@@ -15,7 +15,8 @@ clippy:
 	$(cargo) clippy
 
 run:
-	$(cargo) run
+	# runs the node daemon
+	$(cargo) run --bin anomad -- run
 
 install:
 	$(cargo) install --force

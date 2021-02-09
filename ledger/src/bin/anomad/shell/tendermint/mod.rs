@@ -8,8 +8,7 @@ extern crate byteorder;
 
 use std::net::SocketAddr;
 
-use crate::shell::shell;
-use crate::shell::shell::Shell;
+use crate::shell::{self, Shell};
 
 use abci::{
     RequestCheckTx, RequestCommit, RequestDeliverTx, ResponseCheckTx, ResponseCommit,
