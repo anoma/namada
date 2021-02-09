@@ -3,11 +3,7 @@
 To run:
 
 ```shell
-# Init and start a tendermint node
-tendermint init
-tendermint node
-
-# Run Anoma
+# Run Anoma (this will also initialize and run Tendermint node)
 make run
 ```
 

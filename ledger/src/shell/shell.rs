@@ -11,8 +11,11 @@ pub struct Shell {
 pub struct Transaction<'a> {
     pub data: &'a [u8],
 }
-pub enum PrevalidationType {
+pub enum MempoolTxType {
+    /// A transaction that has not been validated by this node before
     NewTransaction,
+    /// A transaction that has been validated at some previous level that may
+    /// need to be validated again
     RecheckTransaction,
 }
 pub type PrevalidationResult<'a> = Result<(), &'a str>;
@@ -39,12 +42,13 @@ fn parse_tx<'a>(tx: Transaction) -> Result<u64, &'a str> {
 }
 
 impl Shell {
-    /// Pre-validate a transaction request. On success, the transaction will
-    /// included in the mempool, otherwise it will be rejected.
-    pub fn prevalidate_tx(
+    /// Validate a transaction request. On success, the transaction will
+    /// included in the mempool and propagated to peers, otherwise it will be
+    /// rejected.
+    pub fn mempool_validate(
         &mut self,
         tx: Transaction,
-        _prevalidation_type: PrevalidationType,
+        _prevalidation_type: MempoolTxType,
     ) -> PrevalidationResult {
         // Get the Tx [u8] and convert to u64
         let c = parse_tx(tx)?;

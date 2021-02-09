@@ -1,5 +1,12 @@
+//! A Tendermint wrapper module that relays Tendermint requests to the Shell.
+//!
+//! Note that Tendermint implementation details should never be leaked outside
+//! of this module.
+
 extern crate abci;
 extern crate byteorder;
+
+use std::net::SocketAddr;
 
 use crate::shell::shell;
 use crate::shell::shell::Shell;
@@ -9,8 +16,8 @@ use abci::{
     ResponseDeliverTx,
 };
 
-pub fn run(shell: Shell) {
-    abci::run_local(ShellWrapper(shell));
+pub fn run(addr: SocketAddr, shell: Shell) {
+    abci::run(addr, ShellWrapper(shell));
 }
 
 struct ShellWrapper(Shell);
@@ -20,10 +27,10 @@ impl abci::Application for ShellWrapper {
         let mut resp = ResponseCheckTx::new();
         let transaction = shell::Transaction { data: req.get_tx() };
         let prevalidation_type = match req.get_field_type() {
-            abci::CheckTxType::New => shell::PrevalidationType::NewTransaction,
-            abci::CheckTxType::Recheck => shell::PrevalidationType::RecheckTransaction,
+            abci::CheckTxType::New => shell::MempoolTxType::NewTransaction,
+            abci::CheckTxType::Recheck => shell::MempoolTxType::RecheckTransaction,
         };
-        match self.0.prevalidate_tx(transaction, prevalidation_type) {
+        match self.0.mempool_validate(transaction, prevalidation_type) {
             Ok(_) => {}
             Err(msg) => {
                 resp.set_code(1);
