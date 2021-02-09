@@ -1,6 +1,9 @@
-use byteorder::{BigEndian, ByteOrder};
 mod tendermint;
 
+use anoma::Transaction;
+use anoma::Message;
+
+use byteorder::{BigEndian, ByteOrder};
 use log::error;
 use std::process::Command;
 
@@ -33,8 +36,6 @@ pub struct Shell {
     count: u64,
 }
 
-pub type Transaction<'a> = anoma::Transaction<'a>;
-
 pub enum MempoolTxType {
     /// A transaction that has not been validated by this node before
     NewTransaction,
@@ -42,8 +43,8 @@ pub enum MempoolTxType {
     /// need to be validated again
     RecheckTransaction,
 }
-pub type MempoolValidationResult<'a> = Result<(), &'a str>;
-pub type ApplyResult<'a> = Result<(), &'a str>;
+pub type MempoolValidationResult<'a> = Result<(), String>;
+pub type ApplyResult<'a> = Result<(), String>;
 
 pub struct MerkleRoot(pub Vec<u8>);
 
@@ -53,34 +54,23 @@ impl Shell {
     }
 }
 
-// Convert incoming tx data to the proper BigEndian size. txs.len() > 8 will
-// return 0
-fn parse_tx<'a>(tx: Transaction) -> Result<u64, &'a str> {
-    if tx.data.len() > 8 {
-        return Err("Failed to parse the transaction");
-    }
-    let pad = 8 - tx.data.len();
-    let mut x = vec![0; pad];
-    x.extend(tx.data.iter());
-    return Ok(BigEndian::read_u64(x.as_slice()));
-}
-
 impl Shell {
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
     pub fn mempool_validate(
         &mut self,
-        tx: Transaction,
+        tx_bytes: &[u8],
         _prevalidation_type: MempoolTxType,
     ) -> MempoolValidationResult {
-        // Get the Tx [u8] and convert to u64
-        let c = parse_tx(tx)?;
+        let tx = Transaction::decode(tx_bytes)
+            .map_err(|e| format!("Error decoding a transaction: {}", e))?;
+        let c = tx.count;
 
         // Validation logic.
         // Rule: Transactions must be incremental: 1,2,3,4...
         if c != self.count + 1 {
-            return Err("Count must be incremental!");
+            return Err(String::from("Count must be incremental!"));
         }
         // Update state to keep state correct for next check_tx call
         self.count = c;
@@ -88,11 +78,11 @@ impl Shell {
     }
 
     /// Validate and apply a transaction.
-    pub fn apply_tx(&mut self, tx: Transaction) -> ApplyResult {
-        // Get the Tx [u8]
-        let c = parse_tx(tx)?;
+    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> ApplyResult {
+        let tx = Transaction::decode(tx_bytes)
+            .map_err(|e| format!("Error decoding a transaction: {}", e))?;
         // Update state
-        self.count = c;
+        self.count = tx.count;
         // Return default code 0 == bueno
         Ok(())
     }

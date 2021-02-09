@@ -19,6 +19,7 @@ path = "src/bin/anomad/main.rs"
 abci = "0.7.1"
 byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
-clap = { git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2" }
+clap = { git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2" } 
 env_logger = "0.8.2"
 log = "0.4.14"
+prost = "0.7"

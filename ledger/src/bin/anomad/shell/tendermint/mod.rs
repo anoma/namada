@@ -24,12 +24,11 @@ struct ShellWrapper(Shell);
 impl abci::Application for ShellWrapper {
     fn check_tx(&mut self, req: &RequestCheckTx) -> ResponseCheckTx {
         let mut resp = ResponseCheckTx::new();
-        let transaction = shell::Transaction { data: req.get_tx() };
         let prevalidation_type = match req.get_field_type() {
             abci::CheckTxType::New => shell::MempoolTxType::NewTransaction,
             abci::CheckTxType::Recheck => shell::MempoolTxType::RecheckTransaction,
         };
-        match self.0.mempool_validate(transaction, prevalidation_type) {
+        match self.0.mempool_validate(req.get_tx(), prevalidation_type) {
             Ok(_) => {}
             Err(msg) => {
                 resp.set_code(1);
@@ -41,7 +40,7 @@ impl abci::Application for ShellWrapper {
 
     fn deliver_tx(&mut self, req: &RequestDeliverTx) -> ResponseDeliverTx {
         let mut resp = ResponseDeliverTx::new();
-        match self.0.apply_tx(shell::Transaction { data: req.get_tx() }) {
+        match self.0.apply_tx(req.get_tx()) {
             Ok(_) => {}
             Err(msg) => {
                 resp.set_code(1);
