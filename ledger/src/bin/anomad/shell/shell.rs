@@ -6,11 +6,8 @@ pub struct Shell {
     count: u64,
 }
 
-// TODO all the data here will use concrete types that will be convertable
-// to/from bytes to be used by tendermint module
-pub struct Transaction<'a> {
-    pub data: &'a [u8],
-}
+pub type Transaction<'a> = anoma::Transaction<'a>;
+
 pub enum MempoolTxType {
     /// A transaction that has not been validated by this node before
     NewTransaction,
@@ -18,7 +15,7 @@ pub enum MempoolTxType {
     /// need to be validated again
     RecheckTransaction,
 }
-pub type PrevalidationResult<'a> = Result<(), &'a str>;
+pub type MempoolValidationResult<'a> = Result<(), &'a str>;
 pub type ApplyResult<'a> = Result<(), &'a str>;
 
 pub struct MerkleRoot(pub Vec<u8>);
@@ -49,7 +46,7 @@ impl Shell {
         &mut self,
         tx: Transaction,
         _prevalidation_type: MempoolTxType,
-    ) -> PrevalidationResult {
+    ) -> MempoolValidationResult {
         // Get the Tx [u8] and convert to u64
         let c = parse_tx(tx)?;
 
