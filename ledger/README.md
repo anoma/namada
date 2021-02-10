@@ -1,20 +1,14 @@
 # Anoma ledger prototype
 
-To run:
+Handy commands:
 
 ```shell
-# Run Anoma (this will also initialize and run Tendermint node)
+# Run Anoma daemon (this will also initialize and run Tendermint node)
 make run
-```
 
-Send transactions to the tendermint node:
+# Reset the state (resets Tendermint too)
+anoma reset
 
-```shell
-curl "localhost:26657/broadcast_tx_commit?tx=0x01"
-```
-
-Reset tendermint node state:
-
-```shell
-tendermint unsafe_reset_all
+# Submit a transaction to the Tendermint node
+anoma transfer -c 1
 ```

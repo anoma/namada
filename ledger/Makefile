@@ -14,13 +14,14 @@ build-release:
 clippy:
 	$(cargo) clippy
 
-run:
-	# runs the node daemon
-	$(cargo) run --bin anomad -- run
-
 install:
 	# Warning: built in debug mode for now
 	$(cargo) install --path ./ --debug
+
+run:
+	@-${MAKE} install
+	# runs the node daemon
+	anoma run
 
 test:
 	$(cargo) test
@@ -38,4 +39,7 @@ dev-deps:
 	$(cargo) install clippy
 	$(cargo) install rustfmt
 
-.PHONY : build build-release run install test test-debug fmt watch dev-deps
+clean:
+	$(cargo) clean
+
+.PHONY : build build-release run install test test-debug fmt watch dev-deps clean

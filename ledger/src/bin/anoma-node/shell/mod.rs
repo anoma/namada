@@ -1,7 +1,7 @@
 mod tendermint;
 
-use anoma::Message;
-use anoma::Transaction;
+use anoma::types::Message;
+use anoma::types::Transaction;
 
 use byteorder::{BigEndian, ByteOrder};
 

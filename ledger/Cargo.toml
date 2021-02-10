@@ -11,10 +11,17 @@ version = "0.1.0"
 name = "anoma"
 path = "src/lib/mod.rs"
 
+# Anoma CLI that aggregates some common commands for the node and the client
+[[bin]]
+name = "anoma"
+path = "src/bin/anoma/main.rs"
+
+# Anoma node daemon
 [[bin]]
 name = "anomad"
 path = "src/bin/anoma-node/main.rs"
 
+# Anoma client
 [[bin]]
 name = "anomac"
 path = "src/bin/anoma-client/main.rs"
