@@ -19,7 +19,8 @@ run:
 	$(cargo) run --bin anomad -- run
 
 install:
-	$(cargo) install --force
+	# Warning: built in debug mode for now
+	$(cargo) install --path ./ --debug
 
 test:
 	$(cargo) test

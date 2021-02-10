@@ -1,9 +1,9 @@
 [package]
-name = "Anoma"
-description = "Anoma node daemon"
-version = "0.1.0"
 authors = ["Heliax <TODO@heliax.dev>"]
+description = "Anoma node daemon"
 edition = "2018"
+name = "Anoma"
+version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,13 +13,21 @@ path = "src/lib/mod.rs"
 
 [[bin]]
 name = "anomad"
-path = "src/bin/anomad/main.rs"
+path = "src/bin/anoma-node/main.rs"
+
+[[bin]]
+name = "anomac"
+path = "src/bin/anoma-client/main.rs"
 
 [dependencies]
-abci = "0.7.1"
+abci = {git = "https://github.com/heliaxdev/rust-abci"}
 byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
-clap = { git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2" } 
+clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2"}
 env_logger = "0.8.2"
+futures = {version = "0.3"}
+hex = "0.4.2"
 log = "0.4.14"
 prost = "0.7"
+tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
+tokio = {version = "1.0", features = ["full"]}

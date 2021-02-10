@@ -1,33 +1,19 @@
 mod tendermint;
 
-use anoma::Transaction;
 use anoma::Message;
+use anoma::Transaction;
 
 use byteorder::{BigEndian, ByteOrder};
-use log::error;
-use std::process::Command;
 
 pub fn run() {
-    // init and run a Tendermint node child process
-    // TODO use an explicit node dir
-    Command::new("tendermint")
-        .args(&["init"])
-        .output()
-        .map_err(|error| error!("Failed to initialize tendermint node: {:?}", error))
-        .unwrap();
-    let _tendermin_node = Command::new("tendermint")
-        .args(&[
-            "node",
-            // ! Only produce blocks when there are txs or when the AppHash changes for now
-            "--consensus.create_empty_blocks=false",
-        ])
-        .spawn()
-        .unwrap();
-
     // run our shell via Tendermint ABCI
     let shell = Shell::new();
     let addr = "127.0.0.1:26658".parse().unwrap();
     tendermint::run(addr, shell)
+}
+
+pub fn reset() {
+    tendermint::reset()
 }
 
 // Simple counter application. Its only state is a u64 count
@@ -63,8 +49,12 @@ impl Shell {
         tx_bytes: &[u8],
         _prevalidation_type: MempoolTxType,
     ) -> MempoolValidationResult {
-        let tx = Transaction::decode(tx_bytes)
-            .map_err(|e| format!("Error decoding a transaction: {}", e))?;
+        let tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
+            format!(
+                "Error decoding a transaction: {}, from bytes  from bytes {:?}",
+                e, tx_bytes
+            )
+        })?;
         let c = tx.count;
 
         // Validation logic.
@@ -79,8 +69,12 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> ApplyResult {
-        let tx = Transaction::decode(tx_bytes)
-            .map_err(|e| format!("Error decoding a transaction: {}", e))?;
+        let tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
+            format!(
+                "Error decoding a transaction: {}, from bytes  from bytes {:?}",
+                e, tx_bytes
+            )
+        })?;
         // Update state
         self.count = tx.count;
         // Return default code 0 == bueno

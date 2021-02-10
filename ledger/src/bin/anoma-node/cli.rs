@@ -10,10 +10,13 @@ use crate::shell;
 enum Opts {
     /// Run the Anoma node daemon
     Run,
+    /// Reset any store state
+    Reset,
 }
 
 pub fn main() {
     match Opts::parse() {
         Opts::Run => shell::run(),
+        Opts::Reset => shell::reset(),
     }
 }
