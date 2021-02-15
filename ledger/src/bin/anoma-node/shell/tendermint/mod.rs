@@ -3,15 +3,16 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
-use crate::shell::{MempoolTxType, Shell};
+use std::net::SocketAddr;
+use std::process::Command;
 
 use abci;
 use abci::{
-    RequestCheckTx, RequestCommit, RequestDeliverTx, ResponseCheckTx, ResponseCommit,
-    ResponseDeliverTx,
+    RequestCheckTx, RequestCommit, RequestDeliverTx, ResponseCheckTx,
+    ResponseCommit, ResponseDeliverTx,
 };
-use std::net::SocketAddr;
-use std::process::Command;
+
+use crate::shell::{MempoolTxType, Shell};
 
 pub fn run(addr: SocketAddr, shell: Shell) {
     // init and run a Tendermint node child process
@@ -19,12 +20,15 @@ pub fn run(addr: SocketAddr, shell: Shell) {
     Command::new("tendermint")
         .args(&["init"])
         .output()
-        .map_err(|error| log::error!("Failed to initialize tendermint node: {:?}", error))
+        .map_err(|error| {
+            log::error!("Failed to initialize tendermint node: {:?}", error)
+        })
         .unwrap();
     let _tendermin_node = Command::new("tendermint")
         .args(&[
             "node",
-            // ! Only produce blocks when there are txs or when the AppHash changes for now
+            // ! Only produce blocks when there are txs or when the AppHash
+            // changes for now
             "--consensus.create_empty_blocks=false",
         ])
         .spawn()
@@ -39,7 +43,9 @@ pub fn reset() {
     Command::new("tendermint")
         .args(&["unsafe_reset_all"])
         .output()
-        .map_err(|error| log::error!("Failed to reset tendermint node: {:?}", error))
+        .map_err(|error| {
+            log::error!("Failed to reset tendermint node: {:?}", error)
+        })
         .unwrap();
 }
 
@@ -65,7 +71,9 @@ impl abci::Application for ShellWrapper {
     fn deliver_tx(&mut self, req: &RequestDeliverTx) -> ResponseDeliverTx {
         let mut resp = ResponseDeliverTx::new();
         match self.0.apply_tx(req.get_tx()) {
-            Ok(_) => resp.set_info("Transaction successfully applied".to_string()),
+            Ok(_) => {
+                resp.set_info("Transaction successfully applied".to_string())
+            }
             Err(msg) => {
                 resp.set_code(1);
                 resp.set_log(String::from(msg));

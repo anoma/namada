@@ -1,10 +1,10 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use crate::shell;
 use anoma::cli::NodeOpts;
-
 use clap::Clap;
+
+use crate::shell;
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Heliax <TODO@heliax.dev>")]

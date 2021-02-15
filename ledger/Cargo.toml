@@ -32,9 +32,10 @@ byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2"}
 env_logger = "0.8.2"
-futures = {version = "0.3"}
+futures = "0.3"
 hex = "0.4.2"
 log = "0.4.14"
 prost = "0.7"
+rocksdb = "0.15"
 tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 tokio = {version = "1.0", features = ["full"]}

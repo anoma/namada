@@ -1,5 +1,7 @@
 //! The CLI commands that are re-used between the executables `anoma`,
-//! `anoma-client` and `anoma-node`
+//! `anoma-client` and `anoma-node`.
+//!
+//! The options that are defined here are inlined in `anoma` CLI.
 
 use clap::Clap;
 
@@ -16,7 +18,6 @@ pub struct Transfer {
     #[clap(short)]
     pub count: u64,
 }
-
 
 // Anoma node
 #[derive(Clap)]

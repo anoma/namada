@@ -3,6 +3,12 @@
 Handy commands:
 
 ```shell
+# Build
+make
+
+# Build and link the executables
+make install
+
 # Run Anoma daemon (this will also initialize and run Tendermint node)
 make run
 

@@ -1,10 +1,11 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use anoma::cli::{ClientOpts, NodeOpts};
+use std::env;
+use std::process::Command;
 
+use anoma::cli::{ClientOpts, NodeOpts};
 use clap::Clap;
-use std::{env, process::Command};
 
 /// Anoma client
 #[derive(Clap)]

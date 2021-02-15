@@ -1,13 +1,14 @@
+mod db;
 mod tendermint;
 
-use anoma::types::Message;
-use anoma::types::Transaction;
+use std::path::Path;
 
+use anoma::types::{Message, Transaction};
 use byteorder::{BigEndian, ByteOrder};
 
 pub fn run() {
     // run our shell via Tendermint ABCI
-    let shell = Shell::new();
+    let shell = Shell::new("./.anoma/store.db");
     let addr = "127.0.0.1:26658".parse().unwrap();
     tendermint::run(addr, shell)
 }
@@ -19,6 +20,7 @@ pub fn reset() {
 // Simple counter application. Its only state is a u64 count
 // We use BigEndian to serialize the data across transactions calls
 pub struct Shell {
+    store: db::Store,
     count: u64,
 }
 
@@ -35,8 +37,11 @@ pub type ApplyResult<'a> = Result<(), String>;
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
-    pub fn new() -> Self {
-        Self { count: 0 }
+    pub fn new<P: AsRef<Path>>(db_path: P) -> Self {
+        Self {
+            store: db::Store::new(db_path),
+            count: 0,
+        }
     }
 }
 

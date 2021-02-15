@@ -19,9 +19,8 @@ install:
 	$(cargo) install --path ./ --debug
 
 run:
-	@-${MAKE} install
 	# runs the node daemon
-	anoma run
+	$(cargo) run --bin anomad -- run
 
 test:
 	$(cargo) test
