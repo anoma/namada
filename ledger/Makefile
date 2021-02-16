@@ -34,10 +34,6 @@ fmt:
 watch:
 	$(cargo) watch
 
-dev-deps:
-	$(cargo) install clippy
-	$(cargo) install rustfmt
-
 clean:
 	$(cargo) clean
 

@@ -39,3 +39,7 @@ prost = "0.7"
 rocksdb = "0.15"
 tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 tokio = {version = "1.0", features = ["full"]}
+
+[dev-dependencies]
+clippy = "0.0.302"
+rustfmt = "0.10.0"
