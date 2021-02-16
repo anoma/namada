@@ -3,7 +3,7 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
-use std::net::SocketAddr;
+use std::{convert::TryInto, net::SocketAddr};
 use std::process::Command;
 
 use abci;
@@ -65,6 +65,8 @@ impl abci::Application for ShellWrapper {
                 resp.set_log(String::from(msg));
             }
         }
+        log::info!("tendermint ABCI check_tx request {:#?}", req);
+        log::info!("tendermint ABCI check_tx response {:#?}", resp);
         resp
     }
 
@@ -87,5 +89,56 @@ impl abci::Application for ShellWrapper {
         let mut resp = ResponseCommit::new();
         resp.set_data(commit_result.0);
         resp
+    }
+
+    fn info(&mut self, _req: &abci::RequestInfo) -> abci::ResponseInfo {
+        abci::ResponseInfo::new()
+    }
+
+    fn set_option(
+        &mut self,
+        _req: &abci::RequestSetOption,
+    ) -> abci::ResponseSetOption {
+        abci::ResponseSetOption::new()
+    }
+
+    fn query(&mut self, _req: &abci::RequestQuery) -> abci::ResponseQuery {
+        abci::ResponseQuery::new()
+    }
+
+    fn init_chain(
+        &mut self,
+        _req: &abci::RequestInitChain,
+    ) -> abci::ResponseInitChain {
+        let params = Shell::init_chain();
+        // TODO initialize the validator keys file for the first validator
+        // TODO setup custom home directory for that
+        let mut resp = abci::ResponseInitChain::new();
+        let validators = resp.mut_validators();
+        params.validators.iter().for_each(|validator| {
+            let mut abci_validator = abci::ValidatorUpdate::new();
+            let mut pub_key = abci::PubKey::new();
+            pub_key.set_field_type("ed25519".to_string());
+            pub_key.set_data(validator.pk.to_bytes().to_vec());
+            abci_validator.set_pub_key(pub_key);
+            abci_validator.set_power(validator.voting_power.try_into().unwrap());
+            validators.push(abci_validator);
+        });
+        log::info!("tendermint ABCI init_chain");
+        resp
+    }
+
+    fn begin_block(
+        &mut self,
+        _req: &abci::RequestBeginBlock,
+    ) -> abci::ResponseBeginBlock {
+        abci::ResponseBeginBlock::new()
+    }
+
+    fn end_block(
+        &mut self,
+        _req: &abci::RequestEndBlock,
+    ) -> abci::ResponseEndBlock {
+        abci::ResponseEndBlock::new()
     }
 }

@@ -1,10 +1,14 @@
 mod db;
+mod storage;
 mod tendermint;
 
 use std::path::Path;
 
 use anoma::types::{Message, Transaction};
 use byteorder::{BigEndian, ByteOrder};
+use rand::{prelude::ThreadRng, thread_rng};
+use storage::ValidatorAccount;
+use ed25519_dalek::Keypair;
 
 pub fn run() {
     // run our shell via Tendermint ABCI
@@ -45,7 +49,27 @@ impl Shell {
     }
 }
 
+pub struct InitialParameters {
+    validators: Vec<ValidatorAccount>,
+}
+
 impl Shell {
+    pub fn init_chain() -> InitialParameters {
+        let mut rng: ThreadRng = thread_rng();
+        let validators_count = 10;
+        let mut validators = vec![];
+        for _ in 0..validators_count {
+            let keypair = Keypair::generate(&mut rng);
+            validators.push(ValidatorAccount {
+                pk: keypair.public,
+                voting_power: 10,
+                vp: (),
+            });
+        }
+        println!("validators: {:#?}", validators);
+        InitialParameters { validators }
+    }
+
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.

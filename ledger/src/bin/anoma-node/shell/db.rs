@@ -1,10 +1,16 @@
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
-pub struct Store {}
+use super::storage::{Account, Address};
+
+pub struct Store {
+    accounts: HashMap<Address, Account>,
+}
 
 impl Store {
     pub fn new<P: AsRef<Path>>(_path: P) -> Self {
-        Self {}
+        Self {
+            accounts: HashMap::new(),
+        }
     }
 }
 

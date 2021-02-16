@@ -26,16 +26,23 @@ path = "src/bin/anoma-node/main.rs"
 name = "anomac"
 path = "src/bin/anoma-client/main.rs"
 
+[features]
+default = ["std"]
+std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
+
 [dependencies]
 abci = {git = "https://github.com/heliaxdev/rust-abci"}
 byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2"}
+ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend"]}
 env_logger = "0.8.2"
 futures = "0.3"
 hex = "0.4.2"
 log = "0.4.14"
 prost = "0.7"
+rand = {version = "0.7", default-features = false}
+rand_core = {version = "0.5", default-features = false}
 rocksdb = "0.15"
 tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 tokio = {version = "1.0", features = ["full"]}
