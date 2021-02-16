@@ -1,27 +1,20 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use anoma::cli::NodeOpts;
+use anoma::cli::{InlinedNodeOpts, NodeOpts};
 use clap::Clap;
 
 use crate::shell;
 
-#[derive(Clap)]
-#[clap(version = "1.0", author = "Heliax <TODO@heliax.dev>")]
-enum Opts {
-    #[clap(flatten)]
-    Shared(NodeOpts),
-}
-
 pub fn main() {
-    match Opts::parse() {
-        Opts::Shared(ops) => exec_shared(ops),
+    match NodeOpts::parse() {
+        NodeOpts::Inlined(ops) => exec_inlined(ops),
     }
 }
 
-fn exec_shared(ops: NodeOpts) {
+fn exec_inlined(ops: InlinedNodeOpts) {
     match ops {
-        NodeOpts::Run => shell::run(),
-        NodeOpts::Reset => shell::reset(),
+        InlinedNodeOpts::Run => shell::run(),
+        InlinedNodeOpts::Reset => shell::reset(),
     }
 }

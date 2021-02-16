@@ -1,22 +1,22 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use anoma::cli::Transfer;
+use anoma::cli::{ClientOpts, InlinedClientOpts, Transfer};
 use anoma::types::{Message, Transaction};
 use clap::Clap;
 use tendermint_rpc::{Client, HttpClient};
 
-/// Anoma client
-#[derive(Clap)]
-#[clap(version = "1.0", author = "Heliax <TODO@heliax.dev>")]
-enum Opts {
-    /// Transfer
-    Transfer(Transfer),
+pub async fn main() {
+    match ClientOpts::parse() {
+        ClientOpts::Inlined(ops) => exec_inlined(ops).await,
+    }
 }
 
-pub async fn main() {
-    match Opts::parse() {
-        Opts::Transfer(Transfer { count }) => transfer(count).await,
+async fn exec_inlined(ops: InlinedClientOpts) {
+    match ops {
+        InlinedClientOpts::Transfer(Transfer { count }) => {
+            transfer(count).await
+        }
     }
 }
 
