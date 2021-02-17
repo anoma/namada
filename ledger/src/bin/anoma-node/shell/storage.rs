@@ -9,14 +9,14 @@ pub enum Account {
 }
 #[derive(Clone, Debug)]
 pub struct BasicAccount {
-    /// vality predicate
-    pub vp: (),
+    pub balance: u64,
+    pub vality_predicate: (),
 }
 
 #[derive(Clone, Debug)]
 pub struct ValidatorAccount {
     pub pk: PublicKey,
     pub voting_power: u64,
-    /// vality predicate
-    pub vp: (),
+    pub balance: u64,
+    pub vality_predicate: (),
 }

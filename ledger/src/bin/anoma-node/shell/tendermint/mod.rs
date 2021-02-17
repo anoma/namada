@@ -3,11 +3,16 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
-use std::{convert::TryInto, fs::File, io::{self, Write}, net::SocketAddr};
-use std::process::Command;
-#[macro_use]
-use serde_json;
+use anoma::chain_params::{self, Validator};
+use chain_params::Genesis;
 use serde_json::json;
+use std::process::Command;
+use std::{
+    convert::TryInto,
+    fs::File,
+    io::{self, Write},
+    net::SocketAddr,
+};
 
 use abci;
 use abci::{
@@ -16,8 +21,6 @@ use abci::{
 };
 
 use crate::shell::{MempoolTxType, Shell};
-
-use super::storage::ValidatorAccount;
 
 pub fn run(addr: SocketAddr, shell: Shell) {
     // init and run a Tendermint node child process
@@ -29,6 +32,15 @@ pub fn run(addr: SocketAddr, shell: Shell) {
             log::error!("Failed to initialize tendermint node: {:?}", error)
         })
         .unwrap();
+    // override the validator key file from the first validator
+    // TODO use custom home directory for that too
+    let params = chain_params::genesis(1);
+    match params.validators.first() {
+        Some(validator) => {
+            write_validator_key(validator).unwrap();
+        }
+        None => {}
+    };
     let _tendermin_node = Command::new("tendermint")
         .args(&[
             "node",
@@ -40,7 +52,13 @@ pub fn run(addr: SocketAddr, shell: Shell) {
         .unwrap();
 
     // run the shell within ABCI
-    abci::run(addr, ShellWrapper(shell));
+    abci::run(
+        addr,
+        ShellWrapper {
+            shell,
+            genesis_params: params,
+        },
+    );
 }
 
 pub fn reset() {
@@ -54,7 +72,10 @@ pub fn reset() {
         .unwrap();
 }
 
-struct ShellWrapper(Shell);
+struct ShellWrapper {
+    shell: Shell,
+    genesis_params: Genesis,
+}
 
 impl abci::Application for ShellWrapper {
     fn check_tx(&mut self, req: &RequestCheckTx) -> ResponseCheckTx {
@@ -63,7 +84,10 @@ impl abci::Application for ShellWrapper {
             abci::CheckTxType::New => MempoolTxType::NewTransaction,
             abci::CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
         };
-        match self.0.mempool_validate(req.get_tx(), prevalidation_type) {
+        match self
+            .shell
+            .mempool_validate(req.get_tx(), prevalidation_type)
+        {
             Ok(_) => resp.set_info("Mempool validation passed".to_string()),
             Err(msg) => {
                 resp.set_code(1);
@@ -77,7 +101,7 @@ impl abci::Application for ShellWrapper {
 
     fn deliver_tx(&mut self, req: &RequestDeliverTx) -> ResponseDeliverTx {
         let mut resp = ResponseDeliverTx::new();
-        match self.0.apply_tx(req.get_tx()) {
+        match self.shell.apply_tx(req.get_tx()) {
             Ok(_) => {
                 resp.set_info("Transaction successfully applied".to_string())
             }
@@ -90,7 +114,7 @@ impl abci::Application for ShellWrapper {
     }
 
     fn commit(&mut self, _req: &RequestCommit) -> ResponseCommit {
-        let commit_result = self.0.commit();
+        let commit_result = self.shell.commit();
         let mut resp = ResponseCommit::new();
         resp.set_data(commit_result.0);
         resp
@@ -115,22 +139,17 @@ impl abci::Application for ShellWrapper {
         &mut self,
         _req: &abci::RequestInitChain,
     ) -> abci::ResponseInitChain {
-        let params = Shell::init_chain();
-        // TODO initialize the validator keys file for the first validator
-        // TODO setup custom home directory for that
         let mut resp = abci::ResponseInitChain::new();
         let validators = resp.mut_validators();
-        match params.validators.first() {
-            Some(validator) => {write_validator_key(validator);},
-            None => {},
-        };
-        params.validators.iter().for_each(|validator| {
+        // TODO delete params after initialization?
+        self.genesis_params.validators.iter().for_each(|validator| {
             let mut abci_validator = abci::ValidatorUpdate::new();
             let mut pub_key = abci::PubKey::new();
             pub_key.set_field_type("ed25519".to_string());
-            pub_key.set_data(validator.pk.to_bytes().to_vec());
+            pub_key.set_data(validator.keypair.public.to_bytes().to_vec());
             abci_validator.set_pub_key(pub_key);
-            abci_validator.set_power(validator.voting_power.try_into().unwrap());
+            abci_validator
+                .set_power(validator.voting_power.try_into().unwrap());
             validators.push(abci_validator);
         });
         log::info!("tendermint ABCI init_chain");
@@ -152,19 +171,22 @@ impl abci::Application for ShellWrapper {
     }
 }
 
-fn write_validator_key(account: &ValidatorAccount) -> io::Result<()> {
+fn write_validator_key(account: &Validator) -> io::Result<()> {
     // TODO home path from config
-    let mut file = File::create("/Users/tz/.tendermint/config/priv_validator_key.json")?;
+    let mut file =
+        File::create("/Users/tz/.tendermint/config/priv_validator_key.json")?;
+    let pk = base64::encode(account.keypair.public.as_bytes());
+    let sk = base64::encode(account.keypair.to_bytes());
     let key = json!({
-           "address": "DFBB3DB9D73F26302B9C125DC47A3945AA6E1B1B",
-           "pub_key": {
-             "type": "PubKeyEd25519",
-             "value": "9hUc23DwANT4DbV5hrA4GXfKFjtw4/bDzyHbCFXeetA="
-           },
-           "priv_key": {
-             "type": "PrivKeyEd25519",
-             "value": "Ha+NnPw2h6NDY5cHQXARIgxMtHjvMQTqcwd2HP7SZDr2FRzbcPAA1PgNtXmGsDgZd8oWO3Dj9sPPIdsIVd560A=="
-          }
-        });
+       "address": account.address,
+       "pub_key": {
+         "type": "tendermint/PubKeyEd25519",
+         "value": pk,
+       },
+       "priv_key": {
+         "type": "tendermint/PrivKeyEd25519",
+         "value": sk,
+      }
+    });
     file.write(key.to_string().as_bytes()).map(|_| ())
 }

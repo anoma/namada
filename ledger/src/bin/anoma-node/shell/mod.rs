@@ -4,12 +4,8 @@ mod tendermint;
 
 use std::path::Path;
 
-use anoma::{chain_params, types::{Message, Transaction}};
+use anoma::types::{Message, Transaction};
 use byteorder::{BigEndian, ByteOrder};
-use chain_params::genesis;
-use rand::{prelude::ThreadRng, thread_rng};
-use storage::ValidatorAccount;
-use ed25519_dalek::Keypair;
 
 pub fn run() {
     // run our shell via Tendermint ABCI
@@ -50,23 +46,7 @@ impl Shell {
     }
 }
 
-pub struct InitialParameters {
-    validators: Vec<ValidatorAccount>,
-}
-
 impl Shell {
-    pub fn init_chain() -> InitialParameters {
-        let params = chain_params::genesis(10);
-        let validators = params.validators.map(|v| {
-            ValidatorAccount {
-                pk: v.pk,
-                voting_power: v.voting_power,
-                vp: (),
-            }
-        });
-        InitialParameters { validators }
-    }
-
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
