@@ -3,8 +3,11 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
-use std::{convert::TryInto, net::SocketAddr};
+use std::{convert::TryInto, fs::File, io::{self, Write}, net::SocketAddr};
 use std::process::Command;
+#[macro_use]
+use serde_json;
+use serde_json::json;
 
 use abci;
 use abci::{
@@ -13,6 +16,8 @@ use abci::{
 };
 
 use crate::shell::{MempoolTxType, Shell};
+
+use super::storage::ValidatorAccount;
 
 pub fn run(addr: SocketAddr, shell: Shell) {
     // init and run a Tendermint node child process
@@ -115,6 +120,10 @@ impl abci::Application for ShellWrapper {
         // TODO setup custom home directory for that
         let mut resp = abci::ResponseInitChain::new();
         let validators = resp.mut_validators();
+        match params.validators.first() {
+            Some(validator) => {write_validator_key(validator);},
+            None => {},
+        };
         params.validators.iter().for_each(|validator| {
             let mut abci_validator = abci::ValidatorUpdate::new();
             let mut pub_key = abci::PubKey::new();
@@ -141,4 +150,21 @@ impl abci::Application for ShellWrapper {
     ) -> abci::ResponseEndBlock {
         abci::ResponseEndBlock::new()
     }
+}
+
+fn write_validator_key(account: &ValidatorAccount) -> io::Result<()> {
+    // TODO home path from config
+    let mut file = File::create("/Users/tz/.tendermint/config/priv_validator_key.json")?;
+    let key = json!({
+           "address": "DFBB3DB9D73F26302B9C125DC47A3945AA6E1B1B",
+           "pub_key": {
+             "type": "PubKeyEd25519",
+             "value": "9hUc23DwANT4DbV5hrA4GXfKFjtw4/bDzyHbCFXeetA="
+           },
+           "priv_key": {
+             "type": "PrivKeyEd25519",
+             "value": "Ha+NnPw2h6NDY5cHQXARIgxMtHjvMQTqcwd2HP7SZDr2FRzbcPAA1PgNtXmGsDgZd8oWO3Dj9sPPIdsIVd560A=="
+          }
+        });
+    file.write(key.to_string().as_bytes()).map(|_| ())
 }

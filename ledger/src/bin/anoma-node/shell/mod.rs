@@ -4,8 +4,9 @@ mod tendermint;
 
 use std::path::Path;
 
-use anoma::types::{Message, Transaction};
+use anoma::{chain_params, types::{Message, Transaction}};
 use byteorder::{BigEndian, ByteOrder};
+use chain_params::genesis;
 use rand::{prelude::ThreadRng, thread_rng};
 use storage::ValidatorAccount;
 use ed25519_dalek::Keypair;
@@ -55,18 +56,14 @@ pub struct InitialParameters {
 
 impl Shell {
     pub fn init_chain() -> InitialParameters {
-        let mut rng: ThreadRng = thread_rng();
-        let validators_count = 10;
-        let mut validators = vec![];
-        for _ in 0..validators_count {
-            let keypair = Keypair::generate(&mut rng);
-            validators.push(ValidatorAccount {
-                pk: keypair.public,
-                voting_power: 10,
+        let params = chain_params::genesis(10);
+        let validators = params.validators.map(|v| {
+            ValidatorAccount {
+                pk: v.pk,
+                voting_power: v.voting_power,
                 vp: (),
-            });
-        }
-        println!("validators: {:#?}", validators);
+            }
+        });
         InitialParameters { validators }
     }
 

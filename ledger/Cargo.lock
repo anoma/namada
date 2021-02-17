@@ -18,6 +18,8 @@ dependencies = [
  "rand_core 0.5.1",
  "rocksdb",
  "rustfmt",
+ "serde_json",
+ "sha2",
  "tendermint-rpc",
  "tokio 1.2.0",
 ]

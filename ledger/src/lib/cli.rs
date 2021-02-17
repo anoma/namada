@@ -11,6 +11,7 @@ use clap::{Clap, FromArgMatches, IntoApp};
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
 
 // Examples of how to use Clap v3: https://github.com/clap-rs/clap/tree/v3.0.0-beta.2/clap_derive
+// Use `cargo expand --lib cli` to see the expanded macros
 
 /// The Anoma CLI
 #[derive(Clap)]
