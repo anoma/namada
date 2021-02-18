@@ -4,18 +4,22 @@ mod tendermint;
 
 use std::path::Path;
 
-use anoma::types::{Message, Transaction};
+use anoma::{
+    config::Config,
+    types::{Message, Transaction},
+};
 use byteorder::{BigEndian, ByteOrder};
 
-pub fn run() {
+pub fn run(config: Config) {
     // run our shell via Tendermint ABCI
-    let shell = Shell::new("./.anoma/store.db");
+    let db_path = config.home_dir.join("store.db");
+    let shell = Shell::new(db_path);
     let addr = "127.0.0.1:26658".parse().unwrap();
-    tendermint::run(addr, shell)
+    tendermint::run(config, addr, shell)
 }
 
-pub fn reset() {
-    tendermint::reset()
+pub fn reset(config: Config) {
+    tendermint::reset(config)
 }
 
 // Simple counter application. Its only state is a u64 count

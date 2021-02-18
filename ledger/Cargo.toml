@@ -27,7 +27,9 @@ name = "anomac"
 path = "src/bin/anoma-client/main.rs"
 
 [features]
-default = ["std"]
+default = ["std", "dev"]
+# NOTE "dev" features that shouldn't be used in live networks are enabled by default for now
+dev = []
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 
 [dependencies]
@@ -51,6 +53,6 @@ tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 tokio = {version = "1.0", features = ["full"]}
 
 [dev-dependencies]
+cargo-watch = "7.5.0"
 clippy = "0.0.302"
 rustfmt = "0.10.0"
-cargo-watch = "7.5.0"

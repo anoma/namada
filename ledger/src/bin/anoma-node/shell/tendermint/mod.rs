@@ -3,8 +3,11 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
-use anoma::chain_params::{self, Validator};
-use chain_params::Genesis;
+use anoma::{
+    config::Config,
+    genesis::{self, Validator},
+};
+use genesis::Genesis;
 use serde_json::json;
 use std::process::Command;
 use std::{
@@ -12,6 +15,7 @@ use std::{
     fs::File,
     io::{self, Write},
     net::SocketAddr,
+    path::PathBuf,
 };
 
 use abci;
@@ -22,28 +26,27 @@ use abci::{
 
 use crate::shell::{MempoolTxType, Shell};
 
-pub fn run(addr: SocketAddr, shell: Shell) {
+pub fn run(config: Config, addr: SocketAddr, shell: Shell) {
+    let home_dir = config.tendermint_home_dir();
+    let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
-    // TODO use an explicit node dir here and in `fn reset`
     Command::new("tendermint")
-        .args(&["init"])
+        .args(&["init", "--home", &home_dir_string])
         .output()
         .map_err(|error| {
             log::error!("Failed to initialize tendermint node: {:?}", error)
         })
         .unwrap();
-    // override the validator key file from the first validator
-    // TODO use custom home directory for that too
-    let params = chain_params::genesis(1);
-    match params.validators.first() {
-        Some(validator) => {
-            write_validator_key(validator).unwrap();
-        }
-        None => {}
-    };
+    let genesis = genesis::genesis();
+    if cfg!(feature = "dev") {
+        // override the validator key file
+        write_validator_key(home_dir, &genesis.validator).unwrap();
+    }
     let _tendermin_node = Command::new("tendermint")
         .args(&[
             "node",
+            "--home",
+            &home_dir_string,
             // ! Only produce blocks when there are txs or when the AppHash
             // changes for now
             "--consensus.create_empty_blocks=false",
@@ -52,19 +55,17 @@ pub fn run(addr: SocketAddr, shell: Shell) {
         .unwrap();
 
     // run the shell within ABCI
-    abci::run(
-        addr,
-        ShellWrapper {
-            shell,
-            genesis_params: params,
-        },
-    );
+    abci::run(addr, ShellWrapper { shell, genesis });
 }
 
-pub fn reset() {
+pub fn reset(config: Config) {
     // reset all the Tendermint state, if any
     Command::new("tendermint")
-        .args(&["unsafe_reset_all"])
+        .args(&[
+            "unsafe_reset_all",
+            "--home",
+            &config.tendermint_home_dir().to_string_lossy(),
+        ])
         .output()
         .map_err(|error| {
             log::error!("Failed to reset tendermint node: {:?}", error)
@@ -74,7 +75,7 @@ pub fn reset() {
 
 struct ShellWrapper {
     shell: Shell,
-    genesis_params: Genesis,
+    genesis: Genesis,
 }
 
 impl abci::Application for ShellWrapper {
@@ -142,17 +143,16 @@ impl abci::Application for ShellWrapper {
         let mut resp = abci::ResponseInitChain::new();
         let validators = resp.mut_validators();
         // TODO delete params after initialization?
-        self.genesis_params.validators.iter().for_each(|validator| {
-            let mut abci_validator = abci::ValidatorUpdate::new();
-            let mut pub_key = abci::PubKey::new();
-            pub_key.set_field_type("ed25519".to_string());
-            pub_key.set_data(validator.keypair.public.to_bytes().to_vec());
-            abci_validator.set_pub_key(pub_key);
-            abci_validator
-                .set_power(validator.voting_power.try_into().unwrap());
-            validators.push(abci_validator);
-        });
-        log::info!("tendermint ABCI init_chain");
+        let mut abci_validator = abci::ValidatorUpdate::new();
+        let mut pub_key = abci::PubKey::new();
+        pub_key.set_field_type("ed25519".to_string());
+        pub_key.set_data(
+            self.genesis.validator.keypair.public.to_bytes().to_vec(),
+        );
+        abci_validator.set_pub_key(pub_key);
+        abci_validator
+            .set_power(self.genesis.validator.voting_power.try_into().unwrap());
+        validators.push(abci_validator);
         resp
     }
 
@@ -171,10 +171,12 @@ impl abci::Application for ShellWrapper {
     }
 }
 
-fn write_validator_key(account: &Validator) -> io::Result<()> {
-    // TODO home path from config
-    let mut file =
-        File::create("/Users/tz/.tendermint/config/priv_validator_key.json")?;
+fn write_validator_key(
+    home_dir: PathBuf,
+    account: &Validator,
+) -> io::Result<()> {
+    let path = home_dir.join("config").join("priv_validator_key.json");
+    let mut file = File::create(path)?;
     let pk = base64::encode(account.keypair.public.as_bytes());
     let sk = base64::encode(account.keypair.to_bytes());
     let key = json!({
@@ -188,5 +190,6 @@ fn write_validator_key(account: &Validator) -> io::Result<()> {
          "value": sk,
       }
     });
+    println!("key {}", key);
     file.write(key.to_string().as_bytes()).map(|_| ())
 }
