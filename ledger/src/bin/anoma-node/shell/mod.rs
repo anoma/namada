@@ -39,18 +39,10 @@ pub struct MerkleRoot(pub Vec<u8>);
 impl Shell {
     pub fn new<P: AsRef<Path>>(_db_path: P) -> Self {
         let mut storage = Storage::new();
-        storage
-            .update_balance(
-                ValidatorAddress::new_address("va".to_owned()),
-                Balance::new(10000),
-            )
-            .unwrap();
-        storage
-            .update_balance(
-                BasicAddress::new_address("ba".to_owned()),
-                Balance::new(100),
-            )
-            .unwrap();
+        let va = ValidatorAddress::new_address("va".to_owned());
+        storage.update_balance(&va, Balance::new(10000)).unwrap();
+        let ba = BasicAddress::new_address("ba".to_owned());
+        storage.update_balance(&ba, Balance::new(100)).unwrap();
         Self { storage }
     }
 }
@@ -64,7 +56,7 @@ impl Shell {
         tx_bytes: &[u8],
         _prevalidation_type: MempoolTxType,
     ) -> MempoolValidationResult {
-        let _tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
+        let tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
             format!(
                 "Error decoding a transaction: {}, from bytes  from bytes {:?}",
                 e, tx_bytes
@@ -72,11 +64,13 @@ impl Shell {
         })?;
 
         // Validation logic
-        // TODO if c != self.count + 1 {
-        //     return Err(String::from("Count must be incremental!"));
-        // }
+        let src_addr = BasicAddress::new_address(tx.src);
+        self.storage.has_balance_gte(&src_addr, tx.amount)?;
         // Update state to keep state correct for next validation call
-        // TODO
+
+        let dest_addr = BasicAddress::new_address(tx.dest);
+        self.storage.transfer(&src_addr, &dest_addr, tx.amount)?;
+
         Ok(())
     }
 
@@ -91,7 +85,7 @@ impl Shell {
 
         let src_addr = BasicAddress::new_address(tx.src);
         let dest_addr = BasicAddress::new_address(tx.dest);
-        self.storage.transfer(src_addr, dest_addr, tx.amount)?;
+        self.storage.transfer(&src_addr, &dest_addr, tx.amount)?;
 
         Ok(())
     }

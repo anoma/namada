@@ -1,7 +1,7 @@
 //! The CLI commands that are re-used between the executables `anoma`,
 //! `anoma-node` and `anoma-client`.
 //!
-//! The `anoma` exectuable groups together the most commonly used commands
+//! The `anoma` executable groups together the most commonly used commands
 //! inlined from the node and the client. The other commands for the node or the
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.

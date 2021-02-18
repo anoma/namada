@@ -46,7 +46,7 @@ impl Storage {
 
     pub fn update_balance(
         &mut self,
-        addr: Address,
+        addr: &Address,
         balance: Balance,
     ) -> Result<(), String> {
         let key = addr.hash();
@@ -54,15 +54,15 @@ impl Storage {
         self.tree
             .update(key, value)
             .map_err(|err| format!("SMT error {}", err))?;
-        self.balances.insert(addr, balance);
+        self.balances.insert(addr.clone(), balance);
         Ok(())
     }
 
     // TODO this doesn't belong here, but just for convenience...
     pub fn transfer(
         &mut self,
-        src: Address,
-        dest: Address,
+        src: &Address,
+        dest: &Address,
         amount: u64,
     ) -> Result<(), String> {
         match self.balances.get(&src) {
@@ -82,6 +82,22 @@ impl Storage {
                 Ok(())
             }
         }
+    }
+
+    pub fn has_balance_gte(
+        &self,
+        addr: &Address,
+        amount: u64,
+    ) -> Result<(), String> {
+        match self.balances.get(&addr) {
+            None => return Err("Source not found".to_owned()),
+            Some(&Balance(src_balance)) => {
+                if src_balance < amount {
+                    return Err("Source balance is too low".to_owned());
+                };
+            }
+        }
+        Ok(())
     }
 }
 
