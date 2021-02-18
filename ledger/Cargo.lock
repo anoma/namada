@@ -6,6 +6,7 @@ version = "0.1.0"
 dependencies = [
  "abci",
  "base64",
+ "blake2b-rs 0.2.0",
  "byteorder",
  "cargo-watch",
  "clap 3.0.0-beta.2",
@@ -22,6 +23,7 @@ dependencies = [
  "rustfmt",
  "serde_json",
  "sha2",
+ "sparse-merkle-tree",
  "tendermint-rpc",
  "tokio 1.2.0",
 ]
@@ -201,6 +203,25 @@ name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
+
+[[package]]
+name = "blake2b-rs"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e35e362830ef90ecea16f09b21b75d22d33a8562a679c74ab4f4fa49b4fcb87"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "blake2b-rs"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a89a8565807f21b913288968e391819e7f9b2f0f46c7b89549c051cccf3a2771"
+dependencies = [
+ "cc",
+ "cty",
+]
 
 [[package]]
 name = "blake2b_simd"
@@ -402,6 +423,12 @@ dependencies = [
  "cfg-if 1.0.0",
  "lazy_static 1.4.0",
 ]
+
+[[package]]
+name = "cty"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7313c0d620d0cb4dbd9d019e461a4beb501071ff46ec0ab933efb4daa76d73e3"
 
 [[package]]
 name = "curve25519-dalek"
@@ -1906,6 +1933,15 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "sparse-merkle-tree"
+version = "0.3.1-pre"
+source = "git+https://github.com/jjyr/sparse-merkle-tree?tag=v0.3.1-pre#3731562d8b0a9af3cc9487f254bd64daa1d13cc2"
+dependencies = [
+ "blake2b-rs 0.1.5",
+ "cfg-if 0.1.10",
 ]
 
 [[package]]

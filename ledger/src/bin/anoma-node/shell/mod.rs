@@ -1,14 +1,12 @@
-mod db;
 mod storage;
 mod tendermint;
 
-use std::path::Path;
-
+use self::storage::{Balance, BasicAddress, Storage, ValidatorAddress};
 use anoma::{
     config::Config,
     types::{Message, Transaction},
 };
-use byteorder::{BigEndian, ByteOrder};
+use std::path::Path;
 
 pub fn run(config: Config) {
     // run our shell via Tendermint ABCI
@@ -22,11 +20,8 @@ pub fn reset(config: Config) {
     tendermint::reset(config)
 }
 
-// Simple counter application. Its only state is a u64 count
-// We use BigEndian to serialize the data across transactions calls
 pub struct Shell {
-    store: db::Store,
-    count: u64,
+    storage: storage::Storage,
 }
 
 pub enum MempoolTxType {
@@ -42,11 +37,21 @@ pub type ApplyResult<'a> = Result<(), String>;
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
-    pub fn new<P: AsRef<Path>>(db_path: P) -> Self {
-        Self {
-            store: db::Store::new(db_path),
-            count: 0,
-        }
+    pub fn new<P: AsRef<Path>>(_db_path: P) -> Self {
+        let mut storage = Storage::new();
+        storage
+            .update_balance(
+                ValidatorAddress::new_address("va".to_owned()),
+                Balance::new(10000),
+            )
+            .unwrap();
+        storage
+            .update_balance(
+                BasicAddress::new_address("ba".to_owned()),
+                Balance::new(100),
+            )
+            .unwrap();
+        Self { storage }
     }
 }
 
@@ -59,21 +64,19 @@ impl Shell {
         tx_bytes: &[u8],
         _prevalidation_type: MempoolTxType,
     ) -> MempoolValidationResult {
-        let tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
+        let _tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
             format!(
                 "Error decoding a transaction: {}, from bytes  from bytes {:?}",
                 e, tx_bytes
             )
         })?;
-        let c = tx.count;
 
-        // Validation logic.
-        // Rule: Transactions must be incremental: 1,2,3,4...
-        if c != self.count + 1 {
-            return Err(String::from("Count must be incremental!"));
-        }
-        // Update state to keep state correct for next check_tx call
-        self.count = c;
+        // Validation logic
+        // TODO if c != self.count + 1 {
+        //     return Err(String::from("Count must be incremental!"));
+        // }
+        // Update state to keep state correct for next validation call
+        // TODO
         Ok(())
     }
 
@@ -85,18 +88,25 @@ impl Shell {
                 e, tx_bytes
             )
         })?;
-        // Update state
-        self.count = tx.count;
-        // Return default code 0 == bueno
+
+        let src_addr = BasicAddress::new_address(tx.src);
+        let dest_addr = BasicAddress::new_address(tx.dest);
+        self.storage.transfer(src_addr, dest_addr, tx.amount)?;
+
         Ok(())
     }
 
     /// Persist the application state and return the Merkle root hash.
     pub fn commit(&mut self) -> MerkleRoot {
-        // Convert count to bits
-        let mut buf = [0; 8];
-        BigEndian::write_u64(&mut buf, self.count);
-        // Set data so last state is included in the block
-        MerkleRoot(buf.to_vec())
+        // TODO store the block's data in DB
+        let root = self.storage.merkle_root();
+        MerkleRoot(root.as_slice().to_vec())
+    }
+
+    /// Load the Merkle root hash and the height of the last committed block, if
+    /// any.
+    pub fn last_state(&self) -> Option<(MerkleRoot, u64)> {
+        // TODO
+        None
     }
 }

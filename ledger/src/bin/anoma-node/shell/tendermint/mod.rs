@@ -80,6 +80,7 @@ struct ShellWrapper {
 
 impl abci::Application for ShellWrapper {
     fn check_tx(&mut self, req: &RequestCheckTx) -> ResponseCheckTx {
+        log::info!("check_tx request {:#?}", req);
         let mut resp = ResponseCheckTx::new();
         let prevalidation_type = match req.get_field_type() {
             abci::CheckTxType::New => MempoolTxType::NewTransaction,
@@ -95,8 +96,7 @@ impl abci::Application for ShellWrapper {
                 resp.set_log(String::from(msg));
             }
         }
-        log::info!("tendermint ABCI check_tx request {:#?}", req);
-        log::info!("tendermint ABCI check_tx response {:#?}", resp);
+        log::info!("check_tx response {:#?}", resp);
         resp
     }
 
@@ -122,7 +122,12 @@ impl abci::Application for ShellWrapper {
     }
 
     fn info(&mut self, _req: &abci::RequestInfo) -> abci::ResponseInfo {
-        abci::ResponseInfo::new()
+        let mut resp = abci::ResponseInfo::new();
+        if let Some((last_hash, last_height)) = self.shell.last_state() {
+            resp.set_last_block_height(last_height.try_into().unwrap());
+            resp.set_last_block_app_hash(last_hash.0);
+        }
+        resp
     }
 
     fn set_option(
@@ -190,6 +195,5 @@ fn write_validator_key(
          "value": sk,
       }
     });
-    println!("key {}", key);
     file.write(key.to_string().as_bytes()).map(|_| ())
 }

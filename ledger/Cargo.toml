@@ -35,6 +35,7 @@ std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 [dependencies]
 abci = {git = "https://github.com/heliaxdev/rust-abci"}
 base64 = "0.13.0"
+blake2b-rs = "0.2.0"
 byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2"}
@@ -49,6 +50,8 @@ rand_core = {version = "0.5", default-features = false}
 rocksdb = "0.15"
 serde_json = "1.0.62"
 sha2 = "0.9.3"
+# latest version is not released on crates
+sparse-merkle-tree = {git = "https://github.com/jjyr/sparse-merkle-tree", tag = "v0.3.1-pre"}
 tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 tokio = {version = "1.0", features = ["full"]}
 

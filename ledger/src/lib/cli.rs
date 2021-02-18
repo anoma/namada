@@ -42,12 +42,18 @@ pub enum InlinedClientOpts {
     Transfer(Transfer),
 }
 
-// `anomac` subcommand for controlling trasfers
+// `anomac` subcommand for controlling transfers
 #[derive(Clap)]
 pub struct Transfer {
+    /// The transfer source
+    #[clap(short)]
+    pub src: String,
     /// An example command
     #[clap(short)]
-    pub count: u64,
+    pub dest: String,
+    /// How much to transfer
+    #[clap(short)]
+    pub amount: u64,
 }
 
 /// The Anoma Node CLI

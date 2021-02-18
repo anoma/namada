@@ -37,10 +37,9 @@ pub struct Validator {
 
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
-    // NOTE When the validator's key changes, tendermint must be resetted
-    // with `anoma reset` command.
-    // To get fresh key bytes, generate a new validator and print
-    // its keypair with:
+    // NOTE When the validator's key changes, tendermint must be reset with
+    // `anoma reset` command. To get fresh key bytes, generate a new
+    // validator and print its keypair with:
     // ```
     // let validator = Validator::new();
     // println!(

@@ -1,16 +1,12 @@
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
-use super::storage::{Account, Address};
+#[allow(dead_code)]
+pub struct DB {}
 
-pub struct Store {
-    accounts: HashMap<Address, Account>,
-}
-
-impl Store {
+#[allow(dead_code)]
+impl DB {
     pub fn new<P: AsRef<Path>>(_path: P) -> Self {
-        Self {
-            accounts: HashMap::new(),
-        }
+        Self {}
     }
 }
 
