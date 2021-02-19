@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+// TODO use https://crates.io/crates/config
+
 pub struct Config {
     pub home_dir: PathBuf,
     // TODO add anoma and tendermint address

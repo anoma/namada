@@ -3,13 +3,20 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
+use crate::shell::storage::BlockHash;
+use crate::shell::{MempoolTxType, Shell};
+use abci;
+use abci::{
+    RequestCheckTx, RequestCommit, RequestDeliverTx, ResponseCheckTx,
+    ResponseCommit, ResponseDeliverTx,
+};
 use anoma::{
     config::Config,
     genesis::{self, Validator},
 };
 use genesis::Genesis;
 use serde_json::json;
-use std::process::Command;
+use std::{convert::TryFrom, process::Command};
 use std::{
     convert::TryInto,
     fs::File,
@@ -17,14 +24,6 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
 };
-
-use abci;
-use abci::{
-    RequestCheckTx, RequestCommit, RequestDeliverTx, ResponseCheckTx,
-    ResponseCommit, ResponseDeliverTx,
-};
-
-use crate::shell::{MempoolTxType, Shell};
 
 pub fn run(config: Config, addr: SocketAddr, shell: Shell) {
     let home_dir = config.tendermint_home_dir();
@@ -143,11 +142,15 @@ impl abci::Application for ShellWrapper {
 
     fn init_chain(
         &mut self,
-        _req: &abci::RequestInitChain,
+        req: &abci::RequestInitChain,
     ) -> abci::ResponseInitChain {
         let mut resp = abci::ResponseInitChain::new();
+        // Initialize the chain in shell
+        let chain_id = req.get_chain_id();
+        self.shell.init_chain(chain_id);
+        // Set the initial validator set
         let validators = resp.mut_validators();
-        // TODO delete params after initialization?
+        // TODO delete params after initialization? (`Option::take()`)
         let mut abci_validator = abci::ValidatorUpdate::new();
         let mut pub_key = abci::PubKey::new();
         pub_key.set_field_type("ed25519".to_string());
@@ -163,9 +166,26 @@ impl abci::Application for ShellWrapper {
 
     fn begin_block(
         &mut self,
-        _req: &abci::RequestBeginBlock,
+        req: &abci::RequestBeginBlock,
     ) -> abci::ResponseBeginBlock {
-        abci::ResponseBeginBlock::new()
+        let resp = abci::ResponseBeginBlock::new();
+        let raw_hash = req.get_hash();
+        match BlockHash::try_from(raw_hash) {
+            Err(err) => {
+                log::error!("{}", err);
+                return resp;
+            }
+            Ok(hash) => {
+                let raw_height = req.get_header().get_height();
+                match raw_height.try_into() {
+                    Err(_) => {
+                        log::error!("Unexpected block height {}", raw_height)
+                    }
+                    Ok(height) => self.shell.begin_block(hash, height),
+                }
+                resp
+            }
+        }
     }
 
     fn end_block(

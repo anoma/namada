@@ -1,7 +1,7 @@
 mod storage;
 mod tendermint;
 
-use self::storage::{Balance, BasicAddress, Storage, ValidatorAddress};
+use self::storage::{Balance, BasicAddress, BlockHash, Storage, ValidatorAddress};
 use anoma::{
     config::Config,
     types::{Message, Transaction},
@@ -38,7 +38,7 @@ pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
     pub fn new<P: AsRef<Path>>(_db_path: P) -> Self {
-        let mut storage = Storage::new();
+        let mut storage = Storage::default();
         let va = ValidatorAddress::new_address("va".to_owned());
         storage.update_balance(&va, Balance::new(10000)).unwrap();
         let ba = BasicAddress::new_address("ba".to_owned());
@@ -48,11 +48,15 @@ impl Shell {
 }
 
 impl Shell {
+    pub fn init_chain(&mut self, chain_id: &str) {
+        self.storage.set_chain_id(chain_id);
+    }
+
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
     pub fn mempool_validate(
-        &mut self,
+        &self,
         tx_bytes: &[u8],
         _prevalidation_type: MempoolTxType,
     ) -> MempoolValidationResult {
@@ -66,10 +70,6 @@ impl Shell {
         // Validation logic
         let src_addr = BasicAddress::new_address(tx.src);
         self.storage.has_balance_gte(&src_addr, tx.amount)?;
-        // Update state to keep state correct for next validation call
-
-        let dest_addr = BasicAddress::new_address(tx.dest);
-        self.storage.transfer(&src_addr, &dest_addr, tx.amount)?;
 
         Ok(())
     }
@@ -86,11 +86,18 @@ impl Shell {
         let src_addr = BasicAddress::new_address(tx.src);
         let dest_addr = BasicAddress::new_address(tx.dest);
         self.storage.transfer(&src_addr, &dest_addr, tx.amount)?;
+        log::debug!("storage after apply_tx {:#?}", self.storage);
 
         Ok(())
     }
 
-    /// Persist the application state and return the Merkle root hash.
+    /// Begin a new block.
+    pub fn begin_block(&mut self, hash: BlockHash, height: u64) {
+        self.storage.begin_block(hash, height);
+    }
+
+    /// Commit a block. Persist the application state and return the Merkle root
+    /// hash.
     pub fn commit(&mut self) -> MerkleRoot {
         // TODO store the block's data in DB
         let root = self.storage.merkle_root();
@@ -100,7 +107,7 @@ impl Shell {
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any.
     pub fn last_state(&self) -> Option<(MerkleRoot, u64)> {
-        // TODO
+        // TODO try to load the last block from DB
         None
     }
 }
