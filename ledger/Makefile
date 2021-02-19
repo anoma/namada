@@ -37,4 +37,8 @@ watch:
 clean:
 	$(cargo) clean
 
-.PHONY : build build-release run install test test-debug fmt watch dev-deps clean
+doc:
+	# build and opens the docs in browser
+	$(cargo) doc --open
+
+.PHONY : build build-release run install test test-debug fmt watch dev-deps clean doc
