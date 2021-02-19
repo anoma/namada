@@ -10,7 +10,7 @@ use blake2b_rs::{Blake2b, Blake2bBuilder};
 use sparse_merkle_tree::{
     blake2b::Blake2bHasher, default_store::DefaultStore, SparseMerkleTree, H256,
 };
-use std::{collections::HashMap, convert::TryFrom};
+use std::{collections::HashMap, convert::TryFrom, hash::Hash};
 
 // TODO adjust once chain ID scheme is chosen
 const CHAIN_ID_LENGTH: usize = 20;
@@ -67,17 +67,40 @@ impl Default for Storage {
 }
 
 impl Storage {
-    pub fn set_chain_id(&mut self, chain_id: &str) {
-        self.chain_id = chain_id.to_owned();
-    }
-
-    pub fn begin_block(&mut self, hash: BlockHash, height: u64) {
-        self.block.hash = hash;
-        self.block.height = height;
-    }
-
+    /// # Storage reads
     pub fn merkle_root(&self) -> &H256 {
         self.block.tree.0.root()
+    }
+
+    // TODO this doesn't belong here, but just for convenience...
+    pub fn has_balance_gte(
+        &self,
+        addr: &Address,
+        amount: u64,
+    ) -> Result<(), String> {
+        match self.block.balances.get(&addr) {
+            None => return Err("Source not found".to_owned()),
+            Some(&Balance(src_balance)) => {
+                if src_balance < amount {
+                    return Err("Source balance is too low".to_owned());
+                };
+            }
+        }
+        Ok(())
+    }
+
+    /// # Storage writes
+    // TODO Enforce or check invariant (it should catch newly added storage
+    // fields too) that every function that changes storage, except for data
+    // from Tendermint's block header should call this function to update the
+    // Merkle tree.
+    fn update_tree(&mut self, key: H256, value: H256) -> Result<(), String> {
+        self.block
+            .tree
+            .0
+            .update(key, value)
+            .map_err(|err| format!("SMT error {}", err))?;
+        Ok(())
     }
 
     pub fn update_balance(
@@ -85,13 +108,9 @@ impl Storage {
         addr: &Address,
         balance: Balance,
     ) -> Result<(), String> {
-        let key = addr.hash();
-        let value = balance.hash();
-        self.block
-            .tree
-            .0
-            .update(key, value)
-            .map_err(|err| format!("SMT error {}", err))?;
+        let key = addr.hash256();
+        let value = balance.hash256();
+        self.update_tree(key, value)?;
         self.block.balances.insert(addr.clone(), balance);
         Ok(())
     }
@@ -122,19 +141,23 @@ impl Storage {
         }
     }
 
-    pub fn has_balance_gte(
-        &self,
-        addr: &Address,
-        amount: u64,
+    /// # Block header data
+    /// Chain ID is not in the Merkle tree as it's tracked by Tendermint in the
+    /// block header. Hence, we don't update the tree when this is set.
+    pub fn set_chain_id(&mut self, chain_id: &str) -> Result<(), String> {
+        self.chain_id = chain_id.to_owned();
+        Ok(())
+    }
+
+    /// Block data is in the Merkle tree as it's tracked by Tendermint in the
+    /// block header. Hence, we don't update the tree when this is set.
+    pub fn begin_block(
+        &mut self,
+        hash: BlockHash,
+        height: u64,
     ) -> Result<(), String> {
-        match self.block.balances.get(&addr) {
-            None => return Err("Source not found".to_owned()),
-            Some(&Balance(src_balance)) => {
-                if src_balance < amount {
-                    return Err("Source balance is too low".to_owned());
-                };
-            }
-        }
+        self.block.hash = hash;
+        self.block.height = height;
         Ok(())
     }
 }
@@ -142,6 +165,11 @@ impl Storage {
 impl Default for BlockHash {
     fn default() -> Self {
         Self([0; 32])
+    }
+}
+impl Hash256 for BlockHash {
+    fn hash256(&self) -> H256 {
+        self.0.hash256()
     }
 }
 
@@ -184,11 +212,15 @@ impl core::fmt::Debug for MerkleTree {
     }
 }
 
-impl Address {
-    fn hash(&self) -> H256 {
+trait Hash256 {
+    fn hash256(&self) -> H256;
+}
+
+impl Hash256 for Address {
+    fn hash256(&self) -> H256 {
         match self {
-            Address::Basic(addr) => addr.hash(),
-            Address::Validator(addr) => addr.hash(),
+            Address::Basic(addr) => addr.hash256(),
+            Address::Validator(addr) => addr.hash256(),
         }
     }
 }
@@ -197,9 +229,10 @@ impl BasicAddress {
     pub fn new_address(addr: String) -> Address {
         Address::Basic(Self(addr))
     }
-
-    fn hash(&self) -> H256 {
-        hash_string(&self.0)
+}
+impl Hash256 for BasicAddress {
+    fn hash256(&self) -> H256 {
+        self.0.hash256()
     }
 }
 
@@ -207,9 +240,10 @@ impl ValidatorAddress {
     pub fn new_address(addr: String) -> Address {
         Address::Validator(Self(addr))
     }
-
-    fn hash(&self) -> H256 {
-        hash_string(&self.0)
+}
+impl Hash256 for ValidatorAddress {
+    fn hash256(&self) -> H256 {
+        self.0.hash256()
     }
 }
 
@@ -217,8 +251,9 @@ impl Balance {
     pub fn new(balance: u64) -> Self {
         Self(balance)
     }
-
-    fn hash(&self) -> H256 {
+}
+impl Hash256 for Balance {
+    fn hash256(&self) -> H256 {
         if self.0 == 0 {
             return H256::zero();
         }
@@ -230,19 +265,57 @@ impl Balance {
     }
 }
 
-fn hash_string(str: &String) -> H256 {
-    if str.is_empty() {
-        return H256::zero();
+impl Hash256 for &str {
+    fn hash256(&self) -> H256 {
+        if self.is_empty() {
+            return H256::zero();
+        }
+        let mut buf = [0u8; 32];
+        let mut hasher = new_blake2b();
+        hasher.update(self.as_bytes());
+        hasher.finalize(&mut buf);
+        buf.into()
     }
-    let mut buf = [0u8; 32];
-    let mut hasher = new_blake2b();
-    hasher.update(str.as_bytes());
-    hasher.finalize(&mut buf);
-    buf.into()
+}
+
+impl Hash256 for String {
+    fn hash256(&self) -> H256 {
+        if self.is_empty() {
+            return H256::zero();
+        }
+        let mut buf = [0u8; 32];
+        let mut hasher = new_blake2b();
+        hasher.update(self.as_bytes());
+        hasher.finalize(&mut buf);
+        buf.into()
+    }
+}
+
+impl Hash256 for [u8; 32] {
+    fn hash256(&self) -> H256 {
+        if self.is_empty() {
+            return H256::zero();
+        }
+        let mut buf = [0u8; 32];
+        let mut hasher = new_blake2b();
+        hasher.update(self);
+        hasher.finalize(&mut buf);
+        buf.into()
+    }
+}
+
+impl Hash256 for u64 {
+    fn hash256(&self) -> H256 {
+        let mut buf = [0u8; 32];
+        let mut hasher = new_blake2b();
+        hasher.update(&self.to_le_bytes());
+        hasher.finalize(&mut buf);
+        buf.into()
+    }
 }
 
 fn new_blake2b() -> Blake2b {
-    Blake2bBuilder::new(32).personal(b"personal hasher").build()
+    Blake2bBuilder::new(32).personal(b"anoma storage").build()
 }
 
 /// A helper to show bytes in hex

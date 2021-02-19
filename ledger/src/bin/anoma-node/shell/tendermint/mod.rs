@@ -150,7 +150,7 @@ impl abci::Application for ShellWrapper {
         self.shell.init_chain(chain_id);
         // Set the initial validator set
         let validators = resp.mut_validators();
-        // TODO delete params after initialization? (`Option::take()`)
+        // TODO delete params after initialization? (`Option::take()`?)
         let mut abci_validator = abci::ValidatorUpdate::new();
         let mut pub_key = abci::PubKey::new();
         pub_key.set_field_type("ed25519".to_string());

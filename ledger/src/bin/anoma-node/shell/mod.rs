@@ -1,7 +1,9 @@
 mod storage;
 mod tendermint;
 
-use self::storage::{Balance, BasicAddress, BlockHash, Storage, ValidatorAddress};
+use self::storage::{
+    Balance, BasicAddress, BlockHash, Storage, ValidatorAddress,
+};
 use anoma::{
     config::Config,
     types::{Message, Transaction},
@@ -49,7 +51,7 @@ impl Shell {
 
 impl Shell {
     pub fn init_chain(&mut self, chain_id: &str) {
-        self.storage.set_chain_id(chain_id);
+        self.storage.set_chain_id(chain_id).unwrap();
     }
 
     /// Validate a transaction request. On success, the transaction will
@@ -93,13 +95,14 @@ impl Shell {
 
     /// Begin a new block.
     pub fn begin_block(&mut self, hash: BlockHash, height: u64) {
-        self.storage.begin_block(hash, height);
+        self.storage.begin_block(hash, height).unwrap();
     }
 
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> MerkleRoot {
         // TODO store the block's data in DB
+        log::debug!("storage to commit {:#?}", self.storage);
         let root = self.storage.merkle_root();
         MerkleRoot(root.as_slice().to_vec())
     }
