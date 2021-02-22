@@ -5,20 +5,25 @@ use self::storage::{
     Balance, BasicAddress, BlockHash, Storage, ValidatorAddress,
 };
 use anoma::{
+    bytes::ByteBuf,
     config::Config,
     types::{Message, Transaction},
 };
-use std::path::Path;
+use std::path::PathBuf;
 
 pub fn run(config: Config) {
     // run our shell via Tendermint ABCI
-    let db_path = config.home_dir.join("store.db");
+    let db_path = config.home_dir.join("db");
     let shell = Shell::new(db_path);
     let addr = "127.0.0.1:26658".parse().unwrap();
     tendermint::run(config, addr, shell)
 }
 
 pub fn reset(config: Config) {
+    // simply nuke the DB files
+    let db_path = config.home_dir.join("db");
+    std::fs::remove_dir_all(db_path).unwrap();
+    // reset Tendermint state
     tendermint::reset(config)
 }
 
@@ -39,8 +44,8 @@ pub type ApplyResult<'a> = Result<(), String>;
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
-    pub fn new<P: AsRef<Path>>(_db_path: P) -> Self {
-        let mut storage = Storage::default();
+    pub fn new(db_path: PathBuf) -> Self {
+        let mut storage = Storage::new(db_path);
         let va = ValidatorAddress::new_address("va".to_owned());
         storage.update_balance(&va, Balance::new(10000)).unwrap();
         let ba = BasicAddress::new_address("ba".to_owned());
@@ -71,7 +76,9 @@ impl Shell {
 
         // Validation logic
         let src_addr = BasicAddress::new_address(tx.src);
-        self.storage.has_balance_gte(&src_addr, tx.amount)?;
+        self.storage
+            .has_balance_gte(&src_addr, tx.amount)
+            .map_err(|e| format!("Encountered a storage error {:?}", e))?;
 
         Ok(())
     }
@@ -87,7 +94,9 @@ impl Shell {
 
         let src_addr = BasicAddress::new_address(tx.src);
         let dest_addr = BasicAddress::new_address(tx.dest);
-        self.storage.transfer(&src_addr, &dest_addr, tx.amount)?;
+        self.storage
+            .transfer(&src_addr, &dest_addr, tx.amount)
+            .map_err(|e| format!("Encountered a storage error {:?}", e))?;
         log::debug!("storage after apply_tx {:#?}", self.storage);
 
         Ok(())
@@ -101,16 +110,38 @@ impl Shell {
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> MerkleRoot {
-        // TODO store the block's data in DB
         log::debug!("storage to commit {:#?}", self.storage);
+        // store the block's data in DB
+        // TODO async?
+        self.storage.commit().unwrap_or_else(|e| {
+            log::error!(
+                "Encountered a storage error while committing a block {:?}",
+                e
+            )
+        });
         let root = self.storage.merkle_root();
         MerkleRoot(root.as_slice().to_vec())
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any.
-    pub fn last_state(&self) -> Option<(MerkleRoot, u64)> {
-        // TODO try to load the last block from DB
-        None
+    pub fn last_state(&mut self) -> Option<(MerkleRoot, u64)> {
+        let result = self.storage.load_last_state().unwrap_or_else(|e| {
+            log::error!("Encountered an error while reading last state from storage {:?}", e);
+            None
+        });
+        match &result {
+            Some((root, height)) => {
+                log::info!(
+                    "Last state root hash: {}, height: {}",
+                    ByteBuf(&root.0),
+                    height
+                )
+            }
+            None => {
+                log::info!("No state could be found")
+            }
+        }
+        result
     }
 }

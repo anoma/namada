@@ -172,7 +172,7 @@ impl abci::Application for ShellWrapper {
         let raw_hash = req.get_hash();
         match BlockHash::try_from(raw_hash) {
             Err(err) => {
-                log::error!("{}", err);
+                log::error!("{:#?}", err);
                 return resp;
             }
             Ok(hash) => {
