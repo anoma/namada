@@ -2,26 +2,20 @@
 //! state in DB.
 
 mod db;
+mod types;
 
 use anoma::bytes::ByteBuf;
-use blake2b_rs::{Blake2b, Blake2bBuilder};
 use rocksdb::WriteBatch;
-use sparse_merkle_tree::{
-    blake2b::Blake2bHasher, default_store::DefaultStore, SparseMerkleTree, H256,
+use sparse_merkle_tree::{default_store::DefaultStore, SparseMerkleTree, H256};
+use std::{collections::HashMap, ops::Deref, path::PathBuf};
+use types::{BlockHeight, KeySeg, Value};
+
+pub use self::types::{
+    Address, Balance, BasicAddress, BlockHash, MerkleTree, ValidatorAddress,
 };
-use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    fmt::write,
-    hash::Hash,
-    path::{Path, PathBuf},
-};
+use self::types::{Hash256, CHAIN_ID_LENGTH};
 
 use super::MerkleRoot;
-
-// TODO adjust once chain ID scheme is chosen
-const CHAIN_ID_LENGTH: usize = 20;
-const BLOCK_HASH_LENGTH: usize = 32;
 
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -47,28 +41,9 @@ pub struct Storage {
 pub struct BlockStorage {
     tree: MerkleTree,
     hash: BlockHash,
-    height: u64,
+    height: BlockHeight,
     balances: HashMap<Address, Balance>,
 }
-
-pub struct BlockHash([u8; 32]);
-
-struct MerkleTree(SparseMerkleTree<Blake2bHasher, H256, DefaultStore<H256>>);
-
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum Address {
-    Validator(ValidatorAddress),
-    Basic(BasicAddress),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct BasicAddress(String);
-
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct ValidatorAddress(String);
-
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Balance(u64);
 
 impl Storage {
     pub fn new(db_path: PathBuf) -> Self {
@@ -77,7 +52,7 @@ impl Storage {
         let block = BlockStorage {
             tree,
             hash: BlockHash::default(),
-            height: 0,
+            height: BlockHeight(0),
             balances,
         };
         Self {
@@ -96,30 +71,111 @@ impl Storage {
             .get("height")
             .map_err(|e| Error::DBError(db::Error::RocksDBError(e)))?
         {
-            Some(raw_height) => {
-                let height =
-                    u64::from_le_bytes(raw_height.try_into().map_err(|e| {
-                        Error::Stringly(format!(
-                            "height encoding error {:?}",
-                            e
-                        ))
-                    })?);
-                let prefix = format!("b/{}", height);
-
+            Some(bytes) => {
+                // TODO if there's an issue decoding this height, should we try
+                // on a pred?
+                let height = BlockHeight::decode(bytes);
+                let prefix = height.to_key_seg();
                 // Merkle tree
                 {
-                    let prefix = format!("{}/tree", prefix);
+                    let tree_prefix = format!("{}/tree", prefix);
                     // Merkle root hash
                     {
-                        let key = format!("{}/root", prefix);
+                        let key = format!("{}/root", tree_prefix);
                         match db.get(key).map_err(|e| {
                             Error::DBError(db::Error::RocksDBError(e))
                         })? {
                             Some(raw_root) => {
-                                let root = MerkleRoot(raw_root);
-                                // TODO set the current state from these
+                                let root = H256::decode(raw_root);
+
+                                // Tree's store
+                                {
+                                    let key = format!("{}/store", tree_prefix);
+                                    let bytes = db
+                                        .get(key)
+                                        .map_err(|e| {
+                                            Error::DBError(
+                                                db::Error::RocksDBError(e),
+                                            )
+                                        })?
+                                        .unwrap();
+                                    let store =
+                                        DefaultStore::<H256>::decode(bytes);
+                                    self.block.tree = MerkleTree(
+                                        SparseMerkleTree::new(root, store),
+                                    )
+                                }
+                                // Block hash
+                                {
+                                    let key = format!("{}/hash", prefix);
+                                    let bytes = db
+                                        .get(key)
+                                        .map_err(|e| {
+                                            Error::DBError(
+                                                db::Error::RocksDBError(e),
+                                            )
+                                        })?
+                                        .unwrap();
+                                    let hash = BlockHash::decode(bytes);
+                                    self.block.hash = hash;
+                                }
+                                // Balances
+                                {
+                                    let prefix = format!("{}/balance/", prefix);
+                                    for (key, bytes) in
+                                        db.prefix_iterator(&prefix)
+                                    {
+                                        // decode the key and strip the prefix
+                                        let path =
+                                            &String::from_utf8((*key).to_vec())
+                                                .map_err(|e| {
+                                                    Error::Stringly(format!(
+                                                "error decoding an address: {}",
+                                                e
+                                            ))
+                                                })?;
+                                        match path.strip_prefix(&prefix) {
+                                            Some(segment) => {
+                                                let addr =
+                                                    Address::from_key_seg(
+                                                        &segment.to_owned(),
+                                                    )
+                                                    .map_err(|e| {
+                                                        Error::Stringly(
+                                                            format!(
+                                                "error decoding an address: {}",
+                                                e
+                                            ),
+                                                        )
+                                                    })?;
+                                                let balance = Balance::decode(
+                                                    bytes.to_vec(),
+                                                );
+                                                self.block
+                                                    .balances
+                                                    .insert(addr, balance);
+                                            }
+                                            None => {
+                                                // TODO the prefix_iterator is
+                                                // going into non-matching
+                                                // prefixes
+                                                log::debug!("Cannot find prefix \"{}\" in \"{}\"", prefix, path);
+                                            }
+                                        }
+                                    }
+                                }
+
                                 self.block.height = height;
-                                Ok(Some((root, height)))
+                                log::debug!(
+                                    "Loaded storage from DB: {:#?}",
+                                    self
+                                );
+                                Ok(Some((
+                                    MerkleRoot(
+                                        root.as_slice().deref().to_vec(),
+                                    ),
+                                    self.block.height.0,
+                                )))
                             }
                             None => Ok(None),
                         }
@@ -132,26 +188,13 @@ impl Storage {
 
     /// Persist the current block's state to the database
     pub fn commit(&self) -> Result<()> {
-        // TODO the rocksdb impl should be contained in the db module
         // TODO DB sub-dir with chain ID?
         let db = db::open(&self.db_path).map_err(Error::DBError)?;
-        // TODO pick an encoding lib
-        // TODO store paths and data:
-        // - "height": the last committed height
-        //   - write after everything else is written?
-        //   - for async writes, we need to take care that all previous heights
-        //     are known when updating this
-        // - "b/h" for each block at height "h":
-        //   - "tree": merkle tree
-        //     - "root": root hash
-        //     - "branches/H256": stored branches
-        //     - "leaves/H256": stored leaves
-        //   - "hash": hash
-        //   - "balance/address": balance for each account address
         let mut batch = WriteBatch::default();
-        let prefix = format!("b/{}", self.block.height);
+        let prefix = self.block.height.to_key_seg();
         // Merkle tree
         {
+            // TODO add and use `to_key_seg` for these
             let prefix = format!("{}/tree", prefix);
             // Merkle root hash
             {
@@ -159,10 +202,34 @@ impl Storage {
                 let value = self.merkle_root();
                 batch.put(key, value.as_slice());
             }
+            // Tree's store
+            {
+                let key = format!("{}/store", prefix);
+                let value = self.block.tree.0.store();
+                batch.put(key, value.encode());
+            }
+        }
+        // Block hash
+        {
+            let key = format!("{}/hash", prefix);
+            let value = &self.block.hash;
+            batch.put(key, value.encode());
+        }
+        // Balances
+        {
+            self.block.balances.iter().for_each(|(addr, balance)| {
+                let key = format!("{}/balance/{}", prefix, addr.to_key_seg());
+                batch.put(key, balance.encode());
+            });
         }
         db.write(batch)
             .map_err(|e| Error::DBError(db::Error::RocksDBError(e)))?;
-        db.put("height", self.block.height.to_le_bytes())
+        // Write height after everything else is written
+        // TODO for async writes, we need to take care that all previous heights
+        // are known when updating this
+        db.put("height", self.block.height.encode())
+            .map_err(|e| Error::DBError(db::Error::RocksDBError(e)))?;
+        db.flush()
             .map_err(|e| Error::DBError(db::Error::RocksDBError(e)))?;
         Ok(())
     }
@@ -253,38 +320,8 @@ impl Storage {
     /// block header. Hence, we don't update the tree when this is set.
     pub fn begin_block(&mut self, hash: BlockHash, height: u64) -> Result<()> {
         self.block.hash = hash;
-        self.block.height = height;
+        self.block.height = BlockHeight(height);
         Ok(())
-    }
-}
-
-impl Default for BlockHash {
-    fn default() -> Self {
-        Self([0; 32])
-    }
-}
-
-impl TryFrom<&[u8]> for BlockHash {
-    type Error = self::Error;
-
-    fn try_from(value: &[u8]) -> Result<Self> {
-        if value.len() != BLOCK_HASH_LENGTH {
-            return Err(Error::Stringly(format!(
-                "Unexpected block hash length {}, expected {}",
-                value.len(),
-                BLOCK_HASH_LENGTH
-            )));
-        }
-        let mut hash = [0; 32];
-        hash.copy_from_slice(value);
-        Ok(BlockHash(hash))
-    }
-}
-
-impl core::fmt::Debug for BlockHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let hash = format!("{}", ByteBuf(&self.0));
-        f.debug_tuple("BlockHash").field(&hash).finish()
     }
 }
 
@@ -301,111 +338,4 @@ impl core::fmt::Debug for MerkleTree {
             .field("root_hash", &root_hash)
             .finish()
     }
-}
-
-// TODO make derive macro for Hash256 https://doc.rust-lang.org/book/ch19-06-macros.html#how-to-write-a-custom-derive-macro
-trait Hash256 {
-    fn hash256(&self) -> H256;
-}
-
-impl Hash256 for Address {
-    fn hash256(&self) -> H256 {
-        match self {
-            Address::Basic(addr) => addr.hash256(),
-            Address::Validator(addr) => addr.hash256(),
-        }
-    }
-}
-
-impl BasicAddress {
-    pub fn new_address(addr: String) -> Address {
-        Address::Basic(Self(addr))
-    }
-}
-impl Hash256 for BasicAddress {
-    fn hash256(&self) -> H256 {
-        self.0.hash256()
-    }
-}
-
-impl ValidatorAddress {
-    pub fn new_address(addr: String) -> Address {
-        Address::Validator(Self(addr))
-    }
-}
-impl Hash256 for ValidatorAddress {
-    fn hash256(&self) -> H256 {
-        self.0.hash256()
-    }
-}
-
-impl Balance {
-    pub fn new(balance: u64) -> Self {
-        Self(balance)
-    }
-}
-impl Hash256 for Balance {
-    fn hash256(&self) -> H256 {
-        if self.0 == 0 {
-            return H256::zero();
-        }
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(&self.0.to_le_bytes());
-        hasher.finalize(&mut buf);
-        buf.into()
-    }
-}
-
-impl Hash256 for &str {
-    fn hash256(&self) -> H256 {
-        if self.is_empty() {
-            return H256::zero();
-        }
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(self.as_bytes());
-        hasher.finalize(&mut buf);
-        buf.into()
-    }
-}
-
-impl Hash256 for String {
-    fn hash256(&self) -> H256 {
-        if self.is_empty() {
-            return H256::zero();
-        }
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(self.as_bytes());
-        hasher.finalize(&mut buf);
-        buf.into()
-    }
-}
-
-impl Hash256 for [u8; 32] {
-    fn hash256(&self) -> H256 {
-        if self.is_empty() {
-            return H256::zero();
-        }
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(self);
-        hasher.finalize(&mut buf);
-        buf.into()
-    }
-}
-
-impl Hash256 for u64 {
-    fn hash256(&self) -> H256 {
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(&self.to_le_bytes());
-        hasher.finalize(&mut buf);
-        buf.into()
-    }
-}
-
-fn new_blake2b() -> Blake2b {
-    Blake2bBuilder::new(32).personal(b"anoma storage").build()
 }

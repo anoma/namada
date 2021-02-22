@@ -22,6 +22,9 @@ cargo run --bin anomac -- transfer -c 1
 # ...or shorter when executables are installed:
 anoma transfer -c 1
 
+# Watch and on change run a node (the state will be persisted)
+cargo watch -x "run --bin anomad -- run"
+
 # Watch and on change reset & run a node
 cargo watch -x "run --bin anomad -- reset" -x "run --bin anomad -- run"
 ```

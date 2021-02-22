@@ -6,7 +6,8 @@ version = "0.1.0"
 dependencies = [
  "abci",
  "base64",
- "blake2b-rs 0.2.0",
+ "blake2b-rs",
+ "borsh",
  "byteorder",
  "cargo-watch",
  "clap 3.0.0-beta.2",
@@ -59,6 +60,12 @@ name = "adler"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee2a4ec343196209d6594e19543ae87a39f96d5534d7174822a3ad825dd6ed7e"
+
+[[package]]
+name = "ahash"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "739f4a8db6605981345c5654f3a85b056ce52f37a39d34da03f25bf2151ea16e"
 
 [[package]]
 name = "aho-corasick"
@@ -206,15 +213,6 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
 name = "blake2b-rs"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e35e362830ef90ecea16f09b21b75d22d33a8562a679c74ab4f4fa49b4fcb87"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "blake2b-rs"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89a8565807f21b913288968e391819e7f9b2f0f46c7b89549c051cccf3a2771"
@@ -241,6 +239,51 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "borsh"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5a26c53ddf60281f18e7a29b20db7ba3db82a9d81b9650bfaa02d646f50d364"
+dependencies = [
+ "borsh-derive",
+ "hashbrown",
+]
+
+[[package]]
+name = "borsh-derive"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b637a47728b78a78cd7f4b85bf06d71ef4221840e059a38f048be2422bf673b2"
+dependencies = [
+ "borsh-derive-internal",
+ "borsh-schema-derive-internal",
+ "proc-macro-crate",
+ "proc-macro2",
+ "syn",
+]
+
+[[package]]
+name = "borsh-derive-internal"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d813fa25eb0bed78c36492cff4415f38c760d6de833d255ba9095bd8ebb7d725"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "borsh-schema-derive-internal"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcf78ee4a98c8cb9eba1bac3d3e2a1ea3d7673c719ce691e67b5cbafc472d3b7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -823,6 +866,9 @@ name = "hashbrown"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
+dependencies = [
+ "ahash",
+]
 
 [[package]]
 name = "heck"
@@ -1373,6 +1419,15 @@ name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
+
+[[package]]
+name = "proc-macro-crate"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d6ea3c4595b96363c13943497db34af4460fb474a95c43f4446ad341b8c9785"
+dependencies = [
+ "toml 0.5.8",
+]
 
 [[package]]
 name = "proc-macro-error"
@@ -1938,10 +1993,11 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/jjyr/sparse-merkle-tree?tag=v0.3.1-pre#3731562d8b0a9af3cc9487f254bd64daa1d13cc2"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding#84f9a920fce8873ee67376242d95b89092cddd19"
 dependencies = [
- "blake2b-rs 0.1.5",
- "cfg-if 0.1.10",
+ "blake2b-rs",
+ "borsh",
+ "cfg-if 1.0.0",
 ]
 
 [[package]]
