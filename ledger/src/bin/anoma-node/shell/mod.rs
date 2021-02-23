@@ -22,7 +22,10 @@ pub fn run(config: Config) {
 pub fn reset(config: Config) {
     // simply nuke the DB files
     let db_path = config.home_dir.join("db");
-    std::fs::remove_dir_all(db_path).unwrap();
+    match std::fs::remove_dir_all(db_path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        res => res.unwrap(),
+    };
     // reset Tendermint state
     tendermint::reset(config)
 }
@@ -46,6 +49,7 @@ pub struct MerkleRoot(pub Vec<u8>);
 impl Shell {
     pub fn new(db_path: PathBuf) -> Self {
         let mut storage = Storage::new(db_path);
+        // TODO load initial accounts from genesis
         let va = ValidatorAddress::new_address("va".to_owned());
         storage.update_balance(&va, Balance::new(10000)).unwrap();
         let ba = BasicAddress::new_address("ba".to_owned());
@@ -112,7 +116,7 @@ impl Shell {
     pub fn commit(&mut self) -> MerkleRoot {
         log::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
-        // TODO async?
+        // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {
             log::error!(
                 "Encountered a storage error while committing a block {:?}",

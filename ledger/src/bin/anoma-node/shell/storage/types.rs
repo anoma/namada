@@ -1,13 +1,4 @@
 //! The key and values that may be persisted in a DB.
-//!
-//! The current storage tree is:
-//! - "height": the last committed height
-//! - "b/h" for each block at height "h":
-//!   - "tree": merkle tree
-//!     - "root": root hash
-//!     - "store": the tree's store
-//!   - "hash": block hash
-//!   - "balance/address": balance for each account "address"
 
 use anoma::bytes::ByteBuf;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
@@ -17,10 +8,11 @@ use sparse_merkle_tree::{
 };
 use std::convert::TryFrom;
 
-// TODO adjust once chain ID scheme is chosen, add `Default`
+// TODO adjust once chain ID scheme is chosen, add `Default` impl that allocates
+// this
 pub const CHAIN_ID_LENGTH: usize = 20;
 const BLOCK_HASH_LENGTH: usize = 32;
-// TODO customize for different types (`size_of`?)
+// TODO customize for different types (derive from `size_of`?)
 const DEFAULT_SERIALIZER_CAPACITY: usize = 1024;
 
 #[derive(
@@ -59,7 +51,7 @@ pub struct ValidatorAddress(pub String);
 )]
 pub struct Balance(pub u64);
 
-// TODO make derive macro for Hash256 https://doc.rust-lang.org/book/ch19-06-macros.html#how-to-write-a-custom-derive-macro
+// TODO make a derive macro for Hash256 https://doc.rust-lang.org/book/ch19-06-macros.html#how-to-write-a-custom-derive-macro
 pub trait Hash256 {
     fn hash256(&self) -> H256;
 }
@@ -104,7 +96,7 @@ impl<T: Value> Value for DefaultStore<T> {}
 
 impl KeySeg for BlockHeight {
     fn to_key_seg(&self) -> String {
-        format!("b/{}", self.0)
+        format!("{}", self.0)
     }
 
     fn from_key_seg(_seg: &String) -> Result<Self, String> {
