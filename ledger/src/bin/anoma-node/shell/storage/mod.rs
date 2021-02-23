@@ -63,9 +63,10 @@ impl Storage {
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
         let mut db = db::open(&self.db_path).map_err(Error::DBError)?;
-        if let Ok(Some((tree, hash, height, balances))) =
-            db.read_block().map_err(Error::DBError)
+        if let Ok(Some((chain_id, tree, hash, height, balances))) =
+            db.read_last_block().map_err(Error::DBError)
         {
+            self.chain_id = chain_id;
             self.block.tree = tree;
             self.block.hash = hash;
             self.block.height = height;
@@ -172,7 +173,12 @@ impl Storage {
     /// Chain ID is not in the Merkle tree as it's tracked by Tendermint in the
     /// block header. Hence, we don't update the tree when this is set.
     pub fn set_chain_id(&mut self, chain_id: &str) -> Result<()> {
+        if self.chain_id == chain_id {
+            return Ok(());
+        }
         self.chain_id = chain_id.to_owned();
+        let mut db = db::open(&self.db_path).map_err(Error::DBError)?;
+        db.write_chain_id(&self.chain_id).map_err(Error::DBError)?;
         Ok(())
     }
 

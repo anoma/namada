@@ -1,6 +1,7 @@
 //! The persistent storage, currently in RocksDB.
 //!
 //! The current storage tree is:
+//! - `chain_id`
 //! - `height`: the last committed block height
 //! - `h`: for each block at height `h`:
 //!   - `tree`: merkle tree
@@ -17,6 +18,8 @@ use crate::shell::storage::types::Value;
 use rocksdb::{BlockBasedOptions, Options, WriteBatch};
 use sparse_merkle_tree::{default_store::DefaultStore, SparseMerkleTree, H256};
 use std::{collections::HashMap, path::Path};
+
+// TODO the DB schema will probably need some kind of versioning
 
 pub struct DB(rocksdb::DB);
 
@@ -105,22 +108,38 @@ impl DB {
         self.0.flush().map_err(|e| Error::RocksDBError(e))
     }
 
-    pub fn read_block(
+    pub fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
+        self.0
+            .put("chain_id", chain_id.encode())
+            .map_err(|e| Error::RocksDBError(e))?;
+        self.0.flush().map_err(|e| Error::RocksDBError(e))
+    }
+
+    pub fn read_last_block(
         &mut self,
     ) -> Result<
         Option<(
+            String,
             MerkleTree,
             BlockHash,
             BlockHeight,
             HashMap<Address, Balance>,
         )>,
     > {
+        let chain_id;
         let tree;
         let hash;
         let height;
         let mut balances: HashMap<Address, Balance> = HashMap::new();
 
         let prefix;
+        // Chain ID
+        match self.0.get("chain_id").map_err(Error::RocksDBError)? {
+            Some(bytes) => {
+                chain_id = String::decode(bytes);
+            }
+            None => return Ok(None),
+        }
         // Block height
         match self.0.get("height").map_err(Error::RocksDBError)? {
             Some(bytes) => {
@@ -204,6 +223,6 @@ impl DB {
                 }
             }
         }
-        Ok(Some((tree, hash, height, balances)))
+        Ok(Some((chain_id, tree, hash, height, balances)))
     }
 }
