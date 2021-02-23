@@ -1,5 +1,7 @@
 # Anoma ledger prototype
 
+The ledger currently requires that [Tendermint version 0.33.x](https://github.com/tendermint/tendermint) is installed and available on path. The newer versions 0.34.x are not yet supported. [The pre-built binaries and the source for 0.33.9 are here](https://github.com/tendermint/tendermint/releases/tag/v0.33.9).
+
 Handy commands:
 
 ```shell
