@@ -217,7 +217,7 @@ impl Hash256 for Balance {
         }
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&self.0.to_le_bytes());
+        hasher.update(&self.encode());
         hasher.finalize(&mut buf);
         buf.into()
     }
@@ -230,7 +230,7 @@ impl Hash256 for &str {
         }
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(self.as_bytes());
+        hasher.update(&self.to_string().encode());
         hasher.finalize(&mut buf);
         buf.into()
     }
@@ -243,7 +243,7 @@ impl Hash256 for String {
         }
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(self.as_bytes());
+        hasher.update(&self.encode());
         hasher.finalize(&mut buf);
         buf.into()
     }
@@ -266,7 +266,7 @@ impl Hash256 for u64 {
     fn hash256(&self) -> H256 {
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&self.to_le_bytes());
+        hasher.update(&self.encode());
         hasher.finalize(&mut buf);
         buf.into()
     }
