@@ -2,7 +2,10 @@
 
 ## Quick start
 
-Currently, there are 2 types of accounts: basic and validator. The accounts have string addresses, basic prefixed with `'b'` and validator with `'v'`. Accounts can have some balance of unspecified currency ¤ (type `u64`).
+The ledger currently requires that [Tendermint version 0.33.x](https://github.com/tendermint/tendermint) is installed and available on path. The newer versions 0.34.x are not yet supported. [The pre-built binaries and the source for 0.33.9 are here](https://github.com/tendermint/tendermint/releases/tag/v0.33.9).
+
+There are 2 types of accounts: basic and validator. The accounts have string addresses, basic prefixed with `'b'` and validator with `'v'`. Accounts can have some balance of unspecified currency ¤ (type `u64`).
+
 
 ```shell
 # Build
