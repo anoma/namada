@@ -1,8 +1,11 @@
 # Anoma ledger prototype
 
+## Quick start
+
 The ledger currently requires that [Tendermint version 0.33.x](https://github.com/tendermint/tendermint) is installed and available on path. The newer versions 0.34.x are not yet supported. [The pre-built binaries and the source for 0.33.9 are here](https://github.com/tendermint/tendermint/releases/tag/v0.33.9).
 
-Handy commands:
+There are 2 types of accounts: basic and validator. The accounts have string addresses, basic prefixed with `'b'` and validator with `'v'`. Accounts can have some balance of unspecified currency ¤ (type `u64`).
+
 
 ```shell
 # Build
@@ -14,13 +17,24 @@ make install
 # Run Anoma daemon (this will also initialize and run Tendermint node)
 make run
 
-# Reset the state (resets Tendermint too), ...
+# Reset the state (resets Tendermint too)
 cargo run --bin anomad -- reset
-# ...or shorter when executables are installed:
-anoma reset
 
-# Submit a transaction to the Tendermint node, ...
-cargo run --bin anomac -- transfer -c 1
-# ...or shorter when executables are installed:
-anoma transfer -c 1
+# Submit a transfer from "va" to "ba" of 10¤ to the Tendermint node
+cargo run --bin anomac -- transfer -s va -d ba -a 10
+
+# Watch and on change run a node (the state will be persisted)
+cargo watch -x "run --bin anomad -- run"
+
+# Watch and on change reset & run a node
+cargo watch -x "run --bin anomad -- reset" -x "run --bin anomad -- run"
 ```
+
+## Logging
+
+To change the log level, set `ANOMA_LOG` environment variable to one of:
+- `error`
+- `warn`
+- `info`
+- `debug`
+- `trace`

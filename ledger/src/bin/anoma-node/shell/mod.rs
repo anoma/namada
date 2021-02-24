@@ -1,32 +1,37 @@
-mod db;
 mod storage;
 mod tendermint;
 
-use std::path::Path;
-
+use self::storage::{
+    Balance, BasicAddress, BlockHash, Storage, ValidatorAddress,
+};
 use anoma::{
+    bytes::ByteBuf,
     config::Config,
     types::{Message, Transaction},
 };
-use byteorder::{BigEndian, ByteOrder};
+use std::path::PathBuf;
 
 pub fn run(config: Config) {
     // run our shell via Tendermint ABCI
-    let db_path = config.home_dir.join("store.db");
+    let db_path = config.home_dir.join("db");
     let shell = Shell::new(db_path);
     let addr = "127.0.0.1:26658".parse().unwrap();
     tendermint::run(config, addr, shell)
 }
 
 pub fn reset(config: Config) {
+    // simply nuke the DB files
+    let db_path = config.home_dir.join("db");
+    match std::fs::remove_dir_all(db_path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        res => res.unwrap(),
+    };
+    // reset Tendermint state
     tendermint::reset(config)
 }
 
-// Simple counter application. Its only state is a u64 count
-// We use BigEndian to serialize the data across transactions calls
 pub struct Shell {
-    store: db::Store,
-    count: u64,
+    storage: storage::Storage,
 }
 
 pub enum MempoolTxType {
@@ -42,20 +47,27 @@ pub type ApplyResult<'a> = Result<(), String>;
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
-    pub fn new<P: AsRef<Path>>(db_path: P) -> Self {
-        Self {
-            store: db::Store::new(db_path),
-            count: 0,
-        }
+    pub fn new(db_path: PathBuf) -> Self {
+        let mut storage = Storage::new(db_path);
+        // TODO load initial accounts from genesis
+        let va = ValidatorAddress::new_address("va".to_owned());
+        storage.update_balance(&va, Balance::new(10000)).unwrap();
+        let ba = BasicAddress::new_address("ba".to_owned());
+        storage.update_balance(&ba, Balance::new(100)).unwrap();
+        Self { storage }
     }
 }
 
 impl Shell {
+    pub fn init_chain(&mut self, chain_id: &str) {
+        self.storage.set_chain_id(chain_id).unwrap();
+    }
+
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
     pub fn mempool_validate(
-        &mut self,
+        &self,
         tx_bytes: &[u8],
         _prevalidation_type: MempoolTxType,
     ) -> MempoolValidationResult {
@@ -65,15 +77,13 @@ impl Shell {
                 e, tx_bytes
             )
         })?;
-        let c = tx.count;
 
-        // Validation logic.
-        // Rule: Transactions must be incremental: 1,2,3,4...
-        if c != self.count + 1 {
-            return Err(String::from("Count must be incremental!"));
-        }
-        // Update state to keep state correct for next check_tx call
-        self.count = c;
+        // Validation logic
+        let src_addr = BasicAddress::new_address(tx.src);
+        self.storage
+            .has_balance_gte(&src_addr, tx.amount)
+            .map_err(|e| format!("Encountered a storage error {:?}", e))?;
+
         Ok(())
     }
 
@@ -85,18 +95,57 @@ impl Shell {
                 e, tx_bytes
             )
         })?;
-        // Update state
-        self.count = tx.count;
-        // Return default code 0 == bueno
+
+        let src_addr = BasicAddress::new_address(tx.src);
+        let dest_addr = BasicAddress::new_address(tx.dest);
+        self.storage
+            .transfer(&src_addr, &dest_addr, tx.amount)
+            .map_err(|e| format!("Encountered a storage error {:?}", e))?;
+        log::debug!("storage after apply_tx {:#?}", self.storage);
+
         Ok(())
     }
 
-    /// Persist the application state and return the Merkle root hash.
+    /// Begin a new block.
+    pub fn begin_block(&mut self, hash: BlockHash, height: u64) {
+        self.storage.begin_block(hash, height).unwrap();
+    }
+
+    /// Commit a block. Persist the application state and return the Merkle root
+    /// hash.
     pub fn commit(&mut self) -> MerkleRoot {
-        // Convert count to bits
-        let mut buf = [0; 8];
-        BigEndian::write_u64(&mut buf, self.count);
-        // Set data so last state is included in the block
-        MerkleRoot(buf.to_vec())
+        log::debug!("storage to commit {:#?}", self.storage);
+        // store the block's data in DB
+        // TODO commit async?
+        self.storage.commit().unwrap_or_else(|e| {
+            log::error!(
+                "Encountered a storage error while committing a block {:?}",
+                e
+            )
+        });
+        let root = self.storage.merkle_root();
+        MerkleRoot(root.as_slice().to_vec())
+    }
+
+    /// Load the Merkle root hash and the height of the last committed block, if
+    /// any.
+    pub fn last_state(&mut self) -> Option<(MerkleRoot, u64)> {
+        let result = self.storage.load_last_state().unwrap_or_else(|e| {
+            log::error!("Encountered an error while reading last state from storage {:?}", e);
+            None
+        });
+        match &result {
+            Some((root, height)) => {
+                log::info!(
+                    "Last state root hash: {}, height: {}",
+                    ByteBuf(&root.0),
+                    height
+                )
+            }
+            None => {
+                log::info!("No state could be found")
+            }
+        }
+        result
     }
 }

@@ -14,18 +14,18 @@ pub async fn main() {
 
 async fn exec_inlined(ops: InlinedClientOpts) {
     match ops {
-        InlinedClientOpts::Transfer(Transfer { count }) => {
-            transfer(count).await
-        }
+        InlinedClientOpts::Transfer(transaction) => transfer(transaction).await,
     }
 }
 
-async fn transfer(count: u64) {
-    let tx = Transaction { count };
+async fn transfer(Transfer { src, dest, amount }: Transfer) {
+    // TODO add a counter
+    let tx = Transaction { src, dest, amount };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();
     let client =
         HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
+    // TODO broadcast_tx_commit shouldn't be used live
     let response = client.broadcast_tx_commit(tx_bytes.into()).await;
     println!("{:#?}", response);
 }
