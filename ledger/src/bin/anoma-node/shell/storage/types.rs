@@ -16,11 +16,20 @@ const BLOCK_HASH_LENGTH: usize = 32;
 const DEFAULT_SERIALIZER_CAPACITY: usize = 1024;
 
 #[derive(
-    BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord, Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
 )]
 pub struct BlockHeight(pub u64);
 
-#[derive(BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub struct BlockHash([u8; 32]);
 
 pub struct MerkleTree(
@@ -122,6 +131,22 @@ impl TryFrom<&[u8]> for BlockHash {
         }
         let mut hash = [0; 32];
         hash.copy_from_slice(value);
+        Ok(BlockHash(hash))
+    }
+}
+impl TryFrom<Vec<u8>> for BlockHash {
+    type Error = String;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, String> {
+        if value.len() != BLOCK_HASH_LENGTH {
+            return Err(format!(
+                "Unexpected block hash length {}, expected {}",
+                value.len(),
+                BLOCK_HASH_LENGTH
+            ));
+        }
+        let mut hash = [0; 32];
+        hash.copy_from_slice(&value);
         Ok(BlockHash(hash))
     }
 }

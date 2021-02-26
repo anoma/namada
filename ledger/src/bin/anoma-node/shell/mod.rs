@@ -9,7 +9,11 @@ use anoma::{
     config::Config,
     types::{Message, Transaction},
 };
-use std::path::PathBuf;
+use std::{
+    ops::Deref,
+    path::PathBuf,
+    sync::{Arc, RwLock},
+};
 
 pub fn run(config: Config) {
     // run our shell via Tendermint ABCI
@@ -30,8 +34,9 @@ pub fn reset(config: Config) {
     tendermint::reset(config)
 }
 
+#[derive(Clone)]
 pub struct Shell {
-    storage: storage::Storage,
+    storage: Arc<RwLock<storage::Storage>>,
 }
 
 pub enum MempoolTxType {
@@ -54,13 +59,20 @@ impl Shell {
         storage.update_balance(&va, Balance::new(10000)).unwrap();
         let ba = BasicAddress::new_address("ba".to_owned());
         storage.update_balance(&ba, Balance::new(100)).unwrap();
-        Self { storage }
+        Self {
+            storage: Arc::new(RwLock::new(storage)),
+        }
     }
 }
 
 impl Shell {
     pub fn init_chain(&mut self, chain_id: &str) {
-        self.storage.set_chain_id(chain_id).unwrap();
+        self.storage
+            .deref()
+            .write()
+            .unwrap()
+            .set_chain_id(chain_id)
+            .unwrap();
     }
 
     /// Validate a transaction request. On success, the transaction will
@@ -81,6 +93,9 @@ impl Shell {
         // Validation logic
         let src_addr = BasicAddress::new_address(tx.src);
         self.storage
+            .deref()
+            .read()
+            .unwrap()
             .has_balance_gte(&src_addr, tx.amount)
             .map_err(|e| format!("Encountered a storage error {:?}", e))?;
 
@@ -99,6 +114,9 @@ impl Shell {
         let src_addr = BasicAddress::new_address(tx.src);
         let dest_addr = BasicAddress::new_address(tx.dest);
         self.storage
+            .deref()
+            .write()
+            .unwrap()
             .transfer(&src_addr, &dest_addr, tx.amount)
             .map_err(|e| format!("Encountered a storage error {:?}", e))?;
         log::debug!("storage after apply_tx {:#?}", self.storage);
@@ -108,7 +126,12 @@ impl Shell {
 
     /// Begin a new block.
     pub fn begin_block(&mut self, hash: BlockHash, height: u64) {
-        self.storage.begin_block(hash, height).unwrap();
+        self.storage
+            .deref()
+            .write()
+            .unwrap()
+            .begin_block(hash, height)
+            .unwrap();
     }
 
     /// Commit a block. Persist the application state and return the Merkle root
@@ -117,23 +140,34 @@ impl Shell {
         log::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?
-        self.storage.commit().unwrap_or_else(|e| {
+        let storage = self.storage.deref().write().unwrap();
+        storage.commit().unwrap_or_else(|e| {
             log::error!(
                 "Encountered a storage error while committing a block {:?}",
                 e
             )
         });
-        let root = self.storage.merkle_root();
+        let root = storage.merkle_root();
         MerkleRoot(root.as_slice().to_vec())
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any.
     pub fn last_state(&mut self) -> Option<(MerkleRoot, u64)> {
-        let result = self.storage.load_last_state().unwrap_or_else(|e| {
-            log::error!("Encountered an error while reading last state from storage {:?}", e);
-            None
-        });
+        let result = self
+            .storage
+            .deref()
+            .write()
+            .unwrap()
+            .load_last_state()
+            .unwrap_or_else(|e| {
+                log::error!(
+                    "Encountered an error while reading last state from
+        storage {:?}",
+                    e
+                );
+                None
+            });
         match &result {
             Some((root, height)) => {
                 log::info!(
