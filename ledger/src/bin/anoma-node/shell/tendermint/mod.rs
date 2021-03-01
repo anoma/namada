@@ -31,6 +31,8 @@ use tendermint_proto::abci::{
     ResponseOfferSnapshot, ResponseQuery, ResponseSetOption,
 };
 
+use super::MerkleRoot;
+
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
 pub type AbciSender = mpsc::Sender<AbciMsg>;
 
@@ -39,7 +41,7 @@ pub enum AbciMsg {
     /// Get the height and the Merkle root hash of the last committed block, if
     /// any
     GetInfo {
-        reply: Sender<Option<(Vec<u8>, i64)>>,
+        reply: Sender<Option<(MerkleRoot, u64)>>,
     },
     /// Initialize a chain with the given ID
     InitChain { reply: Sender<()>, chain_id: String },
@@ -55,13 +57,14 @@ pub enum AbciMsg {
         hash: BlockHash,
         height: BlockHeight,
     },
+    /// Apply a transaction in a block
     ApplyTx {
         reply: Sender<Result<(), String>>,
         tx: Vec<u8>,
     },
     /// Commit the current block. The expected result is the Merkle root hash
     /// of the committed block.
-    CommitBlock { reply: Sender<Vec<u8>> },
+    CommitBlock { reply: Sender<MerkleRoot> },
 }
 
 /// Run the ABCI server in the current thread (blocking).
@@ -134,8 +137,8 @@ impl tendermint_abci::Application for AbciWrapper {
         if let Some((last_block_app_hash, last_block_height)) =
             reply_receiver.recv().unwrap()
         {
-            resp.last_block_height = last_block_height;
-            resp.last_block_app_hash = last_block_app_hash;
+            resp.last_block_height = last_block_height.try_into().unwrap();
+            resp.last_block_app_hash = last_block_app_hash.0;
         }
 
         resp
@@ -267,7 +270,7 @@ impl tendermint_abci::Application for AbciWrapper {
 
         let (reply, reply_receiver) = channel();
         self.sender.send(AbciMsg::CommitBlock { reply }).unwrap();
-        let result = reply_receiver.recv().unwrap();
+        let MerkleRoot(result) = reply_receiver.recv().unwrap();
 
         resp.data = result;
         resp

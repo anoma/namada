@@ -13,7 +13,7 @@ use anoma::{
     config::Config,
     types::{Message, Transaction},
 };
-use std::{convert::TryInto, path::PathBuf, sync::mpsc::channel};
+use std::{path::PathBuf, sync::mpsc::channel};
 
 pub fn run(config: Config) {
     // run our shell via Tendermint ABCI
@@ -73,11 +73,7 @@ impl Shell {
             let msg = self.abci.recv().map_err(|e| e.to_string())?;
             match msg {
                 AbciMsg::GetInfo { reply } => {
-                    let mut result = None;
-                    if let Some((last_hash, last_height)) = self.last_state() {
-                        result =
-                            Some((last_hash.0, last_height.try_into().unwrap()))
-                    }
+                    let result = self.last_state();
                     reply.send(result).map_err(|e| e.to_string())?
                 }
                 AbciMsg::InitChain { reply, chain_id } => {
@@ -101,7 +97,7 @@ impl Shell {
                     reply.send(result).map_err(|e| e.to_string())?
                 }
                 AbciMsg::CommitBlock { reply } => {
-                    let MerkleRoot(result) = self.commit();
+                    let result = self.commit();
                     reply.send(result).map_err(|e| e.to_string())?
                 }
             }
