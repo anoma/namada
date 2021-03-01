@@ -3,29 +3,25 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
-use crate::shell::storage::BlockHash;
-use crate::shell::{MempoolTxType, Shell};
+use crate::shell::storage::{BlockHash, BlockHeight};
+use crate::shell::MempoolTxType;
 use anoma::{
     config::Config,
     genesis::{self, Validator},
 };
 use serde_json::json;
+use std::process::Command;
 use std::{
     convert::{TryFrom, TryInto},
     fs::File,
     io::{self, Write},
     net::SocketAddr,
     path::PathBuf,
-};
-use std::{
-    ops::Deref,
-    process::Command,
-    sync::{Arc, RwLock},
+    sync::mpsc::{self, channel, Sender},
 };
 use tendermint_abci::{self, ServerBuilder};
-
 use tendermint_proto::abci::{
-    RequestApplySnapshotChunk, RequestBeginBlock, RequestCheckTx,
+    CheckTxType, RequestApplySnapshotChunk, RequestBeginBlock, RequestCheckTx,
     RequestDeliverTx, RequestEcho, RequestEndBlock, RequestInfo,
     RequestInitChain, RequestLoadSnapshotChunk, RequestOfferSnapshot,
     RequestQuery, RequestSetOption, ResponseApplySnapshotChunk,
@@ -35,7 +31,41 @@ use tendermint_proto::abci::{
     ResponseOfferSnapshot, ResponseQuery, ResponseSetOption,
 };
 
-pub fn run(config: Config, addr: SocketAddr, shell: Shell) {
+pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
+pub type AbciSender = mpsc::Sender<AbciMsg>;
+
+#[derive(Debug, Clone)]
+pub enum AbciMsg {
+    /// Get the height and the Merkle root hash of the last committed block, if
+    /// any
+    GetInfo {
+        reply: Sender<Option<(Vec<u8>, i64)>>,
+    },
+    /// Initialize a chain with the given ID
+    InitChain { reply: Sender<()>, chain_id: String },
+    /// Validate a given transaction for inclusion in the mempool
+    MempoolValidate {
+        reply: Sender<Result<(), String>>,
+        tx: Vec<u8>,
+        r#type: MempoolTxType,
+    },
+    /// Begin a new block
+    BeginBlock {
+        reply: Sender<()>,
+        hash: BlockHash,
+        height: BlockHeight,
+    },
+    ApplyTx {
+        reply: Sender<Result<(), String>>,
+        tx: Vec<u8>,
+    },
+    /// Commit the current block. The expected result is the Merkle root hash
+    /// of the committed block.
+    CommitBlock { reply: Sender<Vec<u8>> },
+}
+
+/// Run the ABCI server in the current thread (blocking).
+pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
     let home_dir = config.tendermint_home_dir();
     let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
@@ -62,14 +92,9 @@ pub fn run(config: Config, addr: SocketAddr, shell: Shell) {
         .spawn()
         .unwrap();
 
-    // run the shell within ABCI
+    // bind and run the ABCI server
     let server = ServerBuilder::default()
-        .bind(
-            addr,
-            ShellWrapper {
-                shell: Arc::new(RwLock::new(shell)),
-            },
-        )
+        .bind(addr, AbciWrapper { sender })
         .unwrap();
     server.listen().unwrap()
 }
@@ -89,19 +114,12 @@ pub fn reset(config: Config) {
         .unwrap();
 }
 
-struct ShellWrapper {
-    shell: Arc<RwLock<Shell>>,
+#[derive(Clone, Debug)]
+struct AbciWrapper {
+    sender: AbciSender,
 }
 
-impl Clone for ShellWrapper {
-    fn clone(&self) -> Self {
-        Self {
-            shell: self.shell.clone(),
-        }
-    }
-}
-
-impl tendermint_abci::Application for ShellWrapper {
+impl tendermint_abci::Application for AbciWrapper {
     fn echo(&self, request: RequestEcho) -> ResponseEcho {
         ResponseEcho {
             message: request.message,
@@ -110,20 +128,30 @@ impl tendermint_abci::Application for ShellWrapper {
 
     fn info(&self, _req: RequestInfo) -> ResponseInfo {
         let mut resp = ResponseInfo::default();
-        if let Some((last_hash, last_height)) =
-            self.shell.deref().write().unwrap().last_state()
+
+        let (reply, reply_receiver) = channel();
+        self.sender.send(AbciMsg::GetInfo { reply }).unwrap();
+        if let Some((last_block_app_hash, last_block_height)) =
+            reply_receiver.recv().unwrap()
         {
-            resp.last_block_height = last_height.try_into().unwrap();
-            resp.last_block_app_hash = last_hash.0;
+            resp.last_block_height = last_block_height;
+            resp.last_block_app_hash = last_block_app_hash;
         }
+
         resp
     }
 
     fn init_chain(&self, req: RequestInitChain) -> ResponseInitChain {
         let mut resp = ResponseInitChain::default();
+
         // Initialize the chain in shell
         let chain_id = req.chain_id;
-        self.shell.deref().write().unwrap().init_chain(&chain_id);
+        let (reply, reply_receiver) = channel();
+        self.sender
+            .send(AbciMsg::InitChain { reply, chain_id })
+            .unwrap();
+        reply_receiver.recv().unwrap();
+
         // Set the initial validator set
         let genesis = genesis::genesis();
         let mut abci_validator =
@@ -146,19 +174,22 @@ impl tendermint_abci::Application for ShellWrapper {
     fn check_tx(&self, req: RequestCheckTx) -> ResponseCheckTx {
         log::info!("check_tx request {:#?}", req);
         let mut resp = ResponseCheckTx::default();
-        use tendermint_proto::abci::CheckTxType;
-        let prevalidation_type =
-            match CheckTxType::from_i32(req.r#type).unwrap() {
-                CheckTxType::New => MempoolTxType::NewTransaction,
-                CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
-            };
-        match self
-            .shell
-            .deref()
-            .read()
-            .unwrap()
-            .mempool_validate(&req.tx, prevalidation_type)
-        {
+        let r#type = match CheckTxType::from_i32(req.r#type).unwrap() {
+            CheckTxType::New => MempoolTxType::NewTransaction,
+            CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
+        };
+
+        let (reply, reply_receiver) = channel();
+        self.sender
+            .send(AbciMsg::MempoolValidate {
+                reply,
+                tx: req.tx,
+                r#type,
+            })
+            .unwrap();
+        let result = reply_receiver.recv().unwrap();
+
+        match result {
             Ok(_) => resp.info = "Mempool validation passed".to_string(),
             Err(msg) => {
                 resp.code = 1;
@@ -175,30 +206,46 @@ impl tendermint_abci::Application for ShellWrapper {
         match BlockHash::try_from(raw_hash) {
             Err(err) => {
                 log::error!("{:#?}", err);
-                return resp;
             }
             Ok(hash) => {
                 let raw_height = req.header.unwrap().height;
+                // TODO try into BlockHeight directly
                 match raw_height.try_into() {
                     Err(_) => {
                         log::error!("Unexpected block height {}", raw_height)
                     }
-                    Ok(height) => self
-                        .shell
-                        .deref()
-                        .write()
-                        .unwrap()
-                        .begin_block(hash, height),
+                    Ok(height) => {
+                        let (reply, reply_receiver) = channel();
+                        self.sender
+                            .send(AbciMsg::BeginBlock {
+                                reply,
+                                hash,
+                                height: BlockHeight(height),
+                            })
+                            .unwrap();
+                        reply_receiver.recv().unwrap();
+                    }
                 }
-                resp
             }
         }
+        resp
     }
 
     fn deliver_tx(&self, req: RequestDeliverTx) -> ResponseDeliverTx {
         let mut resp = ResponseDeliverTx::default();
-        match self.shell.deref().write().unwrap().apply_tx(&req.tx) {
-            Ok(_) => resp.info = "Transaction successfully applied".to_string(),
+
+        let (reply, reply_receiver) = channel();
+        self.sender
+            .send(AbciMsg::ApplyTx { reply, tx: req.tx })
+            .unwrap();
+        let result = reply_receiver.recv().unwrap();
+
+        match result {
+            Ok(()) => {
+                resp.info = "Transaction successfully
+        applied"
+                    .to_string()
+            }
             Err(msg) => {
                 resp.code = 1;
                 resp.log = String::from(msg);
@@ -216,9 +263,13 @@ impl tendermint_abci::Application for ShellWrapper {
     }
 
     fn commit(&self) -> ResponseCommit {
-        let commit_result = self.shell.deref().write().unwrap().commit();
         let mut resp = ResponseCommit::default();
-        resp.data = commit_result.0;
+
+        let (reply, reply_receiver) = channel();
+        self.sender.send(AbciMsg::CommitBlock { reply }).unwrap();
+        let result = reply_receiver.recv().unwrap();
+
+        resp.data = result;
         resp
     }
 

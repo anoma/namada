@@ -5,14 +5,14 @@ mod db;
 mod types;
 
 pub use self::types::{
-    Address, Balance, BasicAddress, BlockHash, MerkleTree, ValidatorAddress,
+    Address, Balance, BasicAddress, BlockHash, BlockHeight, MerkleTree,
+    ValidatorAddress,
 };
 use self::types::{Hash256, CHAIN_ID_LENGTH};
 use super::MerkleRoot;
 use anoma::bytes::ByteBuf;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 use std::{collections::HashMap, ops::Deref, path::PathBuf};
-use types::BlockHeight;
 
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -184,9 +184,13 @@ impl Storage {
 
     /// Block data is in the Merkle tree as it's tracked by Tendermint in the
     /// block header. Hence, we don't update the tree when this is set.
-    pub fn begin_block(&mut self, hash: BlockHash, height: u64) -> Result<()> {
+    pub fn begin_block(
+        &mut self,
+        hash: BlockHash,
+        height: BlockHeight,
+    ) -> Result<()> {
         self.block.hash = hash;
-        self.block.height = BlockHeight(height);
+        self.block.height = height;
         Ok(())
     }
 }
