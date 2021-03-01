@@ -6,7 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sparse_merkle_tree::{
     blake2b::Blake2bHasher, default_store::DefaultStore, SparseMerkleTree, H256,
 };
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 // TODO adjust once chain ID scheme is chosen, add `Default` impl that allocates
 // this
@@ -110,6 +110,16 @@ impl KeySeg for BlockHeight {
 
     fn from_key_seg(_seg: &String) -> Result<Self, String> {
         todo!()
+    }
+}
+impl TryFrom<i64> for BlockHeight {
+    type Error = String;
+
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        value
+            .try_into()
+            .map(BlockHeight)
+            .map_err(|e| format!("Unexpected height value {}, {}", value, e))
     }
 }
 

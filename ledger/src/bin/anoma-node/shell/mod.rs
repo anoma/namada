@@ -96,6 +96,10 @@ impl Shell {
                     let result = self.apply_tx(&tx);
                     reply.send(result).map_err(|e| e.to_string())?
                 }
+                AbciMsg::EndBlock { reply, height } => {
+                    self.end_block(height);
+                    reply.send(()).map_err(|e| e.to_string())?
+                }
                 AbciMsg::CommitBlock { reply } => {
                     let result = self.commit();
                     reply.send(result).map_err(|e| e.to_string())?
@@ -157,6 +161,9 @@ impl Shell {
     pub fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
         self.storage.begin_block(hash, height).unwrap();
     }
+
+    /// End a block.
+    pub fn end_block(&mut self, _height: BlockHeight) {}
 
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.

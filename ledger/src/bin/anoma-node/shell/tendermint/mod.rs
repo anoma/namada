@@ -62,6 +62,11 @@ pub enum AbciMsg {
         reply: Sender<Result<(), String>>,
         tx: Vec<u8>,
     },
+    /// End a block
+    EndBlock {
+        reply: Sender<()>,
+        height: BlockHeight,
+    },
     /// Commit the current block. The expected result is the Merkle root hash
     /// of the committed block.
     CommitBlock { reply: Sender<MerkleRoot> },
@@ -212,7 +217,6 @@ impl tendermint_abci::Application for AbciWrapper {
             }
             Ok(hash) => {
                 let raw_height = req.header.unwrap().height;
-                // TODO try into BlockHeight directly
                 match raw_height.try_into() {
                     Err(_) => {
                         log::error!("Unexpected block height {}", raw_height)
@@ -223,7 +227,7 @@ impl tendermint_abci::Application for AbciWrapper {
                             .send(AbciMsg::BeginBlock {
                                 reply,
                                 hash,
-                                height: BlockHeight(height),
+                                height,
                             })
                             .unwrap();
                         reply_receiver.recv().unwrap();
@@ -257,8 +261,23 @@ impl tendermint_abci::Application for AbciWrapper {
         resp
     }
 
-    fn end_block(&self, _request: RequestEndBlock) -> ResponseEndBlock {
-        Default::default()
+    fn end_block(&self, req: RequestEndBlock) -> ResponseEndBlock {
+        let resp = ResponseEndBlock::default();
+
+        let raw_height = req.height;
+        match BlockHeight::try_from(raw_height) {
+            Err(_) => {
+                log::error!("Unexpected block height {}", raw_height)
+            }
+            Ok(height) => {
+                let (reply, reply_receiver) = channel();
+                self.sender
+                    .send(AbciMsg::EndBlock { reply, height })
+                    .unwrap();
+                reply_receiver.recv().unwrap();
+            }
+        }
+        resp
     }
 
     fn flush(&self) -> ResponseFlush {
