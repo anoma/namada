@@ -74,6 +74,7 @@ impl Validator {
         let keypair = Keypair::generate(&mut rng);
         let mut hasher = Sha256::new();
         hasher.update(keypair.public.to_bytes());
+        // hex of the first 40 chars of the hash
         let address = format!("{:.40X}", hasher.finalize());
         Validator {
             address,
