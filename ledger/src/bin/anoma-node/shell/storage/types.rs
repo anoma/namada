@@ -31,6 +31,16 @@ pub struct MerkleTree(
 pub enum Address {
     Validator(ValidatorAddress),
     Basic(BasicAddress),
+    
+}
+
+impl Address {
+    pub fn new_address(addr: String) -> Self {
+        match addr.chars().nth(0) {
+            Some(c) if c == 'v' => ValidatorAddress::new_address(addr),
+            _ => BasicAddress::new_address(addr)
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -164,6 +174,7 @@ impl BasicAddress {
         Address::Basic(Self(addr))
     }
 }
+
 impl Hash256 for BasicAddress {
     fn hash256(&self) -> H256 {
         self.0.hash256()

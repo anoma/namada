@@ -2,7 +2,7 @@ mod storage;
 mod tendermint;
 
 use self::storage::{
-    Balance, BasicAddress, BlockHash, Storage, ValidatorAddress,
+    Address, Balance, BasicAddress, BlockHash, Storage, ValidatorAddress,
 };
 use anoma::{
     bytes::ByteBuf,
@@ -79,7 +79,7 @@ impl Shell {
         })?;
 
         // Validation logic
-        let src_addr = BasicAddress::new_address(tx.src);
+        let src_addr = Address::new_address(tx.src);
         self.storage
             .has_balance_gte(&src_addr, tx.amount)
             .map_err(|e| format!("Encountered a storage error {:?}", e))?;
@@ -96,8 +96,8 @@ impl Shell {
             )
         })?;
 
-        let src_addr = BasicAddress::new_address(tx.src);
-        let dest_addr = BasicAddress::new_address(tx.dest);
+        let src_addr = Address::new_address(tx.src);
+        let dest_addr = Address::new_address(tx.dest);
         self.storage
             .transfer(&src_addr, &dest_addr, tx.amount)
             .map_err(|e| format!("Encountered a storage error {:?}", e))?;
