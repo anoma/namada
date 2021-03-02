@@ -3,29 +3,77 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
-use crate::shell::storage::BlockHash;
-use crate::shell::{MempoolTxType, Shell};
-use abci;
-use abci::{
-    RequestCheckTx, RequestCommit, RequestDeliverTx, ResponseCheckTx,
-    ResponseCommit, ResponseDeliverTx,
-};
+use crate::shell::storage::{BlockHash, BlockHeight};
+use crate::shell::MempoolTxType;
 use anoma::{
     config::Config,
     genesis::{self, Validator},
 };
-use genesis::Genesis;
 use serde_json::json;
-use std::{convert::TryFrom, process::Command};
+use std::process::Command;
 use std::{
-    convert::TryInto,
+    convert::{TryFrom, TryInto},
     fs::File,
     io::{self, Write},
     net::SocketAddr,
     path::PathBuf,
+    sync::mpsc::{self, channel, Sender},
+};
+use tendermint_abci::{self, ServerBuilder};
+use tendermint_proto::abci::{
+    CheckTxType, RequestApplySnapshotChunk, RequestBeginBlock, RequestCheckTx,
+    RequestDeliverTx, RequestEcho, RequestEndBlock, RequestInfo,
+    RequestInitChain, RequestLoadSnapshotChunk, RequestOfferSnapshot,
+    RequestQuery, RequestSetOption, ResponseApplySnapshotChunk,
+    ResponseBeginBlock, ResponseCheckTx, ResponseCommit, ResponseDeliverTx,
+    ResponseEcho, ResponseEndBlock, ResponseFlush, ResponseInfo,
+    ResponseInitChain, ResponseListSnapshots, ResponseLoadSnapshotChunk,
+    ResponseOfferSnapshot, ResponseQuery, ResponseSetOption,
 };
 
-pub fn run(config: Config, addr: SocketAddr, shell: Shell) {
+use super::MerkleRoot;
+
+pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
+pub type AbciSender = mpsc::Sender<AbciMsg>;
+
+#[derive(Debug, Clone)]
+pub enum AbciMsg {
+    /// Get the height and the Merkle root hash of the last committed block, if
+    /// any
+    GetInfo {
+        reply: Sender<Option<(MerkleRoot, u64)>>,
+    },
+    /// Initialize a chain with the given ID
+    InitChain { reply: Sender<()>, chain_id: String },
+    /// Validate a given transaction for inclusion in the mempool
+    MempoolValidate {
+        reply: Sender<Result<(), String>>,
+        tx: Vec<u8>,
+        r#type: MempoolTxType,
+    },
+    /// Begin a new block
+    BeginBlock {
+        reply: Sender<()>,
+        hash: BlockHash,
+        height: BlockHeight,
+    },
+    /// Apply a transaction in a block
+    ApplyTx {
+        reply: Sender<Result<(), String>>,
+        tx: Vec<u8>,
+    },
+    /// End a block
+    EndBlock {
+        reply: Sender<()>,
+        height: BlockHeight,
+    },
+    /// Commit the current block. The expected result is the Merkle root hash
+    /// of the committed block.
+    CommitBlock { reply: Sender<MerkleRoot> },
+}
+
+/// Run the ABCI server in the current thread (blocking).
+pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
     let home_dir = config.tendermint_home_dir();
     let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
@@ -36,10 +84,9 @@ pub fn run(config: Config, addr: SocketAddr, shell: Shell) {
             log::error!("Failed to initialize tendermint node: {:?}", error)
         })
         .unwrap();
-    let genesis = genesis::genesis();
     if cfg!(feature = "dev") {
         // override the validator key file
-        write_validator_key(home_dir, &genesis.validator).unwrap();
+        write_validator_key(home_dir, &genesis::genesis().validator).unwrap();
     }
     let _tendermin_node = Command::new("tendermint")
         .args(&[
@@ -53,8 +100,11 @@ pub fn run(config: Config, addr: SocketAddr, shell: Shell) {
         .spawn()
         .unwrap();
 
-    // run the shell within ABCI
-    abci::run(addr, ShellWrapper { shell, genesis });
+    // bind and run the ABCI server
+    let server = ServerBuilder::default()
+        .bind(addr, AbciWrapper { sender })
+        .unwrap();
+    server.listen().unwrap()
 }
 
 pub fn reset(config: Config) {
@@ -72,127 +122,206 @@ pub fn reset(config: Config) {
         .unwrap();
 }
 
-struct ShellWrapper {
-    shell: Shell,
-    genesis: Genesis,
+#[derive(Clone, Debug)]
+struct AbciWrapper {
+    sender: AbciSender,
 }
 
-impl abci::Application for ShellWrapper {
-    fn check_tx(&mut self, req: &RequestCheckTx) -> ResponseCheckTx {
-        log::info!("check_tx request {:#?}", req);
-        let mut resp = ResponseCheckTx::new();
-        let prevalidation_type = match req.get_field_type() {
-            abci::CheckTxType::New => MempoolTxType::NewTransaction,
-            abci::CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
-        };
-        match self
-            .shell
-            .mempool_validate(req.get_tx(), prevalidation_type)
+impl tendermint_abci::Application for AbciWrapper {
+    fn echo(&self, request: RequestEcho) -> ResponseEcho {
+        ResponseEcho {
+            message: request.message,
+        }
+    }
+
+    fn info(&self, _req: RequestInfo) -> ResponseInfo {
+        let mut resp = ResponseInfo::default();
+
+        let (reply, reply_receiver) = channel();
+        self.sender.send(AbciMsg::GetInfo { reply }).unwrap();
+        if let Some((last_block_app_hash, last_block_height)) =
+            reply_receiver.recv().unwrap()
         {
-            Ok(_) => resp.set_info("Mempool validation passed".to_string()),
+            resp.last_block_height = last_block_height.try_into().unwrap();
+            resp.last_block_app_hash = last_block_app_hash.0;
+        }
+
+        resp
+    }
+
+    fn init_chain(&self, req: RequestInitChain) -> ResponseInitChain {
+        let mut resp = ResponseInitChain::default();
+
+        // Initialize the chain in shell
+        let chain_id = req.chain_id;
+        let (reply, reply_receiver) = channel();
+        self.sender
+            .send(AbciMsg::InitChain { reply, chain_id })
+            .unwrap();
+        reply_receiver.recv().unwrap();
+
+        // Set the initial validator set
+        let genesis = genesis::genesis();
+        let mut abci_validator =
+            tendermint_proto::abci::ValidatorUpdate::default();
+        let mut pub_key = tendermint_proto::crypto::PublicKey::default();
+        pub_key.sum = Some(tendermint_proto::crypto::public_key::Sum::Ed25519(
+            genesis.validator.keypair.public.to_bytes().to_vec(),
+        ));
+        abci_validator.pub_key = Some(pub_key);
+        abci_validator.power =
+            genesis.validator.voting_power.try_into().unwrap();
+        resp.validators.push(abci_validator);
+        resp
+    }
+
+    fn query(&self, _request: RequestQuery) -> ResponseQuery {
+        Default::default()
+    }
+
+    fn check_tx(&self, req: RequestCheckTx) -> ResponseCheckTx {
+        log::info!("check_tx request {:#?}", req);
+        let mut resp = ResponseCheckTx::default();
+        let r#type = match CheckTxType::from_i32(req.r#type).unwrap() {
+            CheckTxType::New => MempoolTxType::NewTransaction,
+            CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
+        };
+
+        let (reply, reply_receiver) = channel();
+        self.sender
+            .send(AbciMsg::MempoolValidate {
+                reply,
+                tx: req.tx,
+                r#type,
+            })
+            .unwrap();
+        let result = reply_receiver.recv().unwrap();
+
+        match result {
+            Ok(_) => resp.info = "Mempool validation passed".to_string(),
             Err(msg) => {
-                resp.set_code(1);
-                resp.set_log(String::from(msg));
+                resp.code = 1;
+                resp.log = String::from(msg);
             }
         }
         log::info!("check_tx response {:#?}", resp);
         resp
     }
 
-    fn deliver_tx(&mut self, req: &RequestDeliverTx) -> ResponseDeliverTx {
-        let mut resp = ResponseDeliverTx::new();
-        match self.shell.apply_tx(req.get_tx()) {
-            Ok(_) => {
-                resp.set_info("Transaction successfully applied".to_string())
-            }
-            Err(msg) => {
-                resp.set_code(1);
-                resp.set_log(String::from(msg));
-            }
-        }
-        resp
-    }
-
-    fn commit(&mut self, _req: &RequestCommit) -> ResponseCommit {
-        let commit_result = self.shell.commit();
-        let mut resp = ResponseCommit::new();
-        resp.set_data(commit_result.0);
-        resp
-    }
-
-    fn info(&mut self, _req: &abci::RequestInfo) -> abci::ResponseInfo {
-        let mut resp = abci::ResponseInfo::new();
-        if let Some((last_hash, last_height)) = self.shell.last_state() {
-            resp.set_last_block_height(last_height.try_into().unwrap());
-            resp.set_last_block_app_hash(last_hash.0);
-        }
-        resp
-    }
-
-    fn set_option(
-        &mut self,
-        _req: &abci::RequestSetOption,
-    ) -> abci::ResponseSetOption {
-        abci::ResponseSetOption::new()
-    }
-
-    fn query(&mut self, _req: &abci::RequestQuery) -> abci::ResponseQuery {
-        abci::ResponseQuery::new()
-    }
-
-    fn init_chain(
-        &mut self,
-        req: &abci::RequestInitChain,
-    ) -> abci::ResponseInitChain {
-        let mut resp = abci::ResponseInitChain::new();
-        // Initialize the chain in shell
-        let chain_id = req.get_chain_id();
-        self.shell.init_chain(chain_id);
-        // Set the initial validator set
-        let validators = resp.mut_validators();
-        // TODO delete params after initialization? (`Option::take()`?)
-        let mut abci_validator = abci::ValidatorUpdate::new();
-        let mut pub_key = abci::PubKey::new();
-        pub_key.set_field_type("ed25519".to_string());
-        pub_key.set_data(
-            self.genesis.validator.keypair.public.to_bytes().to_vec(),
-        );
-        abci_validator.set_pub_key(pub_key);
-        abci_validator
-            .set_power(self.genesis.validator.voting_power.try_into().unwrap());
-        validators.push(abci_validator);
-        resp
-    }
-
-    fn begin_block(
-        &mut self,
-        req: &abci::RequestBeginBlock,
-    ) -> abci::ResponseBeginBlock {
-        let resp = abci::ResponseBeginBlock::new();
-        let raw_hash = req.get_hash();
+    fn begin_block(&self, req: RequestBeginBlock) -> ResponseBeginBlock {
+        let resp = ResponseBeginBlock::default();
+        let raw_hash = req.hash;
         match BlockHash::try_from(raw_hash) {
             Err(err) => {
                 log::error!("{:#?}", err);
-                return resp;
             }
             Ok(hash) => {
-                let raw_height = req.get_header().get_height();
+                let raw_height = req.header.unwrap().height;
                 match raw_height.try_into() {
                     Err(_) => {
                         log::error!("Unexpected block height {}", raw_height)
                     }
-                    Ok(height) => self.shell.begin_block(hash, height),
+                    Ok(height) => {
+                        let (reply, reply_receiver) = channel();
+                        self.sender
+                            .send(AbciMsg::BeginBlock {
+                                reply,
+                                hash,
+                                height,
+                            })
+                            .unwrap();
+                        reply_receiver.recv().unwrap();
+                    }
                 }
-                resp
             }
         }
+        resp
     }
 
-    fn end_block(
-        &mut self,
-        _req: &abci::RequestEndBlock,
-    ) -> abci::ResponseEndBlock {
-        abci::ResponseEndBlock::new()
+    fn deliver_tx(&self, req: RequestDeliverTx) -> ResponseDeliverTx {
+        let mut resp = ResponseDeliverTx::default();
+
+        let (reply, reply_receiver) = channel();
+        self.sender
+            .send(AbciMsg::ApplyTx { reply, tx: req.tx })
+            .unwrap();
+        let result = reply_receiver.recv().unwrap();
+
+        match result {
+            Ok(()) => {
+                resp.info = "Transaction successfully
+        applied"
+                    .to_string()
+            }
+            Err(msg) => {
+                resp.code = 1;
+                resp.log = String::from(msg);
+            }
+        }
+        resp
+    }
+
+    fn end_block(&self, req: RequestEndBlock) -> ResponseEndBlock {
+        let resp = ResponseEndBlock::default();
+
+        let raw_height = req.height;
+        match BlockHeight::try_from(raw_height) {
+            Err(_) => {
+                log::error!("Unexpected block height {}", raw_height)
+            }
+            Ok(height) => {
+                let (reply, reply_receiver) = channel();
+                self.sender
+                    .send(AbciMsg::EndBlock { reply, height })
+                    .unwrap();
+                reply_receiver.recv().unwrap();
+            }
+        }
+        resp
+    }
+
+    fn flush(&self) -> ResponseFlush {
+        ResponseFlush {}
+    }
+
+    fn commit(&self) -> ResponseCommit {
+        let mut resp = ResponseCommit::default();
+
+        let (reply, reply_receiver) = channel();
+        self.sender.send(AbciMsg::CommitBlock { reply }).unwrap();
+        let MerkleRoot(result) = reply_receiver.recv().unwrap();
+
+        resp.data = result;
+        resp
+    }
+
+    fn set_option(&self, _request: RequestSetOption) -> ResponseSetOption {
+        Default::default()
+    }
+
+    fn list_snapshots(&self) -> ResponseListSnapshots {
+        Default::default()
+    }
+
+    fn offer_snapshot(
+        &self,
+        _request: RequestOfferSnapshot,
+    ) -> ResponseOfferSnapshot {
+        Default::default()
+    }
+
+    fn load_snapshot_chunk(
+        &self,
+        _request: RequestLoadSnapshotChunk,
+    ) -> ResponseLoadSnapshotChunk {
+        Default::default()
+    }
+
+    fn apply_snapshot_chunk(
+        &self,
+        _request: RequestApplySnapshotChunk,
+    ) -> ResponseApplySnapshotChunk {
+        Default::default()
     }
 }
 
