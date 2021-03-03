@@ -1,0 +1,14 @@
+[package]
+authors = ["Heliax <TODO@heliax.dev>"]
+edition = "2018"
+name = "tx_template"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+
+[profile.release]
+# smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto
+lto = true
