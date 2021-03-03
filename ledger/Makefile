@@ -41,4 +41,9 @@ doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
 
-.PHONY : build build-release run install test test-debug fmt watch dev-deps clean doc
+# Build the validity predicate and transaction wasm from templates
+build-wasm-scripts:
+	make -C ../vp_template && \
+	make -C ../tx_template
+
+.PHONY : build build-release clippy install run test test-debug fmt watch clean doc build-wasm-scripts
