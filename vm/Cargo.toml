@@ -1,0 +1,10 @@
+[package]
+authors = ["Heliax <TODO@heliax.dev>"]
+edition = "2018"
+name = "anoma_vm"
+version = "0.1.0"
+
+[dependencies]
+wasmer = "1.0.2"
+wasmer-compiler-singlepass = "1.0.2"
+wasmer-engine-jit = "1.0.2"
