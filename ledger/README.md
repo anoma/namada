@@ -11,6 +11,11 @@ There are 2 types of accounts: basic and validator. The accounts have string add
 # Build
 make
 
+# Build the validity predicate and transaction wasm from templates, at:
+# - ../vp_template/vp.wasm
+# - ../tx_template/tx.wasm
+make build-wasm-scripts
+
 # Build and link the executables
 make install
 
@@ -20,8 +25,8 @@ make run
 # Reset the state (resets Tendermint too)
 cargo run --bin anomad -- reset
 
-# Submit a transfer from "va" to "ba" of 10¤ to the Tendermint node
-cargo run --bin anomac -- transfer -s va -d ba -a 10
+# Submit a transaction with a wasm code 
+cargo run --bin anomac -- tx -c ../tx_template/tx.wasm
 
 # Watch and on change run a node (the state will be persisted)
 cargo watch -x "run --bin anomad -- run"

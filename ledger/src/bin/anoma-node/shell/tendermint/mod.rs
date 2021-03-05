@@ -112,6 +112,8 @@ pub fn reset(config: Config) {
     Command::new("tendermint")
         .args(&[
             "unsafe_reset_all",
+            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
+            // "--log-level=\"*debug\"",
             "--home",
             &config.tendermint_home_dir().to_string_lossy(),
         ])

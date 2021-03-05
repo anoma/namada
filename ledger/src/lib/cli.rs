@@ -38,22 +38,20 @@ pub enum ClientOpts {
 // `anomac` commands inlined in `anoma`
 #[derive(Clap)]
 pub enum InlinedClientOpts {
-    /// Transfer
-    Transfer(Transfer),
+    /// Submit a transaction and wait for the result
+    Tx(Tx),
 }
 
-// `anomac` subcommand for controlling transfers
+// `anomac` subcommand for submitting transactions
 #[derive(Clap)]
-pub struct Transfer {
-    /// The transfer source
-    #[clap(short)]
-    pub src: String,
-    /// An example command
-    #[clap(short)]
-    pub dest: String,
-    /// How much to transfer
-    #[clap(short)]
-    pub amount: u64,
+pub struct Tx {
+    /// The path to the wasm code to be executed
+    #[clap(long, short)]
+    pub code_path: String,
+    /// The data is an arbitrary hex string that will be passed to the code
+    /// when it's executed
+    #[clap(long, short)]
+    pub data_hex: Option<String>,
 }
 
 /// The Anoma Node CLI

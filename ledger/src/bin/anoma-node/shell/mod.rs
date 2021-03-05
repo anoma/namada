@@ -11,15 +11,16 @@ use self::{
 use anoma::{
     bytes::ByteBuf,
     config::Config,
-    types::{Message, Transaction},
+    rpc_types::{Message, Tx},
 };
-use std::{path::PathBuf, sync::mpsc::channel};
+use anoma_vm::{TxEnv, TxMsg, TxRunner};
+use std::{path::PathBuf, sync::mpsc};
 
 pub fn run(config: Config) {
     // run our shell via Tendermint ABCI
     let db_path = config.home_dir.join("db");
     // open a channel between ABCI (the sender) and the shell (the receiver)
-    let (sender, receiver) = channel();
+    let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, db_path);
     let addr = "127.0.0.1:26658".parse().unwrap();
     // Run Tendermint ABCI server in another thread
@@ -109,6 +110,41 @@ impl Shell {
     }
 }
 
+fn transfer(
+    env: &TxEnv,
+    src_ptr: i32,
+    src_len: i32,
+    dest_ptr: i32,
+    dest_len: i32,
+    amount: u64,
+) {
+    let memory = unsafe { env.memory.get_unchecked() };
+
+    let src_vec: Vec<_> = memory.view()
+        [src_ptr as usize..(src_ptr + src_len) as usize]
+        .iter()
+        .map(|cell| cell.get())
+        .collect();
+    let src = std::str::from_utf8(&src_vec).unwrap().to_string();
+
+    let dest_vec: Vec<_> = memory.view()
+        [dest_ptr as usize..(dest_ptr + dest_len) as usize]
+        .iter()
+        .map(|cell| cell.get())
+        .collect();
+    let dest = std::str::from_utf8(&dest_vec).unwrap().to_string();
+
+    log::debug!(
+        "transfer called with src: {}, dest: {}, amount: {}",
+        src,
+        dest,
+        amount
+    );
+
+    let sender = env.sender.lock().unwrap();
+    (*sender).send(TxMsg { src, dest, amount }).unwrap();
+}
+
 impl Shell {
     pub fn init_chain(&mut self, chain_id: String) {
         self.storage.set_chain_id(&chain_id).unwrap();
@@ -122,35 +158,36 @@ impl Shell {
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> MempoolValidationResult {
-        let tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
+        let _tx = Tx::decode(&tx_bytes[..]).map_err(|e| {
             format!(
                 "Error decoding a transaction: {}, from bytes  from bytes {:?}",
                 e, tx_bytes
             )
         })?;
-
-        // Validation logic
-        let src_addr = Address::new_address(tx.src);
-        self.storage
-            .has_balance_gte(&src_addr, tx.amount)
-            .map_err(|e| format!("Encountered a storage error {:?}", e))?;
-
         Ok(())
     }
 
     /// Validate and apply a transaction.
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> ApplyResult {
-        let tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
+        let tx = Tx::decode(&tx_bytes[..]).map_err(|e| {
             format!(
-                "Error decoding a transaction: {}, from bytes  from bytes {:?}",
+                "Error decoding a transaction: {}, from bytes  from bytes
+        {:?}",
                 e, tx_bytes
             )
         })?;
 
-        let src_addr = Address::new_address(tx.src);
-        let dest_addr = Address::new_address(tx.dest);
+        let (tx_sender, tx_receiver) = mpsc::channel();
+        let tx_runner = TxRunner::new();
+        tx_runner
+            .run(tx.code, tx.data.unwrap_or(vec![]), tx_sender, transfer)
+            .unwrap();
+        let tx_msg = tx_receiver.recv().unwrap();
+
+        let src_addr = Address::new_address(tx_msg.src);
+        let dest_addr = Address::new_address(tx_msg.dest);
         self.storage
-            .transfer(&src_addr, &dest_addr, tx.amount)
+            .transfer(&src_addr, &dest_addr, tx_msg.amount)
             .map_err(|e| format!("Encountered a storage error {:?}", e))?;
         log::debug!("storage after apply_tx {:#?}", self.storage);
 

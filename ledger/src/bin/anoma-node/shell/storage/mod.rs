@@ -100,21 +100,6 @@ impl Storage {
         self.block.tree.0.root()
     }
 
-    // TODO this doesn't belong here, temporary for convenience...
-    pub fn has_balance_gte(&self, addr: &Address, amount: u64) -> Result<()> {
-        match self.block.balances.get(&addr) {
-            None => return Err(Error::Stringly("Source not found".to_owned())),
-            Some(&Balance(src_balance)) => {
-                if src_balance < amount {
-                    return Err(Error::Stringly(
-                        "Source balance is too low".to_owned(),
-                    ));
-                };
-            }
-        }
-        Ok(())
-    }
-
     /// # Storage writes
     // TODO Enforce or check invariant (it should catch newly added storage
     // fields too) that every function that changes storage, except for data
