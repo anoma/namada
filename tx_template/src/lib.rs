@@ -1,5 +1,6 @@
 /// The environment provides calls to host functions via this C interface:
 extern "C" {
+    // NOTE: Just for testing
     fn transfer(
         src_ptr: *const u8,
         src_len: usize,
