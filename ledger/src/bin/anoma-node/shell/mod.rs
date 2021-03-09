@@ -13,7 +13,7 @@ use anoma::{
     config::Config,
     rpc_types::{Message, Tx},
 };
-use anoma_vm::{TxEnv, TxMsg, TxRunner};
+use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
 use std::{path::PathBuf, sync::mpsc};
 
 pub fn run(config: Config) {
@@ -176,20 +176,60 @@ impl Shell {
                 e, tx_bytes
             )
         })?;
+        let tx_data = tx.data.unwrap_or(vec![]);
 
+        // Execute the transaction code and wait for result
         let (tx_sender, tx_receiver) = mpsc::channel();
         let tx_runner = TxRunner::new();
         tx_runner
-            .run(tx.code, tx.data.unwrap_or(vec![]), tx_sender, transfer)
+            .run(tx.code, tx_data, tx_sender, transfer)
             .unwrap();
         let tx_msg = tx_receiver.recv().unwrap();
+        let src_addr = Address::new_address(tx_msg.src.clone());
+        let dest_addr = Address::new_address(tx_msg.dest.clone());
 
-        let src_addr = Address::new_address(tx_msg.src);
-        let dest_addr = Address::new_address(tx_msg.dest);
-        self.storage
-            .transfer(&src_addr, &dest_addr, tx_msg.amount)
+        // Run a VP for every account with modified storage sub-space
+        // TODO run in parallel for all accounts
+        //   - all must return `true` to accept the tx
+        //   - cancel all remaining workers and fail if any returns `false`
+        let src_vp = self
+            .storage
+            .validity_predicate(&src_addr)
             .map_err(|e| format!("Encountered a storage error {:?}", e))?;
-        log::debug!("storage after apply_tx {:#?}", self.storage);
+        let dest_vp = self
+            .storage
+            .validity_predicate(&dest_addr)
+            .map_err(|e| format!("Encountered a storage error {:?}", e))?;
+        let vp_runner = VpRunner::new();
+        let (vp_sender, vp_receiver) = mpsc::channel();
+        vp_runner.run(src_vp, &tx_msg, vp_sender.clone()).unwrap();
+        let src_accept = vp_receiver.recv().unwrap();
+        vp_runner.run(dest_vp, &tx_msg, vp_sender).unwrap();
+        let dest_accept = vp_receiver.recv().unwrap();
+
+        // Apply the transaction if accepted by all the VPs
+        if src_accept && dest_accept {
+            self.storage
+                .transfer(&src_addr, &dest_addr, tx_msg.amount)
+                .map_err(|e| format!("Encountered a storage error {:?}", e))?;
+            log::debug!(
+                "accepted apply_tx storage modification {:#?}",
+                self.storage
+            );
+        } else {
+            log::debug!(
+                "tx declined by {}",
+                if src_accept {
+                    "dest"
+                } else {
+                    if dest_accept {
+                        "src"
+                    } else {
+                        "src and dest"
+                    }
+                }
+            );
+        }
 
         Ok(())
     }

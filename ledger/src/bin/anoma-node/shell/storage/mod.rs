@@ -23,6 +23,9 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
+static VP_WASM: &'static [u8] =
+    include_bytes!("../../../../../../vp_template/vp.wasm");
+
 #[derive(Debug)]
 pub struct Storage {
     db_path: PathBuf,
@@ -40,17 +43,20 @@ pub struct BlockStorage {
     hash: BlockHash,
     height: BlockHeight,
     balances: HashMap<Address, Balance>,
+    vps: HashMap<Address, Vec<u8>>,
 }
 
 impl Storage {
     pub fn new(db_path: PathBuf) -> Self {
         let tree = MerkleTree::default();
         let balances = HashMap::new();
+        let vps = HashMap::new();
         let block = BlockStorage {
             tree,
             hash: BlockHash::default(),
             height: BlockHeight(0),
             balances,
+            vps,
         };
         Self {
             db_path,
@@ -177,6 +183,12 @@ impl Storage {
         self.block.hash = hash;
         self.block.height = height;
         Ok(())
+    }
+
+    /// Get a validity predicate for the given account address
+    pub fn validity_predicate(&self, _addr: &Address) -> Result<Vec<u8>> {
+        // TODO replace the hard-coded VP with stored ones
+        Ok(VP_WASM.to_vec())
     }
 }
 
