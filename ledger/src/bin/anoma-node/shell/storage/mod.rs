@@ -186,9 +186,12 @@ impl Storage {
     }
 
     /// Get a validity predicate for the given account address
-    pub fn validity_predicate(&self, _addr: &Address) -> Result<Vec<u8>> {
-        // TODO replace the hard-coded VP with stored ones
-        Ok(VP_WASM.to_vec())
+    pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
+        match self.block.vps.get(addr) {
+            Some(vp) => Ok(vp.clone()),
+            // TODO: this temporarily loads default VP template if none found
+            None => Ok(VP_WASM.to_vec()),
+        }
     }
 }
 

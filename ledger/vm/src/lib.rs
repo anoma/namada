@@ -32,10 +32,14 @@ impl TxRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        // TODO Could we pass the modified accounts sub-spaces via WASM store directly
-        // to VPs' wasm scripts to avoid passing it through the host?
-        let wasm_store = wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
-        let memory = Memory::new(&wasm_store, wasmer::MemoryType::new(1, None, false)).unwrap();
+        // TODO Could we pass the modified accounts sub-spaces via WASM store
+        // directly to VPs' wasm scripts to avoid passing it through the
+        // host?
+        let wasm_store =
+            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        let memory =
+            Memory::new(&wasm_store, wasmer::MemoryType::new(1, None, false))
+                .unwrap();
         Self { memory, wasm_store }
     }
 
@@ -47,7 +51,8 @@ impl TxRunner {
         func: F,
     ) -> Result<(), String>
     where
-        // TODO these types don't need to be generic, specialize the func to avoid leaking these types
+        // TODO these types don't need to be generic, specialize the func to avoid
+        // leaking these types
         F: HostFunction<Args, Rets, WithEnv, TxEnv>,
         Args: WasmTypeList,
         Rets: WasmTypeList,
@@ -56,8 +61,8 @@ impl TxRunner {
             sender: Arc::new(Mutex::new(tx_sender)),
             memory: wasmer::LazyInit::default(),
         };
-        let tx_module =
-            wasmer::Module::new(&self.wasm_store, &tx_code).map_err(|e| e.to_string())?;
+        let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
+            .map_err(|e| e.to_string())?;
         let tx_imports = wasmer::imports! {
             // default namespace
             "env" => {
@@ -66,7 +71,8 @@ impl TxRunner {
             },
         };
         // compile and run the transaction wasm code
-        let tx_code = wasmer::Instance::new(&tx_module, &tx_imports).map_err(|e| e.to_string())?;
+        let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
+            .map_err(|e| e.to_string())?;
         let apply_tx = tx_code
             .exports
             .get_function("apply_tx")
@@ -92,25 +98,30 @@ impl VpRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        // TODO Could we pass the modified accounts sub-spaces via WASM store directly
-        // to VPs' wasm scripts to avoid passing it through the host?
-        let wasm_store = wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        // TODO Could we pass the modified accounts sub-spaces via WASM store
+        // directly to VPs' wasm scripts to avoid passing it through the
+        // host?
+        let wasm_store =
+            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
         Self { wasm_store }
     }
 
     pub fn run(
         &self,
-        vp_code: Vec<u8>,
+        vp_code: impl AsRef<[u8]>,
         tx_msg: &TxMsg,
         vp_sender: mpsc::Sender<VpMsg>,
     ) -> Result<(), String> {
-        let vp_module =
-            wasmer::Module::new(&self.wasm_store, &vp_code).map_err(|e| e.to_string())?;
+        let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
+            .map_err(|e| e.to_string())?;
         let mut tx_bytes = Vec::with_capacity(1024);
         tx_msg.serialize(&mut tx_bytes).unwrap();
 
-        let memory =
-            Memory::new(&self.wasm_store, wasmer::MemoryType::new(1, None, false)).unwrap();
+        let memory = Memory::new(
+            &self.wasm_store,
+            wasmer::MemoryType::new(1, None, false),
+        )
+        .unwrap();
         let vp_imports = wasmer::imports! {
             // default namespace
             "env" => {
@@ -118,7 +129,8 @@ impl VpRunner {
             },
         };
         // compile and run the transaction wasm code
-        let vp_code = wasmer::Instance::new(&vp_module, &vp_imports).map_err(|e| e.to_string())?;
+        let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
+            .map_err(|e| e.to_string())?;
         let memory = vp_code
             .exports
             .get_memory("memory")

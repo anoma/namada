@@ -15,10 +15,19 @@ extern "C" {}
 
 /// The module interface callable by wasm runtime:
 #[no_mangle]
-pub extern "C" fn validate_tx(tx_ptr: i32, tx_len: i32) -> bool {
-    let slice = unsafe { slice::from_raw_parts(tx_ptr as _, tx_len as _) };
+pub extern "C" fn validate_tx(tx_ptr: *const u8, tx_len: usize) -> bool {
+    // TODO more plumbing here
+    let slice = unsafe { slice::from_raw_parts(tx_ptr, tx_len) };
     let tx = TxMsg::try_from_slice(slice).unwrap();
-    if tx.src == "va" && tx.amount > 0 {
+
+    // run validation with the concrete type(s)
+    do_validate_tx(tx)
+}
+
+fn do_validate_tx(tx: TxMsg) -> bool {
+    if tx.amount > 0
+    // && tx.src == "va"
+    {
         true
     } else {
         false
