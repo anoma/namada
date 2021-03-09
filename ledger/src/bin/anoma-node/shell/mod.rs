@@ -213,7 +213,7 @@ impl Shell {
                 .transfer(&src_addr, &dest_addr, tx_msg.amount)
                 .map_err(|e| format!("Encountered a storage error {:?}", e))?;
             log::debug!(
-                "accepted apply_tx storage modification {:#?}",
+                "all accepted apply_tx storage modification {:#?}",
                 self.storage
             );
         } else {
