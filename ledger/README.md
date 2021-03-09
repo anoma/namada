@@ -6,15 +6,25 @@ The ledger currently requires that [Tendermint version 0.34.x](https://github.co
 
 There are 2 types of accounts: basic and validator. The accounts have string addresses, basic prefixed with `'b'` and validator with `'v'`. Accounts can have some balance of unspecified currency ¤ (type `u64`).
 
+The transaction code can currently be built from [tx_template](../tx_template) and validity predicates from [vp_template](../vp_template), which is Rust code compiled to wasm.
+
+The transaction template calls `transfer` function from the host environment (Anoma shell) with some hard-coded values for the transfer source, destination and amount (this is temporary until we have more complete storage API for transactions).
+
+The validity predicate template receives the `transfer` data and checks that the transfer's amount > 0.
+
+The validity predicate is currently hard-coded in the shell and used for every account. To experiment with a different validity predicate, build it from the template and restart the shell.
 
 ```shell
-# Build
-make
+# Run this first if you don't have Rust wasm target installed:
+make -C ../tx_template
 
 # Build the validity predicate and transaction wasm from templates, at:
 # - ../vp_template/vp.wasm
 # - ../tx_template/tx.wasm
 make build-wasm-scripts
+
+# Build Anoma
+make
 
 # Build and link the executables
 make install
