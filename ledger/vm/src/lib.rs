@@ -4,7 +4,7 @@ use std::{
     sync::{mpsc, Arc, Mutex},
 };
 
-use wasmer::{internals::WithEnv, HostFunction, Memory, WasmTypeList};
+use wasmer::{internals::WithEnv, HostFunction, Memory};
 
 #[derive(wasmer::WasmerEnv, Clone)]
 pub struct TxEnv {
@@ -39,19 +39,15 @@ impl TxRunner {
         Self { wasm_store }
     }
 
-    pub fn run<F, Args, Rets>(
+    pub fn run<F>(
         &self,
         tx_code: Vec<u8>,
         tx_data: Vec<u8>,
         tx_sender: mpsc::Sender<TxMsg>,
-        func: F,
+        transfer: F,
     ) -> Result<(), String>
     where
-        // TODO these types don't need to be generic, specialize the func to avoid
-        // leaking these types
-        F: HostFunction<Args, Rets, WithEnv, TxEnv>,
-        Args: WasmTypeList,
-        Rets: WasmTypeList,
+        F: HostFunction<(i32, i32, i32, i32, u64), (), WithEnv, TxEnv>,
     {
         let tx_env = TxEnv {
             sender: Arc::new(Mutex::new(tx_sender)),
@@ -68,7 +64,7 @@ impl TxRunner {
             // default namespace
             "env" => {
                 "memory" => memory,
-                "transfer" => wasmer::Function::new_native_with_env(&self.wasm_store, tx_env, func),
+                "transfer" => wasmer::Function::new_native_with_env(&self.wasm_store, tx_env, transfer),
             },
         };
         // compile and run the transaction wasm code
