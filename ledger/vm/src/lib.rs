@@ -24,7 +24,6 @@ pub struct TxMsg {
 
 #[derive(Clone, Debug)]
 pub struct TxRunner {
-    memory: Memory,
     wasm_store: wasmer::Store,
 }
 
@@ -37,10 +36,7 @@ impl TxRunner {
         // host?
         let wasm_store =
             wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
-        let memory =
-            Memory::new(&wasm_store, wasmer::MemoryType::new(1, None, false))
-                .unwrap();
-        Self { memory, wasm_store }
+        Self { wasm_store }
     }
 
     pub fn run<F, Args, Rets>(
@@ -63,10 +59,15 @@ impl TxRunner {
         };
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(|e| e.to_string())?;
+        let memory = Memory::new(
+            &self.wasm_store,
+            wasmer::MemoryType::new(1, None, false),
+        )
+        .unwrap();
         let tx_imports = wasmer::imports! {
             // default namespace
             "env" => {
-                "memory" => self.memory.clone(),
+                "memory" => memory,
                 "transfer" => wasmer::Function::new_native_with_env(&self.wasm_store, tx_env, func),
             },
         };
