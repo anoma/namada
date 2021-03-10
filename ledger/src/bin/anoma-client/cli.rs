@@ -45,5 +45,6 @@ async fn exec_tx(
     let client =
         HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
     // TODO broadcast_tx_commit shouldn't be used live
-    client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
+    let response = client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
+    println!("{:#?}", response);
 }
