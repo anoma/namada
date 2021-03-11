@@ -1,8 +1,8 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+pub use std::hash::{Hash, Hasher};
 
 use anoma::protobuf::types::Intent;
-pub use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntentId(pub Vec<u8>);

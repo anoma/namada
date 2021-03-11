@@ -1,9 +1,8 @@
-use anoma::protobuf::services::RpcResponse;
-use anoma::protobuf::{
-    services::rpc_service_server::{RpcService, RpcServiceServer},
-    types::{self, IntentMessage},
+use anoma::protobuf::services::rpc_service_server::{
+    RpcService, RpcServiceServer,
 };
-
+use anoma::protobuf::services::RpcResponse;
+use anoma::protobuf::types::{self, IntentMessage};
 use tokio::sync::mpsc::{self, Sender};
 use tonic::transport::Server;
 use tonic::{Request as TonicRequest, Response as TonicResponse, Status};

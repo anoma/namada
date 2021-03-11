@@ -1,15 +1,17 @@
-use super::types::{self, NetworkEvent};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::time::Duration;
+
 use libp2p::gossipsub::{
     self, Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic,
     MessageAuthenticity, MessageId, TopicHash, ValidationMode,
 };
-use libp2p::{
-    identity::Keypair, swarm::NetworkBehaviourEventProcess, NetworkBehaviour,
-};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::time::Duration;
+use libp2p::identity::Keypair;
+use libp2p::swarm::NetworkBehaviourEventProcess;
+use libp2p::NetworkBehaviour;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+
+use super::types::{self, NetworkEvent};
 
 impl From<types::Topic> for IdentTopic {
     fn from(topic: types::Topic) -> Self {
@@ -60,7 +62,8 @@ fn message_id(message: &GossipsubMessage) -> MessageId {
 
 impl Behaviour {
     pub fn new(key: Keypair) -> (Self, Receiver<NetworkEvent>) {
-        // To content-address message, we can take the hash of message and use it as an ID.
+        // To content-address message, we can take the hash of message and use
+        // it as an ID.
 
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()

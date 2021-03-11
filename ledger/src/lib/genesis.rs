@@ -4,7 +4,8 @@
 use ed25519_dalek::Keypair;
 #[cfg(not(feature = "dev"))]
 use ed25519_dalek::PublicKey;
-use rand::{prelude::ThreadRng, thread_rng};
+use rand::prelude::ThreadRng;
+use rand::thread_rng;
 use sha2::{Digest, Sha256};
 
 #[cfg(not(feature = "dev"))]

@@ -27,6 +27,7 @@ impl Config {
     pub fn tendermint_home_dir(&self) -> PathBuf {
         self.home_dir.join("tendermint")
     }
+
     pub fn gossip_home_dir(&self) -> PathBuf {
         self.home_dir.join("libp2p")
     }

@@ -1,8 +1,9 @@
+use std::fs::{create_dir_all, File};
+use std::io::{Result, Write};
+use std::path::PathBuf;
+
 use serde::Deserialize;
 use serde_json::json;
-use std::fs::{File, create_dir_all};
-use std::io::Result;
-use std::{io::Write, path::PathBuf};
 
 #[derive(Debug, Deserialize)]
 pub struct NetworkConfig {

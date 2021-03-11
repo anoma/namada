@@ -1,7 +1,8 @@
-use super::mempool::{IntentId, Mempool};
-use super::types::{InternMessage, Topic};
 use anoma::protobuf::types::Intent;
 use prost::Message;
+
+use super::mempool::{IntentId, Mempool};
+use super::types::{InternMessage, Topic};
 
 #[derive(Debug, Clone)]
 pub enum Error {

@@ -10,16 +10,18 @@
 //!   - `hash`: block hash
 //!   - `balance/address`: balance for each account `address`
 
-use super::{
-    types::{BlockHeight, KeySeg},
-    Address, Balance, BlockHash, MerkleTree,
-};
-use crate::shell::storage::types::Value;
+use std::collections::HashMap;
+use std::path::Path;
+
 use rocksdb::{
     BlockBasedOptions, FlushOptions, Options, WriteBatch, WriteOptions,
 };
-use sparse_merkle_tree::{default_store::DefaultStore, SparseMerkleTree, H256};
-use std::{collections::HashMap, path::Path};
+use sparse_merkle_tree::default_store::DefaultStore;
+use sparse_merkle_tree::{SparseMerkleTree, H256};
+
+use super::types::{BlockHeight, KeySeg};
+use super::{Address, Balance, BlockHash, MerkleTree};
+use crate::shell::storage::types::Value;
 
 // TODO the DB schema will probably need some kind of versioning
 

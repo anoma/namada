@@ -1,12 +1,13 @@
 //! The key and values that may be persisted in a DB.
 
+use std::convert::{TryFrom, TryInto};
+
 use anoma::bytes::ByteBuf;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use borsh::{BorshDeserialize, BorshSerialize};
-use sparse_merkle_tree::{
-    blake2b::Blake2bHasher, default_store::DefaultStore, SparseMerkleTree, H256,
-};
-use std::convert::{TryFrom, TryInto};
+use sparse_merkle_tree::blake2b::Blake2bHasher;
+use sparse_merkle_tree::default_store::DefaultStore;
+use sparse_merkle_tree::{SparseMerkleTree, H256};
 
 // TODO adjust once chain ID scheme is chosen, add `Default` impl that allocates
 // this
