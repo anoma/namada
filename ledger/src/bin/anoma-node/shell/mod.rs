@@ -124,7 +124,7 @@ impl Shell {
     ) -> MempoolValidationResult {
         let tx = Transaction::decode(&tx_bytes[..]).map_err(|e| {
             format!(
-                "Error decoding a transaction: {}, from bytes  from bytes {:?}",
+                "Error decoding a transaction: {}, from bytes {:?}",
                 e, tx_bytes
             )
         })?;

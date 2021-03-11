@@ -18,9 +18,12 @@ install:
 	# Warning: built in debug mode for now
 	$(cargo) install --path ./ --debug
 
-run:
+run-anoma:
 	# runs the node daemon
-	$(cargo) run --bin anomad -- run
+	$(cargo) run --bin anomad -- run-anoma
+run-orderbook:
+	# runs the node orderbook daemon
+	$(cargo) run --bin anomad -- run-orderbook
 
 test:
 	$(cargo) test
