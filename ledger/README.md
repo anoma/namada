@@ -15,6 +15,9 @@ The validity predicate template receives the `transfer` data and checks that the
 The validity predicate is currently hard-coded in the shell and used for every account. To experiment with a different validity predicate, build it from the template and restart the shell.
 
 ```shell
+# Install development dependencies
+make dev-deps
+
 # Run this first if you don't have Rust wasm target installed:
 make -C ../tx_template
 
@@ -52,6 +55,9 @@ cargo run --bin anomad -- --rpc run-orderbook
 
 # Submit an intent (need a rpc server)
 cargo run --bin anomac -- gossip -data "data"
+
+# Format the code
+make fmt
 ```
 
 ## Logging
