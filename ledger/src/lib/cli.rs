@@ -80,10 +80,22 @@ pub struct NodeOpts {
 // `anomad` commands inlined in `anoma`
 #[derive(Clap)]
 pub enum InlinedNodeOpts {
+    /// Run the Anoma gossip node daemon
+    RunOrderbook(Orderbook),
     /// Run the Anoma node daemon
-    Run,
+    RunAnoma,
     /// Reset any store state
-    Reset,
+    ResetAnoma,
+}
+
+#[derive(Clap)]
+pub struct Orderbook {
+    #[clap(short, long)]
+    pub local_address: Option<String>,
+    #[clap(short, long)]
+    pub peers: Option<Vec<String>>,
+    #[clap(short, long)]
+    pub topics: Option<Vec<String>>,
 }
 
 /// The lazy opt is used for node and client sub-commands, it doesn't actually

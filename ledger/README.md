@@ -15,7 +15,7 @@ make
 make install
 
 # Run Anoma daemon (this will also initialize and run Tendermint node)
-make run
+make run-anoma
 
 # Reset the state (resets Tendermint too)
 cargo run --bin anomad -- reset
@@ -24,10 +24,19 @@ cargo run --bin anomad -- reset
 cargo run --bin anomac -- transfer -s va -d ba -a 10
 
 # Watch and on change run a node (the state will be persisted)
-cargo watch -x "run --bin anomad -- run"
+cargo watch -x "run --bin anomad -- run-anoma"
 
 # Watch and on change reset & run a node
-cargo watch -x "run --bin anomad -- reset" -x "run --bin anomad -- run"
+cargo watch -x "run --bin anomad -- reset-anoma" -x "run --bin anomad -- run"
+
+# run orderbook daemon
+make run-orderbook
+
+# run orderbook daemon with rpc server
+cargo run --bin anomad -- --rpc run-orderbook
+
+# Submit an intent (need a rpc server)
+cargo run --bin anomac -- gossip -data "data"
 ```
 
 ## Logging
