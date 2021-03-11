@@ -1,12 +1,14 @@
 # Error handling
 
+The current preference is to use `thiserror` for most code and `eyre` for reporting errors at the CLI level and the client.
+
 To make the code robust, we should avoid using code that may panic for errors that recoverable and handle all possible errors explicitly. Two exceptions to this rule are:
 - prototyping, where it's fine to use `unwrap`, `expect`, etc.
 - in code paths with conditional compilation **only** for development build, where it's preferable to use `expect` in place of `unwrap` to help with debugging
 
 In case of panics, we should provide an error trace that is helpful for trouble-shooting and debugging.
 
-The current preference is to use `thiserror` for library and library-like code and `eyre` for application code.
+A great post on error handling library/application distinction: <https://nick.groenen.me/posts/rust-error-handling/>.
 
 The considered DBs:
 - thiserror
