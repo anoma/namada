@@ -59,3 +59,33 @@ The considered options for a DB backend are given in [Libraries & Tools / Databa
 ### RocksDB
 
 In terms of RocksDB, the mutable part would be the Active memtable. When committed, it would switch to ReadOnly memtable, which is then flushed to disk and compacted.
+
+## Implementation
+
+### `storage` module
+
+This is the main interface for interacting with storage in Anoma.
+
+This module and its sub-modules should implement the in-memory storage (and/or a cache layer) with Merkle tree (however, the interface should be agnostic to the choice of vector commitment scheme or whether or not there even is one, we may want non-Merklised storage) and the persistent DB.
+
+The in-memory storage holds chain's metadata and current block's storage.
+
+Its public API should allow/provide:
+- get the Merkle root and Merkle tree proofs
+- read-only storage API for ledger's metadata to be accessible for transactions' code, VPs and the RPC
+  - with public types of all the stored metadata
+- unless specified otherwise, read the state from the current block
+
+An API made visible only to the shell module (e.g. `pub ( in SimplePath )` - https://doc.rust-lang.org/reference/visibility-and-privacy.html) should allow the shell to:
+- load state from DB for latest persisted block or initialize a new storage if none found
+- begin a new block
+- within a block:
+  - transaction can modify [account sub-space](/explore/design/ledger/accounts.md#dynamic-storage-sub-space)
+    - the function that modify storage (e.g. `write` and `delete`) have to guarantee to also update the Merkle tree
+  - store each applied transaction and its result
+- end the current block
+- commit the current block (persist to storage)
+
+### `storage/db` module
+
+The persistent DB implementation (e.g. RocksDB).
