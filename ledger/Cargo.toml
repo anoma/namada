@@ -33,14 +33,11 @@ dev = []
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 
 [dependencies]
+anoma_vm = {path = "vm"}
 base64 = "0.13.0"
 blake2b-rs = "0.2.0"
 borsh = "0.8.1"
 byteorder = "1.4.2"
-# TODO Not yet released on crates
-tendermint-abci = {git = "https://github.com/informalsystems/tendermint-rs"}
-# must be the same version as in tendermint-abci
-tendermint-proto = {git = "https://github.com/informalsystems/tendermint-rs"}
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2"}
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
@@ -59,6 +56,10 @@ serde = "1.0.123"
 serde_bytes = "0.11.5"
 sha2 = "0.9.3"
 sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding", features = ["with_borsh"]}
+# TODO Not yet released on crates
+tendermint-abci = {git = "https://github.com/informalsystems/tendermint-rs"}
+# must be the same version as in tendermint-abci
+tendermint-proto = {git = "https://github.com/informalsystems/tendermint-rs"}
 tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 tokio = { version = "1.2.0", features = ["full"] }
 tonic = "0.4.0"

@@ -23,6 +23,9 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
+static VP_WASM: &'static [u8] =
+    include_bytes!("../../../../../../vp_template/vp.wasm");
+
 #[derive(Debug)]
 pub struct Storage {
     db: db::DB,
@@ -40,17 +43,20 @@ pub struct BlockStorage {
     hash: BlockHash,
     height: BlockHeight,
     balances: HashMap<Address, Balance>,
+    vps: HashMap<Address, Vec<u8>>,
 }
 
 impl Storage {
     pub fn new(db_path: PathBuf) -> Self {
         let tree = MerkleTree::default();
         let balances = HashMap::new();
+        let vps = HashMap::new();
         let block = BlockStorage {
             tree,
             hash: BlockHash::default(),
             height: BlockHeight(0),
             balances,
+            vps,
         };
         Self {
             // TODO: Error handling
@@ -98,21 +104,6 @@ impl Storage {
     /// # Storage reads
     pub fn merkle_root(&self) -> &H256 {
         self.block.tree.0.root()
-    }
-
-    // TODO this doesn't belong here, temporary for convenience...
-    pub fn has_balance_gte(&self, addr: &Address, amount: u64) -> Result<()> {
-        match self.block.balances.get(&addr) {
-            None => return Err(Error::Stringly("Source not found".to_owned())),
-            Some(&Balance(src_balance)) => {
-                if src_balance < amount {
-                    return Err(Error::Stringly(
-                        "Source balance is too low".to_owned(),
-                    ));
-                };
-            }
-        }
-        Ok(())
     }
 
     /// # Storage writes
@@ -193,6 +184,15 @@ impl Storage {
         self.block.hash = hash;
         self.block.height = height;
         Ok(())
+    }
+
+    /// Get a validity predicate for the given account address
+    pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
+        match self.block.vps.get(addr) {
+            Some(vp) => Ok(vp.clone()),
+            // TODO: this temporarily loads default VP template if none found
+            None => Ok(VP_WASM.to_vec()),
+        }
     }
 }
 

@@ -40,14 +40,13 @@ pub struct MerkleTree(
 pub enum Address {
     Validator(ValidatorAddress),
     Basic(BasicAddress),
-    
 }
 
 impl Address {
     pub fn new_address(addr: String) -> Self {
         match addr.chars().nth(0) {
             Some(c) if c == 'v' => ValidatorAddress::new_address(addr),
-            _ => BasicAddress::new_address(addr)
+            _ => BasicAddress::new_address(addr),
         }
     }
 }
