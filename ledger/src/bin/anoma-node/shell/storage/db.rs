@@ -15,7 +15,9 @@ use super::{
     Address, Balance, BlockHash, MerkleTree,
 };
 use crate::shell::storage::types::Value;
-use rocksdb::{BlockBasedOptions, Options, WriteBatch, WriteOptions};
+use rocksdb::{
+    BlockBasedOptions, FlushOptions, Options, WriteBatch, WriteOptions,
+};
 use sparse_merkle_tree::{default_store::DefaultStore, SparseMerkleTree, H256};
 use std::{collections::HashMap, path::Path};
 
@@ -61,7 +63,11 @@ pub fn open<P: AsRef<Path>>(path: P) -> Result<DB> {
 
 impl DB {
     pub fn flush(&self) -> Result<()> {
-        self.0.flush().map_err(|e| Error::RocksDBError(e))
+        let mut flush_opts = FlushOptions::default();
+        flush_opts.set_wait(true);
+        self.0
+            .flush_opt(&flush_opts)
+            .map_err(|e| Error::RocksDBError(e))
     }
 
     pub fn write_block(
