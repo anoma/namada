@@ -1,0 +1,18 @@
+[book]
+authors = ["Heliax R&D Team"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Anoma - Technical Specifications"
+
+[output.html]
+additional-js =["assets/mermaid.min.js", "assets/mermaid-init.js"]
+additional-css = ["assets/custom.css"]
+# mathjax-support = true
+
+[output.html.search]
+expand = true
+
+[preprocessor]
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
