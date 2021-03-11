@@ -25,7 +25,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct Storage {
-    db_path: PathBuf,
+    db: db::DB,
     chain_id: String,
     // TODO Because the transaction may modify and state, we'll probably need
     // to split into read-only last block state and mutable current block state
@@ -53,7 +53,8 @@ impl Storage {
             balances,
         };
         Self {
-            db_path,
+            // TODO: Error handling
+            db: db::open(&db_path).unwrap(),
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
         }
@@ -62,9 +63,8 @@ impl Storage {
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
-        let mut db = db::open(&self.db_path).map_err(Error::DBError)?;
         if let Ok(Some((chain_id, tree, hash, height, balances))) =
-            db.read_last_block().map_err(Error::DBError)
+            self.db.read_last_block().map_err(Error::DBError)
         {
             self.chain_id = chain_id;
             self.block.tree = tree;
@@ -83,16 +83,16 @@ impl Storage {
     }
 
     /// Persist the current block's state to the database
-    pub fn commit(&self) -> Result<()> {
+    pub fn commit(&mut self) -> Result<()> {
         // TODO DB sub-dir with chain ID?
-        let mut db = db::open(&self.db_path).map_err(Error::DBError)?;
-        db.write_block(
-            &self.block.tree,
-            &self.block.hash,
-            &self.block.height,
-            &self.block.balances,
-        )
-        .map_err(Error::DBError)
+        self.db
+            .write_block(
+                &self.block.tree,
+                &self.block.hash,
+                &self.block.height,
+                &self.block.balances,
+            )
+            .map_err(Error::DBError)
     }
 
     /// # Storage reads
@@ -177,8 +177,9 @@ impl Storage {
             return Ok(());
         }
         self.chain_id = chain_id.to_owned();
-        let mut db = db::open(&self.db_path).map_err(Error::DBError)?;
-        db.write_chain_id(&self.chain_id).map_err(Error::DBError)?;
+        self.db
+            .write_chain_id(&self.chain_id)
+            .map_err(Error::DBError)?;
         Ok(())
     }
 
