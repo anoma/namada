@@ -21,7 +21,6 @@ pub enum AnomaOpts {
     Node(LazyOpt),
     /// Anoma client commands
     Client(LazyOpt),
-    #[clap(flatten)]
     InlinedNode(NodeOpts),
     #[clap(flatten)]
     InlinedClient(ClientOpts),
@@ -40,6 +39,7 @@ pub enum ClientOpts {
 pub enum InlinedClientOpts {
     /// Transfer
     Transfer(Transfer),
+    Gossip(Gossip),
 }
 
 // `anomac` subcommand for controlling transfers
@@ -55,13 +55,26 @@ pub struct Transfer {
     #[clap(short)]
     pub amount: u64,
 }
+// `anomac` subcommand for controlling intent
+#[derive(Clap)]
+pub struct Gossip {
+    /// An example command
+    #[clap(short, long)]
+    pub orderbook: String,
+    #[clap(short, long)]
+    pub data: String,
+}
 
 /// The Anoma Node CLI
 #[derive(Clap)]
 #[clap(version = "1.0", author = AUTHOR)]
-pub enum NodeOpts {
+pub struct NodeOpts {
+    #[clap(short, long)]
+    pub base_dir: Option<String>,
+    #[clap(short, long)]
+    pub rpc: bool,
     #[clap(flatten)]
-    Inlined(InlinedNodeOpts),
+    pub ops: InlinedNodeOpts,
 }
 
 // `anomad` commands inlined in `anoma`
