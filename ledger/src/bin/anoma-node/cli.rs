@@ -7,17 +7,35 @@ use anoma::{
 };
 use clap::Clap;
 
+use crate::gossip;
 use crate::shell;
 
 pub fn main(config: Config) {
-    match NodeOpts::parse() {
-        NodeOpts::Inlined(ops) => exec_inlined(config, ops),
-    }
+    let NodeOpts { base_dir, rpc, ops } = NodeOpts::parse();
+    let config = base_dir.map(Config::new).unwrap_or(config);
+    exec_inlined(config, rpc, ops)
 }
 
-fn exec_inlined(config: Config, ops: InlinedNodeOpts) {
+fn exec_inlined(
+    config: Config,
+    rpc: bool,
+    ops: InlinedNodeOpts,
+    ) {
     match ops {
-        InlinedNodeOpts::Run => shell::run(config),
-        InlinedNodeOpts::Reset => shell::reset(config),
-    }
+        InlinedNodeOpts::RunOrderbook(arg) => gossip::run(
+            config,
+            rpc,
+            arg.local_address,
+            arg.peers,
+            arg.topics,
+        ),
+        InlinedNodeOpts::RunAnoma => {
+            shell::run(config);
+            Ok(())
+        }
+        InlinedNodeOpts::ResetAnoma => {
+            shell::reset(config);
+            Ok(())
+        }
+    }.unwrap();
 }

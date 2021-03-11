@@ -18,7 +18,16 @@ impl Default for Config {
 }
 
 impl Config {
+    pub fn new(dir: String) -> Self {
+        Self {
+            home_dir: PathBuf::from(dir),
+        }
+    }
+
     pub fn tendermint_home_dir(&self) -> PathBuf {
         self.home_dir.join("tendermint")
+    }
+    pub fn gossip_home_dir(&self) -> PathBuf {
+        self.home_dir.join("libp2p")
     }
 }

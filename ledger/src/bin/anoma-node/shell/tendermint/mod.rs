@@ -88,7 +88,7 @@ pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
         // override the validator key file
         write_validator_key(home_dir, &genesis::genesis().validator).unwrap();
     }
-    let _tendermin_node = Command::new("tendermint")
+    let _tendermint_node = Command::new("tendermint")
         .args(&[
             "node",
             "--home",

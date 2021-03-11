@@ -1,7 +1,8 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-
-use anoma::cli::{self, ClientOpts, InlinedClientOpts};
+use anoma::cli::{self, ClientOpts, Gossip, InlinedClientOpts};
+use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
+use anoma::protobuf::types;
 use anoma::rpc_types::{self, Message};
 use clap::Clap;
 use tendermint_rpc::{Client, HttpClient};
@@ -15,6 +16,9 @@ pub async fn main() {
 async fn exec_inlined(ops: InlinedClientOpts) {
     match ops {
         InlinedClientOpts::Tx(tx) => exec_tx(tx).await,
+        InlinedClientOpts::Gossip(Gossip { orderbook, data }) => {
+            gossip(orderbook, data).await.unwrap();
+        }
     }
 }
 
@@ -47,4 +51,18 @@ async fn exec_tx(
     // TODO broadcast_tx_commit shouldn't be used live
     let response = client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
     println!("{:#?}", response);
+}
+
+async fn gossip(
+    _orderbook_addr: String,
+    data: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = RpcServiceClient::connect("http://[::1]:39111").await?;
+    let intent = Some(types::Intent { data });
+    let intent_message = types::IntentMessage { intent };
+    let message = types::Message {
+        message: Some(types::message::Message::IntentMessage(intent_message)),
+    };
+    let _response = client.send_message(message).await?;
+    Ok(())
 }

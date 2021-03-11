@@ -15,12 +15,15 @@ use super::{
     Address, Balance, BlockHash, MerkleTree,
 };
 use crate::shell::storage::types::Value;
-use rocksdb::{BlockBasedOptions, Options, WriteBatch};
+use rocksdb::{
+    BlockBasedOptions, FlushOptions, Options, WriteBatch, WriteOptions,
+};
 use sparse_merkle_tree::{default_store::DefaultStore, SparseMerkleTree, H256};
 use std::{collections::HashMap, path::Path};
 
 // TODO the DB schema will probably need some kind of versioning
 
+#[derive(Debug)]
 pub struct DB(rocksdb::DB);
 
 #[derive(Debug, Clone)]
@@ -59,6 +62,14 @@ pub fn open<P: AsRef<Path>>(path: P) -> Result<DB> {
 }
 
 impl DB {
+    pub fn flush(&self) -> Result<()> {
+        let mut flush_opts = FlushOptions::default();
+        flush_opts.set_wait(true);
+        self.0
+            .flush_opt(&flush_opts)
+            .map_err(|e| Error::RocksDBError(e))
+    }
+
     pub fn write_block(
         &mut self,
         tree: &MerkleTree,
@@ -98,21 +109,25 @@ impl DB {
                 batch.put(key, balance.encode());
             });
         }
-        self.0.write(batch).map_err(|e| Error::RocksDBError(e))?;
+        let mut write_opts = WriteOptions::default();
+        write_opts.disable_wal(true);
+        self.0
+            .write_opt(batch, &write_opts)
+            .map_err(|e| Error::RocksDBError(e))?;
         // Block height - write after everything else is written
         // NOTE for async writes, we need to take care that all previous heights
         // are known when updating this
         self.0
-            .put("height", height.encode())
-            .map_err(|e| Error::RocksDBError(e))?;
-        self.0.flush().map_err(|e| Error::RocksDBError(e))
+            .put_opt("height", height.encode(), &write_opts)
+            .map_err(|e| Error::RocksDBError(e))
     }
 
     pub fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
+        let mut write_opts = WriteOptions::default();
+        write_opts.disable_wal(true);
         self.0
-            .put("chain_id", chain_id.encode())
-            .map_err(|e| Error::RocksDBError(e))?;
-        self.0.flush().map_err(|e| Error::RocksDBError(e))
+            .put_opt("chain_id", chain_id.encode(), &write_opts)
+            .map_err(|e| Error::RocksDBError(e))
     }
 
     pub fn read_last_block(

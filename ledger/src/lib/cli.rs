@@ -21,7 +21,6 @@ pub enum AnomaOpts {
     Node(LazyOpt),
     /// Anoma client commands
     Client(LazyOpt),
-    #[clap(flatten)]
     InlinedNode(NodeOpts),
     #[clap(flatten)]
     InlinedClient(ClientOpts),
@@ -40,6 +39,7 @@ pub enum ClientOpts {
 pub enum InlinedClientOpts {
     /// Submit a transaction and wait for the result
     Tx(Tx),
+    Gossip(Gossip),
 }
 
 // `anomac` subcommand for submitting transactions
@@ -53,22 +53,47 @@ pub struct Tx {
     #[clap(long, short)]
     pub data_hex: Option<String>,
 }
+// `anomac` subcommand for controlling intent
+#[derive(Clap)]
+pub struct Gossip {
+    /// An example command
+    #[clap(short, long)]
+    pub orderbook: String,
+    #[clap(short, long)]
+    pub data: String,
+}
 
 /// The Anoma Node CLI
 #[derive(Clap)]
 #[clap(version = "1.0", author = AUTHOR)]
-pub enum NodeOpts {
+pub struct NodeOpts {
+    #[clap(short, long)]
+    pub base_dir: Option<String>,
+    #[clap(short, long)]
+    pub rpc: bool,
     #[clap(flatten)]
-    Inlined(InlinedNodeOpts),
+    pub ops: InlinedNodeOpts,
 }
 
 // `anomad` commands inlined in `anoma`
 #[derive(Clap)]
 pub enum InlinedNodeOpts {
+    /// Run the Anoma gossip node daemon
+    RunOrderbook(Orderbook),
     /// Run the Anoma node daemon
-    Run,
+    RunAnoma,
     /// Reset any store state
-    Reset,
+    ResetAnoma,
+}
+
+#[derive(Clap)]
+pub struct Orderbook {
+    #[clap(short, long)]
+    pub local_address: Option<String>,
+    #[clap(short, long)]
+    pub peers: Option<Vec<String>>,
+    #[clap(short, long)]
+    pub topics: Option<Vec<String>>,
 }
 
 /// The lazy opt is used for node and client sub-commands, it doesn't actually
