@@ -69,5 +69,4 @@ cargo-watch = "7.5.0"
 clippy = "0.0.302"
 
 [build-dependencies]
-rustfmt = "0.10.0"
-tonic-build = {version = "0.4.0", features = ["prost", "rustfmt"]}
+tonic-build = {version = "0.4.0", features = ["prost"]}
