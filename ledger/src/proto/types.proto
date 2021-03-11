@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package types;
+
+message Intent {
+  string data = 1;
+  // google.protobuf.Timestamp timestamp = 2;
+}
+
+message DkgMessage {
+  string data = 1;
+}
+
+message IntentMessage {
+  Intent intent = 4;
+}
+
+message Message {
+  oneof message {
+    IntentMessage intent_message = 1 ;
+    DkgMessage dkg_msg = 2;
+  }
+}

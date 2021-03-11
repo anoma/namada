@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package services;
+
+import "types.proto";
+
+service RPCService {
+  rpc SendMessage(types.Message) returns (RpcResponse);
+}
+
+message RpcResponse {
+  string result = 1;
+}
