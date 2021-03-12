@@ -36,7 +36,7 @@ make install
 make run-anoma
 
 # Reset the state (resets Tendermint too)
-cargo run --bin anomad -- reset
+cargo run --bin anomad -- reset-anoma
 
 # Submit a transaction with a wasm code 
 cargo run --bin anomac -- tx -c ../tx_template/tx.wasm
