@@ -19,7 +19,7 @@ The validity predicate is currently hard-coded in the shell and used for every a
 make dev-deps
 
 # Run this first if you don't have Rust wasm target installed:
-make -C ../tx_template
+make -C ../tx_template deps
 
 # Build the validity predicate and transaction wasm from templates, at:
 # - ../vp_template/vp.wasm
