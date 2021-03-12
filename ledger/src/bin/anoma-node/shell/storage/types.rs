@@ -1,6 +1,7 @@
 //! The key and values that may be persisted in a DB.
 
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Display;
 
 use anoma::bytes::ByteBuf;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
@@ -8,6 +9,15 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("TEMPORARY error: {error}")]
+    Temporary { error: String },
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 // TODO adjust once chain ID scheme is chosen, add `Default` impl that allocates
 // this
@@ -52,6 +62,16 @@ impl Address {
     }
 }
 
+impl Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let addr = match self {
+            Address::Validator(ValidatorAddress(addr)) => addr,
+            Address::Basic(BasicAddress(addr)) => addr,
+        };
+        f.write_str(addr)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BasicAddress(pub String);
 
@@ -83,7 +103,7 @@ pub trait KeySeg {
     fn to_key_seg(&self) -> String;
 
     /// Reverse of `to_key_seg`. Convert key segment to `Self`.
-    fn from_key_seg(seg: &String) -> Result<Self, String>
+    fn from_key_seg(seg: &String) -> Result<Self>
     where
         Self: Sized;
 }
@@ -118,14 +138,14 @@ impl KeySeg for BlockHeight {
         format!("{}", self.0)
     }
 
-    fn from_key_seg(_seg: &String) -> Result<Self, String> {
+    fn from_key_seg(_seg: &String) -> Result<Self> {
         todo!()
     }
 }
 impl TryFrom<i64> for BlockHeight {
     type Error = String;
 
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
+    fn try_from(value: i64) -> std::result::Result<Self, Self::Error> {
         value
             .try_into()
             .map(BlockHeight)
@@ -139,15 +159,17 @@ impl Default for BlockHash {
     }
 }
 impl TryFrom<&[u8]> for BlockHash {
-    type Error = String;
+    type Error = self::Error;
 
-    fn try_from(value: &[u8]) -> Result<Self, String> {
+    fn try_from(value: &[u8]) -> Result<Self> {
         if value.len() != BLOCK_HASH_LENGTH {
-            return Err(format!(
-                "Unexpected block hash length {}, expected {}",
-                value.len(),
-                BLOCK_HASH_LENGTH
-            ));
+            return Err(Error::Temporary {
+                error: format!(
+                    "Unexpected block hash length {}, expected {}",
+                    value.len(),
+                    BLOCK_HASH_LENGTH
+                ),
+            });
         }
         let mut hash = [0; 32];
         hash.copy_from_slice(value);
@@ -155,15 +177,17 @@ impl TryFrom<&[u8]> for BlockHash {
     }
 }
 impl TryFrom<Vec<u8>> for BlockHash {
-    type Error = String;
+    type Error = self::Error;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, String> {
+    fn try_from(value: Vec<u8>) -> Result<Self> {
         if value.len() != BLOCK_HASH_LENGTH {
-            return Err(format!(
-                "Unexpected block hash length {}, expected {}",
-                value.len(),
-                BLOCK_HASH_LENGTH
-            ));
+            return Err(Error::Temporary {
+                error: format!(
+                    "Unexpected block hash length {}, expected {}",
+                    value.len(),
+                    BLOCK_HASH_LENGTH
+                ),
+            });
         }
         let mut hash = [0; 32];
         hash.copy_from_slice(&value);
@@ -193,13 +217,15 @@ impl KeySeg for Address {
         }
     }
 
-    fn from_key_seg(seg: &String) -> Result<Self, String> {
+    fn from_key_seg(seg: &String) -> Result<Self> {
         BasicAddress::from_key_seg(seg)
             .map(Address::Basic)
             .or(ValidatorAddress::from_key_seg(seg).map(Address::Validator))
-            .map_err(|_e| {
-                format!("Address must start with \"b\" or \"v\", got {}", seg)
-                    .to_owned()
+            .map_err(|_e| Error::Temporary {
+                error: format!(
+                    "TEMPORARY: Address must start with \"b\" or \"v\", got {}",
+                    seg
+                ),
             })
     }
 }
@@ -220,10 +246,15 @@ impl KeySeg for BasicAddress {
         self.0.clone()
     }
 
-    fn from_key_seg(seg: &String) -> Result<Self, String> {
+    fn from_key_seg(seg: &String) -> Result<Self> {
         match seg.chars().nth(0) {
             Some(c) if c == 'b' => Ok(Self(seg.clone())),
-            _ => Err("BasicAddress must start with \"b\"".to_owned()),
+            _ => Err(Error::Temporary {
+                error: format!(
+                    "TEMPORARY: BasicAddress must start with \"b\", got {}",
+                    seg
+                ),
+            }),
         }
     }
 }
@@ -243,10 +274,15 @@ impl KeySeg for ValidatorAddress {
         self.0.clone()
     }
 
-    fn from_key_seg(seg: &String) -> Result<Self, String> {
+    fn from_key_seg(seg: &String) -> Result<Self> {
         match seg.chars().nth(0) {
             Some(c) if c == 'v' => Ok(Self(seg.clone())),
-            _ => Err("ValidatorAddress must start with \"v\"".to_owned()),
+            _ => Err(Error::Temporary {
+                error: format!(
+                    "TEMPORARY: ValidatorAddress must start with \"v\", got {}",
+                    seg
+                ),
+            }),
         }
     }
 }

@@ -77,13 +77,11 @@ pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
     Command::new("tendermint")
         .args(&["init", "--home", &home_dir_string])
         .output()
-        .map_err(|error| {
-            log::error!("Failed to initialize tendermint node: {:?}", error)
-        })
-        .unwrap();
+        .expect("TEMPORARY: Failed to initialize tendermint node");
     if cfg!(feature = "dev") {
         // override the validator key file
-        write_validator_key(home_dir, &genesis::genesis().validator).unwrap();
+        write_validator_key(home_dir, &genesis::genesis().validator)
+            .expect("TEMPORARY: failed to write tendermint validator key");
     }
     let _tendermint_node = Command::new("tendermint")
         .args(&[
@@ -95,13 +93,15 @@ pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
             "--consensus.create_empty_blocks=false",
         ])
         .spawn()
-        .unwrap();
+        .expect("TEMPORARY: failed to start up tendermint node");
 
     // bind and run the ABCI server
     let server = ServerBuilder::default()
         .bind(addr, AbciWrapper { sender })
-        .unwrap();
-    server.listen().unwrap()
+        .expect("TEMPORARY: failed to bind ABCI server address");
+    server
+        .listen()
+        .expect("TEMPORARY: failed to start up ABCI server")
 }
 
 pub fn reset(config: Config) {
@@ -115,10 +115,7 @@ pub fn reset(config: Config) {
             &config.tendermint_home_dir().to_string_lossy(),
         ])
         .output()
-        .map_err(|error| {
-            log::error!("Failed to reset tendermint node: {:?}", error)
-        })
-        .unwrap();
+        .expect("TEMPORARY: Failed to reset tendermint node's data");
 }
 
 #[derive(Clone, Debug)]
@@ -137,11 +134,16 @@ impl tendermint_abci::Application for AbciWrapper {
         let mut resp = ResponseInfo::default();
 
         let (reply, reply_receiver) = channel();
-        self.sender.send(AbciMsg::GetInfo { reply }).unwrap();
-        if let Some((last_block_app_hash, last_block_height)) =
-            reply_receiver.recv().unwrap()
+        self.sender
+            .send(AbciMsg::GetInfo { reply })
+            .expect("TEMPORARY: failed to send GetInfo request");
+        if let Some((last_block_app_hash, last_block_height)) = reply_receiver
+            .recv()
+            .expect("TEMPORARY: failed to recv GetInfo response")
         {
-            resp.last_block_height = last_block_height.try_into().unwrap();
+            resp.last_block_height = last_block_height
+                .try_into()
+                .expect("TEMPORARY: unexpected height value");
             resp.last_block_app_hash = last_block_app_hash.0;
         }
 
@@ -156,8 +158,10 @@ impl tendermint_abci::Application for AbciWrapper {
         let (reply, reply_receiver) = channel();
         self.sender
             .send(AbciMsg::InitChain { reply, chain_id })
-            .unwrap();
-        reply_receiver.recv().unwrap();
+            .expect("TEMPORARY: failed to send InitChain request");
+        reply_receiver
+            .recv()
+            .expect("TEMPORARY: failed to recv InitChain response");
 
         // Set the initial validator set
         let genesis = genesis::genesis();
@@ -168,8 +172,11 @@ impl tendermint_abci::Application for AbciWrapper {
             genesis.validator.keypair.public.to_bytes().to_vec(),
         ));
         abci_validator.pub_key = Some(pub_key);
-        abci_validator.power =
-            genesis.validator.voting_power.try_into().unwrap();
+        abci_validator.power = genesis
+            .validator
+            .voting_power
+            .try_into()
+            .expect("TEMPORARY: unexpected validator's voting power");
         resp.validators.push(abci_validator);
         resp
     }
@@ -181,7 +188,9 @@ impl tendermint_abci::Application for AbciWrapper {
     fn check_tx(&self, req: RequestCheckTx) -> ResponseCheckTx {
         log::info!("check_tx request {:#?}", req);
         let mut resp = ResponseCheckTx::default();
-        let r#type = match CheckTxType::from_i32(req.r#type).unwrap() {
+        let r#type = match CheckTxType::from_i32(req.r#type)
+            .expect("TEMPORARY: received unexpected CheckTxType from ABCI")
+        {
             CheckTxType::New => MempoolTxType::NewTransaction,
             CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
         };
@@ -193,8 +202,10 @@ impl tendermint_abci::Application for AbciWrapper {
                 tx: req.tx,
                 r#type,
             })
-            .unwrap();
-        let result = reply_receiver.recv().unwrap();
+            .expect("TEMPORARY: failed to send MempoolValidate request");
+        let result = reply_receiver
+            .recv()
+            .expect("TEMPORARY: failed to recv MempoolValidate response");
 
         match result {
             Ok(_) => resp.info = "Mempool validation passed".to_string(),
@@ -215,7 +226,10 @@ impl tendermint_abci::Application for AbciWrapper {
                 log::error!("{:#?}", err);
             }
             Ok(hash) => {
-                let raw_height = req.header.unwrap().height;
+                let raw_height = req
+                    .header
+                    .expect("TEMPORARY: missing block's header")
+                    .height;
                 match raw_height.try_into() {
                     Err(_) => {
                         log::error!("Unexpected block height {}", raw_height)
@@ -228,8 +242,12 @@ impl tendermint_abci::Application for AbciWrapper {
                                 hash,
                                 height,
                             })
-                            .unwrap();
-                        reply_receiver.recv().unwrap();
+                            .expect(
+                                "TEMPORARY: failed to send BeginBlock request",
+                            );
+                        reply_receiver.recv().expect(
+                            "TEMPORARY: failed to recv BeginBlock response",
+                        );
                     }
                 }
             }
@@ -243,8 +261,10 @@ impl tendermint_abci::Application for AbciWrapper {
         let (reply, reply_receiver) = channel();
         self.sender
             .send(AbciMsg::ApplyTx { reply, tx: req.tx })
-            .unwrap();
-        let result = reply_receiver.recv().unwrap();
+            .expect("TEMPORARY: failed to send ApplyTx request");
+        let result = reply_receiver
+            .recv()
+            .expect("TEMPORARY: failed to recv ApplyTx response");
 
         match result {
             Ok(()) => {
@@ -272,8 +292,10 @@ impl tendermint_abci::Application for AbciWrapper {
                 let (reply, reply_receiver) = channel();
                 self.sender
                     .send(AbciMsg::EndBlock { reply, height })
-                    .unwrap();
-                reply_receiver.recv().unwrap();
+                    .expect("TEMPORARY: failed to send EndBlock request");
+                reply_receiver
+                    .recv()
+                    .expect("TEMPORARY: failed to recv EndBlock response");
             }
         }
         resp
@@ -287,8 +309,12 @@ impl tendermint_abci::Application for AbciWrapper {
         let mut resp = ResponseCommit::default();
 
         let (reply, reply_receiver) = channel();
-        self.sender.send(AbciMsg::CommitBlock { reply }).unwrap();
-        let MerkleRoot(result) = reply_receiver.recv().unwrap();
+        self.sender
+            .send(AbciMsg::CommitBlock { reply })
+            .expect("TEMPORARY: failed to send CommitBlock request");
+        let MerkleRoot(result) = reply_receiver
+            .recv()
+            .expect("TEMPORARY: failed to recv CommitBlock response");
 
         resp.data = result;
         resp

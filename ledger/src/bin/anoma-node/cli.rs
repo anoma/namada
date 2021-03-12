@@ -4,28 +4,30 @@
 use anoma::cli::{InlinedNodeOpts, NodeOpts};
 use anoma::config::Config;
 use clap::Clap;
+use eyre::{Result, WrapErr};
 
 use crate::{gossip, shell};
 
-pub fn main(config: Config) {
+pub fn main(config: Config) -> Result<()> {
     let NodeOpts { base_dir, rpc, ops } = NodeOpts::parse();
     let config = base_dir.map(Config::new).unwrap_or(config);
     exec_inlined(config, rpc, ops)
 }
 
-fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) {
+fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
     match ops {
-        InlinedNodeOpts::RunOrderbook(arg) => {
-            gossip::run(config, rpc, arg.local_address, arg.peers, arg.topics)
-        }
+        InlinedNodeOpts::RunOrderbook(arg) => Ok(gossip::run(
+            config,
+            rpc,
+            arg.local_address,
+            arg.peers,
+            arg.topics,
+        )),
         InlinedNodeOpts::RunAnoma => {
-            shell::run(config);
-            Ok(())
+            shell::run(config).wrap_err("Failed to run Anoma node")
         }
         InlinedNodeOpts::ResetAnoma => {
-            shell::reset(config);
-            Ok(())
+            shell::reset(config).wrap_err("Failed to reset Anoma node")
         }
     }
-    .unwrap();
 }
