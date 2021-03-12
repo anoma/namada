@@ -2,8 +2,11 @@ package = Anoma
 
 # env = OPENSSL_INCLUDE_DIR="/usr/local/opt/openssl/include"
 cargo = $(env) cargo
+rustup = $(env) rustup
 debug-env = RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
 debug-cargo = $(env) $(debug-env) cargo
+# nightly build is currently used for rustfmt
+nightly = nightly-2021-03-09
 
 build:
 	$(cargo) build
@@ -32,7 +35,7 @@ test-debug:
 	$(debug-cargo) test -- --nocapture
 
 fmt:
-	$(cargo) fmt
+	$(cargo) +$(nightly) fmt
 
 watch:
 	$(cargo) watch
@@ -49,4 +52,8 @@ build-wasm-scripts:
 	make -C ../vp_template && \
 	make -C ../tx_template
 
-.PHONY : build build-release clippy install run test test-debug fmt watch clean doc build-wasm-scripts
+dev-deps:
+	$(rustup) toolchain install $(nightly)
+	$(rustup) component add rustfmt --toolchain $(nightly)
+
+.PHONY : build build-release clippy install run test test-debug fmt watch clean doc build-wasm-scripts dev-deps

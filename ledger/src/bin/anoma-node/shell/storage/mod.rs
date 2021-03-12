@@ -4,15 +4,19 @@
 mod db;
 mod types;
 
+use std::collections::HashMap;
+use std::ops::Deref;
+use std::path::PathBuf;
+
+use anoma::bytes::ByteBuf;
+use sparse_merkle_tree::{SparseMerkleTree, H256};
+
 pub use self::types::{
     Address, Balance, BasicAddress, BlockHash, BlockHeight, MerkleTree,
     ValidatorAddress,
 };
 use self::types::{Hash256, CHAIN_ID_LENGTH};
 use super::MerkleRoot;
-use anoma::bytes::ByteBuf;
-use sparse_merkle_tree::{SparseMerkleTree, H256};
-use std::{collections::HashMap, ops::Deref, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub enum Error {

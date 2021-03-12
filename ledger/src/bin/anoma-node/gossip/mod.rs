@@ -6,17 +6,19 @@ mod orderbook;
 mod p2p;
 mod types;
 
-use self::orderbook::Orderbook;
-use self::{config::NetworkConfig, dkg::DKG};
+use std::error::Error;
+use std::fs::{create_dir_all, File};
+use std::io::Write;
+use std::path::PathBuf;
+use std::{fs, thread};
+
 // use self::Dkg::DKG;
-use anoma::{
-    bookkeeper::Bookkeeper, config::*
-};
-use std::{error::Error, fs::create_dir_all, thread};
-use std::fs;
-use std::fs::File;
-use std::{io::Write, path::PathBuf};
+use anoma::{bookkeeper::Bookkeeper, config::*};
 use tokio::sync::mpsc;
+
+use self::config::NetworkConfig;
+use self::dkg::DKG;
+use self::orderbook::Orderbook;
 use crate::rpc;
 
 // XXX TODO add type error and speficic Result type

@@ -1,20 +1,19 @@
 mod storage;
 mod tendermint;
 
-use self::{
-    storage::{
-        Address, Balance, BasicAddress, BlockHash, BlockHeight, Storage,
-        ValidatorAddress,
-    },
-    tendermint::{AbciMsg, AbciReceiver},
-};
-use anoma::{
-    bytes::ByteBuf,
-    config::Config,
-    rpc_types::{Message, Tx},
-};
+use std::path::PathBuf;
+use std::sync::mpsc;
+
+use anoma::bytes::ByteBuf;
+use anoma::config::Config;
+use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
-use std::{path::PathBuf, sync::mpsc};
+
+use self::storage::{
+    Address, Balance, BasicAddress, BlockHash, BlockHeight, Storage,
+    ValidatorAddress,
+};
+use self::tendermint::{AbciMsg, AbciReceiver};
 
 pub fn run(config: Config) {
     // run our shell via Tendermint ABCI
@@ -222,11 +221,7 @@ impl Shell {
                 if src_accept {
                     "dest"
                 } else {
-                    if dest_accept {
-                        "src"
-                    } else {
-                        "src and dest"
-                    }
+                    if dest_accept { "src" } else { "src and dest" }
                 }
             );
         }

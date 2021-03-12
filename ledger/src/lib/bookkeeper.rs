@@ -1,7 +1,6 @@
+use libp2p::identity::ed25519::Keypair;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
-use libp2p::identity::ed25519::Keypair;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Bookkeeper {

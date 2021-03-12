@@ -3,22 +3,17 @@
 //! Note that Tendermint implementation details should never be leaked outside
 //! of this module.
 
-use crate::shell::storage::{BlockHash, BlockHeight};
-use crate::shell::MempoolTxType;
-use anoma::{
-    config::Config,
-    genesis::{self, Validator},
-};
-use serde_json::json;
+use std::convert::{TryFrom, TryInto};
+use std::fs::File;
+use std::io::{self, Write};
+use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::process::Command;
-use std::{
-    convert::{TryFrom, TryInto},
-    fs::File,
-    io::{self, Write},
-    net::SocketAddr,
-    path::PathBuf,
-    sync::mpsc::{self, channel, Sender},
-};
+use std::sync::mpsc::{self, channel, Sender};
+
+use anoma::config::Config;
+use anoma::genesis::{self, Validator};
+use serde_json::json;
 use tendermint_abci::{self, ServerBuilder};
 use tendermint_proto::abci::{
     CheckTxType, RequestApplySnapshotChunk, RequestBeginBlock, RequestCheckTx,
@@ -32,6 +27,8 @@ use tendermint_proto::abci::{
 };
 
 use super::MerkleRoot;
+use crate::shell::storage::{BlockHash, BlockHeight};
+use crate::shell::MempoolTxType;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
 pub type AbciSender = mpsc::Sender<AbciMsg>;

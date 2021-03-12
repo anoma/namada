@@ -1,15 +1,19 @@
-use super::{
-    config::NetworkConfig,
-    orderbook::{self, Orderbook},
-};
-use super::{dkg::DKG, network_behaviour::Behaviour, types::NetworkEvent};
-use anoma::{bookkeeper::Bookkeeper, protobuf::types::IntentMessage};
-use libp2p::gossipsub::{IdentTopic as Topic, MessageAcceptance};
-use libp2p::PeerId;
-use libp2p::{identity::Keypair, identity::Keypair::Ed25519};
-use prost::Message;
 use std::error::Error;
+
+use anoma::bookkeeper::Bookkeeper;
+use anoma::protobuf::types::IntentMessage;
+use libp2p::gossipsub::{IdentTopic as Topic, MessageAcceptance};
+use libp2p::identity::Keypair;
+use libp2p::identity::Keypair::Ed25519;
+use libp2p::PeerId;
+use prost::Message;
 use tokio::sync::mpsc::Receiver;
+
+use super::config::NetworkConfig;
+use super::dkg::DKG;
+use super::network_behaviour::Behaviour;
+use super::orderbook::{self, Orderbook};
+use super::types::NetworkEvent;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 pub fn build_swarm(
