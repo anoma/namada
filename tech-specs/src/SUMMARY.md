@@ -11,6 +11,8 @@
       - [Transaction execution](./explore/design/ledger/tx-execution.md)
       - [Front-running prevention](./explore/design/ledger/front-running.md)
     - [The gossip/orderbook](./explore/design/gossip.md)
+      - [Intent](./explore/design/gossip/intent.md)
+      - [Filter](./explore/design/gossip/filter.md)
     - [Fractal scaling](./explore/design/fractal-scaling.md)
     - [Upgrade system](./explore/design/upgrade-system.md)
     - [Crypto primitives](./explore/design/crypto-primitives.md)
