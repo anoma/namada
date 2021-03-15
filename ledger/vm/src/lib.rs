@@ -1,12 +1,12 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use std::{
-    io::Write,
-    sync::{mpsc, Arc, Mutex},
-};
+mod memory;
+pub mod types;
+
+use memory::AnomaMemory;
+use std::sync::{mpsc, Arc, Mutex};
 use thiserror::Error;
+use types::TxMsg;
 use wasmer::{
-    internals::WithEnv, HostEnvInitError, HostFunction, Instance, Memory,
-    WasmerEnv,
+    internals::WithEnv, HostEnvInitError, HostFunction, Instance, WasmerEnv,
 };
 
 const TX_ENTRYPOINT: &str = "apply_tx";
@@ -19,7 +19,7 @@ pub struct TxEnv {
     // currently implements. There must be a better way...
     pub sender: Arc<Mutex<mpsc::Sender<TxMsg>>>,
     // #[wasmer(export)]
-    pub memory: wasmer::LazyInit<Memory>,
+    pub memory: AnomaMemory,
 }
 
 impl WasmerEnv for TxEnv {
@@ -27,17 +27,8 @@ impl WasmerEnv for TxEnv {
         &mut self,
         instance: &Instance,
     ) -> std::result::Result<(), HostEnvInitError> {
-        let memory = instance.exports.get_memory("memory")?;
-        self.memory.initialize(memory.clone());
-        Ok(())
+        self.memory.init_env_memory(&instance.exports)
     }
-}
-
-#[derive(Clone, BorshSerialize, BorshDeserialize)]
-pub struct TxMsg {
-    pub src: String,
-    pub dest: String,
-    pub amount: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -48,33 +39,33 @@ pub struct TxRunner {
 #[derive(Error, Debug)]
 pub enum Error {
     // 1. Common error types
-    #[error("Failed initializing the memory {0}")]
-    InitMemoryError(wasmer::MemoryError),
-    #[error("Failed exporting the memory {0}")]
-    MemoryExportError(wasmer::ExportError),
+    #[error("Memory error: {0}")]
+    MemoryError(memory::Error),
     // 2. Transaction errors
-    #[error("Transaction compilation error {0}")]
+    #[error("Transaction compilation error: {0}")]
     TxCompileError(wasmer::CompileError),
-    #[error("Validity predicate compilation error {0}")]
+    #[error("Validity predicate compilation error: {0}")]
     MissingTxModuleEntrypoint(wasmer::ExportError),
-    #[error("Unexpected transaction module entrypoint interface {TX_ENTRYPOINT}, failed with {0}")]
+    #[error("Unexpected transaction module entrypoint interface {TX_ENTRYPOINT}, failed with: {0}")]
     UnexpectedTxModuleEntrypointInterface(wasmer::RuntimeError),
-    #[error("Failed running transaction with {0}")]
+    #[error("Failed running transaction with: {0}")]
     TxRuntimeError(wasmer::RuntimeError),
-    #[error("Failed instantiating transaction module with {0}")]
+    #[error("Failed instantiating transaction module with: {0}")]
     TxInstantiationError(wasmer::InstantiationError),
-    #[error("Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with {0}")]
+    #[error("Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: {0}")]
     // 3. Validity predicate errors
     VpCompileError(wasmer::CompileError),
-    #[error("Missing transaction entrypoint {TX_ENTRYPOINT}, failed with {0}")]
+    #[error(
+        "Missing transaction entrypoint {TX_ENTRYPOINT}, failed with: {0}"
+    )]
     MissingVpModuleEntrypoint(wasmer::ExportError),
-    #[error("Unexpected validity predicate module entrypoint interface {VP_ENTRYPOINT}, failed with {0}")]
+    #[error("Unexpected validity predicate module entrypoint interface {VP_ENTRYPOINT}, failed with: {0}")]
     UnexpectedVpModuleEntrypointInterface(wasmer::RuntimeError),
-    #[error("Failed running validity predicate with {0}")]
+    #[error("Failed running validity predicate with: {0}")]
     VpRuntimeError(wasmer::RuntimeError),
-    #[error("Failed instantiating validity predicate module with {0}")]
+    #[error("Failed instantiating validity predicate module with: {0}")]
     VpInstantiationError(wasmer::InstantiationError),
-    #[error("Validity predicate failed to send result {0}")]
+    #[error("Validity predicate failed to send result: {0}")]
     VpChannelError(mpsc::SendError<bool>),
 }
 
@@ -104,15 +95,12 @@ impl TxRunner {
     {
         let tx_env = TxEnv {
             sender: Arc::new(Mutex::new(tx_sender)),
-            memory: wasmer::LazyInit::default(),
+            memory: AnomaMemory::default(),
         };
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(|e| Error::TxCompileError(e))?;
-        let memory = Memory::new(
-            &self.wasm_store,
-            wasmer::MemoryType::new(1, None, false),
-        )
-        .map_err(|e| Error::InitMemoryError(e).into())?;
+        let memory = AnomaMemory::prepare_tx_memory(&self.wasm_store)
+            .map_err(Error::MemoryError)?;
         let tx_imports = wasmer::imports! {
             // default namespace
             "env" => {
@@ -166,14 +154,9 @@ impl VpRunner {
     ) -> Result<()> {
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(|e| Error::TxCompileError(e))?;
-        let mut tx_bytes = Vec::with_capacity(1024);
-        tx_msg.serialize(&mut tx_bytes).expect("TEMPORARY: failed to serialize TxMsg for validity predicate - this will be handled in memory module");
 
-        let memory = Memory::new(
-            &self.wasm_store,
-            wasmer::MemoryType::new(1, None, false),
-        )
-        .map_err(|e| Error::InitMemoryError(e).into())?;
+        let memory = AnomaMemory::prepare_tx_memory(&self.wasm_store)
+            .map_err(Error::MemoryError)?;
         let vp_imports = wasmer::imports! {
             // default namespace
             "env" => {
@@ -183,17 +166,12 @@ impl VpRunner {
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(|e| Error::VpInstantiationError(e).into())?;
-        let memory = vp_code
-            .exports
-            .get_memory("memory")
-            .map_err(|e| Error::MemoryExportError(e).into())?;
-        {
-            // TODO: do this safely in a customized memory implementation
-            let mut data = unsafe { memory.data_unchecked_mut() };
-            // NOTE: the memory is initialized with 1 page (64kb in
-            // `wasmer::Pages`), so this data fits in
-            data.write(&tx_bytes).expect("TEMPORARY: failed to write TxMsg for validity predicate - this will be handled in memory module");
-        }
+
+        // TODO how can we let the memory handle passing these values to the
+        // call?
+        let (tx_ptr, tx_len) =
+            AnomaMemory::write_tx_msg(&vp_code.exports, tx_msg)
+                .map_err(Error::MemoryError)?;
 
         let validate_tx = vp_code
             .exports
@@ -207,7 +185,7 @@ impl VpRunner {
             // TODO: we use 0 for the tx_bytes pointer, because we wrote the
             // `tx_bytes` in the front of `memory`, this should be handled in
             // the memory implementation
-            .call(0 as i32, tx_bytes.len() as i32)
+            .call(tx_ptr, tx_len)
             .map_err(|e| Error::VpRuntimeError(e).into())?
             == 1;
         vp_sender

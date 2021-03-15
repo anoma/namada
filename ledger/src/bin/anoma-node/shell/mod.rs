@@ -7,7 +7,7 @@ use std::sync::mpsc;
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
-use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
+use anoma_vm::{TxEnv, TxRunner, VpRunner};
 use thiserror::Error;
 
 use self::storage::{
@@ -171,31 +171,18 @@ fn transfer(
     dest_len: i32,
     amount: u64,
 ) {
-    let memory = unsafe { env.memory.get_unchecked() };
+    let tx_msg = env
+        .memory
+        .read_tx(src_ptr, src_len, dest_ptr, dest_len, amount)
+        .expect("Cannot read the transaction from memory");
 
-    let src_vec: Vec<_> = memory.view()
-        [src_ptr as usize..(src_ptr + src_len) as usize]
-        .iter()
-        .map(|cell| cell.get())
-        .collect();
-    let src = std::str::from_utf8(&src_vec).unwrap().to_string();
-
-    let dest_vec: Vec<_> = memory.view()
-        [dest_ptr as usize..(dest_ptr + dest_len) as usize]
-        .iter()
-        .map(|cell| cell.get())
-        .collect();
-    let dest = std::str::from_utf8(&dest_vec).unwrap().to_string();
-
-    log::debug!(
-        "transfer called with src: {}, dest: {}, amount: {}",
-        src,
-        dest,
-        amount
-    );
-
-    let sender = env.sender.lock().unwrap();
-    (*sender).send(TxMsg { src, dest, amount }).unwrap();
+    let sender = env
+        .sender
+        .lock()
+        .expect("Cannot get a lock on the transfer result sender");
+    (*sender)
+        .send(tx_msg)
+        .expect("Cannot send the transfer result");
 }
 
 impl Shell {
