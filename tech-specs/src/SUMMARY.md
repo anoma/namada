@@ -29,6 +29,7 @@
     - [Packaging](./explore/libraries/packaging.md)
     - [Serialization](./explore/libraries/serialization.md)
     - [WASM runtime](./explore/libraries/wasm.md)
+    - [Error handling](./explore/libraries/errors.md)
   - [Resources](./explore/resources/README.md)
     - [IDE](./explore/resources/ide.md)
 - [Specifications](./specs/README.md)

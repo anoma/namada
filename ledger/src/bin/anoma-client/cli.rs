@@ -5,11 +5,12 @@ use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::rpc_types::{self, Message};
 use clap::Clap;
+use color_eyre::eyre::Result;
 use tendermint_rpc::{Client, HttpClient};
 
-pub async fn main() {
+pub async fn main() -> Result<()> {
     match ClientOpts::parse() {
-        ClientOpts::Inlined(ops) => exec_inlined(ops).await,
+        ClientOpts::Inlined(ops) => Ok(exec_inlined(ops).await),
     }
 }
 

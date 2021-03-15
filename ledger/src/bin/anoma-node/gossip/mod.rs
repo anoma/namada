@@ -6,7 +6,6 @@ mod orderbook;
 mod p2p;
 mod types;
 
-use std::error::Error;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
@@ -28,9 +27,10 @@ pub fn run(
     local_address: Option<String>,
     peers: Option<Vec<String>>,
     topics: Option<Vec<String>>,
-) -> Result<(), Box<dyn Error>> {
+) -> () {
     let base_dir: PathBuf = config.gossip_home_dir();
-    let bookkeeper: Bookkeeper = read_or_generate_bookkeeper_key(&base_dir)?;
+    let bookkeeper: Bookkeeper = read_or_generate_bookkeeper_key(&base_dir)
+        .expect("TEMPORARY: Error reading or generating bookkeep file");
 
     let rpc_event_receiver = if rpc {
         let (tx, rx) = mpsc::channel(100);
@@ -47,7 +47,8 @@ pub fn run(
         topics,
     );
 
-    let (mut swarm, event_receiver) = p2p::build_swarm(bookkeeper)?;
+    let (mut swarm, event_receiver) = p2p::build_swarm(bookkeeper)
+        .expect("TEMPORARY: unable to build p2p swarm");
     p2p::prepare_swarm(&mut swarm, &network_config);
     p2p::dispatcher(
         swarm,
@@ -56,13 +57,14 @@ pub fn run(
         Some(Orderbook::new()),
         Some(DKG::new()),
     )
+    .expect("TEMPORARY: unable to start p2p dispatcher")
 }
 
 const BOOKKEEPER_KEY_FILE: &str = "priv_bookkepeer_key.json";
 
 fn read_or_generate_bookkeeper_key(
     home_dir: &PathBuf,
-) -> Result<Bookkeeper, std::io::Error> {
+) -> std::result::Result<Bookkeeper, std::io::Error> {
     if home_dir.join("config").join(BOOKKEEPER_KEY_FILE).exists() {
         let conf_file = home_dir.join("config").join(BOOKKEEPER_KEY_FILE);
         let json_string = fs::read_to_string(conf_file.as_path())?;

@@ -18,6 +18,7 @@ use rocksdb::{
 };
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+use thiserror::Error;
 
 use super::types::{BlockHeight, KeySeg};
 use super::{Address, Balance, BlockHash, MerkleTree};
@@ -28,10 +29,13 @@ use crate::shell::storage::types::Value;
 #[derive(Debug)]
 pub struct DB(rocksdb::DB);
 
-#[derive(Debug, Clone)]
+#[derive(Error, Debug)]
 pub enum Error {
-    // TODO strong types
-    Stringly(String),
+    #[error("TEMPORARY error: {error}")]
+    Temporary { error: String },
+    #[error("Cannot read a missing key: {key}")]
+    MissingKey { key: String },
+    #[error("RocksDB error: {0}")]
     RocksDBError(rocksdb::Error),
 }
 
@@ -60,7 +64,7 @@ pub fn open<P: AsRef<Path>>(path: P) -> Result<DB> {
     // TODO use column families
     rocksdb::DB::open_cf_descriptors(&cf_opts, path, vec![])
         .map(DB)
-        .map_err(Error::RocksDBError)
+        .map_err(|e| Error::RocksDBError(e).into())
 }
 
 impl DB {
@@ -69,7 +73,7 @@ impl DB {
         flush_opts.set_wait(true);
         self.0
             .flush_opt(&flush_opts)
-            .map_err(|e| Error::RocksDBError(e))
+            .map_err(|e| Error::RocksDBError(e).into())
     }
 
     pub fn write_block(
@@ -121,7 +125,7 @@ impl DB {
         // are known when updating this
         self.0
             .put_opt("height", height.encode(), &write_opts)
-            .map_err(|e| Error::RocksDBError(e))
+            .map_err(|e| Error::RocksDBError(e).into())
     }
 
     pub fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
@@ -129,7 +133,7 @@ impl DB {
         write_opts.disable_wal(true);
         self.0
             .put_opt("chain_id", chain_id.encode(), &write_opts)
-            .map_err(|e| Error::RocksDBError(e))
+            .map_err(|e| Error::RocksDBError(e).into())
     }
 
     pub fn read_last_block(
@@ -179,18 +183,18 @@ impl DB {
                         root = H256::decode(raw_root);
                     }
                     None => {
-                        return Err(Error::Stringly(format!(
-                            "Cannot read value for key {}",
-                            key
-                        )));
+                        return Err(Error::MissingKey { key }.into());
                     }
                 }
             }
             // Tree's store
             {
                 let key = format!("{}/store", tree_prefix);
-                let bytes =
-                    self.0.get(key).map_err(Error::RocksDBError)?.unwrap();
+                let bytes = self
+                    .0
+                    .get(&key)
+                    .map_err(Error::RocksDBError)?
+                    .ok_or_else(|| Error::MissingKey { key })?;
                 let store = DefaultStore::<H256>::decode(bytes);
                 tree = MerkleTree(SparseMerkleTree::new(root, store))
             }
@@ -198,7 +202,11 @@ impl DB {
         // Block hash
         {
             let key = format!("{}/hash", prefix);
-            let bytes = self.0.get(key).map_err(Error::RocksDBError)?.unwrap();
+            let bytes = self
+                .0
+                .get(&key)
+                .map_err(Error::RocksDBError)?
+                .ok_or_else(|| Error::MissingKey { key })?;
             hash = BlockHash::decode(bytes);
         }
         // Balances
@@ -208,19 +216,22 @@ impl DB {
                 // decode the key and strip the prefix
                 let path =
                     &String::from_utf8((*key).to_vec()).map_err(|e| {
-                        Error::Stringly(format!(
-                            "error decoding an address: {}",
-                            e
-                        ))
+                        Error::Temporary {
+                            error: format!(
+                                "Cannot convert address from utf8 bytes to \
+                                 string: {}",
+                                e
+                            ),
+                        }
                     })?;
                 match path.strip_prefix(&prefix) {
                     Some(segment) => {
                         let addr = Address::from_key_seg(&segment.to_owned())
-                            .map_err(|e| {
-                            Error::Stringly(format!(
-                                "error decoding an address: {}",
+                            .map_err(|e| Error::Temporary {
+                            error: format!(
+                                "Cannot parse address from key segment: {}",
                                 e
-                            ))
+                            ),
                         })?;
                         let balance = Balance::decode(bytes.to_vec());
                         balances.insert(addr, balance);

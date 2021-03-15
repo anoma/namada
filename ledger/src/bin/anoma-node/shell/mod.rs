@@ -8,6 +8,7 @@ use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
+use thiserror::Error;
 
 use self::storage::{
     Address, Balance, BasicAddress, BlockHash, BlockHeight, Storage,
@@ -15,27 +16,55 @@ use self::storage::{
 };
 use self::tendermint::{AbciMsg, AbciReceiver};
 
-pub fn run(config: Config) {
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("TEMPORARY error: {error}")]
+    Temporary { error: String },
+    #[error("Error removing the DB data: {0}")]
+    RemoveDB(std::io::Error),
+    #[error("Storage error: {0}")]
+    StorageError(storage::Error),
+    #[error("Shell ABCI channel receiver error: {0}")]
+    AbciChannelRecvError(mpsc::RecvError),
+    #[error("Shell ABCI channel sender error: {0}")]
+    AbciChannelSendError(String),
+    #[error("Error decoding a transaction from bytes: {0}")]
+    TxDecodingError(prost::DecodeError),
+    #[error("Transaction runner error: {0}")]
+    TxRunnerError(anoma_vm::Error),
+    #[error("Validity predicate for {addr} runner error: {error}")]
+    VpRunnerError {
+        addr: Address,
+        error: anoma_vm::Error,
+    },
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+pub fn run(config: Config) -> Result<()> {
     // run our shell via Tendermint ABCI
     let db_path = config.home_dir.join("db");
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, db_path);
-    let addr = "127.0.0.1:26658".parse().unwrap();
+    let addr = "127.0.0.1:26658".parse().map_err(|e| Error::Temporary {
+        error: format!("cannot parse tendermint address {}", e),
+    })?;
     // Run Tendermint ABCI server in another thread
     std::thread::spawn(move || tendermint::run(sender, config, addr));
-    shell.run().unwrap();
+    shell.run()
 }
 
-pub fn reset(config: Config) {
+pub fn reset(config: Config) -> Result<()> {
     // simply nuke the DB files
     let db_path = config.home_dir.join("db");
-    match std::fs::remove_dir_all(db_path) {
+    match std::fs::remove_dir_all(&db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
-        res => res.unwrap(),
+        res => res.map_err(Error::RemoveDB)?,
     };
     // reset Tendermint state
-    tendermint::reset(config)
+    tendermint::reset(config);
+    Ok(())
 }
 
 pub struct Shell {
@@ -51,8 +80,6 @@ pub enum MempoolTxType {
     /// need to be validated again
     RecheckTransaction,
 }
-pub type MempoolValidationResult<'a> = Result<(), String>;
-pub type ApplyResult<'a> = Result<(), String>;
 
 pub struct MerkleRoot(pub Vec<u8>);
 
@@ -61,28 +88,43 @@ impl Shell {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
         let va = ValidatorAddress::new_address("va".to_owned());
-        storage.update_balance(&va, Balance::new(10000)).unwrap();
+        storage
+            .update_balance(&va, Balance::new(10000))
+            .expect("Unable to set the initial balance for validator account");
         let ba = BasicAddress::new_address("ba".to_owned());
-        storage.update_balance(&ba, Balance::new(100)).unwrap();
+        storage
+            .update_balance(&ba, Balance::new(100))
+            .expect("Unable to set the initial balance for basic account");
         Self { abci, storage }
     }
 
     /// Run the shell in the current thread (blocking).
-    pub fn run(mut self) -> Result<(), String> {
+    pub fn run(mut self) -> Result<()> {
         loop {
-            let msg = self.abci.recv().map_err(|e| e.to_string())?;
+            let msg = self.abci.recv().map_err(Error::AbciChannelRecvError)?;
             match msg {
                 AbciMsg::GetInfo { reply } => {
                     let result = self.last_state();
-                    reply.send(result).map_err(|e| e.to_string())?
+                    reply.send(result).map_err(|e| {
+                        Error::AbciChannelSendError(format!("GetInfo {}", e))
+                    })?
                 }
                 AbciMsg::InitChain { reply, chain_id } => {
-                    self.init_chain(chain_id);
-                    reply.send(()).map_err(|e| e.to_string())?
+                    self.init_chain(chain_id)?;
+                    reply.send(()).map_err(|e| {
+                        Error::AbciChannelSendError(format!("InitChain {}", e))
+                    })?
                 }
                 AbciMsg::MempoolValidate { reply, tx, r#type } => {
-                    let result = self.mempool_validate(&tx, r#type);
-                    reply.send(result).map_err(|e| e.to_string())?
+                    let result = self
+                        .mempool_validate(&tx, r#type)
+                        .map_err(|e| format!("{}", e));
+                    reply.send(result).map_err(|e| {
+                        Error::AbciChannelSendError(format!(
+                            "MempoolValidate {}",
+                            e
+                        ))
+                    })?
                 }
                 AbciMsg::BeginBlock {
                     reply,
@@ -90,19 +132,31 @@ impl Shell {
                     height,
                 } => {
                     self.begin_block(hash, height);
-                    reply.send(()).map_err(|e| e.to_string())?
+                    reply.send(()).map_err(|e| {
+                        Error::AbciChannelSendError(format!("BeginBlock {}", e))
+                    })?
                 }
                 AbciMsg::ApplyTx { reply, tx } => {
-                    let result = self.apply_tx(&tx);
-                    reply.send(result).map_err(|e| e.to_string())?
+                    let result =
+                        self.apply_tx(&tx).map_err(|e| format!("{}", e));
+                    reply.send(result).map_err(|e| {
+                        Error::AbciChannelSendError(format!("ApplyTx {}", e))
+                    })?
                 }
                 AbciMsg::EndBlock { reply, height } => {
                     self.end_block(height);
-                    reply.send(()).map_err(|e| e.to_string())?
+                    reply.send(()).map_err(|e| {
+                        Error::AbciChannelSendError(format!("EndBlock {}", e))
+                    })?
                 }
                 AbciMsg::CommitBlock { reply } => {
                     let result = self.commit();
-                    reply.send(result).map_err(|e| e.to_string())?
+                    reply.send(result).map_err(|e| {
+                        Error::AbciChannelSendError(format!(
+                            "CommitBlock {}",
+                            e
+                        ))
+                    })?
                 }
             }
         }
@@ -145,8 +199,10 @@ fn transfer(
 }
 
 impl Shell {
-    pub fn init_chain(&mut self, chain_id: String) {
-        self.storage.set_chain_id(&chain_id).unwrap();
+    pub fn init_chain(&mut self, chain_id: String) -> Result<()> {
+        self.storage
+            .set_chain_id(&chain_id)
+            .map_err(Error::StorageError)
     }
 
     /// Validate a transaction request. On success, the transaction will
@@ -156,25 +212,14 @@ impl Shell {
         &self,
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
-    ) -> MempoolValidationResult {
-        let _tx = Tx::decode(&tx_bytes[..]).map_err(|e| {
-            format!(
-                "Error decoding a transaction: {}, from bytes {:?}",
-                e, tx_bytes
-            )
-        })?;
+    ) -> Result<()> {
+        let _tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
         Ok(())
     }
 
     /// Validate and apply a transaction.
-    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> ApplyResult {
-        let tx = Tx::decode(&tx_bytes[..]).map_err(|e| {
-            format!(
-                "Error decoding a transaction: {}, from bytes  from bytes
-        {:?}",
-                e, tx_bytes
-            )
-        })?;
+    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<()> {
+        let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
         let tx_data = tx.data.unwrap_or(vec![]);
 
         // Execute the transaction code and wait for result
@@ -182,8 +227,10 @@ impl Shell {
         let tx_runner = TxRunner::new();
         tx_runner
             .run(tx.code, tx_data, tx_sender, transfer)
-            .unwrap();
-        let tx_msg = tx_receiver.recv().unwrap();
+            .map_err(Error::TxRunnerError)?;
+        let tx_msg = tx_receiver
+            .recv()
+            .expect("Expected a message from transaction runner");
         let src_addr = Address::new_address(tx_msg.src.clone());
         let dest_addr = Address::new_address(tx_msg.dest.clone());
 
@@ -194,23 +241,38 @@ impl Shell {
         let src_vp = self
             .storage
             .validity_predicate(&src_addr)
-            .map_err(|e| format!("Encountered a storage error {:?}", e))?;
+            .map_err(Error::StorageError)?;
         let dest_vp = self
             .storage
             .validity_predicate(&dest_addr)
-            .map_err(|e| format!("Encountered a storage error {:?}", e))?;
+            .map_err(Error::StorageError)?;
+
         let vp_runner = VpRunner::new();
         let (vp_sender, vp_receiver) = mpsc::channel();
-        vp_runner.run(src_vp, &tx_msg, vp_sender.clone()).unwrap();
-        let src_accept = vp_receiver.recv().unwrap();
-        vp_runner.run(dest_vp, &tx_msg, vp_sender).unwrap();
-        let dest_accept = vp_receiver.recv().unwrap();
+        vp_runner
+            .run(src_vp, &tx_msg, vp_sender.clone())
+            .map_err(|error| Error::VpRunnerError {
+                addr: src_addr.clone(),
+                error,
+            })?;
+        let src_accept = vp_receiver
+            .recv()
+            .expect("Expected a message from source's VP runner");
+        vp_runner
+            .run(dest_vp, &tx_msg, vp_sender)
+            .map_err(|error| Error::VpRunnerError {
+                addr: dest_addr.clone(),
+                error,
+            })?;
+        let dest_accept = vp_receiver
+            .recv()
+            .expect("Expected a message from destination's VP runner");
 
         // Apply the transaction if accepted by all the VPs
         if src_accept && dest_accept {
             self.storage
                 .transfer(&src_addr, &dest_addr, tx_msg.amount)
-                .map_err(|e| format!("Encountered a storage error {:?}", e))?;
+                .map_err(Error::StorageError)?;
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
@@ -221,7 +283,11 @@ impl Shell {
                 if src_accept {
                     "dest"
                 } else {
-                    if dest_accept { "src" } else { "src and dest" }
+                    if dest_accept {
+                        "src"
+                    } else {
+                        "src and dest"
+                    }
                 }
             );
         }
@@ -259,7 +325,7 @@ impl Shell {
         let result = self.storage.load_last_state().unwrap_or_else(|e| {
             log::error!(
                 "Encountered an error while reading last state from
-        storage {:?}",
+        storage {}",
                 e
             );
             None
