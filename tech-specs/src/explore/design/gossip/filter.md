@@ -7,7 +7,7 @@ The orderbook checks intent on arrival and periodically with two differents
   filter allow for a quick validation to check the interest of a node.
 
 - An exclusive filter, can be high on computation and is only run locally on the
-  node. This filter might do more detailed check but can't
+  node. This filter might do more detailed check but can't be gossiped.
 
 If a peer does not respect the inclusive filter, it score is lowered until a
 thresold that ban it for some time.
