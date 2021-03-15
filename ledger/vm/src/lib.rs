@@ -50,7 +50,7 @@ pub enum Error {
     // 1. Common error types
     #[error("Failed initializing the memory {0}")]
     InitMemoryError(wasmer::MemoryError),
-    #[error("Failed initializing the memory {0}")]
+    #[error("Failed exporting the memory {0}")]
     MemoryExportError(wasmer::ExportError),
     // 2. Transaction errors
     #[error("Transaction compilation error {0}")]
