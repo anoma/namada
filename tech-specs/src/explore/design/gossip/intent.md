@@ -14,7 +14,7 @@ transaction. Some arbitrary field might be exported to specific field, like
 
 ```rust
 struct Intent {
-    data: Vec<[u8]>,
+    data: Vec<u8>,
     timestamp: Timestamp
 }
 ```
