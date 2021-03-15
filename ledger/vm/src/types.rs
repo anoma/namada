@@ -1,6 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 
-#[derive(Clone, BorshSerialize, BorshDeserialize)]
+// TODO remove this file
+
+// TODO Temporary
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TxMsg {
     pub src: String,
     pub dest: String,
