@@ -1,7 +1,7 @@
-use std::io::Write;
-
 use crate::types::TxMsg;
+use anoma_vm_env::memory;
 use borsh::BorshSerialize;
+use std::io::Write;
 use thiserror::Error;
 use wasmer::{HostEnvInitError, LazyInit, Memory};
 
@@ -17,26 +17,92 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Prepare memory for instantiating a transaction module
+pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
+    let mem_type = wasmer::MemoryType::new(1, None, false);
+    Memory::new(store, mem_type).map_err(|e| Error::InitMemoryError(e).into())
+}
+
+/// Prepare memory for instantiating a validity predicate module
+pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
+    let mem_type = wasmer::MemoryType::new(1, None, false);
+    Memory::new(store, mem_type).map_err(|e| Error::InitMemoryError(e).into())
+}
+
+pub struct TxCallInput {
+    pub tx_data_ptr: i32,
+    pub tx_data_len: i32,
+}
+
+pub fn write_tx_inputs(
+    exports: &wasmer::Exports,
+    tx_data: memory::TxIn,
+) -> Result<TxCallInput> {
+    let memory = exports
+        .get_memory("memory")
+        .map_err(|e| Error::MemoryExportError(e).into())?;
+
+    let tx_data_bytes = tx_data.0;
+    let tx_data_ptr = 0;
+    let tx_data_len = tx_data_bytes.len() as i32;
+
+    // TODO check size and grow memory if needed
+    let mut data = unsafe { memory.data_unchecked_mut() };
+    let bufs = tx_data_bytes;
+    data.write_all(&bufs)
+        .expect("TEMPORARY: failed to write tx_data for validity predicate");
+
+    Ok(TxCallInput {
+        tx_data_ptr,
+        tx_data_len,
+    })
+}
+
+pub struct VpCallInput {
+    pub tx_data_ptr: i32,
+    pub tx_data_len: i32,
+    pub write_log_ptr: i32,
+    pub write_log_len: i32,
+}
+
+pub fn write_vp_inputs(
+    exports: &wasmer::Exports,
+    (tx_data, write_log): memory::VpIn,
+) -> Result<VpCallInput> {
+    let memory = exports
+        .get_memory("memory")
+        .map_err(|e| Error::MemoryExportError(e).into())?;
+
+    let tx_data_bytes = tx_data.0;
+    let tx_data_ptr = 0;
+    let tx_data_len = tx_data_bytes.len() as i32;
+
+    let mut write_log_bytes = Vec::with_capacity(1024);
+    write_log.serialize(&mut write_log_bytes).expect(
+        "TEMPORARY: failed to serialize write_log for validity predicate",
+    );
+    let write_log_ptr = tx_data_ptr + tx_data_len;
+    let write_log_len = write_log_bytes.len() as i32;
+
+    // TODO check size and grow memory if needed
+    let mut data = unsafe { memory.data_unchecked_mut() };
+    let bufs = [tx_data_bytes, write_log_bytes].concat();
+    data.write_all(&bufs)
+        .expect("TEMPORARY: failed to write tx_data for validity predicate");
+
+    Ok(VpCallInput {
+        tx_data_ptr,
+        tx_data_len,
+        write_log_ptr,
+        write_log_len,
+    })
+}
+
 #[derive(Debug, Clone)]
 pub struct AnomaMemory {
     inner: LazyInit<wasmer::Memory>,
 }
-
 impl AnomaMemory {
-    /// Prepare memory for running a transaction
-    pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
-        let mem_type = wasmer::MemoryType::new(1, None, false);
-        Memory::new(store, mem_type)
-            .map_err(|e| Error::InitMemoryError(e).into())
-    }
-
-    /// Prepare memory for running a validity predicate
-    pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
-        let mem_type = wasmer::MemoryType::new(1, None, false);
-        Memory::new(store, mem_type)
-            .map_err(|e| Error::InitMemoryError(e).into())
-    }
-
     /// Initialize the memory from the given exports
     pub fn init_env_memory(
         &mut self,
@@ -47,24 +113,6 @@ impl AnomaMemory {
             log::error!("wasm memory is already initialized");
         }
         Ok(())
-    }
-
-    /// Write a [`Tx_msg`] into memory and return a pointer and the data length
-    pub fn write_tx_msg(
-        exports: &wasmer::Exports,
-        tx_msg: &TxMsg,
-    ) -> Result<(i32, i32)> {
-        let memory = exports
-            .get_memory("memory")
-            .map_err(|e| Error::MemoryExportError(e).into())?;
-        let mut tx_bytes = Vec::with_capacity(1024);
-        tx_msg.serialize(&mut tx_bytes).expect("TEMPORARY: failed to serialize TxMsg for validity predicate - this will be handled in memory module");
-        // TODO: do this safely in a customized memory implementation
-        let mut data = unsafe { memory.data_unchecked_mut() };
-        // NOTE: the memory is initialized with 1 page (64kb in
-        // `wasmer::Pages`), so this data fits in
-        data.write(&tx_bytes).expect("TEMPORARY: failed to write TxMsg for validity predicate - this will be handled in memory module");
-        Ok((0, tx_bytes.len() as i32))
     }
 
     /// Read a [`Tx_msg`] from memory
