@@ -1,3 +1,9 @@
+// TODO the memory types, serialization, and other "plumbing" code will be
+// injected into the wasm module by the host to reduce file size
+use anoma_vm_env::memory;
+use borsh::{BorshDeserialize, BorshSerialize};
+use core::slice;
+
 /// The environment provides calls to host functions via this C interface:
 extern "C" {
     // NOTE: Just for testing
@@ -19,11 +25,22 @@ extern "C" {
 
 /// The module interface callable by wasm runtime:
 #[no_mangle]
-pub extern "C" fn apply_tx(_tx_data_ptr: i32, _tx_data_len: i32) {
+pub extern "C" fn apply_tx(tx_data_ptr: *const u8, tx_data_len: usize) {
+    let slice = unsafe { slice::from_raw_parts(tx_data_ptr, tx_data_len) };
+    let tx_data = memory::TxDataIn::try_from_slice(slice).unwrap();
+
+    do_apply_tx(tx_data);
+}
+
+fn do_apply_tx(_tx_data: memory::TxDataIn) {
     // source and destination address
     let src = "va";
     let dest = "ba";
     let amount = 10;
+    do_transfer(src, dest, amount);
+}
+
+fn do_transfer(src: &str, dest: &str, amount: u64) {
     unsafe {
         transfer(src.as_ptr(), src.len(), dest.as_ptr(), dest.len(), amount);
     }

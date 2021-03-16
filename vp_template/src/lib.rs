@@ -1,3 +1,4 @@
+use anoma_vm_env::memory;
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::slice;
 
@@ -15,25 +16,29 @@ extern "C" {}
 
 /// The module interface callable by wasm runtime:
 #[no_mangle]
-pub extern "C" fn validate_tx(tx_ptr: *const u8, tx_len: usize) -> bool {
+pub extern "C" fn validate_tx(
+    tx_data_ptr: *const u8,
+    tx_data_len: usize,
+    write_log_ptr: *const u8,
+    write_log_len: usize,
+) -> bool {
     // TODO more plumbing here
-    let slice = unsafe { slice::from_raw_parts(tx_ptr, tx_len) };
-    let tx = TxMsg::try_from_slice(slice).unwrap();
+    let slice = unsafe { slice::from_raw_parts(tx_data_ptr, tx_data_len) };
+    let tx_data = memory::TxDataIn::try_from_slice(slice).unwrap();
+    let slice = unsafe { slice::from_raw_parts(write_log_ptr, write_log_len) };
+    let write_log = memory::WriteLogIn::try_from_slice(slice).unwrap();
 
     // run validation with the concrete type(s)
-    do_validate_tx(tx)
+    do_validate_tx(tx_data, write_log)
 }
 
-fn do_validate_tx(tx: TxMsg) -> bool {
-    if tx.amount > 0
-    // && tx.src == "va"
-    {
-        true
-    } else {
-        false
-    }
+fn do_validate_tx(tx_data: memory::TxDataIn, write_log: memory::WriteLogIn) -> bool {
+    // if tx.amount > 0
+    // // && tx.src == "va"
+    // {
+    //     true
+    // } else {
+    //     false
+    // }
+    true
 }
-
-// pub extern "C" fn validate_intent(...) -> bool {
-//     false
-// }
