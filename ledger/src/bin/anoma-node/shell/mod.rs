@@ -213,7 +213,7 @@ impl Shell {
         let (tx_sender, tx_receiver) = mpsc::channel();
         let tx_runner = TxRunner::new();
         tx_runner
-            .run(tx.code, tx_data, tx_sender, transfer)
+            .run(tx.code, tx_data.clone(), tx_sender, transfer)
             .map_err(Error::TxRunnerError)?;
         let tx_msg = tx_receiver
             .recv()
@@ -237,7 +237,7 @@ impl Shell {
         let vp_runner = VpRunner::new();
         let (vp_sender, vp_receiver) = mpsc::channel();
         vp_runner
-            .run(src_vp, &tx_msg, vp_sender.clone())
+            .run(src_vp, tx_data.clone(), vp_sender.clone())
             .map_err(|error| Error::VpRunnerError {
                 addr: src_addr.clone(),
                 error,
@@ -246,7 +246,7 @@ impl Shell {
             .recv()
             .expect("Expected a message from source's VP runner");
         vp_runner
-            .run(dest_vp, &tx_msg, vp_sender)
+            .run(dest_vp, tx_data, vp_sender)
             .map_err(|error| Error::VpRunnerError {
                 addr: dest_addr.clone(),
                 error,
