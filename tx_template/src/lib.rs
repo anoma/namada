@@ -1,7 +1,7 @@
 // TODO the memory types, serialization, and other "plumbing" code will be
 // injected into the wasm module by the host to reduce file size
 use anoma_vm_env::memory;
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use core::slice;
 
 /// The environment provides calls to host functions via this C interface:

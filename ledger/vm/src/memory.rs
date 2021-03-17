@@ -20,13 +20,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Prepare memory for instantiating a transaction module
 pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
     let mem_type = wasmer::MemoryType::new(1, None, false);
-    Memory::new(store, mem_type).map_err(|e| Error::InitMemoryError(e).into())
+    Memory::new(store, mem_type).map_err(Error::InitMemoryError)
 }
 
 /// Prepare memory for instantiating a validity predicate module
 pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
     let mem_type = wasmer::MemoryType::new(1, None, false);
-    Memory::new(store, mem_type).map_err(|e| Error::InitMemoryError(e).into())
+    Memory::new(store, mem_type).map_err(Error::InitMemoryError)
 }
 
 pub struct TxCallInput {
@@ -36,21 +36,27 @@ pub struct TxCallInput {
 
 pub fn write_tx_inputs(
     exports: &wasmer::Exports,
-    tx_data: memory::TxIn,
+    tx_data: memory::TxDataIn,
 ) -> Result<TxCallInput> {
     let memory = exports
         .get_memory("memory")
-        .map_err(|e| Error::MemoryExportError(e).into())?;
+        .map_err(Error::MemoryExportError)?;
 
-    let tx_data_bytes = tx_data.0;
+    // TODO tx data is just bytes, the wrapper type is excessive, we could pass
+    // them as is (also for VP)
+    let mut tx_data_bytes = Vec::with_capacity(1024);
+    tx_data
+        .0
+        .serialize(&mut tx_data_bytes)
+        .expect("TEMPORARY: failed to serialize tx_data for transaction");
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as i32;
 
     // TODO check size and grow memory if needed
     let mut data = unsafe { memory.data_unchecked_mut() };
     let bufs = tx_data_bytes;
-    data.write_all(&bufs)
-        .expect("TEMPORARY: failed to write tx_data for validity predicate");
+    data.write(&bufs)
+        .expect("TEMPORARY: failed to write tx_data for transaction");
 
     Ok(TxCallInput {
         tx_data_ptr,
@@ -71,9 +77,12 @@ pub fn write_vp_inputs(
 ) -> Result<VpCallInput> {
     let memory = exports
         .get_memory("memory")
-        .map_err(|e| Error::MemoryExportError(e).into())?;
+        .map_err(Error::MemoryExportError)?;
 
-    let tx_data_bytes = tx_data.0;
+    let mut tx_data_bytes = Vec::with_capacity(1024);
+    tx_data.0.serialize(&mut tx_data_bytes).expect(
+        "TEMPORARY: failed to serialize tx_data for validity predicate",
+    );
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as i32;
 
@@ -87,7 +96,7 @@ pub fn write_vp_inputs(
     // TODO check size and grow memory if needed
     let mut data = unsafe { memory.data_unchecked_mut() };
     let bufs = [tx_data_bytes, write_log_bytes].concat();
-    data.write_all(&bufs)
+    data.write(&bufs)
         .expect("TEMPORARY: failed to write tx_data for validity predicate");
 
     Ok(VpCallInput {

@@ -1,15 +1,8 @@
+// TODO the memory types, serialization, and other "plumbing" code will be
+// injected into the wasm module by the host to reduce file size
 use anoma_vm_env::memory;
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use core::slice;
-
-// TODO Plumbing functionality between the ledger and VPs will be injected into
-// the wasm before it's ran (it bloats the size considerably)
-#[derive(Clone, BorshSerialize, BorshDeserialize)]
-pub struct TxMsg {
-    pub src: String,
-    pub dest: String,
-    pub amount: u64,
-}
 
 /// The environment provides calls to host functions via this C interface:
 extern "C" {}
@@ -29,16 +22,18 @@ pub extern "C" fn validate_tx(
     let write_log = memory::WriteLogIn::try_from_slice(slice).unwrap();
 
     // run validation with the concrete type(s)
-    do_validate_tx(tx_data, write_log)
+    true
+
+    // do_validate_tx(tx_data, write_log)
 }
 
-fn do_validate_tx(tx_data: memory::TxDataIn, write_log: memory::WriteLogIn) -> bool {
-    // if tx.amount > 0
-    // // && tx.src == "va"
-    // {
-    //     true
-    // } else {
-    //     false
-    // }
-    true
-}
+// fn do_validate_tx(_tx_data: memory::TxDataIn, _write_log: memory::WriteLogIn)
+// -> bool {     // if tx.amount > 0
+//     // // && tx.src == "va"
+//     // {
+//     //     true
+//     // } else {
+//     //     false
+//     // }
+//     true
+// }

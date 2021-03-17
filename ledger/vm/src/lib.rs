@@ -98,7 +98,7 @@ impl TxRunner {
             memory: AnomaMemory::default(),
         };
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
-            .map_err(|e| Error::TxCompileError(e))?;
+            .map_err(Error::TxCompileError)?;
         let memory = memory::prepare_tx_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let tx_imports = wasmer::imports! {
@@ -110,7 +110,7 @@ impl TxRunner {
         };
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
-            .map_err(|e| Error::TxInstantiationError(e).into())?;
+            .map_err(Error::TxInstantiationError)?;
 
         self.run_with_input(tx_code, tx_data)?;
         Ok(())
@@ -121,17 +121,12 @@ impl TxRunner {
         tx_code: Instance,
         tx_data: Vec<u8>,
     ) -> Result<()> {
-        // let tx_input = memory::write_tx_inputs(
-        //     &tx_code.exports,
-        //     anoma_vm_env::memory::TxDataIn(tx_data),
-        // )
-        // .map_err(Error::MemoryError)?;
         let memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
         }: memory::TxCallInput = memory::write_tx_inputs(
             &tx_code.exports,
-            anoma_vm_env::memory::TxDataIn(tx_data),
+            anoma_vm_env::memory::TxDataIn(tx_data.clone()),
         )
         .map_err(Error::MemoryError)?;
         let apply_tx = tx_code
@@ -173,7 +168,7 @@ impl VpRunner {
         vp_sender: mpsc::Sender<VpMsg>,
     ) -> Result<()> {
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
-            .map_err(|e| Error::TxCompileError(e))?;
+            .map_err(Error::TxCompileError)?;
 
         let memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
@@ -185,7 +180,7 @@ impl VpRunner {
         };
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
-            .map_err(|e| Error::VpInstantiationError(e).into())?;
+            .map_err(Error::VpInstantiationError)?;
 
         let write_log = vec![];
         let is_valid = self.run_with_input(vp_code, tx_data, write_log)?;
@@ -201,8 +196,6 @@ impl VpRunner {
         tx_data: Vec<u8>,
         write_log: Vec<anoma_vm_env::StorageUpdate>,
     ) -> Result<bool> {
-        // let (tx_ptr, tx_len) = memory::write_tx_msg(&vp_code.exports, tx_msg)
-        //     .map_err(Error::MemoryError)?;
         let memory::VpCallInput {
             tx_data_ptr,
             tx_data_len,
@@ -221,11 +214,9 @@ impl VpRunner {
         let validate_tx = vp_code
             .exports
             .get_function(VP_ENTRYPOINT)
-            .map_err(|e| Error::MissingVpModuleEntrypoint(e).into())?
+            .map_err(Error::MissingVpModuleEntrypoint)?
             .native::<(i32, i32, i32, i32), i32>()
-            .map_err(|e| {
-                Error::UnexpectedVpModuleEntrypointInterface(e).into()
-            })?;
+            .map_err(Error::UnexpectedVpModuleEntrypointInterface)?;
         let is_valid = validate_tx
             .call(tx_data_ptr, tx_data_len, write_log_ptr, write_log_len)
             .map_err(Error::VpRuntimeError)?;
