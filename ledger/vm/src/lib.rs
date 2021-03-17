@@ -124,11 +124,9 @@ impl TxRunner {
         let memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
-        }: memory::TxCallInput = memory::write_tx_inputs(
-            &tx_code.exports,
-            anoma_vm_env::memory::TxDataIn(tx_data.clone()),
-        )
-        .map_err(Error::MemoryError)?;
+        }: memory::TxCallInput =
+            memory::write_tx_inputs(&tx_code.exports, &tx_data)
+                .map_err(Error::MemoryError)?;
         let apply_tx = tx_code
             .exports
             .get_function(TX_ENTRYPOINT)
@@ -196,20 +194,15 @@ impl VpRunner {
         tx_data: Vec<u8>,
         write_log: Vec<anoma_vm_env::StorageUpdate>,
     ) -> Result<bool> {
+        // TODO this can be nicer
+        let inputs = (tx_data, write_log);
         let memory::VpCallInput {
             tx_data_ptr,
             tx_data_len,
             write_log_ptr,
             write_log_len,
-        } = memory::write_vp_inputs(
-            &vp_code.exports,
-            // TODO this can be nicer
-            (
-                anoma_vm_env::memory::TxDataIn(tx_data),
-                anoma_vm_env::memory::WriteLogIn(write_log),
-            ),
-        )
-        .map_err(Error::MemoryError)?;
+        } = memory::write_vp_inputs(&vp_code.exports, &inputs)
+            .map_err(Error::MemoryError)?;
 
         let validate_tx = vp_code
             .exports

@@ -17,23 +17,21 @@ pub extern "C" fn validate_tx(
 ) -> bool {
     // TODO more plumbing here
     let slice = unsafe { slice::from_raw_parts(tx_data_ptr, tx_data_len) };
-    let tx_data = memory::TxDataIn::try_from_slice(slice).unwrap();
+    let tx_data = slice.to_vec() as memory::TxData;
     let slice = unsafe { slice::from_raw_parts(write_log_ptr, write_log_len) };
-    let write_log = memory::WriteLogIn::try_from_slice(slice).unwrap();
+    let write_log = memory::WriteLog::try_from_slice(slice).unwrap();
 
     // run validation with the concrete type(s)
-    true
-
-    // do_validate_tx(tx_data, write_log)
+    do_validate_tx(tx_data, write_log)
 }
 
-// fn do_validate_tx(_tx_data: memory::TxDataIn, _write_log: memory::WriteLogIn)
-// -> bool {     // if tx.amount > 0
-//     // // && tx.src == "va"
-//     // {
-//     //     true
-//     // } else {
-//     //     false
-//     // }
-//     true
-// }
+fn do_validate_tx(_tx_data: memory::TxData, _write_log: memory::WriteLog) -> bool {
+    // if tx.amount > 0
+    // // && tx.src == "va"
+    // {
+    //     true
+    // } else {
+    //     false
+    // }
+    true
+}

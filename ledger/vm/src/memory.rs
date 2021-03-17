@@ -1,7 +1,7 @@
 use crate::types::TxMsg;
 use anoma_vm_env::memory;
 use borsh::BorshSerialize;
-use std::io::Write;
+use std::io::{IoSlice, Write};
 use thiserror::Error;
 use wasmer::{HostEnvInitError, LazyInit, Memory};
 
@@ -36,26 +36,18 @@ pub struct TxCallInput {
 
 pub fn write_tx_inputs(
     exports: &wasmer::Exports,
-    tx_data: memory::TxDataIn,
+    tx_data_bytes: &memory::TxData,
 ) -> Result<TxCallInput> {
     let memory = exports
         .get_memory("memory")
         .map_err(Error::MemoryExportError)?;
 
-    // TODO tx data is just bytes, the wrapper type is excessive, we could pass
-    // them as is (also for VP)
-    let mut tx_data_bytes = Vec::with_capacity(1024);
-    tx_data
-        .0
-        .serialize(&mut tx_data_bytes)
-        .expect("TEMPORARY: failed to serialize tx_data for transaction");
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as i32;
 
     // TODO check size and grow memory if needed
     let mut data = unsafe { memory.data_unchecked_mut() };
-    let bufs = tx_data_bytes;
-    data.write(&bufs)
+    data.write(tx_data_bytes)
         .expect("TEMPORARY: failed to write tx_data for transaction");
 
     Ok(TxCallInput {
@@ -73,16 +65,12 @@ pub struct VpCallInput {
 
 pub fn write_vp_inputs(
     exports: &wasmer::Exports,
-    (tx_data, write_log): memory::VpIn,
+    (tx_data_bytes, write_log): &memory::VpInput,
 ) -> Result<VpCallInput> {
     let memory = exports
         .get_memory("memory")
         .map_err(Error::MemoryExportError)?;
 
-    let mut tx_data_bytes = Vec::with_capacity(1024);
-    tx_data.0.serialize(&mut tx_data_bytes).expect(
-        "TEMPORARY: failed to serialize tx_data for validity predicate",
-    );
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as i32;
 
@@ -95,9 +83,9 @@ pub fn write_vp_inputs(
 
     // TODO check size and grow memory if needed
     let mut data = unsafe { memory.data_unchecked_mut() };
-    let bufs = [tx_data_bytes, write_log_bytes].concat();
-    data.write(&bufs)
-        .expect("TEMPORARY: failed to write tx_data for validity predicate");
+    let bufs = [IoSlice::new(tx_data_bytes), IoSlice::new(&write_log_bytes)];
+    data.write_vectored(&bufs)
+        .expect("TEMPORARY: failed to write inputs for validity predicate");
 
     Ok(VpCallInput {
         tx_data_ptr,

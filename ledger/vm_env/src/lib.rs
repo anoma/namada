@@ -25,56 +25,57 @@ pub mod memory {
 
     /// The data attached to the transaction that initiated the wasm call
     /// (tx or VP)
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct TxDataIn(pub Vec<u8>);
+    pub type TxData = Vec<u8>;
 
     /// The storage write log of storage updates performed by the
     /// transaction for the account associated with the VP
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct WriteLogIn(pub Vec<StorageUpdate>);
+    pub type WriteLog = Vec<StorageUpdate>;
 
-    pub type TxIn = TxDataIn;
-    pub type VpIn = (TxDataIn, WriteLogIn);
+    /// Input for transaction wasm module call
+    pub type TxInput = TxData;
+
+    /// Input for validity predicate wasm module call
+    pub type VpInput = (TxData, WriteLog);
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageReadIn {
+    pub struct StorageReadInput {
         pub addr: String,
         pub key: String,
     }
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageReadOut {
+    pub struct StorageReadOutput {
         pub data: Option<Vec<u8>>,
     }
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageHasKeyIn {
+    pub struct StorageHasKeyInput {
         pub addr: String,
         pub key: String,
     }
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageHasKeyOut(pub bool);
+    pub struct StorageHasKeyOutput(pub bool);
 
     /// The storage update is stored in the host, so there is no output
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageUpdateIn(pub StorageUpdate);
+    pub struct StorageUpdateInput(pub StorageUpdate);
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageReadSelfIn {
+    pub struct StorageReadSelfInput {
         key: String,
     }
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageReadSelfOut {
+    pub struct StorageReadSelfOutput {
         pub data: Option<Vec<u8>>,
     }
 
     /// Check if a VP at the given address approved the transaction
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct OtherApprovedIn {
+    pub struct OtherApprovedInput {
         addr: String,
     }
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct OtherApprovedOut(pub bool);
+    pub struct OtherApprovedOutput(pub bool);
 }

@@ -27,12 +27,12 @@ extern "C" {
 #[no_mangle]
 pub extern "C" fn apply_tx(tx_data_ptr: *const u8, tx_data_len: usize) {
     let slice = unsafe { slice::from_raw_parts(tx_data_ptr, tx_data_len) };
-    let tx_data = memory::TxDataIn::try_from_slice(slice).unwrap();
+    let tx_data = slice.to_vec() as memory::TxData;
 
     do_apply_tx(tx_data);
 }
 
-fn do_apply_tx(_tx_data: memory::TxDataIn) {
+fn do_apply_tx(_tx_data: memory::TxData) {
     // source and destination address
     let src = "va";
     let dest = "ba";
