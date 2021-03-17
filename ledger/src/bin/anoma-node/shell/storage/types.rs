@@ -152,6 +152,11 @@ impl TryFrom<i64> for BlockHeight {
             .map_err(|e| format!("Unexpected height value {}, {}", value, e))
     }
 }
+impl BlockHeight {
+    pub fn next_height(&self) -> BlockHeight {
+        BlockHeight(self.0 + 1)
+    }
+}
 
 impl Default for BlockHash {
     fn default() -> Self {
