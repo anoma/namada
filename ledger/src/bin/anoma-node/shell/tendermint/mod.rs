@@ -186,7 +186,6 @@ impl tendermint_abci::Application for AbciWrapper {
     }
 
     fn check_tx(&self, req: RequestCheckTx) -> ResponseCheckTx {
-        log::info!("check_tx request {:#?}", req);
         let mut resp = ResponseCheckTx::default();
         let r#type = match CheckTxType::from_i32(req.r#type)
             .expect("TEMPORARY: received unexpected CheckTxType from ABCI")
@@ -214,7 +213,6 @@ impl tendermint_abci::Application for AbciWrapper {
                 resp.log = String::from(msg);
             }
         }
-        log::info!("check_tx response {:#?}", resp);
         resp
     }
 
