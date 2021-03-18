@@ -55,7 +55,7 @@ pub struct BlockStorage {
 }
 
 impl Storage {
-    pub fn new(db_path: PathBuf) -> Self {
+    pub fn new(db_path: &PathBuf) -> Self {
         let tree = MerkleTree::default();
         let balances = HashMap::new();
         let vps = HashMap::new();
@@ -68,7 +68,7 @@ impl Storage {
         };
         Self {
             // TODO: Error handling
-            db: db::open(&db_path).unwrap(),
+            db: db::open(db_path).unwrap(),
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
         }
