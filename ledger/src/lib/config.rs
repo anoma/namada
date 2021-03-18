@@ -26,13 +26,13 @@ pub struct Gossip {
     pub port: String
 }
 #[derive(Debug, Deserialize)]
-pub struct AnomaConfig {
+pub struct Config {
     pub node: Node,
     pub tendermint: Tendermint,
     pub p2p: Gossip
 }
 
-impl AnomaConfig {
+impl Config {
     pub fn new(home: String) -> Result<Self, config::ConfigError> {
         let mut s = config::Config::new();
 

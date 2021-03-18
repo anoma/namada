@@ -4,7 +4,7 @@ mod tendermint;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-use anoma::{bytes::ByteBuf, config::AnomaConfig};
+use anoma::{bytes::ByteBuf, config::Config};
 use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
 use thiserror::Error;
@@ -41,7 +41,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: AnomaConfig) -> Result<()>{
+pub fn run(config: Config) -> Result<()>{
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, &config.node.db_path);
@@ -53,7 +53,7 @@ pub fn run(config: AnomaConfig) -> Result<()>{
     shell.run()
 }
 
-pub fn reset(config: AnomaConfig) -> Result<()> {
+pub fn reset(config: Config) -> Result<()> {
     // simply nuke the DB files
     let db_path = config.db_home_dir();
     match std::fs::remove_dir_all(&db_path) {
