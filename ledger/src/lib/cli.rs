@@ -67,7 +67,7 @@ pub struct Gossip {
 #[derive(Clap)]
 #[clap(version = "1.0", author = AUTHOR)]
 pub struct NodeOpts {
-    #[clap(short, long, default_value = ".anoma")]
+    #[clap(short, long, default_value = "~/.anoma")]
     pub home: String,
     #[clap(short, long)]
     pub rpc: bool,
