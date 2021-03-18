@@ -11,8 +11,7 @@ use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
 use thiserror::Error;
 
 use self::storage::{
-    Address, Balance, BasicAddress, BlockHash, BlockHeight, Storage,
-    ValidatorAddress,
+    Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
 use self::tendermint::{AbciMsg, AbciReceiver};
 
@@ -89,11 +88,19 @@ impl Shell {
         // TODO load initial accounts from genesis
         let va = ValidatorAddress::new_address("va".to_owned());
         storage
-            .update_balance(&va, Balance::new(10000))
+            .write(
+                &va,
+                "balance/eth",
+                vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+            )
             .expect("Unable to set the initial balance for validator account");
         let ba = BasicAddress::new_address("ba".to_owned());
         storage
-            .update_balance(&ba, Balance::new(100))
+            .write(
+                &ba,
+                "balance/eth",
+                vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+            )
             .expect("Unable to set the initial balance for basic account");
         Self { abci, storage }
     }
