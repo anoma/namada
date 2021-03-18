@@ -40,7 +40,7 @@ pub fn run(
         None
     };
 
-    let p2p_local_address = local_address.unwrap_or(format!("{}:{}", config.p2p.host, config.p2p.port));
+    let p2p_local_address = local_address.unwrap_or(format!("/ip4/{}/tcp/{}", config.p2p.host, config.p2p.port));
     let p2p_peers = peers.unwrap_or(config.p2p.peers);
     let p2p_topics = topics.unwrap_or(config.p2p.topics);
 
