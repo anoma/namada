@@ -4,7 +4,8 @@ mod tendermint;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-use anoma::{bytes::ByteBuf, config::Config};
+use anoma::bytes::ByteBuf;
+use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
 use thiserror::Error;
@@ -14,7 +15,6 @@ use self::storage::{
     ValidatorAddress,
 };
 use self::tendermint::{AbciMsg, AbciReceiver};
-
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -41,13 +41,15 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: Config) -> Result<()>{
+pub fn run(config: Config) -> Result<()> {
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, &config.db_home_dir());
-    let addr = format!("{}:{}", config.tendermint.host, config.tendermint.port).parse().map_err(|e| Error::Temporary {
-        error: format!("cannot parse tendermint address {}", e),
-    })?;
+    let addr = format!("{}:{}", config.tendermint.host, config.tendermint.port)
+        .parse()
+        .map_err(|e| Error::Temporary {
+            error: format!("cannot parse tendermint address {}", e),
+        })?;
     // Run Tendermint ABCI server in another thread
     std::thread::spawn(move || tendermint::run(sender, config, addr));
     shell.run()

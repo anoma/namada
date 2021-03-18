@@ -1,6 +1,7 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use anoma::{cli::{InlinedNodeOpts, NodeOpts}, config::Config};
+use anoma::cli::{InlinedNodeOpts, NodeOpts};
+use anoma::config::Config;
 use clap::Clap;
 use eyre::{Result, WrapErr};
 

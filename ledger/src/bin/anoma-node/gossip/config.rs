@@ -47,9 +47,7 @@ impl NetworkConfig {
         Self {
             local_address: config.local_address,
             peers: peers,
-            gossip: GossipConfig {
-                topics: topics,
-            },
+            gossip: GossipConfig { topics: topics },
         }
     }
 
@@ -61,9 +59,7 @@ impl NetworkConfig {
         Self {
             local_address: local_address,
             peers: peers,
-            gossip: GossipConfig {
-                topics: topics,
-            },
+            gossip: GossipConfig { topics: topics },
         }
     }
 

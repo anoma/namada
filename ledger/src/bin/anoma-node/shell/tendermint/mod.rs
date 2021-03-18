@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
 
-use anoma::config::{Config};
+use anoma::config::Config;
 use anoma::genesis::{self, Validator};
 use serde_json::json;
 use tendermint_abci::{self, ServerBuilder};
