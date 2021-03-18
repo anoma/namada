@@ -6,7 +6,9 @@ use libp2p::gossipsub::{IdentTopic as Topic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
 use libp2p::PeerId;
+use orderbook::OrderbookError;
 use prost::Message;
+use serde::de::Expected;
 use tokio::sync::mpsc::Receiver;
 
 use super::config::NetworkConfig;
@@ -145,18 +147,22 @@ fn handle_network_event(
             NetworkEvent::Message(msg)
                 if msg.topic == super::types::Topic::Orderbook =>
             {
-                if orderbook_node.apply(&msg)? {
-                    {
-                        swarm
-                            .gossipsub
-                            .report_message_validation_result(
-                                &msg.message_id,
-                                &msg.peer,
-                                MessageAcceptance::Accept,
-                            )
-                            .unwrap();
+                let validity = match orderbook_node.apply(&msg.data) {
+                    Ok(true) => MessageAcceptance::Accept,
+                    Ok(false) => MessageAcceptance::Ignore,
+                    Err(OrderbookError::DecodeError(..)) => {
+                        MessageAcceptance::Reject
                     }
-                }
+                    _ => MessageAcceptance::Ignore,
+                };
+                swarm
+                    .gossipsub
+                    .report_message_validation_result(
+                        &msg.message_id,
+                        &msg.peer,
+                        validity,
+                    )
+                    .expect("Failed to validate the message ");
             }
             NetworkEvent::Message(msg) => {
                 panic!("topic {:?} not yet implemented", msg.topic)
