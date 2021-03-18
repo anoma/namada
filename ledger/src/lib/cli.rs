@@ -93,7 +93,11 @@ pub struct Orderbook {
     #[clap(short, long)]
     pub peers: Option<Vec<String>>,
     #[clap(short, long)]
-    pub topics: Option<Vec<String>>,
+    pub orderbook: bool,
+    #[clap(short, long)]
+    pub dkg: bool,
+    #[clap(short, long)]
+    pub filter: Option<Vec<u8>>,
 }
 
 /// The lazy opt is used for node and client sub-commands, it doesn't actually

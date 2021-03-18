@@ -19,9 +19,10 @@ fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
         InlinedNodeOpts::RunOrderbook(arg) => Ok(gossip::run(
             config,
             rpc,
+            arg.orderbook,
+            arg.dkg,
             arg.local_address,
             arg.peers,
-            arg.topics,
         )),
         InlinedNodeOpts::RunAnoma => {
             shell::run(config).wrap_err("Failed to run Anoma node")

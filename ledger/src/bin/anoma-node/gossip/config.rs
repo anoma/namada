@@ -1,9 +1,14 @@
-use std::fs::{create_dir_all, File};
 use std::io::{Result, Write};
 use std::path::PathBuf;
+use std::{
+    default,
+    fs::{create_dir_all, File},
+};
 
 use serde::Deserialize;
 use serde_json::json;
+
+use super::orderbook;
 
 #[derive(Debug, Deserialize)]
 pub struct NetworkConfig {
@@ -12,9 +17,29 @@ pub struct NetworkConfig {
     pub gossip: GossipConfig,
 }
 
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self {
+            local_address: String::from("/ip4/127.0.0.1/tcp/38153"),
+            peers: Vec::new(),
+            gossip: GossipConfig::default(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct GossipConfig {
-    pub topics: Vec<String>,
+    pub orderbook: bool,
+    pub dkg: bool,
+}
+
+impl Default for GossipConfig {
+    fn default() -> Self {
+        Self {
+            orderbook: true,
+            dkg: false,
+        }
+    }
 }
 
 const CONFIG_FILE: &str = "gossipsub.json";
@@ -23,12 +48,14 @@ impl NetworkConfig {
         home_dir: &PathBuf,
         local_address: Option<String>,
         peers: Option<Vec<String>>,
-        topics: Option<Vec<String>>,
+        orderbook: bool,
+        dkg: bool,
     ) -> Self {
         let config = if home_dir.join("config").join(CONFIG_FILE).exists() {
-            Self::read_config(home_dir, peers, topics)
+            Self::read_config(home_dir, peers, orderbook, dkg)
         } else {
-            let config = Self::generate_config(local_address, peers, topics);
+            let config =
+                Self::generate_config(local_address, peers, orderbook, dkg);
             let _written = config.write_config(home_dir);
             config
         };
@@ -38,7 +65,8 @@ impl NetworkConfig {
     fn read_config(
         home_dir: &PathBuf,
         peers: Option<Vec<String>>,
-        topics: Option<Vec<String>>,
+        orderbook: bool,
+        dkg: bool,
     ) -> Self {
         let path = home_dir.join("config").join(CONFIG_FILE);
         let file = File::open(path).unwrap();
@@ -48,7 +76,8 @@ impl NetworkConfig {
             local_address: config.local_address,
             peers: peers.unwrap_or(config.peers),
             gossip: GossipConfig {
-                topics: topics.unwrap_or(config.gossip.topics),
+                orderbook: orderbook || config.gossip.orderbook,
+                dkg: dkg || config.gossip.dkg,
             },
         }
     }
@@ -56,14 +85,17 @@ impl NetworkConfig {
     fn generate_config(
         local_address: Option<String>,
         peers: Option<Vec<String>>,
-        topics: Option<Vec<String>>,
+        orderbook: bool,
+        dkg: bool,
     ) -> Self {
+        let default_gossip_conf = GossipConfig::default();
         Self {
             local_address: local_address
                 .unwrap_or(String::from("/ip4/127.0.0.1/tcp/38153")),
             peers: peers.unwrap_or_default(),
             gossip: GossipConfig {
-                topics: topics.unwrap_or_default(),
+                orderbook: orderbook || default_gossip_conf.orderbook,
+                dkg: dkg || default_gossip_conf.dkg,
             },
         }
     }
@@ -76,7 +108,10 @@ impl NetworkConfig {
         let config = json!({
             "local_address": self.local_address,
             "peers" : self.peers,
-            "gossip": { "topics": self.gossip.topics},
+            "gossip": {
+                "orderbook": self.gossip.orderbook,
+                "dkg": self.gossip.dkg,
+            },
         });
         file.write(config.to_string().as_bytes()).map(|_| ())
     }

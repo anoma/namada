@@ -24,9 +24,10 @@ use crate::rpc;
 pub fn run(
     config: Config,
     rpc: bool,
+    orderbook: bool,
+    dkg: bool,
     local_address: Option<String>,
     peers: Option<Vec<String>>,
-    topics: Option<Vec<String>>,
 ) -> () {
     let base_dir: PathBuf = config.gossip_home_dir();
     let bookkeeper: Bookkeeper = read_or_generate_bookkeeper_key(&base_dir)
@@ -44,7 +45,8 @@ pub fn run(
         &base_dir,
         local_address,
         peers,
-        topics,
+        orderbook,
+        dkg,
     );
 
     let (mut swarm, event_receiver) = p2p::build_swarm(bookkeeper)
