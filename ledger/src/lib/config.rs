@@ -43,6 +43,7 @@ impl AnomaConfig {
 
         s.set_default("tendermint.host", "127.0.0.1")?;
         s.set_default("tendermint.port", 26658)?;
+        s.set_default("tendermint.network", "mainnet")?;
         
         s.set_default("p2p.host", "127.0.0.1")?;
         s.set_default("p2p.port", 20201)?;
