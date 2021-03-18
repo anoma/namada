@@ -13,28 +13,6 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::types::{self, NetworkEvent};
 
-impl From<types::Topic> for IdentTopic {
-    fn from(topic: types::Topic) -> Self {
-        IdentTopic::new(topic.to_string())
-    }
-}
-impl From<types::Topic> for TopicHash {
-    fn from(topic: types::Topic) -> Self {
-        IdentTopic::from(topic).hash()
-    }
-}
-impl From<&TopicHash> for types::Topic {
-    fn from(topic_hash: &TopicHash) -> Self {
-        if topic_hash == &TopicHash::from(types::Topic::Dkg) {
-            types::Topic::Dkg
-        } else if topic_hash == &TopicHash::from(types::Topic::Orderbook) {
-            types::Topic::Orderbook
-        } else {
-            panic!("topic_hash does not correspond to any topic of interest")
-        }
-    }
-}
-
 impl From<GossipsubMessage> for types::NetworkEvent {
     fn from(msg: GossipsubMessage) -> Self {
         Self::Message(types::InternMessage {
