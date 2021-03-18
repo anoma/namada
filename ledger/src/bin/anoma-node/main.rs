@@ -12,5 +12,5 @@ fn main() -> Result<()> {
     env_logger::init_from_env("ANOMA_LOG");
 
     // run the CLI
-    cli::main();
+    cli::main()
 }

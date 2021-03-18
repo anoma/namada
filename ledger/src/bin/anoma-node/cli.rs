@@ -6,24 +6,26 @@ use eyre::{Result, WrapErr};
 
 use crate::{gossip, shell};
 
-pub fn main() {
+pub fn main() -> Result<()> {
     let NodeOpts { home, rpc, ops } = NodeOpts::parse();
     let config = AnomaConfig::new(home).unwrap();
     exec_inlined(config, rpc, ops)
 }
 
-fn exec_inlined(config: AnomaConfig, rpc: bool, ops: InlinedNodeOpts) {
+fn exec_inlined(config: AnomaConfig, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
     match ops {
-        InlinedNodeOpts::RunOrderbook(arg) => {
-            gossip::run(config, rpc, arg.local_address, arg.peers, arg.topics)
-        }
+        InlinedNodeOpts::RunOrderbook(arg) => Ok(gossip::run(
+            config,
+            rpc,
+            arg.local_address,
+            arg.peers,
+            arg.topics,
+        )),
         InlinedNodeOpts::RunAnoma => {
-            shell::run(config);
-            Ok(())
+            shell::run(config).wrap_err("Failed to run Anoma node")
         }
         InlinedNodeOpts::ResetAnoma => {
-            shell::reset(config);
-            Ok(())
+            shell::reset(config).wrap_err("Failed to reset Anoma node")
         }
     }
 }
