@@ -8,9 +8,9 @@ use config;
 #[derive(Debug, Deserialize)]
 pub struct Node {
     home: PathBuf,
-    pub tendermint_path: PathBuf,
-    pub db_path: PathBuf,
-    pub libp2p_path: PathBuf
+    tendermint_path: PathBuf,
+    db_path: PathBuf,
+    libp2p_path: PathBuf
 }
 
 

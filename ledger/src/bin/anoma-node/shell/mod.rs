@@ -44,7 +44,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn run(config: Config) -> Result<()>{
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
-    let shell = Shell::new(receiver, &config.node.db_path);
+    let shell = Shell::new(receiver, &config.db_home_dir());
     let addr = format!("{}:{}", config.tendermint.host, config.tendermint.port).parse().map_err(|e| Error::Temporary {
         error: format!("cannot parse tendermint address {}", e),
     })?;
