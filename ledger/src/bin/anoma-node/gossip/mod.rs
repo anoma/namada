@@ -23,7 +23,7 @@ use crate::rpc;
 
 // XXX TODO add type error and speficic Result type
 pub fn run(
-    config: Config,
+    config: AnomaConfig,
     rpc: bool,
     local_address: Option<String>,
     peers: Option<Vec<String>>,

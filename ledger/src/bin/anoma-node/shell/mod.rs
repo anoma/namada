@@ -4,8 +4,7 @@ mod tendermint;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-use anoma::bytes::ByteBuf;
-use anoma::config::Config;
+use anoma::{bytes::ByteBuf, config::AnomaConfig};
 use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
 
@@ -15,21 +14,19 @@ use self::storage::{
 };
 use self::tendermint::{AbciMsg, AbciReceiver};
 
-pub fn run(config: Config) {
-    // run our shell via Tendermint ABCI
-    let db_path = config.home_dir.join("db");
+pub fn run(config: AnomaConfig) {
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
-    let shell = Shell::new(receiver, db_path);
-    let addr = "127.0.0.1:26658".parse().unwrap();
+    let shell = Shell::new(receiver, &config.node.db_path);
+    let addr = format!("{}:{}", config.tendermint.host, config.tendermint.port).parse().unwrap();
     // Run Tendermint ABCI server in another thread
     std::thread::spawn(move || tendermint::run(sender, config, addr));
     shell.run().unwrap();
 }
 
-pub fn reset(config: Config) {
+pub fn reset(config: AnomaConfig) {
     // simply nuke the DB files
-    let db_path = config.home_dir.join("db");
+    let db_path = config.db_home_dir();
     match std::fs::remove_dir_all(db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.unwrap(),
@@ -57,7 +54,7 @@ pub type ApplyResult<'a> = Result<(), String>;
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
-    pub fn new(abci: AbciReceiver, db_path: PathBuf) -> Self {
+    pub fn new(abci: AbciReceiver, db_path: &PathBuf) -> Self {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
         let va = ValidatorAddress::new_address("va".to_owned());

@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
 
-use anoma::config::Config;
+use anoma::config::{AnomaConfig};
 use anoma::genesis::{self, Validator};
 use serde_json::json;
 use tendermint_abci::{self, ServerBuilder};
@@ -70,7 +70,7 @@ pub enum AbciMsg {
 }
 
 /// Run the ABCI server in the current thread (blocking).
-pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
+pub fn run(sender: AbciSender, config: AnomaConfig, addr: SocketAddr) {
     let home_dir = config.tendermint_home_dir();
     let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
@@ -104,7 +104,7 @@ pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
     server.listen().unwrap()
 }
 
-pub fn reset(config: Config) {
+pub fn reset(config: AnomaConfig) {
     // reset all the Tendermint state, if any
     Command::new("tendermint")
         .args(&[
