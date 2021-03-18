@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use anoma::bytes::ByteBuf;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+use thiserror::Error;
 
 pub use self::types::{
     Address, Balance, BasicAddress, BlockHash, BlockHeight, MerkleTree,
@@ -18,14 +19,17 @@ pub use self::types::{
 use self::types::{Hash256, CHAIN_ID_LENGTH};
 use super::MerkleRoot;
 
-#[derive(Debug, Clone)]
+#[derive(Error, Debug)]
 pub enum Error {
-    // TODO strong types
-    Stringly(String),
+    #[error("TEMPORARY error: {error}")]
+    Temporary { error: String },
+    #[error("Database error: {0}")]
     DBError(db::Error),
+    #[error("Merkle tree error: {0}")]
+    MerkleTreeError(sparse_merkle_tree::error::Error),
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 static VP_WASM: &'static [u8] =
     include_bytes!("../../../../../../vp_template/vp.wasm");
@@ -73,8 +77,8 @@ impl Storage {
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
-        if let Ok(Some((chain_id, tree, hash, height, balances))) =
-            self.db.read_last_block().map_err(Error::DBError)
+        if let Some((chain_id, tree, hash, height, balances)) =
+            self.db.read_last_block().map_err(Error::DBError)?
         {
             self.chain_id = chain_id;
             self.block.tree = tree;
@@ -102,7 +106,7 @@ impl Storage {
                 &self.block.height,
                 &self.block.balances,
             )
-            .map_err(Error::DBError)
+            .map_err(|e| Error::DBError(e).into())
     }
 
     /// # Storage reads
@@ -120,7 +124,7 @@ impl Storage {
             .tree
             .0
             .update(key, value)
-            .map_err(|err| Error::Stringly(format!("SMT error {}", err)))?;
+            .map_err(Error::MerkleTreeError)?;
         Ok(())
     }
 
@@ -144,12 +148,16 @@ impl Storage {
         amount: u64,
     ) -> Result<()> {
         match self.block.balances.get(&src) {
-            None => return Err(Error::Stringly("Source not found".to_owned())),
+            None => {
+                return Err(Error::Temporary {
+                    error: format!("Source balance not found {:?}", src),
+                });
+            }
             Some(&Balance(src_balance)) => {
                 if src_balance < amount {
-                    return Err(Error::Stringly(
-                        "Source balance is too low".to_owned(),
-                    ));
+                    return Err(Error::Temporary {
+                        error: format!("Source balance is too low {:?}", src),
+                    });
                 };
                 self.update_balance(src, Balance::new(src_balance - amount))?;
                 match self.block.balances.get(&dest) {

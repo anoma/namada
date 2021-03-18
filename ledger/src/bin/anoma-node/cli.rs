@@ -2,28 +2,28 @@
 //! in the CLI `--help`.
 use anoma::{cli::{InlinedNodeOpts, NodeOpts}, config::AnomaConfig};
 use clap::Clap;
+use eyre::{Result, WrapErr};
 
 use crate::{gossip, shell};
 
 pub fn main() {
     let NodeOpts { home, rpc, ops } = NodeOpts::parse();
-    let anoma_config = AnomaConfig::new(home).unwrap();
-    exec_inlined(anoma_config, rpc, ops)
+    let config = AnomaConfig::new(home).unwrap();
+    exec_inlined(config, rpc, ops)
 }
 
-fn exec_inlined(a_config: AnomaConfig, rpc: bool, ops: InlinedNodeOpts) {
+fn exec_inlined(config: AnomaConfig, rpc: bool, ops: InlinedNodeOpts) {
     match ops {
         InlinedNodeOpts::RunOrderbook(arg) => {
-            gossip::run(a_config, rpc, arg.local_address, arg.peers, arg.topics)
+            gossip::run(config, rpc, arg.local_address, arg.peers, arg.topics)
         }
         InlinedNodeOpts::RunAnoma => {
-            shell::run(a_config);
+            shell::run(config);
             Ok(())
         }
         InlinedNodeOpts::ResetAnoma => {
-            shell::reset(a_config);
+            shell::reset(config);
             Ok(())
         }
     }
-    .unwrap();
 }

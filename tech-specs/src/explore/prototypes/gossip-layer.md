@@ -1,58 +1,43 @@
 # Gossip layer/Orderbook prototype
 
-tracking issue <https://github.com/heliaxdev/rd-pm/issues/6>
+tracking issue <https://github.com/heliaxdev/anoma-prototype/issues/35>
 
 ## Goals
 
-## component
+- learning rust
+- usable node + client setup :
+  - intent
+  - incentive function
+  - mempool and white list
+- basic matchmaker
 
-### Intent
+## components
 
-An intent is a way of describing the need and/or gives of an account.
+The orderbook is build conjointly to the ledger and share the same binary.
 
-### Orderbook
+### Node
 
-The Orderbook has a mempool of intent and gossip intents to other
-orderbook. Each orderbook maintains a intent's filter and informs any orderbook
-node of it, if an orderbook relay an intent that is not part of that list that
-orderbook is blacklisted.
+The node is built into `anomad`, it runs all the necesarry part, rpc server,
+libp2p, orderbook app.
 
-### Matchmaker
+#### Orderbook
 
-The matchmaker transform a linked intent's list into valid transactions. There
-will be multiple matchmaker, each describing a way to match a subset of possible
-intent. The matchmaker is rewarded when
+The orderbook application
 
-### proposed order of development
+##### Mempool
 
-This is not a mandatory development cycle for the prototyping but just to have a
-draft on what could be the priority when developping the orderbook.
+##### Filter
 
-### v0: base
-  * intent
-    * Unencrypted
-    * Can express basic asset need
-  * mempool
-    * Intents are kept alive with no restriction
-  * Gossip
-    * All orderbook are added to gossip list
-    * Intents are gossiped to everyone known
+#### Network behaviour
+The network behaviour is the part that react on network event. It creates a
+channel (e.g. `tokio::mpsc::channel`) with the orderbook to communicate all
+intent it receive.
 
-### v1: working prototype
-  * mempool
-    * Add basic whitelist of asset
-    * Intents are kept alive with no restriction
-  * Gossip
-    * Intents are gossiped to orderbook with at least one asset in whitelist
-    * Periodically check whitelist of connected orderbooks
+#### Rpc server
+If the rpc command line option is set it creates a tonic server that receive
+command from a client and send theses through a channel
+(e.g. `tokio::mpsc::channel`) to the the orderbook.
 
-### v2 : Incentive logic for match-maker and orderbooks
-  * intent
-    * Contains a gossip fee
-  * gossip
-    * Relayed intents are signed with pk of recipient
-      : to determine which orderbook to pay when matched, correct logic TBD
-
-### v3
-order TBD later
-....
+### Client
+Allow to submit a intent :
+`anoma gossip --data "data"`
