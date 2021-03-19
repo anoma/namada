@@ -90,7 +90,11 @@ pub fn write_vp_inputs(
 
     // TODO check size and grow memory if needed
     let mut data = unsafe { memory.data_unchecked_mut() };
-    let bufs = [IoSlice::new(tx_data_bytes), IoSlice::new(&write_log_bytes)];
+    let bufs = [
+        IoSlice::new(&addr_bytes),
+        IoSlice::new(tx_data_bytes),
+        IoSlice::new(&write_log_bytes),
+    ];
     data.write_vectored(&bufs)
         .expect("TEMPORARY: failed to write inputs for validity predicate");
 
