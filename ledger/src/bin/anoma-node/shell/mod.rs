@@ -9,7 +9,6 @@ use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxRunner, VpRunner};
 use borsh::BorshDeserialize;
-use borsh::BorshSerialize;
 use storage::KeySeg;
 use thiserror::Error;
 
@@ -175,10 +174,10 @@ impl Shell {
 
 fn vm_storage_read(
     env: &TxEnv,
-    key_ptr: i32,
-    key_len: i32,
+    key_ptr: u64,
+    key_len: u64,
     result_ptr: u64,
-) -> i32 {
+) -> u64 {
     let key = env
         .memory
         .read_string(key_ptr, key_len)
@@ -212,23 +211,24 @@ fn vm_storage_read(
             return 1;
         }
     }
+    // fail
     0
 }
 
 fn vm_storage_update(
     env: &TxEnv,
-    key_ptr: i32,
-    key_len: i32,
-    val_ptr: i32,
-    val_len: i32,
-) {
+    key_ptr: u64,
+    key_len: u64,
+    val_ptr: u64,
+    val_len: u64,
+) -> u64 {
     let key = env
         .memory
         .read_string(key_ptr, key_len)
         .expect("Cannot read the key from memory");
     let val = env
         .memory
-        .read_bytes(val_ptr as u64, val_len as _)
+        .read_bytes(val_ptr, val_len as _)
         .expect("Cannot read the value from memory");
     log::info!("vm_storage_update {}, {:#?}", key, val);
 
@@ -244,8 +244,11 @@ fn vm_storage_update(
                 .storage
                 .write(&addr, &key, val)
                 .expect("VM storage write fail");
+            return 1;
         }
     }
+    // fail
+    0
 }
 
 impl Shell {
@@ -284,69 +287,79 @@ impl Shell {
                 vm_storage_update,
             )
             .map_err(Error::TxRunnerError)?;
-        // let write_log = tx_receiver
-        //     .recv()
-        //     .expect("Expected a message from transaction runner");
-        // let src_addr = Address::new_address("va".into());
-        // let dest_addr = Address::new_address("ba".into());
 
-        // // Run a VP for every account with modified storage sub-space
-        // // TODO run in parallel for all accounts
-        // //   - all must return `true` to accept the tx
-        // //   - cancel all remaining workers and fail if any returns `false`
-        // let src_vp = self
-        //     .storage
-        //     .validity_predicate(&src_addr)
-        //     .map_err(Error::StorageError)?;
-        // let dest_vp = self
-        //     .storage
-        //     .validity_predicate(&dest_addr)
-        //     .map_err(Error::StorageError)?;
+        // TODO gather write log from tx udpates
+        let write_log = vec![];
 
-        // let vp_runner = VpRunner::new();
-        // let (vp_sender, vp_receiver) = mpsc::channel();
-        // vp_runner
-        //     .run(src_vp, &tx_data, &write_log, vp_sender.clone())
-        //     .map_err(|error| Error::VpRunnerError {
-        //         addr: src_addr.clone(),
-        //         error,
-        //     })?;
-        // let src_accept = vp_receiver
-        //     .recv()
-        //     .expect("Expected a message from source's VP runner");
-        // vp_runner
-        //     .run(dest_vp, &tx_data, &write_log, vp_sender)
-        //     .map_err(|error| Error::VpRunnerError {
-        //         addr: dest_addr.clone(),
-        //         error,
-        //     })?;
-        // let dest_accept = vp_receiver
-        //     .recv()
-        //     .expect("Expected a message from destination's VP runner");
+        // TODO determine these from the write log
+        let src = "va";
+        let dest = "ba";
+        let src_addr = Address::new_address(src.into());
+        let dest_addr = Address::new_address(dest.into());
 
-        // // Apply the transaction if accepted by all the VPs
-        // if src_accept && dest_accept {
-        //     self.storage
-        //         .transfer(&src_addr, &dest_addr, 10)
-        //         .map_err(Error::StorageError)?;
-        //     log::debug!(
-        //         "all accepted apply_tx storage modification {:#?}",
-        //         self.storage
-        //     );
-        // } else {
-        //     log::debug!(
-        //         "tx declined by {}",
-        //         if src_accept {
-        //             "dest"
-        //         } else {
-        //             if dest_accept {
-        //                 "src"
-        //             } else {
-        //                 "src and dest"
-        //             }
-        //         }
-        //     );
-        // }
+        // Run a VP for every account with modified storage sub-space
+        // TODO run in parallel for all accounts
+        //   - all must return `true` to accept the tx
+        //   - cancel all remaining workers and fail if any returns `false`
+        let src_vp = self
+            .storage
+            .validity_predicate(&src_addr)
+            .map_err(Error::StorageError)?;
+        let dest_vp = self
+            .storage
+            .validity_predicate(&dest_addr)
+            .map_err(Error::StorageError)?;
+
+        let vp_runner = VpRunner::new();
+        let (vp_sender, vp_receiver) = mpsc::channel();
+        vp_runner
+            .run(
+                src_vp,
+                &tx_data,
+                src.to_string(),
+                &write_log,
+                vp_sender.clone(),
+            )
+            .map_err(|error| Error::VpRunnerError {
+                addr: src_addr.clone(),
+                error,
+            })?;
+        let src_accept = vp_receiver
+            .recv()
+            .expect("Expected a message from source's VP runner");
+        vp_runner
+            .run(dest_vp, &tx_data, dest.to_string(), &write_log, vp_sender)
+            .map_err(|error| Error::VpRunnerError {
+                addr: dest_addr.clone(),
+                error,
+            })?;
+        let dest_accept = vp_receiver
+            .recv()
+            .expect("Expected a message from destination's VP runner");
+
+        // Apply the transaction if accepted by all the VPs
+        if src_accept && dest_accept {
+            self.storage
+                .transfer(&src_addr, &dest_addr, 10)
+                .map_err(Error::StorageError)?;
+            log::debug!(
+                "all accepted apply_tx storage modification {:#?}",
+                self.storage
+            );
+        } else {
+            log::debug!(
+                "tx declined by {}",
+                if src_accept {
+                    "dest"
+                } else {
+                    if dest_accept {
+                        "src"
+                    } else {
+                        "src and dest"
+                    }
+                }
+            );
+        }
 
         Ok(())
     }

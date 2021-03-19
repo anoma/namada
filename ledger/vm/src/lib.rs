@@ -4,11 +4,10 @@ pub mod types;
 use anoma_vm_env::memory::WriteLog;
 use memory::AnomaMemory;
 use std::ffi::c_void;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc;
 use thiserror::Error;
 use wasmer::{
-    internals::WithEnv, HostEnvInitError, HostFunction, Instance, WasmPtr,
-    WasmerEnv,
+    internals::WithEnv, HostEnvInitError, HostFunction, Instance, WasmerEnv,
 };
 
 #[derive(Clone)]
@@ -19,13 +18,10 @@ unsafe impl Sync for LedgerWrapper {}
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
 
-// TODO check WasmerEnv issue
+// TODO check WasmerEnv macro issue
 // #[derive(wasmer::WasmerEnv, Clone)]
 #[derive(Clone)]
 pub struct TxEnv {
-    // // TODO Mutex is not great, we only ever read, but it's what WasmerEnv
-    // // currently implements. There must be a better way...
-    // pub sender: Arc<Mutex<mpsc::Sender<TxRequest>>>,
     // not thread-safe, assuming single-theaded Tx runner
     pub ledger: LedgerWrapper,
     // #[wasmer(export)]
@@ -102,8 +98,8 @@ impl TxRunner {
         storage_update: Update,
     ) -> Result<()>
     where
-        Read: HostFunction<(i32, i32, u64), i32, WithEnv, TxEnv>,
-        Update: HostFunction<(i32, i32, i32, i32), (), WithEnv, TxEnv>,
+        Read: HostFunction<(u64, u64, u64), u64, WithEnv, TxEnv>,
+        Update: HostFunction<(u64, u64, u64, u64), u64, WithEnv, TxEnv>,
     {
         let tx_env = TxEnv {
             ledger,
@@ -144,7 +140,7 @@ impl TxRunner {
             .exports
             .get_function(TX_ENTRYPOINT)
             .map_err(Error::MissingTxModuleEntrypoint)?
-            .native::<(i32, i32), ()>()
+            .native::<(u64, u64), ()>()
             .map_err(Error::UnexpectedTxModuleEntrypointInterface)?;
         apply_tx
             .call(tx_data_ptr, tx_data_len)
@@ -192,6 +188,7 @@ impl VpRunner {
         &self,
         vp_code: impl AsRef<[u8]>,
         tx_data: &Vec<u8>,
+        addr: String,
         write_log: &WriteLog,
         vp_sender: mpsc::Sender<VpMsg>,
     ) -> Result<()> {
@@ -210,7 +207,8 @@ impl VpRunner {
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::VpInstantiationError)?;
 
-        let is_valid = self.run_with_input(vp_code, tx_data, write_log)?;
+        let is_valid =
+            self.run_with_input(vp_code, tx_data, addr, write_log)?;
         vp_sender
             .send(is_valid)
             .map_err(|e| Error::VpChannelError(e))?;
@@ -221,11 +219,14 @@ impl VpRunner {
         &self,
         vp_code: Instance,
         tx_data: &Vec<u8>,
+        addr: String,
         write_log: &Vec<anoma_vm_env::StorageUpdate>,
     ) -> Result<bool> {
         // TODO this can be nicer
-        let inputs = (tx_data, write_log);
+        let inputs = (addr, tx_data, write_log);
         let memory::VpCallInput {
+            addr_ptr,
+            addr_len,
             tx_data_ptr,
             tx_data_len,
             write_log_ptr,
@@ -237,10 +238,17 @@ impl VpRunner {
             .exports
             .get_function(VP_ENTRYPOINT)
             .map_err(Error::MissingVpModuleEntrypoint)?
-            .native::<(i32, i32, i32, i32), i32>()
+            .native::<(u64, u64, u64, u64, u64, u64), u64>()
             .map_err(Error::UnexpectedVpModuleEntrypointInterface)?;
         let is_valid = validate_tx
-            .call(tx_data_ptr, tx_data_len, write_log_ptr, write_log_len)
+            .call(
+                addr_ptr,
+                addr_len,
+                tx_data_ptr,
+                tx_data_len,
+                write_log_ptr,
+                write_log_len,
+            )
             .map_err(Error::VpRuntimeError)?;
         Ok(is_valid == 1)
     }

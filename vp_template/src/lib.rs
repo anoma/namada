@@ -10,22 +10,32 @@ extern "C" {}
 /// The module interface callable by wasm runtime:
 #[no_mangle]
 pub extern "C" fn validate_tx(
-    tx_data_ptr: *const u8,
-    tx_data_len: usize,
-    write_log_ptr: *const u8,
-    write_log_len: usize,
-) -> bool {
+    // VP's account's address
+    // TODO Should the address be on demand (a call to host function?)
+    addr_ptr: u64,
+    addr_len: u64,
+    tx_data_ptr: u64,
+    tx_data_len: u64,
+    write_log_ptr: u64,
+    write_log_len: u64,
+) -> u64 {
     // TODO more plumbing here
-    let slice = unsafe { slice::from_raw_parts(tx_data_ptr, tx_data_len) };
+    let slice = unsafe { slice::from_raw_parts(addr_ptr as *const u8, addr_len as _) };
+    let addr = String::try_from_slice(&slice).unwrap();
+    let slice = unsafe { slice::from_raw_parts(tx_data_ptr as *const u8, tx_data_len as _) };
     let tx_data = slice.to_vec() as memory::TxData;
-    let slice = unsafe { slice::from_raw_parts(write_log_ptr, write_log_len) };
+    let slice = unsafe { slice::from_raw_parts(write_log_ptr as _, write_log_len as _) };
     let write_log = memory::WriteLog::try_from_slice(slice).unwrap();
 
     // run validation with the concrete type(s)
-    do_validate_tx(tx_data, write_log)
+    if do_validate_tx(tx_data, addr, write_log) {
+        1
+    } else {
+        0
+    }
 }
 
-fn do_validate_tx(_tx_data: memory::TxData, _write_log: memory::WriteLog) -> bool {
+fn do_validate_tx(_tx_data: memory::TxData, _addr: String, _write_log: memory::WriteLog) -> bool {
     // if tx.amount > 0
     // // && tx.src == "va"
     // {

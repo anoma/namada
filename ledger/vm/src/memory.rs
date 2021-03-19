@@ -1,4 +1,4 @@
-use anoma_vm_env::memory::{self, WriteLog};
+use anoma_vm_env::memory;
 use borsh::BorshSerialize;
 use std::io::{IoSlice, Write};
 use thiserror::Error;
@@ -29,8 +29,8 @@ pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
 }
 
 pub struct TxCallInput {
-    pub tx_data_ptr: i32,
-    pub tx_data_len: i32,
+    pub tx_data_ptr: u64,
+    pub tx_data_len: u64,
 }
 
 pub fn write_tx_inputs(
@@ -42,7 +42,7 @@ pub fn write_tx_inputs(
         .map_err(Error::MemoryExportError)?;
 
     let tx_data_ptr = 0;
-    let tx_data_len = tx_data_bytes.len() as i32;
+    let tx_data_len = tx_data_bytes.len() as _;
 
     // TODO check size and grow memory if needed
     let mut data = unsafe { memory.data_unchecked_mut() };
@@ -56,29 +56,37 @@ pub fn write_tx_inputs(
 }
 
 pub struct VpCallInput {
-    pub tx_data_ptr: i32,
-    pub tx_data_len: i32,
-    pub write_log_ptr: i32,
-    pub write_log_len: i32,
+    pub addr_ptr: u64,
+    pub addr_len: u64,
+    pub tx_data_ptr: u64,
+    pub tx_data_len: u64,
+    pub write_log_ptr: u64,
+    pub write_log_len: u64,
 }
 
 pub fn write_vp_inputs(
     exports: &wasmer::Exports,
-    (tx_data_bytes, write_log): memory::VpInput,
+    (addr, tx_data_bytes, write_log): memory::VpInput,
 ) -> Result<VpCallInput> {
     let memory = exports
         .get_memory("memory")
         .map_err(Error::MemoryExportError)?;
 
-    let tx_data_ptr = 0;
-    let tx_data_len = tx_data_bytes.len() as i32;
+    let addr_ptr = 0;
+    let mut addr_bytes = Vec::with_capacity(1024);
+    addr.serialize(&mut addr_bytes)
+        .expect("TEMPORARY: failed to serialize addr for validity predicate");
+    let addr_len = addr_bytes.len() as _;
+
+    let tx_data_ptr = addr_ptr + addr_len;
+    let tx_data_len = tx_data_bytes.len() as _;
 
     let mut write_log_bytes = Vec::with_capacity(1024);
     write_log.serialize(&mut write_log_bytes).expect(
         "TEMPORARY: failed to serialize write_log for validity predicate",
     );
     let write_log_ptr = tx_data_ptr + tx_data_len;
-    let write_log_len = write_log_bytes.len() as i32;
+    let write_log_len = write_log_bytes.len() as _;
 
     // TODO check size and grow memory if needed
     let mut data = unsafe { memory.data_unchecked_mut() };
@@ -87,6 +95,8 @@ pub fn write_vp_inputs(
         .expect("TEMPORARY: failed to write inputs for validity predicate");
 
     Ok(VpCallInput {
+        addr_ptr,
+        addr_len,
         tx_data_ptr,
         tx_data_len,
         write_log_ptr,
@@ -111,52 +121,7 @@ impl AnomaMemory {
         Ok(())
     }
 
-    /// Temporary: Read a transfer data from memory and return it as write log.
-    /// TODO In near future, the tx will call storage API instead.
-    pub fn read_transfer_input(
-        &self,
-        src_ptr: i32,
-        src_len: i32,
-        dest_ptr: i32,
-        dest_len: i32,
-        amount: u64,
-    ) -> Result<WriteLog> {
-        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
-        let src_vec: Vec<_> = memory.view()
-            [src_ptr as usize..(src_ptr + src_len) as usize]
-            .iter()
-            .map(|cell| cell.get())
-            .collect();
-        let src = std::str::from_utf8(&src_vec)
-            .expect("unable to read string from memory")
-            .to_string();
-
-        let dest_vec: Vec<_> = memory.view()
-            [dest_ptr as usize..(dest_ptr + dest_len) as usize]
-            .iter()
-            .map(|cell| cell.get())
-            .collect();
-        let dest = std::str::from_utf8(&dest_vec)
-            .expect("unable to read string from memory")
-            .to_string();
-
-        log::debug!(
-            "transfer called with src: {}, dest: {}, amount: {}",
-            src,
-            dest,
-            amount
-        );
-
-        // let src_balance =
-        // let write_log = vec![StorageUpdate::Update {
-        //     key: format!("balance/{}", src, value = src_new_balance),
-        // }];
-        let write_log = vec![];
-
-        Ok(write_log)
-    }
-
-    pub fn read_string(&self, str_ptr: i32, str_len: i32) -> Result<String> {
+    pub fn read_string(&self, str_ptr: u64, str_len: u64) -> Result<String> {
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         let str_vec: Vec<_> = memory.view()
             [str_ptr as usize..(str_ptr + str_len) as usize]
