@@ -1,5 +1,4 @@
-use crate::types::TxMsg;
-use anoma_vm_env::memory;
+use anoma_vm_env::memory::{self, WriteLog};
 use borsh::BorshSerialize;
 use std::io::{IoSlice, Write};
 use thiserror::Error;
@@ -65,7 +64,7 @@ pub struct VpCallInput {
 
 pub fn write_vp_inputs(
     exports: &wasmer::Exports,
-    (tx_data_bytes, write_log): &memory::VpInput,
+    (tx_data_bytes, write_log): memory::VpInput,
 ) -> Result<VpCallInput> {
     let memory = exports
         .get_memory("memory")
@@ -112,29 +111,34 @@ impl AnomaMemory {
         Ok(())
     }
 
-    /// Read a [`Tx_msg`] from memory
-    pub fn read_tx(
+    /// Temporary: Read a transfer data from memory and return it as write log.
+    /// TODO In near future, the tx will call storage API instead.
+    pub fn read_transfer_input(
         &self,
         src_ptr: i32,
         src_len: i32,
         dest_ptr: i32,
         dest_len: i32,
         amount: u64,
-    ) -> Result<TxMsg> {
+    ) -> Result<WriteLog> {
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         let src_vec: Vec<_> = memory.view()
             [src_ptr as usize..(src_ptr + src_len) as usize]
             .iter()
             .map(|cell| cell.get())
             .collect();
-        let src = std::str::from_utf8(&src_vec).unwrap().to_string();
+        let src = std::str::from_utf8(&src_vec)
+            .expect("unable to read string from memory")
+            .to_string();
 
         let dest_vec: Vec<_> = memory.view()
             [dest_ptr as usize..(dest_ptr + dest_len) as usize]
             .iter()
             .map(|cell| cell.get())
             .collect();
-        let dest = std::str::from_utf8(&dest_vec).unwrap().to_string();
+        let dest = std::str::from_utf8(&dest_vec)
+            .expect("unable to read string from memory")
+            .to_string();
 
         log::debug!(
             "transfer called with src: {}, dest: {}, amount: {}",
@@ -143,7 +147,45 @@ impl AnomaMemory {
             amount
         );
 
-        Ok(TxMsg { src, dest, amount })
+        // let src_balance =
+        // let write_log = vec![StorageUpdate::Update {
+        //     key: format!("balance/{}", src, value = src_new_balance),
+        // }];
+        let write_log = vec![];
+
+        Ok(write_log)
+    }
+
+    pub fn read_string(&self, str_ptr: i32, str_len: i32) -> Result<String> {
+        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
+        let str_vec: Vec<_> = memory.view()
+            [str_ptr as usize..(str_ptr + str_len) as usize]
+            .iter()
+            .map(|cell| cell.get())
+            .collect();
+        Ok(std::str::from_utf8(&str_vec)
+            .expect("unable to read string from memory")
+            .to_string())
+    }
+
+    pub fn read_bytes(&self, ptr: u64, len: u64) -> Result<Vec<u8>> {
+        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
+        let vec: Vec<_> = memory.view()[ptr as usize..(ptr + len) as usize]
+            .iter()
+            .map(|cell| cell.get())
+            .collect();
+        Ok(vec)
+    }
+
+    pub fn write_bytes(&self, result_ptr: u64, bytes: Vec<u8>) -> Result<()> {
+        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
+
+        let offset = result_ptr as usize;
+        memory.view()[offset..(offset + bytes.len())]
+            .iter()
+            .zip(bytes.iter())
+            .for_each(|(cell, v)| cell.set(*v));
+        Ok(())
     }
 }
 

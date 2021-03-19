@@ -35,7 +35,7 @@ pub mod memory {
     pub type TxInput = TxData;
 
     /// Input for validity predicate wasm module call
-    pub type VpInput = (TxData, WriteLog);
+    pub type VpInput<'a> = (&'a TxData, &'a WriteLog);
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub struct StorageReadInput {

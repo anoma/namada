@@ -1,13 +1,15 @@
 mod storage;
 mod tendermint;
 
-use std::path::PathBuf;
 use std::sync::mpsc;
+use std::{ffi::c_void, path::PathBuf};
 
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxRunner, VpRunner};
+use borsh::BorshDeserialize;
+use borsh::BorshSerialize;
 use thiserror::Error;
 
 use self::storage::{
@@ -163,26 +165,64 @@ impl Shell {
     }
 }
 
-fn transfer(
+fn vm_storage_read(
     env: &TxEnv,
-    src_ptr: i32,
-    src_len: i32,
-    dest_ptr: i32,
-    dest_len: i32,
-    amount: u64,
-) {
-    let tx_msg = env
+    key_ptr: i32,
+    key_len: i32,
+    result_ptr: u64,
+) -> i32 {
+    let key = env
         .memory
-        .read_tx(src_ptr, src_len, dest_ptr, dest_len, amount)
-        .expect("Cannot read the transaction from memory");
+        .read_string(key_ptr, key_len)
+        .expect("Cannot read the key from memory");
 
-    let sender = env
-        .sender
-        .lock()
-        .expect("Cannot get a lock on the transfer result sender");
-    (*sender)
-        .send(tx_msg)
-        .expect("Cannot send the transfer result");
+    log::info!(
+        "vm_storage_read {}, key {}, result_ptr {}, {:#?}",
+        key,
+        key_ptr,
+        result_ptr,
+        env.memory
+    );
+
+    let shell: &mut Shell = unsafe { &mut *(env.ledger.0 as *mut Shell) };
+
+    // TODO Temporary - read from shell
+    let val: u64 = 100;
+    let mut val_bytes = Vec::with_capacity(8);
+    val.serialize(&mut val_bytes).expect("cannot encode val");
+
+    env.memory
+        .write_bytes(result_ptr, val_bytes.clone())
+        .expect("cannot write to memory");
+
+    1
+
+    // TODO read the value and put it in the result_ptr
+}
+
+fn vm_storage_update(
+    env: &TxEnv,
+    key_ptr: i32,
+    key_len: i32,
+    val_ptr: i32,
+    val_len: i32,
+) {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len)
+        .expect("Cannot read the key from memory");
+    let val = env
+        .memory
+        .read_bytes(val_ptr as u64, val_len as _)
+        .expect("Cannot read the value from memory");
+    let bal: u64 = u64::deserialize(&mut &val[..]).unwrap();
+    // let val = env
+    //     .memory
+    //     .read_bytes(key_ptr, key_len)
+    //     .expect("Cannot read the value from memory");
+
+    log::info!("vm_storage_update {}, {:#?}, {}", key, val, bal)
+    // TODO read the value and put it in the buf
 }
 
 impl Shell {
@@ -209,75 +249,81 @@ impl Shell {
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
         let tx_data = tx.data.unwrap_or(vec![]);
 
-        // Execute the transaction code and wait for result
-        let (tx_sender, tx_receiver) = mpsc::channel();
+        // Execute the transaction code
         let tx_runner = TxRunner::new();
+        let ledger = anoma_vm::LedgerWrapper(self as *mut _ as *mut c_void);
         tx_runner
-            .run(tx.code, tx_data.clone(), tx_sender, transfer)
+            .run(
+                ledger,
+                tx.code,
+                &tx_data,
+                vm_storage_read,
+                vm_storage_update,
+            )
             .map_err(Error::TxRunnerError)?;
-        let tx_msg = tx_receiver
-            .recv()
-            .expect("Expected a message from transaction runner");
-        let src_addr = Address::new_address(tx_msg.src.clone());
-        let dest_addr = Address::new_address(tx_msg.dest.clone());
+        // let write_log = tx_receiver
+        //     .recv()
+        //     .expect("Expected a message from transaction runner");
+        // let src_addr = Address::new_address("va".into());
+        // let dest_addr = Address::new_address("ba".into());
 
-        // Run a VP for every account with modified storage sub-space
-        // TODO run in parallel for all accounts
-        //   - all must return `true` to accept the tx
-        //   - cancel all remaining workers and fail if any returns `false`
-        let src_vp = self
-            .storage
-            .validity_predicate(&src_addr)
-            .map_err(Error::StorageError)?;
-        let dest_vp = self
-            .storage
-            .validity_predicate(&dest_addr)
-            .map_err(Error::StorageError)?;
+        // // Run a VP for every account with modified storage sub-space
+        // // TODO run in parallel for all accounts
+        // //   - all must return `true` to accept the tx
+        // //   - cancel all remaining workers and fail if any returns `false`
+        // let src_vp = self
+        //     .storage
+        //     .validity_predicate(&src_addr)
+        //     .map_err(Error::StorageError)?;
+        // let dest_vp = self
+        //     .storage
+        //     .validity_predicate(&dest_addr)
+        //     .map_err(Error::StorageError)?;
 
-        let vp_runner = VpRunner::new();
-        let (vp_sender, vp_receiver) = mpsc::channel();
-        vp_runner
-            .run(src_vp, tx_data.clone(), vp_sender.clone())
-            .map_err(|error| Error::VpRunnerError {
-                addr: src_addr.clone(),
-                error,
-            })?;
-        let src_accept = vp_receiver
-            .recv()
-            .expect("Expected a message from source's VP runner");
-        vp_runner
-            .run(dest_vp, tx_data, vp_sender)
-            .map_err(|error| Error::VpRunnerError {
-                addr: dest_addr.clone(),
-                error,
-            })?;
-        let dest_accept = vp_receiver
-            .recv()
-            .expect("Expected a message from destination's VP runner");
+        // let vp_runner = VpRunner::new();
+        // let (vp_sender, vp_receiver) = mpsc::channel();
+        // vp_runner
+        //     .run(src_vp, &tx_data, &write_log, vp_sender.clone())
+        //     .map_err(|error| Error::VpRunnerError {
+        //         addr: src_addr.clone(),
+        //         error,
+        //     })?;
+        // let src_accept = vp_receiver
+        //     .recv()
+        //     .expect("Expected a message from source's VP runner");
+        // vp_runner
+        //     .run(dest_vp, &tx_data, &write_log, vp_sender)
+        //     .map_err(|error| Error::VpRunnerError {
+        //         addr: dest_addr.clone(),
+        //         error,
+        //     })?;
+        // let dest_accept = vp_receiver
+        //     .recv()
+        //     .expect("Expected a message from destination's VP runner");
 
-        // Apply the transaction if accepted by all the VPs
-        if src_accept && dest_accept {
-            self.storage
-                .transfer(&src_addr, &dest_addr, tx_msg.amount)
-                .map_err(Error::StorageError)?;
-            log::debug!(
-                "all accepted apply_tx storage modification {:#?}",
-                self.storage
-            );
-        } else {
-            log::debug!(
-                "tx declined by {}",
-                if src_accept {
-                    "dest"
-                } else {
-                    if dest_accept {
-                        "src"
-                    } else {
-                        "src and dest"
-                    }
-                }
-            );
-        }
+        // // Apply the transaction if accepted by all the VPs
+        // if src_accept && dest_accept {
+        //     self.storage
+        //         .transfer(&src_addr, &dest_addr, 10)
+        //         .map_err(Error::StorageError)?;
+        //     log::debug!(
+        //         "all accepted apply_tx storage modification {:#?}",
+        //         self.storage
+        //     );
+        // } else {
+        //     log::debug!(
+        //         "tx declined by {}",
+        //         if src_accept {
+        //             "dest"
+        //         } else {
+        //             if dest_accept {
+        //                 "src"
+        //             } else {
+        //                 "src and dest"
+        //             }
+        //         }
+        //     );
+        // }
 
         Ok(())
     }

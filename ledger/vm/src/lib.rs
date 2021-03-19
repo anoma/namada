@@ -1,23 +1,33 @@
 mod memory;
 pub mod types;
 
+use anoma_vm_env::memory::WriteLog;
 use memory::AnomaMemory;
+use std::ffi::c_void;
 use std::sync::{mpsc, Arc, Mutex};
 use thiserror::Error;
-use types::TxMsg;
 use wasmer::{
-    internals::WithEnv, HostEnvInitError, HostFunction, Instance, WasmerEnv,
+    internals::WithEnv, HostEnvInitError, HostFunction, Instance, WasmPtr,
+    WasmerEnv,
 };
+
+#[derive(Clone)]
+pub struct LedgerWrapper(pub *mut c_void);
+unsafe impl Send for LedgerWrapper {}
+unsafe impl Sync for LedgerWrapper {}
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
 
+// TODO check WasmerEnv issue
 // #[derive(wasmer::WasmerEnv, Clone)]
 #[derive(Clone)]
 pub struct TxEnv {
-    // TODO Mutex is not great, we only ever read, but it's what WasmerEnv
-    // currently implements. There must be a better way...
-    pub sender: Arc<Mutex<mpsc::Sender<TxMsg>>>,
+    // // TODO Mutex is not great, we only ever read, but it's what WasmerEnv
+    // // currently implements. There must be a better way...
+    // pub sender: Arc<Mutex<mpsc::Sender<TxRequest>>>,
+    // not thread-safe, assuming single-theaded Tx runner
+    pub ledger: LedgerWrapper,
     // #[wasmer(export)]
     pub memory: AnomaMemory,
 }
@@ -83,18 +93,20 @@ impl TxRunner {
         Self { wasm_store }
     }
 
-    pub fn run<F>(
+    pub fn run<Read, Update>(
         &self,
+        ledger: LedgerWrapper,
         tx_code: Vec<u8>,
-        tx_data: Vec<u8>,
-        tx_sender: mpsc::Sender<TxMsg>,
-        transfer: F,
+        tx_data: &Vec<u8>,
+        storage_read: Read,
+        storage_update: Update,
     ) -> Result<()>
     where
-        F: HostFunction<(i32, i32, i32, i32, u64), (), WithEnv, TxEnv>,
+        Read: HostFunction<(i32, i32, u64), i32, WithEnv, TxEnv>,
+        Update: HostFunction<(i32, i32, i32, i32), (), WithEnv, TxEnv>,
     {
         let tx_env = TxEnv {
-            sender: Arc::new(Mutex::new(tx_sender)),
+            ledger,
             memory: AnomaMemory::default(),
         };
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
@@ -105,7 +117,8 @@ impl TxRunner {
             // default namespace
             "env" => {
                 "memory" => memory,
-                "transfer" => wasmer::Function::new_native_with_env(&self.wasm_store, tx_env, transfer),
+                "read" => wasmer::Function::new_native_with_env(&self.wasm_store, tx_env.clone(), storage_read),
+                "update" => wasmer::Function::new_native_with_env(&self.wasm_store, tx_env, storage_update),
             },
         };
         // compile and run the transaction wasm code
@@ -119,13 +132,13 @@ impl TxRunner {
     fn run_with_input(
         &self,
         tx_code: Instance,
-        tx_data: Vec<u8>,
+        tx_data: &Vec<u8>,
     ) -> Result<()> {
         let memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
         }: memory::TxCallInput =
-            memory::write_tx_inputs(&tx_code.exports, &tx_data)
+            memory::write_tx_inputs(&tx_code.exports, tx_data)
                 .map_err(Error::MemoryError)?;
         let apply_tx = tx_code
             .exports
@@ -136,6 +149,22 @@ impl TxRunner {
         apply_tx
             .call(tx_data_ptr, tx_data_len)
             .map_err(Error::TxRuntimeError)
+    }
+}
+// #[derive(wasmer::WasmerEnv, Clone)]
+#[derive(Clone)]
+pub struct VpEnv {
+    pub ledger: LedgerWrapper,
+    // #[wasmer(export)]
+    pub memory: AnomaMemory,
+}
+
+impl WasmerEnv for VpEnv {
+    fn init_with_instance(
+        &mut self,
+        instance: &Instance,
+    ) -> std::result::Result<(), HostEnvInitError> {
+        self.memory.init_env_memory(&instance.exports)
     }
 }
 
@@ -162,7 +191,8 @@ impl VpRunner {
     pub fn run(
         &self,
         vp_code: impl AsRef<[u8]>,
-        tx_data: Vec<u8>,
+        tx_data: &Vec<u8>,
+        write_log: &WriteLog,
         vp_sender: mpsc::Sender<VpMsg>,
     ) -> Result<()> {
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
@@ -180,7 +210,6 @@ impl VpRunner {
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::VpInstantiationError)?;
 
-        let write_log = vec![];
         let is_valid = self.run_with_input(vp_code, tx_data, write_log)?;
         vp_sender
             .send(is_valid)
@@ -191,8 +220,8 @@ impl VpRunner {
     fn run_with_input(
         &self,
         vp_code: Instance,
-        tx_data: Vec<u8>,
-        write_log: Vec<anoma_vm_env::StorageUpdate>,
+        tx_data: &Vec<u8>,
+        write_log: &Vec<anoma_vm_env::StorageUpdate>,
     ) -> Result<bool> {
         // TODO this can be nicer
         let inputs = (tx_data, write_log);
@@ -201,7 +230,7 @@ impl VpRunner {
             tx_data_len,
             write_log_ptr,
             write_log_len,
-        } = memory::write_vp_inputs(&vp_code.exports, &inputs)
+        } = memory::write_vp_inputs(&vp_code.exports, inputs)
             .map_err(Error::MemoryError)?;
 
         let validate_tx = vp_code

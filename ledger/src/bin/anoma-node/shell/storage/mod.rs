@@ -128,6 +128,15 @@ impl Storage {
         Ok(())
     }
 
+    // TODO temporary
+    pub fn get_balance(&mut self, addr: &Address) -> Result<Balance> {
+        match self.block.balances.get(addr) {
+            Some(value) => Ok(value.clone()),
+            None => Ok(Balance::new(0)),
+        }
+    }
+
+    // TODO temporary
     pub fn update_balance(
         &mut self,
         addr: &Address,
