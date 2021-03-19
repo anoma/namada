@@ -13,8 +13,8 @@ use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
 pub use self::types::{
-    Address, Balance, BasicAddress, BlockHash, BlockHeight, MerkleTree,
-    ValidatorAddress,
+    Address, BasicAddress, BlockHash, BlockHeight, KeySeg, MerkleTree,
+    ValidatorAddress, Value,
 };
 use self::types::{Hash256, CHAIN_ID_LENGTH};
 use super::MerkleRoot;
@@ -50,21 +50,18 @@ pub struct BlockStorage {
     tree: MerkleTree,
     hash: BlockHash,
     height: BlockHeight,
-    balances: HashMap<Address, Balance>,
-    vps: HashMap<Address, Vec<u8>>,
+    subspaces: HashMap<Address, HashMap<String, Vec<u8>>>,
 }
 
 impl Storage {
     pub fn new(db_path: &PathBuf) -> Self {
         let tree = MerkleTree::default();
-        let balances = HashMap::new();
-        let vps = HashMap::new();
+        let subspaces = HashMap::new();
         let block = BlockStorage {
             tree,
             hash: BlockHash::default(),
             height: BlockHeight(0),
-            balances,
-            vps,
+            subspaces,
         };
         Self {
             // TODO: Error handling
@@ -77,14 +74,14 @@ impl Storage {
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
-        if let Some((chain_id, tree, hash, height, balances)) =
+        if let Some((chain_id, tree, hash, height, subspaces)) =
             self.db.read_last_block().map_err(Error::DBError)?
         {
             self.chain_id = chain_id;
             self.block.tree = tree;
             self.block.hash = hash;
             self.block.height = height;
-            self.block.balances = balances;
+            self.block.subspaces = subspaces;
             log::debug!("Loaded storage from DB: {:#?}", self);
             return Ok(Some((
                 MerkleRoot(
@@ -104,7 +101,7 @@ impl Storage {
                 &self.block.tree,
                 &self.block.hash,
                 &self.block.height,
-                &self.block.balances,
+                &self.block.subspaces,
             )
             .map_err(|e| Error::DBError(e).into())
     }
@@ -128,15 +125,45 @@ impl Storage {
         Ok(())
     }
 
-    pub fn update_balance(
+    pub fn read(
+        &self,
+        addr: &Address,
+        column: &str,
+    ) -> Result<Option<Vec<u8>>> {
+        match self.block.subspaces.get(addr) {
+            // TODO: first read from a write log 
+            Some(subspace) => match subspace.get(column) {
+                Some(bytes) => Ok(Some(bytes.clone())),
+                None => Ok(None),
+            },
+            // TODO: read from DB?
+            //None => self.db.read(addr, column)?;
+            None => Ok(None),
+        }
+    }
+
+    pub fn write(
         &mut self,
         addr: &Address,
-        balance: Balance,
+        column: &str,
+        value: Vec<u8>,
     ) -> Result<()> {
-        let key = addr.hash256();
-        let value = balance.hash256();
-        self.update_tree(key, value)?;
-        self.block.balances.insert(addr.clone(), balance);
+        // TODO: update the merkle tree later
+        let storage_key = format!("{}/{}", addr.to_key_seg(), column);
+        let key = storage_key.hash256();
+        let value_h256 = value.hash256();
+        self.update_tree(key, value_h256)?;
+        // TODO: write to a write log?
+        match self.block.subspaces.get_mut(addr) {
+            Some(subspace) => {
+                subspace.insert(column.to_owned(), value);
+            }
+            None => {
+                let mut subspace = HashMap::new();
+                subspace.insert(column.to_owned(), value);
+                self.block.subspaces.insert(addr.clone(), subspace);
+            }
+        }
         Ok(())
     }
 
@@ -147,29 +174,28 @@ impl Storage {
         dest: &Address,
         amount: u64,
     ) -> Result<()> {
-        match self.block.balances.get(&src) {
+        let src_balance = match self.read(src, "balance/eth")? {
             None => {
                 return Err(Error::Temporary {
                     error: format!("Source balance not found {:?}", src),
                 });
             }
-            Some(&Balance(src_balance)) => {
-                if src_balance < amount {
-                    return Err(Error::Temporary {
-                        error: format!("Source balance is too low {:?}", src),
-                    });
-                };
-                self.update_balance(src, Balance::new(src_balance - amount))?;
-                match self.block.balances.get(&dest) {
-                    None => self.update_balance(dest, Balance::new(amount))?,
-                    Some(&Balance(dest_balance)) => self.update_balance(
-                        dest,
-                        Balance::new(dest_balance + amount),
-                    )?,
-                }
-                Ok(())
-            }
+            Some(bytes) => u64::decode(bytes),
+        };
+        if src_balance < amount {
+            return Err(Error::Temporary {
+                error: format!("Source balance is too low {:?}", src),
+            });
         }
+
+        let dest_balance = match self.read(dest, "balance/eth")? {
+            None => 0,
+            Some(bytes) => u64::decode(bytes),
+        };
+
+        self.write(src, "balance/eth", (src_balance - amount).encode())?;
+        self.write(dest, "balance/eth", (dest_balance + amount).encode())?;
+        Ok(())
     }
 
     /// # Block header data
@@ -200,7 +226,7 @@ impl Storage {
 
     /// Get a validity predicate for the given account address
     pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
-        match self.block.vps.get(addr) {
+        match self.read(addr, "vp")? {
             Some(vp) => Ok(vp.clone()),
             // TODO: this temporarily loads default VP template if none found
             None => Ok(VP_WASM.to_vec()),

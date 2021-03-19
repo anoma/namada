@@ -21,7 +21,7 @@ use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
 use super::types::{BlockHeight, KeySeg};
-use super::{Address, Balance, BlockHash, MerkleTree};
+use super::{Address, BlockHash, MerkleTree};
 use crate::shell::storage::types::Value;
 
 // TODO the DB schema will probably need some kind of versioning
@@ -107,7 +107,7 @@ impl DB {
         tree: &MerkleTree,
         hash: &BlockHash,
         height: &BlockHeight,
-        balances: &HashMap<Address, Balance>,
+        subspaces: &HashMap<Address, HashMap<String, Vec<u8>>>,
     ) -> Result<()> {
         let mut batch = WriteBatch::default();
 
@@ -134,11 +134,15 @@ impl DB {
             let value = hash;
             batch.put(key, value.encode());
         }
-        // Balances
+        // SubSpace
         {
-            balances.iter().for_each(|(addr, balance)| {
-                let key = format!("{}/balance/{}", prefix, addr.to_key_seg());
-                batch.put(key, balance.encode());
+            subspaces.iter().for_each(|(addr, subspace)| {
+                let subspace_prefix =
+                    format!("{}/subspace/{}", prefix, addr.to_key_seg());
+                subspace.iter().for_each(|(column, value)| {
+                    let key = format!("{}/{}", subspace_prefix, column);
+                    batch.put(key, value);
+                });
             });
         }
         let mut write_opts = WriteOptions::default();
@@ -174,7 +178,7 @@ impl DB {
             MerkleTree,
             BlockHash,
             BlockHeight,
-            HashMap<Address, Balance>,
+            HashMap<Address, HashMap<String, Vec<u8>>>,
         )>,
     > {
         let chain_id;
@@ -205,7 +209,8 @@ impl DB {
         let mut root = None;
         let mut store = None;
         let mut hash = None;
-        let mut balances: HashMap<Address, Balance> = HashMap::new();
+        let mut subspaces: HashMap<Address, HashMap<String, Vec<u8>>> =
+            HashMap::new();
         for (key, bytes) in self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
@@ -218,39 +223,49 @@ impl DB {
                     ),
                 }
             })?;
-            let segments: Vec<&str> = path.split('/').collect();
-            match segments[1] {
-                "tree" => match segments[2] {
-                    "root" => root = Some(H256::decode(bytes.to_vec())),
-                    "store" => {
-                        store =
-                            Some(DefaultStore::<H256>::decode(bytes.to_vec()))
-                    }
-                    _ => {
-                        return Err(Error::UnknownKey {
-                            key: path.to_string(),
+            let mut segments: Vec<&str> = path.split('/').collect();
+            match segments.get(1) {
+                Some(prefix) => match *prefix {
+                    "tree" => match segments.get(2) {
+                        Some(smt) => match *smt {
+                            "root" => root = Some(H256::decode(bytes.to_vec())),
+                            "store" => {
+                                store = Some(DefaultStore::<H256>::decode(
+                                    bytes.to_vec(),
+                                ))
+                            }
+                            _ => unknown_key_error(path)?,
+                        },
+                        None => unknown_key_error(path)?,
+                    },
+                    "hash" => hash = Some(BlockHash::decode(bytes.to_vec())),
+                    "subspace" => match segments.get(2) {
+                        Some(addr_str) => {
+                            let addr =
+                                Address::from_key_seg(&(*addr_str).to_owned())
+                                    .map_err(|e| Error::Temporary {
+                                        error: format!(
+                                    "Cannot parse address from key segment: {}",
+                                    e
+                                ),
+                                    })?;
+                            let column = segments.split_off(3).join("/");
+                            match subspaces.get_mut(&addr) {
+                                Some(subspace) => {
+                                    subspace.insert(column, bytes.to_vec());
+                                }
+                                None => {
+                                    let mut subspace = HashMap::new();
+                                    subspace.insert(column, bytes.to_vec());
+                                    subspaces.insert(addr, subspace);
+                                }
+                            };
                         }
-                        .into())
-                    }
+                        None => unknown_key_error(path)?,
+                    },
+                    _ => unknown_key_error(path)?,
                 },
-                "hash" => hash = Some(BlockHash::decode(bytes.to_vec())),
-                "balance" => {
-                    let addr = Address::from_key_seg(&segments[2].to_owned())
-                        .map_err(|e| Error::Temporary {
-                        error: format!(
-                            "Cannot parse address from key segment: {}",
-                            e
-                        ),
-                    })?;
-                    let balance = Balance::decode(bytes.to_vec());
-                    balances.insert(addr, balance);
-                }
-                _ => {
-                    return Err(Error::UnknownKey {
-                        key: path.to_string(),
-                    }
-                    .into())
-                }
+                None => unknown_key_error(path)?,
             }
         }
         if root.is_none() || store.is_none() || hash.is_none() {
@@ -262,7 +277,14 @@ impl DB {
                 root.unwrap(),
                 store.unwrap(),
             ));
-            Ok(Some((chain_id, tree, hash.unwrap(), height, balances)))
+            Ok(Some((chain_id, tree, hash.unwrap(), height, subspaces)))
         }
     }
+}
+
+fn unknown_key_error(key: &str) -> Result<()> {
+    Err(Error::UnknownKey {
+        key: key.to_owned(),
+    }
+    .into())
 }
