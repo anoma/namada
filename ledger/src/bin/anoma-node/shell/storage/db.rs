@@ -61,7 +61,7 @@ pub fn open<P: AsRef<Path>>(path: P) -> Result<DB> {
     cf_opts.create_missing_column_families(true);
     cf_opts.create_if_missing(true);
 
-    cf_opts.set_comparator(&"key_comparator", key_comparator());
+    cf_opts.set_comparator(&"key_comparator", key_comparator);
     let extractor = SliceTransform::create_fixed_prefix(20);
     cf_opts.set_prefix_extractor(extractor);
     // TODO use column families
@@ -70,27 +70,25 @@ pub fn open<P: AsRef<Path>>(path: P) -> Result<DB> {
         .map_err(|e| Error::RocksDBError(e).into())
 }
 
-fn key_comparator() -> fn(&[u8], &[u8]) -> Ordering {
-    |a: &[u8], b: &[u8]| {
-        let a_str = &String::from_utf8(a.to_vec()).unwrap();
-        let b_str = &String::from_utf8(b.to_vec()).unwrap();
+fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
+    let a_str = &String::from_utf8(a.to_vec()).unwrap();
+    let b_str = &String::from_utf8(b.to_vec()).unwrap();
 
-        let a_vec: Vec<&str> = a_str.split('/').collect();
-        let b_vec: Vec<&str> = b_str.split('/').collect();
+    let a_vec: Vec<&str> = a_str.split('/').collect();
+    let b_vec: Vec<&str> = b_str.split('/').collect();
 
-        let result_a_h = a_vec[0].parse::<u64>();
-        let result_b_h = b_vec[0].parse::<u64>();
-        if result_a_h.is_err() || result_b_h.is_err() {
-            // the key doesn't include the height
-            a_str.cmp(b_str)
+    let result_a_h = a_vec[0].parse::<u64>();
+    let result_b_h = b_vec[0].parse::<u64>();
+    if result_a_h.is_err() || result_b_h.is_err() {
+        // the key doesn't include the height
+        a_str.cmp(b_str)
+    } else {
+        let a_h = result_a_h.unwrap();
+        let b_h = result_b_h.unwrap();
+        if a_h == b_h {
+            a_vec[1..].cmp(&b_vec[1..])
         } else {
-            let a_h = result_a_h.unwrap();
-            let b_h = result_b_h.unwrap();
-            if a_h == b_h {
-                a_vec[1..].cmp(&b_vec[1..])
-            } else {
-                a_h.cmp(&b_h)
-            }
+            a_h.cmp(&b_h)
         }
     }
 }
