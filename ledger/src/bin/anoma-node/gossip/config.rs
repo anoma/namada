@@ -21,9 +21,9 @@ const CONFIG_FILE: &str = "gossipsub.json";
 impl NetworkConfig {
     pub fn read_or_generate(
         home_dir: &PathBuf,
-        local_address: Option<String>,
-        peers: Option<Vec<String>>,
-        topics: Option<Vec<String>>,
+        local_address: String,
+        peers: Vec<String>,
+        topics: Vec<String>,
     ) -> Self {
         let config = if home_dir.join("config").join(CONFIG_FILE).exists() {
             Self::read_config(home_dir, peers, topics)
@@ -37,8 +37,8 @@ impl NetworkConfig {
 
     fn read_config(
         home_dir: &PathBuf,
-        peers: Option<Vec<String>>,
-        topics: Option<Vec<String>>,
+        peers: Vec<String>,
+        topics: Vec<String>,
     ) -> Self {
         let path = home_dir.join("config").join(CONFIG_FILE);
         let file = File::open(path).unwrap();
@@ -46,25 +46,20 @@ impl NetworkConfig {
             serde_json::from_reader(file).expect("JSON was not well-formatted");
         Self {
             local_address: config.local_address,
-            peers: peers.unwrap_or(config.peers),
-            gossip: GossipConfig {
-                topics: topics.unwrap_or(config.gossip.topics),
-            },
+            peers: peers,
+            gossip: GossipConfig { topics: topics },
         }
     }
 
     fn generate_config(
-        local_address: Option<String>,
-        peers: Option<Vec<String>>,
-        topics: Option<Vec<String>>,
+        local_address: String,
+        peers: Vec<String>,
+        topics: Vec<String>,
     ) -> Self {
         Self {
-            local_address: local_address
-                .unwrap_or(String::from("/ip4/127.0.0.1/tcp/38153")),
-            peers: peers.unwrap_or_default(),
-            gossip: GossipConfig {
-                topics: topics.unwrap_or_default(),
-            },
+            local_address: local_address,
+            peers: peers,
+            gossip: GossipConfig { topics: topics },
         }
     }
 

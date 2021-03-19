@@ -6,7 +6,7 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
-use clap::{Clap, FromArgMatches, IntoApp};
+use clap::Clap;
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
 
@@ -17,10 +17,6 @@ const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
 #[derive(Clap)]
 #[clap(version = "1.0", author = AUTHOR)]
 pub enum AnomaOpts {
-    /// Anoma node commands
-    Node(LazyOpt),
-    /// Anoma client commands
-    Client(LazyOpt),
     InlinedNode(NodeOpts),
     #[clap(flatten)]
     InlinedClient(ClientOpts),
@@ -67,8 +63,8 @@ pub struct Gossip {
 #[derive(Clap)]
 #[clap(version = "1.0", author = AUTHOR)]
 pub struct NodeOpts {
-    #[clap(short, long)]
-    pub base_dir: Option<String>,
+    #[clap(short, long, default_value = ".anoma")]
+    pub home: String,
     #[clap(short, long)]
     pub rpc: bool,
     #[clap(flatten)]
@@ -94,23 +90,4 @@ pub struct Orderbook {
     pub peers: Option<Vec<String>>,
     #[clap(short, long)]
     pub topics: Option<Vec<String>>,
-}
-
-/// The lazy opt is used for node and client sub-commands, it doesn't actually
-/// parse any commands as the commands are dispatched to `anoma-node` and
-/// `anoma-client`, respectively.
-pub struct LazyOpt;
-impl IntoApp for LazyOpt {
-    fn into_app<'help>() -> clap::App<'help> {
-        clap::App::default()
-    }
-
-    fn augment_clap(app: clap::App<'_>) -> clap::App<'_> {
-        app
-    }
-}
-impl FromArgMatches for LazyOpt {
-    fn from_arg_matches(_matches: &clap::ArgMatches) -> Self {
-        Self
-    }
 }

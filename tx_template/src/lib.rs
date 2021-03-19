@@ -40,31 +40,30 @@ pub extern "C" fn apply_tx(tx_data_ptr: *const u8, tx_data_len: usize) {
     //         read_register(1, value.as_ptr() as u64);
 
     // we know the len from wasm, so just pre-allocate it and give it ptr
-    do_apply_tx(tx_data, tx_data_len as _);
+    do_apply_tx(tx_data);
 }
 
-fn do_apply_tx(_tx_data: memory::TxData, next_ptr: i32) {
+fn do_apply_tx(_tx_data: memory::TxData) {
     // source and destination address
-    let src_key = "balance/va";
-    let dest_key = "balance/ba";
+    let src_key = "va/balance/eth";
+    let dest_key = "ba/balance/eth";
     let amount = 10;
 
     let bal_size = size_of::<u64>();
     let src_bal_buf: Vec<u8> = Vec::with_capacity(bal_size);
-    let result = unsafe {
-        read(
-            src_key.as_ptr(),
-            src_key.len(),
-            src_bal_buf.as_ptr() as *const u64 as u64,
-        )
-    };
+    let result = unsafe { read(src_key.as_ptr(), src_key.len(), src_bal_buf.as_ptr() as u64) };
     if result == 1 {
         let mut slice = unsafe { slice::from_raw_parts(src_bal_buf.as_ptr(), bal_size) };
         let src_bal: u64 = u64::deserialize(&mut slice).unwrap();
 
-        let next_ptr = next_ptr + bal_size as i32;
         let dest_bal_buf: Vec<u8> = Vec::with_capacity(bal_size);
-        let result = unsafe { read(dest_key.as_ptr(), dest_key.len(), next_ptr as _) };
+        let result = unsafe {
+            read(
+                dest_key.as_ptr(),
+                dest_key.len(),
+                dest_bal_buf.as_ptr() as u64,
+            )
+        };
         if result == 1 {
             let mut slice = unsafe { slice::from_raw_parts(dest_bal_buf.as_ptr(), bal_size) };
             let dest_bal: u64 = u64::deserialize(&mut slice).unwrap();

@@ -10,11 +10,11 @@ use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxRunner, VpRunner};
 use borsh::BorshDeserialize;
 use borsh::BorshSerialize;
+use storage::KeySeg;
 use thiserror::Error;
 
 use self::storage::{
-    Address, Balance, BasicAddress, BlockHash, BlockHeight, Storage,
-    ValidatorAddress,
+    Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
 use self::tendermint::{AbciMsg, AbciReceiver};
 
@@ -44,14 +44,14 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn run(config: Config) -> Result<()> {
-    // run our shell via Tendermint ABCI
-    let db_path = config.home_dir.join("db");
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
-    let shell = Shell::new(receiver, db_path);
-    let addr = "127.0.0.1:26658".parse().map_err(|e| Error::Temporary {
-        error: format!("cannot parse tendermint address {}", e),
-    })?;
+    let shell = Shell::new(receiver, &config.db_home_dir());
+    let addr = format!("{}:{}", config.tendermint.host, config.tendermint.port)
+        .parse()
+        .map_err(|e| Error::Temporary {
+            error: format!("cannot parse tendermint address {}", e),
+        })?;
     // Run Tendermint ABCI server in another thread
     std::thread::spawn(move || tendermint::run(sender, config, addr));
     shell.run()
@@ -59,7 +59,7 @@ pub fn run(config: Config) -> Result<()> {
 
 pub fn reset(config: Config) -> Result<()> {
     // simply nuke the DB files
-    let db_path = config.home_dir.join("db");
+    let db_path = config.db_home_dir();
     match std::fs::remove_dir_all(&db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,
@@ -86,16 +86,24 @@ pub enum MempoolTxType {
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
-    pub fn new(abci: AbciReceiver, db_path: PathBuf) -> Self {
+    pub fn new(abci: AbciReceiver, db_path: &PathBuf) -> Self {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
         let va = ValidatorAddress::new_address("va".to_owned());
         storage
-            .update_balance(&va, Balance::new(10000))
+            .write(
+                &va,
+                "balance/eth",
+                vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+            )
             .expect("Unable to set the initial balance for validator account");
         let ba = BasicAddress::new_address("ba".to_owned());
         storage
-            .update_balance(&ba, Balance::new(100))
+            .write(
+                &ba,
+                "balance/eth",
+                vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+            )
             .expect("Unable to set the initial balance for basic account");
         Self { abci, storage }
     }
@@ -185,19 +193,26 @@ fn vm_storage_read(
     );
 
     let shell: &mut Shell = unsafe { &mut *(env.ledger.0 as *mut Shell) };
-
-    // TODO Temporary - read from shell
-    let val: u64 = 100;
-    let mut val_bytes = Vec::with_capacity(8);
-    val.serialize(&mut val_bytes).expect("cannot encode val");
-
-    env.memory
-        .write_bytes(result_ptr, val_bytes.clone())
-        .expect("cannot write to memory");
-
-    1
-
-    // TODO read the value and put it in the result_ptr
+    let keys = key.split('/').collect::<Vec<&str>>();
+    if let [key_a, key_b, key_c] = keys.as_slice() {
+        if "balance" == key_b.to_string() {
+            let addr = storage::Address::from_key_seg(&key_a.to_string())
+                .expect("should be an address");
+            let key = format!("{}/{}", key_b, key_c);
+            let value = shell
+                .storage
+                .read(&addr, &key)
+                .expect("storage read failed")
+                .expect("key not found");
+            let bal: u64 = u64::deserialize(&mut &value[..]).unwrap();
+            log::info!("key {}/{}/{}, value {}", key_a, key_b, key_c, bal);
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            return 1;
+        }
+    }
+    0
 }
 
 fn vm_storage_update(
@@ -215,14 +230,22 @@ fn vm_storage_update(
         .memory
         .read_bytes(val_ptr as u64, val_len as _)
         .expect("Cannot read the value from memory");
-    let bal: u64 = u64::deserialize(&mut &val[..]).unwrap();
-    // let val = env
-    //     .memory
-    //     .read_bytes(key_ptr, key_len)
-    //     .expect("Cannot read the value from memory");
+    log::info!("vm_storage_update {}, {:#?}", key, val);
 
-    log::info!("vm_storage_update {}, {:#?}, {}", key, val, bal)
-    // TODO read the value and put it in the buf
+    let shell: &mut Shell = unsafe { &mut *(env.ledger.0 as *mut Shell) };
+    let keys = key.split('/').collect::<Vec<&str>>();
+    if let [key_a, key_b, key_c] = keys.as_slice() {
+        if "balance" == key_b.to_string() {
+            let addr = storage::Address::from_key_seg(&key_a.to_string())
+                .expect("should be an address");
+            let key = format!("{}/{}", key_b, key_c);
+            log::info!("key {}/{}/{}", key_a, key_b, key_c);
+            shell
+                .storage
+                .write(&addr, &key, val)
+                .expect("VM storage write fail");
+        }
+    }
 }
 
 impl Shell {

@@ -78,18 +78,6 @@ pub struct BasicAddress(pub String);
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct ValidatorAddress(pub String);
 
-#[derive(
-    BorshDeserialize,
-    BorshSerialize,
-    Clone,
-    Debug,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-)]
-pub struct Balance(pub u64);
-
 // TODO make a derive macro for Hash256 https://doc.rust-lang.org/book/ch19-06-macros.html#how-to-write-a-custom-derive-macro
 pub trait Hash256 {
     fn hash256(&self) -> H256;
@@ -127,7 +115,6 @@ pub trait Value: BorshSerialize + BorshDeserialize {
 impl Value for String {}
 impl Value for u64 {}
 impl Value for i64 {}
-impl Value for Balance {}
 impl Value for BlockHeight {}
 impl Value for BlockHash {}
 impl Value for H256 {}
@@ -150,6 +137,11 @@ impl TryFrom<i64> for BlockHeight {
             .try_into()
             .map(BlockHeight)
             .map_err(|e| format!("Unexpected height value {}, {}", value, e))
+    }
+}
+impl BlockHeight {
+    pub fn next_height(&self) -> BlockHeight {
+        BlockHeight(self.0 + 1)
     }
 }
 
@@ -287,24 +279,6 @@ impl KeySeg for ValidatorAddress {
     }
 }
 
-impl Balance {
-    pub fn new(balance: u64) -> Self {
-        Self(balance)
-    }
-}
-impl Hash256 for Balance {
-    fn hash256(&self) -> H256 {
-        if self.0 == 0 {
-            return H256::zero();
-        }
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(&self.encode());
-        hasher.finalize(&mut buf);
-        buf.into()
-    }
-}
-
 impl Hash256 for &str {
     fn hash256(&self) -> H256 {
         if self.is_empty() {
@@ -349,6 +323,16 @@ impl Hash256 for u64 {
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
         hasher.update(&self.encode());
+        hasher.finalize(&mut buf);
+        buf.into()
+    }
+}
+
+impl Hash256 for Vec<u8> {
+    fn hash256(&self) -> H256 {
+        let mut buf = [0u8; 32];
+        let mut hasher = new_blake2b();
+        hasher.update(&self.as_slice());
         hasher.finalize(&mut buf);
         buf.into()
     }
