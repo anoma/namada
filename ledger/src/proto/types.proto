@@ -1,18 +1,35 @@
-syntax = "proto3";
+// XXX TODO proto3 requires all value to be optional, it's a bit annoying
+// Maybe a way can be find
+syntax = "proto2";
+
+// XXX TODO Tonic generate an empty file for this import, can it be removed or clean ?
+import "google/protobuf/timestamp.proto";
 
 package types;
 
+message intent_data {
+  required string addr = 1 ;
+  required string token_buy = 2;
+  required string amount_buy = 3;
+  required string token_sell = 4;
+  required string amount_sell = 5;
+}
 message Intent {
-  string data = 1;
-  // google.protobuf.Timestamp timestamp = 2;
+  required intent_data data = 1;
+  required google.protobuf.Timestamp timestamp = 2;
+}
+
+message Tx {
+  required bytes code = 1;
+  optional bytes data = 2;
 }
 
 message DkgMessage {
-  string data = 1;
+  required string data = 1;
 }
 
 message IntentMessage {
-  Intent intent = 4;
+  required Intent intent = 4;
 }
 
 message Message {

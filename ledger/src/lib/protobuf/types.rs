@@ -1,18 +1,39 @@
-#[derive(Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IntentData {
+    #[prost(string, required, tag = "1")]
+    pub addr: ::prost::alloc::string::String,
+    #[prost(string, required, tag = "2")]
+    pub token_buy: ::prost::alloc::string::String,
+    #[prost(string, required, tag = "3")]
+    pub amount_buy: ::prost::alloc::string::String,
+    #[prost(string, required, tag = "4")]
+    pub token_sell: ::prost::alloc::string::String,
+    #[prost(string, required, tag = "5")]
+    pub amount_sell: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Intent {
-    /// google.protobuf.Timestamp timestamp = 2;
-    #[prost(string, tag = "1")]
-    pub data: ::prost::alloc::string::String,
+    #[prost(message, required, tag = "1")]
+    pub data: IntentData,
+    #[prost(message, required, tag = "2")]
+    pub timestamp: ::prost_types::Timestamp,
 }
-#[derive(Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Tx {
+    #[prost(bytes = "vec", required, tag = "1")]
+    pub code: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub data: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgMessage {
-    #[prost(string, tag = "1")]
+    #[prost(string, required, tag = "1")]
     pub data: ::prost::alloc::string::String,
 }
-#[derive(Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IntentMessage {
-    #[prost(message, optional, tag = "4")]
-    pub intent: ::core::option::Option<Intent>,
+    #[prost(message, required, tag = "4")]
+    pub intent: Intent,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Message {

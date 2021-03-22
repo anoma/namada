@@ -6,4 +6,3 @@ pub mod cli;
 pub mod config;
 pub mod genesis;
 pub mod protobuf;
-pub mod rpc_types;

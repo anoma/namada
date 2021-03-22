@@ -39,7 +39,7 @@ pub enum ClientOpts {
 pub enum InlinedClientOpts {
     /// Submit a transaction and wait for the result
     Tx(Tx),
-    Gossip(Gossip),
+    Intent(IntentArg),
 }
 
 // `anomac` subcommand for submitting transactions
@@ -55,12 +55,30 @@ pub struct Tx {
 }
 // `anomac` subcommand for controlling intent
 #[derive(Clap)]
-pub struct Gossip {
-    /// An example command
-    #[clap(short, long)]
+pub struct IntentArg {
+    // the orderbook adress
+    #[clap(short, long, default_value = "http://[::1]:39111")]
     pub orderbook: String,
+    // the data of the intent, that contains all value necessary for the
+    // matchmaker
+    #[clap(flatten)]
+    pub data: IntentData,
+}
+
+// XXX TODO This is meant to be replace by a file with an unknown encoding to
+// the client
+#[derive(Clap)]
+pub struct IntentData {
     #[clap(short, long)]
-    pub data: String,
+    pub addr: String,
+    #[clap(short, long)]
+    pub token_buy: String,
+    #[clap(short, long)]
+    pub amount_buy: String,
+    #[clap(short, long)]
+    pub token_sell: String,
+    #[clap(short, long)]
+    pub amount_sell: String,
 }
 
 /// The Anoma Node CLI
@@ -79,7 +97,7 @@ pub struct NodeOpts {
 #[derive(Clap)]
 pub enum InlinedNodeOpts {
     /// Run the Anoma gossip node daemon
-    RunOrderbook(Orderbook),
+    RunGossip(Gossip),
     /// Run the Anoma node daemon
     RunAnoma,
     /// Reset any store state
@@ -87,7 +105,7 @@ pub enum InlinedNodeOpts {
 }
 
 #[derive(Clap)]
-pub struct Orderbook {
+pub struct Gossip {
     #[clap(short, long)]
     pub local_address: Option<String>,
     #[clap(short, long)]
@@ -96,6 +114,8 @@ pub struct Orderbook {
     pub orderbook: bool,
     #[clap(short, long)]
     pub dkg: bool,
+    #[clap(short, long)]
+    pub matchmaker: bool,
     #[clap(short, long)]
     pub filter: Option<Vec<u8>>,
 }

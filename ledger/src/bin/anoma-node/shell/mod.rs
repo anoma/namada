@@ -6,8 +6,9 @@ use std::sync::mpsc;
 
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
-use anoma::rpc_types::{Message, Tx};
+use anoma::protobuf::types::Tx;
 use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
+use prost::Message;
 use thiserror::Error;
 
 use self::storage::{
