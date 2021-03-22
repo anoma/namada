@@ -1,8 +1,11 @@
 use anoma::protobuf::types::Intent;
 use prost::Message;
 
-use super::mempool::{IntentId, Mempool};
 use super::types::{InternMessage, Topic};
+use super::{
+    matchmaker::Matchmaker,
+    mempool::{IntentId, Mempool},
+};
 
 #[derive(Debug, Clone)]
 pub enum OrderbookError {
@@ -31,16 +34,13 @@ pub struct Orderbook {
     pub mempool: Mempool,
 }
 impl Orderbook {
-    pub fn new() -> Self {
+    pub fn new(matchmaker: bool) -> Self {
         Self {
             mempool: Mempool::new(),
         }
     }
 
-    pub fn apply(
-        &mut self,
-        data: &Vec<u8>
-    ) -> Result<bool> {
+    pub fn apply(&mut self, data: &Vec<u8>) -> Result<bool> {
         let intent =
             Intent::decode(&data[..]).map_err(OrderbookError::DecodeError)?;
         Ok(true)

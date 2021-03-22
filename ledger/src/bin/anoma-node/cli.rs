@@ -16,11 +16,12 @@ pub fn main(config: Config) -> Result<()> {
 
 fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
     match ops {
-        InlinedNodeOpts::RunOrderbook(arg) => Ok(gossip::run(
+        InlinedNodeOpts::RunGossip(arg) => Ok(gossip::run(
             config,
             rpc,
             arg.orderbook,
             arg.dkg,
+            arg.matchmaker,
             arg.local_address,
             arg.peers,
         )),
