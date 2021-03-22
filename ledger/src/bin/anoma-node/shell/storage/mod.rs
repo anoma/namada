@@ -125,19 +125,37 @@ impl Storage {
         Ok(())
     }
 
+    pub fn has_key(&self, addr: &Address, column: &str) -> Result<bool> {
+        let storage_key = format!("{}/{}", addr.to_key_seg(), column);
+        let key = storage_key.hash256();
+        Ok(!self
+            .block
+            .tree
+            .0
+            .get(&key)
+            .map_err(Error::MerkleTreeError)?
+            .is_zero())
+    }
+
     pub fn read(
         &self,
         addr: &Address,
         column: &str,
     ) -> Result<Option<Vec<u8>>> {
-        match self.block.subspaces.get(addr) {
-            // TODO: first read from a write log 
-            Some(subspace) => match subspace.get(column) {
-                Some(bytes) => Ok(Some(bytes.clone())),
-                None => Ok(None),
-            },
-            // TODO: read from DB?
-            //None => self.db.read(addr, column)?;
+        if !self.has_key(addr, column)? {
+            return Ok(None);
+        }
+
+        if let Some(subspace) = self.block.subspaces.get(addr) {
+            if let Some(bytes) = subspace.get(column) {
+                return Ok(Some(bytes.to_vec()));
+            }
+        }
+
+        match self.block.height.prev_height() {
+            Some(prev) => {
+                self.db.read(prev, addr, column).map_err(Error::DBError)
+            }
             None => Ok(None),
         }
     }
@@ -148,12 +166,11 @@ impl Storage {
         column: &str,
         value: Vec<u8>,
     ) -> Result<()> {
-        // TODO: update the merkle tree later
         let storage_key = format!("{}/{}", addr.to_key_seg(), column);
         let key = storage_key.hash256();
         let value_h256 = value.hash256();
         self.update_tree(key, value_h256)?;
-        // TODO: write to a write log?
+
         match self.block.subspaces.get_mut(addr) {
             Some(subspace) => {
                 subspace.insert(column.to_owned(), value);
@@ -162,6 +179,20 @@ impl Storage {
                 let mut subspace = HashMap::new();
                 subspace.insert(column.to_owned(), value);
                 self.block.subspaces.insert(addr.clone(), subspace);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn delete(&mut self, addr: &Address, column: &str) -> Result<()> {
+        if self.has_key(addr, column)? {
+            // update the merkle tree with a zero as a tombstone
+            let storage_key = format!("{}/{}", addr.to_key_seg(), column);
+            let key = storage_key.hash256();
+            self.update_tree(key, H256::zero())?;
+
+            if let Some(subspace) = self.block.subspaces.get_mut(addr) {
+                subspace.remove(column);
             }
         }
         Ok(())

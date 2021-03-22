@@ -170,6 +170,28 @@ impl DB {
             .map_err(|e| Error::RocksDBError(e).into())
     }
 
+    pub fn read(
+        &self,
+        height: BlockHeight,
+        addr: &Address,
+        column: &str,
+    ) -> Result<Option<Vec<u8>>> {
+        let key = format!(
+            "{}/subspace/{}/{}",
+            height.to_key_seg(),
+            addr.to_key_seg(),
+            column
+        );
+        if let Some(bytes) = self.0.get(key).map_err(Error::RocksDBError)? {
+            return Ok(Some(bytes));
+        }
+
+        match height.prev_height() {
+            Some(prev) => self.read(prev, addr, column),
+            None => Ok(None),
+        }
+    }
+
     pub fn read_last_block(
         &mut self,
     ) -> Result<
