@@ -8,7 +8,6 @@ use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxRunner, VpRunner};
-use borsh::BorshDeserialize;
 use storage::KeySeg;
 use thiserror::Error;
 
