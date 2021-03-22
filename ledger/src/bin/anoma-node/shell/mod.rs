@@ -191,7 +191,7 @@ fn vm_storage_read(
         env.memory
     );
 
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.0 as *mut Shell) };
+    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
     let keys = key.split('/').collect::<Vec<&str>>();
     if let [key_a, key_b, key_c] = keys.as_slice() {
         if "balance" == key_b.to_string() {
@@ -232,7 +232,7 @@ fn vm_storage_update(
         .expect("Cannot read the value from memory");
     log::info!("vm_storage_update {}, {:#?}", key, val);
 
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.0 as *mut Shell) };
+    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
     let keys = key.split('/').collect::<Vec<&str>>();
     if let [key_a, key_b, key_c] = keys.as_slice() {
         if "balance" == key_b.to_string() {
@@ -277,7 +277,9 @@ impl Shell {
 
         // Execute the transaction code
         let tx_runner = TxRunner::new();
-        let ledger = anoma_vm::LedgerWrapper(self as *mut _ as *mut c_void);
+        let ledger = unsafe {
+            anoma_vm::TxShellWrapper::new(self as *mut _ as *mut c_void)
+        };
         tx_runner
             .run(
                 ledger,

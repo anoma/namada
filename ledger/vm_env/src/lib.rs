@@ -5,8 +5,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 /// Storage modifications
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub enum StorageUpdate {
-    Update { key: String, value: String },
+pub enum StorageWrite {
+    Write { key: String, value: String },
     Delete { key: String },
 }
 
@@ -29,7 +29,7 @@ pub mod memory {
 
     /// The storage write log of storage updates performed by the
     /// transaction for the account associated with the VP
-    pub type WriteLog = Vec<StorageUpdate>;
+    pub type WriteLog = Vec<StorageWrite>;
 
     /// Input for transaction wasm module call
     pub type TxInput = TxData;
@@ -58,7 +58,7 @@ pub mod memory {
 
     /// The storage update is stored in the host, so there is no output
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageUpdateInput(pub StorageUpdate);
+    pub struct StorageWriteInput(pub StorageWrite);
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub struct StorageReadSelfInput {

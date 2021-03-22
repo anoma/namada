@@ -1,7 +1,6 @@
 mod memory;
-pub mod types;
 
-use anoma_vm_env::memory::WriteLog;
+use anoma_vm_env::memory::{VpInput, WriteLog};
 use memory::AnomaMemory;
 use std::ffi::c_void;
 use std::sync::mpsc;
@@ -10,21 +9,33 @@ use wasmer::{
     internals::WithEnv, HostEnvInitError, HostFunction, Instance, WasmerEnv,
 };
 
+/// This is used to attach the Ledger's shell to transaction environment,
+/// which is used for implementing some host calls.
+/// It's not thread-safe, we're assuming single-threaded Tx runner.
 #[derive(Clone)]
-pub struct LedgerWrapper(pub *mut c_void);
-unsafe impl Send for LedgerWrapper {}
-unsafe impl Sync for LedgerWrapper {}
+pub struct TxShellWrapper(*mut c_void);
+unsafe impl Send for TxShellWrapper {}
+unsafe impl Sync for TxShellWrapper {}
+
+impl TxShellWrapper {
+    /// This is not thread-safe, we're assuming single-threaded Tx runner.
+    pub unsafe fn new(ledger: *mut c_void) -> Self {
+        Self(ledger)
+    }
+
+    /// This is not thread-safe, we're assuming single-threaded Tx runner.
+    pub unsafe fn get(&self) -> *mut c_void {
+        self.0
+    }
+}
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
 
-// TODO check WasmerEnv macro issue
-// #[derive(wasmer::WasmerEnv, Clone)]
 #[derive(Clone)]
 pub struct TxEnv {
-    // not thread-safe, assuming single-theaded Tx runner
-    pub ledger: LedgerWrapper,
-    // #[wasmer(export)]
+    // not thread-safe, assuming single-threaded Tx runner
+    pub ledger: TxShellWrapper,
     pub memory: AnomaMemory,
 }
 
@@ -89,17 +100,17 @@ impl TxRunner {
         Self { wasm_store }
     }
 
-    pub fn run<Read, Update>(
+    pub fn run<Read, Write>(
         &self,
-        ledger: LedgerWrapper,
+        ledger: TxShellWrapper,
         tx_code: Vec<u8>,
         tx_data: &Vec<u8>,
         storage_read: Read,
-        storage_update: Update,
+        storage_update: Write,
     ) -> Result<()>
     where
         Read: HostFunction<(u64, u64, u64), u64, WithEnv, TxEnv>,
-        Update: HostFunction<(u64, u64, u64, u64), u64, WithEnv, TxEnv>,
+        Write: HostFunction<(u64, u64, u64, u64), u64, WithEnv, TxEnv>,
     {
         let tx_env = TxEnv {
             ledger,
@@ -108,6 +119,8 @@ impl TxRunner {
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::TxCompileError)?;
         let memory = memory::prepare_tx_memory(&self.wasm_store)
+            .map_err(Error::MemoryError)?;
+        let call_input = memory::write_tx_inputs(&memory, tx_data)
             .map_err(Error::MemoryError)?;
         let tx_imports = wasmer::imports! {
             // default namespace
@@ -121,21 +134,18 @@ impl TxRunner {
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::TxInstantiationError)?;
 
-        self.run_with_input(tx_code, tx_data)?;
+        self.run_with_input(tx_code, call_input)?;
         Ok(())
     }
 
     fn run_with_input(
         &self,
         tx_code: Instance,
-        tx_data: &Vec<u8>,
-    ) -> Result<()> {
-        let memory::TxCallInput {
+        memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
-        }: memory::TxCallInput =
-            memory::write_tx_inputs(&tx_code.exports, tx_data)
-                .map_err(Error::MemoryError)?;
+        }: memory::TxCallInput,
+    ) -> Result<()> {
         let apply_tx = tx_code
             .exports
             .get_function(TX_ENTRYPOINT)
@@ -150,7 +160,7 @@ impl TxRunner {
 // #[derive(wasmer::WasmerEnv, Clone)]
 #[derive(Clone)]
 pub struct VpEnv {
-    pub ledger: LedgerWrapper,
+    pub ledger: TxShellWrapper,
     // #[wasmer(export)]
     pub memory: AnomaMemory,
 }
@@ -176,9 +186,6 @@ impl VpRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        // TODO Could we pass the modified accounts sub-spaces via WASM store
-        // directly to VPs' wasm scripts to avoid passing it through the
-        // host?
         let wasm_store =
             wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
         Self { wasm_store }
@@ -197,6 +204,9 @@ impl VpRunner {
 
         let memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
+        let input: VpInput = (addr, tx_data, write_log);
+        let call_input = memory::write_vp_inputs(&memory, input)
+            .map_err(Error::MemoryError)?;
         let vp_imports = wasmer::imports! {
             // default namespace
             "env" => {
@@ -207,8 +217,8 @@ impl VpRunner {
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::VpInstantiationError)?;
 
-        let is_valid =
-            self.run_with_input(vp_code, tx_data, addr, write_log)?;
+        let is_valid = self.run_with_input(vp_code, call_input)?;
+
         vp_sender
             .send(is_valid)
             .map_err(|e| Error::VpChannelError(e))?;
@@ -218,22 +228,15 @@ impl VpRunner {
     fn run_with_input(
         &self,
         vp_code: Instance,
-        tx_data: &Vec<u8>,
-        addr: String,
-        write_log: &Vec<anoma_vm_env::StorageUpdate>,
-    ) -> Result<bool> {
-        // TODO this can be nicer
-        let inputs = (addr, tx_data, write_log);
-        let memory::VpCallInput {
+        memory::VpCallInput {
             addr_ptr,
             addr_len,
             tx_data_ptr,
             tx_data_len,
             write_log_ptr,
             write_log_len,
-        } = memory::write_vp_inputs(&vp_code.exports, inputs)
-            .map_err(Error::MemoryError)?;
-
+        }: memory::VpCallInput,
+    ) -> Result<bool> {
         let validate_tx = vp_code
             .exports
             .get_function(VP_ENTRYPOINT)
