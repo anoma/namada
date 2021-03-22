@@ -176,10 +176,6 @@ impl DB {
         addr: &Address,
         column: &str,
     ) -> Result<Option<Vec<u8>>> {
-        if height.is_genesis() {
-            return Ok(None);
-        }
-
         let key = format!(
             "{}/subspace/{}/{}",
             height.to_key_seg(),
