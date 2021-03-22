@@ -125,19 +125,39 @@ impl Storage {
         Ok(())
     }
 
+    pub fn has_key(&self, addr: &Address, column: &str) -> Result<bool> {
+        //TODO: check a write log
+        let storage_key = format!("{}/{}", addr.to_key_seg(), column);
+        let key = storage_key.hash256();
+        Ok(!self
+            .block
+            .tree
+            .0
+            .get(&key)
+            .map_err(Error::MerkleTreeError)?
+            .is_zero())
+    }
+
     pub fn read(
         &self,
         addr: &Address,
         column: &str,
     ) -> Result<Option<Vec<u8>>> {
-        match self.block.subspaces.get(addr) {
-            // TODO: first read from a write log 
-            Some(subspace) => match subspace.get(column) {
-                Some(bytes) => Ok(Some(bytes.clone())),
-                None => Ok(None),
-            },
-            // TODO: read from DB?
-            //None => self.db.read(addr, column)?;
+        // TODO: first read from a write log
+        if !self.has_key(addr, column)? {
+            return Ok(None);
+        }
+
+        if let Some(subspace) = self.block.subspaces.get(addr) {
+            if let Some(bytes) = subspace.get(column) {
+                return Ok(Some(bytes.to_vec()));
+            }
+        }
+
+        match self.block.height.prev_height() {
+            Some(prev) => {
+                self.db.read(prev, addr, column).map_err(Error::DBError)
+            }
             None => Ok(None),
         }
     }
@@ -165,6 +185,17 @@ impl Storage {
             }
         }
         Ok(())
+    }
+
+    pub fn delete(&mut self, addr: &Address, column: &str) -> Result<()> {
+        // TODO: update write log?
+        if let Some(subspace) = self.block.subspaces.get_mut(addr) {
+            subspace.remove(column);
+        }
+        // update the merkle tree to add a zero as a tombstone
+        let storage_key = format!("{}/{}", addr.to_key_seg(), column);
+        let key = storage_key.hash256();
+        self.update_tree(key, H256::zero())
     }
 
     // TODO this doesn't belong here, temporary for convenience...
