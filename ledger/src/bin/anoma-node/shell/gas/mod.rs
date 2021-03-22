@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Transaction gas limit exceeded")]
@@ -6,44 +8,54 @@ pub enum Error {
     BlockGasExceeded(),
 }
 
+const BASE_TRANSACTION_FEE: i64 = 2;
 const BLOCK_GAS_LIMIT: i64 = 1000;
 const TRANSACTION_GAS_LIMIT: i64 = 100;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-trait GasCounter {
+pub trait GasCounter {
     fn add(&mut self, gas: i64) -> Result<()>;
-    fn finalize_transaction(&mut self, gas: i64) -> Result<()>;
+    fn finalize_transaction(&mut self) -> Result<i64>;
 }
 
 #[derive(Debug)]
 pub struct BlockGasMeter {
-    block_gas: i32,
-    transaction_gas: i32,
+    block_gas: i64,
+    transaction_gas: i64,
 }
 
 impl GasCounter for BlockGasMeter {
     fn add(&mut self, gas: i64) -> Result<()> {
         self.transaction_gas += gas;
-        if (self.transaction_gas > TRANSACTION_GAS_LIMIT) {
+        if self.transaction_gas > TRANSACTION_GAS_LIMIT {
             self.transaction_gas -= gas;
-            return TransactionGasExceedededError();
+            return Err(Error::TransactionGasExceedededError());
         }
-        return Ok();
+        return Ok(());
     }
 
-    fn finalize_transaction(&mut self, gas: i64) -> Result<()> {
+    fn finalize_transaction(&mut self) -> Result<i64> {
         self.block_gas += self.transaction_gas;
-        if (self.block_gas > BLOCK_GAS_LIMIT) {
+        if self.block_gas > BLOCK_GAS_LIMIT {
             self.block_gas -= self.transaction_gas;
-            return BlockGasExceeded();
+            return Err(Error::TransactionGasExceedededError());
         }
-        return Ok();
+        return Ok(self.block_gas);
     }
 }
 
-impl Default for MerkleTree {
+impl BlockGasMeter {
+    pub fn add_with_base_fee(&mut self, gas: i64) -> Result<()> {
+        return self.add(gas + BASE_TRANSACTION_FEE);
+    }
+}
+
+impl Default for BlockGasMeter {
     fn default() -> Self {
-        BlockGasMeter(0, 0);
+        BlockGasMeter {
+            block_gas: 0,
+            transaction_gas: 0,
+        }
     }
 }
