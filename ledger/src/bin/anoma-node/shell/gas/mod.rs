@@ -6,14 +6,14 @@ pub enum Error {
     BlockGasExceeded(),
 }
 
-const BLOCK_GAS_LIMIT: usize = 1000;
-const TRANSACTION_GAS_LIMIT: usize = 100;
+const BLOCK_GAS_LIMIT: i64 = 1000;
+const TRANSACTION_GAS_LIMIT: i64 = 100;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 trait GasCounter {
-    fn add(&mut self, gas: i32) -> Result<()>;
-    fn finalize_transaction(&mut self, gas: i32) -> Result<()>;
+    fn add(&mut self, gas: i64) -> Result<()>;
+    fn finalize_transaction(&mut self, gas: i64) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -22,8 +22,8 @@ pub struct BlockGasMeter {
     transaction_gas: i32,
 }
 
-impl GasgCounter for BlockGasMeter {
-    fn add(&mut self, gas: i32) -> Result<()> {
+impl GasCounter for BlockGasMeter {
+    fn add(&mut self, gas: i64) -> Result<()> {
         self.transaction_gas += gas;
         if (self.transaction_gas > TRANSACTION_GAS_LIMIT) {
             self.transaction_gas -= gas;
@@ -32,7 +32,7 @@ impl GasgCounter for BlockGasMeter {
         return Ok();
     }
 
-    fn finalize_transaction(&mut self, gas: i32) -> Result<()> {
+    fn finalize_transaction(&mut self, gas: i64) -> Result<()> {
         self.block_gas += self.transaction_gas;
         if (self.block_gas > BLOCK_GAS_LIMIT) {
             self.block_gas -= self.transaction_gas;
