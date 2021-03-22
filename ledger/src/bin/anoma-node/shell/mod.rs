@@ -203,8 +203,6 @@ fn vm_storage_read(
                 .read(&addr, &key)
                 .expect("storage read failed")
                 .expect("key not found");
-            let bal: u64 = u64::deserialize(&mut &value[..]).unwrap();
-            log::info!("key {}/{}/{}, value {}", key_a, key_b, key_c, bal);
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
@@ -239,7 +237,6 @@ fn vm_storage_update(
             let addr = storage::Address::from_key_seg(&key_a.to_string())
                 .expect("should be an address");
             let key = format!("{}/{}", key_b, key_c);
-            log::info!("key {}/{}/{}", key_a, key_b, key_c);
             shell
                 .storage
                 .write(&addr, &key, val)
