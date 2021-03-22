@@ -140,6 +140,18 @@ impl TryFrom<i64> for BlockHeight {
     }
 }
 impl BlockHeight {
+    pub fn is_genesis(&self) -> bool {
+        self.0 == 1
+    }
+
+    pub fn prev_height(&self) -> Option<BlockHeight> {
+        if self.is_genesis() {
+            None
+        } else {
+            Some(BlockHeight(self.0 - 1))
+        }
+    }
+
     pub fn next_height(&self) -> BlockHeight {
         BlockHeight(self.0 + 1)
     }
