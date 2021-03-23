@@ -21,7 +21,8 @@ pub extern "C" fn validate_tx(
 ) -> u64 {
     // TODO more plumbing here
     let slice = unsafe { slice::from_raw_parts(addr_ptr as *const u8, addr_len as _) };
-    let addr = String::try_from_slice(&slice).unwrap();
+    // let addr = String::try_from_slice(slice).unwrap();
+    let addr = core::str::from_utf8(slice).unwrap();
     let slice = unsafe { slice::from_raw_parts(tx_data_ptr as *const u8, tx_data_len as _) };
     let tx_data = slice.to_vec() as memory::TxData;
     let slice = unsafe { slice::from_raw_parts(write_log_ptr as _, write_log_len as _) };
@@ -35,7 +36,7 @@ pub extern "C" fn validate_tx(
     }
 }
 
-fn do_validate_tx(_tx_data: memory::TxData, _addr: String, _write_log: memory::WriteLog) -> bool {
+fn do_validate_tx(_tx_data: memory::TxData, _addr: &str, _write_log: memory::WriteLog) -> bool {
     // if tx.amount > 0
     // // && tx.src == "va"
     // {

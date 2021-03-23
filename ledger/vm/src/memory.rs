@@ -11,34 +11,40 @@ pub enum Error {
     MemoryExportError(wasmer::ExportError),
     #[error("Memory is not initialized")]
     UninitializedMemory,
-    #[error("Exceeded memory bounds")]
-    ExceededMemoryBounds,
+    #[error("Memory ouf of bounds: {0}")]
+    MemoryOutOfBounds(wasmer::MemoryError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 // The bounds are set in number of pages, the actual size is multiplied by
-// `WASM_PAGE_SIZE = 64kiB`. The wasm code also occupies the memory space.
+// `wasmer::WASM_PAGE_SIZE = 64kiB`. The wasm code also occupies the memory
+// space.
 // TODO set bounds to accommodate for wasm env size
-const TX_MIN_SIZE: u32 = 100; // 6.4 MiB
-const TX_MAX_SIZE: u32 = 200; // 12.8 MiB
-const VP_MIN_SIZE: u32 = 100; // 6.4 MiB
-const VP_MAX_SIZE: u32 = 200; // 12.8 MiB
+const TX_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
+const TX_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
+const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
+const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 
 /// Prepare memory for instantiating a transaction module
 pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
-    let mem_type =
-        wasmer::MemoryType::new(TX_MIN_SIZE, Some(TX_MAX_SIZE), false);
+    let mem_type = wasmer::MemoryType::new(
+        TX_MEMORY_INIT_PAGES,
+        Some(TX_MEMORY_MAX_PAGES),
+        false,
+    );
     Memory::new(store, mem_type).map_err(Error::InitMemoryError)
 }
 
 /// Prepare memory for instantiating a validity predicate module
 pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
-    let mem_type =
-        wasmer::MemoryType::new(VP_MIN_SIZE, Some(VP_MAX_SIZE), false);
+    let mem_type = wasmer::MemoryType::new(
+        VP_MEMORY_INIT_PAGES,
+        Some(VP_MEMORY_MAX_PAGES),
+        false,
+    );
     let memory =
         Memory::new(store, mem_type).map_err(Error::InitMemoryError)?;
-    log::info!("prepare VP memory size before: {}", memory.data_size());
     Ok(memory)
 }
 
@@ -54,8 +60,8 @@ pub fn write_tx_inputs(
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as _;
 
-    write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)
-        .expect("TEMPORARY: failed to write input for transaction");
+    log::info!("write_tx_inputs {}", tx_data_len);
+    write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)?;
 
     Ok(TxCallInput {
         tx_data_ptr,
@@ -63,6 +69,7 @@ pub fn write_tx_inputs(
     })
 }
 
+#[derive(Clone, Debug)]
 pub struct VpCallInput {
     pub addr_ptr: u64,
     pub addr_len: u64,
@@ -77,25 +84,33 @@ pub fn write_vp_inputs(
     (addr, tx_data_bytes, write_log): memory::VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
-    let mut addr_bytes = Vec::with_capacity(1024);
-    addr.serialize(&mut addr_bytes)
-        .expect("TEMPORARY: failed to serialize addr for validity predicate");
+    let addr_bytes = addr.as_bytes();
+    // TODO there is some issue with serializing String with Borsh
+    // We can decode it back below (`addr2`), but in wasm deserialization fails.
+    // It encodes "va" as `[ 2, 0, 0, 0, 118, 97, ]`,
+    // whereas `String::as_bytes` encodes it just as [ 118, 97, ]
+
+    // let addr_bytes = addr.try_to_vec().expect(
+    //     "TEMPORARY: failed to serialize addr for validity predicate",
+    // );
+
     let addr_len = addr_bytes.len() as _;
+    // let addr2 = <String as
+    // borsh::BorshDeserialize>::try_from_slice(&addr_bytes[..])
+    //     .unwrap();
+    // println!("write_vp 2 {}", addr2);
 
     let tx_data_ptr = addr_ptr + addr_len;
     let tx_data_len = tx_data_bytes.len() as _;
 
-    let mut write_log_bytes = Vec::with_capacity(1024);
-    write_log.serialize(&mut write_log_bytes).expect(
+    let write_log_bytes = write_log.try_to_vec().expect(
         "TEMPORARY: failed to serialize write_log for validity predicate",
     );
     let write_log_ptr = tx_data_ptr + tx_data_len;
     let write_log_len = write_log_bytes.len() as _;
 
-    let bufs =
-        [&addr_bytes[..], &tx_data_bytes[..], &write_log_bytes[..]].concat();
-    write_memory_bytes(memory, addr_ptr, bufs)
-        .expect("TEMPORARY: failed to write input for validity predicate");
+    let bytes = [&addr_bytes[..], tx_data_bytes, &write_log_bytes[..]].concat();
+    write_memory_bytes(memory, addr_ptr, bytes)?;
 
     Ok(VpCallInput {
         addr_ptr,
@@ -106,10 +121,28 @@ pub fn write_vp_inputs(
         write_log_len,
     })
 }
-/// Check that the given offset and length fits into the memory bounds
-fn check_bounds(memory: &Memory, offset: u64, len: u64) -> Result<()> {
-    if memory.data_size() < offset + len {
-        Err(Error::ExceededMemoryBounds)
+
+/// Check that the given offset and length fits into the memory bounds. If not,
+/// it will try to grow the memory.
+fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
+    log::info!(
+        "check_bounds pages {}, data_size {}, offset + len {}",
+        memory.size().0,
+        memory.data_size(),
+        offset + len as u64
+    );
+    if memory.data_size() < offset + len as u64 {
+        let cur_pages = memory.size().0;
+        let capacity = cur_pages as usize * wasmer::WASM_PAGE_SIZE;
+        let missing = offset as usize + len - capacity;
+        // Ceiling division
+        let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
+            / wasmer::WASM_PAGE_SIZE) as u32;
+        log::info!("trying to grow memory by {} pages", req_pages);
+        memory
+            .grow(req_pages)
+            .map(|_pages| ())
+            .map_err(|e| Error::MemoryOutOfBounds(e))
     } else {
         Ok(())
     }
@@ -119,10 +152,11 @@ fn check_bounds(memory: &Memory, offset: u64, len: u64) -> Result<()> {
 fn read_memory_bytes(
     memory: &Memory,
     offset: u64,
-    len: u64,
+    len: usize,
 ) -> Result<Vec<u8>> {
     check_bounds(memory, offset, len)?;
-    let vec: Vec<_> = memory.view()[offset as usize..(offset + len) as usize]
+    let offset = offset as usize;
+    let vec: Vec<_> = memory.view()[offset..(offset + len)]
         .iter()
         .map(|cell| cell.get())
         .collect();
@@ -164,7 +198,7 @@ impl AnomaMemory {
     }
 
     /// Read bytes from memory at the given offset and length
-    pub fn read_bytes(&self, offset: u64, len: u64) -> Result<Vec<u8>> {
+    pub fn read_bytes(&self, offset: u64, len: usize) -> Result<Vec<u8>> {
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         read_memory_bytes(memory, offset, len)
     }
@@ -179,7 +213,7 @@ impl AnomaMemory {
     }
 
     /// Read string from memory at the given offset and bytes length
-    pub fn read_string(&self, offset: u64, len: u64) -> Result<String> {
+    pub fn read_string(&self, offset: u64, len: usize) -> Result<String> {
         let bytes = self.read_bytes(offset, len)?;
         Ok(std::str::from_utf8(&bytes)
             .expect("unable to decode string from memory")

@@ -171,6 +171,7 @@ impl Shell {
     }
 }
 
+/// Storage read function exposed to the wasm VM environment
 fn vm_storage_read(
     env: &TxEnv,
     key_ptr: u64,
@@ -179,7 +180,7 @@ fn vm_storage_read(
 ) -> u64 {
     let key = env
         .memory
-        .read_string(key_ptr, key_len)
+        .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
 
     log::debug!(
@@ -211,6 +212,7 @@ fn vm_storage_read(
     0
 }
 
+/// Storage update function exposed to the wasm VM environment
 fn vm_storage_update(
     env: &TxEnv,
     key_ptr: u64,
@@ -220,7 +222,7 @@ fn vm_storage_update(
 ) -> u64 {
     let key = env
         .memory
-        .read_string(key_ptr, key_len)
+        .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
     let val = env
         .memory
