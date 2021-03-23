@@ -173,16 +173,19 @@ impl Storage {
         addr: &Address,
         column: &str,
         value: Vec<u8>,
-    ) -> Result<u64> {
+    ) -> Result<(u64, i64)> {
         let storage_key = format!("{}/{}", addr.to_key_seg(), column);
         let key = storage_key.hash256();
         let value_h256 = value.hash256();
         self.update_tree(key, value_h256)?;
 
-        let len = value.len() as u64;
+        let len = value.len();
+        let mut size_diff = 0;
         match self.block.subspaces.get_mut(addr) {
             Some(subspace) => {
-                subspace.insert(column.to_owned(), value);
+                if let Some(old) = subspace.insert(column.to_owned(), value) {
+                    size_diff = len as i64 - old.len() as i64;
+                }
             }
             None => {
                 let mut subspace = HashMap::new();
@@ -190,10 +193,11 @@ impl Storage {
                 self.block.subspaces.insert(addr.clone(), subspace);
             }
         }
-        Ok(len)
+        Ok((len as u64, size_diff))
     }
 
-    pub fn delete(&mut self, addr: &Address, column: &str) -> Result<()> {
+    pub fn delete(&mut self, addr: &Address, column: &str) -> Result<(u64, i64)> {
+        let mut size_diff = 0;
         if self.has_key(addr, column)? {
             // update the merkle tree with a zero as a tombstone
             let storage_key = format!("{}/{}", addr.to_key_seg(), column);
@@ -201,10 +205,12 @@ impl Storage {
             self.update_tree(key, H256::zero())?;
 
             if let Some(subspace) = self.block.subspaces.get_mut(addr) {
-                subspace.remove(column);
+                if let Some(old_v) = subspace.remove(column) {
+                    size_diff -= old_v.len() as i64;
+                }
             }
         }
-        Ok(())
+        Ok((-size_diff as u64, size_diff))
     }
 
     /// # Block header data
