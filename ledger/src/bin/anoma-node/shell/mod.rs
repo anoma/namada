@@ -19,9 +19,6 @@ use self::{
         ValidatorAddress,
     },
 };
-use crate::shell::gas::GasCounter;
-
-const TX_GAS_PER_BYTE: i64 = 2;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -81,7 +78,7 @@ pub fn reset(config: Config) -> Result<()> {
 pub struct Shell {
     abci: AbciReceiver,
     storage: storage::Storage,
-    gasMeter: BlockGasMeter,
+    gas_meter: BlockGasMeter,
 }
 
 #[derive(Clone, Debug)]
@@ -118,7 +115,7 @@ impl Shell {
         Self {
             abci,
             storage,
-            gasMeter: BlockGasMeter::default(),
+            gas_meter: BlockGasMeter::default(),
         }
     }
 
@@ -317,19 +314,21 @@ impl Shell {
             );
         }
 
-        let transactionStorageGas = (tx_bytes.len() as i64) * TX_GAS_PER_BYTE;
+        let transaction_storage_gas =
+            (tx_bytes.len() as i64) * gas::TX_GAS_PER_BYTE;
         let _ = self
-            .gasMeter
-            .add_with_base_fee(transactionStorageGas)
+            .gas_meter
+            .add_base_transaction_fee(transaction_storage_gas)
             .map_err(|_| Error::TooHighTransactionGasUsage);
-        let totalGasUsed = match self.gasMeter.finalize_transaction() {
+        match self.gas_meter.finalize_transaction() {
             Ok(gas) => return Ok(gas),
-            Err(e) => return Err(Error::TooHighBlockGasUsage()),
+            Err(_) => return Err(Error::TooHighBlockGasUsage()),
         };
     }
 
     /// Begin a new block.
     pub fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
+        self.gas_meter.reset();
         self.storage.begin_block(hash, height).unwrap();
     }
 
