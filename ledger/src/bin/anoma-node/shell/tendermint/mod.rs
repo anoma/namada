@@ -56,7 +56,7 @@ pub enum AbciMsg {
     },
     /// Apply a transaction in a block
     ApplyTx {
-        reply: Sender<Result<(), String>>,
+        reply: Sender<Result<i64, String>>,
         tx: Vec<u8>,
     },
     /// End a block
@@ -267,10 +267,10 @@ impl tendermint_abci::Application for AbciWrapper {
             .expect("TEMPORARY: failed to recv ApplyTx response");
 
         match result {
-            Ok(()) => {
-                resp.info = "Transaction successfully
-        applied"
-                    .to_string()
+            Ok(gas) => {
+                resp.gas_used = gas;
+                resp.info =
+                    format!("Transaction successfully applied with gas {}", gas)
             }
             Err(msg) => {
                 resp.code = 1;
