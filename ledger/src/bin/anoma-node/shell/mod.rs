@@ -182,12 +182,11 @@ fn vm_storage_read(
         .read_string(key_ptr, key_len)
         .expect("Cannot read the key from memory");
 
-    log::info!(
-        "vm_storage_read {}, key {}, result_ptr {}, {:#?}",
+    log::debug!(
+        "vm_storage_read {}, key {}, result_ptr {}",
         key,
         key_ptr,
         result_ptr,
-        env.memory
     );
 
     let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
@@ -227,7 +226,7 @@ fn vm_storage_update(
         .memory
         .read_bytes(val_ptr, val_len as _)
         .expect("Cannot read the value from memory");
-    log::info!("vm_storage_update {}, {:#?}", key, val);
+    log::debug!("vm_storage_update {}, {:#?}", key, val);
 
     let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
     let keys = key.split('/').collect::<Vec<&str>>();
@@ -337,9 +336,6 @@ impl Shell {
 
         // Apply the transaction if accepted by all the VPs
         if src_accept && dest_accept {
-            self.storage
-                .transfer(&src_addr, &dest_addr, 10)
-                .map_err(Error::StorageError)?;
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage

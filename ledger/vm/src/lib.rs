@@ -157,11 +157,10 @@ impl TxRunner {
             .map_err(Error::TxRuntimeError)
     }
 }
-// #[derive(wasmer::WasmerEnv, Clone)]
+
 #[derive(Clone)]
 pub struct VpEnv {
     pub ledger: TxShellWrapper,
-    // #[wasmer(export)]
     pub memory: AnomaMemory,
 }
 
