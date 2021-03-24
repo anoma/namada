@@ -1,6 +1,6 @@
-use super::TxShellWrapper;
+use super::TxStorageWrapper;
 use super::{
-    super::{storage, Shell},
+    super::{storage, Storage},
     memory::AnomaMemory,
 };
 use wasmer::{
@@ -10,7 +10,7 @@ use wasmer::{
 #[derive(Clone)]
 struct TxEnv {
     // not thread-safe, assuming single-threaded Tx runner
-    ledger: TxShellWrapper,
+    ledger: TxStorageWrapper,
     memory: AnomaMemory,
 }
 
@@ -25,7 +25,7 @@ impl WasmerEnv for TxEnv {
 
 #[derive(Clone)]
 struct VpEnv {
-    ledger: TxShellWrapper,
+    ledger: TxStorageWrapper,
     memory: AnomaMemory,
 }
 
@@ -43,7 +43,7 @@ impl WasmerEnv for VpEnv {
 pub fn prepare_tx_imports(
     wasm_store: &Store,
     memory: Memory,
-    ledger: TxShellWrapper,
+    ledger: TxStorageWrapper,
 ) -> ImportObject {
     let tx_env = TxEnv {
         ledger,
@@ -89,7 +89,8 @@ fn storage_read(
         result_ptr,
     );
 
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
+    let storage: &mut Storage =
+        unsafe { &mut *(env.ledger.get() as *mut Storage) };
     let keys = key.split('/').collect::<Vec<&str>>();
     if let [key_a, key_b, key_c] = keys.as_slice() {
         if "balance" == key_b.to_string() {
@@ -97,8 +98,7 @@ fn storage_read(
                 storage::KeySeg::from_key_seg(&key_a.to_string())
                     .expect("should be an address");
             let key = format!("{}/{}", key_b, key_c);
-            let value = shell
-                .storage
+            let value = storage
                 .read(&addr, &key)
                 .expect("storage read failed")
                 .expect("key not found");
@@ -130,7 +130,8 @@ fn storage_update(
         .expect("Cannot read the value from memory");
     log::debug!("vm_storage_update {}, {:#?}", key, val);
 
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
+    let storage: &mut Storage =
+        unsafe { &mut *(env.ledger.get() as *mut Storage) };
     let keys = key.split('/').collect::<Vec<&str>>();
     if let [key_a, key_b, key_c] = keys.as_slice() {
         if "balance" == key_b.to_string() {
@@ -138,8 +139,7 @@ fn storage_update(
                 storage::KeySeg::from_key_seg(&key_a.to_string())
                     .expect("should be an address");
             let key = format!("{}/{}", key_b, key_c);
-            shell
-                .storage
+            storage
                 .write(&addr, &key, val)
                 .expect("VM storage write fail");
             return 1;

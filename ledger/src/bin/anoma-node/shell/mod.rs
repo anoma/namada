@@ -71,6 +71,7 @@ pub fn reset(config: Config) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct Shell {
     abci: AbciReceiver,
     storage: storage::Storage,
@@ -207,10 +208,14 @@ impl Shell {
 
         // Execute the transaction code
         let tx_runner = TxRunner::new();
-        let ledger =
-            unsafe { vm::TxShellWrapper::new(self as *mut _ as *mut c_void) };
+        // This is not thread-safe, we're assuming single-threaded Tx runner.
+        let storage_wrapper = unsafe {
+            vm::TxStorageWrapper::new(
+                &mut self.storage as *mut _ as *mut c_void,
+            )
+        };
         tx_runner
-            .run(ledger, tx.code, &tx_data)
+            .run(storage_wrapper, tx.code, &tx_data)
             .map_err(Error::TxRunnerError)?;
 
         // TODO gather write log from tx udpates

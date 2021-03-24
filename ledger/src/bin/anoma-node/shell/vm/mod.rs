@@ -15,11 +15,11 @@ const VP_ENTRYPOINT: &str = "validate_tx";
 /// which is used for implementing some host calls.
 /// It's not thread-safe, we're assuming single-threaded Tx runner.
 #[derive(Clone)]
-pub struct TxShellWrapper(*mut c_void);
-unsafe impl Send for TxShellWrapper {}
-unsafe impl Sync for TxShellWrapper {}
+pub struct TxStorageWrapper(*mut c_void);
+unsafe impl Send for TxStorageWrapper {}
+unsafe impl Sync for TxStorageWrapper {}
 
-impl TxShellWrapper {
+impl TxStorageWrapper {
     /// This is not thread-safe, we're assuming single-threaded Tx runner.
     pub unsafe fn new(ledger: *mut c_void) -> Self {
         Self(ledger)
@@ -94,7 +94,7 @@ impl TxRunner {
 
     pub fn run(
         &self,
-        ledger: TxShellWrapper,
+        ledger: TxStorageWrapper,
         tx_code: Vec<u8>,
         tx_data: &Vec<u8>,
     ) -> Result<()> {
