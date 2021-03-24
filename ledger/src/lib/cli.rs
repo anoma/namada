@@ -61,24 +61,7 @@ pub struct IntentArg {
     pub orderbook: String,
     // the data of the intent, that contains all value necessary for the
     // matchmaker
-    #[clap(flatten)]
-    pub data: IntentData,
-}
-
-// XXX TODO This is meant to be replace by a file with an unknown encoding to
-// the client
-#[derive(Clap)]
-pub struct IntentData {
-    #[clap(short, long)]
-    pub addr: String,
-    #[clap(short, long)]
-    pub token_buy: String,
-    #[clap(short, long)]
-    pub amount_buy: String,
-    #[clap(short, long)]
-    pub token_sell: String,
-    #[clap(short, long)]
-    pub amount_sell: String,
+    pub data_path: String,
 }
 
 /// The Anoma Node CLI
@@ -97,7 +80,7 @@ pub struct NodeOpts {
 #[derive(Clap)]
 pub enum InlinedNodeOpts {
     /// Run the Anoma gossip node daemon
-    RunGossip(Gossip),
+    RunGossip(GossipArg),
     /// Run the Anoma node daemon
     RunAnoma,
     /// Reset any store state
@@ -105,9 +88,9 @@ pub enum InlinedNodeOpts {
 }
 
 #[derive(Clap)]
-pub struct Gossip {
+pub struct GossipArg {
     #[clap(short, long)]
-    pub local_address: Option<String>,
+    pub address: Option<String>,
     #[clap(short, long)]
     pub peers: Option<Vec<String>>,
     #[clap(short, long)]
@@ -115,11 +98,10 @@ pub struct Gossip {
     #[clap(short, long)]
     pub dkg: bool,
     #[clap(short, long)]
-    pub matchmaker: bool,
+    pub matchmaker: Option<String>,
     #[clap(short, long)]
-    pub filter: Option<Vec<u8>>,
+    pub ledger_address: Option<String>,
 }
-
 /// The lazy opt is used for node and client sub-commands, it doesn't actually
 /// parse any commands as the commands are dispatched to `anoma-node` and
 /// `anoma-client`, respectively.

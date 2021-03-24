@@ -50,15 +50,18 @@ impl Mempool {
         &mut self,
         intent1: &Intent,
         f: &dyn Fn(&Intent, &Intent) -> Option<O>,
-    ) -> Result<Option<O>> {
+    ) -> Option<O> {
         let id1: IntentId = IntentId::new(intent1);
-        let res = self.intents.iter().find_map(|(id2, intent2)| {
-            if id1 == id2.to_owned() {
+        println!("mempool trying to find match for {:?}", id1);
+        self.intents.iter().find_map(|(id2, intent2)| {
+            println!("matching {:?} & {:?}", id1, id2);
+            if &id1 == id2 {
+                println!("matching same id {:?}", id1);
                 None
             } else {
+                println!("matching2 {:?} & {:?}", id1, id2);
                 f(intent1, &intent2)
             }
-        });
-        Ok(res)
+        })
     }
 }

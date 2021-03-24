@@ -1,10 +1,9 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
+use anoma::cli::{self, ClientOpts, GossipArg, InlinedClientOpts, IntentArg};
 use anoma::protobuf::types;
-use anoma::{
-    cli::{self, ClientOpts, Gossip, InlinedClientOpts, IntentArg},
-    protobuf::types::IntentData,
+use anoma::protobuf::{
+    services::rpc_service_client::RpcServiceClient, types::Tx,
 };
 use clap::Clap;
 use color_eyre::eyre::Result;
@@ -22,22 +21,9 @@ async fn exec_inlined(ops: InlinedClientOpts) {
         InlinedClientOpts::Tx(tx) => exec_tx(tx).await,
         InlinedClientOpts::Intent(IntentArg {
             orderbook,
-            data: cli::IntentData{
-                addr,
-                token_buy,
-                amount_buy,
-                token_sell,
-                amount_sell,
-            }}) => {
-            gossip_intent(
-                orderbook,
-                addr,
-                token_buy,
-                amount_buy,
-                token_sell,
-                amount_sell,
-            )
-            .await;
+            data_path,
+        }) => {
+            gossip_intent(orderbook, data_path).await;
         }
     }
 }
@@ -53,11 +39,11 @@ async fn exec_tx(
 
     let code = std::fs::read(code_path).unwrap();
     let data = data_hex.map(|hex| hex::decode(hex).unwrap());
-    let tx = anoma::protobuf::types::Tx { code, data };
+    let tx = Tx { code, data };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();
-
     // NOTE: use this to print the request JSON body:
+
     // let request =
     // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
     //     tx_bytes.clone().into(),
@@ -73,27 +59,17 @@ async fn exec_tx(
     println!("{:#?}", response);
 }
 
-async fn gossip_intent(
-    orderbook_addr: String,
-    addr: String,
-    token_buy: String,
-    amount_buy: String,
-    token_sell: String,
-    amount_sell: String,
-) {
+async fn gossip_intent(orderbook_addr: String, data_path: String) {
     println!("address : {:?}", orderbook_addr);
     let mut client = RpcServiceClient::connect(orderbook_addr).await.unwrap();
+    let data = std::fs::read(data_path).expect("data file IO error");
     let intent = types::Intent {
-        data: IntentData {
-            addr,
-            token_buy,
-            amount_buy,
-            token_sell,
-            amount_sell,
-        },
-        timestamp: std::time::SystemTime::now().into(),
+        data,
+        timestamp: Some(std::time::SystemTime::now().into()),
     };
-    let intent_message = types::IntentMessage { intent };
+    let intent_message = types::IntentMessage {
+        intent: Some(intent),
+    };
     let message = types::Message {
         message: Some(types::message::Message::IntentMessage(intent_message)),
     };

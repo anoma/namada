@@ -1,11 +1,12 @@
-use anoma::bookkeeper::Bookkeeper;
 use anoma::protobuf::types::IntentMessage;
+use anoma::{bookkeeper::Bookkeeper, protobuf::types::Tx};
 use libp2p::gossipsub::{IdentTopic as Topic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
 use libp2p::PeerId;
 use prost::Message;
 use serde::de::Expected;
+use tendermint_rpc::{Client, HttpClient};
 use tokio::sync::mpsc::Receiver;
 
 use super::dkg::DKG;
@@ -26,7 +27,7 @@ pub struct P2P {
     pub swarm: Swarm,
     pub orderbook: Option<Orderbook>,
     pub dkg: Option<DKG>,
-    pub matchmaker: Option<Matchmaker>,
+    pub ledger: Option<String>,
 }
 
 impl P2P {
@@ -34,8 +35,9 @@ impl P2P {
         bookkeeper: Bookkeeper,
         orderbook: bool,
         dkg: bool,
-        matchmaker: bool,
-    ) -> Result<(Self, Receiver<NetworkEvent>)> {
+        matchmaker: Option<String>,
+        ledger: Option<String>,
+    ) -> Result<(Self, Receiver<NetworkEvent>, Option<Receiver<Tx>>)> {
         let local_key: Keypair = Ed25519(bookkeeper.key);
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
@@ -45,16 +47,13 @@ impl P2P {
 
         let (gossipsub, network_event_receiver) = Behaviour::new(local_key);
         let swarm = Swarm::new(transport, gossipsub, local_peer_id);
-        let orderbook = if orderbook {
-            Some(Orderbook::new(matchmaker))
-        } else {
-            None
-        };
 
-        let matchmaker = if matchmaker {
-            Some(Matchmaker::new())
+        let (orderbook, matchmaker_event_receiver) = if orderbook {
+            let (orderbook, matchmaker_event_receiver) =
+                Orderbook::new(matchmaker);
+            (Some(orderbook), matchmaker_event_receiver)
         } else {
-            None
+            (None, None)
         };
 
         let dkg = if dkg { Some(DKG::new()) } else { None };
@@ -64,9 +63,10 @@ impl P2P {
                 swarm,
                 orderbook,
                 dkg,
-                matchmaker,
+                ledger,
             },
             network_event_receiver,
+            matchmaker_event_receiver,
         ))
     }
 
@@ -106,30 +106,53 @@ impl P2P {
         }
     }
 
-    pub fn handle_rpc_event(&mut self, event: Option<IntentMessage>) {
+    pub async fn handle_rpc_event(&mut self, event: Option<IntentMessage>) {
         if let Some(event) = event {
-            println!("received {:?} from a client", event);
+            // println!("received {:?} from a client", event);
             if let IntentMessage { intent } = event {
-                // if orderbook_node.apply(&i){
-                let mut tix_bytes = vec![];
-                intent.encode(&mut tix_bytes).unwrap();
-                let _message_id = self.swarm.gossipsub.publish(
-                    Topic::from(super::types::Topic::Orderbook),
-                    tix_bytes,
-                );
+                if let Some(orderbook) = &mut self.orderbook {
+                    if let Some(intent) = intent {
+                        if orderbook
+                            .apply_intent(intent.clone())
+                            .await
+                            .expect("test")
+                        {
+                            let mut tix_bytes = vec![];
+                            intent.encode(&mut tix_bytes).unwrap();
+                            let _message_id = self.swarm.gossipsub.publish(
+                                Topic::from(super::types::Topic::Orderbook),
+                                tix_bytes,
+                            );
+                        }
+                    }
+                }
             }
         }
     }
 
-    pub fn handle_network_event(&mut self, event: Option<NetworkEvent>) {
+    pub async fn handle_matchmaker_event(&mut self, event: Option<Tx>) {
+        if let Some(tx) = event {
+            println!("sending {:?} from matchmaker", tx);
+            let ledger_addr =
+                self.ledger.clone().expect("missing ledger address");
+            let mut tx_bytes = vec![];
+            tx.encode(&mut tx_bytes).unwrap();
+            println!("sending bytes {:?} from matchmaker", tx_bytes);
+            println!("bytes len {:?}", tx_bytes.len());
+            let client = HttpClient::new(ledger_addr.parse().unwrap()).unwrap();
+            let response = client.broadcast_tx_commit(tx_bytes.into()).await;
+        }
+    }
+
+    pub async fn handle_network_event(&mut self, event: Option<NetworkEvent>) {
         if let Some(event) = event {
-            println!("received {:?} from the network", event);
+            // println!("received {:?} from the network", event);
             match event {
                 NetworkEvent::Message(msg)
                     if msg.topic == super::types::Topic::Orderbook =>
                 {
                     if let Some(orderbook) = &mut self.orderbook {
-                        let validity = match orderbook.apply(&msg.data) {
+                        let validity = match orderbook.apply(&msg.data).await {
                             orderbook::Result::Ok(true) => {
                                 MessageAcceptance::Accept
                             }

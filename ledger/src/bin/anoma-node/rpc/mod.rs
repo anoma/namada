@@ -23,7 +23,7 @@ impl RpcService for Rpc {
         }: &types::Message = request.get_ref();
         match intent_message {
             Some(types::message::Message::IntentMessage(msg)) => {
-                println!("received a intent {:?}", msg);
+                // println!("received a intent {:?}", msg);
                 self.tx.send(msg.clone()).await.unwrap();
             }
             Some(types::message::Message::DkgMsg(msg)) => {

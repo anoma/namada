@@ -11,16 +11,23 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::{fs, thread};
+use tokio::runtime::Runtime;
 
 // use self::Dkg::DKG;
-use anoma::{bookkeeper::Bookkeeper, config::*, protobuf::types::IntentMessage};
-use tokio::sync::mpsc;
-
-use self::{config::NetworkConfig, p2p::P2P};
 use self::dkg::DKG;
 use self::matchmaker::Matchmaker;
 use self::orderbook::Orderbook;
 use self::types::NetworkEvent;
+use self::{config::NetworkConfig, p2p::P2P};
+use anoma::{
+    bookkeeper::Bookkeeper,
+    config::*,
+    protobuf::types::{IntentMessage, Tx},
+};
+use mpsc::Receiver;
+use prost::Message;
+use tendermint_rpc::{Client, HttpClient};
+use tokio::sync::mpsc;
 
 use crate::rpc;
 
@@ -36,9 +43,10 @@ pub fn run(
     rpc: bool,
     orderbook: bool,
     dkg: bool,
-    matchmaker: bool,
-    local_address: Option<String>,
+    address: Option<String>,
     peers: Option<Vec<String>>,
+    matchmaker: Option<String>,
+    ledger_address: Option<String>,
 ) -> () {
     let base_dir: PathBuf = config.gossip_home_dir();
     let bookkeeper: Bookkeeper = read_or_generate_bookkeeper_key(&base_dir)
@@ -53,19 +61,20 @@ pub fn run(
     };
 
     let network_config = NetworkConfig::read_or_generate(
-        &base_dir,
-        local_address,
-        peers,
-        orderbook,
-        dkg,
+        &base_dir, address, peers, orderbook, dkg,
     );
-    let (mut p2p, event_receiver) =
-        p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker)
-            .expect("TEMPORARY: unable to build p2p swarm");
+    let (mut p2p, event_receiver, matchmaker_event_receiver) =
+        p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker, ledger_address)
+            .expect("TEMPORARY: unable to build p2p layer");
     p2p.prepare(&network_config);
 
-    dispatcher(p2p, event_receiver, rpc_event_receiver)
-        .expect("TEMPORARY: unable to start p2p dispatcher")
+    dispatcher(
+        p2p,
+        event_receiver,
+        rpc_event_receiver,
+        matchmaker_event_receiver,
+    )
+    .expect("TEMPORARY: unable to start p2p dispatcher")
 }
 
 const BOOKKEEPER_KEY_FILE: &str = "priv_bookkepeer_key.json";
@@ -90,33 +99,77 @@ fn read_or_generate_bookkeeper_key(
     }
 }
 
+// XXX TODO The protobuf encoding logic does not play well with asynchronous.
+// see https://github.com/danburkert/prost/issues/108
+// When this event handler is merged into the main handler of the dispatcher
+// then it does not send the correct dota to the ledger and it fails to
+// correctly decode the Tx.
+// This fix spawn a thread only to send the Tx to the ledger to prevent that.
+#[tokio::main]
+pub async fn matchmaker_dispatcher(mut matchmaker_event_receiver: Receiver<Tx>){
+    loop {
+        tokio::select! {
+            event = matchmaker_event_receiver.recv() =>
+            {
+                if let Some(tx) = event {
+                    println!("sending {:?} from matchmaker", tx);
+                            let mut tx_bytes = vec![];
+                    tx.encode(&mut tx_bytes).unwrap();
+                    println!("sending bytes {:?} from matchmaker", tx_bytes);
+                    println!("bytes len {:?}", tx_bytes.len());
+                    let client =
+                        HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
+                    let response = client.broadcast_tx_commit(tx_bytes.into()).await;
+                }
+            }
+        };
+    }
+}
+
 #[tokio::main]
 pub async fn dispatcher(
     mut p2p: P2P,
-    mut network_event_receiver: mpsc::Receiver<NetworkEvent>,
-    rpc_event_receiver: Option<mpsc::Receiver<IntentMessage>>,
+    mut network_event_receiver: Receiver<NetworkEvent>,
+    rpc_event_receiver: Option<Receiver<IntentMessage>>,
+    matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
-    // Here it should pass the option value to handle_network_event instead of
-    // unwraping it
-    match rpc_event_receiver {
-        Some(mut rpc_event_receiver) => {
+    let tx = Tx {
+        code: vec![],
+        data: None,
+    };
+    let mut tx_bytes = vec![];
+    tx.encode(&mut tx_bytes).unwrap();
+    println!("sending bytes {:?} from matchmaker", tx_bytes);
+    println!("bytes len {:?}", tx_bytes.len());
+    let client =
+        HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
+    let response = client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
+    println!("ledger response {:#?}", response);
+
+    if let Some(matchmaker_event_receiver) = matchmaker_event_receiver{
+        thread::spawn(|| matchmaker_dispatcher(matchmaker_event_receiver));
+    }
+
+    // XXX TODO find a way to factorize all that code
+    match (rpc_event_receiver) {
+        (Some(mut rpc_event_receiver)) => {
             loop {
                 tokio::select! {
                     event = rpc_event_receiver.recv() =>
-                    {p2p.handle_rpc_event(event)}
+                        p2p.handle_rpc_event(event).await ,
                     swarm_event = p2p.swarm.next() => {
                         // All events are handled by the
                         // `NetworkBehaviourEventProcess`es.  I.e. the
                         // `swarm.next()` future drives the `Swarm` without ever
                         // terminating.
                         panic!("Unexpected event: {:?}", swarm_event);
-                    }
+                    },
                     event = network_event_receiver.recv() =>
-                        p2p.handle_network_event(event)
+                        p2p.handle_network_event(event).await
                 };
             }
         }
-        None => {
+        (None) => {
             loop {
                 tokio::select! {
                     swarm_event = p2p.swarm.next() => {
@@ -125,9 +178,9 @@ pub async fn dispatcher(
                         // `swarm.next()` future drives the `Swarm` without ever
                         // terminating.
                         panic!("Unexpected event: {:?}", swarm_event);
-                    }
+                    },
                     event = network_event_receiver.recv() =>
-                        p2p.handle_network_event(event)
+                        p2p.handle_network_event(event).await
                 }
             }
         }

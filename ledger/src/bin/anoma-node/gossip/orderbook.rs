@@ -1,5 +1,6 @@
-use anoma::protobuf::types::Intent;
+use anoma::protobuf::types::{Intent, Tx};
 use prost::Message;
+use tokio::sync::mpsc::Receiver;
 
 use super::types::{InternMessage, Topic};
 use super::{
@@ -32,17 +33,40 @@ pub type Result<T> = std::result::Result<T, OrderbookError>;
 #[derive(Debug)]
 pub struct Orderbook {
     pub mempool: Mempool,
+    pub matchmaker: Option<Matchmaker>,
 }
+
 impl Orderbook {
-    pub fn new(matchmaker: bool) -> Self {
-        Self {
-            mempool: Mempool::new(),
+    pub fn new(matchmaker: Option<String>) -> (Self, Option<Receiver<Tx>>) {
+        match matchmaker.map(|tx_code_path| Matchmaker::new(tx_code_path)) {
+            Some((matchmaker, matchmaker_event_receiver)) => (
+                Self {
+                    mempool: Mempool::new(),
+                    matchmaker: Some(matchmaker),
+                },
+                Some(matchmaker_event_receiver),
+            ),
+            None => (
+                Self {
+                    mempool: Mempool::new(),
+                    matchmaker: None,
+                },
+                None,
+            ),
         }
     }
 
-    pub fn apply(&mut self, data: &Vec<u8>) -> Result<bool> {
+    pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
+        if let Some(matchmaker) = &mut self.matchmaker {
+            matchmaker.find_and_send(&intent).await;
+            matchmaker.add(intent);
+        }
+        Ok(true)
+    }
+
+    pub async fn apply(&mut self, data: &Vec<u8>) -> Result<bool> {
         let intent =
             Intent::decode(&data[..]).map_err(OrderbookError::DecodeError)?;
-        Ok(true)
+        self.apply_intent(intent).await
     }
 }
