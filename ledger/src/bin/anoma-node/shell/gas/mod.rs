@@ -12,6 +12,9 @@ pub enum Error {
 
 pub const TX_GAS_PER_BYTE: u64 = 2;
 const BASE_TRANSACTION_FEE: u64 = 2;
+
+/// The maximum value should be less or equal to i64::MAX
+/// to avoid the gas overflow when sending this to ABCI
 const BLOCK_GAS_LIMIT: u64 = 1000;
 const TRANSACTION_GAS_LIMIT: u64 = 100;
 
