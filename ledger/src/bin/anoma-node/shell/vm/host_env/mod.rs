@@ -1,3 +1,5 @@
+mod write_log;
+
 use super::TxStorageWrapper;
 use super::{
     super::{storage, Storage},
