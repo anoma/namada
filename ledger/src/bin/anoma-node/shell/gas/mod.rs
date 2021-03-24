@@ -10,7 +10,7 @@ pub enum Error {
     GasOverflow,
 }
 
-pub const TX_GAS_PER_BYTE: u64 = 2;
+const TX_GAS_PER_BYTE: u64 = 2;
 const BASE_TRANSACTION_FEE: u64 = 2;
 
 /// The maximum value should be less or equal to i64::MAX
