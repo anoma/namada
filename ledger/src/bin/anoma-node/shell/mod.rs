@@ -239,7 +239,7 @@ impl Shell {
     }
 
     /// Validate and apply a transaction.
-    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<i64> {
+    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
 
         let tx_data = tx.data.unwrap_or(vec![]);
@@ -315,7 +315,7 @@ impl Shell {
         }
 
         let transaction_storage_gas =
-            (tx_bytes.len() as i64) * gas::TX_GAS_PER_BYTE;
+            (tx_bytes.len() as u64) * gas::TX_GAS_PER_BYTE as u64;
         let _ = self
             .gas_meter
             .add_base_transaction_fee(transaction_storage_gas)
