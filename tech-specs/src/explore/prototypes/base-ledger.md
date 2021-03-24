@@ -1,25 +1,42 @@
 # Base ledger prototype
 
+## Version 2
+
+tracking issue <https://github.com/heliaxdev/anoma-prototype/issues/62>
+
+### Goals
+
+- storage
+  - build key schema for access
+  - implement dynamic account sub-spaces
+- implement more complete support for WASM transactions and validity predicates
+  - transactions can read/write all storage
+  - validity predicates receive the set of changes (changed keys or complete write log) and can read their pre/post state
+- add basic transaction gas metering
+- various other improvements
+
+## Version 1
+
 tracking issue <https://github.com/heliaxdev/rd-pm/issues/5>
 
-## Goals
+### Goals
 
 - get some hands-on experience with Rust and Tendermint
 - initial usable node + client (+ validator?) setup
 - provide a base layer for other prototypes that need to build on top of a ledger
 
-## Components
+### Components
 
 The main components are built in a single Cargo project with [shared library code](#shared) and multiple binaries:
 - `anoma` - main executable with commands for both the node and the client (`anoma node` and `anoma client`)
 - `anomad` - the [node](#node)
 - `anomac` - the [client](#client)
 
-### Node
+#### Node
 
 The node is built into `anomad`.
 
-#### Shell
+##### Shell
 
 The shell is what currently pulls together all the other components in the node.
 
@@ -30,20 +47,20 @@ When it's ran:
 - run shell loop with the channel receiver, which handles ABIC requests:
   - [transaction execution](/explore/design/ledger/tx-execution.md) which includes [wasm VM calls](/explore/design/ledger/wasm-vm.md)
 
-##### Tendermint
+###### Tendermint
 
 This module handles initializing and running `tendermint` and forwards messages for the ABCI requests via its channel sender.
 
-#### Storage
+##### Storage
 
-Key-value storage. More details being specified: WIP in <https://github.com/heliaxdev/rd-pm/pull/37/files#diff-3d006fbf4395f551596925fb96a3ced8a2b24ef5bc918b9872140e9889414606R63>
+Key-value storage. More details are specified on [Database page](tech-specs/src/explore/design/db.md).
 
-#### CLI
+##### CLI
 
 - `anoma run` to start the node (will initialize (if needed) and launch tendermint under the hood)
 - `anoma reset` to delete all the node's state from DB and tendermint's state
 
-### Client
+#### Client
 
 Allows to submit a transaction with an attached wasm code to the node with:
 
@@ -51,17 +68,17 @@ Allows to submit a transaction with an attached wasm code to the node with:
 
 It presents back the received response on stdout. Currently, it waits for both the mempool validation and application in a block.
 
-### Shared
+#### Shared
 
-#### Config
+##### Config
 
 Configuration settings:
 - home directory (db storage and tendermint config and data)
 
-#### Genesis
+##### Genesis
 
 The genesis parameters, such as the initial validator set, are used to initialize a chain's genesis block.
 
-#### RPC types
+##### RPC types
 
 The types for data that can be submitted to the node via the client's RPC commands.

@@ -41,8 +41,8 @@ const CONFIG_FILE: &str = "gossipsub.json";
 impl NetworkConfig {
     pub fn read_or_generate(
         home_dir: &PathBuf,
-        local_address: Option<String>,
-        peers: Option<Vec<String>>,
+        local_address: String,
+        peers: Vec<String>,
         orderbook: bool,
         dkg: bool,
     ) -> Self {
@@ -59,7 +59,7 @@ impl NetworkConfig {
 
     fn read_config(
         home_dir: &PathBuf,
-        peers: Option<Vec<String>>,
+        peers: Vec<String>,
         orderbook: bool,
         dkg: bool,
     ) -> Self {
@@ -69,7 +69,7 @@ impl NetworkConfig {
             serde_json::from_reader(file).expect("JSON was not well-formatted");
         Self {
             local_address: config.local_address,
-            peers: peers.unwrap_or(config.peers),
+            peers,
             gossip: GossipConfig {
                 orderbook: orderbook || config.gossip.orderbook,
                 dkg: dkg || config.gossip.dkg,
@@ -78,16 +78,15 @@ impl NetworkConfig {
     }
 
     fn generate_config(
-        local_address: Option<String>,
-        peers: Option<Vec<String>>,
+        local_address: String,
+        peers: Vec<String>,
         orderbook: bool,
         dkg: bool,
     ) -> Self {
         let default_gossip_conf = GossipConfig::default();
         Self {
-            local_address: local_address
-                .unwrap_or(String::from("/ip4/127.0.0.1/tcp/38153")),
-            peers: peers.unwrap_or_default(),
+            local_address,
+            peers,
             gossip: GossipConfig {
                 orderbook: orderbook || default_gossip_conf.orderbook,
                 dkg: dkg || default_gossip_conf.dkg,

@@ -1,39 +1,48 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+// TODO the memory types, serialization, and other "plumbing" code will be
+// injected into the wasm module by the host to reduce file size
+use anoma_vm_env::memory;
+use borsh::BorshDeserialize;
 use core::slice;
-
-// TODO Plumbing functionality between the ledger and VPs will be injected into
-// the wasm before it's ran (it bloats the size considerably)
-#[derive(Clone, BorshSerialize, BorshDeserialize)]
-pub struct TxMsg {
-    pub src: String,
-    pub dest: String,
-    pub amount: u64,
-}
 
 /// The environment provides calls to host functions via this C interface:
 extern "C" {}
 
 /// The module interface callable by wasm runtime:
 #[no_mangle]
-pub extern "C" fn validate_tx(tx_ptr: *const u8, tx_len: usize) -> bool {
+pub extern "C" fn validate_tx(
+    // VP's account's address
+    // TODO Should the address be on demand (a call to host function?)
+    addr_ptr: u64,
+    addr_len: u64,
+    tx_data_ptr: u64,
+    tx_data_len: u64,
+    write_log_ptr: u64,
+    write_log_len: u64,
+) -> u64 {
     // TODO more plumbing here
-    let slice = unsafe { slice::from_raw_parts(tx_ptr, tx_len) };
-    let tx = TxMsg::try_from_slice(slice).unwrap();
+    let slice = unsafe { slice::from_raw_parts(addr_ptr as *const u8, addr_len as _) };
+    // let addr = String::try_from_slice(slice).unwrap();
+    let addr = core::str::from_utf8(slice).unwrap();
+    let slice = unsafe { slice::from_raw_parts(tx_data_ptr as *const u8, tx_data_len as _) };
+    let tx_data = slice.to_vec() as memory::TxData;
+    let slice = unsafe { slice::from_raw_parts(write_log_ptr as _, write_log_len as _) };
+    let write_log = memory::WriteLog::try_from_slice(slice).unwrap();
 
     // run validation with the concrete type(s)
-    do_validate_tx(tx)
-}
-
-fn do_validate_tx(tx: TxMsg) -> bool {
-    if tx.amount > 0
-    // && tx.src == "va"
-    {
-        true
+    if do_validate_tx(tx_data, addr, write_log) {
+        1
     } else {
-        false
+        0
     }
 }
 
-// pub extern "C" fn validate_intent(...) -> bool {
-//     false
-// }
+fn do_validate_tx(_tx_data: memory::TxData, _addr: &str, _write_log: memory::WriteLog) -> bool {
+    // if tx.amount > 0
+    // // && tx.src == "va"
+    // {
+    //     true
+    // } else {
+    //     false
+    // }
+    true
+}

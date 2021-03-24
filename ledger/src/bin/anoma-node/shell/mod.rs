@@ -1,21 +1,26 @@
+mod gas;
 mod storage;
 mod tendermint;
 
-use std::path::PathBuf;
 use std::sync::mpsc;
+use std::{ffi::c_void, path::PathBuf};
 
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::protobuf::types::Tx;
-use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
+use anoma_vm::{TxEnv, TxRunner, VpRunner};
 use prost::Message;
+use storage::KeySeg;
 use thiserror::Error;
 
-use self::storage::{
-    Address, Balance, BasicAddress, BlockHash, BlockHeight, Storage,
-    ValidatorAddress,
-};
 use self::tendermint::{AbciMsg, AbciReceiver};
+use self::{
+    gas::BlockGasMeter,
+    storage::{
+        Address, BasicAddress, BlockHash, BlockHeight, Storage,
+        ValidatorAddress,
+    },
+};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -38,19 +43,23 @@ pub enum Error {
         addr: Address,
         error: anoma_vm::Error,
     },
+    #[error("Transaction gas is too high")]
+    TooHighTransactionGasUsage(),
+    #[error("Block gas is too high")]
+    TooHighBlockGasUsage(),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn run(config: Config) -> Result<()> {
-    // run our shell via Tendermint ABCI
-    let db_path = config.home_dir.join("db");
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
-    let shell = Shell::new(receiver, db_path);
-    let addr = "127.0.0.1:26658".parse().map_err(|e| Error::Temporary {
-        error: format!("cannot parse tendermint address {}", e),
-    })?;
+    let shell = Shell::new(receiver, &config.db_home_dir());
+    let addr = format!("{}:{}", config.tendermint.host, config.tendermint.port)
+        .parse()
+        .map_err(|e| Error::Temporary {
+            error: format!("cannot parse tendermint address {}", e),
+        })?;
     // Run Tendermint ABCI server in another thread
     std::thread::spawn(move || tendermint::run(sender, config, addr));
     shell.run()
@@ -58,7 +67,7 @@ pub fn run(config: Config) -> Result<()> {
 
 pub fn reset(config: Config) -> Result<()> {
     // simply nuke the DB files
-    let db_path = config.home_dir.join("db");
+    let db_path = config.db_home_dir();
     match std::fs::remove_dir_all(&db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,
@@ -71,6 +80,7 @@ pub fn reset(config: Config) -> Result<()> {
 pub struct Shell {
     abci: AbciReceiver,
     storage: storage::Storage,
+    gas_meter: BlockGasMeter,
 }
 
 #[derive(Clone, Debug)]
@@ -85,18 +95,30 @@ pub enum MempoolTxType {
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
-    pub fn new(abci: AbciReceiver, db_path: PathBuf) -> Self {
+    pub fn new(abci: AbciReceiver, db_path: &PathBuf) -> Self {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
         let va = ValidatorAddress::new_address("va".to_owned());
         storage
-            .update_balance(&va, Balance::new(10000))
+            .write(
+                &va,
+                "balance/eth",
+                vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+            )
             .expect("Unable to set the initial balance for validator account");
         let ba = BasicAddress::new_address("ba".to_owned());
         storage
-            .update_balance(&ba, Balance::new(100))
+            .write(
+                &ba,
+                "balance/eth",
+                vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+            )
             .expect("Unable to set the initial balance for basic account");
-        Self { abci, storage }
+        Self {
+            abci,
+            storage,
+            gas_meter: BlockGasMeter::default(),
+        }
     }
 
     /// Run the shell in the current thread (blocking).
@@ -164,39 +186,81 @@ impl Shell {
     }
 }
 
-fn transfer(
+/// Storage read function exposed to the wasm VM environment
+fn vm_storage_read(
     env: &TxEnv,
-    src_ptr: i32,
-    src_len: i32,
-    dest_ptr: i32,
-    dest_len: i32,
-    amount: u64,
-) {
-    let memory = unsafe { env.memory.get_unchecked() };
-
-    let src_vec: Vec<_> = memory.view()
-        [src_ptr as usize..(src_ptr + src_len) as usize]
-        .iter()
-        .map(|cell| cell.get())
-        .collect();
-    let src = std::str::from_utf8(&src_vec).unwrap().to_string();
-
-    let dest_vec: Vec<_> = memory.view()
-        [dest_ptr as usize..(dest_ptr + dest_len) as usize]
-        .iter()
-        .map(|cell| cell.get())
-        .collect();
-    let dest = std::str::from_utf8(&dest_vec).unwrap().to_string();
+    key_ptr: u64,
+    key_len: u64,
+    result_ptr: u64,
+) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
 
     log::debug!(
-        "transfer called with src: {}, dest: {}, amount: {}",
-        src,
-        dest,
-        amount
+        "vm_storage_read {}, key {}, result_ptr {}",
+        key,
+        key_ptr,
+        result_ptr,
     );
 
-    let sender = env.sender.lock().unwrap();
-    (*sender).send(TxMsg { src, dest, amount }).unwrap();
+    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
+    let keys = key.split('/').collect::<Vec<&str>>();
+    if let [key_a, key_b, key_c] = keys.as_slice() {
+        if "balance" == key_b.to_string() {
+            let addr = storage::Address::from_key_seg(&key_a.to_string())
+                .expect("should be an address");
+            let key = format!("{}/{}", key_b, key_c);
+            let value = shell
+                .storage
+                .read(&addr, &key)
+                .expect("storage read failed")
+                .expect("key not found");
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            return 1;
+        }
+    }
+    // fail
+    0
+}
+
+/// Storage update function exposed to the wasm VM environment
+fn vm_storage_update(
+    env: &TxEnv,
+    key_ptr: u64,
+    key_len: u64,
+    val_ptr: u64,
+    val_len: u64,
+) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+    let val = env
+        .memory
+        .read_bytes(val_ptr, val_len as _)
+        .expect("Cannot read the value from memory");
+    log::debug!("vm_storage_update {}, {:#?}", key, val);
+
+    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
+    let keys = key.split('/').collect::<Vec<&str>>();
+    if let [key_a, key_b, key_c] = keys.as_slice() {
+        if "balance" == key_b.to_string() {
+            let addr = storage::Address::from_key_seg(&key_a.to_string())
+                .expect("should be an address");
+            let key = format!("{}/{}", key_b, key_c);
+            shell
+                .storage
+                .write(&addr, &key, val)
+                .expect("VM storage write fail");
+            return 1;
+        }
+    }
+    // fail
+    0
 }
 
 impl Shell {
@@ -219,21 +283,34 @@ impl Shell {
     }
 
     /// Validate and apply a transaction.
-    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<()> {
+    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
+
         let tx_data = tx.data.unwrap_or(vec![]);
 
-        // Execute the transaction code and wait for result
-        let (tx_sender, tx_receiver) = mpsc::channel();
+        // Execute the transaction code
         let tx_runner = TxRunner::new();
+        let ledger = unsafe {
+            anoma_vm::TxShellWrapper::new(self as *mut _ as *mut c_void)
+        };
         tx_runner
-            .run(tx.code, tx_data, tx_sender, transfer)
+            .run(
+                ledger,
+                tx.code,
+                &tx_data,
+                vm_storage_read,
+                vm_storage_update,
+            )
             .map_err(Error::TxRunnerError)?;
-        let tx_msg = tx_receiver
-            .recv()
-            .expect("Expected a message from transaction runner");
-        let src_addr = Address::new_address(tx_msg.src.clone());
-        let dest_addr = Address::new_address(tx_msg.dest.clone());
+
+        // TODO gather write log from tx udpates
+        let write_log = vec![];
+
+        // TODO determine these from the write log
+        let src = "va";
+        let dest = "ba";
+        let src_addr = Address::new_address(src.into());
+        let dest_addr = Address::new_address(dest.into());
 
         // Run a VP for every account with modified storage sub-space
         // TODO run in parallel for all accounts
@@ -251,7 +328,13 @@ impl Shell {
         let vp_runner = VpRunner::new();
         let (vp_sender, vp_receiver) = mpsc::channel();
         vp_runner
-            .run(src_vp, &tx_msg, vp_sender.clone())
+            .run(
+                src_vp,
+                &tx_data,
+                src.to_string(),
+                &write_log,
+                vp_sender.clone(),
+            )
             .map_err(|error| Error::VpRunnerError {
                 addr: src_addr.clone(),
                 error,
@@ -260,7 +343,7 @@ impl Shell {
             .recv()
             .expect("Expected a message from source's VP runner");
         vp_runner
-            .run(dest_vp, &tx_msg, vp_sender)
+            .run(dest_vp, &tx_data, dest.to_string(), &write_log, vp_sender)
             .map_err(|error| Error::VpRunnerError {
                 addr: dest_addr.clone(),
                 error,
@@ -271,9 +354,6 @@ impl Shell {
 
         // Apply the transaction if accepted by all the VPs
         if src_accept && dest_accept {
-            self.storage
-                .transfer(&src_addr, &dest_addr, tx_msg.amount)
-                .map_err(Error::StorageError)?;
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
@@ -293,11 +373,21 @@ impl Shell {
             );
         }
 
-        Ok(())
+        let transaction_storage_gas =
+            (tx_bytes.len() as u64) * gas::TX_GAS_PER_BYTE as u64;
+        let _ = self
+            .gas_meter
+            .add_base_transaction_fee(transaction_storage_gas)
+            .map_err(|_| Error::TooHighTransactionGasUsage);
+        match self.gas_meter.finalize_transaction() {
+            Ok(gas) => return Ok(gas),
+            Err(_) => return Err(Error::TooHighBlockGasUsage()),
+        };
     }
 
     /// Begin a new block.
     pub fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
+        self.gas_meter.reset();
         self.storage.begin_block(hash, height).unwrap();
     }
 

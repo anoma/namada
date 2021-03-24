@@ -1,6 +1,5 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-
 use anoma::cli::{InlinedNodeOpts, NodeOpts};
 use anoma::config::Config;
 use clap::Clap;
@@ -8,9 +7,9 @@ use eyre::{Result, WrapErr};
 
 use crate::{gossip, shell};
 
-pub fn main(config: Config) -> Result<()> {
-    let NodeOpts { base_dir, rpc, ops } = NodeOpts::parse();
-    let config = base_dir.map(Config::new).unwrap_or(config);
+pub fn main() -> Result<()> {
+    let NodeOpts { home, rpc, ops } = NodeOpts::parse();
+    let config = Config::new(home).unwrap();
     exec_inlined(config, rpc, ops)
 }
 

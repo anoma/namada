@@ -14,20 +14,22 @@ use std::{fs, thread};
 use tokio::runtime::Runtime;
 
 // use self::Dkg::DKG;
+use anoma::{self, bookkeeper::Bookkeeper, config::Config};
+use tokio::sync::mpsc;
+
+use self::config::NetworkConfig;
 use self::dkg::DKG;
 use self::matchmaker::Matchmaker;
 use self::orderbook::Orderbook;
 use self::types::NetworkEvent;
-use self::{config::NetworkConfig, p2p::P2P};
+use self::p2p::P2P;
 use anoma::{
-    bookkeeper::Bookkeeper,
     config::*,
     protobuf::types::{IntentMessage, Tx},
 };
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
-use tokio::sync::mpsc;
 
 use crate::rpc;
 
@@ -60,8 +62,15 @@ pub fn run(
         None
     };
 
+    let p2p_local_address = address
+        .unwrap_or(format!("/ip4/{}/tcp/{}", config.p2p.host, config.p2p.port));
+    let p2p_peers = peers.unwrap_or(config.p2p.peers);
+
     let network_config = NetworkConfig::read_or_generate(
-        &base_dir, address, peers, orderbook, dkg,
+        &base_dir,
+        p2p_local_address,
+        p2p_peers,
+        orderbook, dkg,
     );
     let (mut p2p, event_receiver, matchmaker_event_receiver) =
         p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker, ledger_address)
