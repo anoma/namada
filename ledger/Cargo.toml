@@ -34,6 +34,7 @@ std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 
 [dependencies]
 anoma_vm = {path = "vm"}
+anoma_vm_env = {path = "vm_env"}
 base64 = "0.13.0"
 blake2b-rs = "0.2.0"
 borsh = "0.8.1"
@@ -53,7 +54,7 @@ prost = "0.7.0"
 rand = {version = "0.7", default-features = false}
 rand_core = {version = "0.5", default-features = false}
 rocksdb = "0.15"
-serde = { version = "1.0.123", features = ["derive"] }
+serde = {version = "1.0.123", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"
 sha2 = "0.9.3"
@@ -61,12 +62,12 @@ sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", b
 # TODO Not yet released on crates
 tendermint-abci = {git = "https://github.com/informalsystems/tendermint-rs"}
 # must be the same version as in tendermint-abci
+config = "0.9"
 tendermint-proto = {git = "https://github.com/informalsystems/tendermint-rs"}
 tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", features = ["full"]}
 tonic = "0.4.0"
-config = "0.9"
 
 [dev-dependencies]
 cargo-watch = "7.5.0"
