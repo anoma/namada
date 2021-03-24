@@ -9,7 +9,6 @@ use libp2p::PeerId;
 use prost::Message;
 use tokio::sync::mpsc::Receiver;
 
-use super::config::NetworkConfig;
 use super::dkg::DKG;
 use super::network_behaviour::Behaviour;
 use super::orderbook::{self, Orderbook};
@@ -34,18 +33,22 @@ pub fn build_swarm(
     ))
 }
 
-pub fn prepare_swarm(swarm: &mut Swarm, network_config: &NetworkConfig) {
-    for topic_string in &network_config.gossip.topics {
+pub fn prepare_swarm(
+    swarm: &mut Swarm,
+    address: String,
+    topics: Vec<String>,
+    peers: Vec<String>,
+) {
+    for topic_string in topics {
         let topic = Topic::new(topic_string);
         swarm.gossipsub.subscribe(&topic).unwrap();
     }
 
     // Listen on all interfaces and whatever port the OS assigns
-    Swarm::listen_on(swarm, network_config.local_address.parse().unwrap())
-        .unwrap();
+    Swarm::listen_on(swarm, address.parse().unwrap()).unwrap();
 
     // Reach out to another node if specified
-    for to_dial in &network_config.peers {
+    for to_dial in peers {
         let dialing = to_dial.clone();
         match to_dial.parse() {
             Ok(to_dial) => match Swarm::dial_addr(swarm, to_dial) {

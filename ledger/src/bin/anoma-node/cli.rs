@@ -15,13 +15,10 @@ pub fn main() -> Result<()> {
 
 fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
     match ops {
-        InlinedNodeOpts::RunOrderbook(arg) => Ok(gossip::run(
-            config,
-            rpc,
-            arg.local_address,
-            arg.peers,
-            arg.topics,
-        )),
+        InlinedNodeOpts::RunOrderbook(arg) => {
+            gossip::run(config, rpc, arg.local_address, arg.peers, arg.topics)
+                .wrap_err("Failied to run Anoma orderbook")
+        }
         InlinedNodeOpts::RunAnoma => {
             shell::run(config).wrap_err("Failed to run Anoma node")
         }

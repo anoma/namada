@@ -2,8 +2,16 @@
 
 use std::path::PathBuf;
 
+use std::fs;
+use std::fs::{create_dir_all, File};
+use std::io::Write;
+
 use config;
 use serde::Deserialize;
+
+use crate::bookkeeper::Bookkeeper;
+
+const BOOKKEEPER_KEY_FILE: &str = "priv_bookkepeer_key.json";
 
 #[derive(Debug, Deserialize)]
 pub struct Node {
@@ -31,6 +39,12 @@ pub struct Config {
     pub node: Node,
     pub tendermint: Tendermint,
     pub p2p: Gossip,
+}
+
+impl Gossip {
+    pub fn get_address(&self) -> String {
+        return format!("/ip4/{}/tcp/{}", self.host, self.port);
+    }
 }
 
 impl Config {
@@ -69,5 +83,23 @@ impl Config {
 
     pub fn db_home_dir(&self) -> PathBuf {
         self.node.home.join(self.node.db_path.clone())
+    }
+
+    pub fn get_bookkeeper(&self) -> Result<Bookkeeper, std::io::Error> {
+        if self.gossip_home_dir().join(BOOKKEEPER_KEY_FILE).exists() {
+            let conf_file = self.gossip_home_dir().join(BOOKKEEPER_KEY_FILE);
+            let json_string = fs::read_to_string(conf_file.as_path())?;
+            let bookkeeper = serde_json::from_str::<Bookkeeper>(&json_string)?;
+            Ok(bookkeeper)
+        } else {
+            let path = self.gossip_home_dir();
+            create_dir_all(&path).unwrap();
+            let path = path.join(BOOKKEEPER_KEY_FILE);
+            let account: Bookkeeper = Bookkeeper::new();
+            let mut file = File::create(path)?;
+            let json = serde_json::to_string(&account)?;
+            file.write_all(json.as_bytes()).map(|_| ()).unwrap();
+            Ok(account)
+        }
     }
 }
