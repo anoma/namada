@@ -277,7 +277,10 @@ impl tendermint_abci::Application for AbciWrapper {
                 }
                 Err(err) => {
                     resp.code = 1;
-                    resp.log = String::from(err.to_string());
+                    resp.log = format!(
+                        "Transaction failed, gas overflow: {}",
+                        err.to_string()
+                    );
                 }
             },
             Err(msg) => {
