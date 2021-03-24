@@ -8,6 +8,8 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
+anoma_vm_env = {path = "../ledger/vm_env"}
+borsh = "0.8.2"
 
 [profile.release]
 # smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto

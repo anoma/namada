@@ -21,8 +21,6 @@ use super::MerkleRoot;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
     #[error("Database error: {0}")]
     DBError(db::Error),
     #[error("Merkle tree error: {0}")]
@@ -195,37 +193,6 @@ impl Storage {
                 subspace.remove(column);
             }
         }
-        Ok(())
-    }
-
-    // TODO this doesn't belong here, temporary for convenience...
-    pub fn transfer(
-        &mut self,
-        src: &Address,
-        dest: &Address,
-        amount: u64,
-    ) -> Result<()> {
-        let src_balance = match self.read(src, "balance/eth")? {
-            None => {
-                return Err(Error::Temporary {
-                    error: format!("Source balance not found {:?}", src),
-                });
-            }
-            Some(bytes) => u64::decode(bytes),
-        };
-        if src_balance < amount {
-            return Err(Error::Temporary {
-                error: format!("Source balance is too low {:?}", src),
-            });
-        }
-
-        let dest_balance = match self.read(dest, "balance/eth")? {
-            None => 0,
-            Some(bytes) => u64::decode(bytes),
-        };
-
-        self.write(src, "balance/eth", (src_balance - amount).encode())?;
-        self.write(dest, "balance/eth", (dest_balance + amount).encode())?;
         Ok(())
     }
 

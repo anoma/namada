@@ -5,6 +5,7 @@ name = "Anoma"
 version = "0.1.0"
 dependencies = [
  "anoma_vm",
+ "anoma_vm_env",
  "base64 0.13.0",
  "blake2b-rs",
  "borsh",
@@ -127,11 +128,20 @@ dependencies = [
 name = "anoma_vm"
 version = "0.1.0"
 dependencies = [
+ "anoma_vm_env",
  "borsh",
+ "log",
  "thiserror",
  "wasmer",
  "wasmer-compiler-singlepass",
  "wasmer-engine-jit",
+]
+
+[[package]]
+name = "anoma_vm_env"
+version = "0.1.0"
+dependencies = [
+ "borsh",
 ]
 
 [[package]]
