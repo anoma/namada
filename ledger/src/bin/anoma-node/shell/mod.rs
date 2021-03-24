@@ -1,3 +1,4 @@
+mod gas;
 mod storage;
 mod tendermint;
 
@@ -10,10 +11,14 @@ use anoma::rpc_types::{Message, Tx};
 use anoma_vm::{TxEnv, TxMsg, TxRunner, VpRunner};
 use thiserror::Error;
 
-use self::storage::{
-    Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
-};
 use self::tendermint::{AbciMsg, AbciReceiver};
+use self::{
+    gas::BlockGasMeter,
+    storage::{
+        Address, BasicAddress, BlockHash, BlockHeight, Storage,
+        ValidatorAddress,
+    },
+};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -36,6 +41,10 @@ pub enum Error {
         addr: Address,
         error: anoma_vm::Error,
     },
+    #[error("Transaction gas is too high")]
+    TooHighTransactionGasUsage(),
+    #[error("Block gas is too high")]
+    TooHighBlockGasUsage(),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -69,6 +78,7 @@ pub fn reset(config: Config) -> Result<()> {
 pub struct Shell {
     abci: AbciReceiver,
     storage: storage::Storage,
+    gas_meter: BlockGasMeter,
 }
 
 #[derive(Clone, Debug)]
@@ -102,7 +112,11 @@ impl Shell {
                 vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
             )
             .expect("Unable to set the initial balance for basic account");
-        Self { abci, storage }
+        Self {
+            abci,
+            storage,
+            gas_meter: BlockGasMeter::default(),
+        }
     }
 
     /// Run the shell in the current thread (blocking).
@@ -225,8 +239,9 @@ impl Shell {
     }
 
     /// Validate and apply a transaction.
-    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<()> {
+    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
+
         let tx_data = tx.data.unwrap_or(vec![]);
 
         // Execute the transaction code and wait for result
@@ -299,11 +314,21 @@ impl Shell {
             );
         }
 
-        Ok(())
+        let transaction_storage_gas =
+            (tx_bytes.len() as u64) * gas::TX_GAS_PER_BYTE as u64;
+        let _ = self
+            .gas_meter
+            .add_base_transaction_fee(transaction_storage_gas)
+            .map_err(|_| Error::TooHighTransactionGasUsage);
+        match self.gas_meter.finalize_transaction() {
+            Ok(gas) => return Ok(gas),
+            Err(_) => return Err(Error::TooHighBlockGasUsage()),
+        };
     }
 
     /// Begin a new block.
     pub fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
+        self.gas_meter.reset();
         self.storage.begin_block(hash, height).unwrap();
     }
 
