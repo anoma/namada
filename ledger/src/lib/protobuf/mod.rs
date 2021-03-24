@@ -1,15 +1,8 @@
 use std::hash::Hash;
 
 use self::types::Intent;
-use self::types::IntentData;
 pub mod services;
 pub mod types;
-
-impl Hash for IntentData {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        todo!()
-    }
-}
 
 // TODO change timestamp type to chrono (support for serde) or std::time
 impl Hash for Intent {
