@@ -7,8 +7,6 @@ use wasmer::{HostEnvInitError, LazyInit, Memory};
 pub enum Error {
     #[error("Failed initializing the memory: {0}")]
     InitMemoryError(wasmer::MemoryError),
-    #[error("Failed exporting the memory: {0}")]
-    MemoryExportError(wasmer::ExportError),
     #[error("Memory is not initialized")]
     UninitializedMemory,
     #[error("Memory ouf of bounds: {0}")]
@@ -221,6 +219,7 @@ impl AnomaMemory {
     }
 
     /// Write string into memory at the given offset
+    #[allow(dead_code)]
     pub fn write_string(&self, offset: u64, string: String) -> Result<()> {
         self.write_bytes(offset, string.as_bytes())
     }

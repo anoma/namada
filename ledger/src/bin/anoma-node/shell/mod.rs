@@ -3,24 +3,21 @@ mod storage;
 mod tendermint;
 mod vm;
 
+use std::ffi::c_void;
+use std::path::PathBuf;
 use std::sync::mpsc;
-use std::{ffi::c_void, path::PathBuf};
 
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
-use storage::KeySeg;
 use thiserror::Error;
-use vm::{TxEnv, TxRunner, VpRunner};
 
-use self::tendermint::{AbciMsg, AbciReceiver};
-use self::{
-    gas::BlockGasMeter,
-    storage::{
-        Address, BasicAddress, BlockHash, BlockHeight, Storage,
-        ValidatorAddress,
-    },
+use self::gas::BlockGasMeter;
+use self::storage::{
+    Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
+use self::tendermint::{AbciMsg, AbciReceiver};
+use self::vm::{TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -183,83 +180,6 @@ impl Shell {
     }
 }
 
-/// Storage read function exposed to the wasm VM environment
-fn vm_storage_read(
-    env: &TxEnv,
-    key_ptr: u64,
-    key_len: u64,
-    result_ptr: u64,
-) -> u64 {
-    let key = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-
-    log::debug!(
-        "vm_storage_read {}, key {}, result_ptr {}",
-        key,
-        key_ptr,
-        result_ptr,
-    );
-
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
-    let keys = key.split('/').collect::<Vec<&str>>();
-    if let [key_a, key_b, key_c] = keys.as_slice() {
-        if "balance" == key_b.to_string() {
-            let addr = storage::Address::from_key_seg(&key_a.to_string())
-                .expect("should be an address");
-            let key = format!("{}/{}", key_b, key_c);
-            let value = shell
-                .storage
-                .read(&addr, &key)
-                .expect("storage read failed")
-                .expect("key not found");
-            env.memory
-                .write_bytes(result_ptr, value)
-                .expect("cannot write to memory");
-            return 1;
-        }
-    }
-    // fail
-    0
-}
-
-/// Storage update function exposed to the wasm VM environment
-fn vm_storage_update(
-    env: &TxEnv,
-    key_ptr: u64,
-    key_len: u64,
-    val_ptr: u64,
-    val_len: u64,
-) -> u64 {
-    let key = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-    let val = env
-        .memory
-        .read_bytes(val_ptr, val_len as _)
-        .expect("Cannot read the value from memory");
-    log::debug!("vm_storage_update {}, {:#?}", key, val);
-
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
-    let keys = key.split('/').collect::<Vec<&str>>();
-    if let [key_a, key_b, key_c] = keys.as_slice() {
-        if "balance" == key_b.to_string() {
-            let addr = storage::Address::from_key_seg(&key_a.to_string())
-                .expect("should be an address");
-            let key = format!("{}/{}", key_b, key_c);
-            shell
-                .storage
-                .write(&addr, &key, val)
-                .expect("VM storage write fail");
-            return 1;
-        }
-    }
-    // fail
-    0
-}
-
 impl Shell {
     pub fn init_chain(&mut self, chain_id: String) -> Result<()> {
         self.storage
@@ -290,13 +210,7 @@ impl Shell {
         let ledger =
             unsafe { vm::TxShellWrapper::new(self as *mut _ as *mut c_void) };
         tx_runner
-            .run(
-                ledger,
-                tx.code,
-                &tx_data,
-                vm_storage_read,
-                vm_storage_update,
-            )
+            .run(ledger, tx.code, &tx_data)
             .map_err(Error::TxRunnerError)?;
 
         // TODO gather write log from tx udpates

@@ -1,13 +1,15 @@
+mod host_env;
 mod memory;
 
-use anoma_vm_env::memory::{VpInput, WriteLog};
-use memory::AnomaMemory;
 use std::ffi::c_void;
 use std::sync::mpsc;
+
+use anoma_vm_env::memory::{VpInput, WriteLog};
 use thiserror::Error;
-use wasmer::{
-    internals::WithEnv, HostEnvInitError, HostFunction, Instance, WasmerEnv,
-};
+use wasmer::Instance;
+
+const TX_ENTRYPOINT: &str = "apply_tx";
+const VP_ENTRYPOINT: &str = "validate_tx";
 
 /// This is used to attach the Ledger's shell to transaction environment,
 /// which is used for implementing some host calls.
@@ -29,25 +31,6 @@ impl TxShellWrapper {
     }
 }
 
-const TX_ENTRYPOINT: &str = "apply_tx";
-const VP_ENTRYPOINT: &str = "validate_tx";
-
-#[derive(Clone)]
-pub struct TxEnv {
-    // not thread-safe, assuming single-threaded Tx runner
-    pub ledger: TxShellWrapper,
-    pub memory: AnomaMemory,
-}
-
-impl WasmerEnv for TxEnv {
-    fn init_with_instance(
-        &mut self,
-        instance: &Instance,
-    ) -> std::result::Result<(), HostEnvInitError> {
-        self.memory.init_env_memory(&instance.exports)
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct TxRunner {
     wasm_store: wasmer::Store,
@@ -63,20 +46,29 @@ pub enum Error {
     TxCompileError(wasmer::CompileError),
     #[error("Validity predicate compilation error: {0}")]
     MissingTxModuleEntrypoint(wasmer::ExportError),
-    #[error("Unexpected transaction module entrypoint interface {TX_ENTRYPOINT}, failed with: {0}")]
+    #[error(
+        "Unexpected transaction module entrypoint interface {TX_ENTRYPOINT}, \
+         failed with: {0}"
+    )]
     UnexpectedTxModuleEntrypointInterface(wasmer::RuntimeError),
     #[error("Failed running transaction with: {0}")]
     TxRuntimeError(wasmer::RuntimeError),
     #[error("Failed instantiating transaction module with: {0}")]
     TxInstantiationError(wasmer::InstantiationError),
-    #[error("Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: {0}")]
+    #[error(
+        "Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: \
+         {0}"
+    )]
     // 3. Validity predicate errors
     VpCompileError(wasmer::CompileError),
     #[error(
         "Missing transaction entrypoint {TX_ENTRYPOINT}, failed with: {0}"
     )]
     MissingVpModuleEntrypoint(wasmer::ExportError),
-    #[error("Unexpected validity predicate module entrypoint interface {VP_ENTRYPOINT}, failed with: {0}")]
+    #[error(
+        "Unexpected validity predicate module entrypoint interface \
+         {VP_ENTRYPOINT}, failed with: {0}"
+    )]
     UnexpectedVpModuleEntrypointInterface(wasmer::RuntimeError),
     #[error("Failed running validity predicate with: {0}")]
     VpRuntimeError(wasmer::RuntimeError),
@@ -100,41 +92,29 @@ impl TxRunner {
         Self { wasm_store }
     }
 
-    pub fn run<Read, Write>(
+    pub fn run(
         &self,
         ledger: TxShellWrapper,
         tx_code: Vec<u8>,
         tx_data: &Vec<u8>,
-        storage_read: Read,
-        storage_update: Write,
-    ) -> Result<()>
-    where
-        Read: HostFunction<(u64, u64, u64), u64, WithEnv, TxEnv>,
-        Write: HostFunction<(u64, u64, u64, u64), u64, WithEnv, TxEnv>,
-    {
-        let tx_env = TxEnv {
-            ledger,
-            memory: AnomaMemory::default(),
-        };
+    ) -> Result<()> {
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::TxCompileError)?;
-        let memory = memory::prepare_tx_memory(&self.wasm_store)
+        let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let call_input = memory::write_tx_inputs(&memory, tx_data)
+        let call_input = memory::write_tx_inputs(&initial_memory, tx_data)
             .map_err(Error::MemoryError)?;
-        let tx_imports = wasmer::imports! {
-            // default namespace
-            "env" => {
-                "memory" => memory,
-                "read" => wasmer::Function::new_native_with_env(&self.wasm_store, tx_env.clone(), storage_read),
-                "update" => wasmer::Function::new_native_with_env(&self.wasm_store, tx_env, storage_update),
-            },
-        };
+        let tx_imports = host_env::prepare_tx_imports(
+            &self.wasm_store,
+            initial_memory,
+            ledger,
+        );
+
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::TxInstantiationError)?;
-
         self.run_with_input(tx_code, call_input)?;
+
         Ok(())
     }
 
@@ -155,21 +135,6 @@ impl TxRunner {
         apply_tx
             .call(tx_data_ptr, tx_data_len)
             .map_err(Error::TxRuntimeError)
-    }
-}
-
-#[derive(Clone)]
-pub struct VpEnv {
-    pub ledger: TxShellWrapper,
-    pub memory: AnomaMemory,
-}
-
-impl WasmerEnv for VpEnv {
-    fn init_with_instance(
-        &mut self,
-        instance: &Instance,
-    ) -> std::result::Result<(), HostEnvInitError> {
-        self.memory.init_env_memory(&instance.exports)
     }
 }
 
@@ -199,23 +164,18 @@ impl VpRunner {
         vp_sender: mpsc::Sender<VpMsg>,
     ) -> Result<()> {
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
-            .map_err(Error::TxCompileError)?;
-
-        let memory = memory::prepare_vp_memory(&self.wasm_store)
+            .map_err(Error::VpCompileError)?;
+        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let input: VpInput = (addr, tx_data, write_log);
-        let call_input = memory::write_vp_inputs(&memory, input)
+        let call_input = memory::write_vp_inputs(&initial_memory, input)
             .map_err(Error::MemoryError)?;
-        let vp_imports = wasmer::imports! {
-            // default namespace
-            "env" => {
-                "memory" => memory,
-            },
-        };
+        let vp_imports =
+            host_env::prepare_vp_imports(&self.wasm_store, initial_memory);
+
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::VpInstantiationError)?;
-
         let is_valid = self.run_with_input(vp_code, call_input)?;
 
         vp_sender
