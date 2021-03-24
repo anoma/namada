@@ -276,7 +276,8 @@ impl tendermint_abci::Application for AbciWrapper {
                     );
                 }
                 Err(err) => {
-                    log::error!("{:#?}", err);
+                    resp.code = 1;
+                    resp.log = String::from(err.to_string());
                 }
             },
             Err(msg) => {
