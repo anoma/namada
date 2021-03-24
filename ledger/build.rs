@@ -10,7 +10,8 @@ fn main() {
         .out_dir(PathBuf::from("src/lib/protobuf"))
         .format(true)
         // XXX TODO try to add json encoding to simplify use for user
-        // .type_attribute("types.Intent", "#[derive(serde::Serialize, serde::Deserialize)]")
+        // .type_attribute("types.Intent", "#[derive(serde::Serialize,
+        // serde::Deserialize)]")
         .compile(&["src/proto/services.proto"], &["src/proto"])
         .unwrap();
 }

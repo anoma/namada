@@ -2,11 +2,9 @@ use anoma::protobuf::types::{Intent, Tx};
 use prost::Message;
 use tokio::sync::mpsc::Receiver;
 
+use super::matchmaker::Matchmaker;
+use super::mempool::{IntentId, Mempool};
 use super::types::{InternMessage, Topic};
-use super::{
-    matchmaker::Matchmaker,
-    mempool::{IntentId, Mempool},
-};
 
 #[derive(Debug, Clone)]
 pub enum OrderbookError {

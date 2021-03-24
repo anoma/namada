@@ -11,26 +11,23 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::{fs, thread};
-use tokio::runtime::Runtime;
 
-// use self::Dkg::DKG;
-use anoma::{self, bookkeeper::Bookkeeper, config::Config};
+use anoma::self;
+use anoma::bookkeeper::Bookkeeper;
+use anoma::config::{Config, *};
+use anoma::protobuf::types::{IntentMessage, Tx};
+use mpsc::Receiver;
+use prost::Message;
+use tendermint_rpc::{Client, HttpClient};
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
 use self::config::NetworkConfig;
 use self::dkg::DKG;
 use self::matchmaker::Matchmaker;
 use self::orderbook::Orderbook;
-use self::types::NetworkEvent;
 use self::p2p::P2P;
-use anoma::{
-    config::*,
-    protobuf::types::{IntentMessage, Tx},
-};
-use mpsc::Receiver;
-use prost::Message;
-use tendermint_rpc::{Client, HttpClient};
-
+use self::types::NetworkEvent;
 use crate::rpc;
 
 #[derive(Debug)]
@@ -70,7 +67,8 @@ pub fn run(
         &base_dir,
         p2p_local_address,
         p2p_peers,
-        orderbook, dkg,
+        orderbook,
+        dkg,
     );
     let (mut p2p, event_receiver, matchmaker_event_receiver) =
         p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker, ledger_address)
@@ -120,7 +118,9 @@ fn read_or_generate_bookkeeper_key(
 
 // This fix spawn a thread only to send the Tx to the ledger to prevent that.
 #[tokio::main]
-pub async fn matchmaker_dispatcher(mut matchmaker_event_receiver: Receiver<Tx>){
+pub async fn matchmaker_dispatcher(
+    mut matchmaker_event_receiver: Receiver<Tx>,
+) {
     loop {
         tokio::select! {
             event = matchmaker_event_receiver.recv() =>
@@ -160,7 +160,7 @@ pub async fn dispatcher(
     let response = client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
     println!("ledger response {:#?}", response);
 
-    if let Some(matchmaker_event_receiver) = matchmaker_event_receiver{
+    if let Some(matchmaker_event_receiver) = matchmaker_event_receiver {
         thread::spawn(|| matchmaker_dispatcher(matchmaker_event_receiver));
     }
 

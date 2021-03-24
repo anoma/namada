@@ -1,5 +1,5 @@
-use anoma::protobuf::types::IntentMessage;
-use anoma::{bookkeeper::Bookkeeper, protobuf::types::Tx};
+use anoma::bookkeeper::Bookkeeper;
+use anoma::protobuf::types::{IntentMessage, Tx};
 use libp2p::gossipsub::{IdentTopic as Topic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -9,11 +9,12 @@ use serde::de::Expected;
 use tendermint_rpc::{Client, HttpClient};
 use tokio::sync::mpsc::Receiver;
 
+use super::config::NetworkConfig;
 use super::dkg::DKG;
+use super::matchmaker::Matchmaker;
 use super::network_behaviour::Behaviour;
 use super::orderbook::{self, Orderbook};
 use super::types::NetworkEvent;
-use super::{config::NetworkConfig, matchmaker::Matchmaker};
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 

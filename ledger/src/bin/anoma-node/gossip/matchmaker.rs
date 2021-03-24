@@ -1,8 +1,9 @@
-use super::mempool::{self, Mempool, MempoolError};
 use anoma::protobuf::types::{Intent, Tx};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+
+use super::mempool::{self, Mempool, MempoolError};
 
 #[derive(Debug)]
 pub struct Matchmaker {
@@ -87,7 +88,7 @@ impl Matchmaker {
                 .expect("Error while serializing tx data");
             let tx = Tx {
                 code: code.clone(),
-                data: Some(data)
+                data: Some(data),
             };
             Some(tx)
         } else {

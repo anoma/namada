@@ -1,10 +1,9 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 use anoma::cli::{self, ClientOpts, GossipArg, InlinedClientOpts, IntentArg};
+use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
-use anoma::protobuf::{
-    services::rpc_service_client::RpcServiceClient, types::Tx,
-};
+use anoma::protobuf::types::Tx;
 use clap::Clap;
 use color_eyre::eyre::Result;
 use prost::Message;
