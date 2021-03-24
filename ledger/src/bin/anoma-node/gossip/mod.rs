@@ -104,6 +104,11 @@ fn read_or_generate_bookkeeper_key(
 // When this event handler is merged into the main handler of the dispatcher
 // then it does not send the correct dota to the ledger and it fails to
 // correctly decode the Tx.
+
+// The problem comes from the line :
+// https://github.com/informalsystems/tendermint-rs/blob/a0a59b3a3f8a50abdaa618ff00394eeeeb8b9a0f/abci/src/codec.rs#L151
+// Ok(Some(M::decode(&mut result_bytes)?))
+
 // This fix spawn a thread only to send the Tx to the ledger to prevent that.
 #[tokio::main]
 pub async fn matchmaker_dispatcher(mut matchmaker_event_receiver: Receiver<Tx>){
