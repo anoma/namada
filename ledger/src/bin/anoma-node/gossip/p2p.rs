@@ -35,8 +35,13 @@ pub fn build_swarm(
 }
 
 pub fn prepare_swarm(swarm: &mut Swarm, network_config: &NetworkConfig) {
-    for topic_string in &network_config.gossip.topics {
-        let topic = Topic::new(topic_string);
+    if network_config.gossip.orderbook {
+        let topic = Topic::from(super::types::Topic::Orderbook);
+        swarm.gossipsub.subscribe(&topic).unwrap();
+    }
+
+    if network_config.gossip.dkg {
+        let topic = Topic::from(super::types::Topic::Dkg);
         swarm.gossipsub.subscribe(&topic).unwrap();
     }
 
