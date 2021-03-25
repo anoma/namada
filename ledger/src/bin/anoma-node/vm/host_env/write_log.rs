@@ -39,6 +39,26 @@ impl WriteLog {
 }
 
 impl WriteLog {
+    /// Read a value at the given key, returns [`None`] if the key is not
+    /// present in the write log
+    pub fn read<K>(
+        &self,
+        addr: &Address,
+        key: K,
+    ) -> Option<&StorageModification>
+    where
+        K: AsRef<str>,
+    {
+        let s_key = StorageKey {
+            addr: addr.clone(),
+            key: key.as_ref().to_string(),
+        };
+        // try to read from tx write log first
+        self.tx_write_log.get(&s_key).or_else(|| {
+            // if not found, then try to read from block write log
+            self.tx_write_log.get(&s_key)
+        })
+    }
     /// Write a key and a value
     pub fn write(&mut self, addr: Address, key: String, value: Vec<u8>) {
         self.tx_write_log.insert(

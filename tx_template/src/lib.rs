@@ -8,7 +8,7 @@ use std::mem::size_of;
 /// The environment provides calls to host functions via this C interface:
 extern "C" {
     fn read(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
-    fn update(key_ptr: u64, key_len: u64, val_ptr: u64, val_len: u64) -> u64;
+    fn write(key_ptr: u64, key_len: u64, val_ptr: u64, val_len: u64) -> u64;
     // fn delete(key);
     // fn iterate_prefix(key) -> iter;
     // fn iter_next(iter) -> (key, value);
@@ -64,7 +64,7 @@ fn do_apply_tx(_tx_data: memory::TxData) {
             dest_new_bal.serialize(&mut dest_new_bal_buf).unwrap();
 
             unsafe {
-                update(
+                write(
                     src_key.as_ptr() as _,
                     src_key.len() as _,
                     src_new_bal_buf.as_ptr() as _,
@@ -72,7 +72,7 @@ fn do_apply_tx(_tx_data: memory::TxData) {
                 )
             };
             unsafe {
-                update(
+                write(
                     dest_key.as_ptr() as _,
                     dest_key.len() as _,
                     dest_new_bal_buf.as_ptr() as _,

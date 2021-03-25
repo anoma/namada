@@ -268,15 +268,6 @@ impl VpRunner {
             .map_err(Error::MissingVpModuleEntrypoint)?
             .native::<(u64, u64, u64, u64, u64, u64), u64>()
             .map_err(Error::UnexpectedVpModuleEntrypointInterface)?;
-        let input = memory::VpCallInput {
-            addr_ptr,
-            addr_len,
-            tx_data_ptr,
-            tx_data_len,
-            write_log_ptr,
-            write_log_len,
-        };
-        println!("run VP input {:#?}", input);
         let is_valid = validate_tx
             .call(
                 addr_ptr,

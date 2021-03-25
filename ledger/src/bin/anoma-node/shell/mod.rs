@@ -240,7 +240,7 @@ impl Shell {
                 src_vp,
                 &tx_data,
                 src.to_string(),
-                &mut self.storage,
+                &self.storage,
                 &self.write_log,
                 &keys_changed,
                 vp_sender.clone(),
@@ -257,7 +257,7 @@ impl Shell {
                 dest_vp,
                 &tx_data,
                 dest.to_string(),
-                &mut self.storage,
+                &self.storage,
                 &self.write_log,
                 &keys_changed,
                 vp_sender,
@@ -276,6 +276,7 @@ impl Shell {
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
             );
+            self.write_log.commit_tx();
         } else {
             log::debug!(
                 "tx declined by {}",
@@ -289,6 +290,7 @@ impl Shell {
                     }
                 }
             );
+            self.write_log.drop_tx();
         }
 
         let transaction_storage_gas =
@@ -310,7 +312,11 @@ impl Shell {
     }
 
     /// End a block.
-    pub fn end_block(&mut self, _height: BlockHeight) {}
+    pub fn end_block(&mut self, _height: BlockHeight) {
+        self.write_log
+            .commit_block(&mut self.storage)
+            .expect("Expected committing block write log success");
+    }
 
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.

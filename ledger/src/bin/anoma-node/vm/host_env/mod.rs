@@ -62,8 +62,8 @@ pub fn prepare_tx_imports(
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            "read" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), storage_read),
-            "update" => wasmer::Function::new_native_with_env(wasm_store, tx_env, storage_update),
+            "read" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_read),
+            "write" => wasmer::Function::new_native_with_env(wasm_store, tx_env, tx_storage_write),
         },
     }
 }
@@ -89,8 +89,23 @@ pub fn prepare_vp_imports(
     }
 }
 
-/// Storage read function exposed to the wasm VM environment
-fn storage_read(
+fn parse_key(key: String) -> (storage::Address, String) {
+    // parse the address from the first key segment and get the rest of the key
+    let mut key_segments: Vec<&str> = key.split('/').collect();
+    let addr_str = key_segments
+        .first()
+        .expect("key shouldn't be empty")
+        .to_string();
+    key_segments.drain(0..1);
+    let key = key_segments.join("/");
+    let addr: storage::Address =
+        storage::KeySeg::from_key_seg(&addr_str).expect("should be an address");
+    (addr, key)
+}
+
+/// Storage read function exposed to the wasm VM Tx environment. It will try to
+/// read from the write log first and if no entry found then from the storage.
+fn tx_storage_read(
     env: &TxEnv,
     key_ptr: u64,
     key_len: u64,
@@ -108,29 +123,45 @@ fn storage_read(
         result_ptr,
     );
 
-    let storage: &mut Storage =
-        unsafe { &mut *(env.storage.get() as *mut Storage) };
-    let keys = key.split('/').collect::<Vec<&str>>();
-    if let [key_a, key_b, key_c] = keys.as_slice() {
-        if "balance" == key_b.to_string() {
-            let addr: storage::Address =
-                storage::KeySeg::from_key_seg(&key_a.to_string())
-                    .expect("should be an address");
-            let key = format!("{}/{}", key_b, key_c);
-            let (value, _gas) =
-                storage.read(&addr, &key).expect("storage read failed");
+    let (addr, key) = parse_key(key);
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&addr, &key) {
+        Some(&write_log::StorageModification::Write { ref value }) => {
             env.memory
-                .write_bytes(result_ptr, value.expect("key not found"))
+                .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
             return 1;
         }
+        Some(&write_log::StorageModification::Delete) => {
+            // fail, given key has been deleted
+            return 0;
+        }
+        None => {
+            // when not found in write log, try to read from the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (value, _gas) =
+                storage.read(&addr, &key).expect("storage read failed");
+            match value {
+                Some(value) => {
+                    env.memory
+                        .write_bytes(result_ptr, value)
+                        .expect("cannot write to memory");
+                    return 1;
+                }
+                None => {
+                    // fail, key not found
+                    return 0;
+                }
+            }
+        }
     }
-    // fail
-    0
 }
 
-/// Storage update function exposed to the wasm VM environment
-fn storage_update(
+/// Storage write function exposed to the wasm VM Tx environment. The given
+/// key/value will be written to the write log.
+fn tx_storage_write(
     env: &TxEnv,
     key_ptr: u64,
     key_len: u64,
@@ -141,27 +172,17 @@ fn storage_update(
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
-    let val = env
+    let value = env
         .memory
         .read_bytes(val_ptr, val_len as _)
         .expect("Cannot read the value from memory");
-    log::debug!("vm_storage_update {}, {:#?}", key, val);
 
-    let storage: &mut Storage =
-        unsafe { &mut *(env.storage.get() as *mut Storage) };
-    let keys = key.split('/').collect::<Vec<&str>>();
-    if let [key_a, key_b, key_c] = keys.as_slice() {
-        if "balance" == key_b.to_string() {
-            let addr: storage::Address =
-                storage::KeySeg::from_key_seg(&key_a.to_string())
-                    .expect("should be an address");
-            let key = format!("{}/{}", key_b, key_c);
-            let (_gas, _bytes_diff) = storage
-                .write(&addr, &key, val)
-                .expect("VM storage write fail");
-            return 1;
-        }
-    }
-    // fail
-    0
+    log::debug!("vm_storage_update {}, {:#?}", key, value);
+
+    let (addr, key) = parse_key(key);
+
+    let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
+    write_log.write(addr, key, value);
+
+    1
 }
