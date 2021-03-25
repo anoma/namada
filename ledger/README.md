@@ -48,13 +48,13 @@ cargo watch -x "run --bin anomad -- run-anoma"
 cargo watch -x "run --bin anomad -- reset-anoma" -x "run --bin anomad -- run"
 
 # run orderbook daemon
-make run-orderbook
+make run-gossip
 
 # run orderbook daemon with rpc server
-cargo run --bin anomad -- --rpc run-orderbook
+cargo run --bin anomad -- --rpc run-gossip
 
 # Submit an intent (need a rpc server)
-cargo run --bin anomac -- gossip -data "data"
+cargo run --bin anomac -- intent "data"
 
 # Format the code
 make fmt
