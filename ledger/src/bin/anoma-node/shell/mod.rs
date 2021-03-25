@@ -1,17 +1,16 @@
 mod gas;
 mod storage;
 mod tendermint;
-mod vm;
 
 use std::sync::mpsc;
 use std::{ffi::c_void, path::PathBuf};
 
+use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
 use storage::KeySeg;
 use thiserror::Error;
-use vm::{TxEnv, TxRunner, VpRunner};
 
 use self::tendermint::{AbciMsg, AbciReceiver};
 use self::{
