@@ -35,6 +35,7 @@ pub enum ClientOpts {
 pub enum InlinedClientOpts {
     /// Submit a transaction and wait for the result
     Tx(Tx),
+    /// Submit an intent to the orderbook
     Intent(IntentArg),
 }
 
