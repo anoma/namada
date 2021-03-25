@@ -56,4 +56,4 @@ dev-deps:
 	$(rustup) toolchain install $(nightly)
 	$(rustup) component add rustfmt --toolchain $(nightly)
 
-.PHONY : build build-release clippy install run test test-debug fmt watch clean doc build-wasm-scripts dev-deps
+.PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps
