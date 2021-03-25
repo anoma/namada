@@ -2,11 +2,10 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
-use std::ffi::c_void;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-use crate::vm::{self, TxRunner, VpRunner};
+use crate::vm::{self, host_env::write_log::WriteLog, TxRunner, VpRunner};
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
@@ -75,6 +74,7 @@ pub struct Shell {
     abci: AbciReceiver,
     storage: storage::Storage,
     gas_meter: BlockGasMeter,
+    write_log: WriteLog,
 }
 
 #[derive(Clone, Debug)]
@@ -112,6 +112,7 @@ impl Shell {
             abci,
             storage,
             gas_meter: BlockGasMeter::default(),
+            write_log: WriteLog::new(),
         }
     }
 
@@ -207,20 +208,13 @@ impl Shell {
 
         // Execute the transaction code
         let tx_runner = TxRunner::new();
-        // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage_wrapper = unsafe {
-            vm::TxStorageWrapper::new(
-                &mut self.storage as *mut _ as *mut c_void,
-            )
-        };
         tx_runner
-            .run(storage_wrapper, tx.code, &tx_data)
+            .run(&mut self.storage, &mut self.write_log, tx.code, &tx_data)
             .map_err(Error::TxRunnerError)?;
 
-        // TODO gather write log from tx udpates
-        let write_log = vec![];
-
-        // TODO determine these from the write log
+        // TODO get the changed keys from the write log
+        let keys_changed: Vec<String> = vec![];
+        // TODO determine these from the changed keys
         let src = "va";
         let dest = "ba";
         let src_addr = Address::new_address(src.into());
@@ -246,7 +240,9 @@ impl Shell {
                 src_vp,
                 &tx_data,
                 src.to_string(),
-                &write_log,
+                &mut self.storage,
+                &self.write_log,
+                &keys_changed,
                 vp_sender.clone(),
             )
             .map_err(|error| Error::VpRunnerError {
@@ -257,7 +253,15 @@ impl Shell {
             .recv()
             .expect("Expected a message from source's VP runner");
         vp_runner
-            .run(dest_vp, &tx_data, dest.to_string(), &write_log, vp_sender)
+            .run(
+                dest_vp,
+                &tx_data,
+                dest.to_string(),
+                &mut self.storage,
+                &self.write_log,
+                &keys_changed,
+                vp_sender,
+            )
             .map_err(|error| Error::VpRunnerError {
                 addr: dest_addr.clone(),
                 error,

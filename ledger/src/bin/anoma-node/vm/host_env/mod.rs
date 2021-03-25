@@ -1,7 +1,9 @@
-mod write_log;
+pub mod write_log;
+
+use self::write_log::WriteLog;
 
 use super::memory::AnomaMemory;
-use super::TxStorageWrapper;
+use super::TxEnvHostWrapper;
 use crate::shell::storage::{self, Storage};
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
@@ -10,7 +12,7 @@ use wasmer::{
 #[derive(Clone)]
 struct TxEnv {
     // not thread-safe, assuming single-threaded Tx runner
-    ledger: TxStorageWrapper,
+    storage: TxEnvHostWrapper<Storage>,
     memory: AnomaMemory,
 }
 
@@ -25,7 +27,7 @@ impl WasmerEnv for TxEnv {
 
 #[derive(Clone)]
 struct VpEnv {
-    ledger: TxStorageWrapper,
+    storage: TxEnvHostWrapper<Storage>,
     memory: AnomaMemory,
 }
 
@@ -42,11 +44,12 @@ impl WasmerEnv for VpEnv {
 /// transaction code
 pub fn prepare_tx_imports(
     wasm_store: &Store,
+    write_log: &mut WriteLog,
     memory: Memory,
-    ledger: TxStorageWrapper,
+    storage: TxEnvHostWrapper<Storage>,
 ) -> ImportObject {
     let tx_env = TxEnv {
-        ledger,
+        storage,
         memory: AnomaMemory::default(),
     };
     wasmer::imports! {
@@ -90,7 +93,7 @@ fn storage_read(
     );
 
     let storage: &mut Storage =
-        unsafe { &mut *(env.ledger.get() as *mut Storage) };
+        unsafe { &mut *(env.storage.get() as *mut Storage) };
     let keys = key.split('/').collect::<Vec<&str>>();
     if let [key_a, key_b, key_c] = keys.as_slice() {
         if "balance" == key_b.to_string() {
@@ -129,7 +132,7 @@ fn storage_update(
     log::debug!("vm_storage_update {}, {:#?}", key, val);
 
     let storage: &mut Storage =
-        unsafe { &mut *(env.ledger.get() as *mut Storage) };
+        unsafe { &mut *(env.storage.get() as *mut Storage) };
     let keys = key.split('/').collect::<Vec<&str>>();
     if let [key_a, key_b, key_c] = keys.as_slice() {
         if "balance" == key_b.to_string() {

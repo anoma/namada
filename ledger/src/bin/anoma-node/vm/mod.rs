@@ -1,33 +1,44 @@
-mod host_env;
+pub mod host_env;
 mod memory;
 
-use std::ffi::c_void;
 use std::sync::mpsc;
+use std::{ffi::c_void, marker::PhantomData};
 
-use anoma_vm_env::memory::{VpInput, WriteLog};
+use anoma_vm_env::memory::VpInput;
 use thiserror::Error;
 use wasmer::Instance;
+
+use crate::shell::storage::Storage;
+
+use self::host_env::write_log::WriteLog;
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
 
-/// This is used to attach the Ledger's shell to transaction environment,
-/// which is used for implementing some host calls.
+/// This is used to attach the Ledger's host structures to transaction
+/// environment, which is used for implementing some host calls.
 /// It's not thread-safe, we're assuming single-threaded Tx runner.
-#[derive(Clone)]
-pub struct TxStorageWrapper(*mut c_void);
-unsafe impl Send for TxStorageWrapper {}
-unsafe impl Sync for TxStorageWrapper {}
+pub struct TxEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
+unsafe impl<T> Send for TxEnvHostWrapper<T> {}
+unsafe impl<T> Sync for TxEnvHostWrapper<T> {}
 
-impl TxStorageWrapper {
+// Have to manually implement [`Clone`], because the derived [`Clone`] for
+// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
+impl<T> Clone for TxEnvHostWrapper<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, PhantomData)
+    }
+}
+
+impl<T> TxEnvHostWrapper<T> {
     /// This is not thread-safe, we're assuming single-threaded Tx runner.
-    pub unsafe fn new(ledger: *mut c_void) -> Self {
-        Self(ledger)
+    unsafe fn new(ledger: *mut c_void) -> Self {
+        Self(ledger, PhantomData)
     }
 
     /// This is not thread-safe, we're assuming single-threaded Tx runner.
-    pub unsafe fn get(&self) -> *mut c_void {
-        self.0
+    pub unsafe fn get(&self) -> *mut T {
+        self.0 as *mut T
     }
 }
 
@@ -94,10 +105,14 @@ impl TxRunner {
 
     pub fn run(
         &self,
-        ledger: TxStorageWrapper,
+        storage: &mut Storage,
+        write_log: &mut WriteLog,
         tx_code: Vec<u8>,
         tx_data: &Vec<u8>,
     ) -> Result<()> {
+        // This is not thread-safe, we're assuming single-threaded Tx runner.
+        let storage =
+            unsafe { TxEnvHostWrapper::new(storage as *mut _ as *mut c_void) };
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::TxCompileError)?;
         let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
@@ -106,8 +121,9 @@ impl TxRunner {
             .map_err(Error::MemoryError)?;
         let tx_imports = host_env::prepare_tx_imports(
             &self.wasm_store,
+            write_log,
             initial_memory,
-            ledger,
+            storage,
         );
 
         // compile and run the transaction wasm code
@@ -160,14 +176,18 @@ impl VpRunner {
         vp_code: impl AsRef<[u8]>,
         tx_data: &Vec<u8>,
         addr: String,
-        write_log: &WriteLog,
+        // TODO use in VpEnv for prior storage reads
+        _storage: &mut Storage,
+        // TODO use in VpEnv for posterior storage reads
+        _write_log: &WriteLog,
+        keys_changed: &Vec<String>,
         vp_sender: mpsc::Sender<VpMsg>,
     ) -> Result<()> {
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(Error::VpCompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let input: VpInput = (addr, tx_data, write_log);
+        let input: VpInput = (addr, tx_data, keys_changed);
         let call_input = memory::write_vp_inputs(&initial_memory, input)
             .map_err(Error::MemoryError)?;
         let vp_imports =

@@ -23,13 +23,14 @@ pub enum StorageModification {
     Delete,
 }
 
-struct WriteLog {
+#[derive(Debug)]
+pub struct WriteLog {
     block_write_log: HashMap<StorageKey, StorageModification>,
     tx_write_log: HashMap<StorageKey, StorageModification>,
 }
 
 impl WriteLog {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
