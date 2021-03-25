@@ -48,14 +48,13 @@ pub fn run(
         None
     };
 
-    let p2p_local_address = local_address
-        .unwrap_or(format!("/ip4/{}/tcp/{}", config.p2p.host, config.p2p.port));
+    let p2p_local_address = local_address.unwrap_or(config.p2p.get_address());
     let p2p_peers = peers.unwrap_or(config.p2p.peers);
     let p2p_topics = topics.unwrap_or(config.p2p.topics);
 
     let (mut swarm, event_receiver) = p2p::build_swarm(bookkeeper)
         // .expect("msg");
-        .or_else(|e| Err(Error::P2pSwarmError(e.to_string())))?;
+        .map_err(|e| Error::P2pSwarmError(e.to_string()))?;
     p2p::prepare_swarm(&mut swarm, p2p_local_address, p2p_topics, p2p_peers);
     p2p::dispatcher(
         swarm,
@@ -64,6 +63,6 @@ pub fn run(
         Some(Orderbook::new()),
         Some(DKG::new()),
     )
-    .or_else(|e| Err(Error::P2pDispatcherError(e.to_string())))?;
+    .map_err(|e| Error::P2pDispatcherError(e.to_string()))?;
     Ok(())
 }
