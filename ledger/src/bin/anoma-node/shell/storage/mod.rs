@@ -135,6 +135,7 @@ impl Storage {
             .is_zero())
     }
 
+    /// Returns a value from the specified subspace and the gas cost
     pub fn read(
         &self,
         addr: &Address,
@@ -168,6 +169,7 @@ impl Storage {
         }
     }
 
+    /// Write a value to the specified subspace and returns the gas cost and the size difference
     pub fn write(
         &mut self,
         addr: &Address,
@@ -196,7 +198,12 @@ impl Storage {
         Ok((len as u64, size_diff))
     }
 
-    pub fn delete(&mut self, addr: &Address, column: &str) -> Result<(u64, i64)> {
+    /// Delete the specified subspace and returns the gas cost and the size difference
+    pub fn delete(
+        &mut self,
+        addr: &Address,
+        column: &str,
+    ) -> Result<(u64, i64)> {
         let mut size_diff = 0;
         if self.has_key(addr, column)? {
             // update the merkle tree with a zero as a tombstone
