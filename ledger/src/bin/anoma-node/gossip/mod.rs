@@ -65,6 +65,5 @@ pub fn run(
         Some(Orderbook::new()),
         Some(DKG::new()),
     )
-    .map_err(|e| Error::P2pDispatcherError(e.to_string()))?;
-    Ok(())
+    .map_err(|e| Error::P2pDispatcherError(e.to_string()))
 }
