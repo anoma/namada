@@ -24,9 +24,9 @@ install:
 run-anoma:
 	# runs the node daemon
 	$(cargo) run --bin anomad -- run-anoma
-run-orderbook:
-	# runs the node orderbook daemon
-	$(cargo) run --bin anomad -- run-orderbook
+run-gossip:
+	# runs the node gossip daemon
+	$(cargo) run --bin anomad -- run-gossip
 
 test:
 	$(cargo) test
