@@ -107,6 +107,8 @@ impl Key {
     fn parse(string: String) -> Result<Self, Error> {..}
     fn join(&self, other: KeySeg) -> Self {..}
     fn into_string(self) -> String;
+    // find addresses included in the key, used to find which validity-predicates should be triggered by a key space change
+    fn find_addresses(&self) -> Vec<Address>;
 }
 
 // Provide a trait so that we can define new pre-defined key segment types inside wasm environment and also ad-hoc key segments defined by wasm users
