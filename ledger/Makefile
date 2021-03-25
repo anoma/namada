@@ -24,9 +24,9 @@ install:
 run-anoma:
 	# runs the node daemon
 	$(cargo) run --bin anomad -- run-anoma
-run-orderbook:
-	# runs the node orderbook daemon
-	$(cargo) run --bin anomad -- run-orderbook
+run-gossip:
+	# runs the node gossip daemon
+	$(cargo) run --bin anomad -- run-gossip
 
 test:
 	$(cargo) test
@@ -56,4 +56,4 @@ dev-deps:
 	$(rustup) toolchain install $(nightly)
 	$(rustup) component add rustfmt --toolchain $(nightly)
 
-.PHONY : build build-release clippy install run test test-debug fmt watch clean doc build-wasm-scripts dev-deps
+.PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps

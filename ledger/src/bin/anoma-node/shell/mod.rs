@@ -5,10 +5,10 @@ mod tendermint;
 use std::sync::mpsc;
 use std::{ffi::c_void, path::PathBuf};
 
+use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
-use anoma_vm::{TxEnv, TxRunner, VpRunner};
 use storage::KeySeg;
 use thiserror::Error;
 
@@ -36,12 +36,9 @@ pub enum Error {
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
     #[error("Transaction runner error: {0}")]
-    TxRunnerError(anoma_vm::Error),
+    TxRunnerError(vm::Error),
     #[error("Validity predicate for {addr} runner error: {error}")]
-    VpRunnerError {
-        addr: Address,
-        error: anoma_vm::Error,
-    },
+    VpRunnerError { addr: Address, error: vm::Error },
     #[error("Transaction gas is too high")]
     TooHighTransactionGasUsage(),
     #[error("Block gas is too high")]
@@ -288,9 +285,8 @@ impl Shell {
 
         // Execute the transaction code
         let tx_runner = TxRunner::new();
-        let ledger = unsafe {
-            anoma_vm::TxShellWrapper::new(self as *mut _ as *mut c_void)
-        };
+        let ledger =
+            unsafe { vm::TxShellWrapper::new(self as *mut _ as *mut c_void) };
         tx_runner
             .run(
                 ledger,

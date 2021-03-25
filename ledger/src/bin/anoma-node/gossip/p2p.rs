@@ -33,9 +33,14 @@ pub fn build_swarm(
     ))
 }
 
-pub fn prepare_swarm(swarm: &mut Swarm, config: Config) {
-    for topic_string in config.p2p.topics.clone() {
-        let topic = Topic::new(topic_string);
+pub fn prepare_swarm(swarm: &mut Swarm, config: &Config) {
+    if config.p2p.topics.get("orderbook").cloned().unwrap_or(false) {
+        let topic = Topic::from(super::types::Topic::Orderbook);
+        swarm.gossipsub.subscribe(&topic).unwrap();
+    }
+
+    if config.p2p.topics.get("dkg").cloned().unwrap_or(false) {
+        let topic = Topic::from(super::types::Topic::Dkg);
         swarm.gossipsub.subscribe(&topic).unwrap();
     }
 

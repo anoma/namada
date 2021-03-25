@@ -33,7 +33,6 @@ dev = []
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 
 [dependencies]
-anoma_vm = {path = "vm"}
 anoma_vm_env = {path = "vm_env"}
 base64 = "0.13.0"
 blake2b-rs = "0.2.0"
@@ -68,6 +67,9 @@ tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", features = ["full"]}
 tonic = "0.4.0"
+wasmer = "1.0.2"
+wasmer-compiler-singlepass = "1.0.2"
+wasmer-engine-jit = "1.0.2"
 
 [dev-dependencies]
 cargo-watch = "7.5.0"

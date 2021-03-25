@@ -1,6 +1,6 @@
 //! Node and client configuration settings
 
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use std::fs;
 use std::fs::{create_dir_all, File};
@@ -32,7 +32,7 @@ pub struct Gossip {
     pub host: String,
     pub port: String,
     pub peers: Vec<String>,
-    pub topics: Vec<String>,
+    pub topics: HashMap<String, bool>,
 }
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -55,13 +55,8 @@ impl Gossip {
         }
     }
 
-    pub fn set_topics(&mut self, topics: Option<Vec<String>>) {
-        match topics {
-            Some(topics) => {
-                self.topics = topics.clone();
-            }
-            None => {}
-        }
+    pub fn set_topic(&mut self, topic_name: String, enable: bool) {
+        self.topics.insert(topic_name, enable);
     }
 
     pub fn set_address(&mut self, address: Option<String>) {
@@ -81,6 +76,10 @@ impl Config {
     pub fn new(home: String) -> Result<Self, config::ConfigError> {
         let mut s = config::Config::new();
 
+        let mut default_topics: HashMap<String, bool> = HashMap::new();
+        default_topics.insert("orderbook".to_string(), true);
+        default_topics.insert("dkg".to_string(), false);
+
         s.set_default("node.home", home.to_string())?;
         s.set_default("node.db_path", "db")?;
         s.set_default("node.libp2p_path", "libp2p")?;
@@ -93,7 +92,7 @@ impl Config {
         s.set_default("p2p.host", "127.0.0.1")?;
         s.set_default("p2p.port", 20201)?;
         s.set_default("p2p.peers", Vec::<String>::new())?;
-        s.set_default("p2p.topics", Vec::<String>::new())?;
+        s.set_default("p2p.topics", default_topics)?;
 
         s.merge(
             config::File::with_name(&format!("{}/{}", home, "settings.toml"))

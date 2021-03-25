@@ -32,9 +32,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn run(
     mut config: Config,
     rpc: bool,
+    orderbook: bool,
+    dkg: bool,
     local_address: Option<String>,
     peers: Option<Vec<String>>,
-    topics: Option<Vec<String>>,
 ) -> Result<()> {
     let bookkeeper = config
         .get_bookkeeper()
@@ -50,12 +51,13 @@ pub fn run(
 
     config.p2p.set_address(local_address);
     config.p2p.set_peers(peers);
-    config.p2p.set_topics(topics);
+    config.p2p.set_topic("dkg".to_string(), dkg);
+    config.p2p.set_topic("orderbook".to_string(), orderbook);
 
     let (mut swarm, event_receiver) = p2p::build_swarm(bookkeeper)
         // .expect("msg");
         .map_err(|e| Error::P2pSwarmError(e.to_string()))?;
-    p2p::prepare_swarm(&mut swarm, config);
+    p2p::prepare_swarm(&mut swarm, &config);
     p2p::dispatcher(
         swarm,
         event_receiver,
