@@ -10,11 +10,11 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-// TODO this could probably be in storage module
+// TODO some form of this will be in storage module
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct StorageKey {
-    addr: Address,
-    key: String,
+    pub addr: Address,
+    pub key: String,
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +71,10 @@ impl WriteLog {
     pub fn delete(&mut self, addr: Address, key: String) {
         self.tx_write_log
             .insert(StorageKey { addr, key }, StorageModification::Delete);
+    }
+
+    pub fn get_changed_key(&self) -> Vec<&StorageKey> {
+        self.tx_write_log.keys().collect()
     }
 
     /// Commit the current transaction's write log to the block when it's

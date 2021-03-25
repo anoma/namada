@@ -64,6 +64,7 @@ impl<T> VpEnvHostWrapper<T> {
     }
 
     /// This is not thread-safe, see [`VmEnvHostWrapper`]
+    #[allow(dead_code)]
     pub unsafe fn get(&self) -> *const T {
         self.0 as *const T
     }
@@ -258,8 +259,8 @@ impl VpRunner {
             addr_len,
             tx_data_ptr,
             tx_data_len,
-            write_log_ptr,
-            write_log_len,
+            keys_changed_ptr,
+            keys_changed_len,
         }: memory::VpCallInput,
     ) -> Result<bool> {
         let validate_tx = vp_code
@@ -274,8 +275,8 @@ impl VpRunner {
                 addr_len,
                 tx_data_ptr,
                 tx_data_len,
-                write_log_ptr,
-                write_log_len,
+                keys_changed_ptr,
+                keys_changed_len,
             )
             .map_err(Error::VpRuntimeError)?;
         Ok(is_valid == 1)

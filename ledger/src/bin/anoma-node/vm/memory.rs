@@ -73,13 +73,13 @@ pub struct VpCallInput {
     pub addr_len: u64,
     pub tx_data_ptr: u64,
     pub tx_data_len: u64,
-    pub write_log_ptr: u64,
-    pub write_log_len: u64,
+    pub keys_changed_ptr: u64,
+    pub keys_changed_len: u64,
 }
 
 pub fn write_vp_inputs(
     memory: &wasmer::Memory,
-    (addr, tx_data_bytes, write_log): memory::VpInput,
+    (addr, tx_data_bytes, keys_changed): memory::VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
     let addr_bytes = addr.as_bytes();
@@ -101,13 +101,14 @@ pub fn write_vp_inputs(
     let tx_data_ptr = addr_ptr + addr_len;
     let tx_data_len = tx_data_bytes.len() as _;
 
-    let write_log_bytes = write_log.try_to_vec().expect(
-        "TEMPORARY: failed to serialize write_log for validity predicate",
+    let keys_changed_bytes = keys_changed.try_to_vec().expect(
+        "TEMPORARY: failed to serialize keys_changed for validity predicate",
     );
-    let write_log_ptr = tx_data_ptr + tx_data_len;
-    let write_log_len = write_log_bytes.len() as _;
+    let keys_changed_ptr = tx_data_ptr + tx_data_len;
+    let keys_changed_len = keys_changed_bytes.len() as _;
 
-    let bytes = [&addr_bytes[..], tx_data_bytes, &write_log_bytes[..]].concat();
+    let bytes =
+        [&addr_bytes[..], tx_data_bytes, &keys_changed_bytes[..]].concat();
     write_memory_bytes(memory, addr_ptr, bytes)?;
 
     Ok(VpCallInput {
@@ -115,8 +116,8 @@ pub fn write_vp_inputs(
         addr_len,
         tx_data_ptr,
         tx_data_len,
-        write_log_ptr,
-        write_log_len,
+        keys_changed_ptr,
+        keys_changed_len,
     })
 }
 

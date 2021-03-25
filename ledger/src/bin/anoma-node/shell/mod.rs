@@ -10,6 +10,7 @@ use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
 use thiserror::Error;
+use vm::host_env::write_log::StorageKey;
 
 use self::gas::BlockGasMeter;
 use self::storage::{
@@ -212,8 +213,12 @@ impl Shell {
             .run(&mut self.storage, &mut self.write_log, tx.code, &tx_data)
             .map_err(Error::TxRunnerError)?;
 
-        // TODO get the changed keys from the write log
-        let keys_changed: Vec<String> = vec![];
+        let keys_changed: Vec<String> = self
+            .write_log
+            .get_changed_key()
+            .iter()
+            .map(|StorageKey { addr, key }| format!("{}/{}", addr, key))
+            .collect();
         // TODO determine these from the changed keys
         let src = "va";
         let dest = "ba";
