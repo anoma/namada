@@ -1,10 +1,8 @@
 mod write_log;
 
+use super::memory::AnomaMemory;
 use super::TxStorageWrapper;
-use super::{
-    super::{storage, Storage},
-    memory::AnomaMemory,
-};
+use crate::shell::storage::{self, Storage};
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
 };
@@ -100,12 +98,10 @@ fn storage_read(
                 storage::KeySeg::from_key_seg(&key_a.to_string())
                     .expect("should be an address");
             let key = format!("{}/{}", key_b, key_c);
-            let value = storage
-                .read(&addr, &key)
-                .expect("storage read failed")
-                .expect("key not found");
+            let (value, _gas) =
+                storage.read(&addr, &key).expect("storage read failed");
             env.memory
-                .write_bytes(result_ptr, value)
+                .write_bytes(result_ptr, value.expect("key not found"))
                 .expect("cannot write to memory");
             return 1;
         }
@@ -141,7 +137,7 @@ fn storage_update(
                 storage::KeySeg::from_key_seg(&key_a.to_string())
                     .expect("should be an address");
             let key = format!("{}/{}", key_b, key_c);
-            storage
+            let (_gas, _bytes_diff) = storage
                 .write(&addr, &key, val)
                 .expect("VM storage write fail");
             return 1;

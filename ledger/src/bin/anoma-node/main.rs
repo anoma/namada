@@ -2,6 +2,7 @@ mod cli;
 mod gossip;
 mod rpc;
 mod shell;
+mod vm;
 use color_eyre::eyre::Result;
 
 fn main() -> Result<()> {

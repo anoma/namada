@@ -1,12 +1,12 @@
-mod gas;
-mod storage;
+pub mod gas;
+pub mod storage;
 mod tendermint;
-mod vm;
 
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
+use crate::vm::{self, TxRunner, VpRunner};
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::rpc_types::{Message, Tx};
@@ -17,7 +17,6 @@ use self::storage::{
     Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
 use self::tendermint::{AbciMsg, AbciReceiver};
-use self::vm::{TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {
