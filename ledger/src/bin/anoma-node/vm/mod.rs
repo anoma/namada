@@ -15,9 +15,9 @@ use self::host_env::write_log::WriteLog;
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
 
-/// This is used to attach the Ledger's host structures to transaction
-/// environment, which is used for implementing some host calls.
-/// It's not thread-safe, we're assuming single-threaded Tx runner.
+/// This is used to attach the Ledger's host structures to transaction, which is
+/// used for implementing some host calls. It's not thread-safe, we're assuming
+/// single-threaded Tx runner.
 pub struct TxEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
 unsafe impl<T> Send for TxEnvHostWrapper<T> {}
 unsafe impl<T> Sync for TxEnvHostWrapper<T> {}
@@ -31,14 +31,41 @@ impl<T> Clone for TxEnvHostWrapper<T> {
 }
 
 impl<T> TxEnvHostWrapper<T> {
-    /// This is not thread-safe, we're assuming single-threaded Tx runner.
-    unsafe fn new(ledger: *mut c_void) -> Self {
-        Self(ledger, PhantomData)
+    /// This is not thread-safe, see [`VmEnvHostWrapper`]
+    unsafe fn new(host_structure: *mut c_void) -> Self {
+        Self(host_structure, PhantomData)
     }
 
-    /// This is not thread-safe, we're assuming single-threaded Tx runner.
+    /// This is not thread-safe, see [`VmEnvHostWrapper`]
     pub unsafe fn get(&self) -> *mut T {
         self.0 as *mut T
+    }
+}
+/// This is used to attach the Ledger's host structures to validity predicate
+/// environment, which is used for implementing some host calls. It's not
+/// thread-safe, we're assuming read-only access from parallel Vp runners.
+pub struct VpEnvHostWrapper<T>(*const c_void, PhantomData<T>);
+unsafe impl<T> Send for VpEnvHostWrapper<T> {}
+unsafe impl<T> Sync for VpEnvHostWrapper<T> {}
+
+// Same as for [`TxEnvHostWrapper`], we have to manually implement [`Clone`],
+// because the derived [`Clone`] for [`PhantomData<T>`] puts the bound on [`T:
+// Clone`].
+impl<T> Clone for VpEnvHostWrapper<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, PhantomData)
+    }
+}
+
+impl<T> VpEnvHostWrapper<T> {
+    /// This is not thread-safe, see [`VmEnvHostWrapper`]
+    unsafe fn new(host_structure: *const c_void) -> Self {
+        Self(host_structure, PhantomData)
+    }
+
+    /// This is not thread-safe, see [`VmEnvHostWrapper`]
+    pub unsafe fn get(&self) -> *const T {
+        self.0 as *const T
     }
 }
 
@@ -113,6 +140,12 @@ impl TxRunner {
         // This is not thread-safe, we're assuming single-threaded Tx runner.
         let storage =
             unsafe { TxEnvHostWrapper::new(storage as *mut _ as *mut c_void) };
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
+        let write_log = unsafe {
+            TxEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
+        };
+
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::TxCompileError)?;
         let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
@@ -121,9 +154,9 @@ impl TxRunner {
             .map_err(Error::MemoryError)?;
         let tx_imports = host_env::prepare_tx_imports(
             &self.wasm_store,
+            storage,
             write_log,
             initial_memory,
-            storage,
         );
 
         // compile and run the transaction wasm code
@@ -176,13 +209,22 @@ impl VpRunner {
         vp_code: impl AsRef<[u8]>,
         tx_data: &Vec<u8>,
         addr: String,
-        // TODO use in VpEnv for prior storage reads
-        _storage: &mut Storage,
-        // TODO use in VpEnv for posterior storage reads
-        _write_log: &WriteLog,
+        storage: &Storage,
+        write_log: &WriteLog,
         keys_changed: &Vec<String>,
         vp_sender: mpsc::Sender<VpMsg>,
     ) -> Result<()> {
+        // This is not thread-safe, we're assuming read-only access from
+        // parallel Vp runners.
+        let storage = unsafe {
+            VpEnvHostWrapper::new(storage as *const _ as *const c_void)
+        };
+        // This is also not thread-safe, we're assuming read-only access from
+        // parallel Vp runners.
+        let write_log = unsafe {
+            VpEnvHostWrapper::new(write_log as *const _ as *const c_void)
+        };
+
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(Error::VpCompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
@@ -190,8 +232,12 @@ impl VpRunner {
         let input: VpInput = (addr, tx_data, keys_changed);
         let call_input = memory::write_vp_inputs(&initial_memory, input)
             .map_err(Error::MemoryError)?;
-        let vp_imports =
-            host_env::prepare_vp_imports(&self.wasm_store, initial_memory);
+        let vp_imports = host_env::prepare_vp_imports(
+            &self.wasm_store,
+            storage,
+            write_log,
+            initial_memory,
+        );
 
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)

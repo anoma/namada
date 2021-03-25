@@ -2,8 +2,8 @@ pub mod write_log;
 
 use self::write_log::WriteLog;
 
-use super::memory::AnomaMemory;
 use super::TxEnvHostWrapper;
+use super::{memory::AnomaMemory, VpEnvHostWrapper};
 use crate::shell::storage::{self, Storage};
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
@@ -13,6 +13,8 @@ use wasmer::{
 struct TxEnv {
     // not thread-safe, assuming single-threaded Tx runner
     storage: TxEnvHostWrapper<Storage>,
+    // not thread-safe, assuming single-threaded Tx runner
+    write_log: TxEnvHostWrapper<WriteLog>,
     memory: AnomaMemory,
 }
 
@@ -27,7 +29,10 @@ impl WasmerEnv for TxEnv {
 
 #[derive(Clone)]
 struct VpEnv {
-    storage: TxEnvHostWrapper<Storage>,
+    // not thread-safe, assuming read-only access from parallel Vp runners
+    storage: VpEnvHostWrapper<Storage>,
+    // not thread-safe, assuming read-only access from parallel Vp runners
+    write_log: VpEnvHostWrapper<WriteLog>,
     memory: AnomaMemory,
 }
 
@@ -44,18 +49,19 @@ impl WasmerEnv for VpEnv {
 /// transaction code
 pub fn prepare_tx_imports(
     wasm_store: &Store,
-    write_log: &mut WriteLog,
-    memory: Memory,
     storage: TxEnvHostWrapper<Storage>,
+    write_log: TxEnvHostWrapper<WriteLog>,
+    initial_memory: Memory,
 ) -> ImportObject {
     let tx_env = TxEnv {
         storage,
+        write_log,
         memory: AnomaMemory::default(),
     };
     wasmer::imports! {
         // default namespace
         "env" => {
-            "memory" => memory,
+            "memory" => initial_memory,
             "read" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), storage_read),
             "update" => wasmer::Function::new_native_with_env(wasm_store, tx_env, storage_update),
         },
@@ -64,11 +70,21 @@ pub fn prepare_tx_imports(
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
-pub fn prepare_vp_imports(_wasm_store: &Store, memory: Memory) -> ImportObject {
+pub fn prepare_vp_imports(
+    _wasm_store: &Store,
+    storage: VpEnvHostWrapper<Storage>,
+    write_log: VpEnvHostWrapper<WriteLog>,
+    initial_memory: Memory,
+) -> ImportObject {
+    let _vp_env = VpEnv {
+        storage,
+        write_log,
+        memory: AnomaMemory::default(),
+    };
     wasmer::imports! {
         // default namespace
         "env" => {
-            "memory" => memory,
+            "memory" => initial_memory,
         },
     }
 }
