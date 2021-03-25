@@ -4,7 +4,6 @@
 name = "Anoma"
 version = "0.1.0"
 dependencies = [
- "anoma_vm",
  "anoma_vm_env",
  "base64 0.13.0",
  "blake2b-rs",
@@ -38,6 +37,9 @@ dependencies = [
  "tokio",
  "tonic",
  "tonic-build",
+ "wasmer",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-jit",
 ]
 
 [[package]]
@@ -122,19 +124,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7404febffaa47dac81aa44dba71523c9d069b1bdc50a77db41195149e17f68e5"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "anoma_vm"
-version = "0.1.0"
-dependencies = [
- "anoma_vm_env",
- "borsh",
- "log",
- "thiserror",
- "wasmer",
- "wasmer-compiler-singlepass",
- "wasmer-engine-jit",
 ]
 
 [[package]]
