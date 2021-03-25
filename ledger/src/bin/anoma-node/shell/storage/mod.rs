@@ -135,43 +135,59 @@ impl Storage {
             .is_zero())
     }
 
+    /// Returns a value from the specified subspace and the gas cost
     pub fn read(
         &self,
         addr: &Address,
         column: &str,
-    ) -> Result<Option<Vec<u8>>> {
+    ) -> Result<(Option<Vec<u8>>, u64)> {
         if !self.has_key(addr, column)? {
-            return Ok(None);
+            return Ok((None, 0));
         }
 
         if let Some(subspace) = self.block.subspaces.get(addr) {
-            if let Some(bytes) = subspace.get(column) {
-                return Ok(Some(bytes.to_vec()));
+            if let Some(v) = subspace.get(column) {
+                return Ok((Some(v.to_vec()), v.len() as u64));
             }
         }
 
         match self.block.height.prev_height() {
             Some(prev) => {
-                self.db.read(prev, addr, column).map_err(Error::DBError)
+                match self
+                    .db
+                    .read(prev, addr, column)
+                    .map_err(Error::DBError)?
+                {
+                    Some(v) => {
+                        let len = v.len() as u64;
+                        Ok((Some(v), len))
+                    }
+                    None => Ok((None, 0)),
+                }
             }
-            None => Ok(None),
+            None => Ok((None, 0)),
         }
     }
 
+    /// Write a value to the specified subspace and returns the gas cost and the size difference
     pub fn write(
         &mut self,
         addr: &Address,
         column: &str,
         value: Vec<u8>,
-    ) -> Result<()> {
+    ) -> Result<(u64, i64)> {
         let storage_key = format!("{}/{}", addr.to_key_seg(), column);
         let key = storage_key.hash256();
         let value_h256 = value.hash256();
         self.update_tree(key, value_h256)?;
 
+        let len = value.len();
+        let mut size_diff = 0;
         match self.block.subspaces.get_mut(addr) {
             Some(subspace) => {
-                subspace.insert(column.to_owned(), value);
+                if let Some(old) = subspace.insert(column.to_owned(), value) {
+                    size_diff = len as i64 - old.len() as i64;
+                }
             }
             None => {
                 let mut subspace = HashMap::new();
@@ -179,10 +195,16 @@ impl Storage {
                 self.block.subspaces.insert(addr.clone(), subspace);
             }
         }
-        Ok(())
+        Ok((len as u64, size_diff))
     }
 
-    pub fn delete(&mut self, addr: &Address, column: &str) -> Result<()> {
+    /// Delete the specified subspace and returns the gas cost and the size difference
+    pub fn delete(
+        &mut self,
+        addr: &Address,
+        column: &str,
+    ) -> Result<(u64, i64)> {
+        let mut size_diff = 0;
         if self.has_key(addr, column)? {
             // update the merkle tree with a zero as a tombstone
             let storage_key = format!("{}/{}", addr.to_key_seg(), column);
@@ -190,10 +212,12 @@ impl Storage {
             self.update_tree(key, H256::zero())?;
 
             if let Some(subspace) = self.block.subspaces.get_mut(addr) {
-                subspace.remove(column);
+                if let Some(old_v) = subspace.remove(column) {
+                    size_diff -= old_v.len() as i64;
+                }
             }
         }
-        Ok(())
+        Ok((-size_diff as u64, size_diff))
     }
 
     /// # Block header data
@@ -224,7 +248,7 @@ impl Storage {
 
     /// Get a validity predicate for the given account address
     pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
-        match self.read(addr, "vp")? {
+        match self.read(addr, "vp")?.0 {
             Some(vp) => Ok(vp.clone()),
             // TODO: this temporarily loads default VP template if none found
             None => Ok(VP_WASM.to_vec()),

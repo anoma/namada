@@ -210,13 +210,12 @@ fn vm_storage_read(
             let addr = storage::Address::from_key_seg(&key_a.to_string())
                 .expect("should be an address");
             let key = format!("{}/{}", key_b, key_c);
-            let value = shell
+            let (value, _) = shell
                 .storage
                 .read(&addr, &key)
-                .expect("storage read failed")
-                .expect("key not found");
+                .expect("storage read failed");
             env.memory
-                .write_bytes(result_ptr, value)
+                .write_bytes(result_ptr, value.expect("key not found"))
                 .expect("cannot write to memory");
             return 1;
         }
