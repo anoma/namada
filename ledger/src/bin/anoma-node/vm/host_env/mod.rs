@@ -63,7 +63,8 @@ pub fn prepare_tx_imports(
         "env" => {
             "memory" => initial_memory,
             "read" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_read),
-            "write" => wasmer::Function::new_native_with_env(wasm_store, tx_env, tx_storage_write),
+            "write" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_write),
+            "delete" => wasmer::Function::new_native_with_env(wasm_store, tx_env, tx_storage_delete),
         },
     }
 }
@@ -183,6 +184,24 @@ fn tx_storage_write(
 
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
     write_log.write(addr, key, value);
+
+    1
+}
+
+/// Storage delete function exposed to the wasm VM Tx environment. The given
+/// key/value will be written as deleted to the write log.
+fn tx_storage_delete(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("vm_storage_delete {}", key);
+
+    let (addr, key) = parse_key(key);
+
+    let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
+    write_log.delete(addr, key);
 
     1
 }

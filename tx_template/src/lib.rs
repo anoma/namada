@@ -9,7 +9,7 @@ use std::mem::size_of;
 extern "C" {
     fn read(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
     fn write(key_ptr: u64, key_len: u64, val_ptr: u64, val_len: u64) -> u64;
-    // fn delete(key);
+    fn delete(key_ptr: u64, key_len: u64) -> u64;
     // fn iterate_prefix(key) -> iter;
     // fn iter_next(iter) -> (key, value);
 }
