@@ -30,7 +30,7 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn run(
-    config: Config,
+    mut config: Config,
     rpc: bool,
     local_address: Option<String>,
     peers: Option<Vec<String>>,
@@ -48,14 +48,14 @@ pub fn run(
         None
     };
 
-    let p2p_local_address = local_address.unwrap_or(config.p2p.get_address());
-    let p2p_peers = peers.unwrap_or(config.p2p.peers);
-    let p2p_topics = topics.unwrap_or(config.p2p.topics);
+    config.p2p.set_address(local_address);
+    config.p2p.set_peers(peers);
+    config.p2p.set_topics(topics);
 
     let (mut swarm, event_receiver) = p2p::build_swarm(bookkeeper)
         // .expect("msg");
         .map_err(|e| Error::P2pSwarmError(e.to_string()))?;
-    p2p::prepare_swarm(&mut swarm, p2p_local_address, p2p_topics, p2p_peers);
+    p2p::prepare_swarm(&mut swarm, config);
     p2p::dispatcher(
         swarm,
         event_receiver,

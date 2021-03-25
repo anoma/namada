@@ -45,6 +45,36 @@ impl Gossip {
     pub fn get_address(&self) -> String {
         return format!("/ip4/{}/tcp/{}", self.host, self.port);
     }
+
+    pub fn set_peers(&mut self, peers: Option<Vec<String>>) {
+        match peers {
+            Some(peers) => {
+                self.peers = peers.clone();
+            }
+            None => {}
+        }
+    }
+
+    pub fn set_topics(&mut self, topics: Option<Vec<String>>) {
+        match topics {
+            Some(topics) => {
+                self.topics = topics.clone();
+            }
+            None => {}
+        }
+    }
+
+    pub fn set_address(&mut self, address: Option<String>) {
+        match address {
+            Some(address) => {
+                let split_addresses: Vec<String> =
+                    address.split("/").map(|s| s.to_string()).collect();
+                self.host = split_addresses[1].clone();
+                self.port = split_addresses[3].clone();
+            }
+            None => {}
+        }
+    }
 }
 
 impl Config {

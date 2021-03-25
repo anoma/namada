@@ -1,7 +1,7 @@
 use std::error::Error;
 
-use anoma::bookkeeper::Bookkeeper;
 use anoma::protobuf::types::IntentMessage;
+use anoma::{bookkeeper::Bookkeeper, config::Config};
 use libp2p::gossipsub::{IdentTopic as Topic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -33,22 +33,17 @@ pub fn build_swarm(
     ))
 }
 
-pub fn prepare_swarm(
-    swarm: &mut Swarm,
-    address: String,
-    topics: Vec<String>,
-    peers: Vec<String>,
-) {
-    for topic_string in topics {
+pub fn prepare_swarm(swarm: &mut Swarm, config: Config) {
+    for topic_string in config.p2p.topics.clone() {
         let topic = Topic::new(topic_string);
         swarm.gossipsub.subscribe(&topic).unwrap();
     }
 
     // Listen on all interfaces and whatever port the OS assigns
-    Swarm::listen_on(swarm, address.parse().unwrap()).unwrap();
+    Swarm::listen_on(swarm, config.p2p.get_address().parse().unwrap()).unwrap();
 
     // Reach out to another node if specified
-    for to_dial in peers {
+    for to_dial in config.p2p.peers.clone() {
         let dialing = to_dial.clone();
         match to_dial.parse() {
             Ok(to_dial) => match Swarm::dial_addr(swarm, to_dial) {
