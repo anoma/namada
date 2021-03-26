@@ -56,7 +56,7 @@ impl WriteLog {
         // try to read from tx write log first
         self.tx_write_log.get(&s_key).or_else(|| {
             // if not found, then try to read from block write log
-            self.tx_write_log.get(&s_key)
+            self.block_write_log.get(&s_key)
         })
     }
     /// Write a key and a value
