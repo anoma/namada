@@ -4,6 +4,7 @@ pub use std::hash::{Hash, Hasher};
 
 use anoma::protobuf::types::Intent;
 
+#[derive(Debug)]
 pub enum MempoolError {}
 
 type Result<T> = std::result::Result<T, MempoolError>;

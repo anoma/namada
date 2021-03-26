@@ -5,6 +5,7 @@ use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
 use libp2p::PeerId;
 use prost::Message;
+use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::config::NetworkConfig;
@@ -15,7 +16,7 @@ use super::types::NetworkEvent;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),

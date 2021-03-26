@@ -1,6 +1,7 @@
 use anoma::protobuf::types::{Intent, Tx};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::mempool::{Mempool, MempoolError};
@@ -12,6 +13,7 @@ pub struct Matchmaker {
     event_chan: Sender<Tx>,
 }
 
+#[derive(Error, Debug)]
 pub enum MatchmakerError {
     #[error("Failed to add intent to mempool: {0}")]
     MempoolFailed(MempoolError),

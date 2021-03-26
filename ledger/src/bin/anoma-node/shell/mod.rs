@@ -6,7 +6,6 @@ use std::ffi::c_void;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::protobuf::types::Tx;
@@ -19,6 +18,7 @@ use self::storage::{
     Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
 use self::tendermint::{AbciMsg, AbciReceiver};
+use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {

@@ -1,13 +1,13 @@
 mod memory;
 
-use anoma_vm_env::memory::{VpInput, WriteLog};
-use memory::AnomaMemory;
 use std::ffi::c_void;
 use std::sync::mpsc;
+
+use anoma_vm_env::memory::{VpInput, WriteLog};
+use memory::AnomaMemory;
 use thiserror::Error;
-use wasmer::{
-    internals::WithEnv, HostEnvInitError, HostFunction, Instance, WasmerEnv,
-};
+use wasmer::internals::WithEnv;
+use wasmer::{HostEnvInitError, HostFunction, Instance, WasmerEnv};
 
 /// This is used to attach the Ledger's shell to transaction environment,
 /// which is used for implementing some host calls.
@@ -63,20 +63,29 @@ pub enum Error {
     TxCompileError(wasmer::CompileError),
     #[error("Validity predicate compilation error: {0}")]
     MissingTxModuleEntrypoint(wasmer::ExportError),
-    #[error("Unexpected transaction module entrypoint interface {TX_ENTRYPOINT}, failed with: {0}")]
+    #[error(
+        "Unexpected transaction module entrypoint interface {TX_ENTRYPOINT}, \
+         failed with: {0}"
+    )]
     UnexpectedTxModuleEntrypointInterface(wasmer::RuntimeError),
     #[error("Failed running transaction with: {0}")]
     TxRuntimeError(wasmer::RuntimeError),
     #[error("Failed instantiating transaction module with: {0}")]
     TxInstantiationError(wasmer::InstantiationError),
-    #[error("Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: {0}")]
+    #[error(
+        "Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: \
+         {0}"
+    )]
     // 3. Validity predicate errors
     VpCompileError(wasmer::CompileError),
     #[error(
         "Missing transaction entrypoint {TX_ENTRYPOINT}, failed with: {0}"
     )]
     MissingVpModuleEntrypoint(wasmer::ExportError),
-    #[error("Unexpected validity predicate module entrypoint interface {VP_ENTRYPOINT}, failed with: {0}")]
+    #[error(
+        "Unexpected validity predicate module entrypoint interface \
+         {VP_ENTRYPOINT}, failed with: {0}"
+    )]
     UnexpectedVpModuleEntrypointInterface(wasmer::RuntimeError),
     #[error("Failed running validity predicate with: {0}")]
     VpRuntimeError(wasmer::RuntimeError),

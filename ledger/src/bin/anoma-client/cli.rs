@@ -19,7 +19,10 @@ pub async fn main() -> Result<()> {
 async fn exec_inlined(ops: InlinedClientOpts) {
     match ops {
         InlinedClientOpts::Tx(tx) => exec_tx(tx).await,
-        InlinedClientOpts::Intent(IntentArg { orderbook, data_path }) => {
+        InlinedClientOpts::Intent(IntentArg {
+            orderbook,
+            data_path,
+        }) => {
             gossip_intent(orderbook, data_path).await;
         }
     }
