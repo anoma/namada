@@ -51,6 +51,7 @@ pub struct TxCallInput {
     pub tx_data_len: u64,
 }
 
+/// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
     tx_data_bytes: &memory::TxData,
@@ -58,7 +59,6 @@ pub fn write_tx_inputs(
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as _;
 
-    log::info!("write_tx_inputs {}", tx_data_len);
     write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)?;
 
     Ok(TxCallInput {
@@ -77,26 +77,15 @@ pub struct VpCallInput {
     pub keys_changed_len: u64,
 }
 
+/// Write validity predicate inputs into wasm memory
 pub fn write_vp_inputs(
     memory: &wasmer::Memory,
     (addr, tx_data_bytes, keys_changed): memory::VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
+    // String utf8 encoding is more space-efficient than Borsh encoding
     let addr_bytes = addr.as_bytes();
-    // TODO there is some issue with serializing String with Borsh
-    // We can decode it back below (`addr2`), but in wasm deserialization fails.
-    // It encodes "va" as `[ 2, 0, 0, 0, 118, 97, ]`,
-    // whereas `String::as_bytes` encodes it just as [ 118, 97, ]
-
-    // let addr_bytes = addr.try_to_vec().expect(
-    //     "TEMPORARY: failed to serialize addr for validity predicate",
-    // );
-
     let addr_len = addr_bytes.len() as _;
-    // let addr2 = <String as
-    // borsh::BorshDeserialize>::try_from_slice(&addr_bytes[..])
-    //     .unwrap();
-    // println!("write_vp 2 {}", addr2);
 
     let tx_data_ptr = addr_ptr + addr_len;
     let tx_data_len = tx_data_bytes.len() as _;
@@ -184,7 +173,7 @@ pub struct AnomaMemory {
 }
 impl AnomaMemory {
     /// Initialize the memory from the given exports, used to implement
-    /// [`WasmerEnv`].
+    /// [`wasmer::WasmerEnv`].
     pub fn init_env_memory(
         &mut self,
         exports: &wasmer::Exports,

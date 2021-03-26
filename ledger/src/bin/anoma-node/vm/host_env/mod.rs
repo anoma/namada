@@ -64,7 +64,8 @@ pub fn prepare_tx_imports(
             "memory" => initial_memory,
             "read" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_read),
             "write" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_write),
-            "delete" => wasmer::Function::new_native_with_env(wasm_store, tx_env, tx_storage_delete),
+            "delete" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_delete),
+            "log_string" => wasmer::Function::new_native_with_env(wasm_store, tx_env, tx_log_string),
         },
     }
 }
@@ -72,12 +73,12 @@ pub fn prepare_tx_imports(
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
 pub fn prepare_vp_imports(
-    _wasm_store: &Store,
+    wasm_store: &Store,
     storage: VpEnvHostWrapper<Storage>,
     write_log: VpEnvHostWrapper<WriteLog>,
     initial_memory: Memory,
 ) -> ImportObject {
-    let _vp_env = VpEnv {
+    let vp_env = VpEnv {
         storage,
         write_log,
         memory: AnomaMemory::default(),
@@ -86,6 +87,7 @@ pub fn prepare_vp_imports(
         // default namespace
         "env" => {
             "memory" => initial_memory,
+            "log_string" => wasmer::Function::new_native_with_env(wasm_store, vp_env, vp_log_string),
         },
     }
 }
@@ -204,4 +206,26 @@ fn tx_storage_delete(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
     write_log.delete(addr, key);
 
     1
+}
+
+/// Log a string from exposed to the wasm VM Tx environment. The message will be
+/// printed at the [`log::Level::Info`].
+fn tx_log_string(env: &TxEnv, str_ptr: u64, str_len: u64) {
+    let str = env
+        .memory
+        .read_string(str_ptr, str_len as _)
+        .expect("Cannot read the string from memory");
+
+    log::info!("WASM Transaction log: {}", str);
+}
+
+/// Log a string from exposed to the wasm VM VP environment. The message will be
+/// printed at the [`log::Level::Info`].
+fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
+    let str = env
+        .memory
+        .read_string(str_ptr, str_len as _)
+        .expect("Cannot read the string from memory");
+
+    log::info!("WASM Validity predicate log: {}", str);
 }

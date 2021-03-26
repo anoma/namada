@@ -5,7 +5,10 @@ use borsh::BorshDeserialize;
 use core::slice;
 
 /// The environment provides calls to host functions via this C interface:
-extern "C" {}
+extern "C" {
+    // Requires a node running with "Info" log level
+    fn log_string(str_ptr: u64, str_len: u64);
+}
 
 /// The module interface callable by wasm runtime:
 #[no_mangle]
@@ -21,12 +24,22 @@ pub extern "C" fn validate_tx(
 ) -> u64 {
     // TODO more plumbing here
     let slice = unsafe { slice::from_raw_parts(addr_ptr as *const u8, addr_len as _) };
-    // let addr = String::try_from_slice(slice).unwrap();
     let addr = core::str::from_utf8(slice).unwrap();
+
     let slice = unsafe { slice::from_raw_parts(tx_data_ptr as *const u8, tx_data_len as _) };
     let tx_data = slice.to_vec() as memory::TxData;
-    let slice = unsafe { slice::from_raw_parts(keys_changed_ptr as _, keys_changed_len as _) };
+
+    let slice =
+        unsafe { slice::from_raw_parts(keys_changed_ptr as *const u8, keys_changed_len as _) };
     let keys_changed: Vec<String> = Vec::try_from_slice(slice).unwrap();
+
+    let log_msg = format!(
+        "validate_tx called with addr: {}, key_changed: {:#?}, tx_data: {:#?}",
+        addr, keys_changed, tx_data
+    );
+    unsafe {
+        log_string(log_msg.as_ptr() as _, log_msg.len() as _);
+    }
 
     // run validation with the concrete type(s)
     if do_validate_tx(tx_data, addr, keys_changed) {

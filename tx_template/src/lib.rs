@@ -10,6 +10,8 @@ extern "C" {
     fn read(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
     fn write(key_ptr: u64, key_len: u64, val_ptr: u64, val_len: u64) -> u64;
     fn delete(key_ptr: u64, key_len: u64) -> u64;
+    // Requires a node running with "Info" log level
+    fn log_string(str_ptr: u64, str_len: u64);
     // fn iterate_prefix(key) -> iter;
     // fn iter_next(iter) -> (key, value);
 }
@@ -19,6 +21,11 @@ extern "C" {
 pub extern "C" fn apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
     let slice = unsafe { slice::from_raw_parts(tx_data_ptr as *const u8, tx_data_len as _) };
     let tx_data = slice.to_vec() as memory::TxData;
+
+    let log_msg = format!("apply_tx called with tx_data: {:#?}", tx_data);
+    unsafe {
+        log_string(log_msg.as_ptr() as _, log_msg.len() as _);
+    }
 
     do_apply_tx(tx_data);
 }

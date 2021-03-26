@@ -4,7 +4,7 @@ mod memory;
 use std::sync::mpsc;
 use std::{ffi::c_void, marker::PhantomData};
 
-use anoma_vm_env::memory::VpInput;
+use anoma_vm_env::memory::{TxInput, VpInput};
 use thiserror::Error;
 use wasmer::Instance;
 
@@ -31,12 +31,12 @@ impl<T> Clone for TxEnvHostWrapper<T> {
 }
 
 impl<T> TxEnvHostWrapper<T> {
-    /// This is not thread-safe, see [`VmEnvHostWrapper`]
+    /// This is not thread-safe, see [`TxEnvHostWrapper`]
     unsafe fn new(host_structure: *mut c_void) -> Self {
         Self(host_structure, PhantomData)
     }
 
-    /// This is not thread-safe, see [`VmEnvHostWrapper`]
+    /// This is not thread-safe, see [`TxEnvHostWrapper`]
     pub unsafe fn get(&self) -> *mut T {
         self.0 as *mut T
     }
@@ -58,12 +58,12 @@ impl<T> Clone for VpEnvHostWrapper<T> {
 }
 
 impl<T> VpEnvHostWrapper<T> {
-    /// This is not thread-safe, see [`VmEnvHostWrapper`]
+    /// This is not thread-safe, see [`VpEnvHostWrapper`]
     unsafe fn new(host_structure: *const c_void) -> Self {
         Self(host_structure, PhantomData)
     }
 
-    /// This is not thread-safe, see [`VmEnvHostWrapper`]
+    /// This is not thread-safe, see [`VpEnvHostWrapper`]
     #[allow(dead_code)]
     pub unsafe fn get(&self) -> *const T {
         self.0 as *const T
@@ -83,6 +83,8 @@ pub enum Error {
     // 2. Transaction errors
     #[error("Transaction compilation error: {0}")]
     TxCompileError(wasmer::CompileError),
+    #[error("Missing transaction memory export, failed with: {0}")]
+    MissingTxModuleMemory(wasmer::ExportError),
     #[error("Validity predicate compilation error: {0}")]
     MissingTxModuleEntrypoint(wasmer::ExportError),
     #[error(
@@ -94,14 +96,16 @@ pub enum Error {
     TxRuntimeError(wasmer::RuntimeError),
     #[error("Failed instantiating transaction module with: {0}")]
     TxInstantiationError(wasmer::InstantiationError),
+    // 3. Validity predicate errors
     #[error(
         "Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: \
          {0}"
     )]
-    // 3. Validity predicate errors
     VpCompileError(wasmer::CompileError),
+    #[error("Missing validity predicate memory export, failed with: {0}")]
+    MissingVpModuleMemory(wasmer::ExportError),
     #[error(
-        "Missing transaction entrypoint {TX_ENTRYPOINT}, failed with: {0}"
+        "Missing validity predicate entrypoint {TX_ENTRYPOINT}, failed with: {0}"
     )]
     MissingVpModuleEntrypoint(wasmer::ExportError),
     #[error(
@@ -151,8 +155,6 @@ impl TxRunner {
             .map_err(Error::TxCompileError)?;
         let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let call_input = memory::write_tx_inputs(&initial_memory, tx_data)
-            .map_err(Error::MemoryError)?;
         let tx_imports = host_env::prepare_tx_imports(
             &self.wasm_store,
             storage,
@@ -163,19 +165,27 @@ impl TxRunner {
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::TxInstantiationError)?;
-        self.run_with_input(tx_code, call_input)?;
-
-        Ok(())
+        self.run_with_input(tx_code, tx_data)
     }
 
     fn run_with_input(
         &self,
         tx_code: Instance,
-        memory::TxCallInput {
+        tx_data: &TxInput,
+    ) -> Result<()> {
+        // We need to write the inputs in the memory exported from the wasm
+        // module
+        let memory = tx_code
+            .exports
+            .get_memory("memory")
+            .map_err(Error::MissingTxModuleMemory)?;
+        let memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
-        }: memory::TxCallInput,
-    ) -> Result<()> {
+        } = memory::write_tx_inputs(memory, tx_data)
+            .map_err(Error::MemoryError)?;
+
+        // Get the module's entrypoint to be called
         let apply_tx = tx_code
             .exports
             .get_function(TX_ENTRYPOINT)
@@ -231,8 +241,6 @@ impl VpRunner {
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let input: VpInput = (addr, tx_data, keys_changed);
-        let call_input = memory::write_vp_inputs(&initial_memory, input)
-            .map_err(Error::MemoryError)?;
         let vp_imports = host_env::prepare_vp_imports(
             &self.wasm_store,
             storage,
@@ -243,26 +251,35 @@ impl VpRunner {
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::VpInstantiationError)?;
-        let is_valid = self.run_with_input(vp_code, call_input)?;
+        let is_valid = self.run_with_input(vp_code, input)?;
 
         vp_sender
             .send(is_valid)
-            .map_err(|e| Error::VpChannelError(e))?;
-        Ok(())
+            .map_err(|e| Error::VpChannelError(e))
     }
 
     fn run_with_input(
         &self,
         vp_code: Instance,
-        memory::VpCallInput {
+        input: VpInput,
+    ) -> Result<bool> {
+        // We need to write the inputs in the memory exported from the wasm
+        // module
+        let memory = vp_code
+            .exports
+            .get_memory("memory")
+            .map_err(Error::MissingVpModuleMemory)?;
+        let memory::VpCallInput {
             addr_ptr,
             addr_len,
             tx_data_ptr,
             tx_data_len,
             keys_changed_ptr,
             keys_changed_len,
-        }: memory::VpCallInput,
-    ) -> Result<bool> {
+        } = memory::write_vp_inputs(memory, input)
+            .map_err(Error::MemoryError)?;
+
+        // Get the module's entrypoint to be called
         let validate_tx = vp_code
             .exports
             .get_function(VP_ENTRYPOINT)
