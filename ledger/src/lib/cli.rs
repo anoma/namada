@@ -35,7 +35,8 @@ pub enum ClientOpts {
 pub enum InlinedClientOpts {
     /// Submit a transaction and wait for the result
     Tx(Tx),
-    Gossip(Gossip),
+    /// Submit an intent to the orderbook
+    Intent(IntentArg),
 }
 
 // `anomac` subcommand for submitting transactions
@@ -51,11 +52,12 @@ pub struct Tx {
 }
 // `anomac` subcommand for controlling intent
 #[derive(Clap)]
-pub struct Gossip {
-    /// An example command
-    #[clap(short, long)]
+pub struct IntentArg {
+    /// the orderbook adress
+    #[clap(short, long, default_value = "http://[::1]:39111")]
     pub orderbook: String,
-    #[clap(short, long)]
+    /// the data of the intent, that contains all value necessary for the
+    /// matchmaker
     pub data: String,
 }
 
@@ -65,6 +67,7 @@ pub struct Gossip {
 pub struct NodeOpts {
     #[clap(short, long, default_value = ".anoma")]
     pub home: String,
+    /// start the rpc server
     #[clap(short, long)]
     pub rpc: bool,
     #[clap(flatten)]
@@ -75,7 +78,7 @@ pub struct NodeOpts {
 #[derive(Clap)]
 pub enum InlinedNodeOpts {
     /// Run the Anoma gossip node daemon
-    RunOrderbook(Orderbook),
+    RunGossip(GossipArg),
     /// Run the Anoma node daemon
     RunAnoma,
     /// Reset any store state
@@ -83,11 +86,17 @@ pub enum InlinedNodeOpts {
 }
 
 #[derive(Clap)]
-pub struct Orderbook {
+pub struct GossipArg {
+    /// Local address to listen
     #[clap(short, long)]
-    pub local_address: Option<String>,
+    pub address: Option<String>,
     #[clap(short, long)]
+    /// peers to connect
     pub peers: Option<Vec<String>>,
+    /// start orderbook network
     #[clap(short, long)]
-    pub topics: Option<Vec<String>>,
+    pub orderbook: bool,
+    /// start dkg network
+    #[clap(short, long)]
+    pub dkg: bool,
 }
