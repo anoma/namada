@@ -17,6 +17,7 @@ pub type Swarm = libp2p::Swarm<Behaviour>;
 
 #[derive(Debug)]
 pub enum Error {
+    #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),
 }
 type Result<T> = std::result::Result<T, Error>;

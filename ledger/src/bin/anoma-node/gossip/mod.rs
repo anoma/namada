@@ -30,7 +30,6 @@ pub enum Error {}
 
 type Result<T> = std::result::Result<T, Error>;
 
-// XXX TODO add type error and speficic Result type
 pub fn run(
     config: Config,
     rpc: bool,
@@ -116,6 +115,7 @@ pub async fn matchmaker_dispatcher(
     mut matchmaker_event_receiver: Receiver<Tx>,
 ) {
     loop {
+        // XXX todo, get rid of select because only 1 future
         tokio::select! {
             event = matchmaker_event_receiver.recv() =>
             {

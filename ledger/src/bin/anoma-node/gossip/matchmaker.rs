@@ -13,6 +13,7 @@ pub struct Matchmaker {
 }
 
 pub enum MatchmakerError {
+    #[error("Failed to add intent to mempool: {0}")]
     MempoolFailed(MempoolError),
 }
 

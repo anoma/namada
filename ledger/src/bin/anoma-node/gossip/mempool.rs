@@ -43,9 +43,7 @@ impl Mempool {
         Ok(already_exists_intent.is_none())
     }
 
-    // XXX TODO This is inefficient. Instead there should not be a mempool for
-    // the matchmaker and the matchmaker wasm program should be taking care of
-    // that.
+    // XXX TODO This is inefficient.
     pub fn find_map<O>(
         &mut self,
         intent1: &Intent,
