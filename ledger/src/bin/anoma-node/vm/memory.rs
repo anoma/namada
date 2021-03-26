@@ -185,7 +185,7 @@ pub struct AnomaMemory {
 }
 impl AnomaMemory {
     /// Initialize the memory from the given exports, used to implement
-    /// [`WasmerEnv`].
+    /// [`wasmer::WasmerEnv`].
     pub fn init_env_memory(
         &mut self,
         exports: &wasmer::Exports,

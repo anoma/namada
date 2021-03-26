@@ -35,6 +35,7 @@ pub enum ClientOpts {
 pub enum InlinedClientOpts {
     /// Submit a transaction and wait for the result
     Tx(Tx),
+    /// Submit an intent to the orderbook
     Intent(IntentArg),
 }
 
@@ -52,11 +53,11 @@ pub struct Tx {
 // `anomac` subcommand for controlling intent
 #[derive(Clap)]
 pub struct IntentArg {
-    // the orderbook adress
+    /// the orderbook adress
     #[clap(short, long, default_value = "http://[::1]:39111")]
     pub orderbook: String,
-    // the data of the intent, that contains all value necessary for the
-    // matchmaker
+    /// the data of the intent, that contains all value necessary for the
+    /// matchmaker
     pub data_path: String,
 }
 
@@ -66,6 +67,7 @@ pub struct IntentArg {
 pub struct NodeOpts {
     #[clap(short, long, default_value = ".anoma")]
     pub home: String,
+    /// start the rpc server
     #[clap(short, long)]
     pub rpc: bool,
     #[clap(flatten)]
@@ -85,12 +87,16 @@ pub enum InlinedNodeOpts {
 
 #[derive(Clap)]
 pub struct GossipArg {
+    /// Local address to listen
     #[clap(short, long)]
     pub address: Option<String>,
     #[clap(short, long)]
+    /// peers to connect
     pub peers: Option<Vec<String>>,
+    /// start orderbook network
     #[clap(short, long)]
     pub orderbook: bool,
+    /// start dkg network
     #[clap(short, long)]
     pub dkg: bool,
     #[clap(short, long)]

@@ -1,5 +1,6 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
+
 use anoma::cli::{self, ClientOpts, InlinedClientOpts, IntentArg};
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
@@ -18,10 +19,7 @@ pub async fn main() -> Result<()> {
 async fn exec_inlined(ops: InlinedClientOpts) {
     match ops {
         InlinedClientOpts::Tx(tx) => exec_tx(tx).await,
-        InlinedClientOpts::Intent(IntentArg {
-            orderbook,
-            data_path,
-        }) => {
+        InlinedClientOpts::Intent(IntentArg { orderbook, data_path }) => {
             gossip_intent(orderbook, data_path).await;
         }
     }
