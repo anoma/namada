@@ -3,8 +3,8 @@ use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use libp2p::gossipsub::{
-    self, Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic,
-    MessageAuthenticity, MessageId, TopicHash, ValidationMode,
+    self, Gossipsub, GossipsubEvent, GossipsubMessage, MessageAuthenticity,
+    MessageId, ValidationMode,
 };
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviourEventProcess;

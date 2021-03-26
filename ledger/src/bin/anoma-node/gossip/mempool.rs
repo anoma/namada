@@ -1,7 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 pub use std::hash::{Hash, Hasher};
-use std::iter;
 
 use anoma::protobuf::types::Intent;
 

@@ -12,28 +12,22 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{fs, thread};
 
-use anoma::self;
 use anoma::bookkeeper::Bookkeeper;
-use anoma::config::{Config, *};
+use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
-use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
 use self::config::NetworkConfig;
-use self::dkg::DKG;
-use self::matchmaker::Matchmaker;
-use self::orderbook::Orderbook;
 use self::p2p::P2P;
 use self::types::NetworkEvent;
-use crate::rpc;
+use super::rpc;
 
 #[derive(Debug)]
-pub enum Error {
-    P2PError(p2p::Error),
-}
+pub enum Error {}
+
 type Result<T> = std::result::Result<T, Error>;
 
 // XXX TODO add type error and speficic Result type
@@ -133,7 +127,7 @@ pub async fn matchmaker_dispatcher(
                     println!("bytes len {:?}", tx_bytes.len());
                     let client =
                         HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
-                    let response = client.broadcast_tx_commit(tx_bytes.into()).await;
+                    let _response = client.broadcast_tx_commit(tx_bytes.into()).await;
                 }
             }
         };
@@ -165,8 +159,8 @@ pub async fn dispatcher(
     }
 
     // XXX TODO find a way to factorize all that code
-    match (rpc_event_receiver) {
-        (Some(mut rpc_event_receiver)) => {
+    match rpc_event_receiver {
+        Some(mut rpc_event_receiver) => {
             loop {
                 tokio::select! {
                     event = rpc_event_receiver.recv() =>
@@ -183,7 +177,7 @@ pub async fn dispatcher(
                 };
             }
         }
-        (None) => {
+        None => {
             loop {
                 tokio::select! {
                     swarm_event = p2p.swarm.next() => {

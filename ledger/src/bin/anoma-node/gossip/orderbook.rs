@@ -3,8 +3,7 @@ use prost::Message;
 use tokio::sync::mpsc::Receiver;
 
 use super::matchmaker::Matchmaker;
-use super::mempool::{IntentId, Mempool};
-use super::types::{InternMessage, Topic};
+use super::mempool::Mempool;
 
 #[derive(Debug, Clone)]
 pub enum OrderbookError {
@@ -57,7 +56,7 @@ impl Orderbook {
     pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
         if let Some(matchmaker) = &mut self.matchmaker {
             matchmaker.find_and_send(&intent).await;
-            matchmaker.add(intent);
+            let _result = matchmaker.add(intent);
         }
         Ok(true)
     }

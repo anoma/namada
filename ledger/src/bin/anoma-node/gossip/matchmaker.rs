@@ -3,7 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use super::mempool::{self, Mempool, MempoolError};
+use super::mempool::{Mempool, MempoolError};
 
 #[derive(Debug)]
 pub struct Matchmaker {
@@ -14,7 +14,6 @@ pub struct Matchmaker {
 
 pub enum MatchmakerError {
     MempoolFailed(MempoolError),
-    MatchFailed(MempoolError),
 }
 
 // Currently only for two party transfer of token with exact match of amount
@@ -109,7 +108,7 @@ impl Matchmaker {
         let tx_opt = self.find_map(intent).await;
         match tx_opt {
             Some(tx) => {
-                self.event_chan.send(tx).await;
+                let _result = self.event_chan.send(tx).await;
                 true
             }
             None => false,
