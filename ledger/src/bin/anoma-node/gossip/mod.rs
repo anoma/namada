@@ -120,11 +120,8 @@ pub async fn matchmaker_dispatcher(
             event = matchmaker_event_receiver.recv() =>
             {
                 if let Some(tx) = event {
-                    println!("sending {:?} from matchmaker", tx);
-                            let mut tx_bytes = vec![];
+                    let mut tx_bytes = vec![];
                     tx.encode(&mut tx_bytes).unwrap();
-                    println!("sending bytes {:?} from matchmaker", tx_bytes);
-                    println!("bytes len {:?}", tx_bytes.len());
                     let client =
                         HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
                     let _response = client.broadcast_tx_commit(tx_bytes.into()).await;
@@ -141,18 +138,6 @@ pub async fn dispatcher(
     rpc_event_receiver: Option<Receiver<IntentMessage>>,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
-    let tx = Tx {
-        code: vec![],
-        data: None,
-    };
-    let mut tx_bytes = vec![];
-    tx.encode(&mut tx_bytes).unwrap();
-    println!("sending bytes {:?} from matchmaker", tx_bytes);
-    println!("bytes len {:?}", tx_bytes.len());
-    let client =
-        HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
-    let response = client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
-    println!("ledger response {:#?}", response);
 
     if let Some(matchmaker_event_receiver) = matchmaker_event_receiver {
         thread::spawn(|| matchmaker_dispatcher(matchmaker_event_receiver));

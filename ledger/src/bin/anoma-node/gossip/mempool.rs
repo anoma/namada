@@ -1,13 +1,14 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-pub use std::hash::{Hash, Hasher};
+use std::hash::{Hash, Hasher};
+use thiserror::Error;
 
 use anoma::protobuf::types::Intent;
 
-#[derive(Debug)]
-pub enum MempoolError {}
+#[derive(Error, Debug)]
+pub enum Error {}
 
-type Result<T> = std::result::Result<T, MempoolError>;
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntentId(pub Vec<u8>);
@@ -51,14 +52,10 @@ impl Mempool {
         f: &dyn Fn(&Intent, &Intent) -> Option<O>,
     ) -> Option<O> {
         let id1: IntentId = IntentId::new(intent1);
-        println!("mempool trying to find match for {:?}", id1);
         self.intents.iter().find_map(|(id2, intent2)| {
-            println!("matching {:?} & {:?}", id1, id2);
             if &id1 == id2 {
-                println!("matching same id {:?}", id1);
                 None
             } else {
-                println!("matching2 {:?} & {:?}", id1, id2);
                 f(intent1, &intent2)
             }
         })

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use super::mempool::{Mempool, MempoolError};
+use super::mempool::{self,Mempool};
 
 #[derive(Debug)]
 pub struct Matchmaker {
@@ -16,7 +16,7 @@ pub struct Matchmaker {
 #[derive(Error, Debug)]
 pub enum MatchmakerError {
     #[error("Failed to add intent to mempool: {0}")]
-    MempoolFailed(MempoolError),
+    MempoolFailed(mempool::Error),
 }
 
 // Currently only for two party transfer of token with exact match of amount
@@ -45,7 +45,6 @@ type Result<T> = std::result::Result<T, MatchmakerError>;
 impl Matchmaker {
     pub fn new(tx_code_path: String) -> (Self, Receiver<Tx>) {
         let (event_chan, rx) = channel::<Tx>(100);
-        println!("creating matchmaker with tx_template : {:?}", tx_code_path);
         (
             Self {
                 mempool: Mempool::new(),
@@ -69,8 +68,6 @@ impl Matchmaker {
         let data_intent_2: IntentData =
             serde_json::from_slice(&mut &intent2.data[..])
                 .expect("matchmaker does not understand data's intent");
-        println!("testing data {:?} with {:?} ", data_intent_1, data_intent_2);
-        println!("{:?} with {:?} ", data_intent_1, data_intent_2);
         if data_intent_1.token_sell == data_intent_2.token_buy
             && data_intent_1.amount_sell == data_intent_2.amount_buy
             && data_intent_1.token_buy == data_intent_2.token_sell
