@@ -317,15 +317,15 @@ impl Shell {
     }
 
     /// End a block.
-    pub fn end_block(&mut self, _height: BlockHeight) {
-        self.write_log
-            .commit_block(&mut self.storage)
-            .expect("Expected committing block write log success");
-    }
+    pub fn end_block(&mut self, _height: BlockHeight) {}
 
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> MerkleRoot {
+        // commit changes from the write-log to storage
+        self.write_log
+            .commit_block(&mut self.storage)
+            .expect("Expected committing block write log success");
         log::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?
