@@ -2,7 +2,7 @@ use std::error::Error;
 
 use anoma::protobuf::types::IntentMessage;
 use anoma::{bookkeeper::Bookkeeper, config::Config};
-use libp2p::gossipsub::{IdentTopic as Topic, MessageAcceptance};
+use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
 use libp2p::PeerId;
@@ -34,13 +34,8 @@ pub fn build_swarm(
 }
 
 pub fn prepare_swarm(swarm: &mut Swarm, config: &Config) {
-    if config.p2p.topics.get("orderbook").cloned().unwrap_or(false) {
-        let topic = Topic::from(super::types::Topic::Orderbook);
-        swarm.gossipsub.subscribe(&topic).unwrap();
-    }
-
-    if config.p2p.topics.get("dkg").cloned().unwrap_or(false) {
-        let topic = Topic::from(super::types::Topic::Dkg);
+    for topic in config.p2p.topics.clone() {
+        let topic = IdentTopic::new(topic.to_string());
         swarm.gossipsub.subscribe(&topic).unwrap();
     }
 
@@ -124,7 +119,7 @@ fn handle_rpc_event(event: Option<IntentMessage>, swarm: &mut Swarm) {
             let mut tix_bytes = vec![];
             i.encode(&mut tix_bytes).unwrap();
             let _message_id = swarm.gossipsub.publish(
-                Topic::from(super::types::Topic::Orderbook),
+                IdentTopic::new(anoma::types::Topic::Orderbook.to_string()),
                 tix_bytes,
             );
         }
@@ -140,7 +135,7 @@ fn handle_network_event(
         println!("received {:?} from the network", event);
         match event {
             NetworkEvent::Message(msg)
-                if msg.topic == super::types::Topic::Orderbook =>
+                if msg.topic == anoma::types::Topic::Orderbook =>
             {
                 if orderbook_node.apply(&msg)? {
                     {

@@ -2,7 +2,7 @@ use anoma::protobuf::types::Intent;
 use prost::Message;
 
 use super::mempool::{IntentId, Mempool};
-use super::types::{InternMessage, Topic};
+use super::types::{InternMessage};
 
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -41,7 +41,7 @@ impl Orderbook {
         &mut self,
         InternMessage { topic, data, .. }: &InternMessage,
     ) -> Result<bool> {
-        if let Topic::Orderbook = topic {
+        if let anoma::types::Topic::Orderbook = topic {
             let intent =
                 Intent::decode(&data[..]).map_err(Error::DecodeError)?;
             println!("Intent {:?} added to local mempool", intent);

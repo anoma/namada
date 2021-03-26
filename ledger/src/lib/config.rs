@@ -1,15 +1,14 @@
 //! Node and client configuration settings
 
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 
-use config;
 use serde::Deserialize;
 
-use crate::bookkeeper::Bookkeeper;
+use crate::{bookkeeper::Bookkeeper, types::Topic};
 
 const BOOKKEEPER_KEY_FILE: &str = "priv_bookkepeer_key.json";
 
@@ -32,7 +31,7 @@ pub struct Gossip {
     pub host: String,
     pub port: String,
     pub peers: Vec<String>,
-    pub topics: HashMap<String, bool>,
+    pub topics: Vec<Topic>,
 }
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -55,8 +54,20 @@ impl Gossip {
         }
     }
 
-    pub fn set_topic(&mut self, topic_name: String, enable: bool) {
-        self.topics.insert(topic_name, enable);
+    pub fn set_dkg_topic(&mut self, enable: bool) {
+        if enable {
+            self.set_topic(Topic::Dkg);
+        }
+    }
+
+    pub fn set_orderbook_topic(&mut self, enable: bool) {
+        if enable {
+            self.set_topic(Topic::Dkg);
+        }
+    }
+
+    fn set_topic(&mut self, topic: Topic) {
+        self.topics.push(topic);
     }
 
     pub fn set_address(&mut self, address: Option<String>) {
@@ -76,9 +87,8 @@ impl Config {
     pub fn new(home: String) -> Result<Self, config::ConfigError> {
         let mut s = config::Config::new();
 
-        let mut default_topics: HashMap<String, bool> = HashMap::new();
-        default_topics.insert("orderbook".to_string(), true);
-        default_topics.insert("dkg".to_string(), false);
+        let mut topics = Vec::<String>::with_capacity(2);
+        topics.push(Topic::Orderbook.to_string());
 
         s.set_default("node.home", home.to_string())?;
         s.set_default("node.db_path", "db")?;
@@ -92,7 +102,7 @@ impl Config {
         s.set_default("p2p.host", "127.0.0.1")?;
         s.set_default("p2p.port", 20201)?;
         s.set_default("p2p.peers", Vec::<String>::new())?;
-        s.set_default("p2p.topics", default_topics)?;
+        s.set_default("p2p.topics", topics)?;
 
         s.merge(
             config::File::with_name(&format!("{}/{}", home, "settings.toml"))

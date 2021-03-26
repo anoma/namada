@@ -51,8 +51,9 @@ pub fn run(
 
     config.p2p.set_address(local_address);
     config.p2p.set_peers(peers);
-    config.p2p.set_topic("dkg".to_string(), dkg);
-    config.p2p.set_topic("orderbook".to_string(), orderbook);
+    // TODO: check for duplicates and push instead of set
+    config.p2p.set_dkg_topic(dkg);
+    config.p2p.set_orderbook_topic(orderbook);
 
     let (mut swarm, event_receiver) = p2p::build_swarm(bookkeeper)
         // .expect("msg");
