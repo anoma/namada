@@ -1,40 +1,37 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use InlinedClientOpts::{Intent, Tx};
-use anoma::cli::{self, ClientOpts, InlinedClientOpts, IntentArg};
+use anoma::cli::anoma_client_cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::rpc_types::{self, Message};
-use clap::Clap;
 use color_eyre::eyre::Result;
 use tendermint_rpc::{Client, HttpClient};
 
 pub async fn main() -> Result<()> {
-    match ClientOpts::parse() {
-        ClientOpts::Inlined(ops) => Ok(exec_inlined(ops).await),
-    }
-}
-
-async fn exec_inlined(ops: InlinedClientOpts) {
-    match ops {
-        Tx(tx) => exec_tx(tx).await,
-        Intent(IntentArg { orderbook, data }) => {
-            gossip(orderbook, data).await.unwrap();
+    let matches = anoma_client_cli();
+    match matches.subcommand() {
+        Some(("tx", args)) => {
+            // here unwrap is safe as the arguments are required
+            let path = args.value_of("path").unwrap().to_string();
+            let data = args.value_of("data").unwrap().to_string();
+            Ok(exec_tx(path, data).await)
         }
+        Some(("intent", args)) => {
+            // here unwrap is safe as the arguments are required
+            let orderbook = args.value_of("orderbook").unwrap().to_string();
+            let data = args.value_of("data").unwrap().to_string();
+            Ok(gossip(orderbook, data).await.unwrap())
+        }
+        _ => Ok(()),
     }
 }
 
-async fn exec_tx(
-    cli::Tx {
-        code_path,
-        data_hex,
-    }: cli::Tx,
-) {
+async fn exec_tx(code_path: String, data_hex: String) {
     // TODO tendermint cache blocks the same transaction sent more than once,
     // add a counter or timestamp?
 
     let code = std::fs::read(code_path).unwrap();
-    let data = data_hex.map(|hex| hex::decode(hex).unwrap());
+    let data = Some(hex::decode(data_hex).unwrap());
     let tx = rpc_types::Tx { code, data };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();

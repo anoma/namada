@@ -103,6 +103,60 @@ pub struct GossipArg {
     pub dkg: bool,
 }
 
+// #[derive(Clap)]
+// pub struct IntentArg {
+//     /// the orderbook adress
+//     #[clap(short, long, default_value = "http://[::1]:39111")]
+//     pub orderbook: String,
+//     /// the data of the intent, that contains all value necessary for the
+//     /// matchmaker
+//     pub data: String,
+// }
+
+pub fn anoma_client_cli() -> ArgMatches {
+    return App::new(APP_DESCRIPTION)
+        .version(VERSION)
+        .author(AUTHOR)
+        .about("Anoma client")
+        .subcommand(
+            App::new("tx")
+                .about("Send a transaction")
+                .arg(
+                    Arg::new("path")
+                        .long("path")
+                        .takes_value(true)
+                        .required(true)
+                        .about("The path to the wasm code to be executed."),
+                )
+                .arg(
+                    Arg::new("data")
+                        .long("data")
+                        .takes_value(true)
+                        .required(true)
+                        .about("The data is an arbitrary hex string that will be passed to the code when it's executed"),
+                ),
+        )
+        .subcommand(
+            App::new("run-ledger")
+                .about("Run Anoma gossip service")
+                .arg(
+                    Arg::new("orderbook")
+                        .long("orderbook")
+                        .takes_value(true)
+                        .required(true)
+                        .about("The orderbook address."),
+                )
+                .arg(
+                    Arg::new("data")
+                        .long("data")
+                        .takes_value(true)
+                        .required(true)
+                        .about("The data of the intent, that contains all value necessary for the matchmaker"),
+                ),
+        )
+        .get_matches();
+}
+
 pub fn anoma_node_cli() -> ArgMatches {
     return App::new(APP_DESCRIPTION)
         .version(VERSION)
