@@ -66,7 +66,8 @@ pub fn run(
     let (mut p2p, event_receiver, matchmaker_event_receiver) =
         p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker, ledger_address)
             .expect("TEMPORARY: unable to build p2p layer");
-    p2p.prepare(&network_config);
+    p2p.prepare(&network_config)
+        .expect("p2p prepraration failed");
 
     dispatcher(
         p2p,
@@ -115,19 +116,14 @@ pub async fn matchmaker_dispatcher(
     mut matchmaker_event_receiver: Receiver<Tx>,
 ) {
     loop {
-        // XXX todo, get rid of select because only 1 future
-        tokio::select! {
-            event = matchmaker_event_receiver.recv() =>
-            {
-                if let Some(tx) = event {
-                    let mut tx_bytes = vec![];
-                    tx.encode(&mut tx_bytes).unwrap();
-                    let client =
-                        HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
-                    let _response = client.broadcast_tx_commit(tx_bytes.into()).await;
-                }
-            }
-        };
+        if let Some(tx) = matchmaker_event_receiver.recv().await {
+            let mut tx_bytes = vec![];
+            tx.encode(&mut tx_bytes).unwrap();
+            let client =
+                HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap())
+                    .unwrap();
+            let _response = client.broadcast_tx_commit(tx_bytes.into()).await;
+        }
     }
 }
 
@@ -138,17 +134,15 @@ pub async fn dispatcher(
     rpc_event_receiver: Option<Receiver<IntentMessage>>,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
-
     if let Some(matchmaker_event_receiver) = matchmaker_event_receiver {
         thread::spawn(|| matchmaker_dispatcher(matchmaker_event_receiver));
     }
-
     // XXX TODO find a way to factorize all that code
     match rpc_event_receiver {
         Some(mut rpc_event_receiver) => {
             loop {
                 tokio::select! {
-                    event = rpc_event_receiver.recv() =>
+                    Some(event) = rpc_event_receiver.recv() =>
                         p2p.handle_rpc_event(event).await ,
                     swarm_event = p2p.swarm.next() => {
                         // All events are handled by the
@@ -157,7 +151,7 @@ pub async fn dispatcher(
                         // terminating.
                         panic!("Unexpected event: {:?}", swarm_event);
                     },
-                    event = network_event_receiver.recv() =>
+                    Some(event) = network_event_receiver.recv() =>
                         p2p.handle_network_event(event).await
                 };
             }
@@ -172,7 +166,7 @@ pub async fn dispatcher(
                         // terminating.
                         panic!("Unexpected event: {:?}", swarm_event);
                     },
-                    event = network_event_receiver.recv() =>
+                    Some(event) = network_event_receiver.recv() =>
                         p2p.handle_network_event(event).await
                 }
             }

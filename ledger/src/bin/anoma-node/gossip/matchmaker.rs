@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use super::mempool::{self,Mempool};
+use super::mempool::{self, Mempool};
 
 #[derive(Debug)]
 pub struct Matchmaker {
     pub mempool: Mempool,
     pub tx_code: Vec<u8>,
-    event_chan: Sender<Tx>,
+    inject_tx: Sender<Tx>,
 }
 
 #[derive(Error, Debug)]
@@ -44,12 +44,12 @@ type Result<T> = std::result::Result<T, MatchmakerError>;
 
 impl Matchmaker {
     pub fn new(tx_code_path: String) -> (Self, Receiver<Tx>) {
-        let (event_chan, rx) = channel::<Tx>(100);
+        let (inject_tx, rx) = channel::<Tx>(100);
         (
             Self {
                 mempool: Mempool::new(),
                 tx_code: std::fs::read(tx_code_path).unwrap(),
-                event_chan,
+                inject_tx,
             },
             rx,
         )
@@ -95,20 +95,20 @@ impl Matchmaker {
         }
     }
 
-    async fn find_map(&mut self, intent: &Intent) -> Option<Tx> {
-        let code = self.tx_code.clone();
+    async fn try_mempool_match(&mut self, intent: &Intent) -> Option<Tx> {
+        let code = &self.tx_code;
         let res = self.mempool.find_map(&intent, &|i1, i2| {
-            let res = Self::find(&code, i1, i2);
+            let res = Self::find(code, i1, i2);
             res
         });
         res
     }
 
-    pub async fn find_and_send(&mut self, intent: &Intent) -> bool {
-        let tx_opt = self.find_map(intent).await;
+    pub async fn try_match_intent(&mut self, intent: &Intent) -> bool {
+        let tx_opt = self.try_mempool_match(intent).await;
         match tx_opt {
             Some(tx) => {
-                let _result = self.event_chan.send(tx).await;
+                let _result = self.inject_tx.send(tx).await;
                 true
             }
             None => false,

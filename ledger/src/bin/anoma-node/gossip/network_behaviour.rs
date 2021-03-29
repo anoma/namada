@@ -30,8 +30,9 @@ impl From<GossipsubMessage> for types::NetworkEvent {
 pub struct Behaviour {
     pub gossipsub: Gossipsub,
     #[behaviour(ignore)]
-    event_chan: Sender<NetworkEvent>,
+    inject_event: Sender<NetworkEvent>,
 }
+
 fn message_id(message: &GossipsubMessage) -> MessageId {
     let mut s = DefaultHasher::new();
     message.data.hash(&mut s);
@@ -57,11 +58,11 @@ impl Behaviour {
             Gossipsub::new(MessageAuthenticity::Signed(key), gossipsub_config)
                 .expect("Correct configuration");
 
-        let (event_chan, rx) = channel::<NetworkEvent>(100);
+        let (inject_event, rx) = channel::<NetworkEvent>(100);
         (
             Self {
                 gossipsub,
-                event_chan,
+                inject_event,
             },
             rx,
         )
@@ -72,7 +73,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     // Called when `gossipsub` produces an event.
     fn inject_event(&mut self, event: GossipsubEvent) {
         if let GossipsubEvent::Message { message, .. } = event {
-            self.event_chan
+            self.inject_event
                 .try_send(NetworkEvent::from(message))
                 .unwrap();
         }

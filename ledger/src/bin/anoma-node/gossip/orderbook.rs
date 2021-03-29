@@ -55,13 +55,13 @@ impl Orderbook {
 
     pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
         if let Some(matchmaker) = &mut self.matchmaker {
-            matchmaker.find_and_send(&intent).await;
+            matchmaker.try_match_intent(&intent).await;
             let _result = matchmaker.add(intent);
         }
         Ok(true)
     }
 
-    pub async fn apply(&mut self, data: &Vec<u8>) -> Result<bool> {
+    pub async fn apply_raw_intent(&mut self, data: &Vec<u8>) -> Result<bool> {
         let intent =
             Intent::decode(&data[..]).map_err(OrderbookError::DecodeError)?;
         self.apply_intent(intent).await

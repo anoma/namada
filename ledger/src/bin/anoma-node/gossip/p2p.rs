@@ -70,7 +70,7 @@ impl P2P {
         ))
     }
 
-    pub fn prepare(&mut self, network_config: &NetworkConfig) {
+    pub fn prepare(&mut self, network_config: &NetworkConfig) -> Result<()> {
         if network_config.gossip.orderbook {
             let topic = Topic::from(super::types::Topic::Orderbook);
             self.swarm.gossipsub.subscribe(&topic).unwrap();
@@ -104,26 +104,28 @@ impl P2P {
                 }
             }
         }
+        Ok(())
     }
 
-    pub async fn handle_rpc_event(&mut self, event: Option<IntentMessage>) {
-        if let Some(event) = event {
-            let IntentMessage { intent } = event;
-            if let Some(orderbook) = &mut self.orderbook {
-                if let Some(intent) = intent {
-                    if orderbook
-                        .apply_intent(intent.clone())
-                        .await
-                        .expect("test")
-                    {
-                        let mut tix_bytes = vec![];
-                        intent.encode(&mut tix_bytes).unwrap();
-                        let _message_id = self.swarm.gossipsub.publish(
-                            Topic::from(super::types::Topic::Orderbook),
-                            tix_bytes,
-                        );
-                    }
-                }
+    pub async fn handle_rpc_event(&mut self, event: IntentMessage) {
+        if let (
+            IntentMessage {
+                intent: Some(intent),
+            },
+            Some(orderbook),
+        ) = (event, &mut self.orderbook)
+        {
+            if orderbook
+                .apply_intent(intent.clone())
+                .await
+                .expect("failed to apply intent")
+            {
+                let mut tix_bytes = vec![];
+                intent.encode(&mut tix_bytes).unwrap();
+                let _message_id = self.swarm.gossipsub.publish(
+                    Topic::from(super::types::Topic::Orderbook),
+                    tix_bytes,
+                );
             }
         }
     }
@@ -142,15 +144,14 @@ impl P2P {
     // _response = client.broadcast_tx_commit(tx_bytes.into()).await;     }
     // }
 
-    pub async fn handle_network_event(&mut self, event: Option<NetworkEvent>) {
-        if let Some(event) = event {
-            // println!("received {:?} from the network", event);
-            match event {
-                NetworkEvent::Message(msg)
-                    if msg.topic == super::types::Topic::Orderbook =>
-                {
-                    if let Some(orderbook) = &mut self.orderbook {
-                        let validity = match orderbook.apply(&msg.data).await {
+    pub async fn handle_network_event(&mut self, event: NetworkEvent) {
+        match event {
+            NetworkEvent::Message(msg)
+                if msg.topic == super::types::Topic::Orderbook =>
+            {
+                if let Some(orderbook) = &mut self.orderbook {
+                    let validity =
+                        match orderbook.apply_raw_intent(&msg.data).await {
                             orderbook::Result::Ok(true) => {
                                 MessageAcceptance::Accept
                             }
@@ -161,28 +162,27 @@ impl P2P {
                                 orderbook::OrderbookError::DecodeError(..),
                             ) => MessageAcceptance::Reject,
                         };
-                        self.swarm
-                            .gossipsub
-                            .report_message_validation_result(
-                                &msg.message_id,
-                                &msg.peer,
-                                validity,
-                            )
-                            .expect("Failed to validate the message ");
-                    } else {
-                        self.swarm
-                            .gossipsub
-                            .report_message_validation_result(
-                                &msg.message_id,
-                                &msg.peer,
-                                MessageAcceptance::Ignore,
-                            )
-                            .expect("Failed to validate the message ");
-                    }
+                    self.swarm
+                        .gossipsub
+                        .report_message_validation_result(
+                            &msg.message_id,
+                            &msg.peer,
+                            validity,
+                        )
+                        .expect("Failed to validate the message ");
+                } else {
+                    self.swarm
+                        .gossipsub
+                        .report_message_validation_result(
+                            &msg.message_id,
+                            &msg.peer,
+                            MessageAcceptance::Ignore,
+                        )
+                        .expect("Failed to validate the message ");
                 }
-                NetworkEvent::Message(msg) => {
-                    panic!("{:?} not implemented", msg.topic)
-                }
+            }
+            NetworkEvent::Message(msg) => {
+                panic!("{:?} not implemented", msg.topic)
             }
         }
     }
