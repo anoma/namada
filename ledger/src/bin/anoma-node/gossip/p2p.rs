@@ -34,7 +34,7 @@ pub fn build_swarm(
 }
 
 pub fn prepare_swarm(swarm: &mut Swarm, config: &Config) {
-    for topic in config.p2p.topics.clone() {
+    for topic in &config.p2p.topics {
         let topic = IdentTopic::new(topic.to_string());
         swarm.gossipsub.subscribe(&topic).unwrap();
     }
@@ -43,7 +43,7 @@ pub fn prepare_swarm(swarm: &mut Swarm, config: &Config) {
     Swarm::listen_on(swarm, config.p2p.get_address().parse().unwrap()).unwrap();
 
     // Reach out to another node if specified
-    for to_dial in config.p2p.peers.clone() {
+    for to_dial in &config.p2p.peers {
         let dialing = to_dial.clone();
         match to_dial.parse() {
             Ok(to_dial) => match Swarm::dial_addr(swarm, to_dial) {
