@@ -38,10 +38,8 @@ pub enum Error {
     TxRunnerError(vm::Error),
     #[error("Validity predicate for {addr} runner error: {error}")]
     VpRunnerError { addr: Address, error: vm::Error },
-    #[error("Transaction gas is too high")]
-    TooHighTransactionGasUsage(),
-    #[error("Block gas is too high")]
-    TooHighBlockGasUsage(),
+    #[error("Gas error: {0}")]
+    GasError(gas::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -278,6 +276,10 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
+        self.gas_meter
+            .add_base_transaction_fee(tx_bytes.len())
+            .map_err(Error::GasError)?;
+
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
 
         let tx_data = tx.data.unwrap_or(vec![]);
@@ -362,16 +364,9 @@ impl Shell {
             );
         }
 
-        let transaction_storage_gas =
-            (tx_bytes.len() as u64) * gas::TX_GAS_PER_BYTE as u64;
-        let _ = self
-            .gas_meter
-            .add_base_transaction_fee(transaction_storage_gas)
-            .map_err(|_| Error::TooHighTransactionGasUsage);
-        match self.gas_meter.finalize_transaction() {
-            Ok(gas) => return Ok(gas),
-            Err(_) => return Err(Error::TooHighBlockGasUsage()),
-        };
+        self.gas_meter
+            .finalize_transaction()
+            .map_err(Error::GasError)
     }
 
     /// Begin a new block.
