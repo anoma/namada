@@ -1,13 +1,13 @@
 pub mod write_log;
 
-use self::write_log::WriteLog;
-
-use super::TxEnvHostWrapper;
-use super::{memory::AnomaMemory, VpEnvHostWrapper};
-use crate::shell::storage::{self, Storage};
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
 };
+
+use self::write_log::WriteLog;
+use super::memory::AnomaMemory;
+use super::{TxEnvHostWrapper, VpEnvHostWrapper};
+use crate::shell::storage::{self, Storage};
 
 #[derive(Clone)]
 struct TxEnv {

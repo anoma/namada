@@ -1,6 +1,8 @@
-use crate::shell::storage::{self, Address, Storage};
 use std::collections::HashMap;
+
 use thiserror::Error;
+
+use crate::shell::storage::{self, Address, Storage};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -59,6 +61,7 @@ impl WriteLog {
             self.block_write_log.get(&s_key)
         })
     }
+
     /// Write a key and a value
     pub fn write(&mut self, addr: Address, key: String, value: Vec<u8>) {
         self.tx_write_log.insert(

@@ -1,15 +1,23 @@
-#[derive(Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Intent {
-    /// google.protobuf.Timestamp timestamp = 2;
-    #[prost(string, tag = "1")]
-    pub data: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "1")]
+    pub data: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
 }
-#[derive(Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Tx {
+    #[prost(bytes = "vec", tag = "1")]
+    pub code: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub data: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgMessage {
     #[prost(string, tag = "1")]
     pub data: ::prost::alloc::string::String,
 }
-#[derive(Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IntentMessage {
     #[prost(message, optional, tag = "4")]
     pub intent: ::core::option::Option<Intent>,

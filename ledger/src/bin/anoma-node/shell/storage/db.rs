@@ -10,7 +10,9 @@
 //!   - `hash`: block hash
 //!   - `balance/address`: balance for each account `address`
 
-use std::{cmp::Ordering, collections::HashMap, path::Path};
+use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::path::Path;
 
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
@@ -148,7 +150,7 @@ impl DB {
         let mut write_opts = WriteOptions::default();
         // TODO: disable WAL when we can shutdown with flush
         write_opts.set_sync(true);
-        //write_opts.disable_wal(true);
+        // write_opts.disable_wal(true);
         self.0
             .write_opt(batch, &write_opts)
             .map_err(|e| Error::RocksDBError(e))?;
@@ -164,7 +166,7 @@ impl DB {
         let mut write_opts = WriteOptions::default();
         // TODO: disable WAL when we can shutdown with flush
         write_opts.set_sync(true);
-        //write_opts.disable_wal(true);
+        // write_opts.disable_wal(true);
         self.0
             .put_opt("chain_id", chain_id.encode(), &write_opts)
             .map_err(|e| Error::RocksDBError(e).into())
@@ -267,9 +269,10 @@ impl DB {
                                 Address::from_key_seg(&(*addr_str).to_owned())
                                     .map_err(|e| Error::Temporary {
                                         error: format!(
-                                    "Cannot parse address from key segment: {}",
-                                    e
-                                ),
+                                            "Cannot parse address from key \
+                                             segment: {}",
+                                            e
+                                        ),
                                     })?;
                             let column = segments.split_off(3).join("/");
                             match subspaces.get_mut(&addr) {

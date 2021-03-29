@@ -3,8 +3,8 @@ use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use libp2p::gossipsub::{
-    self, Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic,
-    MessageAuthenticity, MessageId, TopicHash, ValidationMode,
+    self, Gossipsub, GossipsubEvent, GossipsubMessage, MessageAuthenticity,
+    MessageId, ValidationMode,
 };
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviourEventProcess;
@@ -12,28 +12,6 @@ use libp2p::NetworkBehaviour;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::types::{self, NetworkEvent};
-
-impl From<types::Topic> for IdentTopic {
-    fn from(topic: types::Topic) -> Self {
-        IdentTopic::new(topic.to_string())
-    }
-}
-impl From<types::Topic> for TopicHash {
-    fn from(topic: types::Topic) -> Self {
-        IdentTopic::from(topic).hash()
-    }
-}
-impl From<&TopicHash> for types::Topic {
-    fn from(topic_hash: &TopicHash) -> Self {
-        if topic_hash == &TopicHash::from(types::Topic::Dkg) {
-            types::Topic::Dkg
-        } else if topic_hash == &TopicHash::from(types::Topic::Orderbook) {
-            types::Topic::Orderbook
-        } else {
-            panic!("topic_hash does not correspond to any topic of interest")
-        }
-    }
-}
 
 impl From<GossipsubMessage> for types::NetworkEvent {
     fn from(msg: GossipsubMessage) -> Self {
@@ -52,8 +30,9 @@ impl From<GossipsubMessage> for types::NetworkEvent {
 pub struct Behaviour {
     pub gossipsub: Gossipsub,
     #[behaviour(ignore)]
-    event_chan: Sender<NetworkEvent>,
+    inject_event: Sender<NetworkEvent>,
 }
+
 fn message_id(message: &GossipsubMessage) -> MessageId {
     let mut s = DefaultHasher::new();
     message.data.hash(&mut s);
@@ -79,11 +58,11 @@ impl Behaviour {
             Gossipsub::new(MessageAuthenticity::Signed(key), gossipsub_config)
                 .expect("Correct configuration");
 
-        let (event_chan, rx) = channel::<NetworkEvent>(100);
+        let (inject_event, rx) = channel::<NetworkEvent>(100);
         (
             Self {
                 gossipsub,
-                event_chan,
+                inject_event,
             },
             rx,
         )
@@ -94,7 +73,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     // Called when `gossipsub` produces an event.
     fn inject_event(&mut self, event: GossipsubEvent) {
         if let GossipsubEvent::Message { message, .. } = event {
-            self.event_chan
+            self.inject_event
                 .try_send(NetworkEvent::from(message))
                 .unwrap();
         }

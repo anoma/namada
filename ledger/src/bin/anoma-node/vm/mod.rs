@@ -1,16 +1,16 @@
 pub mod host_env;
 mod memory;
 
+use std::ffi::c_void;
+use std::marker::PhantomData;
 use std::sync::mpsc;
-use std::{ffi::c_void, marker::PhantomData};
 
 use anoma_vm_env::memory::{TxInput, VpInput};
 use thiserror::Error;
 use wasmer::Instance;
 
-use crate::shell::storage::Storage;
-
 use self::host_env::write_log::WriteLog;
+use crate::shell::storage::Storage;
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
@@ -105,7 +105,8 @@ pub enum Error {
     #[error("Missing validity predicate memory export, failed with: {0}")]
     MissingVpModuleMemory(wasmer::ExportError),
     #[error(
-        "Missing validity predicate entrypoint {TX_ENTRYPOINT}, failed with: {0}"
+        "Missing validity predicate entrypoint {TX_ENTRYPOINT}, failed with: \
+         {0}"
     )]
     MissingVpModuleEntrypoint(wasmer::ExportError),
     #[error(
