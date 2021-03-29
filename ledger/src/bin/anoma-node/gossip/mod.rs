@@ -20,7 +20,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Bad Bookkeeper file")]
-    BadBookkeeper(),
+    BadBookkeeper(std::io::Error),
     #[error("Error p2p swarm {0}")]
     P2pSwarmError(String),
     #[error("Error p2p dispatcher {0}")]
@@ -39,7 +39,7 @@ pub fn run(
 ) -> Result<()> {
     let bookkeeper = config
         .get_bookkeeper()
-        .or_else(|_| Err(Error::BadBookkeeper()))?;
+        .or_else(|e| Err(Error::BadBookkeeper(e)))?;
 
     let rpc_event_receiver = if rpc {
         let (tx, rx) = mpsc::channel(100);
