@@ -1,12 +1,11 @@
 # matchmaker
 
-The matchmaker has the task to craft transaction based on intent and inject them
+The matchmaker has the task to craft transactions from intents and inject them
 into the ledger.
 
-A wasm program wasm must be attached to any matchmaker with some specific
-entrypoint (TDB). This program is feed with intents data and craft transaction.
-The matchmaker should include a payement for himself in the transaction to
-reembourse himself of the fee he had to pay.
+A wasm program with implementation of intent-matching logic can be attached to a matchmaker with a specific
+entrypoint (TBD). This program is fed the intents data and it should produce transactions.
+The matchmaker should include in the transactions a small payment to reimburse itself for the fees it has to pay to inject the transactions into the ledger.
 
 ## process
 
