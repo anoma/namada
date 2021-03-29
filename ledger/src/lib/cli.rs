@@ -111,8 +111,6 @@ pub fn anoma_node_cli() -> ArgMatches {
         .subcommand(
             App::new("run-gossip")
                 .about("Run Anoma gossip service")
-                .version("0.0.1")
-                .author("Someone E. <someone_else@other.com>")
                 .arg(
                     Arg::new("base")
                         .short('b')
@@ -167,8 +165,6 @@ pub fn anoma_node_cli() -> ArgMatches {
         .subcommand(
             App::new("run-ledger")
                 .about("Run Anoma gossip service")
-                .version("0.0.1")
-                .author("Someone E. <someone_else@other.com>")
                 .arg(
                     Arg::new("base")
                         .short('b')
@@ -178,17 +174,13 @@ pub fn anoma_node_cli() -> ArgMatches {
                 ),
         )
         .subcommand(
-            App::new("reset")
-                .about("Run Anoma gossip service")
-                .version("0.0.1")
-                .author("Someone E. <someone_else@other.com>")
-                .arg(
-                    Arg::new("base")
-                        .short('b')
-                        .long("base-dir")
-                        .takes_value(true)
-                        .about("Set the base directiory."),
-                ),
+            App::new("reset").about("Run Anoma gossip service").arg(
+                Arg::new("base")
+                    .short('b')
+                    .long("base-dir")
+                    .takes_value(true)
+                    .about("Set the base directiory."),
+            ),
         )
         .get_matches();
 }
