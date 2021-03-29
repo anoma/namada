@@ -1,12 +1,13 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use InlinedClientOpts::{Intent, Tx};
+
 use anoma::cli::{self, ClientOpts, InlinedClientOpts, IntentArg};
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
-use anoma::rpc_types::{self, Message};
+use anoma::protobuf::types::Tx;
 use clap::Clap;
 use color_eyre::eyre::Result;
+use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 
 pub async fn main() -> Result<()> {
@@ -17,9 +18,12 @@ pub async fn main() -> Result<()> {
 
 async fn exec_inlined(ops: InlinedClientOpts) {
     match ops {
-        Tx(tx) => exec_tx(tx).await,
-        Intent(IntentArg { orderbook, data }) => {
-            gossip(orderbook, data).await.unwrap();
+        InlinedClientOpts::Tx(tx) => exec_tx(tx).await,
+        InlinedClientOpts::Intent(IntentArg {
+            orderbook,
+            data_path,
+        }) => {
+            gossip_intent(orderbook, data_path).await;
         }
     }
 }
@@ -35,11 +39,11 @@ async fn exec_tx(
 
     let code = std::fs::read(code_path).unwrap();
     let data = data_hex.map(|hex| hex::decode(hex).unwrap());
-    let tx = rpc_types::Tx { code, data };
+    let tx = Tx { code, data };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();
-
     // NOTE: use this to print the request JSON body:
+
     // let request =
     // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
     //     tx_bytes.clone().into(),
@@ -55,16 +59,19 @@ async fn exec_tx(
     println!("{:#?}", response);
 }
 
-async fn gossip(
-    _orderbook_addr: String,
-    data: String,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = RpcServiceClient::connect("http://[::1]:39111").await?;
-    let intent = Some(types::Intent { data });
-    let intent_message = types::IntentMessage { intent };
+async fn gossip_intent(orderbook_addr: String, data_path: String) {
+    println!("address : {:?}", orderbook_addr);
+    let mut client = RpcServiceClient::connect(orderbook_addr).await.unwrap();
+    let data = std::fs::read(data_path).expect("data file IO error");
+    let intent = types::Intent {
+        data,
+        timestamp: Some(std::time::SystemTime::now().into()),
+    };
+    let intent_message = types::IntentMessage {
+        intent: Some(intent),
+    };
     let message = types::Message {
         message: Some(types::message::Message::IntentMessage(intent_message)),
     };
-    let _response = client.send_message(message).await?;
-    Ok(())
+    let _response = client.send_message(message).await.unwrap();
 }

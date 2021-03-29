@@ -21,4 +21,4 @@ struct Intent {
 
 ## Intent life cycle
 
-![intent life cycle](./intent_detailed_cycle.svg "intent life cycle")
+![intent life cycle](./intent_life_cycle.svg "intent life cycle")

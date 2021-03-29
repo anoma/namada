@@ -22,6 +22,8 @@ fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
             arg.dkg,
             arg.address,
             arg.peers,
+            arg.matchmaker,
+            arg.ledger_address,
         )),
         InlinedNodeOpts::RunAnoma => {
             shell::run(config).wrap_err("Failed to run Anoma node")

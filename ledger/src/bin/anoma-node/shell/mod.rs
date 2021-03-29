@@ -2,24 +2,23 @@ mod gas;
 mod storage;
 mod tendermint;
 
+use std::ffi::c_void;
+use std::path::PathBuf;
 use std::sync::mpsc;
-use std::{ffi::c_void, path::PathBuf};
 
-use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
-use anoma::rpc_types::{Message, Tx};
+use anoma::protobuf::types::Tx;
+use prost::Message;
 use storage::KeySeg;
 use thiserror::Error;
 
-use self::tendermint::{AbciMsg, AbciReceiver};
-use self::{
-    gas::BlockGasMeter,
-    storage::{
-        Address, BasicAddress, BlockHash, BlockHeight, Storage,
-        ValidatorAddress,
-    },
+use self::gas::BlockGasMeter;
+use self::storage::{
+    Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
+use self::tendermint::{AbciMsg, AbciReceiver};
+use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -360,11 +359,7 @@ impl Shell {
                 if src_accept {
                     "dest"
                 } else {
-                    if dest_accept {
-                        "src"
-                    } else {
-                        "src and dest"
-                    }
+                    if dest_accept { "src" } else { "src and dest" }
                 }
             );
         }

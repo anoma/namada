@@ -1,8 +1,14 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-pub use std::hash::{Hash, Hasher};
+use std::hash::{Hash, Hasher};
 
 use anoma::protobuf::types::Intent;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {}
+
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntentId(pub Vec<u8>);
@@ -24,21 +30,34 @@ impl IntentId {
 #[derive(Debug)]
 pub struct Mempool {
     intents: HashMap<IntentId, Intent>,
-    history: Vec<IntentId>,
 }
 
 impl Mempool {
     pub fn new() -> Self {
         Self {
             intents: HashMap::default(),
-            history: Vec::new(),
         }
     }
 
-    pub fn put(&mut self, id: &IntentId, intent: Intent) {
+    pub fn put(&mut self, intent: Intent) -> Result<bool> {
+        let id = IntentId::new(&intent);
         let already_exists_intent = self.intents.insert(id.clone(), intent);
-        if already_exists_intent.is_none() {
-            self.history.push(id.clone());
-        }
+        Ok(already_exists_intent.is_none())
+    }
+
+    // XXX TODO This is inefficient.
+    pub fn find_map<O>(
+        &mut self,
+        intent1: &Intent,
+        f: &dyn Fn(&Intent, &Intent) -> Option<O>,
+    ) -> Option<O> {
+        let id1: IntentId = IntentId::new(intent1);
+        self.intents.iter().find_map(|(id2, intent2)| {
+            if &id1 == id2 {
+                None
+            } else {
+                f(intent1, &intent2)
+            }
+        })
     }
 }
