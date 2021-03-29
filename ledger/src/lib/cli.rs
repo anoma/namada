@@ -6,9 +6,11 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
-use clap::Clap;
+use clap::{App, Arg, ArgMatches, Clap};
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
+const APP_DESCRIPTION: &str = "Anoma node daemon";
+const VERSION: &str = "0.1.0";
 
 // Examples of how to use Clap v3: https://github.com/clap-rs/clap/tree/v3.0.0-beta.2/clap_derive
 // Use `cargo expand --lib cli` to see the expanded macros
@@ -99,4 +101,94 @@ pub struct GossipArg {
     /// start dkg network
     #[clap(short, long)]
     pub dkg: bool,
+}
+
+pub fn anoma_node_cli() -> ArgMatches {
+    return App::new(APP_DESCRIPTION)
+        .version(VERSION)
+        .author(AUTHOR)
+        .about("Anoma node daemon")
+        .subcommand(
+            App::new("run-gossip")
+                .about("Run Anoma gossip service")
+                .version("0.0.1")
+                .author("Someone E. <someone_else@other.com>")
+                .arg(
+                    Arg::new("base")
+                        .short('b')
+                        .long("base-dir")
+                        .takes_value(true)
+                        .about("Set the base directiory."),
+                )
+                .arg(
+                    Arg::new("base")
+                        .short('b')
+                        .long("base-dir")
+                        .takes_value(true)
+                        .about("Set the base directiory."),
+                )
+                .arg(
+                    Arg::new("address")
+                        .short('a')
+                        .long("address")
+                        .takes_value(true)
+                        .about("Gossip service address"),
+                )
+                .arg(
+                    Arg::new("peers")
+                        .short('p')
+                        .long("peers")
+                        .multiple(true)
+                        .takes_value(true)
+                        .about("List of peers"),
+                )
+                .arg(
+                    Arg::new("dkg")
+                        .long("dkg")
+                        .multiple(false)
+                        .takes_value(false)
+                        .about("Enable DKG gossip topic."),
+                )
+                .arg(
+                    Arg::new("orderbook")
+                        .long("orderbook")
+                        .multiple(false)
+                        .takes_value(false)
+                        .about("Enable Orderbook gossip topic."),
+                )
+                .arg(
+                    Arg::new("rpc")
+                        .long("rpc")
+                        .multiple(false)
+                        .takes_value(false)
+                        .about("Enable RPC service."),
+                ),
+        )
+        .subcommand(
+            App::new("run-ledger")
+                .about("Run Anoma gossip service")
+                .version("0.0.1")
+                .author("Someone E. <someone_else@other.com>")
+                .arg(
+                    Arg::new("base")
+                        .short('b')
+                        .long("base-dir")
+                        .takes_value(true)
+                        .about("Set the base directiory."),
+                ),
+        )
+        .subcommand(
+            App::new("reset")
+                .about("Run Anoma gossip service")
+                .version("0.0.1")
+                .author("Someone E. <someone_else@other.com>")
+                .arg(
+                    Arg::new("base")
+                        .short('b')
+                        .long("base-dir")
+                        .takes_value(true)
+                        .about("Set the base directiory."),
+                ),
+        )
+        .get_matches();
 }
