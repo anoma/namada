@@ -83,17 +83,106 @@ pub trait Hash256 {
     fn hash256(&self) -> H256;
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Key {
+    segments: Vec<DbKeySeg>,
+}
+
+impl Key {
+    /// Parses string and returns a key
+    pub fn parse(string: String) -> Result<Self> {
+        let mut segments = Vec::new();
+        for s in string.split('/') {
+            segments.push(DbKeySeg::parse(s.to_owned())?);
+        }
+        Ok(Key { segments })
+    }
+
+    /// Returns a new key with segments of `Self` and the given segment
+    pub fn push(&self, other: &dyn KeySeg) -> Result<Self> {
+        let mut segments: Vec<DbKeySeg> =
+            self.segments.iter().map(|s| s.clone()).collect();
+        segments.push(DbKeySeg::parse(other.into_string())?);
+        Ok(Key { segments })
+    }
+
+    /// Returns a new key with segments of `Self` and the given key
+    pub fn join(&self, other: &Key) -> Self {
+        let mut segments: Vec<DbKeySeg> =
+            self.segments.iter().map(|s| s.clone()).collect();
+        let mut added: Vec<DbKeySeg> =
+            other.segments.iter().map(|s| s.clone()).collect();
+        segments.append(&mut added);
+        Key { segments }
+    }
+
+    /// Returns string from the segments
+    pub fn into_string(&self) -> String {
+        let v: Vec<String> = self
+            .segments
+            .iter()
+            .map(|s| DbKeySeg::into_string(s))
+            .collect();
+        v.join("/")
+    }
+
+    /// Returns addresses from the segments
+    pub fn find_addresses(&self) -> Vec<Address> {
+        let mut addresses = Vec::new();
+        for s in &self.segments {
+            match &*s {
+                DbKeySeg::AddressSeg(addr) => addresses.push(addr.clone()),
+                _ => continue,
+            }
+        }
+        addresses
+    }
+}
+
 // TODO use std::convert::{TryFrom, Into}?
 /// Represents a segment in a path that may be used as a database key
 pub trait KeySeg {
-    /// Convert `Self` to a key segment. This mapping should preserve the
-    /// ordering of `Self`
-    fn to_key_seg(&self) -> String;
-
-    /// Reverse of `to_key_seg`. Convert key segment to `Self`.
-    fn from_key_seg(seg: &String) -> Result<Self>
+    /// Reverse of `into_string`. Convert key segment to `Self`.
+    fn parse(string: String) -> Result<Self>
     where
         Self: Sized;
+
+    /// Convert `Self` to a key segment. This mapping should preserve the
+    /// ordering of `Self`
+    fn into_string(&self) -> String;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+enum DbKeySeg {
+    AddressSeg(Address),
+    StringSeg(String),
+}
+
+impl KeySeg for DbKeySeg {
+    fn parse(string: String) -> Result<Self> {
+        match string.chars().nth(0) {
+            Some(c) if c == '@' => {
+                // TODO: single address type
+                match string.chars().nth(1) {
+                    Some(c) if c == 'b' => Ok(BasicAddress::parse(string)
+                        .map(Address::Basic)
+                        .map(DbKeySeg::AddressSeg)?),
+                    _ => Ok(ValidatorAddress::parse(string)
+                        .map(Address::Validator)
+                        .map(DbKeySeg::AddressSeg)?),
+                }
+            }
+            _ => Ok(DbKeySeg::StringSeg(string)),
+        }
+    }
+
+    fn into_string(&self) -> String {
+        match self {
+            // TODO: single address type
+            DbKeySeg::AddressSeg(addr) => addr.into_string(),
+            DbKeySeg::StringSeg(seg) => seg.to_owned(),
+        }
+    }
 }
 
 /// Represents a value that can be written and read from the database
@@ -120,13 +209,26 @@ impl Value for BlockHash {}
 impl Value for H256 {}
 impl<T: Value> Value for DefaultStore<T> {}
 
+impl KeySeg for String {
+    fn into_string(&self) -> String {
+        self.to_owned()
+    }
+
+    fn parse(string: String) -> Result<Self> {
+        Ok(string)
+    }
+}
+
 impl KeySeg for BlockHeight {
-    fn to_key_seg(&self) -> String {
+    fn into_string(&self) -> String {
         format!("{}", self.0)
     }
 
-    fn from_key_seg(_seg: &String) -> Result<Self> {
-        todo!()
+    fn parse(string: String) -> Result<Self> {
+        let h = string.parse::<u64>().map_err(|e| Error::Temporary {
+            error: format!("Unexpected hight value {}, {}", string, e),
+        })?;
+        Ok(BlockHeight(h))
     }
 }
 impl TryFrom<i64> for BlockHeight {
@@ -140,18 +242,6 @@ impl TryFrom<i64> for BlockHeight {
     }
 }
 impl BlockHeight {
-    pub fn is_genesis(&self) -> bool {
-        self.0 == 1
-    }
-
-    pub fn prev_height(&self) -> Option<BlockHeight> {
-        if self.is_genesis() {
-            None
-        } else {
-            Some(BlockHeight(self.0 - 1))
-        }
-    }
-
     pub fn next_height(&self) -> BlockHeight {
         BlockHeight(self.0 + 1)
     }
@@ -214,17 +304,17 @@ impl Hash256 for Address {
     }
 }
 impl KeySeg for Address {
-    fn to_key_seg(&self) -> String {
+    fn into_string(&self) -> String {
         match self {
-            Address::Validator(addr) => addr.to_key_seg(),
-            Address::Basic(addr) => addr.to_key_seg(),
+            Address::Validator(addr) => addr.into_string(),
+            Address::Basic(addr) => addr.into_string(),
         }
     }
 
-    fn from_key_seg(seg: &String) -> Result<Self> {
-        BasicAddress::from_key_seg(seg)
+    fn parse(seg: String) -> Result<Self> {
+        BasicAddress::parse(seg.clone())
             .map(Address::Basic)
-            .or(ValidatorAddress::from_key_seg(seg).map(Address::Validator))
+            .or(ValidatorAddress::parse(seg.clone()).map(Address::Validator))
             .map_err(|_e| Error::Temporary {
                 error: format!(
                     "TEMPORARY: Address must start with \"b\" or \"v\", got {}",
@@ -246,16 +336,16 @@ impl Hash256 for BasicAddress {
     }
 }
 impl KeySeg for BasicAddress {
-    fn to_key_seg(&self) -> String {
+    fn into_string(&self) -> String {
         self.0.clone()
     }
 
-    fn from_key_seg(seg: &String) -> Result<Self> {
+    fn parse(seg: String) -> Result<Self> {
         match seg.chars().nth(0) {
-            Some(c) if c == 'b' => Ok(Self(seg.clone())),
+            Some(c) if c == '@' => Ok(Self(seg.clone())),
             _ => Err(Error::Temporary {
                 error: format!(
-                    "TEMPORARY: BasicAddress must start with \"b\", got {}",
+                    "TEMPORARY: BasicAddress must start with \"@b\", got {}",
                     seg
                 ),
             }),
@@ -274,16 +364,16 @@ impl Hash256 for ValidatorAddress {
     }
 }
 impl KeySeg for ValidatorAddress {
-    fn to_key_seg(&self) -> String {
+    fn into_string(&self) -> String {
         self.0.clone()
     }
 
-    fn from_key_seg(seg: &String) -> Result<Self> {
+    fn parse(seg: String) -> Result<Self> {
         match seg.chars().nth(0) {
-            Some(c) if c == 'v' => Ok(Self(seg.clone())),
+            Some(c) if c == '@' => Ok(Self(seg.clone())),
             _ => Err(Error::Temporary {
                 error: format!(
-                    "TEMPORARY: ValidatorAddress must start with \"v\", got {}",
+                    "TEMPORARY: ValidatorAddress must start with \"@v\", got {}",
                     seg
                 ),
             }),
@@ -347,6 +437,12 @@ impl Hash256 for Vec<u8> {
         hasher.update(&self.as_slice());
         hasher.finalize(&mut buf);
         buf.into()
+    }
+}
+
+impl Hash256 for Key {
+    fn hash256(&self) -> H256 {
+        self.into_string().hash256()
     }
 }
 

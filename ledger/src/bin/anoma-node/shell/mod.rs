@@ -10,12 +10,9 @@ use anoma::config::Config;
 use anoma::protobuf::types::Tx;
 use prost::Message;
 use thiserror::Error;
-use vm::host_env::write_log::StorageKey;
 
 use self::gas::BlockGasMeter;
-use self::storage::{
-    Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
-};
+use self::storage::{Address, BlockHash, BlockHeight, Key, Storage};
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::vm::host_env::write_log::WriteLog;
 use crate::vm::{self, TxRunner, VpRunner};
@@ -93,19 +90,19 @@ impl Shell {
     pub fn new(abci: AbciReceiver, db_path: &PathBuf) -> Self {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
-        let va = ValidatorAddress::new_address("va".to_owned());
+        let key1 = Key::parse("@va/balance/eth".to_owned())
+            .expect("Unable to convert string into a key");
         storage
             .write(
-                &va,
-                "balance/eth",
+                &key1,
                 vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
             )
             .expect("Unable to set the initial balance for validator account");
-        let ba = BasicAddress::new_address("ba".to_owned());
+        let key2 = Key::parse("@ba/balance/eth".to_owned())
+            .expect("Unable to convert string into a key");
         storage
             .write(
-                &ba,
-                "balance/eth",
+                &key2,
                 vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
             )
             .expect("Unable to set the initial balance for basic account");
@@ -222,13 +219,13 @@ impl Shell {
             .write_log
             .get_changed_keys()
             .iter()
-            .fold(HashMap::new(), |mut acc, &storage_key| {
-                let &StorageKey { addr, key } = &storage_key;
-                // TODO insert into addresses from the sub-keys too
-                match acc.get_mut(&addr) {
-                    Some(keys) => keys.push(key.clone()),
-                    None => {
-                        acc.insert(addr.clone(), vec![key.clone()]);
+            .fold(HashMap::new(), |mut acc, key| {
+                for addr in &key.find_addresses() {
+                    match acc.get_mut(&addr) {
+                        Some(keys) => keys.push(key.into_string()),
+                        None => {
+                            acc.insert(addr.clone(), vec![key.into_string()]);
+                        }
                     }
                 }
                 acc
