@@ -1,6 +1,6 @@
-use anoma::bookkeeper::Bookkeeper;
 use anoma::protobuf::types::{IntentMessage, Tx};
-use libp2p::gossipsub::{IdentTopic as Topic, MessageAcceptance};
+use anoma::{bookkeeper::Bookkeeper, config::Config};
+use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
 use libp2p::PeerId;
@@ -8,10 +8,9 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::dkg::DKG;
-use super::network_behaviour::Behaviour;
-use super::orderbook::{self, Orderbook};
 use super::types::NetworkEvent;
+use super::{dkg::DKG, orderbook::Orderbook};
+use super::{network_behaviour::Behaviour, orderbook};
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -69,21 +68,21 @@ impl P2P {
         ))
     }
 
-    pub fn prepare(&mut self, Swarm, config: &Config) -> Result<()> {
+    pub fn prepare(&mut self, config: &Config) -> Result<()> {
         for topic in &config.p2p.topics {
             let topic = IdentTopic::new(topic.to_string());
-            swarm.gossipsub.subscribe(&topic).unwrap();
+            self.swarm.gossipsub.subscribe(&topic).unwrap();
         }
 
         // Listen on given address
         Swarm::listen_on(
             &mut self.swarm,
-            network_config.local_address.parse().unwrap(),
+            config.p2p.get_address().parse().unwrap(),
         )
         .unwrap();
 
         // Reach out to another node if specified
-        for to_dial in &network_config.peers {
+        for to_dial in &config.p2p.peers {
             let dialing = to_dial.clone();
             match to_dial.parse() {
                 Ok(to_dial) => match Swarm::dial_addr(&mut self.swarm, to_dial)
@@ -117,7 +116,7 @@ impl P2P {
                 let mut tix_bytes = vec![];
                 intent.encode(&mut tix_bytes).unwrap();
                 let _message_id = self.swarm.gossipsub.publish(
-                    Topic::from(super::types::Topic::Orderbook),
+                    IdentTopic::new(anoma::types::Topic::Orderbook.to_string()),
                     tix_bytes,
                 );
             }

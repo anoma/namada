@@ -2,13 +2,8 @@ use anoma::protobuf::types::{Intent, Tx};
 use prost::Message;
 use tokio::sync::mpsc::Receiver;
 
-<<<<<<< HEAD
-use super::mempool::{IntentId, Mempool};
-use super::types::{InternMessage};
-=======
 use super::matchmaker::Matchmaker;
 use super::mempool::Mempool;
->>>>>>> 4d51412eba8e788912d42c8cd686c893f9df6a3b
 
 #[derive(Debug, Clone)]
 pub enum OrderbookError {
@@ -58,25 +53,10 @@ impl Orderbook {
         }
     }
 
-<<<<<<< HEAD
-    pub fn apply(
-        &mut self,
-        InternMessage { topic, data, .. }: &InternMessage,
-    ) -> Result<bool> {
-        if let anoma::types::Topic::Orderbook = topic {
-            let intent =
-                Intent::decode(&data[..]).map_err(Error::DecodeError)?;
-            println!("Intent {:?} added to local mempool", intent);
-            self.mempool.put(&IntentId::new(&intent), intent);
-            Ok(true)
-        } else {
-            Ok(false)
-=======
     pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
         if let Some(matchmaker) = &mut self.matchmaker {
             matchmaker.try_match_intent(&intent).await;
             let _result = matchmaker.add(intent);
->>>>>>> 4d51412eba8e788912d42c8cd686c893f9df6a3b
         }
         Ok(true)
     }

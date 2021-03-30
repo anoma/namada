@@ -24,7 +24,8 @@ fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
             arg.peers,
             arg.matchmaker,
             arg.ledger_address,
-        )),
+        )
+        .wrap_err("Failed to run gossip service"),
         InlinedNodeOpts::RunAnoma => {
             shell::run(config).wrap_err("Failed to run Anoma node")
         }

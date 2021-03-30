@@ -8,14 +8,16 @@ mod types;
 
 use std::thread;
 
-<<<<<<< HEAD
-// use self::Dkg::DKG;
-use anoma::{self, config::Config};
+use anoma::config::Config;
+use anoma::protobuf::types::{IntentMessage, Tx};
+use mpsc::Receiver;
+use prost::Message;
+use tendermint_rpc::{Client, HttpClient};
 use tokio::sync::mpsc;
 
-use self::dkg::DKG;
-use self::orderbook::Orderbook;
-use crate::rpc;
+use self::p2p::P2P;
+use self::types::NetworkEvent;
+use super::rpc;
 
 use thiserror::Error;
 
@@ -29,28 +31,8 @@ pub enum Error {
     P2pDispatcherError(String),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
-
-=======
-use anoma::bookkeeper::Bookkeeper;
-use anoma::config::Config;
-use anoma::protobuf::types::{IntentMessage, Tx};
-use mpsc::Receiver;
-use prost::Message;
-use tendermint_rpc::{Client, HttpClient};
-use tokio::sync::mpsc;
-
-use self::config::NetworkConfig;
-use self::p2p::P2P;
-use self::types::NetworkEvent;
-use super::rpc;
-
-#[derive(Debug)]
-pub enum Error {}
-
 type Result<T> = std::result::Result<T, Error>;
 
->>>>>>> 4d51412eba8e788912d42c8cd686c893f9df6a3b
 pub fn run(
     mut config: Config,
     rpc: bool,
@@ -58,19 +40,12 @@ pub fn run(
     dkg: bool,
     address: Option<String>,
     peers: Option<Vec<String>>,
-<<<<<<< HEAD
+    matchmaker: Option<String>,
+    ledger_address: Option<String>,
 ) -> Result<()> {
     let bookkeeper = config
         .get_bookkeeper()
         .or_else(|e| Err(Error::BadBookkeeper(e)))?;
-=======
-    matchmaker: Option<String>,
-    ledger_address: Option<String>,
-) -> () {
-    let base_dir: PathBuf = config.gossip_home_dir();
-    let bookkeeper: Bookkeeper = read_or_generate_bookkeeper_key(&base_dir)
-        .expect("TEMPORARY: Error reading or generating bookkeep file");
->>>>>>> 4d51412eba8e788912d42c8cd686c893f9df6a3b
 
     let rpc_event_receiver = if rpc {
         let (tx, rx) = mpsc::channel(100);
@@ -80,40 +55,20 @@ pub fn run(
         None
     };
 
-<<<<<<< HEAD
-    config.p2p.set_address(local_address);
+    config.p2p.set_address(address);
     config.p2p.set_peers(peers);
     // TODO: check for duplicates and push instead of set
     config.p2p.set_dkg_topic(dkg);
     config.p2p.set_orderbook_topic(orderbook);
 
-    let (mut swarm, event_receiver) = p2p::build_swarm(bookkeeper)
-        // .expect("msg");
-        .map_err(|e| Error::P2pSwarmError(e.to_string()))?;
-    p2p::prepare_swarm(&mut swarm, &config);
-    p2p::dispatcher(
-        swarm,
-=======
-    let p2p_local_address = address
-        .unwrap_or(format!("/ip4/{}/tcp/{}", config.p2p.host, config.p2p.port));
-    let p2p_peers = peers.unwrap_or(config.p2p.peers);
-
-    let network_config = NetworkConfig::read_or_generate(
-        &base_dir,
-        p2p_local_address,
-        p2p_peers,
-        orderbook,
-        dkg,
-    );
     let (mut p2p, event_receiver, matchmaker_event_receiver) =
         p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker, ledger_address)
             .expect("TEMPORARY: unable to build p2p layer");
-    p2p.prepare(&network_config)
+    p2p.prepare(&config)
         .expect("p2p prepraration failed");
 
     dispatcher(
         p2p,
->>>>>>> 4d51412eba8e788912d42c8cd686c893f9df6a3b
         event_receiver,
         rpc_event_receiver,
         matchmaker_event_receiver,
