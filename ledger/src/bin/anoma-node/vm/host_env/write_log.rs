@@ -76,7 +76,7 @@ impl WriteLog {
             .insert(StorageKey { addr, key }, StorageModification::Delete);
     }
 
-    pub fn get_changed_key(&self) -> Vec<&StorageKey> {
+    pub fn get_changed_keys(&self) -> Vec<&StorageKey> {
         self.tx_write_log.keys().collect()
     }
 
