@@ -105,3 +105,21 @@ The write log of each transaction included in a block and accepted by VPs is acc
 
 ![write log](./wasm-vm/storage-write-log.svg  "storage write log")
 <https://excalidraw.com/new#room=333e1db689b083669c80,Y0i8yhvIAZCFICs753CSuA>
+
+## Gas metering
+
+The two main options for implementing gas metering within wasm using wasmer are:
+- a [gas metering middleware included in wasmer](https://github.com/wasmerio/wasmer/tree/72d47336cc1461d63baa2322b38c4cb5f67bb72a/lib/middlewares).
+- <https://crates.io/crates/pwasm-utils>
+
+Both of these allow us to assign a gas cost for each wasm operation.
+
+`wasmer` gas middleware is more recent, so probably more risky. It injects the gas metering code into the wasm code, which is more efficient than host calls to a gas meter.
+
+`pwasm-utils` divides the wasm code into metered blocks. It performs host call with the gas cost of each block before it is executed. The gas metering injection is linear to the code size.
+
+The `pwasm-utils` seems like a safer option to begin with (and we'll probably need to use it for [stack height metering](#stack-height-metering) too). We can look into switching to `wasmer` middleware at later point.
+
+## Stack height metering
+
+TODO We'll probably need to use `pwasm-utils`, at least until this PR is merged <https://github.com/wasmerio/wasmer/pull/1037>.
