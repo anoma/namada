@@ -41,7 +41,9 @@ pub struct Config {
 }
 
 impl Gossip {
+    // TODO here, and in set_address, we assumes a ip4+tcp address but it woul be nice to allow all accepted address by libp2p
     pub fn get_address(&self) -> String {
+    
         return format!("/ip4/{}/tcp/{}", self.host, self.port);
     }
 
