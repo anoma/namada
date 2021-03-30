@@ -1,4 +1,3 @@
-mod config;
 mod dkg;
 mod matchmaker;
 mod mempool;
@@ -7,12 +6,8 @@ mod orderbook;
 mod p2p;
 mod types;
 
-use std::fs::{create_dir_all, File};
-use std::io::Write;
-use std::path::PathBuf;
-use std::{fs, thread};
+use std::thread;
 
-use anoma::bookkeeper::Bookkeeper;
 use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
 use mpsc::Receiver;
@@ -20,18 +15,26 @@ use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 use tokio::sync::mpsc;
 
-use self::config::NetworkConfig;
 use self::p2p::P2P;
 use self::types::NetworkEvent;
 use super::rpc;
 
-#[derive(Debug)]
-pub enum Error {}
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Bad Bookkeeper file")]
+    BadBookkeeper(std::io::Error),
+    #[error("Error p2p swarm {0}")]
+    P2pSwarmError(String),
+    #[error("Error p2p dispatcher {0}")]
+    P2pDispatcherError(String),
+}
 
 type Result<T> = std::result::Result<T, Error>;
 
 pub fn run(
-    config: Config,
+    mut config: Config,
     rpc: bool,
     orderbook: bool,
     dkg: bool,
@@ -39,10 +42,10 @@ pub fn run(
     peers: Option<Vec<String>>,
     matchmaker: Option<String>,
     ledger_address: Option<String>,
-) -> () {
-    let base_dir: PathBuf = config.gossip_home_dir();
-    let bookkeeper: Bookkeeper = read_or_generate_bookkeeper_key(&base_dir)
-        .expect("TEMPORARY: Error reading or generating bookkeep file");
+) -> Result<()> {
+    let bookkeeper = config
+        .get_bookkeeper()
+        .or_else(|e| Err(Error::BadBookkeeper(e)))?;
 
     let rpc_event_receiver = if rpc {
         let (tx, rx) = mpsc::channel(100);
@@ -52,21 +55,16 @@ pub fn run(
         None
     };
 
-    let p2p_local_address = address
-        .unwrap_or(format!("/ip4/{}/tcp/{}", config.p2p.host, config.p2p.port));
-    let p2p_peers = peers.unwrap_or(config.p2p.peers);
+    config.p2p.set_address(address);
+    config.p2p.set_peers(peers);
+    // TODO: check for duplicates and push instead of set
+    config.p2p.set_dkg_topic(dkg);
+    config.p2p.set_orderbook_topic(orderbook);
 
-    let network_config = NetworkConfig::read_or_generate(
-        &base_dir,
-        p2p_local_address,
-        p2p_peers,
-        orderbook,
-        dkg,
-    );
     let (mut p2p, event_receiver, matchmaker_event_receiver) =
         p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker, ledger_address)
             .expect("TEMPORARY: unable to build p2p layer");
-    p2p.prepare(&network_config)
+    p2p.prepare(&config)
         .expect("p2p prepraration failed");
 
     dispatcher(
@@ -75,29 +73,7 @@ pub fn run(
         rpc_event_receiver,
         matchmaker_event_receiver,
     )
-    .expect("TEMPORARY: unable to start p2p dispatcher")
-}
-
-const BOOKKEEPER_KEY_FILE: &str = "priv_bookkepeer_key.json";
-
-fn read_or_generate_bookkeeper_key(
-    home_dir: &PathBuf,
-) -> std::result::Result<Bookkeeper, std::io::Error> {
-    if home_dir.join("config").join(BOOKKEEPER_KEY_FILE).exists() {
-        let conf_file = home_dir.join("config").join(BOOKKEEPER_KEY_FILE);
-        let json_string = fs::read_to_string(conf_file.as_path())?;
-        let bookkeeper = serde_json::from_str::<Bookkeeper>(&json_string)?;
-        Ok(bookkeeper)
-    } else {
-        let path = home_dir.join("config");
-        create_dir_all(&path).unwrap();
-        let path = path.join(BOOKKEEPER_KEY_FILE);
-        let account: Bookkeeper = Bookkeeper::new();
-        let mut file = File::create(path)?;
-        let json = serde_json::to_string(&account)?;
-        file.write_all(json.as_bytes()).map(|_| ()).unwrap();
-        Ok(account)
-    }
+    .map_err(|e| Error::P2pDispatcherError(e.to_string()))
 }
 
 // XXX TODO The protobuf encoding logic does not play well with asynchronous.

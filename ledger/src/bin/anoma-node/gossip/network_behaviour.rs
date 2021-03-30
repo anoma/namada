@@ -3,8 +3,8 @@ use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use libp2p::gossipsub::{
-    self, Gossipsub, GossipsubEvent, GossipsubMessage, MessageAuthenticity,
-    MessageId, ValidationMode,
+    self, Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic,
+    MessageAuthenticity, MessageId, TopicHash, ValidationMode,
 };
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviourEventProcess;
@@ -19,10 +19,24 @@ impl From<GossipsubMessage> for types::NetworkEvent {
             peer: msg
                 .source
                 .expect("cannot convert message with anonymous message peer"),
-            topic: types::Topic::from(&msg.topic),
+            topic: topic_of(&msg.topic),
             message_id: message_id(&msg),
             data: msg.data,
         })
+    }
+}
+
+pub fn topic_of(topic_hash: &TopicHash) -> anoma::types::Topic {
+    if topic_hash
+        == &IdentTopic::new(anoma::types::Topic::Dkg.to_string()).hash()
+    {
+        anoma::types::Topic::Dkg
+    } else if topic_hash
+        == &IdentTopic::new(anoma::types::Topic::Orderbook.to_string()).hash()
+    {
+        anoma::types::Topic::Orderbook
+    } else {
+        panic!("topic_hash does not correspond to any topic of interest")
     }
 }
 
