@@ -58,7 +58,7 @@ pub struct IntentArg {
     pub orderbook: String,
     /// the data of the intent, that contains all value necessary for the
     /// matchmaker
-    pub data: String,
+    pub data_path: String,
 }
 
 /// The Anoma Node CLI
@@ -99,4 +99,8 @@ pub struct GossipArg {
     /// start dkg network
     #[clap(short, long)]
     pub dkg: bool,
+    #[clap(short, long)]
+    pub matchmaker: Option<String>,
+    #[clap(short, long)]
+    pub ledger_address: Option<String>,
 }

@@ -2,24 +2,23 @@ mod gas;
 mod storage;
 mod tendermint;
 
+use std::ffi::c_void;
+use std::path::PathBuf;
 use std::sync::mpsc;
-use std::{ffi::c_void, path::PathBuf};
 
-use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
-use anoma::rpc_types::{Message, Tx};
+use anoma::protobuf::types::Tx;
+use prost::Message;
 use storage::KeySeg;
 use thiserror::Error;
 
-use self::tendermint::{AbciMsg, AbciReceiver};
-use self::{
-    gas::BlockGasMeter,
-    storage::{
-        Address, BasicAddress, BlockHash, BlockHeight, Storage,
-        ValidatorAddress,
-    },
+use self::gas::BlockGasMeter;
+use self::storage::{
+    Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
+use self::tendermint::{AbciMsg, AbciReceiver};
+use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -39,10 +38,8 @@ pub enum Error {
     TxRunnerError(vm::Error),
     #[error("Validity predicate for {addr} runner error: {error}")]
     VpRunnerError { addr: Address, error: vm::Error },
-    #[error("Transaction gas is too high")]
-    TooHighTransactionGasUsage(),
-    #[error("Block gas is too high")]
-    TooHighBlockGasUsage(),
+    #[error("Gas error: {0}")]
+    GasError(gas::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -279,6 +276,10 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
+        self.gas_meter
+            .add_base_transaction_fee(tx_bytes.len())
+            .map_err(Error::GasError)?;
+
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
 
         let tx_data = tx.data.unwrap_or(vec![]);
@@ -358,25 +359,14 @@ impl Shell {
                 if src_accept {
                     "dest"
                 } else {
-                    if dest_accept {
-                        "src"
-                    } else {
-                        "src and dest"
-                    }
+                    if dest_accept { "src" } else { "src and dest" }
                 }
             );
         }
 
-        let transaction_storage_gas =
-            (tx_bytes.len() as u64) * gas::TX_GAS_PER_BYTE as u64;
-        let _ = self
-            .gas_meter
-            .add_base_transaction_fee(transaction_storage_gas)
-            .map_err(|_| Error::TooHighTransactionGasUsage);
-        match self.gas_meter.finalize_transaction() {
-            Ok(gas) => return Ok(gas),
-            Err(_) => return Err(Error::TooHighBlockGasUsage()),
-        };
+        self.gas_meter
+            .finalize_transaction()
+            .map_err(Error::GasError)
     }
 
     /// Begin a new block.
