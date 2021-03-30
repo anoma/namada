@@ -103,16 +103,6 @@ pub struct GossipArg {
     pub dkg: bool,
 }
 
-// #[derive(Clap)]
-// pub struct IntentArg {
-//     /// the orderbook adress
-//     #[clap(short, long, default_value = "http://[::1]:39111")]
-//     pub orderbook: String,
-//     /// the data of the intent, that contains all value necessary for the
-//     /// matchmaker
-//     pub data: String,
-// }
-
 pub fn anoma_client_cli() -> ArgMatches {
     return App::new(APP_DESCRIPTION)
         .version(VERSION)
@@ -173,13 +163,6 @@ pub fn anoma_node_cli() -> ArgMatches {
                         .about("Set the base directiory."),
                 )
                 .arg(
-                    Arg::new("base")
-                        .short('b')
-                        .long("base-dir")
-                        .takes_value(true)
-                        .about("Set the base directiory."),
-                )
-                .arg(
                     Arg::new("address")
                         .short('a')
                         .long("address")
@@ -218,7 +201,7 @@ pub fn anoma_node_cli() -> ArgMatches {
         )
         .subcommand(
             App::new("run-ledger")
-                .about("Run Anoma gossip service")
+                .about("Run Anoma gossip service.")
                 .arg(
                     Arg::new("base")
                         .short('b')
@@ -228,7 +211,7 @@ pub fn anoma_node_cli() -> ArgMatches {
                 ),
         )
         .subcommand(
-            App::new("reset").about("Run Anoma gossip service").arg(
+            App::new("reset").about("Reset Anoma node state.").arg(
                 Arg::new("base")
                     .short('b')
                     .long("base-dir")
