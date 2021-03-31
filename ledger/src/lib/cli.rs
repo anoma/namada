@@ -197,6 +197,18 @@ impl CliBuilder<'_> {
         }
     }
 
+    pub fn anoma_inline_cli(&self) -> ArgMatches {
+        return App::new(CliBuilder::get_from_map(
+            &self,
+            "common",
+            "description",
+        ))
+        .version(CliBuilder::get_from_map(&self, "common", "version"))
+        .author(CliBuilder::get_from_map(&self, "common", "author"))
+        .about(CliBuilder::get_from_map(&self, "client", "about"))
+        .get_matches();
+    }
+
     pub fn anoma_client_cli(&self) -> ArgMatches {
         return App::new(CliBuilder::get_from_map(
             &self,
@@ -206,52 +218,78 @@ impl CliBuilder<'_> {
         .version(CliBuilder::get_from_map(&self, "common", "version"))
         .author(CliBuilder::get_from_map(&self, "common", "author"))
         .about(CliBuilder::get_from_map(&self, "client", "about"))
-        .subcommand(
-            App::new(CliBuilder::get_from_map(&self, "client", "tx_command"))
-                .about(CliBuilder::get_from_map(
-                    &self,
-                    "client",
-                    "tx_command_about",
-                ))
-                .arg(
-                    Arg::new(CliBuilder::get_from_map_arg(
-                        &self, "tx_path", "name",
-                    ))
-                    .long(CliBuilder::get_from_map_arg(
-                        &self, "tx_path", "long",
-                    ))
-                    .takes_value(true)
-                    .required(true)
-                    .about(CliBuilder::get_from_map_arg(
-                        &self, "tx_path", "about",
-                    )),
+        .subcommand(CliBuilder::build_client_tx_subcommand(&self))
+        .subcommand(CliBuilder::build_client_intent_subcommand(&self))
+        .get_matches();
+    }
+
+    pub fn anoma_node_cli(&self) -> ArgMatches {
+        return App::new(CliBuilder::get_from_map(
+            &self,
+            "common",
+            "description",
+        ))
+        .version(CliBuilder::get_from_map(&self, "common", "version"))
+        .author(CliBuilder::get_from_map(&self, "common", "author"))
+        .about(CliBuilder::get_from_map(&self, "node", "about"))
+        .arg(
+            Arg::new(CliBuilder::get_from_map_arg(&self, "base", "name"))
+                .short(
+                    CliBuilder::get_from_map_arg(&self, "base", "short")
+                        .chars()
+                        .next()
+                        .unwrap(),
                 )
-                .arg(
-                    Arg::new(CliBuilder::get_from_map_arg(
-                        &self,
-                        "intent_data",
-                        "name",
-                    ))
-                    .long(CliBuilder::get_from_map_arg(
-                        &self,
-                        "intent_data",
-                        "long",
-                    ))
-                    .takes_value(true)
-                    .required(true)
-                    .about(CliBuilder::get_from_map_arg(
-                        &self,
-                        "intent_data",
-                        "about",
-                    )),
-                ),
+                .long(CliBuilder::get_from_map_arg(&self, "base", "long"))
+                .takes_value(true)
+                .required(false)
+                .about(CliBuilder::get_from_map_arg(&self, "base", "about")),
         )
-        .subcommand(
-            App::new(CliBuilder::get_from_map(
+        .subcommand(CliBuilder::build_run_gossip_subcommand(&self))
+        .subcommand(CliBuilder::build_run_ledger_subcommand(&self))
+        .subcommand(CliBuilder::build_reset_anoma_subcommand(&self))
+        .get_matches();
+    }
+
+    fn build_client_tx_subcommand(&self) -> App {
+        App::new(CliBuilder::get_from_map(&self, "client", "tx_command"))
+            .about(CliBuilder::get_from_map(
                 &self,
                 "client",
-                "intent_command",
+                "tx_command_about",
             ))
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(
+                    &self, "tx_path", "name",
+                ))
+                .long(CliBuilder::get_from_map_arg(&self, "tx_path", "long"))
+                .takes_value(true)
+                .required(true)
+                .about(CliBuilder::get_from_map_arg(&self, "tx_path", "about")),
+            )
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(
+                    &self,
+                    "intent_data",
+                    "name",
+                ))
+                .long(CliBuilder::get_from_map_arg(
+                    &self,
+                    "intent_data",
+                    "long",
+                ))
+                .takes_value(true)
+                .required(true)
+                .about(CliBuilder::get_from_map_arg(
+                    &self,
+                    "intent_data",
+                    "about",
+                )),
+            )
+    }
+
+    fn build_client_intent_subcommand(&self) -> App {
+        App::new(CliBuilder::get_from_map(&self, "client", "intent_command"))
             .about(CliBuilder::get_from_map(
                 &self,
                 "client",
@@ -284,100 +322,66 @@ impl CliBuilder<'_> {
                 .takes_value(true)
                 .required(true)
                 .about(CliBuilder::get_from_map_arg(&self, "tx_data", "about")),
-            ),
-        )
-        .get_matches();
+            )
     }
 
-    pub fn anoma_node_cli(&self) -> ArgMatches {
-        return App::new(CliBuilder::get_from_map(
+    fn build_run_gossip_subcommand(&self) -> App {
+        App::new(CliBuilder::get_from_map(
             &self,
-            "common",
-            "description",
+            "node",
+            "run_gossip_command",
         ))
-        .version(CliBuilder::get_from_map(&self, "common", "version"))
-        .author(CliBuilder::get_from_map(&self, "common", "author"))
-        .about(CliBuilder::get_from_map(&self, "node", "about"))
+        .about(CliBuilder::get_from_map(
+            &self,
+            "node",
+            "run_gossip_command_about",
+        ))
         .arg(
-            Arg::new(CliBuilder::get_from_map_arg(&self, "base", "name"))
+            Arg::new(CliBuilder::get_from_map_arg(
+                &self,
+                "gossip_address",
+                "name",
+            ))
+            .short(
+                CliBuilder::get_from_map_arg(&self, "gossip_address", "short")
+                    .chars()
+                    .next()
+                    .unwrap(),
+            )
+            .long(CliBuilder::get_from_map_arg(
+                &self,
+                "gossip_address",
+                "long",
+            ))
+            .takes_value(true)
+            .about(CliBuilder::get_from_map_arg(
+                &self,
+                "gossip_address",
+                "about",
+            )),
+        )
+        .arg(
+            Arg::new(CliBuilder::get_from_map_arg(&self, "peers", "name"))
                 .short(
-                    CliBuilder::get_from_map_arg(&self, "base", "short")
+                    CliBuilder::get_from_map_arg(&self, "peers", "short")
                         .chars()
                         .next()
                         .unwrap(),
                 )
-                .long(CliBuilder::get_from_map_arg(&self, "base", "long"))
+                .long(CliBuilder::get_from_map_arg(&self, "peers", "long"))
+                .multiple(true)
                 .takes_value(true)
-                .required(false)
-                .about(CliBuilder::get_from_map_arg(&self, "base", "about")),
+                .about(CliBuilder::get_from_map_arg(&self, "peers", "about")),
         )
-        .subcommand(
-            App::new(CliBuilder::get_from_map(
-                &self,
-                "node",
-                "run_gossip_command",
-            ))
-            .about(CliBuilder::get_from_map(
-                &self,
-                "node",
-                "run_gossip_command_about",
-            ))
-            .arg(
-                Arg::new(CliBuilder::get_from_map_arg(
-                    &self,
-                    "gossip_address",
-                    "name",
-                ))
-                .short(
-                    CliBuilder::get_from_map_arg(
-                        &self,
-                        "gossip_address",
-                        "short",
-                    )
-                    .chars()
-                    .next()
-                    .unwrap(),
-                )
-                .long(CliBuilder::get_from_map_arg(
-                    &self,
-                    "gossip_address",
-                    "long",
-                ))
-                .takes_value(true)
-                .about(CliBuilder::get_from_map_arg(
-                    &self,
-                    "gossip_address",
-                    "about",
-                )),
-            )
-            .arg(
-                Arg::new(CliBuilder::get_from_map_arg(&self, "peers", "name"))
-                    .short(
-                        CliBuilder::get_from_map_arg(&self, "peers", "short")
-                            .chars()
-                            .next()
-                            .unwrap(),
-                    )
-                    .long(CliBuilder::get_from_map_arg(&self, "peers", "long"))
-                    .multiple(true)
-                    .takes_value(true)
-                    .about(CliBuilder::get_from_map_arg(
-                        &self, "peers", "about",
-                    )),
-            )
-            .arg(
-                Arg::new(CliBuilder::get_from_map_arg(&self, "dkg", "name"))
-                    .long(CliBuilder::get_from_map_arg(&self, "dkg", "long"))
-                    .multiple(false)
-                    .takes_value(false)
-                    .about(CliBuilder::get_from_map_arg(&self, "dkg", "about")),
-            )
-            .arg(
-                Arg::new(CliBuilder::get_from_map_arg(
-                    &self,
-                    "orderbook",
-                    "name",
-                ))
+        .arg(
+            Arg::new(CliBuilder::get_from_map_arg(&self, "dkg", "name"))
+                .long(CliBuilder::get_from_map_arg(&self, "dkg", "long"))
+                .multiple(false)
+                .takes_value(false)
+                .about(CliBuilder::get_from_map_arg(&self, "dkg", "about")),
+        )
+        .arg(
+            Arg::new(CliBuilder::get_from_map_arg(&self, "orderbook", "name"))
                 .long(CliBuilder::get_from_map_arg(&self, "orderbook", "long"))
                 .multiple(false)
                 .takes_value(false)
@@ -386,36 +390,36 @@ impl CliBuilder<'_> {
                     "orderbook",
                     "about",
                 )),
-            )
-            .arg(
-                Arg::new(CliBuilder::get_from_map_arg(&self, "rpc", "name"))
-                    .long(CliBuilder::get_from_map_arg(&self, "rpc", "long"))
-                    .multiple(false)
-                    .takes_value(false)
-                    .about(CliBuilder::get_from_map_arg(&self, "rpc", "about")),
-            ),
         )
-        .subcommand(
-            App::new(CliBuilder::get_from_map(
-                &self,
-                "node",
-                "run_ledger_command",
-            ))
+        .arg(
+            Arg::new(CliBuilder::get_from_map_arg(&self, "rpc", "name"))
+                .long(CliBuilder::get_from_map_arg(&self, "rpc", "long"))
+                .multiple(false)
+                .takes_value(false)
+                .about(CliBuilder::get_from_map_arg(&self, "rpc", "about")),
+        )
+    }
+
+    fn build_run_ledger_subcommand(&self) -> App {
+        App::new(CliBuilder::get_from_map(
+            &self,
+            "node",
+            "run_ledger_command",
+        ))
+        .about(CliBuilder::get_from_map(
+            &self,
+            "node",
+            "run_ledger_command_about",
+        ))
+    }
+
+    fn build_reset_anoma_subcommand(&self) -> App {
+        App::new(CliBuilder::get_from_map(&self, "node", "reset_command"))
             .about(CliBuilder::get_from_map(
                 &self,
                 "node",
-                "run_ledger_command_about",
-            )),
-        )
-        .subcommand(
-            App::new(CliBuilder::get_from_map(&self, "node", "reset_command"))
-                .about(CliBuilder::get_from_map(
-                    &self,
-                    "node",
-                    "reset_command_about",
-                )),
-        )
-        .get_matches();
+                "reset_command_about",
+            ))
     }
 
     fn get_from_map(&self, key: &str, sub_key: &str) -> &str {
