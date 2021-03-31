@@ -51,12 +51,12 @@ The accounts sub-space storage is described under [accounts' dynamic storage sub
 
 Because VPs are stateless, everything that's exposed in the VPs environment should be read-only:
 
-- storage API to account's sub-space
+- storage API to account's sub-space the [storage write log](#storage-write-log)
 - transaction API
 
 ### Transactions environment
 
-- storage write access for all public state
+- storage write access for all public state via the [storage write log](#storage-write-log)
 
 Some exceptions as to what can be written are given under [transaction code](./tx-execution.md#tx-code).
 
@@ -94,3 +94,14 @@ The data being passed between the host and the guest in the order of the executi
   - guest-to-host: parameters of environment function calls
   - host-to-guest: return results for host calls
   - ~~guest-to-host~~: the VP result (`bool`) can be passed directly from the call
+
+### Storage write log
+
+The storage write log gathers any storage updates (`write`/`delete`s) performed by transactions. For each transaction, the write log changes must be accepted by all the validity predicates that were triggered by these changes.
+
+A validity predicate can read its prior state directly from storage as it is not changed by the transactions directly. For the posterior state, we would try to look-up the keys in the write log to try to find a new value if it's been modified or deleted. If the key is not present in the write log, it means that it has not changed and we can read it from storage.
+
+The write log of each transaction included in a block and accepted by VPs is accumulated into block write log. Once the block is committed, we apply the storage changes from the write log to the storage.
+
+![write log](./wasm-vm/storage-write-log.svg  "storage write log")
+<https://excalidraw.com/new#room=333e1db689b083669c80,Y0i8yhvIAZCFICs753CSuA>

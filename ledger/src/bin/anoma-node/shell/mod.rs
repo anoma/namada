@@ -1,8 +1,7 @@
-mod gas;
-mod storage;
+pub mod gas;
+pub mod storage;
 mod tendermint;
 
-use std::ffi::c_void;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
@@ -10,15 +9,16 @@ use anoma::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::protobuf::types::Tx;
 use prost::Message;
-use storage::KeySeg;
 use thiserror::Error;
+use vm::host_env::write_log::StorageKey;
 
 use self::gas::BlockGasMeter;
 use self::storage::{
     Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
 use self::tendermint::{AbciMsg, AbciReceiver};
-use crate::vm::{self, TxEnv, TxRunner, VpRunner};
+use crate::vm::host_env::write_log::WriteLog;
+use crate::vm::{self, TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -70,10 +70,12 @@ pub fn reset(config: Config) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct Shell {
     abci: AbciReceiver,
     storage: storage::Storage,
     gas_meter: BlockGasMeter,
+    write_log: WriteLog,
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +113,7 @@ impl Shell {
             abci,
             storage,
             gas_meter: BlockGasMeter::default(),
+            write_log: WriteLog::new(),
         }
     }
 
@@ -179,82 +182,6 @@ impl Shell {
     }
 }
 
-/// Storage read function exposed to the wasm VM environment
-fn vm_storage_read(
-    env: &TxEnv,
-    key_ptr: u64,
-    key_len: u64,
-    result_ptr: u64,
-) -> u64 {
-    let key = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-
-    log::debug!(
-        "vm_storage_read {}, key {}, result_ptr {}",
-        key,
-        key_ptr,
-        result_ptr,
-    );
-
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
-    let keys = key.split('/').collect::<Vec<&str>>();
-    if let [key_a, key_b, key_c] = keys.as_slice() {
-        if "balance" == key_b.to_string() {
-            let addr = storage::Address::from_key_seg(&key_a.to_string())
-                .expect("should be an address");
-            let key = format!("{}/{}", key_b, key_c);
-            let (value, _) = shell
-                .storage
-                .read(&addr, &key)
-                .expect("storage read failed");
-            env.memory
-                .write_bytes(result_ptr, value.expect("key not found"))
-                .expect("cannot write to memory");
-            return 1;
-        }
-    }
-    // fail
-    0
-}
-
-/// Storage update function exposed to the wasm VM environment
-fn vm_storage_update(
-    env: &TxEnv,
-    key_ptr: u64,
-    key_len: u64,
-    val_ptr: u64,
-    val_len: u64,
-) -> u64 {
-    let key = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-    let val = env
-        .memory
-        .read_bytes(val_ptr, val_len as _)
-        .expect("Cannot read the value from memory");
-    log::debug!("vm_storage_update {}, {:#?}", key, val);
-
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
-    let keys = key.split('/').collect::<Vec<&str>>();
-    if let [key_a, key_b, key_c] = keys.as_slice() {
-        if "balance" == key_b.to_string() {
-            let addr = storage::Address::from_key_seg(&key_a.to_string())
-                .expect("should be an address");
-            let key = format!("{}/{}", key_b, key_c);
-            shell
-                .storage
-                .write(&addr, &key, val)
-                .expect("VM storage write fail");
-            return 1;
-        }
-    }
-    // fail
-    0
-}
-
 impl Shell {
     pub fn init_chain(&mut self, chain_id: String) -> Result<()> {
         self.storage
@@ -286,22 +213,17 @@ impl Shell {
 
         // Execute the transaction code
         let tx_runner = TxRunner::new();
-        let ledger =
-            unsafe { vm::TxShellWrapper::new(self as *mut _ as *mut c_void) };
         tx_runner
-            .run(
-                ledger,
-                tx.code,
-                &tx_data,
-                vm_storage_read,
-                vm_storage_update,
-            )
+            .run(&mut self.storage, &mut self.write_log, tx.code, &tx_data)
             .map_err(Error::TxRunnerError)?;
 
-        // TODO gather write log from tx udpates
-        let write_log = vec![];
-
-        // TODO determine these from the write log
+        let keys_changed: Vec<String> = self
+            .write_log
+            .get_changed_key()
+            .iter()
+            .map(|StorageKey { addr, key }| format!("{}/{}", addr, key))
+            .collect();
+        // TODO determine these from the changed keys
         let src = "va";
         let dest = "ba";
         let src_addr = Address::new_address(src.into());
@@ -327,7 +249,9 @@ impl Shell {
                 src_vp,
                 &tx_data,
                 src.to_string(),
-                &write_log,
+                &self.storage,
+                &self.write_log,
+                &keys_changed,
                 vp_sender.clone(),
             )
             .map_err(|error| Error::VpRunnerError {
@@ -338,7 +262,15 @@ impl Shell {
             .recv()
             .expect("Expected a message from source's VP runner");
         vp_runner
-            .run(dest_vp, &tx_data, dest.to_string(), &write_log, vp_sender)
+            .run(
+                dest_vp,
+                &tx_data,
+                dest.to_string(),
+                &self.storage,
+                &self.write_log,
+                &keys_changed,
+                vp_sender,
+            )
             .map_err(|error| Error::VpRunnerError {
                 addr: dest_addr.clone(),
                 error,
@@ -353,6 +285,7 @@ impl Shell {
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
             );
+            self.write_log.commit_tx();
         } else {
             log::debug!(
                 "tx declined by {}",
@@ -362,6 +295,7 @@ impl Shell {
                     if dest_accept { "src" } else { "src and dest" }
                 }
             );
+            self.write_log.drop_tx();
         }
 
         self.gas_meter
@@ -381,6 +315,10 @@ impl Shell {
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> MerkleRoot {
+        // commit changes from the write-log to storage
+        self.write_log
+            .commit_block(&mut self.storage)
+            .expect("Expected committing block write log success");
         log::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?

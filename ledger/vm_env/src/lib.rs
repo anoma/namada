@@ -3,13 +3,6 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-/// Storage modifications
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub enum StorageWrite {
-    Write { key: String, value: String },
-    Delete { key: String },
-}
-
 /// Memory types can be passed between the host and guest via wasm linear
 /// memory.
 ///
@@ -27,15 +20,15 @@ pub mod memory {
     /// (tx or VP)
     pub type TxData = Vec<u8>;
 
-    /// The storage write log of storage updates performed by the
-    /// transaction for the account associated with the VP
-    pub type WriteLog = Vec<StorageWrite>;
+    /// The storage changed keys from the write log of storage updates performed
+    /// by the transaction for the account associated with the VP
+    pub type KeysChanged = Vec<String>;
 
     /// Input for transaction wasm module call
     pub type TxInput = TxData;
 
     /// Input for validity predicate wasm module call
-    pub type VpInput<'a> = (String, &'a TxData, &'a WriteLog);
+    pub type VpInput<'a> = (String, &'a TxData, &'a KeysChanged);
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub struct StorageReadInput {
@@ -58,11 +51,14 @@ pub mod memory {
 
     /// The storage update is stored in the host, so there is no output
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct StorageWriteInput(pub StorageWrite);
+    pub struct StorageWriteInput {
+        pub key: String,
+        pub val: Vec<u8>,
+    }
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub struct StorageReadSelfInput {
-        key: String,
+        pub key: String,
     }
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
@@ -73,7 +69,7 @@ pub mod memory {
     /// Check if a VP at the given address approved the transaction
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub struct OtherApprovedInput {
-        addr: String,
+        pub addr: String,
     }
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
