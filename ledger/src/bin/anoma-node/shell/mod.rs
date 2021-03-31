@@ -214,7 +214,13 @@ impl Shell {
         // Execute the transaction code
         let tx_runner = TxRunner::new();
         tx_runner
-            .run(&mut self.storage, &mut self.write_log, tx.code, &tx_data)
+            .run(
+                &mut self.storage,
+                &mut self.write_log,
+                &mut self.gas_meter,
+                tx.code,
+                &tx_data,
+            )
             .map_err(Error::TxRunnerError)?;
 
         // get changed keys grouped by the address

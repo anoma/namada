@@ -5,11 +5,16 @@ use std::ffi::c_void;
 use std::marker::PhantomData;
 
 use anoma_vm_env::memory::{TxInput, VpInput};
+use parity_wasm::elements;
+use pwasm_utils::{self, rules};
 use thiserror::Error;
 use wasmer::Instance;
 
 use self::host_env::write_log::WriteLog;
-use crate::shell::storage::{Address, Storage};
+use crate::shell::{
+    gas::BlockGasMeter,
+    storage::{Address, Storage},
+};
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
@@ -80,6 +85,12 @@ pub enum Error {
     #[error("Memory error: {0}")]
     MemoryError(memory::Error),
     // 2. Transaction errors
+    #[error("Transaction deserialization error: {0}")]
+    TxDeserializationError(elements::Error),
+    #[error("Transaction serialization error: {0}")]
+    TxSerializationError(elements::Error),
+    #[error("Unable to inject gas meter for transaction")]
+    TxGasMeterInjection,
     #[error("Transaction compilation error: {0}")]
     TxCompileError(wasmer::CompileError),
     #[error("Missing transaction memory export, failed with: {0}")]
@@ -137,6 +148,7 @@ impl TxRunner {
         &self,
         storage: &mut Storage,
         write_log: &mut WriteLog,
+        gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
         tx_data: &Vec<u8>,
     ) -> Result<()> {
@@ -148,6 +160,13 @@ impl TxRunner {
         let write_log = unsafe {
             TxEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
         };
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
+        let gas_meter = unsafe {
+            TxEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
+        };
+
+        let tx_code = Self::prepare_tx_code(tx_code)?;
 
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::TxCompileError)?;
@@ -157,20 +176,28 @@ impl TxRunner {
             &self.wasm_store,
             storage,
             write_log,
+            gas_meter,
             initial_memory,
         );
 
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::TxInstantiationError)?;
-        self.run_with_input(tx_code, tx_data)
+        Self::run_with_input(tx_code, tx_data)
     }
 
-    fn run_with_input(
-        &self,
-        tx_code: Instance,
-        tx_data: &TxInput,
-    ) -> Result<()> {
+    fn prepare_tx_code(tx_code: Vec<u8>) -> Result<Vec<u8>> {
+        let module: elements::Module =
+            elements::deserialize_buffer(&tx_code)
+                .map_err(Error::TxDeserializationError)?;
+        let gas_rules =
+            rules::Set::new(1, Default::default()).with_grow_cost(1);
+        let module = pwasm_utils::inject_gas_counter(module, &gas_rules, "env")
+            .map_err(|_original_module| Error::TxGasMeterInjection)?;
+        elements::serialize(module).map_err(Error::TxSerializationError)
+    }
+
+    fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {
         // We need to write the inputs in the memory exported from the wasm
         // module
         let memory = tx_code

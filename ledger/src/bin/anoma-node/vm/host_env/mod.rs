@@ -9,7 +9,10 @@ use wasmer::{
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{TxEnvHostWrapper, VpEnvHostWrapper};
-use crate::shell::storage::{self, Address, Storage};
+use crate::shell::{
+    gas::BlockGasMeter,
+    storage::{self, Address, Storage},
+};
 
 #[derive(Clone)]
 struct TxEnv {
@@ -17,6 +20,8 @@ struct TxEnv {
     storage: TxEnvHostWrapper<Storage>,
     // not thread-safe, assuming single-threaded Tx runner
     write_log: TxEnvHostWrapper<WriteLog>,
+    // not thread-safe, assuming single-threaded Tx runner
+    gas_meter: TxEnvHostWrapper<BlockGasMeter>,
     memory: AnomaMemory,
 }
 
@@ -55,17 +60,20 @@ pub fn prepare_tx_imports(
     wasm_store: &Store,
     storage: TxEnvHostWrapper<Storage>,
     write_log: TxEnvHostWrapper<WriteLog>,
+    gas_meter: TxEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
     let tx_env = TxEnv {
         storage,
         write_log,
+        gas_meter,
         memory: AnomaMemory::default(),
     };
     wasmer::imports! {
         // default namespace
         "env" => {
             "memory" => initial_memory,
+            "gas" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_charge_gas),
             "read" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_read),
             "write" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_write),
             "delete" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_delete),
@@ -115,6 +123,23 @@ fn parse_key(key: String) -> (storage::Address, String) {
     let addr: storage::Address =
         storage::KeySeg::from_key_seg(&addr_str).expect("should be an address");
     (addr, key)
+}
+
+/// Called from tx wasm to request to use the given gas amount
+fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
+    let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
+    log::debug!("transaction wasm requested gas: {}", used_gas);
+    // if we run out of gas, we need to stop the execution
+    match gas_meter.add(used_gas as _) {
+        Err(err) => {
+            log::warn!(
+                "Stopping transaction execution because of gas error: {}",
+                err
+            );
+            unreachable!()
+        }
+        _ => {}
+    }
 }
 
 /// Storage read function exposed to the wasm VM Tx environment. It will try to

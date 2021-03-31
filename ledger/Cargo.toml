@@ -71,6 +71,8 @@ tonic = "0.4.0"
 wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
 wasmer-engine-jit = "1.0.2"
+parity-wasm = "0.42.2"
+pwasm-utils = "0.17.0"
 
 [dev-dependencies]
 cargo-watch = "7.5.0"
