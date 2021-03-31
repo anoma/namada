@@ -195,10 +195,9 @@ impl TxRunner {
         let module: elements::Module =
             elements::deserialize_buffer(&tx_code)
                 .map_err(Error::TxDeserializationError)?;
-        let gas_rules =
-            rules::Set::new(1, Default::default()).with_grow_cost(1);
-        let module = pwasm_utils::inject_gas_counter(module, &gas_rules, "env")
-            .map_err(|_original_module| Error::TxGasMeterInjection)?;
+        let module =
+            pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
+                .map_err(|_original_module| Error::TxGasMeterInjection)?;
         elements::serialize(module).map_err(Error::TxSerializationError)
     }
 
@@ -289,10 +288,9 @@ impl VpRunner {
         let module: elements::Module =
             elements::deserialize_buffer(vp_code.as_ref())
                 .map_err(Error::VpDeserializationError)?;
-        let gas_rules =
-            rules::Set::new(1, Default::default()).with_grow_cost(1);
-        let module = pwasm_utils::inject_gas_counter(module, &gas_rules, "env")
-            .map_err(|_original_module| Error::VpGasMeterInjection)?;
+        let module =
+            pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
+                .map_err(|_original_module| Error::VpGasMeterInjection)?;
         elements::serialize(module).map_err(Error::VpSerializationError)
     }
 
@@ -332,4 +330,9 @@ impl VpRunner {
             .map_err(Error::VpRuntimeError)?;
         Ok(is_valid == 1)
     }
+}
+
+/// Get the gas rules used to meter wasm operations
+fn get_gas_rules() -> rules::Set {
+    rules::Set::default().with_grow_cost(1)
 }
