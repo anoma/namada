@@ -99,7 +99,7 @@ The data being passed between the host and the guest in the order of the executi
 
 The storage write log gathers any storage updates (`write`/`delete`s) performed by transactions. For each transaction, the write log changes must by accepted by all the validity predicates that were triggered by these changes.
 
-A validity predicate can read its prior state directly from storage as it's not changed by the transactions directly. For the posterior state, we would try to look-up the keys in the write log to try to find a new value if it's been modified or deleted. If the key is not present in the write log, it means that is has not changed and we can read it from storage.
+A validity predicate can read its prior state directly from storage as it is not changed by the transaction directly. For the posterior state, we first try to look-up the keys in the write log to try to find a new value if the key has been modified or deleted. If the key is not present in the write log, it means that the value has not changed and we can read it from storage.
 
 The write log of each transaction included in a block and accepted by VPs is accumulated into block write log. Once the block is committed, we apply the storage changes from the write log to the storage.
 
