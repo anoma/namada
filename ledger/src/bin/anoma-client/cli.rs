@@ -1,6 +1,6 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use anoma::cli::anoma_client_cli;
+use anoma::cli::{anoma_client_cli, CliBuilder};
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::rpc_types::{self, Message};
@@ -8,7 +8,8 @@ use color_eyre::eyre::Result;
 use tendermint_rpc::{Client, HttpClient};
 
 pub async fn main() -> Result<()> {
-    let matches = anoma_client_cli();
+    let matches = CliBuilder::new().anoma_client_cli();
+
     match matches.subcommand() {
         Some(("tx", args)) => {
             // here unwrap is safe as the arguments are required

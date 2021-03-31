@@ -6,7 +6,10 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
+use std::collections::HashMap;
+
 use clap::{App, Arg, ArgMatches, Clap};
+use maplit::hashmap;
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
 const APP_DESCRIPTION: &str = "Anoma node daemon";
@@ -103,6 +106,341 @@ pub struct GossipArg {
     pub dkg: bool,
 }
 
+pub struct CliBuilder<'a> {
+    common: HashMap<&'a str, &'a str>,
+    client: HashMap<&'a str, &'a str>,
+    node: HashMap<&'a str, &'a str>,
+    args: HashMap<&'a str, HashMap<&'a str, &'a str>>,
+}
+
+impl CliBuilder<'_> {
+    pub fn new() -> Self {
+        Self {
+            common: hashmap! {
+                "author" => "Heliax <TODO@heliax.dev>.",
+                "version" => "0.1.0",
+                "description" => "Anoma node daemon."
+            },
+            client: hashmap! {
+                "about" => "Anoma node client.",
+                "intent_command" => "intent",
+                "intent_command_about" => "Send an intent",
+                "tx_command" => "tx",
+                "tx_command_about" => "Send an transaction"
+            },
+            node: hashmap! {
+                "about" => "Anoma node daemon.",
+                "run_gossip_command" => "run-gossip",
+                "run_gossip_command_about" => "Run Anoma gossip service.",
+                "tx_command" => "tx",
+                "tx_command_about" => "Send an transaction",
+                "run_ledger_command" => "run-ledger",
+                "run_ledger_command_about" => "Run Anoma gossip service.",
+                "reset_command" => "reset-anoma",
+                "reset_command_about" => "Reset Anoma node state."
+            },
+            args: hashmap! {
+                "intent_data" =>  hashmap! {
+                    "name" => "data",
+                    "long" => "data",
+                    "about" => "The data of the intent, that contains all value necessary for the matchmaker."
+                },
+                "intent_orderbook" =>  hashmap! {
+                    "name" => "orderbook",
+                    "long" => "orderbook",
+                    "about" => "The orderbook address."
+                },
+                "tx_data" =>  hashmap! {
+                    "name" => "data",
+                    "long" => "data",
+                    "about" => "The data is an arbitrary hex string that will be passed to the code when it's executed."
+                },
+                "tx_path" =>  hashmap! {
+                    "name" => "path",
+                    "long" => "path",
+                    "about" => "The path to the wasm code to be executed."
+                },
+                "base" =>  hashmap! {
+                    "name" => "base",
+                    "short" => "b",
+                    "long" => "base-dir",
+                    "about" => "Set the base directiory."
+                },
+                "gossip_address" =>  hashmap! {
+                    "name" => "address",
+                    "short" => "a",
+                    "long" => "address",
+                    "about" => "Gossip service address."
+                },
+                "peers" =>  hashmap! {
+                    "name" => "peers",
+                    "short" => "p",
+                    "long" => "peers",
+                    "about" => "List of peers."
+                },
+                "dkg" =>  hashmap! {
+                    "name" => "dkg",
+                    "long" => "dkg",
+                    "about" => "Enable DKG gossip topic."
+                },
+                "orderbook" =>  hashmap! {
+                    "name" => "orderbook",
+                    "long" => "orderbook",
+                    "about" => "Enable ORDERBOOK gossip topic."
+                },
+                "rpc" =>  hashmap! {
+                    "name" => "rpc",
+                    "long" => "rpc",
+                    "about" => "Enable RPC service."
+                },
+            },
+        }
+    }
+
+    pub fn anoma_client_cli(&self) -> ArgMatches {
+        return App::new(CliBuilder::get_from_map(
+            &self,
+            "common",
+            "description",
+        ))
+        .version(CliBuilder::get_from_map(&self, "common", "version"))
+        .author(CliBuilder::get_from_map(&self, "common", "author"))
+        .about(CliBuilder::get_from_map(&self, "client", "about"))
+        .subcommand(
+            App::new(CliBuilder::get_from_map(&self, "client", "tx_command"))
+                .about(CliBuilder::get_from_map(
+                    &self,
+                    "client",
+                    "tx_command_about",
+                ))
+                .arg(
+                    Arg::new(CliBuilder::get_from_map_arg(
+                        &self, "tx_path", "name",
+                    ))
+                    .long(CliBuilder::get_from_map_arg(
+                        &self, "tx_path", "long",
+                    ))
+                    .takes_value(true)
+                    .required(true)
+                    .about(CliBuilder::get_from_map_arg(
+                        &self, "tx_path", "about",
+                    )),
+                )
+                .arg(
+                    Arg::new(CliBuilder::get_from_map_arg(
+                        &self,
+                        "intent_data",
+                        "name",
+                    ))
+                    .long(CliBuilder::get_from_map_arg(
+                        &self,
+                        "intent_data",
+                        "long",
+                    ))
+                    .takes_value(true)
+                    .required(true)
+                    .about(CliBuilder::get_from_map_arg(
+                        &self,
+                        "intent_data",
+                        "about",
+                    )),
+                ),
+        )
+        .subcommand(
+            App::new(CliBuilder::get_from_map(
+                &self,
+                "client",
+                "intent_command",
+            ))
+            .about(CliBuilder::get_from_map(
+                &self,
+                "client",
+                "intent_command_about",
+            ))
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(
+                    &self,
+                    "intent_orderbook",
+                    "name",
+                ))
+                .long(CliBuilder::get_from_map_arg(
+                    &self,
+                    "intent_orderbook",
+                    "long",
+                ))
+                .takes_value(true)
+                .required(true)
+                .about(CliBuilder::get_from_map_arg(
+                    &self,
+                    "intent_orderbook",
+                    "about",
+                )),
+            )
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(
+                    &self, "tx_data", "name",
+                ))
+                .long(CliBuilder::get_from_map_arg(&self, "tx_data", "long"))
+                .takes_value(true)
+                .required(true)
+                .about(CliBuilder::get_from_map_arg(&self, "tx_data", "about")),
+            ),
+        )
+        .get_matches();
+    }
+
+    pub fn anoma_node_cli(&self) -> ArgMatches {
+        return App::new(CliBuilder::get_from_map(
+            &self,
+            "common",
+            "description",
+        ))
+        .version(CliBuilder::get_from_map(&self, "common", "version"))
+        .author(CliBuilder::get_from_map(&self, "common", "author"))
+        .about(CliBuilder::get_from_map(&self, "node", "about"))
+        .arg(
+            Arg::new(CliBuilder::get_from_map_arg(&self, "base", "name"))
+                .short(
+                    CliBuilder::get_from_map_arg(&self, "base", "short")
+                        .chars()
+                        .next()
+                        .unwrap(),
+                )
+                .long(CliBuilder::get_from_map_arg(&self, "base", "long"))
+                .takes_value(true)
+                .required(false)
+                .about(CliBuilder::get_from_map_arg(&self, "base", "about")),
+        )
+        .subcommand(
+            App::new(CliBuilder::get_from_map(
+                &self,
+                "node",
+                "run_gossip_command",
+            ))
+            .about(CliBuilder::get_from_map(
+                &self,
+                "node",
+                "run_gossip_command_about",
+            ))
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(
+                    &self,
+                    "gossip_address",
+                    "name",
+                ))
+                .short(
+                    CliBuilder::get_from_map_arg(
+                        &self,
+                        "gossip_address",
+                        "short",
+                    )
+                    .chars()
+                    .next()
+                    .unwrap(),
+                )
+                .long(CliBuilder::get_from_map_arg(
+                    &self,
+                    "gossip_address",
+                    "long",
+                ))
+                .takes_value(true)
+                .about(CliBuilder::get_from_map_arg(
+                    &self,
+                    "gossip_address",
+                    "about",
+                )),
+            )
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(&self, "peers", "name"))
+                    .short(
+                        CliBuilder::get_from_map_arg(&self, "peers", "short")
+                            .chars()
+                            .next()
+                            .unwrap(),
+                    )
+                    .long(CliBuilder::get_from_map_arg(&self, "peers", "long"))
+                    .multiple(true)
+                    .takes_value(true)
+                    .about(CliBuilder::get_from_map_arg(
+                        &self, "peers", "about",
+                    )),
+            )
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(&self, "dkg", "name"))
+                    .long(CliBuilder::get_from_map_arg(&self, "dkg", "long"))
+                    .multiple(false)
+                    .takes_value(false)
+                    .about(CliBuilder::get_from_map_arg(&self, "dkg", "about")),
+            )
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(
+                    &self,
+                    "orderbook",
+                    "name",
+                ))
+                .long(CliBuilder::get_from_map_arg(&self, "orderbook", "long"))
+                .multiple(false)
+                .takes_value(false)
+                .about(CliBuilder::get_from_map_arg(
+                    &self,
+                    "orderbook",
+                    "about",
+                )),
+            )
+            .arg(
+                Arg::new(CliBuilder::get_from_map_arg(&self, "rpc", "name"))
+                    .long(CliBuilder::get_from_map_arg(&self, "rpc", "long"))
+                    .multiple(false)
+                    .takes_value(false)
+                    .about(CliBuilder::get_from_map_arg(&self, "rpc", "about")),
+            ),
+        )
+        .subcommand(
+            App::new(CliBuilder::get_from_map(
+                &self,
+                "node",
+                "run_ledger_command",
+            ))
+            .about(CliBuilder::get_from_map(
+                &self,
+                "node",
+                "run_ledger_command_about",
+            )),
+        )
+        .subcommand(
+            App::new(CliBuilder::get_from_map(&self, "node", "reset_command"))
+                .about(CliBuilder::get_from_map(
+                    &self,
+                    "node",
+                    "reset_command_about",
+                )),
+        )
+        .get_matches();
+    }
+
+    fn get_from_map(&self, key: &str, sub_key: &str) -> &str {
+        println!("{}", key);
+        println!("{}", sub_key);
+        match key {
+            "common" => self.common.get(sub_key).map(|res| *res).unwrap(),
+            "client" => self.client.get(sub_key).map(|res| *res).unwrap(),
+            "node" => self.node.get(sub_key).map(|res| *res).unwrap(),
+            _ => panic!("Invalid key/subkey in cli: {}", key),
+        }
+    }
+
+    fn get_from_map_arg(&self, key: &str, sub_key: &str) -> &str {
+        println!("{}", key);
+        println!("{}", sub_key);
+        self.args
+            .get(key)
+            .unwrap()
+            .get(sub_key)
+            .map(|res| *res)
+            .unwrap()
+    }
+}
+
 pub fn anoma_client_cli() -> ArgMatches {
     return App::new(APP_DESCRIPTION)
         .version(VERSION)
@@ -152,16 +490,16 @@ pub fn anoma_node_cli() -> ArgMatches {
         .version(VERSION)
         .author(AUTHOR)
         .about("Anoma node daemon")
+        .arg(
+            Arg::new("test")
+                .short('t')
+                .long("test")
+                .takes_value(true)
+                .about("test"),
+        )
         .subcommand(
             App::new("run-gossip")
                 .about("Run Anoma gossip service")
-                .arg(
-                    Arg::new("base")
-                        .short('b')
-                        .long("base-dir")
-                        .takes_value(true)
-                        .about("Set the base directiory."),
-                )
                 .arg(
                     Arg::new("address")
                         .short('a')
@@ -199,25 +537,7 @@ pub fn anoma_node_cli() -> ArgMatches {
                         .about("Enable RPC service."),
                 ),
         )
-        .subcommand(
-            App::new("run-ledger")
-                .about("Run Anoma gossip service.")
-                .arg(
-                    Arg::new("base")
-                        .short('b')
-                        .long("base-dir")
-                        .takes_value(true)
-                        .about("Set the base directiory."),
-                ),
-        )
-        .subcommand(
-            App::new("reset").about("Reset Anoma node state.").arg(
-                Arg::new("base")
-                    .short('b')
-                    .long("base-dir")
-                    .takes_value(true)
-                    .about("Set the base directiory."),
-            ),
-        )
+        .subcommand(App::new("run-ledger").about("Run Anoma gossip service."))
+        .subcommand(App::new("reset").about("Reset Anoma node state."))
         .get_matches();
 }
