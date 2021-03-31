@@ -1,6 +1,7 @@
 pub mod write_log;
 
 use std::convert::TryInto;
+use std::sync::{Arc, Mutex};
 
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
@@ -9,10 +10,8 @@ use wasmer::{
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{TxEnvHostWrapper, VpEnvHostWrapper};
-use crate::shell::{
-    gas::BlockGasMeter,
-    storage::{self, Address, Storage},
-};
+use crate::shell::gas::BlockGasMeter;
+use crate::shell::storage::{self, Address, Storage};
 
 #[derive(Clone)]
 struct TxEnv {
@@ -42,6 +41,9 @@ struct VpEnv {
     storage: VpEnvHostWrapper<Storage>,
     // not thread-safe, assuming read-only access from parallel Vp runners
     write_log: VpEnvHostWrapper<WriteLog>,
+    // TODO In parallel runs, we can change only the maximum used gas of all
+    // the VPs that we ran.
+    gas_meter: Arc<Mutex<BlockGasMeter>>,
     memory: AnomaMemory,
 }
 
@@ -63,7 +65,7 @@ pub fn prepare_tx_imports(
     gas_meter: TxEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
-    let tx_env = TxEnv {
+    let env = TxEnv {
         storage,
         write_log,
         gas_meter,
@@ -73,12 +75,12 @@ pub fn prepare_tx_imports(
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            "gas" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_charge_gas),
-            "read" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_read),
-            "write" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_write),
-            "delete" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_delete),
-            "read_varlen" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_read_varlen),
-            "log_string" => wasmer::Function::new_native_with_env(wasm_store, tx_env, tx_log_string),
+            "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_charge_gas),
+            "read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read),
+            "write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
+            "delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
+            "read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
+            "log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
 }
@@ -90,23 +92,26 @@ pub fn prepare_vp_imports(
     addr: Address,
     storage: VpEnvHostWrapper<Storage>,
     write_log: VpEnvHostWrapper<WriteLog>,
+    gas_meter: Arc<Mutex<BlockGasMeter>>,
     initial_memory: Memory,
 ) -> ImportObject {
-    let vp_env = VpEnv {
+    let env = VpEnv {
         addr,
         storage,
         write_log,
+        gas_meter,
         memory: AnomaMemory::default(),
     };
     wasmer::imports! {
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            "read_pre" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_pre),
-            "read_post" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_post),
-            "read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_pre_varlen),
-            "read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_post_varlen),
-            "log_string" => wasmer::Function::new_native_with_env(wasm_store, vp_env, vp_log_string),
+            "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_charge_gas),
+            "read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
+            "read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
+            "read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
+            "read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
+            "log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
         },
     }
 }
@@ -134,6 +139,27 @@ fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
         Err(err) => {
             log::warn!(
                 "Stopping transaction execution because of gas error: {}",
+                err
+            );
+            unreachable!()
+        }
+        _ => {}
+    }
+}
+
+/// Called from VP wasm to request to use the given gas amount
+fn vp_charge_gas(env: &VpEnv, used_gas: i32) {
+    let mut gas_meter = env
+        .gas_meter
+        .lock()
+        .expect("Cannot get lock on the gas meter");
+    log::debug!("Validity predicate wasm requested gas: {}", used_gas);
+    // if we run out of gas, we need to stop the execution
+    match gas_meter.add(used_gas as _) {
+        Err(err) => {
+            log::warn!(
+                "Stopping validity predicate execution because of gas error: \
+                 {}",
                 err
             );
             unreachable!()
