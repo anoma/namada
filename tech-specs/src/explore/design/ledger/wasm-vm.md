@@ -122,4 +122,6 @@ The `pwasm-utils` seems like a safer option to begin with (and we'll probably ne
 
 ## Stack height metering
 
-TODO We'll probably need to use `pwasm-utils`, at least until this PR is merged <https://github.com/wasmerio/wasmer/pull/1037>.
+For safety, we need to limit the stack height in wasm code. Similarly to gas metering, we can also use `wasmer` middleware or `pwasm-utils`.
+
+We have to use `pwasm-utils`, because `wasmer`'s stack limiter is currently non-deterministic (platform specific). This is to be fixed in this PR: <https://github.com/wasmerio/wasmer/pull/1037>.
