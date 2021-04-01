@@ -89,3 +89,41 @@ An API made visible only to the shell module (e.g. `pub ( in SimplePath )` - htt
 ### `storage/db` module
 
 The persistent DB implementation (e.g. RocksDB).
+
+### DB keys
+
+The DB keys are composed of key segments. A key segment can be an `Address` (there can be multiple addresses involved in a key) or any user defined non-empty utf-8 string (maybe limited to only alphanumerical characters).
+
+In the DB storage, the keys would be prefixed by the block height. This would be hidden from the wasm environment, which only operates at the current block height.
+
+This could roughly be implemented as:
+
+```
+struct Key {
+    segments: Vec<KeySeg>
+}
+
+impl Key {
+    fn parse(string: String) -> Result<Self, Error> {..}
+    fn join(&self, other: KeySeg) -> Self {..}
+    fn into_string(self) -> String;
+    // find addresses included in the key, used to find which validity-predicates should be triggered by a key space change
+    fn find_addresses(&self) -> Vec<Address>;
+}
+
+// Provide a trait so that we can define new pre-defined key segment types inside wasm environment and also ad-hoc key segments defined by wasm users
+trait KeySeg {
+    fn parse(string: String) -> Result<Self, Error>;
+    fn into_string(self) -> String;
+}
+
+enum DbKeySeg {
+    AddressSeg(Address),
+    StringSeg(String),
+}
+
+impl KeySeg for DbKeySeg {..}
+impl KeySeg for BlockHeight {..}
+```
+
+Then the storage API functions (read/write/delete) should only accept the keys with this `Key` type.
