@@ -86,56 +86,30 @@ pub enum Error {
     MemoryError(memory::Error),
     #[error("Unable to inject gas meter")]
     StackLimiterInjection,
-    // 2. Transaction errors
-    #[error("Transaction deserialization error: {0}")]
-    TxDeserializationError(elements::Error),
-    #[error("Transaction serialization error: {0}")]
-    TxSerializationError(elements::Error),
-    #[error("Unable to inject gas meter for transaction")]
-    TxGasMeterInjection,
-    #[error("Transaction compilation error: {0}")]
-    TxCompileError(wasmer::CompileError),
-    #[error("Missing transaction memory export, failed with: {0}")]
-    MissingTxModuleMemory(wasmer::ExportError),
-    #[error("Validity predicate compilation error: {0}")]
-    MissingTxModuleEntrypoint(wasmer::ExportError),
+    #[error("Wasm deserialization error: {0}")]
+    DeserializationError(elements::Error),
+    #[error("Wasm serialization error: {0}")]
+    SerializationError(elements::Error),
+    #[error("Unable to inject gas meter")]
+    GasMeterInjection,
+    #[error("Wasm compilation error: {0}")]
+    CompileError(wasmer::CompileError),
+    #[error("Missing wasm memory export, failed with: {0}")]
+    MissingModuleMemory(wasmer::ExportError),
+    #[error("Missing wasm entrypoint: {0}")]
+    MissingModuleEntrypoint(wasmer::ExportError),
+    #[error("Failed running wasm with: {0}")]
+    RuntimeError(wasmer::RuntimeError),
+    #[error("Failed instantiating wasm module with: {0}")]
+    InstantiationError(wasmer::InstantiationError),
     #[error(
-        "Unexpected transaction module entrypoint interface {TX_ENTRYPOINT}, \
-         failed with: {0}"
+        "Unexpected module entrypoint interface {entrypoint}, \
+         failed with: {error}"
     )]
-    UnexpectedTxModuleEntrypointInterface(wasmer::RuntimeError),
-    #[error("Failed running transaction with: {0}")]
-    TxRuntimeError(wasmer::RuntimeError),
-    #[error("Failed instantiating transaction module with: {0}")]
-    TxInstantiationError(wasmer::InstantiationError),
-    // 3. Validity predicate errors
-    #[error("Validity predicate deserialization error: {0}")]
-    VpDeserializationError(elements::Error),
-    #[error("Validity predicate serialization error: {0}")]
-    VpSerializationError(elements::Error),
-    #[error("Unable to inject gas meter for validity predicate")]
-    VpGasMeterInjection,
-    #[error(
-        "Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: \
-         {0}"
-    )]
-    VpCompileError(wasmer::CompileError),
-    #[error("Missing validity predicate memory export, failed with: {0}")]
-    MissingVpModuleMemory(wasmer::ExportError),
-    #[error(
-        "Missing validity predicate entrypoint {TX_ENTRYPOINT}, failed with: \
-         {0}"
-    )]
-    MissingVpModuleEntrypoint(wasmer::ExportError),
-    #[error(
-        "Unexpected validity predicate module entrypoint interface \
-         {VP_ENTRYPOINT}, failed with: {0}"
-    )]
-    UnexpectedVpModuleEntrypointInterface(wasmer::RuntimeError),
-    #[error("Failed running validity predicate with: {0}")]
-    VpRuntimeError(wasmer::RuntimeError),
-    #[error("Failed instantiating validity predicate module with: {0}")]
-    VpInstantiationError(wasmer::InstantiationError),
+    UnexpectedModuleEntrypointInterface {
+        entrypoint: &'static str,
+        error: wasmer::RuntimeError,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -177,7 +151,7 @@ impl TxRunner {
         let tx_code = Self::prepare_tx_code(tx_code)?;
 
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
-            .map_err(Error::TxCompileError)?;
+            .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let tx_imports = host_env::prepare_tx_imports(
@@ -190,21 +164,20 @@ impl TxRunner {
 
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
-            .map_err(Error::TxInstantiationError)?;
+            .map_err(Error::InstantiationError)?;
         Self::run_with_input(tx_code, tx_data)
     }
 
     fn prepare_tx_code(tx_code: Vec<u8>) -> Result<Vec<u8>> {
-        let module: elements::Module =
-            elements::deserialize_buffer(&tx_code)
-                .map_err(Error::TxDeserializationError)?;
+        let module: elements::Module = elements::deserialize_buffer(&tx_code)
+            .map_err(Error::DeserializationError)?;
         let module =
             pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-                .map_err(|_original_module| Error::TxGasMeterInjection)?;
+                .map_err(|_original_module| Error::GasMeterInjection)?;
         let module =
             pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
                 .map_err(|_original_module| Error::StackLimiterInjection)?;
-        elements::serialize(module).map_err(Error::TxSerializationError)
+        elements::serialize(module).map_err(Error::SerializationError)
     }
 
     fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {
@@ -213,7 +186,7 @@ impl TxRunner {
         let memory = tx_code
             .exports
             .get_memory("memory")
-            .map_err(Error::MissingTxModuleMemory)?;
+            .map_err(Error::MissingModuleMemory)?;
         let memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
@@ -224,12 +197,15 @@ impl TxRunner {
         let apply_tx = tx_code
             .exports
             .get_function(TX_ENTRYPOINT)
-            .map_err(Error::MissingTxModuleEntrypoint)?
+            .map_err(Error::MissingModuleEntrypoint)?
             .native::<(u64, u64), ()>()
-            .map_err(Error::UnexpectedTxModuleEntrypointInterface)?;
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: TX_ENTRYPOINT,
+                error,
+            })?;
         apply_tx
             .call(tx_data_ptr, tx_data_len)
-            .map_err(Error::TxRuntimeError)
+            .map_err(Error::RuntimeError)
     }
 }
 
@@ -271,7 +247,7 @@ impl VpRunner {
         let vp_code = Self::prepare_vp_code(vp_code)?;
 
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
-            .map_err(Error::VpCompileError)?;
+            .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let input: VpInput = (addr.to_string(), tx_data, keys_changed);
@@ -286,21 +262,21 @@ impl VpRunner {
 
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
-            .map_err(Error::VpInstantiationError)?;
+            .map_err(Error::InstantiationError)?;
         VpRunner::run_with_input(vp_code, input)
     }
 
     fn prepare_vp_code<T: AsRef<[u8]>>(vp_code: T) -> Result<Vec<u8>> {
         let module: elements::Module =
             elements::deserialize_buffer(vp_code.as_ref())
-                .map_err(Error::VpDeserializationError)?;
+                .map_err(Error::DeserializationError)?;
         let module =
             pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-                .map_err(|_original_module| Error::VpGasMeterInjection)?;
+                .map_err(|_original_module| Error::GasMeterInjection)?;
         let module =
             pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
                 .map_err(|_original_module| Error::StackLimiterInjection)?;
-        elements::serialize(module).map_err(Error::VpSerializationError)
+        elements::serialize(module).map_err(Error::SerializationError)
     }
 
     fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
@@ -309,7 +285,7 @@ impl VpRunner {
         let memory = vp_code
             .exports
             .get_memory("memory")
-            .map_err(Error::MissingVpModuleMemory)?;
+            .map_err(Error::MissingModuleMemory)?;
         let memory::VpCallInput {
             addr_ptr,
             addr_len,
@@ -324,9 +300,12 @@ impl VpRunner {
         let validate_tx = vp_code
             .exports
             .get_function(VP_ENTRYPOINT)
-            .map_err(Error::MissingVpModuleEntrypoint)?
+            .map_err(Error::MissingModuleEntrypoint)?
             .native::<(u64, u64, u64, u64, u64, u64), u64>()
-            .map_err(Error::UnexpectedVpModuleEntrypointInterface)?;
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: VP_ENTRYPOINT,
+                error,
+            })?;
         let is_valid = validate_tx
             .call(
                 addr_ptr,
@@ -336,7 +315,7 @@ impl VpRunner {
                 keys_changed_ptr,
                 keys_changed_len,
             )
-            .map_err(Error::VpRuntimeError)?;
+            .map_err(Error::RuntimeError)?;
         Ok(is_valid == 1)
     }
 }
