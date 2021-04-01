@@ -113,12 +113,12 @@ pub fn write_vp_inputs(
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
 fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
-    // log::info!(
-    //     "check_bounds pages {}, data_size {}, offset + len {}",
-    //     memory.size().0,
-    //     memory.data_size(),
-    //     offset + len as u64
-    // );
+    log::debug!(
+        "check_bounds pages {}, data_size {}, offset + len {}",
+        memory.size().0,
+        memory.data_size(),
+        offset + len as u64
+    );
     if memory.data_size() < offset + len as u64 {
         let cur_pages = memory.size().0;
         let capacity = cur_pages as usize * wasmer::WASM_PAGE_SIZE;

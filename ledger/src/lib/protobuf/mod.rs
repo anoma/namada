@@ -1,5 +1,8 @@
 use std::hash::Hash;
 
+use prost::Message;
+use types::Tx;
+
 use self::types::Intent;
 pub mod services;
 pub mod types;
