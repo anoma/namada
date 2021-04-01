@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use clap::{App, Arg, ArgMatches, Clap};
+use clap::{App, Arg, ArgMatches, Clap, Subcommand};
 use maplit::hashmap;
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
@@ -110,6 +110,7 @@ pub struct CliBuilder<'a> {
     common: HashMap<&'a str, &'a str>,
     client: HashMap<&'a str, &'a str>,
     node: HashMap<&'a str, &'a str>,
+    inline: HashMap<&'a str, &'a str>,
     args: HashMap<&'a str, HashMap<&'a str, &'a str>>,
 }
 
@@ -138,6 +139,12 @@ impl CliBuilder<'_> {
                 "run_ledger_command_about" => "Run Anoma gossip service.",
                 "reset_command" => "reset-anoma",
                 "reset_command_about" => "Reset Anoma node state."
+            },
+            inline: hashmap! {
+                "node_command" => "node",
+                "node_command_about" => "Run a node command.",
+                "client_command" => "client",
+                "node_command_about" => "Run a client command.",
             },
             args: hashmap! {
                 "intent_data" =>  hashmap! {
@@ -206,6 +213,36 @@ impl CliBuilder<'_> {
         .version(CliBuilder::get_from_map(&self, "common", "version"))
         .author(CliBuilder::get_from_map(&self, "common", "author"))
         .about(CliBuilder::get_from_map(&self, "client", "about"))
+        .subcommand(CliBuilder::build_run_gossip_subcommand(&self))
+        .subcommand(CliBuilder::build_run_ledger_subcommand(&self))
+        .subcommand(CliBuilder::build_reset_anoma_subcommand(&self))
+        .subcommand(CliBuilder::build_client_tx_subcommand(&self))
+        .subcommand(CliBuilder::build_client_intent_subcommand(&self))
+        .subcommand(
+            App::new(CliBuilder::get_from_map(&self, "inline", "node_command"))
+                .about(CliBuilder::get_from_map(
+                    &self,
+                    "inline",
+                    "node_command_about",
+                ))
+                .subcommand(CliBuilder::build_run_gossip_subcommand(&self))
+                .subcommand(CliBuilder::build_run_ledger_subcommand(&self))
+                .subcommand(CliBuilder::build_reset_anoma_subcommand(&self)),
+        )
+        .subcommand(
+            App::new(CliBuilder::get_from_map(
+                &self,
+                "inline",
+                "client_command",
+            ))
+            .about(CliBuilder::get_from_map(
+                &self,
+                "inline",
+                "client_command_about",
+            ))
+            .subcommand(CliBuilder::build_client_tx_subcommand(&self))
+            .subcommand(CliBuilder::build_client_intent_subcommand(&self)),
+        )
         .get_matches();
     }
 

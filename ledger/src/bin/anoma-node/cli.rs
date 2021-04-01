@@ -26,15 +26,14 @@ fn exec_inlined(matches: ArgMatches) -> Result<()> {
             let address = args.value_of("address").map(|s| s.to_string());
             let orderbook = args.is_present("orderbook");
             let dkg = args.is_present("dkg");
-            Ok(())
-            // Ok(gossip::run(config, rpc, orderbook, dkg, address, None))
+            Ok(gossip::run(config, rpc, orderbook, dkg, address, None))
         }
-        Some(("run-ledger", args)) => {
+        Some(("run-ledger", _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();
             let config = Config::new(home).unwrap();
             shell::run(config).wrap_err("Failed to run Anoma node")
         }
-        Some(("reset", args)) => {
+        Some(("reset", _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();
             let config = Config::new(home).unwrap();
             shell::reset(config).wrap_err("Failed to reset Anoma node")
