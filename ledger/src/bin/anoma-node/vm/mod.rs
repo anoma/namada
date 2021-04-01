@@ -17,6 +17,7 @@ use crate::shell::storage::{Address, Storage};
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
+const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 /// This is used to attach the Ledger's host structures to transaction, which is
 /// used for implementing some host calls. It's not thread-safe, we're assuming
@@ -83,6 +84,8 @@ pub enum Error {
     // 1. Common error types
     #[error("Memory error: {0}")]
     MemoryError(memory::Error),
+    #[error("Unable to inject gas meter")]
+    StackLimiterInjection,
     // 2. Transaction errors
     #[error("Transaction deserialization error: {0}")]
     TxDeserializationError(elements::Error),
@@ -198,6 +201,9 @@ impl TxRunner {
         let module =
             pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
                 .map_err(|_original_module| Error::TxGasMeterInjection)?;
+        let module =
+            pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
+                .map_err(|_original_module| Error::StackLimiterInjection)?;
         elements::serialize(module).map_err(Error::TxSerializationError)
     }
 
@@ -291,6 +297,9 @@ impl VpRunner {
         let module =
             pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
                 .map_err(|_original_module| Error::VpGasMeterInjection)?;
+        let module =
+            pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
+                .map_err(|_original_module| Error::StackLimiterInjection)?;
         elements::serialize(module).map_err(Error::VpSerializationError)
     }
 
