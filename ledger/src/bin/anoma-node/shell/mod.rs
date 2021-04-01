@@ -2,8 +2,8 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
-use std::path::PathBuf;
 use std::sync::mpsc;
+use std::{collections::HashMap, path::PathBuf};
 
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
@@ -217,84 +217,61 @@ impl Shell {
             .run(&mut self.storage, &mut self.write_log, tx.code, &tx_data)
             .map_err(Error::TxRunnerError)?;
 
-        let keys_changed: Vec<String> = self
+        // get changed keys grouped by the address
+        let keys_changed: HashMap<Address, Vec<String>> = self
             .write_log
-            .get_changed_key()
+            .get_changed_keys()
             .iter()
-            .map(|StorageKey { addr, key }| format!("{}/{}", addr, key))
-            .collect();
-        // TODO determine these from the changed keys
-        let src = "va";
-        let dest = "ba";
-        let src_addr = Address::new_address(src.into());
-        let dest_addr = Address::new_address(dest.into());
+            .fold(HashMap::new(), |mut acc, &storage_key| {
+                let &StorageKey { addr, key } = &storage_key;
+                // TODO insert into addresses from the sub-keys too
+                match acc.get_mut(&addr) {
+                    Some(keys) => keys.push(key.clone()),
+                    None => {
+                        acc.insert(addr.clone(), vec![key.clone()]);
+                    }
+                }
+                acc
+            });
 
-        // Run a VP for every account with modified storage sub-space
+        let mut accept = true;
         // TODO run in parallel for all accounts
+        // Run a VP for every account with modified storage sub-space
         //   - all must return `true` to accept the tx
         //   - cancel all remaining workers and fail if any returns `false`
-        let src_vp = self
-            .storage
-            .validity_predicate(&src_addr)
-            .map_err(Error::StorageError)?;
-        let dest_vp = self
-            .storage
-            .validity_predicate(&dest_addr)
-            .map_err(Error::StorageError)?;
+        for (addr, keys) in keys_changed.iter() {
+            let vp = self
+                .storage
+                .validity_predicate(&addr)
+                .map_err(Error::StorageError)?;
 
-        let vp_runner = VpRunner::new();
-        let (vp_sender, vp_receiver) = mpsc::channel();
-        vp_runner
-            .run(
-                src_vp,
-                &tx_data,
-                src.to_string(),
-                &self.storage,
-                &self.write_log,
-                &keys_changed,
-                vp_sender.clone(),
-            )
-            .map_err(|error| Error::VpRunnerError {
-                addr: src_addr.clone(),
-                error,
-            })?;
-        let src_accept = vp_receiver
-            .recv()
-            .expect("Expected a message from source's VP runner");
-        vp_runner
-            .run(
-                dest_vp,
-                &tx_data,
-                dest.to_string(),
-                &self.storage,
-                &self.write_log,
-                &keys_changed,
-                vp_sender,
-            )
-            .map_err(|error| Error::VpRunnerError {
-                addr: dest_addr.clone(),
-                error,
-            })?;
-        let dest_accept = vp_receiver
-            .recv()
-            .expect("Expected a message from destination's VP runner");
-
+            let vp_runner = VpRunner::new();
+            accept = vp_runner
+                .run(
+                    vp,
+                    &tx_data,
+                    addr.clone(),
+                    &self.storage,
+                    &self.write_log,
+                    keys,
+                )
+                .map_err(|error| Error::VpRunnerError {
+                    addr: addr.clone(),
+                    error,
+                })?;
+            if !accept {
+                log::debug!("{} rejected transaction", addr);
+                break;
+            };
+        }
         // Apply the transaction if accepted by all the VPs
-        if src_accept && dest_accept {
+        if accept {
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
             );
             self.write_log.commit_tx();
         } else {
-            log::debug!(
-                "tx declined by {}",
-                if src_accept {
-                    "dest"
-                } else {
-                    if dest_accept { "src" } else { "src and dest" }
-                }
-            );
             self.write_log.drop_tx();
         }
 

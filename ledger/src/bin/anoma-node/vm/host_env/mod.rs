@@ -1,5 +1,7 @@
 pub mod write_log;
 
+use std::convert::TryInto;
+
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
 };
@@ -7,7 +9,7 @@ use wasmer::{
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{TxEnvHostWrapper, VpEnvHostWrapper};
-use crate::shell::storage::{self, Storage};
+use crate::shell::storage::{self, Address, Storage};
 
 #[derive(Clone)]
 struct TxEnv {
@@ -29,6 +31,8 @@ impl WasmerEnv for TxEnv {
 
 #[derive(Clone)]
 struct VpEnv {
+    /// The address of the account that owns the VP
+    addr: Address,
     // not thread-safe, assuming read-only access from parallel Vp runners
     storage: VpEnvHostWrapper<Storage>,
     // not thread-safe, assuming read-only access from parallel Vp runners
@@ -65,6 +69,7 @@ pub fn prepare_tx_imports(
             "read" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_read),
             "write" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_write),
             "delete" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_delete),
+            "read_varlen" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_read_varlen),
             "log_string" => wasmer::Function::new_native_with_env(wasm_store, tx_env, tx_log_string),
         },
     }
@@ -74,11 +79,13 @@ pub fn prepare_tx_imports(
 /// validity predicate code
 pub fn prepare_vp_imports(
     wasm_store: &Store,
+    addr: Address,
     storage: VpEnvHostWrapper<Storage>,
     write_log: VpEnvHostWrapper<WriteLog>,
     initial_memory: Memory,
 ) -> ImportObject {
     let vp_env = VpEnv {
+        addr,
         storage,
         write_log,
         memory: AnomaMemory::default(),
@@ -87,6 +94,10 @@ pub fn prepare_vp_imports(
         // default namespace
         "env" => {
             "memory" => initial_memory,
+            "read_pre" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_pre),
+            "read_post" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_post),
+            "read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_pre_varlen),
+            "read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_post_varlen),
             "log_string" => wasmer::Function::new_native_with_env(wasm_store, vp_env, vp_log_string),
         },
     }
@@ -120,7 +131,7 @@ fn tx_storage_read(
         .expect("Cannot read the key from memory");
 
     log::debug!(
-        "vm_storage_read {}, key {}, result_ptr {}",
+        "tx_storage_read {}, key {}, result_ptr {}",
         key,
         key_ptr,
         result_ptr,
@@ -162,6 +173,69 @@ fn tx_storage_read(
     }
 }
 
+/// Storage read function exposed to the wasm VM Tx environment. It will try to
+/// read from the write log first and if no entry found then from the storage.
+///
+/// Returns [`-1`] when the key is not present, or the length of the data when
+/// the key is present (the length may be [`0`]).
+fn tx_storage_read_varlen(
+    env: &TxEnv,
+    key_ptr: u64,
+    key_len: u64,
+    result_ptr: u64,
+) -> i64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!(
+        "tx_storage_read {}, key {}, result_ptr {}",
+        key,
+        key_ptr,
+        result_ptr,
+    );
+
+    let (addr, key) = parse_key(key);
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&addr, &key) {
+        Some(&write_log::StorageModification::Write { ref value }) => {
+            let len: i64 =
+                value.len().try_into().expect("data length overflow");
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            len
+        }
+        Some(&write_log::StorageModification::Delete) => {
+            // fail, given key has been deleted
+            -1
+        }
+        None => {
+            // when not found in write log, try to read from the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (value, _gas) =
+                storage.read(&addr, &key).expect("storage read failed");
+            match value {
+                Some(value) => {
+                    let len: i64 =
+                        value.len().try_into().expect("data length overflow");
+                    env.memory
+                        .write_bytes(result_ptr, value)
+                        .expect("cannot write to memory");
+                    len
+                }
+                None => {
+                    // fail, key not found
+                    -1
+                }
+            }
+        }
+    }
+}
+
 /// Storage write function exposed to the wasm VM Tx environment. The given
 /// key/value will be written to the write log.
 fn tx_storage_write(
@@ -180,7 +254,7 @@ fn tx_storage_write(
         .read_bytes(val_ptr, val_len as _)
         .expect("Cannot read the value from memory");
 
-    log::debug!("vm_storage_update {}, {:#?}", key, value);
+    log::debug!("tx_storage_update {}, {:#?}", key, value);
 
     let (addr, key) = parse_key(key);
 
@@ -198,7 +272,7 @@ fn tx_storage_delete(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
 
-    log::debug!("vm_storage_delete {}", key);
+    log::debug!("tx_storage_delete {}", key);
 
     let (addr, key) = parse_key(key);
 
@@ -206,6 +280,202 @@ fn tx_storage_delete(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
     write_log.delete(addr, key);
 
     1
+}
+
+/// Storage read prior state (before tx execution) function exposed to the wasm
+/// VM VP environment. It will try to read from the storage.
+fn vp_storage_read_pre(
+    env: &VpEnv,
+    key_ptr: u64,
+    key_len: u64,
+    result_ptr: u64,
+) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    // try to read from the storage
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (value, _gas) =
+        storage.read(&env.addr, &key).expect("storage read failed");
+    log::debug!(
+        "vp_storage_read_pre addr {}, key {}, value {:#?}",
+        env.addr,
+        key,
+        value,
+    );
+    match value {
+        Some(value) => {
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            return 1;
+        }
+        None => {
+            // fail, key not found
+            return 0;
+        }
+    }
+}
+
+/// Storage read posterior state (after tx execution) function exposed to the
+/// wasm VM VP environment. It will try to read from the write log first and if
+/// no entry found then from the storage.
+fn vp_storage_read_post(
+    env: &VpEnv,
+    key_ptr: u64,
+    key_len: u64,
+    result_ptr: u64,
+) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!(
+        "vp_storage_read_post {}, key {}, result_ptr {}",
+        key,
+        key_ptr,
+        result_ptr,
+    );
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&env.addr, &key) {
+        Some(&write_log::StorageModification::Write { ref value }) => {
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            return 1;
+        }
+        Some(&write_log::StorageModification::Delete) => {
+            // fail, given key has been deleted
+            return 0;
+        }
+        None => {
+            // when not found in write log, try to read from the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (value, _gas) =
+                storage.read(&env.addr, &key).expect("storage read failed");
+            match value {
+                Some(value) => {
+                    env.memory
+                        .write_bytes(result_ptr, value)
+                        .expect("cannot write to memory");
+                    return 1;
+                }
+                None => {
+                    // fail, key not found
+                    return 0;
+                }
+            }
+        }
+    }
+}
+
+/// Storage read prior state (before tx execution) function exposed to the wasm
+/// VM VP environment. It will try to read from the storage.
+///
+/// Returns [`-1`] when the key is not present, or the length of the data when
+/// the key is present (the length may be [`0`]).
+fn vp_storage_read_pre_varlen(
+    env: &VpEnv,
+    key_ptr: u64,
+    key_len: u64,
+    result_ptr: u64,
+) -> i64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    // try to read from the storage
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (value, _gas) =
+        storage.read(&env.addr, &key).expect("storage read failed");
+    log::debug!(
+        "vp_storage_read_pre addr {}, key {}, value {:#?}",
+        env.addr,
+        key,
+        value,
+    );
+    match value {
+        Some(value) => {
+            let len: i64 =
+                value.len().try_into().expect("data length overflow");
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            len
+        }
+        None => {
+            // fail, key not found
+            -1
+        }
+    }
+}
+
+/// Storage read posterior state (after tx execution) function exposed to the
+/// wasm VM VP environment. It will try to read from the write log first and if
+/// no entry found then from the storage.
+///
+/// Returns [`-1`] when the key is not present, or the length of the data when
+/// the key is present (the length may be [`0`]).
+fn vp_storage_read_post_varlen(
+    env: &VpEnv,
+    key_ptr: u64,
+    key_len: u64,
+    result_ptr: u64,
+) -> i64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!(
+        "vp_storage_read_post {}, key {}, result_ptr {}",
+        key,
+        key_ptr,
+        result_ptr,
+    );
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&env.addr, &key) {
+        Some(&write_log::StorageModification::Write { ref value }) => {
+            let len: i64 =
+                value.len().try_into().expect("data length overflow");
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            len
+        }
+        Some(&write_log::StorageModification::Delete) => {
+            // fail, given key has been deleted
+            -1
+        }
+        None => {
+            // when not found in write log, try to read from the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (value, _gas) =
+                storage.read(&env.addr, &key).expect("storage read failed");
+            match value {
+                Some(value) => {
+                    let len: i64 =
+                        value.len().try_into().expect("data length overflow");
+                    env.memory
+                        .write_bytes(result_ptr, value)
+                        .expect("cannot write to memory");
+                    len
+                }
+                None => {
+                    // fail, key not found
+                    -1
+                }
+            }
+        }
+    }
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be

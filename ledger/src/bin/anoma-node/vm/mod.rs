@@ -3,14 +3,13 @@ mod memory;
 
 use std::ffi::c_void;
 use std::marker::PhantomData;
-use std::sync::mpsc;
 
 use anoma_vm_env::memory::{TxInput, VpInput};
 use thiserror::Error;
 use wasmer::Instance;
 
 use self::host_env::write_log::WriteLog;
-use crate::shell::storage::Storage;
+use crate::shell::storage::{Address, Storage};
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
@@ -118,8 +117,6 @@ pub enum Error {
     VpRuntimeError(wasmer::RuntimeError),
     #[error("Failed instantiating validity predicate module with: {0}")]
     VpInstantiationError(wasmer::InstantiationError),
-    #[error("Validity predicate failed to send result: {0}")]
-    VpChannelError(mpsc::SendError<bool>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -199,9 +196,6 @@ impl TxRunner {
     }
 }
 
-// does the validity predicate accept the state changes?
-pub type VpMsg = bool;
-
 #[derive(Clone, Debug)]
 pub struct VpRunner {
     wasm_store: wasmer::Store,
@@ -220,12 +214,11 @@ impl VpRunner {
         &self,
         vp_code: impl AsRef<[u8]>,
         tx_data: &Vec<u8>,
-        addr: String,
+        addr: Address,
         storage: &Storage,
         write_log: &WriteLog,
         keys_changed: &Vec<String>,
-        vp_sender: mpsc::Sender<VpMsg>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         // This is not thread-safe, we're assuming read-only access from
         // parallel Vp runners.
         let storage = unsafe {
@@ -241,9 +234,10 @@ impl VpRunner {
             .map_err(Error::VpCompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let input: VpInput = (addr, tx_data, keys_changed);
+        let input: VpInput = (addr.to_string(), tx_data, keys_changed);
         let vp_imports = host_env::prepare_vp_imports(
             &self.wasm_store,
+            addr,
             storage,
             write_log,
             initial_memory,
@@ -252,11 +246,7 @@ impl VpRunner {
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::VpInstantiationError)?;
-        let is_valid = self.run_with_input(vp_code, input)?;
-
-        vp_sender
-            .send(is_valid)
-            .map_err(|e| Error::VpChannelError(e))
+        self.run_with_input(vp_code, input)
     }
 
     fn run_with_input(

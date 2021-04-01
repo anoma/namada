@@ -113,7 +113,7 @@ pub fn write_vp_inputs(
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
 fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
-    log::info!(
+    log::debug!(
         "check_bounds pages {}, data_size {}, offset + len {}",
         memory.size().0,
         memory.data_size(),
