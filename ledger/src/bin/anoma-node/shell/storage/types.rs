@@ -28,6 +28,7 @@ const DEFAULT_SERIALIZER_CAPACITY: usize = 1024;
 
 #[derive(
     Clone,
+    Copy,
     BorshSerialize,
     BorshDeserialize,
     PartialEq,
@@ -178,7 +179,6 @@ impl KeySeg for DbKeySeg {
 
     fn into_string(&self) -> String {
         match self {
-            // TODO: single address type
             DbKeySeg::AddressSeg(addr) => addr.into_string(),
             DbKeySeg::StringSeg(seg) => seg.to_owned(),
         }

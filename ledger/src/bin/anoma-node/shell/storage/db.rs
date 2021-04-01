@@ -109,7 +109,7 @@ impl DB {
         &mut self,
         tree: &MerkleTree,
         hash: &BlockHash,
-        height: &BlockHeight,
+        height: BlockHeight,
         subspaces: &HashMap<Key, Vec<u8>>,
     ) -> Result<()> {
         let mut batch = WriteBatch::default();
@@ -183,7 +183,7 @@ impl DB {
 
     pub fn read(
         &self,
-        height: &BlockHeight,
+        height: BlockHeight,
         key: &Key,
     ) -> Result<Option<Vec<u8>>> {
         let key = Key::parse(format!("{}/subspace/", height.into_string()))

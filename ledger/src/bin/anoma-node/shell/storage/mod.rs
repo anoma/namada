@@ -100,7 +100,7 @@ impl Storage {
             .write_block(
                 &self.block.tree,
                 &self.block.hash,
-                &self.block.height,
+                self.block.height,
                 &self.block.subspaces,
             )
             .map_err(|e| Error::DBError(e).into())
@@ -147,7 +147,7 @@ impl Storage {
 
         match self
             .db
-            .read(&self.block.height, key)
+            .read(self.block.height, key)
             .map_err(Error::DBError)?
         {
             Some(v) => {
