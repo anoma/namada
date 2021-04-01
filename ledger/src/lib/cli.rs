@@ -144,7 +144,7 @@ impl CliBuilder<'_> {
                 "node_command" => "node",
                 "node_command_about" => "Run a node command.",
                 "client_command" => "client",
-                "node_command_about" => "Run a client command.",
+                "client_command_about" => "Run a client command.",
             },
             args: hashmap! {
                 "intent_data" =>  hashmap! {
@@ -460,19 +460,16 @@ impl CliBuilder<'_> {
     }
 
     fn get_from_map(&self, key: &str, sub_key: &str) -> &str {
-        println!("{}", key);
-        println!("{}", sub_key);
         match key {
             "common" => self.common.get(sub_key).map(|res| *res).unwrap(),
             "client" => self.client.get(sub_key).map(|res| *res).unwrap(),
             "node" => self.node.get(sub_key).map(|res| *res).unwrap(),
+            "inline" => self.inline.get(sub_key).map(|res| *res).unwrap(),
             _ => panic!("Invalid key/subkey in cli: {}", key),
         }
     }
 
     fn get_from_map_arg(&self, key: &str, sub_key: &str) -> &str {
-        println!("{}", key);
-        println!("{}", sub_key);
         self.args
             .get(key)
             .unwrap()
