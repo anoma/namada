@@ -54,7 +54,7 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data_bytes: &memory::TxData,
+    tx_data_bytes: &memory::Data,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as _;

@@ -31,7 +31,7 @@ extern "C" {
 #[no_mangle]
 pub extern "C" fn apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
     let slice = unsafe { slice::from_raw_parts(tx_data_ptr as *const u8, tx_data_len as _) };
-    let tx_data = slice.to_vec() as memory::TxData;
+    let tx_data = slice.to_vec() as memory::Data;
 
     let log_msg = format!("apply_tx called with tx_data: {:#?}", tx_data);
     unsafe {
@@ -41,7 +41,7 @@ pub extern "C" fn apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
     do_apply_tx(tx_data);
 }
 
-fn do_apply_tx(_tx_data: memory::TxData) {
+fn do_apply_tx(_tx_data: memory::Data) {
     // source and destination address
     let src_key = "va/balance/eth";
     let dest_key = "ba/balance/eth";
