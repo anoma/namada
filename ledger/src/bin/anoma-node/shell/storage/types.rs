@@ -92,8 +92,7 @@ impl Key {
 
     /// Returns a new key with segments of `Self` and the given segment
     pub fn push<T: KeySeg>(&self, other: &T) -> Result<Self> {
-        let mut segments: Vec<DbKeySeg> =
-            self.segments.iter().map(|s| s.clone()).collect();
+        let mut segments = self.segments.clone();
         segments.push(DbKeySeg::parse(other.into_string())?);
         Ok(Key { segments })
     }
