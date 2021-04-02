@@ -286,7 +286,7 @@ fn vp_storage_read_pre(
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let (value, _gas) = storage.read(&key).expect("storage read failed");
     log::debug!(
-        "vp_storage_read_pre addr {}, key {:?}, value {:#?}",
+        "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
         key,
         value,
@@ -382,7 +382,7 @@ fn vp_storage_read_pre_varlen(
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let (value, _gas) = storage.read(&key).expect("storage read failed");
     log::debug!(
-        "vp_storage_read_pre addr {}, key {:?}, value {:#?}",
+        "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
         key,
         value,

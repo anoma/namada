@@ -54,15 +54,6 @@ pub enum Address {
     Basic(BasicAddress),
 }
 
-impl Address {
-    pub fn new_address(addr: String) -> Self {
-        match addr.chars().nth(0) {
-            Some(c) if c == 'v' => ValidatorAddress::new_address(addr),
-            _ => BasicAddress::new_address(addr),
-        }
-    }
-}
-
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let addr = match self {
@@ -100,7 +91,7 @@ impl Key {
     }
 
     /// Returns a new key with segments of `Self` and the given segment
-    pub fn push(&self, other: &dyn KeySeg) -> Result<Self> {
+    pub fn push<T: KeySeg>(&self, other: &T) -> Result<Self> {
         let mut segments: Vec<DbKeySeg> =
             self.segments.iter().map(|s| s.clone()).collect();
         segments.push(DbKeySeg::parse(other.into_string())?);
@@ -109,10 +100,8 @@ impl Key {
 
     /// Returns a new key with segments of `Self` and the given key
     pub fn join(&self, other: &Key) -> Self {
-        let mut segments: Vec<DbKeySeg> =
-            self.segments.iter().map(|s| s.clone()).collect();
-        let mut added: Vec<DbKeySeg> =
-            other.segments.iter().map(|s| s.clone()).collect();
+        let mut segments: Vec<DbKeySeg> = self.segments.clone();
+        let mut added: Vec<DbKeySeg> = other.segments.clone();
         segments.append(&mut added);
         Key { segments }
     }
@@ -131,12 +120,18 @@ impl Key {
     pub fn find_addresses(&self) -> Vec<Address> {
         let mut addresses = Vec::new();
         for s in &self.segments {
-            match &*s {
+            match s {
                 DbKeySeg::AddressSeg(addr) => addresses.push(addr.clone()),
                 _ => continue,
             }
         }
         addresses
+    }
+}
+
+impl Display for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.into_string())
     }
 }
 
@@ -226,7 +221,7 @@ impl KeySeg for BlockHeight {
 
     fn parse(string: String) -> Result<Self> {
         let h = string.parse::<u64>().map_err(|e| Error::Temporary {
-            error: format!("Unexpected hight value {}, {}", string, e),
+            error: format!("Unexpected height value {}, {}", string, e),
         })?;
         Ok(BlockHeight(h))
     }
@@ -324,12 +319,6 @@ impl KeySeg for Address {
     }
 }
 
-impl BasicAddress {
-    pub fn new_address(addr: String) -> Address {
-        Address::Basic(Self(addr))
-    }
-}
-
 impl Hash256 for BasicAddress {
     fn hash256(&self) -> H256 {
         self.0.hash256()
@@ -353,11 +342,6 @@ impl KeySeg for BasicAddress {
     }
 }
 
-impl ValidatorAddress {
-    pub fn new_address(addr: String) -> Address {
-        Address::Validator(Self(addr))
-    }
-}
 impl Hash256 for ValidatorAddress {
     fn hash256(&self) -> H256 {
         self.0.hash256()
