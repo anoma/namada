@@ -23,6 +23,7 @@ fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
             arg.address,
             arg.peers,
             arg.matchmaker,
+            arg.tx_template,
             arg.ledger_address,
         )
         .wrap_err("Failed to run gossip service"),

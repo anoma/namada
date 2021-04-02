@@ -30,6 +30,8 @@ pub mod memory {
     /// Input for validity predicate wasm module call
     pub type VpInput<'a> = (String, &'a Data, &'a KeysChanged);
 
+    /// Input for matchmaker wasm module call
+    pub type MatchmakerInput = Data;
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub struct StorageReadInput {

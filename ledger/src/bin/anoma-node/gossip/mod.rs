@@ -13,20 +13,17 @@ use anoma::protobuf::types::{IntentMessage, Tx};
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
+use thiserror::Error;
 use tokio::sync::mpsc;
 
 use self::p2p::P2P;
 use self::types::NetworkEvent;
 use super::rpc;
 
-use thiserror::Error;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Bad Bookkeeper file")]
     BadBookkeeper(std::io::Error),
-    #[error("Error p2p swarm {0}")]
-    P2pSwarmError(String),
     #[error("Error p2p dispatcher {0}")]
     P2pDispatcherError(String),
 }
@@ -41,6 +38,7 @@ pub fn run(
     address: Option<String>,
     peers: Option<Vec<String>>,
     matchmaker: Option<String>,
+    tx_template: Option<String>,
     ledger_address: Option<String>,
 ) -> Result<()> {
     let bookkeeper = config
@@ -61,11 +59,16 @@ pub fn run(
     config.p2p.set_dkg_topic(dkg);
     config.p2p.set_orderbook_topic(orderbook);
 
-    let (mut p2p, event_receiver, matchmaker_event_receiver) =
-        p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker, ledger_address)
-            .expect("TEMPORARY: unable to build p2p layer");
-    p2p.prepare(&config)
-        .expect("p2p prepraration failed");
+    let (mut p2p, event_receiver, matchmaker_event_receiver) = p2p::P2P::new(
+        bookkeeper,
+        orderbook,
+        dkg,
+        matchmaker,
+        tx_template,
+        ledger_address,
+    )
+    .expect("TEMPORARY: unable to build p2p layer");
+    p2p.prepare(&config).expect("p2p prepraration failed");
 
     dispatcher(
         p2p,
@@ -86,7 +89,8 @@ pub fn run(
 // https://github.com/informalsystems/tendermint-rs/blob/a0a59b3a3f8a50abdaa618ff00394eeeeb8b9a0f/abci/src/codec.rs#L151
 // Ok(Some(M::decode(&mut result_bytes)?))
 //
-// As a work-around, we spawn a thread that sends [`Tx`]s to the ledger, which seems to prevent this issue.
+// As a work-around, we spawn a thread that sends [`Tx`]s to the ledger, which
+// seems to prevent this issue.
 #[tokio::main]
 pub async fn matchmaker_dispatcher(
     mut matchmaker_event_receiver: Receiver<Tx>,

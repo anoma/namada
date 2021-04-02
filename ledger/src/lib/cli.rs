@@ -122,5 +122,7 @@ pub struct GossipArg {
     #[clap(short, long)]
     pub matchmaker: Option<String>,
     #[clap(short, long)]
+    pub tx_template: Option<String>,
+    #[clap(short, long)]
     pub ledger_address: Option<String>,
 }

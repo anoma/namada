@@ -2,6 +2,8 @@ pub mod write_log;
 
 use std::convert::TryInto;
 
+use anoma::protobuf::types::Tx;
+use tokio::sync::mpsc::Sender;
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
 };
@@ -41,6 +43,24 @@ struct VpEnv {
 }
 
 impl WasmerEnv for VpEnv {
+    fn init_with_instance(
+        &mut self,
+        instance: &Instance,
+    ) -> std::result::Result<(), HostEnvInitError> {
+        self.memory.init_env_memory(&instance.exports)
+    }
+}
+
+#[derive(Clone)]
+pub struct MatchmakerEnv {
+    // not thread-safe, assuming single-threaded Tx runner
+    // pub ledger: TxShellWrapper,
+    pub tx_code: Vec<u8>,
+    pub inject_tx: Sender<Tx>,
+    pub memory: AnomaMemory,
+}
+
+impl WasmerEnv for MatchmakerEnv {
     fn init_with_instance(
         &mut self,
         instance: &Instance,
@@ -99,6 +119,33 @@ pub fn prepare_vp_imports(
             "read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_pre_varlen),
             "read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, vp_env.clone(), vp_storage_read_post_varlen),
             "log_string" => wasmer::Function::new_native_with_env(wasm_store, vp_env, vp_log_string),
+        },
+    }
+}
+
+/// Prepare imports (memory and host functions) exposed to the vm guest running
+/// transaction code
+pub fn prepare_matchmaker_imports(
+    wasm_store: &Store,
+    initial_memory: Memory,
+    tx_code: impl AsRef<[u8]>,
+    inject_tx: Sender<Tx>,
+) -> ImportObject {
+    let env = MatchmakerEnv {
+        memory: AnomaMemory::default(),
+        inject_tx,
+        tx_code: tx_code.as_ref().to_vec(),
+    };
+    wasmer::imports! {
+        // default namespace
+        "env" => {
+            "memory" => initial_memory,
+            "send_match" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                  env.clone(),
+                                                                  send_match),
+            "log_string" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                  env,
+                                                                  matchmaker_log_string),
         },
     }
 }
@@ -489,6 +536,17 @@ fn tx_log_string(env: &TxEnv, str_ptr: u64, str_len: u64) {
     log::info!("WASM Transaction log: {}", str);
 }
 
+/// Log a string from exposed to the wasm VM matchmaker environment. The message
+/// will be printed at the [`log::Level::Info`].
+fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
+    let str = env
+        .memory
+        .read_string(str_ptr, str_len as _)
+        .expect("Cannot read the string from memory");
+
+    log::info!("WASM Transaction log: {}", str);
+}
+
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`log::Level::Info`].
 fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
@@ -498,4 +556,17 @@ fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
         .expect("Cannot read the string from memory");
 
     log::info!("WASM Validity predicate log: {}", str);
+}
+
+fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
+    let inject_tx: &Sender<Tx> = &env.inject_tx;
+    let tx_data = env
+        .memory
+        .read_bytes(data_ptr, data_len as _)
+        .expect("Cannot read the key from memory");
+    let tx = Tx {
+        code: env.tx_code.clone(),
+        data: Some(tx_data),
+    };
+    inject_tx.try_send(tx).expect("failed to send tx")
 }

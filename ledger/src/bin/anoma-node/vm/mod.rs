@@ -4,8 +4,10 @@ mod memory;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
+use anoma::protobuf::types::Tx;
 use anoma_vm_env::memory::{TxInput, VpInput};
 use thiserror::Error;
+use tokio::sync::mpsc::Sender;
 use wasmer::Instance;
 
 use self::host_env::write_log::WriteLog;
@@ -13,6 +15,7 @@ use crate::shell::storage::{Address, Storage};
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
+const MATCHMAKER_ENTRYPOINT: &str = "match_intent";
 
 /// This is used to attach the Ledger's host structures to transaction, which is
 /// used for implementing some host calls. It's not thread-safe, we're assuming
@@ -69,6 +72,21 @@ impl<T> VpEnvHostWrapper<T> {
     }
 }
 
+/// This is used to attach the Ledger's host structures to transaction, which is
+/// used for implementing some host calls. It's not thread-safe, we're assuming
+/// single-threaded Tx runner.
+pub struct MatchmakerEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
+unsafe impl<T> Send for MatchmakerEnvHostWrapper<T> {}
+unsafe impl<T> Sync for MatchmakerEnvHostWrapper<T> {}
+
+// Have to manually implement [`Clone`], because the derived [`Clone`] for
+// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
+impl<T> Clone for MatchmakerEnvHostWrapper<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, PhantomData)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TxRunner {
     wasm_store: wasmer::Store,
@@ -117,6 +135,18 @@ pub enum Error {
     VpRuntimeError(wasmer::RuntimeError),
     #[error("Failed instantiating validity predicate module with: {0}")]
     VpInstantiationError(wasmer::InstantiationError),
+    // 4. Matchmaker predicate error
+    #[error("matchmaker compilation error: {0}")]
+    MatchmakerCompileError(wasmer::CompileError),
+    #[error(
+        "Unexpected matchmaker module entrypoint interface \
+         {MATCHMAKER_ENTRYPOINT}, failed with: {0}"
+    )]
+    UnexpectedMatchmakerModuleEntrypointInterface(wasmer::RuntimeError),
+    #[error("Missing matchmaker memory export, failed with: {0}")]
+    MissingMatchmakerModuleMemory(wasmer::ExportError),
+    #[error("Failed running matchmaker with: {0}")]
+    MatchmakerRuntimeError(wasmer::RuntimeError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -288,5 +318,94 @@ impl VpRunner {
             )
             .map_err(Error::VpRuntimeError)?;
         Ok(is_valid == 1)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MatchmakerRunner {
+    wasm_store: wasmer::Store,
+}
+
+impl MatchmakerRunner {
+    pub fn new() -> Self {
+        // TODO for the matchmaker we could use a compiler that does more
+        // optimisation.
+        let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let wasm_store =
+            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        Self { wasm_store }
+    }
+
+    pub fn run(
+        &self,
+        // ledger: TxShellWrapper,
+        matchmaker_code: impl AsRef<[u8]>,
+        intent1_data: impl AsRef<[u8]>,
+        intent2_data: impl AsRef<[u8]>,
+        tx_code: impl AsRef<[u8]>,
+        inject_tx: Sender<Tx>,
+    ) -> Result<bool> {
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
+        let matchmaker_module: wasmer::Module =
+            wasmer::Module::new(&self.wasm_store, &matchmaker_code)
+                .map_err(Error::MatchmakerCompileError)?;
+        let initial_memory =
+            memory::prepare_matchmaker_memory(&self.wasm_store)
+                .map_err(Error::MemoryError)?;
+
+        let matchmaker_imports = host_env::prepare_matchmaker_imports(
+            &self.wasm_store,
+            initial_memory,
+            tx_code,
+            inject_tx,
+        );
+
+        // compile and run the transaction wasm code
+        let matchmaker_code =
+            wasmer::Instance::new(&matchmaker_module, &matchmaker_imports)
+                .map_err(Error::TxInstantiationError)?;
+
+        Self::run_with_input(&matchmaker_code, intent1_data, intent2_data)
+    }
+
+    fn run_with_input(
+        code: &Instance,
+        intent1_data: impl AsRef<[u8]>,
+        intent2_data: impl AsRef<[u8]>,
+    ) -> Result<bool> {
+        let memory = code
+            .exports
+            .get_memory("memory")
+            .map_err(Error::MissingMatchmakerModuleMemory)?;
+        let memory::MatchmakerCallInput {
+            intent_data_1_ptr,
+            intent_data_1_len,
+            intent_data_2_ptr,
+            intent_data_2_len,
+        }: memory::MatchmakerCallInput = memory::write_matchmaker_inputs(
+            &memory,
+            intent1_data,
+            intent2_data,
+        )
+        .map_err(Error::MemoryError)?;
+        println!("running matchmaker");
+        let apply_matchmaker = code
+            .exports
+            .get_function(MATCHMAKER_ENTRYPOINT)
+            .map_err(Error::MissingTxModuleEntrypoint)?
+            .native::<(u64, u64, u64, u64), u64>()
+            .map_err(Error::UnexpectedMatchmakerModuleEntrypointInterface)?;
+        println!("running matchmaker2");
+        let found_match = apply_matchmaker
+            .call(
+                intent_data_1_ptr,
+                intent_data_1_len,
+                intent_data_2_ptr,
+                intent_data_2_len,
+            )
+            .map_err(Error::MatchmakerRuntimeError)?;
+        println!("running matchmaker3 {}", found_match);
+        Ok(found_match == 0)
     }
 }

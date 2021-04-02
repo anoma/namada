@@ -1,5 +1,6 @@
+use anoma::bookkeeper::Bookkeeper;
+use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
-use anoma::{bookkeeper::Bookkeeper, config::Config};
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -8,9 +9,10 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
+use super::dkg::DKG;
+use super::network_behaviour::Behaviour;
+use super::orderbook::{self,Orderbook};
 use super::types::NetworkEvent;
-use super::{dkg::DKG, orderbook::Orderbook};
-use super::{network_behaviour::Behaviour, orderbook};
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -34,6 +36,7 @@ impl P2P {
         orderbook: bool,
         dkg: bool,
         matchmaker: Option<String>,
+        tx_template: Option<String>,
         ledger: Option<String>,
     ) -> Result<(Self, Receiver<NetworkEvent>, Option<Receiver<Tx>>)> {
         let local_key: Keypair = Ed25519(bookkeeper.key);
@@ -48,7 +51,7 @@ impl P2P {
 
         let (orderbook, matchmaker_event_receiver) = if orderbook {
             let (orderbook, matchmaker_event_receiver) =
-                Orderbook::new(matchmaker);
+                Orderbook::new(matchmaker, tx_template);
             (Some(orderbook), matchmaker_event_receiver)
         } else {
             (None, None)
@@ -75,10 +78,10 @@ impl P2P {
         }
 
         // Listen on given address
-        Swarm::listen_on(
-            &mut self.swarm,
-            config.p2p.get_address().parse().unwrap(),
-        )
+        Swarm::listen_on(&mut self.swarm, {
+            println!("{:?}", config.p2p.get_address());
+            config.p2p.get_address().parse().unwrap()
+        })
         .unwrap();
 
         // Reach out to another node if specified
