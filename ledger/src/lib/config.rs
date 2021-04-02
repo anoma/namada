@@ -1,14 +1,14 @@
 //! Node and client configuration settings
 
-use std::path::PathBuf;
-
 use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
+use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use crate::{bookkeeper::Bookkeeper, types::Topic};
+use crate::bookkeeper::Bookkeeper;
+use crate::types::Topic;
 
 const BOOKKEEPER_KEY_FILE: &str = "priv_bookkepeer_key.json";
 
@@ -41,18 +41,15 @@ pub struct Config {
 }
 
 impl Gossip {
-    // TODO here, and in set_address, we assumes a ip4+tcp address but it woul be nice to allow all accepted address by libp2p
+    // TODO here, and in set_address, we assumes a ip4+tcp address but it would
+    // be nice to allow all accepted address by libp2p
     pub fn get_address(&self) -> String {
-    
         return format!("/ip4/{}/tcp/{}", self.host, self.port);
     }
 
     pub fn set_peers(&mut self, peers: Option<Vec<String>>) {
-        match peers {
-            Some(peers) => {
-                self.peers = peers.clone();
-            }
-            None => {}
+        if let Some(peers) = peers {
+            self.peers = peers;
         }
     }
 
@@ -77,8 +74,8 @@ impl Gossip {
             Some(address) => {
                 let split_addresses: Vec<String> =
                     address.split("/").map(|s| s.to_string()).collect();
-                self.host = split_addresses[1].clone();
-                self.port = split_addresses[3].clone();
+                self.host = split_addresses[2].clone();
+                self.port = split_addresses[4].clone();
             }
             None => {}
         }
