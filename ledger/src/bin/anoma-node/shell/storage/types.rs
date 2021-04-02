@@ -468,3 +468,34 @@ impl Hash256 for Key {
 fn new_blake2b() -> Blake2b {
     Blake2bBuilder::new(32).personal(b"anoma storage").build()
 }
+
+#[derive(Debug)]
+pub struct PrefixIterator(Vec<Vec<u8>>);
+
+impl PrefixIterator {
+    pub fn new(mut values: Vec<Vec<u8>>) -> Self {
+        values.reverse();
+        PrefixIterator(values)
+    }
+}
+
+impl Iterator for PrefixIterator {
+    type Item = Vec<u8>;
+
+    fn next(&mut self) -> Option<Vec<u8>> {
+        self.0.pop()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct PrefixIteratorId(usize);
+
+impl PrefixIteratorId {
+    pub fn new() -> Self {
+        PrefixIteratorId(0)
+    }
+
+    pub fn next_id(&self) -> PrefixIteratorId {
+        PrefixIteratorId(self.0 + 1)
+    }
+}

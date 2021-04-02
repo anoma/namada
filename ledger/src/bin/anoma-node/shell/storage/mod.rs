@@ -14,7 +14,7 @@ use thiserror::Error;
 
 pub use self::types::{
     Address, BasicAddress, BlockHash, BlockHeight, Key, KeySeg, MerkleTree,
-    ValidatorAddress, Value,
+    PrefixIterator, PrefixIteratorId, ValidatorAddress, Value,
 };
 use self::types::{Hash256, CHAIN_ID_LENGTH};
 use super::MerkleRoot;
@@ -43,6 +43,9 @@ pub struct Storage {
     // for write-only. When the block is committed, the former will be updated
     // to the state of the latter
     block: BlockStorage,
+    current_height: BlockHeight,
+    iter_index: PrefixIteratorId,
+    iterators: HashMap<PrefixIteratorId, PrefixIterator>,
 }
 
 #[derive(Debug)]
@@ -68,6 +71,9 @@ impl Storage {
             db: db::open(db_path).unwrap(),
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
+            current_height: BlockHeight(0),
+            iter_index: PrefixIteratorId::new(),
+            iterators: HashMap::new(),
         }
     }
 
@@ -82,6 +88,7 @@ impl Storage {
             self.block.hash = hash;
             self.block.height = height;
             self.block.subspaces = subspaces;
+            self.current_height = height;
             log::debug!("Loaded storage from DB: {:#?}", self);
             return Ok(Some((
                 MerkleRoot(
@@ -103,7 +110,9 @@ impl Storage {
                 self.block.height,
                 &self.block.subspaces,
             )
-            .map_err(|e| Error::DBError(e).into())
+            .map_err(|e| Error::DBError(e).into())?;
+        self.current_height = self.block.height;
+        Ok(())
     }
 
     /// # Storage reads
@@ -147,7 +156,7 @@ impl Storage {
 
         match self
             .db
-            .read(self.block.height, key)
+            .read(self.current_height, key)
             .map_err(Error::DBError)?
         {
             Some(v) => {
@@ -156,6 +165,28 @@ impl Storage {
             }
             None => Ok((None, 0)),
         }
+    }
+
+    /// Returns an ID for a prefix iterator
+    pub fn iter_prefix(&mut self, prefix: &Key) -> PrefixIteratorId {
+        let iter = self.db.iter_prefix(self.current_height, prefix);
+        let iter_id = self.iter_index.clone();
+        self.iterators.insert(iter_id.clone(), iter);
+        self.iter_index = self.iter_index.next_id();
+        iter_id
+    }
+
+    /// Returns a value from the specified iterator
+    pub fn iter_next(&mut self, iter_id: PrefixIteratorId) -> Option<Vec<u8>> {
+        match self.iterators.get_mut(&iter_id) {
+            Some(iter) => iter.next(),
+            None => None,
+        }
+    }
+
+    /// Release the specified iterator
+    pub fn iter_release(&mut self, iter_id: PrefixIteratorId) {
+        self.iterators.remove(&iter_id);
     }
 
     /// Write a value to the specified subspace and returns the gas cost and the
