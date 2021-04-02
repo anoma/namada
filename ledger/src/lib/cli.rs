@@ -37,6 +37,8 @@ pub enum InlinedClientOpts {
     Tx(Tx),
     /// Submit an intent to the orderbook
     Intent(IntentArg),
+    /// Craft file to be send as intent data
+    CraftIntent(CraftIntentArg),
 }
 
 // `anomac` subcommand for submitting transactions
@@ -59,6 +61,24 @@ pub struct IntentArg {
     /// the data of the intent, that contains all value necessary for the
     /// matchmaker
     pub data_path: String,
+}
+
+// `anomac` subcommand for crafting intent
+#[derive(Clap)]
+pub struct CraftIntentArg {
+    /// the orderbook adress
+    #[clap(long)]
+    pub addr: String,
+    #[clap(long)]
+    pub token_sell: String,
+    #[clap(long)]
+    pub amount_sell: u64,
+    #[clap(long)]
+    pub token_buy: String,
+    #[clap(long)]
+    pub amount_buy: u64,
+    #[clap(long)]
+    pub file: String,
 }
 
 /// The Anoma Node CLI

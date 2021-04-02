@@ -1,10 +1,17 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use anoma::cli::{self, ClientOpts, InlinedClientOpts, IntentArg};
+use std::fs::File;
+use std::io::prelude::*;
+
+use anoma::cli::{
+    self, ClientOpts, CraftIntentArg, InlinedClientOpts, IntentArg,
+};
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
+use anoma_data_template;
+use borsh::BorshSerialize;
 use clap::Clap;
 use color_eyre::eyre::Result;
 use prost::Message;
@@ -24,6 +31,24 @@ async fn exec_inlined(ops: InlinedClientOpts) {
             data_path,
         }) => {
             gossip_intent(orderbook, data_path).await;
+        }
+        InlinedClientOpts::CraftIntent(CraftIntentArg {
+            addr,
+            token_sell,
+            amount_sell,
+            token_buy,
+            amount_buy,
+            file,
+        }) => {
+            craft_intent(
+                addr,
+                token_sell,
+                amount_sell,
+                token_buy,
+                amount_buy,
+                file,
+            )
+            .await;
         }
     }
 }
@@ -74,4 +99,25 @@ async fn gossip_intent(orderbook_addr: String, data_path: String) {
         message: Some(types::message::Message::IntentMessage(intent_message)),
     };
     let _response = client.send_message(message).await.unwrap();
+}
+// TODO Instead it might be better to incorporate a cli into the
+// anoma_data_template ?
+async fn craft_intent(
+    addr: String,
+    token_sell: String,
+    amount_sell: u64,
+    token_buy: String,
+    amount_buy: u64,
+    file: String,
+) {
+    let data = anoma_data_template::IntentData {
+        addr,
+        token_sell,
+        amount_sell,
+        token_buy,
+        amount_buy,
+    };
+    let data_bytes = data.try_to_vec().unwrap();
+    let mut file = File::create(file).unwrap();
+    file.write_all(&data_bytes).unwrap();
 }

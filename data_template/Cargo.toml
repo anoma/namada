@@ -1,7 +1,7 @@
 [package]
 authors = ["Heliax <TODO@heliax.dev>"]
 edition = "2018"
-name = "Anoma data template"
+name = "anoma_data_template"
 version = "0.1.0"
 
 [lib]
