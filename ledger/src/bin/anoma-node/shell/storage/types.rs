@@ -100,8 +100,8 @@ impl Key {
 
     /// Returns a new key with segments of `Self` and the given key
     pub fn join(&self, other: &Key) -> Self {
-        let mut segments: Vec<DbKeySeg> = self.segments.clone();
-        let mut added: Vec<DbKeySeg> = other.segments.clone();
+        let mut segments = self.segments.clone();
+        let mut added = other.segments.clone();
         segments.append(&mut added);
         Key { segments }
     }
