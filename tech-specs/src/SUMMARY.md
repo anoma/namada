@@ -13,6 +13,7 @@
     - [The gossip/orderbook](./explore/design/gossip.md)
       - [Intent](./explore/design/gossip/intent.md)
       - [Filter](./explore/design/gossip/filter.md)
+    - [The matchmaker](./explore/design/matchmaker.md)
     - [Fractal scaling](./explore/design/fractal-scaling.md)
     - [Upgrade system](./explore/design/upgrade-system.md)
     - [Crypto primitives](./explore/design/crypto-primitives.md)

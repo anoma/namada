@@ -50,6 +50,7 @@ hex = "0.4.2"
 libp2p = "0.35.1"
 log = "0.4.14"
 prost = "0.7.0"
+prost-types = "0.7.0"
 rand = {version = "0.7", default-features = false}
 rand_core = {version = "0.5", default-features = false}
 rocksdb = "0.15"

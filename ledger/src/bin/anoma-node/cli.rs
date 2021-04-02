@@ -24,7 +24,8 @@ fn exec_inlined(matches: ArgMatches) -> Result<()> {
             let address = args.value_of("address").map(|s| s.to_string());
             let orderbook = args.is_present("orderbook");
             let dkg = args.is_present("dkg");
-            Ok(gossip::run(config, rpc, orderbook, dkg, address, peers))
+            gossip::run(config, rpc, orderbook, dkg, address, peers, None, None)
+                .wrap_err("Failed to run gossip service")
         }
         Some((CliBuilder::RUN_LEDGER_COMMAND, _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();
@@ -39,3 +40,18 @@ fn exec_inlined(matches: ArgMatches) -> Result<()> {
         _ => Ok(()),
     }
 }
+
+// fn exec_inlined(config: Config, rpc: bool, ops: InlinedNodeOpts) -> Result<()> {
+//     match ops {
+//         InlinedNodeOpts::RunGossip(arg) => gossip::run(
+//             config,
+//             rpc,
+//             arg.orderbook,
+//             arg.dkg,
+//             arg.address,
+//             arg.peers,
+//             arg.matchmaker,
+//             arg.ledger_address,
+//         )
+//         .wrap_err("Failed to run gossip service"),
+//         InlinedNodeOpts::RunAnoma => {

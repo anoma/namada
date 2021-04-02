@@ -169,7 +169,8 @@ impl Storage {
         }
     }
 
-    /// Write a value to the specified subspace and returns the gas cost and the size difference
+    /// Write a value to the specified subspace and returns the gas cost and the
+    /// size difference
     pub fn write(
         &mut self,
         addr: &Address,
@@ -198,7 +199,8 @@ impl Storage {
         Ok((len as u64, size_diff))
     }
 
-    /// Delete the specified subspace and returns the gas cost and the size difference
+    /// Delete the specified subspace and returns the gas cost and the size
+    /// difference
     pub fn delete(
         &mut self,
         addr: &Address,

@@ -1,24 +1,6 @@
-use libp2p::gossipsub::MessageId;
+use anoma::types::Topic;
+use libp2p::gossipsub::{IdentTopic, MessageId, TopicHash};
 use libp2p::PeerId;
-
-#[derive(Debug, PartialEq)]
-pub enum Topic {
-    Dkg,
-    Orderbook,
-}
-
-impl std::fmt::Display for Topic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Dkg => "dkg",
-                Self::Orderbook => "orderbook",
-            }
-        )
-    }
-}
 
 #[derive(Debug)]
 pub struct InternMessage {

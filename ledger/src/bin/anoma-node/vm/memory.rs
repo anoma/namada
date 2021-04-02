@@ -7,8 +7,6 @@ use wasmer::{HostEnvInitError, LazyInit, Memory};
 pub enum Error {
     #[error("Failed initializing the memory: {0}")]
     InitMemoryError(wasmer::MemoryError),
-    #[error("Failed exporting the memory: {0}")]
-    MemoryExportError(wasmer::ExportError),
     #[error("Memory is not initialized")]
     UninitializedMemory,
     #[error("Memory ouf of bounds: {0}")]
@@ -53,6 +51,7 @@ pub struct TxCallInput {
     pub tx_data_len: u64,
 }
 
+/// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
     tx_data_bytes: &memory::TxData,
@@ -60,7 +59,6 @@ pub fn write_tx_inputs(
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as _;
 
-    log::info!("write_tx_inputs {}", tx_data_len);
     write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)?;
 
     Ok(TxCallInput {
@@ -75,41 +73,31 @@ pub struct VpCallInput {
     pub addr_len: u64,
     pub tx_data_ptr: u64,
     pub tx_data_len: u64,
-    pub write_log_ptr: u64,
-    pub write_log_len: u64,
+    pub keys_changed_ptr: u64,
+    pub keys_changed_len: u64,
 }
 
+/// Write validity predicate inputs into wasm memory
 pub fn write_vp_inputs(
     memory: &wasmer::Memory,
-    (addr, tx_data_bytes, write_log): memory::VpInput,
+    (addr, tx_data_bytes, keys_changed): memory::VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
+    // String utf8 encoding is more space-efficient than Borsh encoding
     let addr_bytes = addr.as_bytes();
-    // TODO there is some issue with serializing String with Borsh
-    // We can decode it back below (`addr2`), but in wasm deserialization fails.
-    // It encodes "va" as `[ 2, 0, 0, 0, 118, 97, ]`,
-    // whereas `String::as_bytes` encodes it just as [ 118, 97, ]
-
-    // let addr_bytes = addr.try_to_vec().expect(
-    //     "TEMPORARY: failed to serialize addr for validity predicate",
-    // );
-
     let addr_len = addr_bytes.len() as _;
-    // let addr2 = <String as
-    // borsh::BorshDeserialize>::try_from_slice(&addr_bytes[..])
-    //     .unwrap();
-    // println!("write_vp 2 {}", addr2);
 
     let tx_data_ptr = addr_ptr + addr_len;
     let tx_data_len = tx_data_bytes.len() as _;
 
-    let write_log_bytes = write_log.try_to_vec().expect(
-        "TEMPORARY: failed to serialize write_log for validity predicate",
+    let keys_changed_bytes = keys_changed.try_to_vec().expect(
+        "TEMPORARY: failed to serialize keys_changed for validity predicate",
     );
-    let write_log_ptr = tx_data_ptr + tx_data_len;
-    let write_log_len = write_log_bytes.len() as _;
+    let keys_changed_ptr = tx_data_ptr + tx_data_len;
+    let keys_changed_len = keys_changed_bytes.len() as _;
 
-    let bytes = [&addr_bytes[..], tx_data_bytes, &write_log_bytes[..]].concat();
+    let bytes =
+        [&addr_bytes[..], tx_data_bytes, &keys_changed_bytes[..]].concat();
     write_memory_bytes(memory, addr_ptr, bytes)?;
 
     Ok(VpCallInput {
@@ -117,15 +105,15 @@ pub fn write_vp_inputs(
         addr_len,
         tx_data_ptr,
         tx_data_len,
-        write_log_ptr,
-        write_log_len,
+        keys_changed_ptr,
+        keys_changed_len,
     })
 }
 
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
 fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
-    log::info!(
+    log::debug!(
         "check_bounds pages {}, data_size {}, offset + len {}",
         memory.size().0,
         memory.data_size(),
@@ -221,6 +209,7 @@ impl AnomaMemory {
     }
 
     /// Write string into memory at the given offset
+    #[allow(dead_code)]
     pub fn write_string(&self, offset: u64, string: String) -> Result<()> {
         self.write_bytes(offset, string.as_bytes())
     }

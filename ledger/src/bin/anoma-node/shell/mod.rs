@@ -1,25 +1,24 @@
-mod gas;
-mod storage;
+pub mod gas;
+pub mod storage;
 mod tendermint;
 
 use std::sync::mpsc;
-use std::{ffi::c_void, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
-use crate::vm::{self, TxEnv, TxRunner, VpRunner};
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
-use anoma::rpc_types::{Message, Tx};
-use storage::KeySeg;
+use anoma::protobuf::types::Tx;
+use prost::Message;
 use thiserror::Error;
+use vm::host_env::write_log::StorageKey;
 
-use self::tendermint::{AbciMsg, AbciReceiver};
-use self::{
-    gas::BlockGasMeter,
-    storage::{
-        Address, BasicAddress, BlockHash, BlockHeight, Storage,
-        ValidatorAddress,
-    },
+use self::gas::BlockGasMeter;
+use self::storage::{
+    Address, BasicAddress, BlockHash, BlockHeight, Storage, ValidatorAddress,
 };
+use self::tendermint::{AbciMsg, AbciReceiver};
+use crate::vm::host_env::write_log::WriteLog;
+use crate::vm::{self, TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -39,10 +38,8 @@ pub enum Error {
     TxRunnerError(vm::Error),
     #[error("Validity predicate for {addr} runner error: {error}")]
     VpRunnerError { addr: Address, error: vm::Error },
-    #[error("Transaction gas is too high")]
-    TooHighTransactionGasUsage(),
-    #[error("Block gas is too high")]
-    TooHighBlockGasUsage(),
+    #[error("Gas error: {0}")]
+    GasError(gas::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -73,10 +70,12 @@ pub fn reset(config: Config) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct Shell {
     abci: AbciReceiver,
     storage: storage::Storage,
     gas_meter: BlockGasMeter,
+    write_log: WriteLog,
 }
 
 #[derive(Clone, Debug)]
@@ -114,6 +113,7 @@ impl Shell {
             abci,
             storage,
             gas_meter: BlockGasMeter::default(),
+            write_log: WriteLog::new(),
         }
     }
 
@@ -182,82 +182,6 @@ impl Shell {
     }
 }
 
-/// Storage read function exposed to the wasm VM environment
-fn vm_storage_read(
-    env: &TxEnv,
-    key_ptr: u64,
-    key_len: u64,
-    result_ptr: u64,
-) -> u64 {
-    let key = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-
-    log::debug!(
-        "vm_storage_read {}, key {}, result_ptr {}",
-        key,
-        key_ptr,
-        result_ptr,
-    );
-
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
-    let keys = key.split('/').collect::<Vec<&str>>();
-    if let [key_a, key_b, key_c] = keys.as_slice() {
-        if "balance" == key_b.to_string() {
-            let addr = storage::Address::from_key_seg(&key_a.to_string())
-                .expect("should be an address");
-            let key = format!("{}/{}", key_b, key_c);
-            let (value, _) = shell
-                .storage
-                .read(&addr, &key)
-                .expect("storage read failed");
-            env.memory
-                .write_bytes(result_ptr, value.expect("key not found"))
-                .expect("cannot write to memory");
-            return 1;
-        }
-    }
-    // fail
-    0
-}
-
-/// Storage update function exposed to the wasm VM environment
-fn vm_storage_update(
-    env: &TxEnv,
-    key_ptr: u64,
-    key_len: u64,
-    val_ptr: u64,
-    val_len: u64,
-) -> u64 {
-    let key = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-    let val = env
-        .memory
-        .read_bytes(val_ptr, val_len as _)
-        .expect("Cannot read the value from memory");
-    log::debug!("vm_storage_update {}, {:#?}", key, val);
-
-    let shell: &mut Shell = unsafe { &mut *(env.ledger.get() as *mut Shell) };
-    let keys = key.split('/').collect::<Vec<&str>>();
-    if let [key_a, key_b, key_c] = keys.as_slice() {
-        if "balance" == key_b.to_string() {
-            let addr = storage::Address::from_key_seg(&key_a.to_string())
-                .expect("should be an address");
-            let key = format!("{}/{}", key_b, key_c);
-            shell
-                .storage
-                .write(&addr, &key, val)
-                .expect("VM storage write fail");
-            return 1;
-        }
-    }
-    // fail
-    0
-}
-
 impl Shell {
     pub fn init_chain(&mut self, chain_id: String) -> Result<()> {
         self.storage
@@ -279,104 +203,81 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
+        self.gas_meter
+            .add_base_transaction_fee(tx_bytes.len())
+            .map_err(Error::GasError)?;
+
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
 
         let tx_data = tx.data.unwrap_or(vec![]);
 
         // Execute the transaction code
         let tx_runner = TxRunner::new();
-        let ledger =
-            unsafe { vm::TxShellWrapper::new(self as *mut _ as *mut c_void) };
         tx_runner
-            .run(
-                ledger,
-                tx.code,
-                &tx_data,
-                vm_storage_read,
-                vm_storage_update,
-            )
+            .run(&mut self.storage, &mut self.write_log, tx.code, &tx_data)
             .map_err(Error::TxRunnerError)?;
 
-        // TODO gather write log from tx udpates
-        let write_log = vec![];
+        // get changed keys grouped by the address
+        let keys_changed: HashMap<Address, Vec<String>> = self
+            .write_log
+            .get_changed_keys()
+            .iter()
+            .fold(HashMap::new(), |mut acc, &storage_key| {
+                let &StorageKey { addr, key } = &storage_key;
+                // TODO insert into addresses from the sub-keys too
+                match acc.get_mut(&addr) {
+                    Some(keys) => keys.push(key.clone()),
+                    None => {
+                        acc.insert(addr.clone(), vec![key.clone()]);
+                    }
+                }
+                acc
+            });
 
-        // TODO determine these from the write log
-        let src = "va";
-        let dest = "ba";
-        let src_addr = Address::new_address(src.into());
-        let dest_addr = Address::new_address(dest.into());
-
-        // Run a VP for every account with modified storage sub-space
+        let mut accept = true;
         // TODO run in parallel for all accounts
+        // Run a VP for every account with modified storage sub-space
         //   - all must return `true` to accept the tx
         //   - cancel all remaining workers and fail if any returns `false`
-        let src_vp = self
-            .storage
-            .validity_predicate(&src_addr)
-            .map_err(Error::StorageError)?;
-        let dest_vp = self
-            .storage
-            .validity_predicate(&dest_addr)
-            .map_err(Error::StorageError)?;
+        for (addr, keys) in keys_changed.iter() {
+            let vp = self
+                .storage
+                .validity_predicate(&addr)
+                .map_err(Error::StorageError)?;
 
-        let vp_runner = VpRunner::new();
-        let (vp_sender, vp_receiver) = mpsc::channel();
-        vp_runner
-            .run(
-                src_vp,
-                &tx_data,
-                src.to_string(),
-                &write_log,
-                vp_sender.clone(),
-            )
-            .map_err(|error| Error::VpRunnerError {
-                addr: src_addr.clone(),
-                error,
-            })?;
-        let src_accept = vp_receiver
-            .recv()
-            .expect("Expected a message from source's VP runner");
-        vp_runner
-            .run(dest_vp, &tx_data, dest.to_string(), &write_log, vp_sender)
-            .map_err(|error| Error::VpRunnerError {
-                addr: dest_addr.clone(),
-                error,
-            })?;
-        let dest_accept = vp_receiver
-            .recv()
-            .expect("Expected a message from destination's VP runner");
-
+            let vp_runner = VpRunner::new();
+            accept = vp_runner
+                .run(
+                    vp,
+                    &tx_data,
+                    addr.clone(),
+                    &self.storage,
+                    &self.write_log,
+                    keys,
+                )
+                .map_err(|error| Error::VpRunnerError {
+                    addr: addr.clone(),
+                    error,
+                })?;
+            if !accept {
+                log::debug!("{} rejected transaction", addr);
+                break;
+            };
+        }
         // Apply the transaction if accepted by all the VPs
-        if src_accept && dest_accept {
+        if accept {
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
             );
+            self.write_log.commit_tx();
         } else {
-            log::debug!(
-                "tx declined by {}",
-                if src_accept {
-                    "dest"
-                } else {
-                    if dest_accept {
-                        "src"
-                    } else {
-                        "src and dest"
-                    }
-                }
-            );
+            self.write_log.drop_tx();
         }
 
-        let transaction_storage_gas =
-            (tx_bytes.len() as u64) * gas::TX_GAS_PER_BYTE as u64;
-        let _ = self
-            .gas_meter
-            .add_base_transaction_fee(transaction_storage_gas)
-            .map_err(|_| Error::TooHighTransactionGasUsage);
-        match self.gas_meter.finalize_transaction() {
-            Ok(gas) => return Ok(gas),
-            Err(_) => return Err(Error::TooHighBlockGasUsage()),
-        };
+        self.gas_meter
+            .finalize_transaction()
+            .map_err(Error::GasError)
     }
 
     /// Begin a new block.
@@ -391,6 +292,10 @@ impl Shell {
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> MerkleRoot {
+        // commit changes from the write-log to storage
+        self.write_log
+            .commit_block(&mut self.storage)
+            .expect("Expected committing block write log success");
         log::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?
