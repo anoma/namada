@@ -2,8 +2,9 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::mpsc;
-use std::{collections::HashMap, path::PathBuf};
 
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
@@ -101,6 +102,13 @@ impl Shell {
                 vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
             )
             .expect("Unable to set the initial balance for validator account");
+        storage
+            .write(
+                &va,
+                "balance/xtz",
+                vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+            )
+            .expect("Unable to set the initial balance for validator account");
         let ba = BasicAddress::new_address("ba".to_owned());
         storage
             .write(
@@ -109,6 +117,13 @@ impl Shell {
                 vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
             )
             .expect("Unable to set the initial balance for basic account");
+        storage
+            .write(
+                &ba,
+                "balance/xtz",
+                vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+            )
+            .expect("Unable to set the initial balance for validator account");
         Self {
             abci,
             storage,
