@@ -148,7 +148,7 @@ impl TxRunner {
             TxEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
         };
 
-        let tx_code = Self::prepare_tx_code(tx_code)?;
+        let tx_code = prepare_wasm_code(&tx_code)?;
 
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::CompileError)?;
@@ -166,18 +166,6 @@ impl TxRunner {
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::InstantiationError)?;
         Self::run_with_input(tx_code, tx_data)
-    }
-
-    fn prepare_tx_code(tx_code: Vec<u8>) -> Result<Vec<u8>> {
-        let module: elements::Module = elements::deserialize_buffer(&tx_code)
-            .map_err(Error::DeserializationError)?;
-        let module =
-            pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-                .map_err(|_original_module| Error::GasMeterInjection)?;
-        let module =
-            pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
-                .map_err(|_original_module| Error::StackLimiterInjection)?;
-        elements::serialize(module).map_err(Error::SerializationError)
     }
 
     fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {
@@ -244,7 +232,7 @@ impl VpRunner {
             VpEnvHostWrapper::new(write_log as *const _ as *const c_void)
         };
 
-        let vp_code = Self::prepare_vp_code(vp_code)?;
+        let vp_code = prepare_wasm_code(vp_code)?;
 
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(Error::CompileError)?;
@@ -264,19 +252,6 @@ impl VpRunner {
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::InstantiationError)?;
         VpRunner::run_with_input(vp_code, input)
-    }
-
-    fn prepare_vp_code<T: AsRef<[u8]>>(vp_code: T) -> Result<Vec<u8>> {
-        let module: elements::Module =
-            elements::deserialize_buffer(vp_code.as_ref())
-                .map_err(Error::DeserializationError)?;
-        let module =
-            pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-                .map_err(|_original_module| Error::GasMeterInjection)?;
-        let module =
-            pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
-                .map_err(|_original_module| Error::StackLimiterInjection)?;
-        elements::serialize(module).map_err(Error::SerializationError)
     }
 
     fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
@@ -316,11 +291,168 @@ impl VpRunner {
                 keys_changed_len,
             )
             .map_err(Error::RuntimeError)?;
+        log::debug!("is_valid {}", is_valid);
         Ok(is_valid == 1)
     }
+}
+
+/// Inject gas counter and stack-height limiter into the given wasm code
+fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
+    let module: elements::Module = elements::deserialize_buffer(code.as_ref())
+        .map_err(Error::DeserializationError)?;
+    let module =
+        pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
+            .map_err(|_original_module| Error::GasMeterInjection)?;
+    let module =
+        pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
+            .map_err(|_original_module| Error::StackLimiterInjection)?;
+    elements::serialize(module).map_err(Error::SerializationError)
 }
 
 /// Get the gas rules used to meter wasm operations
 fn get_gas_rules() -> rules::Set {
     rules::Set::default().with_grow_cost(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use tempdir::TempDir;
+    use wasmer_vm;
+
+    use super::*;
+
+    /// Test that when a transaction wasm goes over the stack-height limit, the
+    /// execution is aborted.
+    #[test]
+    fn test_tx_stack_limiter() {
+        // Because each call into `$loop` inside the wasm consumes 4 stack
+        // heights, this should trigger stack limiter. If we were to subtract
+        // one from this value, we should be just under the limit.
+        let loops = WASM_STACK_LIMIT / 4;
+        // A transaction with a recursive loop.
+        // The boilerplate code is generated from tx.wasm using `wasm2wat` and
+        // the loop code is hand-written.
+        let tx_code = wasmer::wat2wasm(
+            format!(
+                r#"
+            (module
+                (type (;0;) (func (param i64 i64) (result i64)))
+
+                ;; recursive loop, the param is the number of loops
+                (func $loop (param i64) (result i64)
+                (if 
+                (result i64)
+                (i64.eqz (get_local 0))
+                (then (get_local 0))
+                (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
+
+                (func $apply_tx (type 0) (param i64 i64) (result i64)
+                (call $loop (i64.const {})))
+
+                (table (;0;) 1 1 funcref)
+                (memory (;0;) 16)
+                (global (;0;) (mut i32) (i32.const 1048576))
+                (export "memory" (memory 0))
+                (export "apply_tx" (func $apply_tx)))
+            "#,
+                loops
+            )
+            .as_bytes(),
+        )
+        .expect("unexpected error converting wat2wasm")
+        .into_owned();
+
+        let runner = TxRunner::new();
+        let tx_data = vec![];
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = Storage::new(db_path.path());
+        let mut write_log = WriteLog::new();
+        let mut gas_meter = BlockGasMeter::default();
+        let error = runner
+            .run(
+                &mut storage,
+                &mut write_log,
+                &mut gas_meter,
+                tx_code,
+                &tx_data,
+            )
+            .expect_err("Expecting runtime error \"unreachable\" caused by stack-height overflow");
+        if let Error::RuntimeError(err) = &error {
+            if let Some(trap_code) = err.clone().to_trap() {
+                return assert_eq!(
+                    trap_code,
+                    wasmer_vm::TrapCode::UnreachableCodeReached
+                );
+            }
+        }
+        println!("Failed with unexpected error: {}", error);
+    }
+
+    /// Test that when a VP wasm goes over the stack-height limit, the execution
+    /// is aborted.
+    #[test]
+    fn test_vp_stack_limiter() {
+        // Because each call into `$loop` inside the wasm consumes 4 stack
+        // heights, this should trigger stack limiter. If we were to subtract
+        // one from this value, we should be just under the limit.
+        let loops = WASM_STACK_LIMIT / 4;
+        // A validity predicate with a recursive loop.
+        // The boilerplate code is generated from vp.wasm using `wasm2wat` and
+        // the loop code is hand-written.
+        let vp_code = wasmer::wat2wasm(format!(
+            r#"
+            (module
+                (type (;0;) (func (param i64 i64 i64 i64 i64 i64) (result i64)))
+
+                ;; recursive loop, the param is the number of loops
+                (func $loop (param i64) (result i64)
+                (if 
+                (result i64)
+                (i64.eqz (get_local 0))
+                (then (get_local 0))
+                (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
+
+                (func $validate_tx (type 0) (param i64 i64 i64 i64 i64 i64) (result i64)
+                (call $loop (i64.const {})))
+
+                (table (;0;) 1 1 funcref)
+                (memory (;0;) 16)
+                (global (;0;) (mut i32) (i32.const 1048576))
+                (export "memory" (memory 0))
+                (export "validate_tx" (func $validate_tx)))
+            "#, loops).as_bytes(),
+        )
+        .expect("unexpected error converting wat2wasm").into_owned();
+
+        let runner = VpRunner::new();
+        let tx_data = vec![];
+        let addr = Address::new_address(String::from("va"));
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let storage = Storage::new(db_path.path());
+        let write_log = WriteLog::new();
+        let gas_meter = Arc::new(Mutex::new(BlockGasMeter::default()));
+        let keys_changed = vec![];
+        let error = runner
+            .run(
+                vp_code,
+                &tx_data,
+                addr,
+                &storage,
+                &write_log,
+                gas_meter,
+                &keys_changed,
+            )
+            .expect_err("Expecting runtime error \"unreachable\" caused by stack-height overflow");
+        if let Error::RuntimeError(err) = &error {
+            if let Some(trap_code) = err.clone().to_trap() {
+                return assert_eq!(
+                    trap_code,
+                    wasmer_vm::TrapCode::UnreachableCodeReached
+                );
+            }
+        }
+        println!("Failed with unexpected error: {}", error);
+    }
 }

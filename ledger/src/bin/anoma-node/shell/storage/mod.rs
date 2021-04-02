@@ -4,9 +4,8 @@
 mod db;
 mod types;
 
-use std::collections::HashMap;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::{collections::HashMap, path::Path};
 
 use anoma::bytes::ByteBuf;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
@@ -52,7 +51,7 @@ pub struct BlockStorage {
 }
 
 impl Storage {
-    pub fn new(db_path: &PathBuf) -> Self {
+    pub fn new<T: AsRef<Path>>(db_path: T) -> Self {
         let tree = MerkleTree::default();
         let subspaces = HashMap::new();
         let block = BlockStorage {
