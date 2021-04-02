@@ -14,6 +14,10 @@ The validity predicate template receives the `transfer` data and checks that the
 
 The validity predicate is currently hard-coded in the shell and used for every account. To experiment with a different validity predicate, build it from the template and restart the shell.
 
+Multiple gossip node can be run, each should toggle orderbook to relay.
+
+The matchmaker template receive intent with the borsh encoding define in `data_template` and craft data to be send with `tx_intent_template` to the ledger.
+
 ```shell
 # Install development dependencies
 make dev-deps
@@ -50,11 +54,14 @@ cargo watch -x "run --bin anomad -- reset-anoma" -x "run --bin anomad -- run"
 # run orderbook daemon
 make run-gossip
 
-# run orderbook daemon with rpc server
-cargo run --bin anomad -- --rpc run-gossip --orderbook --matchmaker ../tx_intent_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
+# run orderbook daemon with rpc server and matchmaker
+cargo run --bin anomad -- --rpc run-gossip --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_intent_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
+
+# craft an intent to file `intent_data_file`
+cargo run --bin anomac -- craft-intent --addr account_name --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file
 
 # Submit an intent (need a rpc server)
-cargo run --bin anomac -- intent intent_data.json
+cargo run --bin anomac -- intent intent_data_file
 
 # Format the code
 make fmt
