@@ -17,8 +17,8 @@ const CLIENT_VERSION: &str = "0.1.0";
 pub struct CliBuilder {}
 
 impl CliBuilder {
-    pub const INLINE_NODE_COMMAND: &'static str = "node";
-    pub const INLINE_CLIENT_COMMAND: &'static str = "client";
+    pub const NODE_COMMAND: &'static str = "node";
+    pub const CLIENT_COMMAND: &'static str = "client";
     pub const RUN_GOSSIP_COMMAND: &'static str = "run-gossip";
     pub const RUN_LEDGER_COMMAND: &'static str = "run-ledger";
     pub const RESET_ANOMA_COMMAND: &'static str = "reset-anoma";
@@ -44,7 +44,7 @@ impl CliBuilder {
         Self {}
     }
 
-    pub fn anoma_inline_cli(&self) -> ArgMatches {
+    pub fn anoma_inline_cli(&self) -> App {
         return App::new(CLI_DESCRIPTION)
             .version(CLI_VERSION)
             .author(AUTHOR)
@@ -55,7 +55,7 @@ impl CliBuilder {
             .subcommand(CliBuilder::build_client_tx_subcommand(&self))
             .subcommand(CliBuilder::build_client_intent_subcommand(&self))
             .subcommand(
-                App::new(Self::INLINE_NODE_COMMAND)
+                App::new(Self::NODE_COMMAND)
                     .about("Node inline subcommands")
                     .subcommand(CliBuilder::build_run_gossip_subcommand(&self))
                     .subcommand(CliBuilder::build_run_ledger_subcommand(&self))
@@ -64,27 +64,25 @@ impl CliBuilder {
                     )),
             )
             .subcommand(
-                App::new(Self::INLINE_CLIENT_COMMAND)
+                App::new(Self::CLIENT_COMMAND)
                     .about("Client inline subcommands")
                     .subcommand(CliBuilder::build_client_tx_subcommand(&self))
                     .subcommand(CliBuilder::build_client_intent_subcommand(
                         &self,
                     )),
-            )
-            .get_matches();
+            );
     }
 
-    pub fn anoma_client_cli(&self) -> ArgMatches {
+    pub fn anoma_client_cli(&self) -> App {
         return App::new(CLI_DESCRIPTION)
             .version(CLI_VERSION)
             .author(AUTHOR)
             .about("Anoma client interface.")
             .subcommand(CliBuilder::build_client_tx_subcommand(&self))
-            .subcommand(CliBuilder::build_client_intent_subcommand(&self))
-            .get_matches();
+            .subcommand(CliBuilder::build_client_intent_subcommand(&self));
     }
 
-    pub fn anoma_node_cli(&self) -> ArgMatches {
+    pub fn anoma_node_cli(&self) -> App {
         return App::new(CLI_DESCRIPTION)
             .version(CLI_VERSION)
             .author(AUTHOR)
@@ -100,8 +98,7 @@ impl CliBuilder {
             )
             .subcommand(CliBuilder::build_run_gossip_subcommand(&self))
             .subcommand(CliBuilder::build_run_ledger_subcommand(&self))
-            .subcommand(CliBuilder::build_reset_anoma_subcommand(&self))
-            .get_matches();
+            .subcommand(CliBuilder::build_reset_anoma_subcommand(&self));
     }
 
     fn build_client_tx_subcommand(&self) -> App {

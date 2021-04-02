@@ -3,28 +3,34 @@
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::{cli::CliBuilder, protobuf::types::Tx};
-use color_eyre::eyre::Result;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 
+use eyre::{Context, Result};
+
 pub async fn main() -> Result<()> {
-    let matches = CliBuilder::new().anoma_client_cli();
+    let cli = CliBuilder::new();
+    let mut app = cli.anoma_client_cli();
+
+    let matches = app.clone().get_matches();
 
     match matches.subcommand() {
         Some((CliBuilder::TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
             let path = args.value_of("path").unwrap().to_string();
             let data = args.value_of("data");
-            Ok(exec_tx(path, data).await)
+            return Ok(exec_tx(path, data).await);
         }
         Some((CliBuilder::INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
             let orderbook = args.value_of("orderbook").unwrap().to_string();
             let data = args.value_of("data").unwrap().to_string();
-            Ok(gossip_intent(orderbook, data).await)
+            return Ok(gossip_intent(orderbook, data).await);
         }
-        _ => Ok(()),
+        _ => {}
     }
+
+    app.print_help().wrap_err("Can't display help.")
 }
 
 async fn exec_tx(code_path: String, data_hex: Option<&str>) {
