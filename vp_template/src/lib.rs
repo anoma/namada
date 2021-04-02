@@ -17,7 +17,7 @@ extern "C" {
 
     // Read fixed-length posterior state, returns 1 if the key is present, 0
     // otherwise.
-    fn read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
+    fn read_post(key_ptr: u64, result_ptr: u64) -> u64;
 
     // Read variable-length posterior state when we don't know the size up-front,
     // returns the size of the value (can be 0), or -1 if the key is not
@@ -73,9 +73,9 @@ fn do_validate_tx(_tx_data: memory::TxData, _addr: &str, keys_changed: Vec<Strin
         let pre_len =
             unsafe { read_pre_varlen(key.as_ptr() as _, key.len() as _, pre_buf.as_ptr() as _) };
 
-        let post_buf: Vec<u8> = Vec::with_capacity(0);
+        let post_ptr = pre_len;
         let post_len =
-            unsafe { read_post_varlen(key.as_ptr() as _, key.len() as _, post_buf.as_ptr() as _) };
+            unsafe { read_post_varlen(key.as_ptr() as _, key.len() as _, post_ptr as _) };
 
         if pre_len == -1 || post_len == -1 {
             let log_msg = format!(
@@ -87,7 +87,7 @@ fn do_validate_tx(_tx_data: memory::TxData, _addr: &str, keys_changed: Vec<Strin
             }
         } else {
             let pre = unsafe { slice::from_raw_parts(pre_buf.as_ptr(), pre_len as _) };
-            let post = unsafe { slice::from_raw_parts(post_buf.as_ptr(), post_len as _) };
+            let post = unsafe { slice::from_raw_parts(post_ptr as *const u8, post_len as _) };
 
             let log_msg = format!(
                 "validate_tx key: {}, pre: {:#?}, post: {:#?}",
