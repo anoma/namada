@@ -1,8 +1,8 @@
 # Transaction script wasm template
 
-This is just a template of a wasm module for transaction script. The
-functionality initially inlined in here will be modularized into Anoma wasm VM
-and a transaction environment.
+This is just a template of a wasm module for transaction script. This template
+uses data matched by a matchmaker found in intents.
+
 
 ## Quick start
 
