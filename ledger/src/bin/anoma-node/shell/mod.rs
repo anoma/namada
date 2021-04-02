@@ -222,9 +222,9 @@ impl Shell {
             .fold(HashMap::new(), |mut acc, key| {
                 for addr in &key.find_addresses() {
                     match acc.get_mut(&addr) {
-                        Some(keys) => keys.push(key.into_string()),
+                        Some(keys) => keys.push(key.to_string()),
                         None => {
-                            acc.insert(addr.clone(), vec![key.into_string()]);
+                            acc.insert(addr.clone(), vec![key.to_string()]);
                         }
                     }
                 }

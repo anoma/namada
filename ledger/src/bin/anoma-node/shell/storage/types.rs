@@ -9,6 +9,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+use tendermint_proto::types::Block;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -80,6 +81,14 @@ pub struct Key {
     segments: Vec<DbKeySeg>,
 }
 
+impl From<DbKeySeg> for Key {
+    fn from(seg: DbKeySeg) -> Self {
+        Self {
+            segments: vec![seg],
+        }
+    }
+}
+
 impl Key {
     /// Parses string and returns a key
     pub fn parse(string: String) -> Result<Self> {
@@ -93,7 +102,7 @@ impl Key {
     /// Returns a new key with segments of `Self` and the given segment
     pub fn push<T: KeySeg>(&self, other: &T) -> Result<Self> {
         let mut segments = self.segments.clone();
-        segments.push(DbKeySeg::parse(other.into_string())?);
+        segments.push(DbKeySeg::parse(other.to_string())?);
         Ok(Key { segments })
     }
 
@@ -106,11 +115,11 @@ impl Key {
     }
 
     /// Returns string from the segments
-    pub fn into_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         let v: Vec<String> = self
             .segments
             .iter()
-            .map(|s| DbKeySeg::into_string(s))
+            .map(|s| DbKeySeg::to_string(s))
             .collect();
         v.join("/")
     }
@@ -130,7 +139,7 @@ impl Key {
 
 impl Display for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.into_string())
+        f.write_str(&self.to_string())
     }
 }
 
@@ -142,13 +151,16 @@ pub trait KeySeg {
     where
         Self: Sized;
 
+    /// Convert `Self` to a string.
+    fn to_string(&self) -> String;
+
     /// Convert `Self` to a key segment. This mapping should preserve the
     /// ordering of `Self`
-    fn into_string(&self) -> String;
+    fn to_db_key(&self) -> DbKeySeg;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-enum DbKeySeg {
+pub enum DbKeySeg {
     AddressSeg(Address),
     StringSeg(String),
 }
@@ -171,11 +183,15 @@ impl KeySeg for DbKeySeg {
         }
     }
 
-    fn into_string(&self) -> String {
+    fn to_string(&self) -> String {
         match self {
-            DbKeySeg::AddressSeg(addr) => addr.into_string(),
+            DbKeySeg::AddressSeg(addr) => ToString::to_string(&addr),
             DbKeySeg::StringSeg(seg) => seg.to_owned(),
         }
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.clone()
     }
 }
 
@@ -204,25 +220,33 @@ impl Value for H256 {}
 impl<T: Value> Value for DefaultStore<T> {}
 
 impl KeySeg for String {
-    fn into_string(&self) -> String {
+    fn to_string(&self) -> String {
         self.to_owned()
     }
 
     fn parse(string: String) -> Result<Self> {
         Ok(string)
     }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.clone())
+    }
 }
 
 impl KeySeg for BlockHeight {
-    fn into_string(&self) -> String {
-        format!("{}", self.0)
-    }
-
     fn parse(string: String) -> Result<Self> {
         let h = string.parse::<u64>().map_err(|e| Error::Temporary {
             error: format!("Unexpected height value {}, {}", string, e),
         })?;
         Ok(BlockHeight(h))
+    }
+
+    fn to_string(&self) -> String {
+        format!("{}", self.0)
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.to_string())
     }
 }
 impl TryFrom<i64> for BlockHeight {
@@ -298,10 +322,10 @@ impl Hash256 for Address {
     }
 }
 impl KeySeg for Address {
-    fn into_string(&self) -> String {
+    fn to_string(&self) -> String {
         match self {
-            Address::Validator(addr) => addr.into_string(),
-            Address::Basic(addr) => addr.into_string(),
+            Address::Validator(addr) => addr.to_string(),
+            Address::Basic(addr) => addr.to_string(),
         }
     }
 
@@ -316,6 +340,10 @@ impl KeySeg for Address {
                 ),
             })
     }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::AddressSeg(self.clone())
+    }
 }
 
 impl Hash256 for BasicAddress {
@@ -324,7 +352,7 @@ impl Hash256 for BasicAddress {
     }
 }
 impl KeySeg for BasicAddress {
-    fn into_string(&self) -> String {
+    fn to_string(&self) -> String {
         self.0.clone()
     }
 
@@ -339,6 +367,10 @@ impl KeySeg for BasicAddress {
             }),
         }
     }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::AddressSeg(Address::Basic(self.clone()))
+    }
 }
 
 impl Hash256 for ValidatorAddress {
@@ -347,10 +379,6 @@ impl Hash256 for ValidatorAddress {
     }
 }
 impl KeySeg for ValidatorAddress {
-    fn into_string(&self) -> String {
-        self.0.clone()
-    }
-
     fn parse(seg: String) -> Result<Self> {
         match seg.chars().nth(0) {
             Some(c) if c == '@' => Ok(Self(seg.clone())),
@@ -361,6 +389,14 @@ impl KeySeg for ValidatorAddress {
                 ),
             }),
         }
+    }
+
+    fn to_string(&self) -> String {
+        self.0.clone()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::AddressSeg(Address::Validator(self.clone()))
     }
 }
 
@@ -425,7 +461,7 @@ impl Hash256 for Vec<u8> {
 
 impl Hash256 for Key {
     fn hash256(&self) -> H256 {
-        self.into_string().hash256()
+        self.to_string().hash256()
     }
 }
 

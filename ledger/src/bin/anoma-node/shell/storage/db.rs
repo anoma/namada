@@ -114,8 +114,7 @@ impl DB {
     ) -> Result<()> {
         let mut batch = WriteBatch::default();
 
-        let prefix_key =
-            Key::parse(height.into_string()).map_err(Error::KeyError)?;
+        let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
             let prefix_key = prefix_key
@@ -127,7 +126,7 @@ impl DB {
                     .push(&"root".to_owned())
                     .map_err(Error::KeyError)?;
                 let value = tree.0.root();
-                batch.put(key.into_string(), value.as_slice());
+                batch.put(key.to_string(), value.as_slice());
             }
             // Tree's store
             {
@@ -135,7 +134,7 @@ impl DB {
                     .push(&"store".to_owned())
                     .map_err(Error::KeyError)?;
                 let value = tree.0.store();
-                batch.put(key.into_string(), value.encode());
+                batch.put(key.to_string(), value.encode());
             }
         }
         // Block hash
@@ -144,7 +143,7 @@ impl DB {
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
             let value = hash;
-            batch.put(key.into_string(), value.encode());
+            batch.put(key.to_string(), value.encode());
         }
         // SubSpace
         {
@@ -153,7 +152,7 @@ impl DB {
                 .map_err(Error::KeyError)?;
             subspaces.iter().for_each(|(key, value)| {
                 let key = subspace_prefix.join(key);
-                batch.put(key.into_string(), value);
+                batch.put(key.to_string(), value);
             });
         }
         let mut write_opts = WriteOptions::default();
@@ -186,10 +185,11 @@ impl DB {
         height: BlockHeight,
         key: &Key,
     ) -> Result<Option<Vec<u8>>> {
-        let key = Key::parse(format!("{}/subspace/", height.into_string()))
+        let key = Key::from(height.to_db_key())
+            .push(&"subspace".to_owned())
             .map_err(Error::KeyError)?
             .join(key);
-        match self.0.get(key.into_string()).map_err(Error::RocksDBError)? {
+        match self.0.get(key.to_string()).map_err(Error::RocksDBError)? {
             Some(bytes) => Ok(Some(bytes)),
             None => Ok(None),
         }
@@ -225,11 +225,11 @@ impl DB {
             None => return Ok(None),
         }
         // Load data at the height
-        let prefix = format!("{}/", height.into_string());
+        let prefix = format!("{}/", height.to_string());
         let mut read_opts = ReadOptions::default();
         read_opts.set_total_order_seek(false);
         let next_height_prefix =
-            format!("{}/", height.next_height().into_string());
+            format!("{}/", height.next_height().to_string());
         read_opts.set_iterate_upper_bound(next_height_prefix);
         let mut root = None;
         let mut store = None;
