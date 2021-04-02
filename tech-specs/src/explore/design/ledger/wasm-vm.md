@@ -29,6 +29,8 @@ Needs more info:
   - bunch of useful wasm tools (e.g. `wasm2wat` to convert from wasm binary to human-readable wat format) 
 - [Rust wasm WG](https://github.com/rustwasm/team) and [wasm book](https://rustwasm.github.io/book/introduction.html) (some sections are JS specific)
 - [A practical guide to WebAssembly memory](https://radu-matei.com/blog/practical-guide-to-wasm-memory/) modulo JS specific details
+- [Learn X in Y minutes Where X=WebAssembly](https://learnxinyminutes.com/docs/wasm/)
+
 
 ## Wasm environment
 
