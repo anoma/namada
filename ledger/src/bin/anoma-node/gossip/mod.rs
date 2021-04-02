@@ -8,8 +8,8 @@ mod types;
 
 use std::thread;
 
-use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
+use anoma::{config::Config, types::Topic};
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
@@ -33,21 +33,12 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(
-    mut config: Config,
-    rpc: bool,
-    orderbook: bool,
-    dkg: bool,
-    address: Option<String>,
-    peers: Option<Vec<String>>,
-    matchmaker: Option<String>,
-    ledger_address: Option<String>,
-) -> Result<()> {
+pub fn run(config: Config) -> Result<()> {
     let bookkeeper = config
         .get_bookkeeper()
         .or_else(|e| Err(Error::BadBookkeeper(e)))?;
 
-    let rpc_event_receiver = if rpc {
+    let rpc_event_receiver = if config.p2p.rpc {
         let (tx, rx) = mpsc::channel(100);
         thread::spawn(|| rpc::rpc_server(tx).unwrap());
         Some(rx)
@@ -55,17 +46,15 @@ pub fn run(
         None
     };
 
-    config.p2p.set_address(address);
-    config.p2p.set_peers(peers);
-    // TODO: check for duplicates and push instead of set
-    config.p2p.set_dkg_topic(dkg);
-    config.p2p.set_orderbook_topic(orderbook);
-
-    let (mut p2p, event_receiver, matchmaker_event_receiver) =
-        p2p::P2P::new(bookkeeper, orderbook, dkg, matchmaker, ledger_address)
-            .expect("TEMPORARY: unable to build p2p layer");
-    p2p.prepare(&config)
-        .expect("p2p prepraration failed");
+    let (mut p2p, event_receiver, matchmaker_event_receiver) = p2p::P2P::new(
+        bookkeeper,
+        config.p2p.topics.contains(&Topic::Orderbook),
+        config.p2p.topics.contains(&Topic::Dkg),
+        Some(config.p2p.matchmaker.clone()),
+        Some(config.p2p.get_ledger_address().clone()),
+    )
+    .expect("TEMPORARY: unable to build p2p layer");
+    p2p.prepare(&config).expect("p2p prepraration failed");
 
     dispatcher(
         p2p,

@@ -6,6 +6,8 @@ use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 
+use clap::ArgMatches;
+
 use serde::Deserialize;
 
 use crate::{bookkeeper::Bookkeeper, types::Topic};
@@ -30,8 +32,12 @@ pub struct Tendermint {
 pub struct Gossip {
     pub host: String,
     pub port: String,
+    pub rpc: bool,
     pub peers: Vec<String>,
     pub topics: Vec<Topic>,
+    pub matchmaker: String,
+    pub ledger_host: String,
+    pub ledger_port: String,
 }
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -43,11 +49,17 @@ pub struct Config {
 impl Gossip {
     // TODO here, and in set_address, we assumes a ip4+tcp address but it woul be nice to allow all accepted address by libp2p
     pub fn get_address(&self) -> String {
-    
         return format!("/ip4/{}/tcp/{}", self.host, self.port);
     }
 
-    pub fn set_peers(&mut self, peers: Option<Vec<String>>) {
+    pub fn get_ledger_address(&self) -> String {
+        return format!("/ip4/{}/tcp/{}", self.ledger_host, self.ledger_port);
+    }
+
+    pub fn set_peers(&mut self, args: &ArgMatches, field: &str) {
+        let peers = args.values_of(field).map(|peers| {
+            peers.map(|peer| peer.to_string()).collect::<Vec<String>>()
+        });
         match peers {
             Some(peers) => {
                 self.peers = peers.clone();
@@ -56,15 +68,22 @@ impl Gossip {
         }
     }
 
-    pub fn set_dkg_topic(&mut self, enable: bool) {
+    pub fn set_dkg_topic(&mut self, args: &ArgMatches, field: &str) {
+        let enable = args.is_present(field);
         if enable {
             self.set_topic(Topic::Dkg);
         }
     }
 
-    pub fn set_orderbook_topic(&mut self, enable: bool) {
+    pub fn set_rpc(&mut self, args: &ArgMatches, field: &str) {
+        let rpc = args.is_present(field);
+        self.rpc = rpc;
+    }
+
+    pub fn set_orderbook_topic(&mut self, args: &ArgMatches, field: &str) {
+        let enable = args.is_present(field);
         if enable {
-            self.set_topic(Topic::Dkg);
+            self.set_topic(Topic::Orderbook);
         }
     }
 
@@ -72,13 +91,37 @@ impl Gossip {
         self.topics.push(topic);
     }
 
-    pub fn set_address(&mut self, address: Option<String>) {
+    pub fn set_address(&mut self, args: &ArgMatches, field: &str) {
+        let address = args.value_of(field).map(|s| s.to_string());
         match address {
             Some(address) => {
                 let split_addresses: Vec<String> =
                     address.split("/").map(|s| s.to_string()).collect();
                 self.host = split_addresses[1].clone();
                 self.port = split_addresses[3].clone();
+            }
+            None => {}
+        }
+    }
+
+    pub fn set_matchmaker(&mut self, args: &ArgMatches, field: &str) {
+        let matchmaker = args.value_of(field).map(|s| s.to_string());
+        match matchmaker {
+            Some(matchmaker) => {
+                self.matchmaker = matchmaker;
+            }
+            None => {}
+        }
+    }
+
+    pub fn set_ledger_address(&mut self, args: &ArgMatches, field: &str) {
+        let address = args.value_of(field).map(|s| s.to_string());
+        match address {
+            Some(address) => {
+                let split_addresses: Vec<String> =
+                    address.split("/").map(|s| s.to_string()).collect();
+                self.ledger_host = split_addresses[1].clone();
+                self.ledger_port = split_addresses[3].clone();
             }
             None => {}
         }

@@ -16,16 +16,21 @@ fn exec_inlined(matches: ArgMatches) -> Result<()> {
     match matches.subcommand() {
         Some((CliBuilder::RUN_GOSSIP_COMMAND, args)) => {
             let home = matches.value_of("base").unwrap_or_default();
-            let config = Config::new(home.to_string()).unwrap();
-            let peers = args.values_of("peers").map(|peers| {
-                peers.map(|peer| peer.to_string()).collect::<Vec<String>>()
-            });
-            let rpc = args.is_present("rpc");
-            let address = args.value_of("address").map(|s| s.to_string());
-            let orderbook = args.is_present("orderbook");
-            let dkg = args.is_present("dkg");
-            gossip::run(config, rpc, orderbook, dkg, address, peers, None, None)
-                .wrap_err("Failed to run gossip service")
+            let mut config = Config::new(home.to_string()).unwrap();
+
+            config.p2p.set_peers(args, CliBuilder::PEERS_ARG);
+            config.p2p.set_address(args, CliBuilder::ADDRESS_ARG);
+            config.p2p.set_dkg_topic(args, CliBuilder::DKG_ARG);
+            config
+                .p2p
+                .set_orderbook_topic(args, CliBuilder::ORDERBOOK_ARG);
+            config.p2p.set_rpc(args, CliBuilder::RPC_ARG);
+            config.p2p.set_matchmaker(args, CliBuilder::MATCHMAKER);
+            config
+                .p2p
+                .set_ledger_address(args, CliBuilder::LEDGER_ADDRESS);
+
+            gossip::run(config).wrap_err("Failed to run gossip service")
         }
         Some((CliBuilder::RUN_LEDGER_COMMAND, _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();

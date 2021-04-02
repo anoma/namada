@@ -25,6 +25,21 @@ impl CliBuilder {
     pub const INTENT_COMMAND: &'static str = "intent";
     pub const TX_COMMAND: &'static str = "tx";
 
+    // gossip args
+    pub const PEERS_ARG: &'static str = "peers";
+    pub const ADDRESS_ARG: &'static str = "address";
+    pub const DKG_ARG: &'static str = "dkg";
+    pub const ORDERBOOK_ARG: &'static str = "orderbook";
+    pub const RPC_ARG: &'static str = "rpc";
+    pub const MATCHMAKER: &'static str = "matchmaker";
+    pub const LEDGER_ADDRESS: &'static str = "ledger-address";
+
+    // client args
+    pub const DATA_INTENT_ARG: &'static str = "data";
+    pub const DATA_TX_ARG: &'static str = "data";
+    pub const PATH_TX_ARG: &'static str = "path";
+    pub const ORDERBOOK_INTENT_ARG: &'static str = "orderbook";
+
     pub fn new() -> Self {
         Self {}
     }
@@ -94,14 +109,14 @@ impl CliBuilder {
             .version(CLIENT_VERSION)
             .about("Send an transaction.")
             .arg(
-                Arg::new("path")
-                .long("path")
+                Arg::new(Self::DATA_TX_ARG)
+                .long("data")
                 .takes_value(true)
                 .required(true)
                 .about("The data of the intent, that contains all value necessary for the matchmaker."),
             )
             .arg(
-                Arg::new("path")
+                Arg::new(Self::PATH_TX_ARG)
                 .long("path")
                 .takes_value(true)
                 .required(true)
@@ -114,14 +129,14 @@ impl CliBuilder {
             .version(CLIENT_VERSION)
             .about("Send an intent.")
             .arg(
-                Arg::new("orderbook")
+                Arg::new(Self::ORDERBOOK_INTENT_ARG)
                 .long("orderbook")
                 .takes_value(true)
                 .required(true)
                 .about("The orderbook address."),
             )
             .arg(
-                Arg::new("data")
+                Arg::new(Self::DATA_INTENT_ARG)
                 .long("data")
                 .takes_value(true)
                 .required(true)
@@ -134,14 +149,14 @@ impl CliBuilder {
             .version(NODE_VERSION)
             .about("Run Anoma gossip service.")
             .arg(
-                Arg::new("address")
+                Arg::new(Self::ADDRESS_ARG)
                     .short('a')
                     .long("address")
                     .takes_value(true)
-                    .about("Gossip service address."),
+                    .about("Gossip service address as host:port."),
             )
             .arg(
-                Arg::new("peers")
+                Arg::new(Self::PEERS_ARG)
                     .short('p')
                     .long("peers")
                     .multiple(true)
@@ -149,25 +164,39 @@ impl CliBuilder {
                     .about("List of peers to connect to."),
             )
             .arg(
-                Arg::new("dkg")
+                Arg::new(Self::DKG_ARG)
                     .long("dkg")
                     .multiple(false)
                     .takes_value(false)
                     .about("Enable DKG gossip topic."),
             )
             .arg(
-                Arg::new("orderbook")
+                Arg::new(Self::ORDERBOOK_ARG)
                     .long("orderbook")
                     .multiple(false)
                     .takes_value(false)
                     .about("Enable Orderbook gossip topic."),
             )
             .arg(
-                Arg::new("rpc")
+                Arg::new(Self::RPC_ARG)
                     .long("rpc")
                     .multiple(false)
                     .takes_value(false)
                     .about("Enable RPC service."),
+            )
+            .arg(
+                Arg::new(Self::MATCHMAKER)
+                    .long("rpc")
+                    .multiple(false)
+                    .takes_value(false)
+                    .about("The matchmaker."),
+            )
+            .arg(
+                Arg::new(Self::LEDGER_ADDRESS)
+                    .long("ledger-address")
+                    .multiple(false)
+                    .takes_value(false)
+                    .about("The address of the ledger as host:port."),
             )
     }
 

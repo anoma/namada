@@ -1,8 +1,6 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use std::process::Command;
-
 use anoma::{cli::CliBuilder, config::Config};
 use eyre::Result;
 
@@ -13,8 +11,8 @@ pub fn main() -> Result<()> {
 
     match matches.subcommand() {
         Some(("run-gossip", args)) => {
-            // let home = matches.value_of("base").unwrap_or(".anoma").to_string();
-            // let config = Config::new(home).unwrap();
+            let home = matches.value_of("base").unwrap_or(".anoma").to_string();
+            let config = Config::new(home).unwrap();
             // TODO: parse peers into Vec<String>
             // let peers = m.values_of("peers") ???
             // let rpc = args.is_present("rpc");
