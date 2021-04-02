@@ -1,9 +1,6 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use anoma::{
-    cli::{anoma_node_cli, CliBuilder},
-    config::Config,
-};
+use anoma::{cli::CliBuilder, config::Config};
 use clap::ArgMatches;
 use eyre::{Context, Result};
 
@@ -17,31 +14,28 @@ pub fn main() -> Result<()> {
 
 fn exec_inlined(matches: ArgMatches) -> Result<()> {
     match matches.subcommand() {
-        Some(("run-gossip", args)) => {
-            let home = matches.value_of("base").unwrap_or(".anoma").to_string();
-            let config = Config::new(home).unwrap();
-            // TODO: parse peers into Vec<String>
-            // let peers = m.values_of("peers") ???
+        Some((CliBuilder::RUN_GOSSIP_COMMAND, args)) => {
+            let home = matches.value_of("base").unwrap_or_default();
+            let config = Config::new(home.to_string()).unwrap();
+            let peers = args.values_of("peers").map(|peers| {
+                peers.map(|peer| peer.to_string()).collect::<Vec<String>>()
+            });
             let rpc = args.is_present("rpc");
             let address = args.value_of("address").map(|s| s.to_string());
             let orderbook = args.is_present("orderbook");
             let dkg = args.is_present("dkg");
-            Ok(gossip::run(config, rpc, orderbook, dkg, address, None))
+            Ok(gossip::run(config, rpc, orderbook, dkg, address, peers))
         }
-        Some(("run-ledger", _)) => {
+        Some((CliBuilder::RUN_LEDGER_COMMAND, _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();
             let config = Config::new(home).unwrap();
             shell::run(config).wrap_err("Failed to run Anoma node")
         }
-        Some(("reset", _)) => {
+        Some((CliBuilder::RESET_ANOMA_COMMAND, _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();
             let config = Config::new(home).unwrap();
             shell::reset(config).wrap_err("Failed to reset Anoma node")
         }
-        _ => {
-            // should say somethng if no arguments matches?
-            println!("nothing");
-            Ok(())
-        }
+        _ => Ok(()),
     }
 }

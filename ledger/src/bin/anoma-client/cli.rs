@@ -1,6 +1,6 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use anoma::cli::{anoma_client_cli, CliBuilder};
+use anoma::cli::CliBuilder;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::rpc_types::{self, Message};
@@ -11,13 +11,13 @@ pub async fn main() -> Result<()> {
     let matches = CliBuilder::new().anoma_client_cli();
 
     match matches.subcommand() {
-        Some(("tx", args)) => {
+        Some((CliBuilder::TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
             let path = args.value_of("path").unwrap().to_string();
             let data = args.value_of("data").unwrap().to_string();
             Ok(exec_tx(path, data).await)
         }
-        Some(("intent", args)) => {
+        Some((CliBuilder::INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
             let orderbook = args.value_of("orderbook").unwrap().to_string();
             let data = args.value_of("data").unwrap().to_string();

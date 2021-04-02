@@ -1,34 +1,37 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use std::env;
 use std::process::Command;
 
-use anoma::{
-    cli::{AnomaOpts, CliBuilder},
-    config::Config,
-};
-use clap::{Clap, IntoApp};
-use eyre::{Context, Result};
+use anoma::{cli::CliBuilder, config::Config};
+use eyre::Result;
 
 pub fn main() -> Result<()> {
     let matches = CliBuilder::new().anoma_inline_cli();
 
+    // let env_vars = env::vars_os();
+
     match matches.subcommand() {
         Some(("run-gossip", args)) => {
-            let home = matches.value_of("base").unwrap_or(".anoma").to_string();
-            let config = Config::new(home).unwrap();
+            // let home = matches.value_of("base").unwrap_or(".anoma").to_string();
+            // let config = Config::new(home).unwrap();
             // TODO: parse peers into Vec<String>
             // let peers = m.values_of("peers") ???
-            let rpc = args.is_present("rpc");
-            let address = args.value_of("address").map(|s| s.to_string());
-            let orderbook = args.is_present("orderbook");
-            let dkg = args.is_present("dkg");
+            // let rpc = args.is_present("rpc");
+            // let address = args.value_of("address").map(|s| s.to_string());
+            // let orderbook = args.is_present("orderbook");
+            // let dkg = args.is_present("dkg");
+            // Command::new("anomad")
+            //     .args(args)
+            //     .envs(env_vars)
+            //     .status()
+            //     .unwrap();
             Ok(())
         }
         Some(("run-ledger", _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();
             let config = Config::new(home).unwrap();
+            // shell::run(config).wrap_err("Failed to run Anoma node")
             Ok(())
         }
         Some(("reset", _)) => {
@@ -116,4 +119,5 @@ pub fn main() -> Result<()> {
     //         }
     //     },
     // }
+    // Ok(())
 }
