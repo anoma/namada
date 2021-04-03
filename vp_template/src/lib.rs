@@ -17,7 +17,7 @@ extern "C" {
 
     // Read fixed-length posterior state, returns 1 if the key is present, 0
     // otherwise.
-    fn read_post(key_ptr: u64, result_ptr: u64) -> u64;
+    fn read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
 
     // Read variable-length posterior state when we don't know the size up-front,
     // returns the size of the value (can be 0), or -1 if the key is not
