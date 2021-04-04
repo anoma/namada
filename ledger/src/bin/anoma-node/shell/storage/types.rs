@@ -9,7 +9,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
-use tendermint_proto::types::Block;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
