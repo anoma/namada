@@ -201,16 +201,13 @@ impl DB {
         height: BlockHeight,
         prefix: &Key,
     ) -> PrefixIterator {
-        let prefix = format!(
-            "{}/subspace/{}",
-            height.into_string(),
-            prefix.into_string()
-        );
+        let prefix =
+            format!("{}/subspace/{}", height.to_string(), prefix.to_string());
 
         let mut read_opts = ReadOptions::default();
         // don't use the prefix bloom filter
         read_opts.set_total_order_seek(true);
-        let mut upper_prefix = prefix.into_string().into_bytes();
+        let mut upper_prefix = prefix.clone().into_bytes();
         if let Some(last) = upper_prefix.pop() {
             upper_prefix.push(last + 1);
         }
