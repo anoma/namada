@@ -59,7 +59,6 @@ fn do_match_intent(
             token_b_a: data_intent_1.token_buy,
             amount_b_a: data_intent_1.amount_buy,
         };
-        println!("in matchmaker : found match {:?} ", tx_data);
 
         let tx_data_bytes = tx_data.try_to_vec().unwrap();
         unsafe { send_match(tx_data_bytes.as_ptr() as _ , tx_data_bytes.len() as _ ) };

@@ -39,7 +39,7 @@ impl Orderbook {
         tx_template: Option<String>,
     ) -> (Self, Option<Receiver<Tx>>) {
         let (matchmaker, matchmaker_event_receiver) =
-        // TODO instead matchmaker cli option should be Option<(String, String)>
+        // TODO instead matchmaker cli option should be something like Option<(String, String)>
             if matchmaker.is_some() && tx_template.is_some() {
                 let matchmaker = matchmaker.unwrap();
                 let tx_template = tx_template.unwrap();

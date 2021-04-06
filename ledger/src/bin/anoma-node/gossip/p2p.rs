@@ -79,7 +79,6 @@ impl P2P {
 
         // Listen on given address
         Swarm::listen_on(&mut self.swarm, {
-            println!("{:?}", config.p2p.get_address());
             config.p2p.get_address().parse().unwrap()
         })
         .unwrap();

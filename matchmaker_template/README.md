@@ -1,6 +1,6 @@
 # Transaction script wasm template
 
-This is just a template of a wasm module for transaction script. The functionality initially inlined in here will be modularized into Anoma wasm VM and a transaction environment.
+This is just a template of a wasm module for matchmaker script.
 
 ## Quick start
 
@@ -8,7 +8,7 @@ This is just a template of a wasm module for transaction script. The functionali
 # To be able to build this, make sure to have
 make deps
 
-# Build - this will create `tx.wasm` file
+# Build - this will create `matchmaker.wasm` file
 make build-release
 ```
 
