@@ -3,12 +3,16 @@ mod memory;
 
 use std::ffi::c_void;
 use std::marker::PhantomData;
+use std::sync::{Arc, Mutex};
 
 use anoma_vm_env::memory::{TxInput, VpInput};
+use parity_wasm::elements;
+use pwasm_utils::{self, rules};
 use thiserror::Error;
 use wasmer::Instance;
 
 use self::host_env::write_log::WriteLog;
+use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Storage};
 
 const TX_ENTRYPOINT: &str = "apply_tx";
@@ -80,6 +84,12 @@ pub enum Error {
     #[error("Memory error: {0}")]
     MemoryError(memory::Error),
     // 2. Transaction errors
+    #[error("Transaction deserialization error: {0}")]
+    TxDeserializationError(elements::Error),
+    #[error("Transaction serialization error: {0}")]
+    TxSerializationError(elements::Error),
+    #[error("Unable to inject gas meter for transaction")]
+    TxGasMeterInjection,
     #[error("Transaction compilation error: {0}")]
     TxCompileError(wasmer::CompileError),
     #[error("Missing transaction memory export, failed with: {0}")]
@@ -96,6 +106,12 @@ pub enum Error {
     #[error("Failed instantiating transaction module with: {0}")]
     TxInstantiationError(wasmer::InstantiationError),
     // 3. Validity predicate errors
+    #[error("Validity predicate deserialization error: {0}")]
+    VpDeserializationError(elements::Error),
+    #[error("Validity predicate serialization error: {0}")]
+    VpSerializationError(elements::Error),
+    #[error("Unable to inject gas meter for validity predicate")]
+    VpGasMeterInjection,
     #[error(
         "Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: \
          {0}"
@@ -137,6 +153,7 @@ impl TxRunner {
         &self,
         storage: &mut Storage,
         write_log: &mut WriteLog,
+        gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
         tx_data: &Vec<u8>,
     ) -> Result<()> {
@@ -148,6 +165,13 @@ impl TxRunner {
         let write_log = unsafe {
             TxEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
         };
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
+        let gas_meter = unsafe {
+            TxEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
+        };
+
+        let tx_code = Self::prepare_tx_code(tx_code)?;
 
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::TxCompileError)?;
@@ -157,20 +181,27 @@ impl TxRunner {
             &self.wasm_store,
             storage,
             write_log,
+            gas_meter,
             initial_memory,
         );
 
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::TxInstantiationError)?;
-        self.run_with_input(tx_code, tx_data)
+        Self::run_with_input(tx_code, tx_data)
     }
 
-    fn run_with_input(
-        &self,
-        tx_code: Instance,
-        tx_data: &TxInput,
-    ) -> Result<()> {
+    fn prepare_tx_code(tx_code: Vec<u8>) -> Result<Vec<u8>> {
+        let module: elements::Module =
+            elements::deserialize_buffer(&tx_code)
+                .map_err(Error::TxDeserializationError)?;
+        let module =
+            pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
+                .map_err(|_original_module| Error::TxGasMeterInjection)?;
+        elements::serialize(module).map_err(Error::TxSerializationError)
+    }
+
+    fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {
         // We need to write the inputs in the memory exported from the wasm
         // module
         let memory = tx_code
@@ -210,13 +241,14 @@ impl VpRunner {
         Self { wasm_store }
     }
 
-    pub fn run(
+    pub fn run<T: AsRef<[u8]>>(
         &self,
-        vp_code: impl AsRef<[u8]>,
+        vp_code: T,
         tx_data: &Vec<u8>,
         addr: Address,
         storage: &Storage,
         write_log: &WriteLog,
+        gas_meter: Arc<Mutex<BlockGasMeter>>,
         keys_changed: &Vec<String>,
     ) -> Result<bool> {
         // This is not thread-safe, we're assuming read-only access from
@@ -230,6 +262,8 @@ impl VpRunner {
             VpEnvHostWrapper::new(write_log as *const _ as *const c_void)
         };
 
+        let vp_code = Self::prepare_vp_code(vp_code)?;
+
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(Error::VpCompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
@@ -240,20 +274,27 @@ impl VpRunner {
             addr,
             storage,
             write_log,
+            gas_meter,
             initial_memory,
         );
 
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::VpInstantiationError)?;
-        self.run_with_input(vp_code, input)
+        VpRunner::run_with_input(vp_code, input)
     }
 
-    fn run_with_input(
-        &self,
-        vp_code: Instance,
-        input: VpInput,
-    ) -> Result<bool> {
+    fn prepare_vp_code<T: AsRef<[u8]>>(vp_code: T) -> Result<Vec<u8>> {
+        let module: elements::Module =
+            elements::deserialize_buffer(vp_code.as_ref())
+                .map_err(Error::VpDeserializationError)?;
+        let module =
+            pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
+                .map_err(|_original_module| Error::VpGasMeterInjection)?;
+        elements::serialize(module).map_err(Error::VpSerializationError)
+    }
+
+    fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
         // We need to write the inputs in the memory exported from the wasm
         // module
         let memory = vp_code
@@ -289,4 +330,9 @@ impl VpRunner {
             .map_err(Error::VpRuntimeError)?;
         Ok(is_valid == 1)
     }
+}
+
+/// Get the gas rules used to meter wasm operations
+fn get_gas_rules() -> rules::Set {
+    rules::Set::default().with_grow_cost(1)
 }

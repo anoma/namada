@@ -2,8 +2,9 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
-use std::sync::mpsc;
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{mpsc, Arc, Mutex};
 
 use anoma::bytes::ByteBuf;
 use anoma::config::Config;
@@ -71,7 +72,9 @@ pub fn reset(config: Config) -> Result<()> {
 pub struct Shell {
     abci: AbciReceiver,
     storage: storage::Storage,
-    gas_meter: BlockGasMeter,
+    // The gas meter is sync with mutex to allow VPs sharing it
+    // TODO it should be possible to impl a lock-free gas metering for VPs
+    gas_meter: Arc<Mutex<BlockGasMeter>>,
     write_log: WriteLog,
 }
 
@@ -109,7 +112,7 @@ impl Shell {
         Self {
             abci,
             storage,
-            gas_meter: BlockGasMeter::default(),
+            gas_meter: Arc::new(Mutex::new(BlockGasMeter::default())),
             write_log: WriteLog::new(),
         }
     }
@@ -200,7 +203,11 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
-        self.gas_meter
+        let mut gas_meter = self
+            .gas_meter
+            .lock()
+            .expect("Cannot get lock on the gas meter");
+        gas_meter
             .add_base_transaction_fee(tx_bytes.len())
             .map_err(Error::GasError)?;
 
@@ -211,7 +218,13 @@ impl Shell {
         // Execute the transaction code
         let tx_runner = TxRunner::new();
         tx_runner
-            .run(&mut self.storage, &mut self.write_log, tx.code, &tx_data)
+            .run(
+                &mut self.storage,
+                &mut self.write_log,
+                &mut gas_meter,
+                tx.code,
+                &tx_data,
+            )
             .map_err(Error::TxRunnerError)?;
 
         // get changed keys grouped by the address
@@ -230,6 +243,9 @@ impl Shell {
                 }
                 acc
             });
+
+        // drop the lock on the gas meter, the VPs will access it via the mutex
+        drop(gas_meter);
 
         let mut accept = true;
         // TODO run in parallel for all accounts
@@ -250,6 +266,7 @@ impl Shell {
                     addr.clone(),
                     &self.storage,
                     &self.write_log,
+                    self.gas_meter.clone(),
                     keys,
                 )
                 .map_err(|error| Error::VpRunnerError {
@@ -272,14 +289,20 @@ impl Shell {
             self.write_log.drop_tx();
         }
 
-        self.gas_meter
-            .finalize_transaction()
-            .map_err(Error::GasError)
+        let mut gas_meter = self
+            .gas_meter
+            .lock()
+            .expect("Cannot get lock on the gas meter");
+        gas_meter.finalize_transaction().map_err(Error::GasError)
     }
 
     /// Begin a new block.
     pub fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
-        self.gas_meter.reset();
+        let mut gas_meter = self
+            .gas_meter
+            .lock()
+            .expect("Cannot get lock on the gas meter");
+        gas_meter.reset();
         self.storage.begin_block(hash, height).unwrap();
     }
 

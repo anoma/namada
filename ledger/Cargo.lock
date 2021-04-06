@@ -21,8 +21,10 @@ dependencies = [
  "hex",
  "libp2p",
  "log",
+ "parity-wasm",
  "prost",
  "prost-types",
+ "pwasm-utils",
  "rand 0.7.3",
  "rand_core 0.5.1",
  "rocksdb",
@@ -2922,6 +2924,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9777aa91b8ad9dd5aaa04a9b6bcb02c7f1deb952fca5a66034d5e63afc5c6f"
 
 [[package]]
+name = "parity-wasm"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be5e13c266502aadf83426d87d81a0f5d1ef45b8027f5a471c360abfe4bfae92"
+
+[[package]]
 name = "parking"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3181,6 +3189,17 @@ checksum = "b518d7cdd93dab1d1122cf07fa9a60771836c668dde9d9e2a139f957f0d9f1bb"
 dependencies = [
  "bytes 1.0.1",
  "prost",
+]
+
+[[package]]
+name = "pwasm-utils"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51992bc74c0f34f759ff97fb303602e60343afc83693769c91aa17724442809e"
+dependencies = [
+ "byteorder",
+ "log",
+ "parity-wasm",
 ]
 
 [[package]]
