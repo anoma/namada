@@ -93,7 +93,7 @@ impl CliBuilder {
                     .long("base-dir")
                     .takes_value(true)
                     .required(false)
-                    .default_value("base")
+                    .default_value(".anoma")
                     .about("Set the base directiory."),
             )
             .subcommand(CliBuilder::build_run_gossip_subcommand(&self))
@@ -183,16 +183,16 @@ impl CliBuilder {
             )
             .arg(
                 Arg::new(Self::MATCHMAKER)
-                    .long("rpc")
+                    .long("matchmaker")
                     .multiple(false)
-                    .takes_value(false)
+                    .takes_value(true)
                     .about("The matchmaker."),
             )
             .arg(
                 Arg::new(Self::LEDGER_ADDRESS)
                     .long("ledger-address")
                     .multiple(false)
-                    .takes_value(false)
+                    .takes_value(true)
                     .about("The address of the ledger as host:port."),
             )
     }

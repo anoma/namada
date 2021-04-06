@@ -53,7 +53,7 @@ impl Gossip {
     }
 
     pub fn get_ledger_address(&self) -> String {
-        return format!("/ip4/{}/tcp/{}", self.ledger_host, self.ledger_port);
+        return format!("tpc://{}:{}", self.ledger_host, self.ledger_port);
     }
 
     pub fn set_peers(&mut self, args: &ArgMatches, field: &str) {
@@ -76,8 +76,7 @@ impl Gossip {
     }
 
     pub fn set_rpc(&mut self, args: &ArgMatches, field: &str) {
-        let rpc = args.is_present(field);
-        self.rpc = rpc;
+        self.rpc = args.is_present(field);
     }
 
     pub fn set_orderbook_topic(&mut self, args: &ArgMatches, field: &str) {
@@ -96,9 +95,9 @@ impl Gossip {
         match address {
             Some(address) => {
                 let split_addresses: Vec<String> =
-                    address.split("/").map(|s| s.to_string()).collect();
-                self.host = split_addresses[1].clone();
-                self.port = split_addresses[3].clone();
+                    address.split(":").map(|s| s.to_string()).collect();
+                self.host = split_addresses[0].clone();
+                self.port = split_addresses[1].clone();
             }
             None => {}
         }
@@ -119,9 +118,9 @@ impl Gossip {
         match address {
             Some(address) => {
                 let split_addresses: Vec<String> =
-                    address.split("/").map(|s| s.to_string()).collect();
-                self.ledger_host = split_addresses[1].clone();
-                self.ledger_port = split_addresses[3].clone();
+                    address.split(":").map(|s| s.to_string()).collect();
+                self.ledger_host = split_addresses[0].clone();
+                self.ledger_port = split_addresses[1].clone();
             }
             None => {}
         }
@@ -148,6 +147,10 @@ impl Config {
         s.set_default("p2p.port", 20201)?;
         s.set_default("p2p.peers", Vec::<String>::new())?;
         s.set_default("p2p.topics", topics)?;
+        s.set_default("p2p.rpc", true)?;
+        s.set_default("p2p.matchmaker", "")?;
+        s.set_default("p2p.ledger_host", "")?;
+        s.set_default("p2p.ledger_port", 0)?;
 
         s.merge(
             config::File::with_name(&format!("{}/{}", home, "settings.toml"))
