@@ -23,11 +23,15 @@ install:
 
 run-anoma:
 	# runs the node daemon
-	$(cargo) run --bin anomad -- run-anoma
+	$(cargo) run --bin anomad -- run-ledger
 
 run-gossip:
 	# runs the node gossip daemon
 	$(cargo) run --bin anomad -- run-gossip
+
+run-reset:
+	# runs the node daemon
+	$(cargo) run --bin anomad -- reset-anoma
 
 test:
 	$(cargo) test
