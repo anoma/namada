@@ -36,8 +36,8 @@ make install
 make run-anoma
 
 # Reset the state (resets Tendermint too)
-anoma reset
-anoma node reset
+anoma reset-anoma
+anoma node reset-anoma
 cargo run --bin anomad -- reset-anoma
 
 # Submit a transaction with a wasm code

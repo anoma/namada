@@ -13,10 +13,8 @@ pub fn main() -> Result<()> {
 
     match matches.subcommand() {
         Some((CliBuilder::RUN_GOSSIP_COMMAND, args)) => {
-            let home = matches.value_of("base").unwrap();
-            println!("{}", home);
-            let mut config =
-                Config::new(home.to_string()).expect("error config");
+            let home = matches.value_of("base").unwrap().to_string();
+            let mut config = Config::new(home).expect("error config");
 
             config.p2p.set_peers(args, CliBuilder::PEERS_ARG);
             config.p2p.set_address(args, CliBuilder::ADDRESS_ARG);
@@ -29,8 +27,6 @@ pub fn main() -> Result<()> {
             config
                 .p2p
                 .set_ledger_address(args, CliBuilder::LEDGER_ADDRESS);
-
-            println!("{}", config.p2p.matchmaker.clone());
 
             return gossip::run(config)
                 .wrap_err("Failed to run gossip service");

@@ -6,7 +6,7 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, Arg};
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
 const CLI_DESCRIPTION: &str = "Anoma cli interface.";
@@ -56,7 +56,7 @@ impl CliBuilder {
             .subcommand(CliBuilder::build_client_intent_subcommand(&self))
             .subcommand(
                 App::new(Self::NODE_COMMAND)
-                    .about("Node inline subcommands")
+                    .about("Node sub-commands")
                     .subcommand(CliBuilder::build_run_gossip_subcommand(&self))
                     .subcommand(CliBuilder::build_run_ledger_subcommand(&self))
                     .subcommand(CliBuilder::build_reset_anoma_subcommand(
@@ -65,7 +65,7 @@ impl CliBuilder {
             )
             .subcommand(
                 App::new(Self::CLIENT_COMMAND)
-                    .about("Client inline subcommands")
+                    .about("Client sub-commands")
                     .subcommand(CliBuilder::build_client_tx_subcommand(&self))
                     .subcommand(CliBuilder::build_client_intent_subcommand(
                         &self,

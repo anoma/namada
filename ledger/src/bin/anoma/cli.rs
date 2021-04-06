@@ -17,7 +17,8 @@ pub fn main() -> Result<()> {
 
     if let Some(subcommand_name) = matches.subcommand_name() {
         let is_node_or_client =
-            vec![CliBuilder::NODE_COMMAND, CliBuilder::CLIENT_COMMAND].contains(&subcommand_name);
+            vec![CliBuilder::NODE_COMMAND, CliBuilder::CLIENT_COMMAND]
+                .contains(&subcommand_name);
 
         let mut sub_args: Vec<String>;
         if is_node_or_client {
@@ -39,13 +40,18 @@ pub fn main() -> Result<()> {
                 || subcommand_name == CliBuilder::CLIENT_COMMAND;
         if is_node_command {
             let program = if is_cargo {
-                sub_args = "run --bin=anomad --"
-                    .split(" ")
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .into_iter()
-                    .chain(sub_args.into_iter())
-                    .collect();
+                let mut cargo_args =
+                    vec!["run".to_string(), "--bin=anomad".into(), "--".into()];
+                cargo_args.append(&mut sub_args);
+                sub_args = cargo_args;
+
+                // sub_args = "run --bin=anomad --"
+                //     .split(" ")
+                //     .map(|x| x.to_string())
+                //     .collect::<Vec<String>>()
+                //     .into_iter()
+                //     .chain(sub_args.into_iter())
+                //     .collect();
                 "cargo"
             } else {
                 "anomad"
@@ -63,14 +69,18 @@ pub fn main() -> Result<()> {
             }
         } else if is_client_command {
             let program = if is_cargo {
-                sub_args = "run --bin=anomac --"
-                    .split(" ")
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .into_iter()
-                    .chain(sub_args.into_iter())
-                    .collect();
-                "cargo run --bin anomac"
+                let mut cargo_args =
+                    vec!["run".to_string(), "--bin=anomac".into(), "--".into()];
+                cargo_args.append(&mut sub_args);
+                sub_args = cargo_args;
+                // sub_args = "run --bin=anomac --"
+                //     .split(" ")
+                //     .map(|x| x.to_string())
+                //     .collect::<Vec<String>>()
+                //     .into_iter()
+                //     .chain(sub_args.into_iter())
+                //     .collect();
+                "cargoc"
             } else {
                 "anomac"
             };
