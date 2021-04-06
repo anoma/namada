@@ -1,36 +1,35 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
-use anoma::{cli::CliBuilder, protobuf::types::Tx};
+use anoma::protobuf::types::Tx;
+use anoma::{cli, protobuf::services::rpc_service_client::RpcServiceClient};
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 
 use eyre::{Context, Result};
 
 pub async fn main() -> Result<()> {
-    let cli = CliBuilder::new();
-    let mut app = cli.anoma_client_cli();
+    let mut app = cli::anoma_client_cli();
 
     let matches = app.clone().get_matches();
 
     match matches.subcommand() {
-        Some((CliBuilder::TX_COMMAND, args)) => {
+        Some((cli::TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
             let path = args.value_of("path").unwrap().to_string();
             let data = args.value_of("data");
-            return Ok(exec_tx(path, data).await);
+            exec_tx(path, data).await;
+            Ok(())
         }
-        Some((CliBuilder::INTENT_COMMAND, args)) => {
+        Some((cli::INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
             let orderbook = args.value_of("orderbook").unwrap().to_string();
             let data = args.value_of("data").unwrap().to_string();
-            return Ok(gossip_intent(orderbook, data).await);
+            gossip_intent(orderbook, data).await;
+            Ok(())
         }
-        _ => {}
+        _ => app.print_help().wrap_err("Can't display help."),
     }
-
-    app.print_help().wrap_err("Can't display help.")
 }
 
 async fn exec_tx(code_path: String, data_hex: Option<&str>) {

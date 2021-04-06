@@ -1,48 +1,53 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use anoma::{cli::CliBuilder, config::Config};
+use anoma::{cli, config::Config};
 use eyre::{Context, Result};
 
 use crate::{gossip, shell};
 
 pub fn main() -> Result<()> {
-    let cli = CliBuilder::new();
-    let mut app = cli.anoma_node_cli();
+    let mut app = cli::anoma_node_cli();
 
     let matches = app.clone().get_matches();
 
     match matches.subcommand() {
-        Some((CliBuilder::RUN_GOSSIP_COMMAND, args)) => {
+        Some((cli::RUN_GOSSIP_COMMAND, args)) => {
             let home = matches.value_of("base").unwrap().to_string();
             let mut config = Config::new(home).expect("error config");
 
-            config.p2p.set_peers(args, CliBuilder::PEERS_ARG);
-            config.p2p.set_address(args, CliBuilder::ADDRESS_ARG);
-            config.p2p.set_dkg_topic(args, CliBuilder::DKG_ARG);
-            config
-                .p2p
-                .set_orderbook_topic(args, CliBuilder::ORDERBOOK_ARG);
-            config.p2p.set_rpc(args, CliBuilder::RPC_ARG);
-            config.p2p.set_matchmaker(args, CliBuilder::MATCHMAKER);
-            config
-                .p2p
-                .set_ledger_address(args, CliBuilder::LEDGER_ADDRESS);
+            let peers = cli::parse_vector(args, cli::PEERS_ARG);
+            config.p2p.set_peers(peers);
 
-            return gossip::run(config)
-                .wrap_err("Failed to run gossip service");
+            let address = cli::parse_address(args, cli::ADDRESS_ARG);
+            config.p2p.set_address(address);
+
+            let dkg = cli::parse_bool(args, cli::DKG_ARG);
+            config.p2p.set_dkg_topic(dkg);
+
+            let orderbook = cli::parse_bool(args, cli::ORDERBOOK_ARG);
+            config.p2p.set_orderbook_topic(orderbook);
+
+            let rpc = cli::parse_bool(args, cli::RPC_ARG);
+            config.p2p.set_rpc(rpc);
+
+            let matchmaker = cli::parse_string(args, cli::MATCHMAKER);
+            config.p2p.set_matchmaker(matchmaker);
+
+            let ledger_address = cli::parse_address(args, cli::LEDGER_ADDRESS);
+            config.p2p.set_ledger_address(ledger_address);
+
+            gossip::run(config).wrap_err("Failed to run gossip service")
         }
-        Some((CliBuilder::RUN_LEDGER_COMMAND, _)) => {
+        Some((cli::RUN_LEDGER_COMMAND, _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();
             let config = Config::new(home).unwrap();
-            return shell::run(config).wrap_err("Failed to run Anoma node");
+            shell::run(config).wrap_err("Failed to run Anoma node")
         }
-        Some((CliBuilder::RESET_ANOMA_COMMAND, _)) => {
+        Some((cli::RESET_ANOMA_COMMAND, _)) => {
             let home = matches.value_of("base").unwrap_or(".anoma").to_string();
             let config = Config::new(home).unwrap();
-            return shell::reset(config).wrap_err("Failed to reset Anoma node");
+            shell::reset(config).wrap_err("Failed to reset Anoma node")
         }
-        _ => {}
+        _ => app.print_help().wrap_err("Can't display help."),
     }
-
-    app.print_help().wrap_err("Can't display help.")
 }

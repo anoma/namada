@@ -3,12 +3,11 @@
 
 use std::{env, process::Command};
 
-use anoma::cli::CliBuilder;
+use anoma::cli;
 use eyre::{eyre, Context, Result};
 
 pub fn main() -> Result<()> {
-    let cli = CliBuilder::new();
-    let mut app = cli.anoma_inline_cli();
+    let mut app = cli::anoma_inline_cli();
     let matches = app.clone().get_matches();
 
     let args = env::args();
@@ -16,9 +15,8 @@ pub fn main() -> Result<()> {
     let is_cargo = env::var("CARGO").is_ok();
 
     if let Some(subcommand_name) = matches.subcommand_name() {
-        let is_node_or_client =
-            vec![CliBuilder::NODE_COMMAND, CliBuilder::CLIENT_COMMAND]
-                .contains(&subcommand_name);
+        let is_node_or_client = vec![cli::NODE_COMMAND, cli::CLIENT_COMMAND]
+            .contains(&subcommand_name);
 
         let mut sub_args: Vec<String>;
         if is_node_or_client {
@@ -28,16 +26,15 @@ pub fn main() -> Result<()> {
         }
 
         let is_node_command = vec![
-            CliBuilder::RUN_GOSSIP_COMMAND,
-            CliBuilder::RUN_LEDGER_COMMAND,
-            CliBuilder::RESET_ANOMA_COMMAND,
+            cli::RUN_GOSSIP_COMMAND,
+            cli::RUN_LEDGER_COMMAND,
+            cli::RESET_ANOMA_COMMAND,
         ]
         .contains(&subcommand_name)
-            || subcommand_name == CliBuilder::NODE_COMMAND;
-        let is_client_command =
-            vec![CliBuilder::TX_COMMAND, CliBuilder::INTENT_COMMAND]
-                .contains(&subcommand_name)
-                || subcommand_name == CliBuilder::CLIENT_COMMAND;
+            || subcommand_name == cli::NODE_COMMAND;
+        let is_client_command = vec![cli::TX_COMMAND, cli::INTENT_COMMAND]
+            .contains(&subcommand_name)
+            || subcommand_name == cli::CLIENT_COMMAND;
         if is_node_command {
             let program = if is_cargo {
                 let mut cargo_args =
@@ -45,13 +42,6 @@ pub fn main() -> Result<()> {
                 cargo_args.append(&mut sub_args);
                 sub_args = cargo_args;
 
-                // sub_args = "run --bin=anomad --"
-                //     .split(" ")
-                //     .map(|x| x.to_string())
-                //     .collect::<Vec<String>>()
-                //     .into_iter()
-                //     .chain(sub_args.into_iter())
-                //     .collect();
                 "cargo"
             } else {
                 "anomad"
@@ -73,14 +63,8 @@ pub fn main() -> Result<()> {
                     vec!["run".to_string(), "--bin=anomac".into(), "--".into()];
                 cargo_args.append(&mut sub_args);
                 sub_args = cargo_args;
-                // sub_args = "run --bin=anomac --"
-                //     .split(" ")
-                //     .map(|x| x.to_string())
-                //     .collect::<Vec<String>>()
-                //     .into_iter()
-                //     .chain(sub_args.into_iter())
-                //     .collect();
-                "cargoc"
+
+                "cargo"
             } else {
                 "anomac"
             };
@@ -96,6 +80,5 @@ pub fn main() -> Result<()> {
             }
         }
     }
-
     app.print_help().wrap_err("Can't display help.")
 }
