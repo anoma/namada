@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::shell::storage::{self, Address, Storage};
+use crate::shell::storage::{self, Key, Storage};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -12,13 +12,6 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-// TODO some form of this will be in storage module
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct StorageKey {
-    pub addr: Address,
-    pub key: String,
-}
-
 #[derive(Clone, Debug)]
 pub enum StorageModification {
     Write { value: Vec<u8> },
@@ -27,8 +20,8 @@ pub enum StorageModification {
 
 #[derive(Debug)]
 pub struct WriteLog {
-    block_write_log: HashMap<StorageKey, StorageModification>,
-    tx_write_log: HashMap<StorageKey, StorageModification>,
+    block_write_log: HashMap<Key, StorageModification>,
+    tx_write_log: HashMap<Key, StorageModification>,
 }
 
 impl WriteLog {
@@ -43,40 +36,27 @@ impl WriteLog {
 impl WriteLog {
     /// Read a value at the given key, returns [`None`] if the key is not
     /// present in the write log
-    pub fn read<K>(
-        &self,
-        addr: &Address,
-        key: K,
-    ) -> Option<&StorageModification>
-    where
-        K: AsRef<str>,
-    {
-        let s_key = StorageKey {
-            addr: addr.clone(),
-            key: key.as_ref().to_string(),
-        };
+    pub fn read(&self, key: &Key) -> Option<&StorageModification> {
         // try to read from tx write log first
-        self.tx_write_log.get(&s_key).or_else(|| {
+        self.tx_write_log.get(&key).or_else(|| {
             // if not found, then try to read from block write log
-            self.block_write_log.get(&s_key)
+            self.block_write_log.get(&key)
         })
     }
 
     /// Write a key and a value
-    pub fn write(&mut self, addr: Address, key: String, value: Vec<u8>) {
-        self.tx_write_log.insert(
-            StorageKey { addr, key },
-            StorageModification::Write { value },
-        );
+    pub fn write(&mut self, key: &Key, value: Vec<u8>) {
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Write { value });
     }
 
     /// Delete a key and its value
-    pub fn delete(&mut self, addr: Address, key: String) {
+    pub fn delete(&mut self, key: &Key) {
         self.tx_write_log
-            .insert(StorageKey { addr, key }, StorageModification::Delete);
+            .insert(key.clone(), StorageModification::Delete);
     }
 
-    pub fn get_changed_keys(&self) -> Vec<&StorageKey> {
+    pub fn get_changed_keys(&self) -> Vec<&Key> {
         self.tx_write_log.keys().collect()
     }
 
@@ -100,15 +80,15 @@ impl WriteLog {
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.
     pub fn commit_block(&mut self, storage: &mut Storage) -> Result<()> {
-        for (StorageKey { addr, key }, entry) in self.block_write_log.iter() {
+        for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {
                     storage
-                        .write(addr, key, value.clone())
+                        .write(key, value.clone())
                         .map_err(Error::StorageError)?;
                 }
                 StorageModification::Delete => {
-                    storage.delete(addr, key).map_err(Error::StorageError)?;
+                    storage.delete(key).map_err(Error::StorageError)?;
                 }
             }
         }
