@@ -17,7 +17,7 @@ pub fn main() -> Result<()> {
 
     if let Some(subcommand_name) = matches.subcommand_name() {
         let is_node_or_client =
-            vec!["node", "client"].contains(&subcommand_name);
+            vec![CliBuilder::NODE_COMMAND, CliBuilder::CLIENT_COMMAND].contains(&subcommand_name);
 
         let mut sub_args: Vec<String>;
         if is_node_or_client {
