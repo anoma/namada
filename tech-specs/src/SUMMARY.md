@@ -17,7 +17,7 @@
     - [Fractal scaling](./explore/design/fractal-scaling.md)
     - [Upgrade system](./explore/design/upgrade-system.md)
     - [Crypto primitives](./explore/design/crypto-primitives.md)
-    - [Database](./explore/design/db.md)
+    - [Storage](./explore/design/storage.md)
     - [Actors](./explore/design/actors.md)
   - [Prototypes](./explore/prototypes/README.md)
     - [Base ledger](./explore/prototypes/base-ledger.md)
