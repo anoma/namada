@@ -31,4 +31,4 @@ A new account can be initialized on-chain with a transaction:
 - a validity predicate has to be provided (we can have a default out-of-band)
 - at minimum, accounts need to be enumerated on chain, this could be done with an address or a counter
 
-A newly created account should be validated by all the VPs triggered by the transaction, i.e. it should be included in the set of changed keys passed to each VP. If the VPs are not interested in the new created account, they can choose to ignore it.
+A newly created account should be validated by all the VPs triggered by the transaction, i.e. it should be included in the set of changed keys passed to each VP. If the VPs are not interested in the newly created account, they can choose to ignore it.
