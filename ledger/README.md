@@ -36,9 +36,13 @@ make install
 make run-anoma
 
 # Reset the state (resets Tendermint too)
+anoma reset
+anoma node reset
 cargo run --bin anomad -- reset-anoma
 
 # Submit a transaction with a wasm code
+anomac tx --data ... --path ...
+anoma client tx --data ... --path ...
 cargo run --bin anomac -- tx -c ../tx_template/tx.wasm
 
 # Watch and on change run a node (the state will be persisted)
@@ -48,12 +52,20 @@ cargo watch -x "run --bin anomad -- run-anoma"
 cargo watch -x "run --bin anomad -- reset-anoma" -x "run --bin anomad -- run"
 
 # run orderbook daemon
+anoma run-gossip --base-dir ...
+anoma node run-gossip --base-dir ...
+anomad run-gossip --base-dir ...
 make run-gossip
 
 # run orderbook daemon with rpc server
+anoma run-gossip --base-dir ... --rpc --orderbook --matchmaker ../tx_intent_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
+anoma node run-gossip --base-dir ... --rpc --orderbook --matchmaker ../tx_intent_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
+anomad run-gossip --base-dir ... --rpc --orderbook --matchmaker ../tx_intent_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
 cargo run --bin anomad -- --rpc run-gossip --orderbook --matchmaker ../tx_intent_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
 
 # Submit an intent (need a rpc server)
+anoma client intent --orderbook ... --data ...
+anomac intent --orderbook ... --data ...
 cargo run --bin anomac -- intent intent_data.json
 
 # Format the code
