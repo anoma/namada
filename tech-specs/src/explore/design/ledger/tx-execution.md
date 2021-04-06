@@ -92,7 +92,7 @@ flowchart TD
 
 The code is allowed to read and write almost anything from the state storage, as long as [account's sub-space](./accounts.md#dynamic-storage-sub-space) modifications are accepted by the account's [validity predicate (VP)](./vp.md). Other data (that is not in an account's subspace) will need to be read-only, e.g. chain and block metadata, the Merkle tree, account addresses and potentially keys.
 
-Each account whose sub-space has been modified by the tx triggers its VP. The VP is then given the prior and posterior state from the account's sub-space together with the tx to decide if it accepts the tx's state modifications:
+Each account whose sub-space has been modified by the tx triggers its VP. The VP is then given the prior and posterior state from the account's sub-space together with the tx to decide if it accepts the tx's state modifications.
 
 Within a single tx the execution of the validity predicates will be parallelized and thus the fee for VPs execution would their maximum value (plus some portion of the fees for each of the other parallelized VPs - nothing should be "free"). Once any of the VPs rejects the modifications, execution is aborted, the transaction is rejected and state changes discarded. If all the VPs accept the modifications, the transaction is successful and modifications are committed to storage as the input of the next tx.
 
