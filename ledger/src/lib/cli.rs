@@ -14,28 +14,28 @@ const CLI_VERSION: &str = "0.1.0";
 const NODE_VERSION: &str = "0.1.0";
 const CLIENT_VERSION: &str = "0.1.0";
 
-pub const NODE_COMMAND: &'static str = "node";
-pub const CLIENT_COMMAND: &'static str = "client";
-pub const RUN_GOSSIP_COMMAND: &'static str = "run-gossip";
-pub const RUN_LEDGER_COMMAND: &'static str = "run-ledger";
-pub const RESET_ANOMA_COMMAND: &'static str = "reset-anoma";
-pub const INTENT_COMMAND: &'static str = "intent";
-pub const TX_COMMAND: &'static str = "tx";
+pub const NODE_COMMAND: &str = "node";
+pub const CLIENT_COMMAND: &str = "client";
+pub const RUN_GOSSIP_COMMAND: &str = "run-gossip";
+pub const RUN_LEDGER_COMMAND: &str = "run-ledger";
+pub const RESET_ANOMA_COMMAND: &str = "reset-anoma";
+pub const INTENT_COMMAND: &str = "intent";
+pub const TX_COMMAND: &str = "tx";
 
 // gossip args
-pub const PEERS_ARG: &'static str = "peers";
-pub const ADDRESS_ARG: &'static str = "address";
-pub const DKG_ARG: &'static str = "dkg";
-pub const ORDERBOOK_ARG: &'static str = "orderbook";
-pub const RPC_ARG: &'static str = "rpc";
-pub const MATCHMAKER: &'static str = "matchmaker";
-pub const LEDGER_ADDRESS: &'static str = "ledger-address";
+pub const PEERS_ARG: &str = "peers";
+pub const ADDRESS_ARG: &str = "address";
+pub const DKG_ARG: &str = "dkg";
+pub const ORDERBOOK_ARG: &str = "orderbook";
+pub const RPC_ARG: &str = "rpc";
+pub const MATCHMAKER: &str = "matchmaker";
+pub const LEDGER_ADDRESS: &str = "ledger-address";
 
 // client args
-pub const DATA_INTENT_ARG: &'static str = "data";
-pub const DATA_TX_ARG: &'static str = "data";
-pub const PATH_TX_ARG: &'static str = "path";
-pub const ORDERBOOK_INTENT_ARG: &'static str = "orderbook";
+pub const DATA_INTENT_ARG: &str = "data";
+pub const DATA_TX_ARG: &str = "data";
+pub const PATH_TX_ARG: &str = "path";
+pub const ORDERBOOK_INTENT_ARG: &str = "orderbook";
 
 type App = clap::App<'static>;
 
