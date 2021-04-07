@@ -1,61 +1,84 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use std::env;
-use std::process::Command;
+use std::{env, process::Command};
 
-use anoma::cli::AnomaOpts;
-use clap::{Clap, IntoApp};
+use anoma::cli;
+use eyre::{eyre, Context, Result};
 
-pub fn main() {
+pub fn main() -> Result<()> {
+    let mut app = cli::anoma_inline_cli();
+    let matches = app.clone().get_matches();
+
     let args = env::args();
     let env_vars = env::vars_os();
-    // TODO use https://github.com/rust-lang/cargo/blob/ab64d1393b5b77c66b6534ef5023a1b89ee7bf64/src/cargo/util/process_builder.rs to correctly set working dir, etc.
+    let is_cargo = env::var("CARGO").is_ok();
 
-    let args: Vec<String> = args.skip(1).collect();
+    if let Some(subcommand_name) = matches.subcommand_name() {
+        let is_node_or_client = vec![cli::NODE_COMMAND, cli::CLIENT_COMMAND]
+            .contains(&subcommand_name);
 
-    // Handle "node" and "client" sub-commands
-    if let Some((sub, args)) = args.split_first() {
-        if sub == "node" {
-            // TODO when `anoma` is ran with `cargo run`, the
-            // sub-commands should also run from
-            // cargo
-            Command::new("anomad")
-                .args(args)
+        let mut sub_args: Vec<String>;
+        if is_node_or_client {
+            sub_args = args.skip(2).collect();
+        } else {
+            sub_args = args.skip(1).collect();
+        }
+
+        let is_node_command = vec![
+            cli::RUN_GOSSIP_COMMAND,
+            cli::RUN_LEDGER_COMMAND,
+            cli::RESET_ANOMA_COMMAND,
+        ]
+        .contains(&subcommand_name)
+            || subcommand_name == cli::NODE_COMMAND;
+        let is_client_command = vec![cli::TX_COMMAND, cli::INTENT_COMMAND]
+            .contains(&subcommand_name)
+            || subcommand_name == cli::CLIENT_COMMAND;
+        if is_node_command {
+            let program = if is_cargo {
+                let mut cargo_args =
+                    vec!["run".to_string(), "--bin=anomad".into(), "--".into()];
+                cargo_args.append(&mut sub_args);
+                sub_args = cargo_args;
+
+                "cargo"
+            } else {
+                "anomad"
+            };
+
+            let result = Command::new(program)
+                .args(sub_args)
                 .envs(env_vars)
                 .status()
-                .unwrap();
-            return;
-        } else if sub == "client" {
-            Command::new("anomac")
-                .args(args)
+                .expect("Couldn't run node command.");
+            if result.success() {
+                return Ok(());
+            } else {
+                return Err(eyre!("Anomad command failed."));
+            }
+        } else if is_client_command {
+            let program = if is_cargo {
+                let mut cargo_args =
+                    vec!["run".to_string(), "--bin=anomac".into(), "--".into()];
+                cargo_args.append(&mut sub_args);
+                sub_args = cargo_args;
+
+                "cargo"
+            } else {
+                "anomac"
+            };
+            let result = Command::new(program)
+                .args(sub_args)
                 .envs(env_vars)
                 .status()
-                .unwrap();
-            return;
-        }
-    };
-
-    // Handle inlined commands
-    match AnomaOpts::try_parse() {
-        Err(_err) => {
-            AnomaOpts::into_app().print_help().unwrap();
-        }
-        Ok(opts) => match opts {
-            AnomaOpts::InlinedNode(_) => {
-                Command::new("anomad")
-                    .args(args)
-                    .envs(env_vars)
-                    .status()
-                    .unwrap();
+                .expect("Couldn't run client command.");
+            if result.success() {
+                return Ok(());
+            } else {
+                return Err(eyre!("Anomac command failed."));
             }
-            AnomaOpts::InlinedClient(_) => {
-                Command::new("anomac")
-                    .args(args)
-                    .envs(env_vars)
-                    .status()
-                    .unwrap();
-            }
-        },
+        }
     }
+    app.print_help().wrap_err("Can't display help.")
 }
