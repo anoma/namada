@@ -10,6 +10,7 @@ use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
 use wasmer::Instance;
+use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::write_log::WriteLog;
 use crate::shell::gas::BlockGasMeter;
@@ -103,13 +104,15 @@ pub enum Error {
     #[error("Failed instantiating wasm module with: {0}")]
     InstantiationError(wasmer::InstantiationError),
     #[error(
-        "Unexpected module entrypoint interface {entrypoint}, \
-         failed with: {error}"
+        "Unexpected module entrypoint interface {entrypoint}, failed with: \
+         {error}"
     )]
     UnexpectedModuleEntrypointInterface {
         entrypoint: &'static str,
         error: wasmer::RuntimeError,
     },
+    #[error("Wasm validation error: {0}")]
+    ValidationError(wasmparser::BinaryReaderError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -134,6 +137,8 @@ impl TxRunner {
         tx_code: Vec<u8>,
         tx_data: &Vec<u8>,
     ) -> Result<()> {
+        validate_wasm(&tx_code)?;
+
         // This is not thread-safe, we're assuming single-threaded Tx runner.
         let storage =
             unsafe { TxEnvHostWrapper::new(storage as *mut _ as *mut c_void) };
@@ -221,6 +226,8 @@ impl VpRunner {
         gas_meter: Arc<Mutex<BlockGasMeter>>,
         keys_changed: &Vec<String>,
     ) -> Result<bool> {
+        validate_wasm(vp_code.as_ref())?;
+
         // This is not thread-safe, we're assuming read-only access from
         // parallel Vp runners.
         let storage = unsafe {
@@ -314,6 +321,28 @@ fn get_gas_rules() -> rules::Set {
     rules::Set::default().with_grow_cost(1)
 }
 
+fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
+    let mut validator = Validator::new();
+    let features = WasmFeatures {
+        reference_types: false,
+        multi_value: false,
+        bulk_memory: false,
+        module_linking: false,
+        simd: false,
+        threads: false,
+        tail_call: false,
+        deterministic_only: true,
+        multi_memory: false,
+        exceptions: false,
+        memory64: false,
+    };
+    validator.wasm_features(features);
+
+    validator
+        .validate_all(wasm_code)
+        .map_err(Error::ValidationError)
+}
+
 #[cfg(test)]
 mod tests {
     use tempdir::TempDir;
@@ -377,7 +406,10 @@ mod tests {
                 tx_code,
                 &tx_data,
             )
-            .expect_err("Expecting runtime error \"unreachable\" caused by stack-height overflow");
+            .expect_err(
+                "Expecting runtime error \"unreachable\" caused by \
+                 stack-height overflow",
+            );
         if let Error::RuntimeError(err) = &error {
             if let Some(trap_code) = err.clone().to_trap() {
                 return assert_eq!(
@@ -444,7 +476,10 @@ mod tests {
                 gas_meter,
                 &keys_changed,
             )
-            .expect_err("Expecting runtime error \"unreachable\" caused by stack-height overflow");
+            .expect_err(
+                "Expecting runtime error \"unreachable\" caused by \
+                 stack-height overflow",
+            );
         if let Error::RuntimeError(err) = &error {
             if let Some(trap_code) = err.clone().to_trap() {
                 return assert_eq!(
