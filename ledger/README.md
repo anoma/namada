@@ -80,3 +80,5 @@ To change the log level, set `ANOMA_LOG` environment variable to one of:
 - `info`
 - `debug`
 - `trace`
+
+To reduce amount of logging from Tendermint ABCI, which has a lot of `debug` logging, use e.g. `ANOMA_LOG=debug,tendermint_abci=warn`.

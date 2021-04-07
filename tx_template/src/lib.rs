@@ -43,8 +43,8 @@ pub extern "C" fn apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
 
 fn do_apply_tx(_tx_data: memory::Data) {
     // source and destination address
-    let src_key = "va/balance/eth";
-    let dest_key = "ba/balance/eth";
+    let src_key = "@va/balance/eth";
+    let dest_key = "@ba/balance/eth";
     let amount = 10;
 
     let src_bal_buf: Vec<u8> = Vec::with_capacity(0);
