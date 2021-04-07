@@ -57,7 +57,7 @@ cargo watch -x "run --bin anomad -- run-anoma"
 cargo watch -x "run --bin anomad -- reset-anoma" -x "run --bin anomad -- run"
 
 # run orderbook daemon
-make run-gossip
+make run-gossip -- --orderbook
 
 # run orderbook daemon with rpc server and matchmaker
 cargo run --bin anomad -- --rpc run-gossip --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_intent_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
