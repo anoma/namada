@@ -1,5 +1,6 @@
 // TODO the memory types, serialization, and other "plumbing" code will be
 // injected into the wasm module by the host to reduce file size
+use anoma_data_template;
 use anoma_vm_env::memory;
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::slice;
@@ -41,11 +42,9 @@ pub extern "C" fn apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
     do_apply_tx(tx_data);
 }
 
-fn do_apply_tx(_tx_data: memory::Data) {
-    // source and destination address
-    let src_key = "@va/balance/eth";
-    let dest_key = "@ba/balance/eth";
-    let amount = 10;
+fn apply_transfer(src: String, dest: String, token: String, amount: u64) -> bool {
+    let src_key = vec![format!("@{}", src), String::from("balance"), token.clone()].join("/");
+    let dest_key = vec![format!("@{}", dest), String::from("balance"), token].join("/");
 
     let src_bal_buf: Vec<u8> = Vec::with_capacity(0);
     let result = unsafe {
@@ -95,6 +94,24 @@ fn do_apply_tx(_tx_data: memory::Data) {
                     dest_new_bal_buf.len() as _,
                 )
             };
+            true
+        } else {
+            false
         }
+    } else {
+        false
+    }
+}
+
+fn do_apply_tx(tx_data: memory::Data) {
+    let tx = anoma_data_template::TxData::try_from_slice(&tx_data[..]).unwrap();
+    for anoma_data_template::Transfer {
+        source,
+        target,
+        token,
+        amount,
+    } in tx.transfers
+    {
+        apply_transfer(source, target, token, amount);
     }
 }
