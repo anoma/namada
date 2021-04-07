@@ -29,6 +29,8 @@ Needs more info:
   - bunch of useful wasm tools (e.g. `wasm2wat` to convert from wasm binary to human-readable wat format) 
 - [Rust wasm WG](https://github.com/rustwasm/team) and [wasm book](https://rustwasm.github.io/book/introduction.html) (some sections are JS specific)
 - [A practical guide to WebAssembly memory](https://radu-matei.com/blog/practical-guide-to-wasm-memory/) modulo JS specific details
+- [Learn X in Y minutes Where X=WebAssembly](https://learnxinyminutes.com/docs/wasm/)
+
 
 ## Wasm environment
 
@@ -105,3 +107,23 @@ The write log of each transaction included in a block and accepted by VPs is acc
 
 ![write log](./wasm-vm/storage-write-log.svg  "storage write log")
 <https://excalidraw.com/new#room=333e1db689b083669c80,Y0i8yhvIAZCFICs753CSuA>
+
+## Gas metering
+
+The two main options for implementing gas metering within wasm using wasmer are:
+- a [gas metering middleware included in wasmer](https://github.com/wasmerio/wasmer/tree/72d47336cc1461d63baa2322b38c4cb5f67bb72a/lib/middlewares).
+- <https://crates.io/crates/pwasm-utils>
+
+Both of these allow us to assign a gas cost for each wasm operation.
+
+`wasmer` gas middleware is more recent, so probably more risky. It injects the gas metering code into the wasm code, which is more efficient than host calls to a gas meter.
+
+`pwasm-utils` divides the wasm code into metered blocks. It performs host call with the gas cost of each block before it is executed. The gas metering injection is linear to the code size.
+
+The `pwasm-utils` seems like a safer option to begin with (and we'll probably need to use it for [stack height metering](#stack-height-metering) too). We can look into switching to `wasmer` middleware at later point.
+
+## Stack height metering
+
+For safety, we need to limit the stack height in wasm code. Similarly to gas metering, we can also use `wasmer` middleware or `pwasm-utils`.
+
+We have to use `pwasm-utils`, because `wasmer`'s stack limiter is currently non-deterministic (platform specific). This is to be fixed in this PR: <https://github.com/wasmerio/wasmer/pull/1037>.
