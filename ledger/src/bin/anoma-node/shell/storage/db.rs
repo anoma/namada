@@ -213,7 +213,6 @@ impl DB {
         }
         read_opts.set_iterate_upper_bound(upper_prefix);
 
-        // redundant copy to avoid handling DBIterator
         let iter = self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
