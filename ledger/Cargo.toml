@@ -78,6 +78,8 @@ wasmparser = "0.77.0"
 [dev-dependencies]
 cargo-watch = "7.5.0"
 clippy = "0.0.302"
+tempdir = "0.3.7"
+wasmer-vm = "1.0.2"
 
 [build-dependencies]
 tonic-build = {version = "0.4.0", features = ["prost"]}
