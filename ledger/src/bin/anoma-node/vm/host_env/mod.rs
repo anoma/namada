@@ -98,8 +98,8 @@ pub fn prepare_tx_imports(
             "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
             "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
             "_read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
-            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_iter_prefix),
-            "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_iter_next),
+            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_prefix),
+            "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
