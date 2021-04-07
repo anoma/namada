@@ -47,8 +47,11 @@ make run-anoma
 # Reset the state (resets Tendermint too)
 cargo run --bin anomad -- reset-anoma
 
+# craft a transaction data to file `tx_data_file`
+cargo run --bin anomac -- craft-tx-data --source ba --target va --token xtz --amount 10 --file tx_data_file
+
 # Submit a transaction with a wasm code
-cargo run --bin anomac -- tx -c ../tx_template/tx.wasm
+cargo run --bin anomac -- tx --code-path ../tx_template/tx.wasm --data-hex tx_data_file
 
 # Watch and on change run a node (the state will be persisted)
 cargo watch -x "run --bin anomad -- run-anoma"
@@ -63,7 +66,8 @@ make run-gossip -- --orderbook
 cargo run --bin anomad -- --rpc run-gossip --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_intent_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
 
 # craft an intent to file `intent_data_file`
-cargo run --bin anomac -- craft-intent --addr account_name --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file
+cargo run --bin anomac -- craft-intent --addr ba --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file
+
 
 # Submit an intent (need a rpc server)
 cargo run --bin anomac -- intent intent_data_file
