@@ -65,6 +65,13 @@ pub enum AbciMsg {
         reply: Sender<()>,
         height: BlockHeight,
     },
+    AbciQuery {
+        reply: Sender<Result<String, String>>,
+        path: String,
+        data: Vec<u8>,
+        height: BlockHeight,
+        prove: bool,
+    },
     /// Commit the current block. The expected result is the Merkle root hash
     /// of the committed block.
     CommitBlock { reply: Sender<MerkleRoot> },

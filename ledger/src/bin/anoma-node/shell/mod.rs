@@ -177,6 +177,25 @@ impl Shell {
                         ))
                     })?
                 }
+                AbciMsg::AbciQuery {
+                    reply,
+                    path,
+                    data,
+                    height,
+                    prove,
+                } => {
+                    if path == "dry_run_tx" {
+                        let result = self
+                            .dry_run_tx(&data)
+                            .map_err(|e| format!("{}", e));
+                        reply.send(result).map_err(|e| {
+                            Error::AbciChannelSendError(format!(
+                                "ApplyTx {}",
+                                e
+                            ))
+                        })?
+                    }
+                }
             }
         }
     }
@@ -199,6 +218,102 @@ impl Shell {
     ) -> Result<()> {
         let _tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
         Ok(())
+    }
+
+    /// Validate and apply a transaction.
+    pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
+        let mut gas_meter = self
+            .gas_meter
+            .lock()
+            .expect("Cannot get lock on the gas meter");
+        gas_meter
+            .add_base_transaction_fee(tx_bytes.len())
+            .map_err(Error::GasError)?;
+
+        let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
+
+        let tx_data = tx.data.unwrap_or(vec![]);
+
+        // Execute the transaction code
+        let tx_runner = TxRunner::new();
+        tx_runner
+            .run(
+                &mut self.storage,
+                &mut self.write_log,
+                &mut gas_meter,
+                tx.code,
+                &tx_data,
+            )
+            .map_err(Error::TxRunnerError)?;
+
+        // get changed keys grouped by the address
+        let keys_changed: HashMap<Address, Vec<String>> = self
+            .write_log
+            .get_changed_keys()
+            .iter()
+            .fold(HashMap::new(), |mut acc, key| {
+                for addr in &key.find_addresses() {
+                    match acc.get_mut(&addr) {
+                        Some(keys) => keys.push(key.to_string()),
+                        None => {
+                            acc.insert(addr.clone(), vec![key.to_string()]);
+                        }
+                    }
+                }
+                acc
+            });
+
+        // drop the lock on the gas meter, the VPs will access it via the mutex
+        drop(gas_meter);
+
+        let mut accept = true;
+        // TODO run in parallel for all accounts
+        // Run a VP for every account with modified storage sub-space
+        //   - all must return `true` to accept the tx
+        //   - cancel all remaining workers and fail if any returns `false`
+        for (addr, keys) in keys_changed.iter() {
+            let vp = self
+                .storage
+                .validity_predicate(&addr)
+                .map_err(Error::StorageError)?;
+
+            let vp_runner = VpRunner::new();
+            accept = vp_runner
+                .run(
+                    vp,
+                    &tx_data,
+                    addr.clone(),
+                    &self.storage,
+                    &self.write_log,
+                    self.gas_meter.clone(),
+                    keys,
+                )
+                .map_err(|error| Error::VpRunnerError {
+                    addr: addr.clone(),
+                    error,
+                })?;
+            if !accept {
+                log::debug!("{} rejected transaction", addr);
+                break;
+            };
+        }
+
+        // maybe we can return the total gas used by the transaction?
+        let mut gas_meter = self
+            .gas_meter
+            .lock()
+            .expect("Cannot get lock on the gas meter");
+        let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
+
+        if accept && gas.is_ok() {
+            Ok("Transaction success".to_string())
+        } else if gas.is_err() {
+            Ok("Transaction failed: gas overflow.".to_string())
+        } else if !accept {
+            Ok("Transaction failed: VPs are not satisfied.".to_string())
+        } else {
+            Ok("Transaction failed.".to_string())
+        }
     }
 
     /// Validate and apply a transaction.

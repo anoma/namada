@@ -4,7 +4,6 @@ use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
 use anoma::{cli, protobuf::services::rpc_service_client::RpcServiceClient};
 use prost::Message;
-use tendermint::abci;
 use tendermint_rpc::{Client, HttpClient};
 
 use eyre::{Context, Result};
@@ -60,7 +59,7 @@ async fn exec_tx(code_path: String, data_hex: Option<&str>, dry: bool) {
     if dry {
         let response = client
             .abci_query(
-                Some(Path("dry_run_tx".to_string())),
+                Some("dry_run_tx".to_string()),
                 tx_bytes.into(),
                 None,
                 false,
