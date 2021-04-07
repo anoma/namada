@@ -72,21 +72,6 @@ impl<T> VpEnvHostWrapper<T> {
     }
 }
 
-/// This is used to attach the Ledger's host structures to transaction, which is
-/// used for implementing some host calls. It's not thread-safe, we're assuming
-/// single-threaded Tx runner.
-pub struct MatchmakerEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
-unsafe impl<T> Send for MatchmakerEnvHostWrapper<T> {}
-unsafe impl<T> Sync for MatchmakerEnvHostWrapper<T> {}
-
-// Have to manually implement [`Clone`], because the derived [`Clone`] for
-// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
-impl<T> Clone for MatchmakerEnvHostWrapper<T> {
-    fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct TxRunner {
     wasm_store: wasmer::Store,
