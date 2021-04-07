@@ -1,5 +1,5 @@
 use anoma::types::Topic;
-use libp2p::gossipsub::{IdentTopic, MessageId, TopicHash};
+use libp2p::gossipsub::MessageId;
 use libp2p::PeerId;
 
 #[derive(Debug)]

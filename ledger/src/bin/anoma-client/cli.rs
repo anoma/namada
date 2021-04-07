@@ -1,39 +1,39 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-
-use anoma::cli::{self, ClientOpts, InlinedClientOpts, IntentArg};
-use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
-use clap::Clap;
-use color_eyre::eyre::Result;
+use anoma::{cli, protobuf::services::rpc_service_client::RpcServiceClient};
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 
+use eyre::{Context, Result};
+
 pub async fn main() -> Result<()> {
-    match ClientOpts::parse() {
-        ClientOpts::Inlined(ops) => Ok(exec_inlined(ops).await),
-    }
-}
+    let mut app = cli::anoma_client_cli();
 
-async fn exec_inlined(ops: InlinedClientOpts) {
-    match ops {
-        InlinedClientOpts::Tx(tx) => exec_tx(tx).await,
-        InlinedClientOpts::Intent(IntentArg {
-            orderbook,
-            data_path,
-        }) => {
-            gossip_intent(orderbook, data_path).await;
+    let matches = app.clone().get_matches();
+
+    match matches.subcommand() {
+        Some((cli::TX_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let path = args.value_of(cli::PATH_TX_ARG).unwrap().to_string();
+            let data = args.value_of(cli::DATA_TX_ARG);
+            exec_tx(path, data).await;
+            Ok(())
         }
+        Some((cli::INTENT_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let orderbook =
+                args.value_of(cli::ORDERBOOK_ARG).unwrap().to_string();
+            let data = args.value_of(cli::DATA_INTENT_ARG).unwrap().to_string();
+            gossip_intent(orderbook, data).await;
+            Ok(())
+        }
+        _ => app.print_help().wrap_err("Can't display help."),
     }
 }
 
-async fn exec_tx(
-    cli::Tx {
-        code_path,
-        data_hex,
-    }: cli::Tx,
-) {
+async fn exec_tx(code_path: String, data_hex: Option<&str>) {
     // TODO tendermint cache blocks the same transaction sent more than once,
     // add a counter or timestamp?
 

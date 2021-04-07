@@ -30,8 +30,12 @@ pub struct Tendermint {
 pub struct Gossip {
     pub host: String,
     pub port: String,
+    pub rpc: bool,
     pub peers: Vec<String>,
     pub topics: Vec<Topic>,
+    pub matchmaker: String,
+    pub ledger_host: String,
+    pub ledger_port: String,
 }
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -43,17 +47,15 @@ pub struct Config {
 impl Gossip {
     // TODO here, and in set_address, we assumes a ip4+tcp address but it woul be nice to allow all accepted address by libp2p
     pub fn get_address(&self) -> String {
-    
         return format!("/ip4/{}/tcp/{}", self.host, self.port);
     }
 
-    pub fn set_peers(&mut self, peers: Option<Vec<String>>) {
-        match peers {
-            Some(peers) => {
-                self.peers = peers.clone();
-            }
-            None => {}
-        }
+    pub fn get_ledger_address(&self) -> String {
+        return format!("tpc://{}:{}", self.ledger_host, self.ledger_port);
+    }
+
+    pub fn set_peers(&mut self, peers: Vec<String>) {
+        self.peers = peers.clone()
     }
 
     pub fn set_dkg_topic(&mut self, enable: bool) {
@@ -62,9 +64,13 @@ impl Gossip {
         }
     }
 
+    pub fn set_rpc(&mut self, enable: bool) {
+        self.rpc = enable;
+    }
+
     pub fn set_orderbook_topic(&mut self, enable: bool) {
         if enable {
-            self.set_topic(Topic::Dkg);
+            self.set_topic(Topic::Orderbook);
         }
     }
 
@@ -72,15 +78,32 @@ impl Gossip {
         self.topics.push(topic);
     }
 
-    pub fn set_address(&mut self, address: Option<String>) {
+    pub fn set_address(&mut self, address: Option<(String, String)>) {
         match address {
-            Some(address) => {
-                let split_addresses: Vec<String> =
-                    address.split("/").map(|s| s.to_string()).collect();
-                self.host = split_addresses[1].clone();
-                self.port = split_addresses[3].clone();
+            Some(addr) => {
+                self.host = addr.0;
+                self.port = addr.1;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn set_matchmaker(&mut self, matchmaker: Option<String>) {
+        match matchmaker {
+            Some(matchmaker) => {
+                self.matchmaker = matchmaker;
             }
             None => {}
+        }
+    }
+
+    pub fn set_ledger_address(&mut self, address: Option<(String, String)>) {
+        match address {
+            Some(addr) => {
+                self.ledger_host = addr.0;
+                self.ledger_port = addr.1;
+            }
+            _ => {}
         }
     }
 }
@@ -105,6 +128,10 @@ impl Config {
         s.set_default("p2p.port", 20201)?;
         s.set_default("p2p.peers", Vec::<String>::new())?;
         s.set_default("p2p.topics", topics)?;
+        s.set_default("p2p.rpc", true)?;
+        s.set_default("p2p.matchmaker", "")?;
+        s.set_default("p2p.ledger_host", "127.0.0.1")?;
+        s.set_default("p2p.ledger_port", 26658)?;
 
         s.merge(
             config::File::with_name(&format!("{}/{}", home, "settings.toml"))
