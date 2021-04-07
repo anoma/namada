@@ -49,7 +49,7 @@ impl Matchmaker {
         let matchmaker_runner = vm::MatchmakerRunner::new();
         let matchmaker_code = &mut self.matchmaker_code;
         let inject_tx = &self.inject_tx;
-        self.mempool.find_map(&intent, &|i1, i2| {
+        self.mempool.find_map(&intent, &|i1: &Intent, i2: &Intent| {
             matchmaker_runner
                 .run(
                     matchmaker_code.clone(),
