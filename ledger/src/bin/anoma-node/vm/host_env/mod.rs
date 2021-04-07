@@ -13,12 +13,12 @@ use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{TxEnvHostWrapper, VpEnvHostWrapper};
 use crate::shell::gas::BlockGasMeter;
-use crate::shell::storage::{Address, Key, Storage};
+use crate::shell::storage::{Address, Key, PrefixIteratorId, Storage};
 
 #[derive(Clone)]
-struct TxEnv {
+struct TxEnv<'a> {
     // not thread-safe, assuming single-threaded Tx runner
-    storage: TxEnvHostWrapper<Storage>,
+    storage: TxEnvHostWrapper<Storage<'a>>,
     // not thread-safe, assuming single-threaded Tx runner
     write_log: TxEnvHostWrapper<WriteLog>,
     // not thread-safe, assuming single-threaded Tx runner
@@ -26,7 +26,7 @@ struct TxEnv {
     memory: AnomaMemory,
 }
 
-impl WasmerEnv for TxEnv {
+impl<'a> WasmerEnv for TxEnv<'a> {
     fn init_with_instance(
         &mut self,
         instance: &Instance,
@@ -36,11 +36,11 @@ impl WasmerEnv for TxEnv {
 }
 
 #[derive(Clone)]
-struct VpEnv {
+struct VpEnv<'a> {
     /// The address of the account that owns the VP
     addr: Address,
     // not thread-safe, assuming read-only access from parallel Vp runners
-    storage: VpEnvHostWrapper<Storage>,
+    storage: VpEnvHostWrapper<Storage<'a>>,
     // not thread-safe, assuming read-only access from parallel Vp runners
     write_log: VpEnvHostWrapper<WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
@@ -49,7 +49,7 @@ struct VpEnv {
     memory: AnomaMemory,
 }
 
-impl WasmerEnv for VpEnv {
+impl<'a> WasmerEnv for VpEnv<'a> {
     fn init_with_instance(
         &mut self,
         instance: &Instance,
@@ -78,7 +78,7 @@ impl WasmerEnv for MatchmakerEnv {
 /// transaction code
 pub fn prepare_tx_imports(
     wasm_store: &Store,
-    storage: TxEnvHostWrapper<Storage>,
+    storage: TxEnvHostWrapper<Storage<'static>>,
     write_log: TxEnvHostWrapper<WriteLog>,
     gas_meter: TxEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
@@ -98,6 +98,8 @@ pub fn prepare_tx_imports(
             "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
             "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
             "_read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
+            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_iter_prefix),
+            "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, tx_env.clone(), tx_storage_iter_next),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
@@ -108,7 +110,7 @@ pub fn prepare_tx_imports(
 pub fn prepare_vp_imports(
     wasm_store: &Store,
     addr: Address,
-    storage: VpEnvHostWrapper<Storage>,
+    storage: VpEnvHostWrapper<Storage<'static>>,
     write_log: VpEnvHostWrapper<WriteLog>,
     gas_meter: Arc<Mutex<BlockGasMeter>>,
     initial_memory: Memory,
@@ -314,6 +316,68 @@ fn tx_storage_read_varlen(
             }
         }
     }
+}
+
+/// Storage prefix iterator function exposed to the wasm VM Tx environment.
+/// It will try to get an iterator from the storage and return the corresponding
+/// ID of the interator.
+fn tx_storage_iter_prefix(
+    env: &TxEnv,
+    prefix_ptr: u64,
+    prefix_len: u64,
+) -> u64 {
+    let prefix = env
+        .memory
+        .read_string(prefix_ptr, prefix_len as _)
+        .expect("Cannot read the prefix from memory");
+
+    log::debug!("tx_storage_prefix_iter {}, prefix {}", prefix, prefix_ptr,);
+
+    let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
+
+    let storage: &mut Storage = unsafe { &mut *(env.storage.get()) };
+    storage.iter_prefix(&prefix).id()
+}
+
+/// Storage prefix iterator next function exposed to the wasm VM Tx environment.
+/// It will return a value from the write log first and if no entry found then
+/// from the storage.
+fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
+    log::debug!(
+        "tx_storage_iter_next iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let storage: &mut Storage = unsafe { &mut *(env.storage.get()) };
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some(kv) = storage.iter_next(iter_id) {
+        let key = String::from_utf8(kv.0)
+            .expect("Cannot convert from bytes to key string");
+        match write_log
+            .read(&Key::parse(key).expect("Cannot parse the key string"))
+        {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                env.memory
+                    .write_bytes(result_ptr, value)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // the key has already deleted
+                continue;
+            }
+            None => {
+                env.memory
+                    .write_bytes(result_ptr, kv.1)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+        }
+    }
+    // fail, key not found
+    0
 }
 
 /// Storage write function exposed to the wasm VM Tx environment. The given

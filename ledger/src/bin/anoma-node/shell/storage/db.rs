@@ -214,15 +214,11 @@ impl DB {
         read_opts.set_iterate_upper_bound(upper_prefix);
 
         // redundant copy to avoid handling DBIterator
-        let values: Vec<Vec<u8>> = self
-            .0
-            .iterator_opt(
-                IteratorMode::From(prefix.as_bytes(), Direction::Forward),
-                read_opts,
-            )
-            .map(|(_key, value)| value.to_vec())
-            .collect();
-        PrefixIterator::new(values)
+        let iter = self.0.iterator_opt(
+            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+            read_opts,
+        );
+        PrefixIterator::new(iter)
     }
 
     pub fn read_last_block(

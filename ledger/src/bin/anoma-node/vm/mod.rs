@@ -143,7 +143,7 @@ impl TxRunner {
         validate_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage =
+        let env_storage =
             unsafe { TxEnvHostWrapper::new(storage as *mut _ as *mut c_void) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
@@ -164,7 +164,7 @@ impl TxRunner {
             .map_err(Error::MemoryError)?;
         let tx_imports = host_env::prepare_tx_imports(
             &self.wasm_store,
-            storage,
+            env_storage,
             write_log,
             gas_meter,
             initial_memory,
@@ -173,7 +173,12 @@ impl TxRunner {
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::InstantiationError)?;
-        Self::run_with_input(tx_code, tx_data)
+        let ret = Self::run_with_input(tx_code, tx_data);
+
+        // post wasm code running
+        storage.iter_release();
+
+        ret
     }
 
     fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {

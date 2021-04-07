@@ -469,30 +469,41 @@ fn new_blake2b() -> Blake2b {
     Blake2bBuilder::new(32).personal(b"anoma storage").build()
 }
 
-#[derive(Debug)]
-pub struct PrefixIterator(Vec<Vec<u8>>);
+pub struct PrefixIterator<'a>(rocksdb::DBIterator<'a>);
 
-impl PrefixIterator {
-    pub fn new(mut values: Vec<Vec<u8>>) -> Self {
-        values.reverse();
-        PrefixIterator(values)
+impl<'a> PrefixIterator<'a> {
+    pub fn new(iter: rocksdb::DBIterator<'a>) -> Self {
+        PrefixIterator(iter)
     }
 }
 
-impl Iterator for PrefixIterator {
-    type Item = Vec<u8>;
+impl<'a> Iterator for PrefixIterator<'a> {
+    type Item = (Vec<u8>, Vec<u8>);
 
-    fn next(&mut self) -> Option<Vec<u8>> {
-        self.0.pop()
+    fn next(&mut self) -> Option<(Vec<u8>, Vec<u8>)> {
+        match self.0.next() {
+            Some(kv) => Some((kv.0.to_vec(), kv.1.to_vec())),
+            None => None,
+        }
+    }
+}
+
+impl<'a> std::fmt::Debug for PrefixIterator<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PrefixIterator")
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct PrefixIteratorId(usize);
+pub struct PrefixIteratorId(u64);
 
 impl PrefixIteratorId {
-    pub fn new() -> Self {
-        PrefixIteratorId(0)
+    pub fn new(id: u64) -> Self {
+        PrefixIteratorId(id)
+    }
+
+    pub fn id(&self) -> u64 {
+        self.0
     }
 
     pub fn next_id(&self) -> PrefixIteratorId {
