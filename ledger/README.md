@@ -18,6 +18,11 @@ Multiple gossip nodes can be run, each should toggle orderbook to relay.
 
 The matchmaker template receive intent with the borsh encoding define in `data_template` and craft data to be send with `tx_intent_template` to the ledger.
 
+
+The gossip node needs to toggle the orderbook flag `--orderbook` to relay intents, multiple nodes can be connected with the `--peers` option.
+
+The matchmaker template receive intent with the borsh encoding define in `data_template` and craft data to be send with `tx_intent_template` to the ledger. It matches only two intents that are the exact opposite.
+
 ```shell
 # Install development dependencies
 make dev-deps
