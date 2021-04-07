@@ -17,6 +17,7 @@ use crate::shell::storage::{Address, Storage};
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
+const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 /// This is used to attach the Ledger's host structures to transaction, which is
 /// used for implementing some host calls. It's not thread-safe, we're assuming
@@ -83,56 +84,32 @@ pub enum Error {
     // 1. Common error types
     #[error("Memory error: {0}")]
     MemoryError(memory::Error),
-    // 2. Transaction errors
-    #[error("Transaction deserialization error: {0}")]
-    TxDeserializationError(elements::Error),
-    #[error("Transaction serialization error: {0}")]
-    TxSerializationError(elements::Error),
-    #[error("Unable to inject gas meter for transaction")]
-    TxGasMeterInjection,
-    #[error("Transaction compilation error: {0}")]
-    TxCompileError(wasmer::CompileError),
-    #[error("Missing transaction memory export, failed with: {0}")]
-    MissingTxModuleMemory(wasmer::ExportError),
-    #[error("Validity predicate compilation error: {0}")]
-    MissingTxModuleEntrypoint(wasmer::ExportError),
+    #[error("Unable to inject gas meter")]
+    StackLimiterInjection,
+    #[error("Wasm deserialization error: {0}")]
+    DeserializationError(elements::Error),
+    #[error("Wasm serialization error: {0}")]
+    SerializationError(elements::Error),
+    #[error("Unable to inject gas meter")]
+    GasMeterInjection,
+    #[error("Wasm compilation error: {0}")]
+    CompileError(wasmer::CompileError),
+    #[error("Missing wasm memory export, failed with: {0}")]
+    MissingModuleMemory(wasmer::ExportError),
+    #[error("Missing wasm entrypoint: {0}")]
+    MissingModuleEntrypoint(wasmer::ExportError),
+    #[error("Failed running wasm with: {0}")]
+    RuntimeError(wasmer::RuntimeError),
+    #[error("Failed instantiating wasm module with: {0}")]
+    InstantiationError(wasmer::InstantiationError),
     #[error(
-        "Unexpected transaction module entrypoint interface {TX_ENTRYPOINT}, \
-         failed with: {0}"
+        "Unexpected module entrypoint interface {entrypoint}, \
+         failed with: {error}"
     )]
-    UnexpectedTxModuleEntrypointInterface(wasmer::RuntimeError),
-    #[error("Failed running transaction with: {0}")]
-    TxRuntimeError(wasmer::RuntimeError),
-    #[error("Failed instantiating transaction module with: {0}")]
-    TxInstantiationError(wasmer::InstantiationError),
-    // 3. Validity predicate errors
-    #[error("Validity predicate deserialization error: {0}")]
-    VpDeserializationError(elements::Error),
-    #[error("Validity predicate serialization error: {0}")]
-    VpSerializationError(elements::Error),
-    #[error("Unable to inject gas meter for validity predicate")]
-    VpGasMeterInjection,
-    #[error(
-        "Missing validity predicate entrypoint {VP_ENTRYPOINT}, failed with: \
-         {0}"
-    )]
-    VpCompileError(wasmer::CompileError),
-    #[error("Missing validity predicate memory export, failed with: {0}")]
-    MissingVpModuleMemory(wasmer::ExportError),
-    #[error(
-        "Missing validity predicate entrypoint {TX_ENTRYPOINT}, failed with: \
-         {0}"
-    )]
-    MissingVpModuleEntrypoint(wasmer::ExportError),
-    #[error(
-        "Unexpected validity predicate module entrypoint interface \
-         {VP_ENTRYPOINT}, failed with: {0}"
-    )]
-    UnexpectedVpModuleEntrypointInterface(wasmer::RuntimeError),
-    #[error("Failed running validity predicate with: {0}")]
-    VpRuntimeError(wasmer::RuntimeError),
-    #[error("Failed instantiating validity predicate module with: {0}")]
-    VpInstantiationError(wasmer::InstantiationError),
+    UnexpectedModuleEntrypointInterface {
+        entrypoint: &'static str,
+        error: wasmer::RuntimeError,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -171,10 +148,10 @@ impl TxRunner {
             TxEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
         };
 
-        let tx_code = Self::prepare_tx_code(tx_code)?;
+        let tx_code = prepare_wasm_code(&tx_code)?;
 
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
-            .map_err(Error::TxCompileError)?;
+            .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let tx_imports = host_env::prepare_tx_imports(
@@ -187,18 +164,8 @@ impl TxRunner {
 
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
-            .map_err(Error::TxInstantiationError)?;
+            .map_err(Error::InstantiationError)?;
         Self::run_with_input(tx_code, tx_data)
-    }
-
-    fn prepare_tx_code(tx_code: Vec<u8>) -> Result<Vec<u8>> {
-        let module: elements::Module =
-            elements::deserialize_buffer(&tx_code)
-                .map_err(Error::TxDeserializationError)?;
-        let module =
-            pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-                .map_err(|_original_module| Error::TxGasMeterInjection)?;
-        elements::serialize(module).map_err(Error::TxSerializationError)
     }
 
     fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {
@@ -207,7 +174,7 @@ impl TxRunner {
         let memory = tx_code
             .exports
             .get_memory("memory")
-            .map_err(Error::MissingTxModuleMemory)?;
+            .map_err(Error::MissingModuleMemory)?;
         let memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
@@ -218,12 +185,15 @@ impl TxRunner {
         let apply_tx = tx_code
             .exports
             .get_function(TX_ENTRYPOINT)
-            .map_err(Error::MissingTxModuleEntrypoint)?
+            .map_err(Error::MissingModuleEntrypoint)?
             .native::<(u64, u64), ()>()
-            .map_err(Error::UnexpectedTxModuleEntrypointInterface)?;
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: TX_ENTRYPOINT,
+                error,
+            })?;
         apply_tx
             .call(tx_data_ptr, tx_data_len)
-            .map_err(Error::TxRuntimeError)
+            .map_err(Error::RuntimeError)
     }
 }
 
@@ -262,10 +232,10 @@ impl VpRunner {
             VpEnvHostWrapper::new(write_log as *const _ as *const c_void)
         };
 
-        let vp_code = Self::prepare_vp_code(vp_code)?;
+        let vp_code = prepare_wasm_code(vp_code)?;
 
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
-            .map_err(Error::VpCompileError)?;
+            .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let input: VpInput = (addr.to_string(), tx_data, keys_changed);
@@ -280,18 +250,8 @@ impl VpRunner {
 
         // compile and run the transaction wasm code
         let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
-            .map_err(Error::VpInstantiationError)?;
+            .map_err(Error::InstantiationError)?;
         VpRunner::run_with_input(vp_code, input)
-    }
-
-    fn prepare_vp_code<T: AsRef<[u8]>>(vp_code: T) -> Result<Vec<u8>> {
-        let module: elements::Module =
-            elements::deserialize_buffer(vp_code.as_ref())
-                .map_err(Error::VpDeserializationError)?;
-        let module =
-            pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-                .map_err(|_original_module| Error::VpGasMeterInjection)?;
-        elements::serialize(module).map_err(Error::VpSerializationError)
     }
 
     fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
@@ -300,7 +260,7 @@ impl VpRunner {
         let memory = vp_code
             .exports
             .get_memory("memory")
-            .map_err(Error::MissingVpModuleMemory)?;
+            .map_err(Error::MissingModuleMemory)?;
         let memory::VpCallInput {
             addr_ptr,
             addr_len,
@@ -315,9 +275,12 @@ impl VpRunner {
         let validate_tx = vp_code
             .exports
             .get_function(VP_ENTRYPOINT)
-            .map_err(Error::MissingVpModuleEntrypoint)?
+            .map_err(Error::MissingModuleEntrypoint)?
             .native::<(u64, u64, u64, u64, u64, u64), u64>()
-            .map_err(Error::UnexpectedVpModuleEntrypointInterface)?;
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: VP_ENTRYPOINT,
+                error,
+            })?;
         let is_valid = validate_tx
             .call(
                 addr_ptr,
@@ -327,12 +290,169 @@ impl VpRunner {
                 keys_changed_ptr,
                 keys_changed_len,
             )
-            .map_err(Error::VpRuntimeError)?;
+            .map_err(Error::RuntimeError)?;
+        log::debug!("is_valid {}", is_valid);
         Ok(is_valid == 1)
     }
+}
+
+/// Inject gas counter and stack-height limiter into the given wasm code
+fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
+    let module: elements::Module = elements::deserialize_buffer(code.as_ref())
+        .map_err(Error::DeserializationError)?;
+    let module =
+        pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
+            .map_err(|_original_module| Error::GasMeterInjection)?;
+    let module =
+        pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
+            .map_err(|_original_module| Error::StackLimiterInjection)?;
+    elements::serialize(module).map_err(Error::SerializationError)
 }
 
 /// Get the gas rules used to meter wasm operations
 fn get_gas_rules() -> rules::Set {
     rules::Set::default().with_grow_cost(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use tempdir::TempDir;
+    use wasmer_vm;
+
+    use super::*;
+
+    /// Test that when a transaction wasm goes over the stack-height limit, the
+    /// execution is aborted.
+    #[test]
+    fn test_tx_stack_limiter() {
+        // Because each call into `$loop` inside the wasm consumes 4 stack
+        // heights, this should trigger stack limiter. If we were to subtract
+        // one from this value, we should be just under the limit.
+        let loops = WASM_STACK_LIMIT / 4;
+        // A transaction with a recursive loop.
+        // The boilerplate code is generated from tx.wasm using `wasm2wat` and
+        // the loop code is hand-written.
+        let tx_code = wasmer::wat2wasm(
+            format!(
+                r#"
+            (module
+                (type (;0;) (func (param i64 i64) (result i64)))
+
+                ;; recursive loop, the param is the number of loops
+                (func $loop (param i64) (result i64)
+                (if 
+                (result i64)
+                (i64.eqz (get_local 0))
+                (then (get_local 0))
+                (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
+
+                (func $apply_tx (type 0) (param i64 i64) (result i64)
+                (call $loop (i64.const {})))
+
+                (table (;0;) 1 1 funcref)
+                (memory (;0;) 16)
+                (global (;0;) (mut i32) (i32.const 1048576))
+                (export "memory" (memory 0))
+                (export "apply_tx" (func $apply_tx)))
+            "#,
+                loops
+            )
+            .as_bytes(),
+        )
+        .expect("unexpected error converting wat2wasm")
+        .into_owned();
+
+        let runner = TxRunner::new();
+        let tx_data = vec![];
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = Storage::new(db_path.path());
+        let mut write_log = WriteLog::new();
+        let mut gas_meter = BlockGasMeter::default();
+        let error = runner
+            .run(
+                &mut storage,
+                &mut write_log,
+                &mut gas_meter,
+                tx_code,
+                &tx_data,
+            )
+            .expect_err("Expecting runtime error \"unreachable\" caused by stack-height overflow");
+        if let Error::RuntimeError(err) = &error {
+            if let Some(trap_code) = err.clone().to_trap() {
+                return assert_eq!(
+                    trap_code,
+                    wasmer_vm::TrapCode::UnreachableCodeReached
+                );
+            }
+        }
+        println!("Failed with unexpected error: {}", error);
+    }
+
+    /// Test that when a VP wasm goes over the stack-height limit, the execution
+    /// is aborted.
+    #[test]
+    fn test_vp_stack_limiter() {
+        // Because each call into `$loop` inside the wasm consumes 4 stack
+        // heights, this should trigger stack limiter. If we were to subtract
+        // one from this value, we should be just under the limit.
+        let loops = WASM_STACK_LIMIT / 4;
+        // A validity predicate with a recursive loop.
+        // The boilerplate code is generated from vp.wasm using `wasm2wat` and
+        // the loop code is hand-written.
+        let vp_code = wasmer::wat2wasm(format!(
+            r#"
+            (module
+                (type (;0;) (func (param i64 i64 i64 i64 i64 i64) (result i64)))
+
+                ;; recursive loop, the param is the number of loops
+                (func $loop (param i64) (result i64)
+                (if 
+                (result i64)
+                (i64.eqz (get_local 0))
+                (then (get_local 0))
+                (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
+
+                (func $validate_tx (type 0) (param i64 i64 i64 i64 i64 i64) (result i64)
+                (call $loop (i64.const {})))
+
+                (table (;0;) 1 1 funcref)
+                (memory (;0;) 16)
+                (global (;0;) (mut i32) (i32.const 1048576))
+                (export "memory" (memory 0))
+                (export "validate_tx" (func $validate_tx)))
+            "#, loops).as_bytes(),
+        )
+        .expect("unexpected error converting wat2wasm").into_owned();
+
+        let runner = VpRunner::new();
+        let tx_data = vec![];
+        let addr = Address::new_address(String::from("va"));
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let storage = Storage::new(db_path.path());
+        let write_log = WriteLog::new();
+        let gas_meter = Arc::new(Mutex::new(BlockGasMeter::default()));
+        let keys_changed = vec![];
+        let error = runner
+            .run(
+                vp_code,
+                &tx_data,
+                addr,
+                &storage,
+                &write_log,
+                gas_meter,
+                &keys_changed,
+            )
+            .expect_err("Expecting runtime error \"unreachable\" caused by stack-height overflow");
+        if let Error::RuntimeError(err) = &error {
+            if let Some(trap_code) = err.clone().to_trap() {
+                return assert_eq!(
+                    trap_code,
+                    wasmer_vm::TrapCode::UnreachableCodeReached
+                );
+            }
+        }
+        println!("Failed with unexpected error: {}", error);
+    }
 }

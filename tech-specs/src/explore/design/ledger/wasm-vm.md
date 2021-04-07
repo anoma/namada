@@ -29,6 +29,8 @@ Needs more info:
   - bunch of useful wasm tools (e.g. `wasm2wat` to convert from wasm binary to human-readable wat format) 
 - [Rust wasm WG](https://github.com/rustwasm/team) and [wasm book](https://rustwasm.github.io/book/introduction.html) (some sections are JS specific)
 - [A practical guide to WebAssembly memory](https://radu-matei.com/blog/practical-guide-to-wasm-memory/) modulo JS specific details
+- [Learn X in Y minutes Where X=WebAssembly](https://learnxinyminutes.com/docs/wasm/)
+
 
 ## Wasm environment
 
@@ -122,4 +124,6 @@ The `pwasm-utils` seems like a safer option to begin with (and we'll probably ne
 
 ## Stack height metering
 
-TODO We'll probably need to use `pwasm-utils`, at least until this PR is merged <https://github.com/wasmerio/wasmer/pull/1037>.
+For safety, we need to limit the stack height in wasm code. Similarly to gas metering, we can also use `wasmer` middleware or `pwasm-utils`.
+
+We have to use `pwasm-utils`, because `wasmer`'s stack limiter is currently non-deterministic (platform specific). This is to be fixed in this PR: <https://github.com/wasmerio/wasmer/pull/1037>.

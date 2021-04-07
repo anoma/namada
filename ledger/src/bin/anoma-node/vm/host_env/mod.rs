@@ -119,7 +119,6 @@ pub fn prepare_vp_imports(
 /// Called from tx wasm to request to use the given gas amount
 fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
     let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
-    log::debug!("transaction wasm requested gas: {}", used_gas);
     // if we run out of gas, we need to stop the execution
     match gas_meter.add(used_gas as _) {
         Err(err) => {
@@ -139,7 +138,6 @@ fn vp_charge_gas(env: &VpEnv, used_gas: i32) {
         .gas_meter
         .lock()
         .expect("Cannot get lock on the gas meter");
-    log::debug!("Validity predicate wasm requested gas: {}", used_gas);
     // if we run out of gas, we need to stop the execution
     match gas_meter.add(used_gas as _) {
         Err(err) => {
