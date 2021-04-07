@@ -100,8 +100,6 @@ async fn gossip_intent(orderbook_addr: String, data_path: String) {
     };
     let _response = client.send_message(message).await.unwrap();
 }
-// TODO Instead it might be better to incorporate a cli into the
-// anoma_data_template ?
 async fn craft_intent(
     addr: String,
     token_sell: String,
