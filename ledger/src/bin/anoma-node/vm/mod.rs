@@ -345,8 +345,6 @@ impl MatchmakerRunner {
         tx_code: impl AsRef<[u8]>,
         inject_tx: Sender<Tx>,
     ) -> Result<bool> {
-        // This is also not thread-safe, we're assuming single-threaded Tx
-        // runner.
         let matchmaker_module: wasmer::Module =
             wasmer::Module::new(&self.wasm_store, &matchmaker_code)
                 .map_err(Error::MatchmakerCompileError)?;
@@ -361,7 +359,7 @@ impl MatchmakerRunner {
             inject_tx,
         );
 
-        // compile and run the transaction wasm code
+        // compile and run the matchmaker wasm code
         let matchmaker_code =
             wasmer::Instance::new(&matchmaker_module, &matchmaker_imports)
                 .map_err(Error::TxInstantiationError)?;

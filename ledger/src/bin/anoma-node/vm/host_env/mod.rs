@@ -544,7 +544,7 @@ fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
 
-    log::info!("WASM Transaction log: {}", str);
+    log::info!("WASM Matchmaker log: {}", str);
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be

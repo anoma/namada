@@ -37,7 +37,7 @@ pub enum InlinedClientOpts {
     Tx(Tx),
     /// Submit an intent to the orderbook
     Intent(IntentArg),
-    /// Craft file to be send as intent data
+    /// Craft file to be sent as intent data
     CraftIntent(CraftIntentArg),
 }
 

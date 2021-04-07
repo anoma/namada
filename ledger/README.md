@@ -14,7 +14,7 @@ The validity predicate template receives the `transfer` data and checks that the
 
 The validity predicate is currently hard-coded in the shell and used for every account. To experiment with a different validity predicate, build it from the template and restart the shell.
 
-Multiple gossip node can be run, each should toggle orderbook to relay.
+Multiple gossip nodes can be run, each should toggle orderbook to relay.
 
 The matchmaker template receive intent with the borsh encoding define in `data_template` and craft data to be send with `tx_intent_template` to the ledger.
 
