@@ -36,6 +36,7 @@ pub const DATA_INTENT_ARG: &str = "data";
 pub const DATA_TX_ARG: &str = "data";
 pub const PATH_TX_ARG: &str = "path";
 pub const ORDERBOOK_INTENT_ARG: &str = "orderbook";
+pub const DRY_RUN_TX_ARG: &str = "dry";
 
 type App = clap::App<'static>;
 
@@ -108,7 +109,14 @@ fn build_client_tx_subcommand() -> App {
             .long("path")
             .takes_value(true)
             .required(true)
-            .about("The path to the wasm code to be executed."),
+            .about("The path to the wasm code to be executed.")
+        )
+        .arg(
+            Arg::new(DRY_RUN_TX_ARG)
+            .long("dry-run")
+            .takes_value(false)
+            .required(false)
+            .about("Dry run the transaction."),
         )
 }
 
