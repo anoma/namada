@@ -39,6 +39,8 @@ pub enum InlinedClientOpts {
     Intent(IntentArg),
     /// Craft file to be sent as intent data
     CraftIntent(CraftIntentArg),
+    /// Craft file to be sent as tx data
+    CraftTxData(CraftTxDataArg),
 }
 
 // `anomac` subcommand for submitting transactions
@@ -77,6 +79,22 @@ pub struct CraftIntentArg {
     pub token_buy: String,
     #[clap(long)]
     pub amount_buy: u64,
+    #[clap(long)]
+    pub file: String,
+}
+
+// `anomac` subcommand for crafting tx data
+#[derive(Clap)]
+pub struct CraftTxDataArg {
+    /// the orderbook adress
+    #[clap(long)]
+    pub source: String,
+    #[clap(long)]
+    pub target: String,
+    #[clap(long)]
+    pub token: String,
+    #[clap(long)]
+    pub amount: u64,
     #[clap(long)]
     pub file: String,
 }

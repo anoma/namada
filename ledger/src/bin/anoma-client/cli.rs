@@ -4,9 +4,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 
-use anoma::cli::{
-    self, ClientOpts, CraftIntentArg, InlinedClientOpts, IntentArg,
-};
+use anoma::cli::{self, ClientOpts, CraftIntentArg, CraftTxDataArg, InlinedClientOpts, IntentArg};
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
@@ -49,7 +47,24 @@ async fn exec_inlined(ops: InlinedClientOpts) {
                 file,
             )
             .await;
+        },
+        InlinedClientOpts::CraftTxData(CraftTxDataArg {
+            source,
+            target,
+            token,
+            amount,
+            file,
+        }) => {
+            craft_tx_data(
+            source,
+            target,
+            token,
+            amount,
+            file,
+            )
+            .await;
         }
+
     }
 }
 
@@ -100,6 +115,7 @@ async fn gossip_intent(orderbook_addr: String, data_path: String) {
     };
     let _response = client.send_message(message).await.unwrap();
 }
+
 async fn craft_intent(
     addr: String,
     token_sell: String,
@@ -108,13 +124,32 @@ async fn craft_intent(
     amount_buy: u64,
     file: String,
 ) {
-    let data = anoma_data_template::IntentData {
+    let data = anoma_data_template::Intent {
         addr,
         token_sell,
         amount_sell,
         token_buy,
         amount_buy,
     };
+    let data_bytes = data.try_to_vec().unwrap();
+    let mut file = File::create(file).unwrap();
+    file.write_all(&data_bytes).unwrap();
+}
+
+async fn craft_tx_data(
+    source: String,
+    target: String,
+    token: String,
+    amount: u64,
+    file: String,
+) {
+    use anoma_data_template::*;
+    let data = TxData {
+        transfers:vec![Transfer{
+            source,target,
+            token,
+            amount,
+        }]};
     let data_bytes = data.try_to_vec().unwrap();
     let mut file = File::create(file).unwrap();
     file.write_all(&data_bytes).unwrap();
