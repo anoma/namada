@@ -12,6 +12,7 @@ pub fn main() -> Result<()> {
 
     match matches.subcommand() {
         Some((cli::RUN_GOSSIP_COMMAND, args)) => {
+            // here unwrap is safe as the argument has a default
             let home = matches.value_of("base").unwrap().to_string();
             let mut config = Config::new(home).expect("error config");
 
@@ -39,12 +40,14 @@ pub fn main() -> Result<()> {
             gossip::run(config).wrap_err("Failed to run gossip service")
         }
         Some((cli::RUN_LEDGER_COMMAND, _)) => {
-            let home = matches.value_of("base").unwrap_or(".anoma").to_string();
+            // here unwrap is safe as the argument has a default
+            let home = matches.value_of("base").unwrap().to_string();
             let config = Config::new(home).unwrap();
             shell::run(config).wrap_err("Failed to run Anoma node")
         }
         Some((cli::RESET_ANOMA_COMMAND, _)) => {
-            let home = matches.value_of("base").unwrap_or(".anoma").to_string();
+            // here unwrap is safe as the argument has a default
+            let home = matches.value_of("base").unwrap().to_string();
             let config = Config::new(home).unwrap();
             shell::reset(config).wrap_err("Failed to reset Anoma node")
         }
