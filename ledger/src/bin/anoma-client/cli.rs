@@ -16,15 +16,16 @@ pub async fn main() -> Result<()> {
     match matches.subcommand() {
         Some((cli::TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let path = args.value_of("path").unwrap().to_string();
-            let data = args.value_of("data");
+            let path = args.value_of(cli::PATH_TX_ARG).unwrap().to_string();
+            let data = args.value_of(cli::DATA_TX_ARG);
             exec_tx(path, data).await;
             Ok(())
         }
         Some((cli::INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let orderbook = args.value_of("orderbook").unwrap().to_string();
-            let data = args.value_of("data").unwrap().to_string();
+            let orderbook =
+                args.value_of(cli::ORDERBOOK_ARG).unwrap().to_string();
+            let data = args.value_of(cli::DATA_INTENT_ARG).unwrap().to_string();
             gossip_intent(orderbook, data).await;
             Ok(())
         }
