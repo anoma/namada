@@ -4,6 +4,7 @@ use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
 use anoma::{cli, protobuf::services::rpc_service_client::RpcServiceClient};
 use prost::Message;
+use tendermint::abci;
 use tendermint_rpc::{Client, HttpClient};
 
 use eyre::{Context, Result};
