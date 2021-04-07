@@ -331,7 +331,7 @@ fn tx_storage_iter_prefix(
         .read_string(prefix_ptr, prefix_len as _)
         .expect("Cannot read the prefix from memory");
 
-    log::debug!("tx_storage_prefix_iter {}, prefix {}", prefix, prefix_ptr,);
+    log::debug!("tx_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
@@ -340,7 +340,7 @@ fn tx_storage_iter_prefix(
 }
 
 /// Storage prefix iterator next function exposed to the wasm VM Tx environment.
-/// It will return a value from the write log first and if no entry found then
+/// It will read a value from the write log first and if no entry found then
 /// from the storage.
 fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
     log::debug!(
@@ -365,7 +365,7 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
                 return 1;
             }
             Some(&write_log::StorageModification::Delete) => {
-                // the key has already deleted
+                // check the next because the key has already deleted
                 continue;
             }
             None => {
@@ -620,6 +620,93 @@ fn vp_storage_read_post_varlen(
             }
         }
     }
+}
+
+/// Storage prefxi iterator function exposed to the wasm VM VP environment.
+/// It will try to get an iterator from the storage and return the corresponding
+/// ID of the iterator.
+fn vp_storage_iter_prefix(
+    env: &TxEnv,
+    prefix_ptr: u64,
+    prefix_len: u64,
+) -> u64 {
+    let prefix = env
+        .memory
+        .read_string(prefix_ptr, prefix_len as _)
+        .expect("Cannot read the prefix from memory");
+
+    log::debug!("vp_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+
+    let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
+
+    let storage: &mut Storage = unsafe { &mut *(env.storage.get()) };
+    storage.iter_prefix(&prefix).id()
+}
+
+/// Storage prefix iterator next (before tx execution) function exposed to the
+/// wasm VM Tx environment. It will read a value from the storage.
+fn vp_storage_iter_pre_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
+    log::debug!(
+        "vp_storage_iter_pre_next iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let storage: &mut Storage = unsafe { &mut *(env.storage.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    if let Some(kv) = storage.iter_next(iter_id) {
+        env.memory
+            .write_bytes(result_ptr, kv.1)
+            .expect("cannot write to memory");
+        return 1;
+    }
+    // fail, key not found
+    0
+}
+
+/// Storage prefix iterator next (after tx execution) function exposed to the
+/// wasm VM Tx environment. It will return a value from the write log first
+/// and if no entry found then from the storage.
+fn vp_storage_iter_post_next(
+    env: &TxEnv,
+    iter_id: u64,
+    result_ptr: u64,
+) -> u64 {
+    log::debug!(
+        "vp_storage_iter_post_next iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let storage: &mut Storage = unsafe { &mut *(env.storage.get()) };
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some(kv) = storage.iter_next(iter_id) {
+        let key = String::from_utf8(kv.0)
+            .expect("Cannot convert from bytes to key string");
+        match write_log
+            .read(&Key::parse(key).expect("Cannot parse the key string"))
+        {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                env.memory
+                    .write_bytes(result_ptr, value)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                env.memory
+                    .write_bytes(result_ptr, kv.1)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+        }
+    }
+    // fail, key not found
+    0
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
