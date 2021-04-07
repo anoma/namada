@@ -57,13 +57,10 @@ async fn exec_tx(code_path: String, data_hex: Option<&str>, dry: bool) {
         HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
     // TODO broadcast_tx_commit shouldn't be used live;
     if dry {
+        let path = std::str::FromStr::from_str("dry_run_tx").unwrap();
+
         let response = client
-            .abci_query(
-                Some("dry_run_tx".to_string()),
-                tx_bytes.into(),
-                None,
-                false,
-            )
+            .abci_query(Some(path), tx_bytes, None, false)
             .await
             .unwrap();
         println!("{:#?}", response);
