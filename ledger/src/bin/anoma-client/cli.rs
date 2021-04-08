@@ -56,7 +56,7 @@ pub async fn main() -> Result<()> {
                 file,
             );
             Ok(())
-        },
+        }
         Some((cli::CRAFT_DATA_TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
             let source = args.value_of(cli::SOURCE_ARG).unwrap().to_string();
@@ -72,12 +72,12 @@ pub async fn main() -> Result<()> {
     }
 }
 
-async fn exec_tx(code_path: String, data_hex: Option<&str>) {
+async fn exec_tx(code_path: String, data_path: Option<&str>) {
     // TODO tendermint cache blocks the same transaction sent more than once,
     // add a counter or timestamp?
 
     let code = std::fs::read(code_path).unwrap();
-    let data = data_hex.map(|hex| hex::decode(hex).unwrap());
+    let data = data_path.map(|data_path| std::fs::read(data_path).unwrap());
     let tx = Tx { code, data };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();
