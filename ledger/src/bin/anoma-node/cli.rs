@@ -17,6 +17,7 @@ pub fn main() -> Result<()> {
 
     match matches.subcommand() {
         Some((cli::RUN_GOSSIP_COMMAND, args)) => {
+            // TODO: this could be refactored into a function that updates config
             cli::parse_vector(args, cli::PEERS_ARG)
                 .map(|peers| config.p2p.peers = peers);
 
