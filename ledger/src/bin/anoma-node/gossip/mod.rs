@@ -8,8 +8,9 @@ mod types;
 
 use std::thread;
 
+use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
-use anoma::{config::Config, types::Topic};
+use anoma::types::Topic;
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
@@ -47,9 +48,9 @@ pub fn run(config: Config) -> Result<()> {
         bookkeeper,
         config.p2p.topics.contains(&Topic::Orderbook),
         config.p2p.topics.contains(&Topic::Dkg),
-        Some(config.p2p.matchmaker.clone()),
-        Some(config.p2p.tx_template.clone()),
-        Some(config.p2p.get_ledger_address().clone()),
+        config.p2p.matchmaker.clone(),
+        config.p2p.tx_template.clone(),
+        config.p2p.get_ledger_address().clone(),
     )
     .expect("TEMPORARY: unable to build p2p layer");
     p2p.prepare(&config).expect("p2p prepraration failed");

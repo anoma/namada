@@ -33,10 +33,9 @@ pub struct Gossip {
     pub rpc: bool,
     pub peers: Vec<String>,
     pub topics: Vec<Topic>,
-    pub matchmaker: String,
-    pub tx_template: String,
-    pub ledger_host: String,
-    pub ledger_port: String,
+    pub matchmaker: Option<String>,
+    pub tx_template: Option<String>,
+    pub ledger_addr: Option<(String, String)>,
 }
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -49,25 +48,19 @@ impl Gossip {
     // TODO here, and in set_address, we assumes a ip4+tcp address but it would
     // be nice to allow all accepted address by libp2p
     pub fn get_address(&self) -> String {
-        return format!("/ip4/{}/tcp/{}", self.host, self.port);
+        format!("/ip4/{}/tcp/{}", self.host, self.port)
     }
 
-    pub fn get_ledger_address(&self) -> String {
-        return format!("tpc://{}:{}", self.ledger_host, self.ledger_port);
-    }
-
-    pub fn set_peers(&mut self, peers: Vec<String>) {
-        self.peers = peers.clone()
+    pub fn get_ledger_address(&self) -> Option<String> {
+        self.ledger_addr
+            .as_ref()
+            .map(|(host, port)| format!("tcp://{}:{}", host, port))
     }
 
     pub fn set_dkg_topic(&mut self, enable: bool) {
         if enable {
             self.set_topic(Topic::Dkg);
         }
-    }
-
-    pub fn set_rpc(&mut self, enable: bool) {
-        self.rpc = enable;
     }
 
     pub fn set_orderbook_topic(&mut self, enable: bool) {
@@ -81,67 +74,46 @@ impl Gossip {
     }
 
     pub fn set_address(&mut self, address: Option<(String, String)>) {
-        match address {
-            Some(addr) => {
-                self.host = addr.0;
-                self.port = addr.1;
-            }
-            _ => {}
-        }
-    }
-
-    pub fn set_matchmaker(&mut self, matchmaker: Option<String>) {
-        match matchmaker {
-            Some(matchmaker) => {
-                self.matchmaker = matchmaker;
-            }
-            None => {}
+        if let Some(addr) = address {
+            self.host = addr.0;
+            self.port = addr.1;
         }
     }
 
     pub fn set_ledger_address(&mut self, address: Option<(String, String)>) {
-        match address {
-            Some(addr) => {
-                self.ledger_host = addr.0;
-                self.ledger_port = addr.1;
-            }
-            _ => {}
-        }
+        self.ledger_addr = address;
     }
 }
 
 impl Config {
     pub fn new(home: String) -> Result<Self, config::ConfigError> {
-        let mut s = config::Config::new();
+        let mut config = config::Config::new();
 
-        let mut topics = Vec::<String>::with_capacity(2);
-        topics.push(Topic::Orderbook.to_string());
+        config.set_default("node.home", home.to_string())?;
+        config.set_default("node.db_path", "db")?;
+        config.set_default("node.libp2p_path", "libp2p")?;
+        config.set_default("node.tendermint_path", "tendermint")?;
 
-        s.set_default("node.home", home.to_string())?;
-        s.set_default("node.db_path", "db")?;
-        s.set_default("node.libp2p_path", "libp2p")?;
-        s.set_default("node.tendermint_path", "tendermint")?;
+        config.set_default("tendermint.host", "127.0.0.1")?;
+        config.set_default("tendermint.port", 26658)?;
+        config.set_default("tendermint.network", "mainnet")?;
 
-        s.set_default("tendermint.host", "127.0.0.1")?;
-        s.set_default("tendermint.port", 26658)?;
-        s.set_default("tendermint.network", "mainnet")?;
+        config.set_default("p2p.host", "127.0.0.1")?;
+        config.set_default("p2p.port", 20201)?;
+        config.set_default("p2p.peers", Vec::<String>::new())?;
+        config.set_default("p2p.topics", vec![Topic::Orderbook.to_string()])?;
+        config.set_default("p2p.rpc", true)?;
+        config.set_default::<Option<String>>("p2p.matchmaker", None)?;
+        config.set_default::<Option<String>>("p2p.tx_template", None)?;
+        config.set_default::<Option<String>>("p2p.ledger_host", None)?;
+        config.set_default::<Option<String>>("p2p.ledger_port", None)?;
 
-        s.set_default("p2p.host", "127.0.0.1")?;
-        s.set_default("p2p.port", 20201)?;
-        s.set_default("p2p.peers", Vec::<String>::new())?;
-        s.set_default("p2p.topics", topics)?;
-        s.set_default("p2p.rpc", true)?;
-        s.set_default("p2p.matchmaker", "../matchmaker_template/matchmaker.wasm")?;
-        s.set_default("p2p.tx_template", "../tx_template/tx.wasm")?;
-        s.set_default("p2p.ledger_host", "127.0.0.1")?;
-        s.set_default("p2p.ledger_port", 26658)?;
-
-        s.merge(
+        config.merge(
             config::File::with_name(&format!("{}/{}", home, "settings.toml"))
                 .required(false),
         )?;
 
-        s.try_into()
+        config.try_into()
     }
 
     pub fn tendermint_home_dir(&self) -> PathBuf {

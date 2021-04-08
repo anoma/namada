@@ -1,7 +1,8 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 
-use std::{env, process::Command};
+use std::env;
+use std::process::Command;
 
 use anoma::cli;
 use eyre::{eyre, Context, Result};
@@ -28,7 +29,7 @@ pub fn main() -> Result<()> {
         let is_node_command = vec![
             cli::RUN_GOSSIP_COMMAND,
             cli::RUN_LEDGER_COMMAND,
-            cli::RESET_ANOMA_COMMAND,
+            cli::RESET_LEDGER_COMMAND,
         ]
         .contains(&subcommand_name)
             || subcommand_name == cli::NODE_COMMAND;

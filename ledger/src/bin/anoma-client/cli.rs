@@ -3,16 +3,16 @@
 use std::fs::File;
 use std::io::prelude::*;
 
-use anoma::{cli, protobuf::services::rpc_service_client::RpcServiceClient};
+use anoma::cli;
+use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
 use anoma_data_template;
 use borsh::BorshSerialize;
-use clap::Clap;
 use color_eyre::eyre::Result;
+use eyre::Context;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
-use eyre::Context;
 
 pub async fn main() -> Result<()> {
     let mut app = cli::anoma_client_cli();
@@ -37,11 +37,15 @@ pub async fn main() -> Result<()> {
         }
         Some((cli::CRAFT_INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let addr = args.value_of(cli::ADDRESS_ARG).unwrap().to_string();
-            let token_sell = args.value_of(cli::TOKEN_SELL_ARG).unwrap().to_string();
-            let amount_sell = cli::parse_u64(args,cli::AMOUNT_SELL_ARG).expect("not a valid amount");
-            let token_buy = args.value_of(cli::TOKEN_BUY_ARG).unwrap().to_string();
-            let amount_buy = cli::parse_u64(args,cli::AMOUNT_BUY_ARG).expect("not a valid amount");
+            let addr = cli::parse_string(args, cli::ADDRESS_ARG).unwrap();
+            let token_sell =
+                cli::parse_string(args, cli::TOKEN_SELL_ARG).unwrap();
+            let amount_sell = cli::parse_u64(args, cli::AMOUNT_SELL_ARG)
+                .expect("not a valid amount");
+            let token_buy =
+                args.value_of(cli::TOKEN_BUY_ARG).unwrap().to_string();
+            let amount_buy = cli::parse_u64(args, cli::AMOUNT_BUY_ARG)
+                .expect("not a valid amount");
             let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
             craft_intent(
                 addr,
@@ -58,12 +62,13 @@ pub async fn main() -> Result<()> {
             let source = args.value_of(cli::SOURCE_ARG).unwrap().to_string();
             let target = args.value_of(cli::TARGET_ARG).unwrap().to_string();
             let token = args.value_of(cli::TOKEN_ARG).unwrap().to_string();
-            let amount = cli::parse_u64(args,cli::AMOUNT_ARG).expect("not a valid amount");
+            let amount = cli::parse_u64(args, cli::AMOUNT_ARG)
+                .expect("not a valid amount");
             let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
             craft_tx_data(source, target, token, amount, file);
             Ok(())
         }
-        _ => app.print_help().wrap_err("Can't display help.")
+        _ => app.print_help().wrap_err("Can't display help."),
     }
 }
 
@@ -139,11 +144,13 @@ fn craft_tx_data(
 ) {
     use anoma_data_template::*;
     let data = TxData {
-        transfers:vec![Transfer{
-            source,target,
+        transfers: vec![Transfer {
+            source,
+            target,
             token,
             amount,
-        }]};
+        }],
+    };
     let data_bytes = data.try_to_vec().unwrap();
     let mut file = File::create(file).unwrap();
     file.write_all(&data_bytes).unwrap();
