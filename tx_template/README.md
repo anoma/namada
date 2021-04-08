@@ -1,8 +1,7 @@
 # Transaction script wasm template
 
 This is just a template of a wasm module for transaction script. This template
-uses data matched by a matchmaker found in intents.
-
+uses `TxData` as its input as declared in `data_template` crate. It's used by the matchmaker that crafts transactions from matched intents. It's also possible to craft the data using the client, which would create a file with the serialized data, that can be submitted directly to the ledger.
 
 ## Quick start
 
