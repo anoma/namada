@@ -56,16 +56,21 @@ pub fn anoma_inline_cli() -> App {
         .version(CLI_VERSION)
         .author(AUTHOR)
         .about(CLI_DESCRIPTION)
-        .subcommand(build_run_gossip_subcommand())
-        .subcommand(build_run_ledger_subcommand())
-        .subcommand(build_reset_ledger_subcommand())
-        .subcommand(build_client_tx_subcommand())
-        .subcommand(build_client_intent_subcommand())
+        // Inlined commands from the node and the client.
+        // NOTE: If these are changed, please also update the
+        // `handle_command` function in `src/bin/anoma/cli.rs`.
+        .subcommand(run_gossip_subcommand())
+        .subcommand(run_ledger_subcommand())
+        .subcommand(reset_ledger_subcommand())
+        .subcommand(client_tx_subcommand())
+        .subcommand(client_intent_subcommand())
+        // Node sub-commands
         .subcommand(
             App::new(NODE_COMMAND)
                 .about("Node sub-commands")
                 .subcommand(anoma_node_cli()),
         )
+        // Client sub-commands
         .subcommand(
             App::new(CLIENT_COMMAND)
                 .about("Client sub-commands")
@@ -78,10 +83,10 @@ pub fn anoma_client_cli() -> App {
         .version(CLI_VERSION)
         .author(AUTHOR)
         .about("Anoma client interface.")
-        .subcommand(build_client_tx_subcommand())
-        .subcommand(build_client_intent_subcommand())
-        .subcommand(build_client_craft_intent_subcommand())
-        .subcommand(build_client_craft_tx_data_subcommand())
+        .subcommand(client_tx_subcommand())
+        .subcommand(client_intent_subcommand())
+        .subcommand(client_craft_intent_subcommand())
+        .subcommand(client_craft_tx_data_subcommand())
 }
 
 pub fn anoma_node_cli() -> App {
@@ -98,12 +103,12 @@ pub fn anoma_node_cli() -> App {
                 .default_value(".anoma")
                 .about("Set the base directiory."),
         )
-        .subcommand(build_run_gossip_subcommand())
-        .subcommand(build_run_ledger_subcommand())
-        .subcommand(build_reset_ledger_subcommand())
+        .subcommand(run_gossip_subcommand())
+        .subcommand(run_ledger_subcommand())
+        .subcommand(reset_ledger_subcommand())
 }
 
-fn build_client_tx_subcommand() -> App {
+fn client_tx_subcommand() -> App {
     App::new(TX_COMMAND)
         .version(CLIENT_VERSION)
         .about("Send an transaction.")
@@ -126,7 +131,7 @@ fn build_client_tx_subcommand() -> App {
         )
 }
 
-fn build_client_intent_subcommand() -> App {
+fn client_intent_subcommand() -> App {
     App::new(INTENT_COMMAND)
         .version(CLIENT_VERSION)
         .about("Send an intent.")
@@ -149,7 +154,7 @@ fn build_client_intent_subcommand() -> App {
         )
 }
 
-fn build_client_craft_intent_subcommand() -> App {
+fn client_craft_intent_subcommand() -> App {
     App::new(CRAFT_INTENT_COMMAND)
         .version(CLIENT_VERSION)
         .about("Craft an intent.")
@@ -198,7 +203,7 @@ fn build_client_craft_intent_subcommand() -> App {
         )
 }
 
-fn build_client_craft_tx_data_subcommand() -> App {
+fn client_craft_tx_data_subcommand() -> App {
     App::new(CRAFT_DATA_TX_COMMAND)
         .version(CLIENT_VERSION)
         .about("Craft a transaction data.")
@@ -240,7 +245,7 @@ fn build_client_craft_tx_data_subcommand() -> App {
         )
 }
 
-fn build_run_gossip_subcommand() -> App {
+fn run_gossip_subcommand() -> App {
     App::new(RUN_GOSSIP_COMMAND)
         .version(NODE_VERSION)
         .about("Run Anoma gossip service.")
@@ -303,13 +308,13 @@ fn build_run_gossip_subcommand() -> App {
         )
 }
 
-fn build_run_ledger_subcommand() -> App {
+fn run_ledger_subcommand() -> App {
     App::new(RUN_LEDGER_COMMAND)
         .version(NODE_VERSION)
         .about("Run Anoma node service.")
 }
 
-fn build_reset_ledger_subcommand() -> App {
+fn reset_ledger_subcommand() -> App {
     App::new(RESET_LEDGER_COMMAND)
         .version(NODE_VERSION)
         .about("Reset Anoma node state.")
