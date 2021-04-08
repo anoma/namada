@@ -97,6 +97,7 @@ fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
 }
 
 impl DB {
+    #[allow(dead_code)]
     pub fn flush(&self) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(true);
