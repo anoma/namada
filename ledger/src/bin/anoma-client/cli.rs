@@ -1,7 +1,7 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::Write;
 
 use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
