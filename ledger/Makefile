@@ -29,7 +29,7 @@ run-gossip:
 	# runs the node gossip daemon
 	$(cargo) run --bin anomad -- run-gossip
 
-run-reset:
+reset-anoma:
 	# runs the node daemon
 	$(cargo) run --bin anomad -- reset-anoma
 
