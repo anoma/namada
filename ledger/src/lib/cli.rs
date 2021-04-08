@@ -65,45 +65,51 @@ pub fn anoma_inline_cli() -> App {
         .subcommand(client_tx_subcommand())
         .subcommand(client_intent_subcommand())
         // Node sub-commands
-        .subcommand(
-            App::new(NODE_COMMAND)
-                .about("Node sub-commands")
-                .subcommand(anoma_node_cli()),
-        )
+        .subcommand(add_node_commands(
+            App::new(NODE_COMMAND).about("Node sub-commands"),
+        ))
         // Client sub-commands
-        .subcommand(
-            App::new(CLIENT_COMMAND)
-                .about("Client sub-commands")
-                .subcommand(anoma_client_cli()),
-        )
+        .subcommand(add_client_commands(
+            App::new(CLIENT_COMMAND).about("Client sub-commands"),
+        ))
 }
 
 pub fn anoma_client_cli() -> App {
-    App::new(APP_NAME)
-        .version(CLIENT_VERSION)
-        .author(AUTHOR)
-        .about("Anoma client command line interface.")
-        .subcommand(client_tx_subcommand())
+    add_client_commands(
+        App::new(APP_NAME)
+            .version(CLIENT_VERSION)
+            .author(AUTHOR)
+            .about("Anoma client command line interface."),
+    )
+}
+
+fn add_client_commands(app: App) -> App {
+    app.subcommand(client_tx_subcommand())
         .subcommand(client_intent_subcommand())
         .subcommand(client_craft_intent_subcommand())
         .subcommand(client_craft_tx_data_subcommand())
 }
 
 pub fn anoma_node_cli() -> App {
-    App::new(APP_NAME)
-        .version(NODE_VERSION)
-        .author(AUTHOR)
-        .about("Anoma node command line interface.")
-        .arg(
-            Arg::new("base")
-                .short('b')
-                .long("base-dir")
-                .takes_value(true)
-                .required(false)
-                .default_value(".anoma")
-                .about("Set the base directiory."),
-        )
-        .subcommand(run_gossip_subcommand())
+    add_node_commands(
+        App::new(APP_NAME)
+            .version(NODE_VERSION)
+            .author(AUTHOR)
+            .about("Anoma node command line interface.")
+            .arg(
+                Arg::new("base")
+                    .short('b')
+                    .long("base-dir")
+                    .takes_value(true)
+                    .required(false)
+                    .default_value(".anoma")
+                    .about("Set the base directiory."),
+            ),
+    )
+}
+
+fn add_node_commands(app: App) -> App {
+    app.subcommand(run_gossip_subcommand())
         .subcommand(run_ledger_subcommand())
         .subcommand(reset_ledger_subcommand())
 }
