@@ -38,9 +38,9 @@ impl WasmerEnv for TxEnv {
 struct VpEnv {
     /// The address of the account that owns the VP
     addr: Address,
-    // not thread-safe, assuming read-only access from parallel Vp runners
+    // thread-safe read-only access from parallel Vp runners
     storage: EnvHostWrapper<Storage>,
-    // not thread-safe, assuming read-only access from parallel Vp runners
+    // thread-safe read-only access from parallel Vp runners
     write_log: EnvHostWrapper<WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
     // the VPs that we ran.
