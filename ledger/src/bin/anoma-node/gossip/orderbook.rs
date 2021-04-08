@@ -34,23 +34,29 @@ pub struct Orderbook {
 }
 
 impl Orderbook {
-    pub fn new(matchmaker: Option<String>) -> (Self, Option<Receiver<Tx>>) {
-        match matchmaker.map(|tx_code_path| Matchmaker::new(tx_code_path)) {
-            Some((matchmaker, matchmaker_event_receiver)) => (
-                Self {
-                    mempool: Mempool::new(),
-                    matchmaker: Some(matchmaker),
-                },
-                Some(matchmaker_event_receiver),
-            ),
-            None => (
-                Self {
-                    mempool: Mempool::new(),
-                    matchmaker: None,
-                },
-                None,
-            ),
-        }
+    pub fn new(
+        matchmaker: Option<String>,
+        tx_template: Option<String>,
+    ) -> (Self, Option<Receiver<Tx>>) {
+        let (matchmaker, matchmaker_event_receiver) =
+        // TODO instead matchmaker cli option should be something like Option<(String, String)>
+            if matchmaker.is_some() && tx_template.is_some() {
+                let matchmaker = matchmaker.unwrap();
+                let tx_template = tx_template.unwrap();
+                let (matchmaker, matchmaker_event_receiver) =
+                    Matchmaker::new(matchmaker, tx_template);
+                (Some(matchmaker), Some(matchmaker_event_receiver))
+            } else {
+                (None, None)
+            };
+
+        (
+            Self {
+                mempool: Mempool::new(),
+                matchmaker,
+            },
+            matchmaker_event_receiver,
+        )
     }
 
     pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {

@@ -4,8 +4,9 @@
 mod db;
 mod types;
 
+use std::collections::HashMap;
 use std::ops::Deref;
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 use anoma::bytes::ByteBuf;
 use sparse_merkle_tree::{SparseMerkleTree, H256};

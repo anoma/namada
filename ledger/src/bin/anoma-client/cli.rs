@@ -1,12 +1,18 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
+use std::fs::File;
+use std::io::Write;
+
+use anoma::cli;
+use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
-use anoma::{cli, protobuf::services::rpc_service_client::RpcServiceClient};
+use anoma_data_template;
+use borsh::BorshSerialize;
+use color_eyre::eyre::Result;
+use eyre::Context;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
-
-use eyre::{Context, Result};
 
 pub async fn main() -> Result<()> {
     let mut app = cli::anoma_client_cli();
@@ -28,6 +34,39 @@ pub async fn main() -> Result<()> {
                 args.value_of(cli::ORDERBOOK_ARG).unwrap().to_string();
             let data = args.value_of(cli::DATA_INTENT_ARG).unwrap().to_string();
             gossip_intent(orderbook, data).await;
+            Ok(())
+        }
+        Some((cli::CRAFT_INTENT_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let addr = cli::parse_string(args, cli::ADDRESS_ARG).unwrap();
+            let token_sell =
+                cli::parse_string(args, cli::TOKEN_SELL_ARG).unwrap();
+            let amount_sell = cli::parse_u64(args, cli::AMOUNT_SELL_ARG)
+                .expect("not a valid amount");
+            let token_buy =
+                args.value_of(cli::TOKEN_BUY_ARG).unwrap().to_string();
+            let amount_buy = cli::parse_u64(args, cli::AMOUNT_BUY_ARG)
+                .expect("not a valid amount");
+            let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
+            craft_intent(
+                addr,
+                token_sell,
+                amount_sell,
+                token_buy,
+                amount_buy,
+                file,
+            );
+            Ok(())
+        },
+        Some((cli::CRAFT_DATA_TX_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let source = args.value_of(cli::SOURCE_ARG).unwrap().to_string();
+            let target = args.value_of(cli::TARGET_ARG).unwrap().to_string();
+            let token = args.value_of(cli::TOKEN_ARG).unwrap().to_string();
+            let amount = cli::parse_u64(args, cli::AMOUNT_ARG)
+                .expect("not a valid amount");
+            let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
+            craft_tx_data(source, target, token, amount, file);
             Ok(())
         }
         _ => app.print_help().wrap_err("Can't display help."),
@@ -86,4 +125,45 @@ async fn gossip_intent(orderbook_addr: String, data_path: String) {
         message: Some(types::message::Message::IntentMessage(intent_message)),
     };
     let _response = client.send_message(message).await.unwrap();
+}
+
+fn craft_intent(
+    addr: String,
+    token_sell: String,
+    amount_sell: u64,
+    token_buy: String,
+    amount_buy: u64,
+    file: String,
+) {
+    let data = anoma_data_template::Intent {
+        addr,
+        token_sell,
+        amount_sell,
+        token_buy,
+        amount_buy,
+    };
+    let data_bytes = data.try_to_vec().unwrap();
+    let mut file = File::create(file).unwrap();
+    file.write_all(&data_bytes).unwrap();
+}
+
+fn craft_tx_data(
+    source: String,
+    target: String,
+    token: String,
+    amount: u64,
+    file: String,
+) {
+    use anoma_data_template::*;
+    let data = TxData {
+        transfers: vec![Transfer {
+            source,
+            target,
+            token,
+            amount,
+        }],
+    };
+    let data_bytes = data.try_to_vec().unwrap();
+    let mut file = File::create(file).unwrap();
+    file.write_all(&data_bytes).unwrap();
 }

@@ -5,10 +5,12 @@ use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
+use anoma::protobuf::types::Tx;
 use anoma_vm_env::memory::{TxInput, VpInput};
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
+use tokio::sync::mpsc::Sender;
 use wasmer::Instance;
 use wasmparser::{Validator, WasmFeatures};
 
@@ -18,6 +20,7 @@ use crate::shell::storage::{Address, Storage};
 
 const TX_ENTRYPOINT: &str = "apply_tx";
 const VP_ENTRYPOINT: &str = "validate_tx";
+const MATCHMAKER_ENTRYPOINT: &str = "match_intent";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 /// This is used to attach the Ledger's host structures to transaction, which is
@@ -303,6 +306,92 @@ impl VpRunner {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct MatchmakerRunner {
+    wasm_store: wasmer::Store,
+}
+
+impl MatchmakerRunner {
+    pub fn new() -> Self {
+        // TODO for the matchmaker we could use a compiler that does more
+        // optimisation.
+        let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let wasm_store =
+            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        Self { wasm_store }
+    }
+
+    pub fn run(
+        &self,
+        matchmaker_code: impl AsRef<[u8]>,
+        intent1_data: impl AsRef<[u8]>,
+        intent2_data: impl AsRef<[u8]>,
+        tx_code: impl AsRef<[u8]>,
+        inject_tx: Sender<Tx>,
+    ) -> Result<bool> {
+        let matchmaker_module: wasmer::Module =
+            wasmer::Module::new(&self.wasm_store, &matchmaker_code)
+                .map_err(Error::CompileError)?;
+        let initial_memory =
+            memory::prepare_matchmaker_memory(&self.wasm_store)
+                .map_err(Error::MemoryError)?;
+
+        let matchmaker_imports = host_env::prepare_matchmaker_imports(
+            &self.wasm_store,
+            initial_memory,
+            tx_code,
+            inject_tx,
+        );
+
+        // compile and run the matchmaker wasm code
+        let matchmaker_code =
+            wasmer::Instance::new(&matchmaker_module, &matchmaker_imports)
+                .map_err(Error::InstantiationError)?;
+
+        Self::run_with_input(&matchmaker_code, intent1_data, intent2_data)
+    }
+
+    fn run_with_input(
+        code: &Instance,
+        intent1_data: impl AsRef<[u8]>,
+        intent2_data: impl AsRef<[u8]>,
+    ) -> Result<bool> {
+        let memory = code
+            .exports
+            .get_memory("memory")
+            .map_err(Error::MissingModuleMemory)?;
+        let memory::MatchmakerCallInput {
+            intent_data_1_ptr,
+            intent_data_1_len,
+            intent_data_2_ptr,
+            intent_data_2_len,
+        }: memory::MatchmakerCallInput = memory::write_matchmaker_inputs(
+            &memory,
+            intent1_data,
+            intent2_data,
+        )
+        .map_err(Error::MemoryError)?;
+        let apply_matchmaker = code
+            .exports
+            .get_function(MATCHMAKER_ENTRYPOINT)
+            .map_err(Error::MissingModuleEntrypoint)?
+            .native::<(u64, u64, u64, u64), u64>()
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: MATCHMAKER_ENTRYPOINT,
+                error,
+            })?;
+        let found_match = apply_matchmaker
+            .call(
+                intent_data_1_ptr,
+                intent_data_1_len,
+                intent_data_2_ptr,
+                intent_data_2_len,
+            )
+            .map_err(Error::RuntimeError)?;
+        Ok(found_match == 0)
+    }
+}
+
 /// Inject gas counter and stack-height limiter into the given wasm code
 fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
     let module: elements::Module = elements::deserialize_buffer(code.as_ref())
@@ -369,7 +458,7 @@ mod tests {
 
                 ;; recursive loop, the param is the number of loops
                 (func $loop (param i64) (result i64)
-                (if 
+                (if
                 (result i64)
                 (i64.eqz (get_local 0))
                 (then (get_local 0))
@@ -439,7 +528,7 @@ mod tests {
 
                 ;; recursive loop, the param is the number of loops
                 (func $loop (param i64) (result i64)
-                (if 
+                (if
                 (result i64)
                 (i64.eqz (get_local 0))
                 (then (get_local 0))

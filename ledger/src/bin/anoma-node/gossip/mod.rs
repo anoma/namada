@@ -8,25 +8,23 @@ mod types;
 
 use std::thread;
 
+use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
-use anoma::{config::Config, types::Topic};
+use anoma::types::Topic;
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
+use thiserror::Error;
 use tokio::sync::mpsc;
 
 use self::p2p::P2P;
 use self::types::NetworkEvent;
 use super::rpc;
 
-use thiserror::Error;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Bad Bookkeeper file")]
     BadBookkeeper(std::io::Error),
-    #[error("Error p2p swarm {0}")]
-    P2pSwarmError(String),
     #[error("Error p2p dispatcher {0}")]
     P2pDispatcherError(String),
 }
@@ -50,8 +48,9 @@ pub fn run(config: Config) -> Result<()> {
         bookkeeper,
         config.p2p.topics.contains(&Topic::Orderbook),
         config.p2p.topics.contains(&Topic::Dkg),
-        Some(config.p2p.matchmaker.clone()),
-        Some(config.p2p.get_ledger_address().clone()),
+        config.p2p.matchmaker.clone(),
+        config.p2p.tx_template.clone(),
+        config.p2p.get_ledger_address().clone(),
     )
     .expect("TEMPORARY: unable to build p2p layer");
     p2p.prepare(&config).expect("p2p prepraration failed");
@@ -65,7 +64,7 @@ pub fn run(config: Config) -> Result<()> {
     .map_err(|e| Error::P2pDispatcherError(e.to_string()))
 }
 
-// XXX TODO The protobuf encoding logic does not play well with asynchronous.
+// TODO The protobuf encoding logic does not play well with asynchronous.
 // see https://github.com/danburkert/prost/issues/108
 // When this event handler is merged into the main handler of the dispatcher
 // then it does not send the correct data to the ledger and it fails to
@@ -75,7 +74,8 @@ pub fn run(config: Config) -> Result<()> {
 // https://github.com/informalsystems/tendermint-rs/blob/a0a59b3a3f8a50abdaa618ff00394eeeeb8b9a0f/abci/src/codec.rs#L151
 // Ok(Some(M::decode(&mut result_bytes)?))
 //
-// As a work-around, we spawn a thread that sends [`Tx`]s to the ledger, which seems to prevent this issue.
+// As a work-around, we spawn a thread that sends [`Tx`]s to the ledger, which
+// seems to prevent this issue.
 #[tokio::main]
 pub async fn matchmaker_dispatcher(
     mut matchmaker_event_receiver: Receiver<Tx>,

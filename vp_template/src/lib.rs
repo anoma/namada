@@ -44,7 +44,7 @@ pub extern "C" fn validate_tx(
     let addr = core::str::from_utf8(slice).unwrap();
 
     let slice = unsafe { slice::from_raw_parts(tx_data_ptr as *const u8, tx_data_len as _) };
-    let tx_data = slice.to_vec() as memory::TxData;
+    let tx_data = slice.to_vec() as memory::Data;
 
     let slice =
         unsafe { slice::from_raw_parts(keys_changed_ptr as *const u8, keys_changed_len as _) };
@@ -66,7 +66,7 @@ pub extern "C" fn validate_tx(
     }
 }
 
-fn do_validate_tx(_tx_data: memory::TxData, _addr: &str, keys_changed: Vec<String>) -> bool {
+fn do_validate_tx(_tx_data: memory::Data, _addr: &str, keys_changed: Vec<String>) -> bool {
     for key in keys_changed.iter() {
         let pre_buf: Vec<u8> = Vec::with_capacity(0);
         let pre_len =

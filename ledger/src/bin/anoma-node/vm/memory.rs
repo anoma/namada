@@ -23,6 +23,7 @@ const TX_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 const TX_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
+const MATCHMAKER_MEMORY_INIT_PAGES: u32 = 400; // 12.8 MiB
 
 /// Prepare memory for instantiating a transaction module
 pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
@@ -46,6 +47,15 @@ pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
     Ok(memory)
 }
 
+/// Prepare memory for instantiating a matchmaker module
+pub fn prepare_matchmaker_memory(
+    store: &wasmer::Store,
+) -> Result<wasmer::Memory> {
+    let mem_type =
+        wasmer::MemoryType::new(MATCHMAKER_MEMORY_INIT_PAGES, None, false);
+    Memory::new(store, mem_type).map_err(Error::InitMemoryError)
+}
+
 pub struct TxCallInput {
     pub tx_data_ptr: u64,
     pub tx_data_len: u64,
@@ -54,7 +64,7 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data_bytes: &memory::TxData,
+    tx_data_bytes: &memory::Data,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as _;
@@ -110,6 +120,37 @@ pub fn write_vp_inputs(
     })
 }
 
+pub struct MatchmakerCallInput {
+    pub intent_data_1_ptr: u64,
+    pub intent_data_1_len: u64,
+    pub intent_data_2_ptr: u64,
+    pub intent_data_2_len: u64,
+}
+
+pub fn write_matchmaker_inputs(
+    memory: &wasmer::Memory,
+    intent_data_1: impl AsRef<[u8]>,
+    intent_data_2: impl AsRef<[u8]>,
+) -> Result<MatchmakerCallInput> {
+    let intent_data_1_ptr = 0;
+    let intent_data_1_len = intent_data_1.as_ref().len() as _;
+
+    let intent_data_2_ptr = intent_data_1_ptr + intent_data_1_len;
+    let intent_data_2_len = intent_data_2.as_ref().len() as _;
+
+    log::info!("write_data_inputs {}", intent_data_1_len);
+    write_memory_bytes(memory, intent_data_1_ptr, intent_data_1)?;
+    log::info!("write_data_inputs {}", intent_data_2_len);
+    write_memory_bytes(memory, intent_data_2_ptr, intent_data_2)?;
+
+    Ok(MatchmakerCallInput {
+        intent_data_1_ptr,
+        intent_data_1_len,
+        intent_data_2_ptr,
+        intent_data_2_len,
+    })
+}
+
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
 fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
@@ -130,7 +171,7 @@ fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
         memory
             .grow(req_pages)
             .map(|_pages| ())
-            .map_err(|e| Error::MemoryOutOfBounds(e))
+            .map_err(Error::MemoryOutOfBounds)
     } else {
         Ok(())
     }

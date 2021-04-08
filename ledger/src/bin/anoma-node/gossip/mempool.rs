@@ -40,24 +40,25 @@ impl Mempool {
     }
 
     pub fn put(&mut self, intent: Intent) -> Result<bool> {
-        let id = IntentId::new(&intent);
-        let already_exists_intent = self.intents.insert(id.clone(), intent);
+        let already_exists_intent =
+            self.intents.insert(IntentId::new(&intent), intent);
         Ok(already_exists_intent.is_none())
     }
 
-    // XXX TODO This is inefficient.
-    pub fn find_map<O>(
+    // TODO This is inefficient.
+    pub fn find_map<F: Fn(&Intent, &Intent) -> bool>(
         &mut self,
         intent1: &Intent,
-        f: &dyn Fn(&Intent, &Intent) -> Option<O>,
-    ) -> Option<O> {
-        let id1: IntentId = IntentId::new(intent1);
-        self.intents.iter().find_map(|(id2, intent2)| {
+        f: F,
+    ) -> bool {
+        let id1: &IntentId = &IntentId::new(intent1);
+        let res = self.intents.iter().find(|(id2, intent2)| {
             if &id1 == id2 {
-                None
+                false
             } else {
                 f(intent1, &intent2)
             }
-        })
+        });
+        res.is_some()
     }
 }
