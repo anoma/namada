@@ -17,7 +17,6 @@ use crate::shell::storage::{Address, Key, Storage};
 
 #[derive(Clone)]
 struct TxEnv {
-    // not thread-safe, assuming single-threaded Tx runner
     storage: EnvHostWrapper<Storage>,
     // not thread-safe, assuming single-threaded Tx runner
     write_log: MutEnvHostWrapper<WriteLog>,
