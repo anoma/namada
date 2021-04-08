@@ -9,7 +9,7 @@
 use clap::{Arg, ArgMatches};
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
-const CLI_DESCRIPTION: &str = "Anoma cli interface.";
+const APP_NAME: &str = "Anoma";
 const CLI_VERSION: &str = "0.1.0";
 const NODE_VERSION: &str = "0.1.0";
 const CLIENT_VERSION: &str = "0.1.0";
@@ -52,10 +52,10 @@ pub const AMOUNT_ARG: &str = "amount";
 type App = clap::App<'static>;
 
 pub fn anoma_inline_cli() -> App {
-    App::new(CLI_DESCRIPTION)
+    App::new(APP_NAME)
         .version(CLI_VERSION)
         .author(AUTHOR)
-        .about(CLI_DESCRIPTION)
+        .about("Anoma command line interface.")
         // Inlined commands from the node and the client.
         // NOTE: If these are changed, please also update the
         // `handle_command` function in `src/bin/anoma/cli.rs`.
@@ -79,10 +79,10 @@ pub fn anoma_inline_cli() -> App {
 }
 
 pub fn anoma_client_cli() -> App {
-    App::new(CLI_DESCRIPTION)
-        .version(CLI_VERSION)
+    App::new(APP_NAME)
+        .version(CLIENT_VERSION)
         .author(AUTHOR)
-        .about("Anoma client interface.")
+        .about("Anoma client command line interface.")
         .subcommand(client_tx_subcommand())
         .subcommand(client_intent_subcommand())
         .subcommand(client_craft_intent_subcommand())
@@ -90,10 +90,10 @@ pub fn anoma_client_cli() -> App {
 }
 
 pub fn anoma_node_cli() -> App {
-    App::new(CLI_DESCRIPTION)
-        .version(CLI_VERSION)
+    App::new(APP_NAME)
+        .version(NODE_VERSION)
         .author(AUTHOR)
-        .about("Anoma node cli.")
+        .about("Anoma node command line interface.")
         .arg(
             Arg::new("base")
                 .short('b')
@@ -110,7 +110,6 @@ pub fn anoma_node_cli() -> App {
 
 fn client_tx_subcommand() -> App {
     App::new(TX_COMMAND)
-        .version(CLIENT_VERSION)
         .about("Send an transaction.")
         .arg(
             Arg::new(DATA_TX_ARG)
@@ -133,7 +132,6 @@ fn client_tx_subcommand() -> App {
 
 fn client_intent_subcommand() -> App {
     App::new(INTENT_COMMAND)
-        .version(CLIENT_VERSION)
         .about("Send an intent.")
         .arg(
             Arg::new(ORDERBOOK_INTENT_ARG)
@@ -156,7 +154,6 @@ fn client_intent_subcommand() -> App {
 
 fn client_craft_intent_subcommand() -> App {
     App::new(CRAFT_INTENT_COMMAND)
-        .version(CLIENT_VERSION)
         .about("Craft an intent.")
         .arg(
             Arg::new(ADDRESS_ARG)
@@ -205,7 +202,6 @@ fn client_craft_intent_subcommand() -> App {
 
 fn client_craft_tx_data_subcommand() -> App {
     App::new(CRAFT_DATA_TX_COMMAND)
-        .version(CLIENT_VERSION)
         .about("Craft a transaction data.")
         .arg(
             Arg::new("source")
@@ -247,7 +243,6 @@ fn client_craft_tx_data_subcommand() -> App {
 
 fn run_gossip_subcommand() -> App {
     App::new(RUN_GOSSIP_COMMAND)
-        .version(NODE_VERSION)
         .about("Run Anoma gossip service.")
         .arg(
             Arg::new(ADDRESS_ARG)
@@ -309,15 +304,11 @@ fn run_gossip_subcommand() -> App {
 }
 
 fn run_ledger_subcommand() -> App {
-    App::new(RUN_LEDGER_COMMAND)
-        .version(NODE_VERSION)
-        .about("Run Anoma node service.")
+    App::new(RUN_LEDGER_COMMAND).about("Run Anoma node service.")
 }
 
 fn reset_ledger_subcommand() -> App {
-    App::new(RESET_LEDGER_COMMAND)
-        .version(NODE_VERSION)
-        .about("Reset Anoma node state.")
+    App::new(RESET_LEDGER_COMMAND).about("Reset Anoma node state.")
 }
 
 pub fn parse_vector(args: &ArgMatches, field: &str) -> Option<Vec<String>> {
