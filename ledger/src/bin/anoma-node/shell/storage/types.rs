@@ -383,7 +383,8 @@ impl KeySeg for ValidatorAddress {
             Some(c) if c == '@' => Ok(Self(seg.clone())),
             _ => Err(Error::Temporary {
                 error: format!(
-                    "TEMPORARY: ValidatorAddress must start with \"@v\", got {}",
+                    "TEMPORARY: ValidatorAddress must start with \"@v\", got \
+                     {}",
                     seg
                 ),
             }),

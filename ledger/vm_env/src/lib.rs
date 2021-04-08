@@ -16,19 +16,22 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub mod memory {
     use super::*;
 
-    /// The data attached to the transaction that initiated the wasm call
-    /// (tx or VP)
-    pub type TxData = Vec<u8>;
+    /// The data type that can be attached to the operation that initiated the
+    /// wasm call (tx, VP, matchmaker, filter)
+    pub type Data = Vec<u8>;
 
     /// The storage changed keys from the write log of storage updates performed
     /// by the transaction for the account associated with the VP
     pub type KeysChanged = Vec<String>;
 
     /// Input for transaction wasm module call
-    pub type TxInput = TxData;
+    pub type TxInput = Data;
 
     /// Input for validity predicate wasm module call
-    pub type VpInput<'a> = (String, &'a TxData, &'a KeysChanged);
+    pub type VpInput<'a> = (String, &'a Data, &'a KeysChanged);
+
+    /// Input for matchmaker wasm module call
+    pub type MatchmakerInput = Data;
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub struct StorageReadInput {
