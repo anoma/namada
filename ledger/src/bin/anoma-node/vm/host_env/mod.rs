@@ -11,18 +11,18 @@ use wasmer::{
 
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
-use super::{TxEnvHostWrapper, VpEnvHostWrapper};
+use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Key, Storage};
 
 #[derive(Clone)]
 struct TxEnv {
     // not thread-safe, assuming single-threaded Tx runner
-    storage: TxEnvHostWrapper<Storage>,
+    storage: EnvHostWrapper<Storage>,
     // not thread-safe, assuming single-threaded Tx runner
-    write_log: TxEnvHostWrapper<WriteLog>,
+    write_log: MutEnvHostWrapper<WriteLog>,
     // not thread-safe, assuming single-threaded Tx runner
-    gas_meter: TxEnvHostWrapper<BlockGasMeter>,
+    gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     memory: AnomaMemory,
 }
 
@@ -40,9 +40,9 @@ struct VpEnv {
     /// The address of the account that owns the VP
     addr: Address,
     // not thread-safe, assuming read-only access from parallel Vp runners
-    storage: VpEnvHostWrapper<Storage>,
+    storage: EnvHostWrapper<Storage>,
     // not thread-safe, assuming read-only access from parallel Vp runners
-    write_log: VpEnvHostWrapper<WriteLog>,
+    write_log: EnvHostWrapper<WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
     // the VPs that we ran.
     gas_meter: Arc<Mutex<BlockGasMeter>>,
@@ -78,9 +78,9 @@ impl WasmerEnv for MatchmakerEnv {
 /// transaction code
 pub fn prepare_tx_imports(
     wasm_store: &Store,
-    storage: TxEnvHostWrapper<Storage>,
-    write_log: TxEnvHostWrapper<WriteLog>,
-    gas_meter: TxEnvHostWrapper<BlockGasMeter>,
+    storage: EnvHostWrapper<Storage>,
+    write_log: MutEnvHostWrapper<WriteLog>,
+    gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
     let env = TxEnv {
@@ -108,8 +108,8 @@ pub fn prepare_tx_imports(
 pub fn prepare_vp_imports(
     wasm_store: &Store,
     addr: Address,
-    storage: VpEnvHostWrapper<Storage>,
-    write_log: VpEnvHostWrapper<WriteLog>,
+    storage: EnvHostWrapper<Storage>,
+    write_log: EnvHostWrapper<WriteLog>,
     gas_meter: Arc<Mutex<BlockGasMeter>>,
     initial_memory: Memory,
 ) -> ImportObject {

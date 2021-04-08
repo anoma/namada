@@ -254,7 +254,7 @@ impl Shell {
         let tx_runner = TxRunner::new();
         tx_runner
             .run(
-                &mut self.storage,
+                &self.storage,
                 &mut self.write_log,
                 &mut gas_meter,
                 tx.code,
@@ -350,7 +350,7 @@ impl Shell {
         let tx_runner = TxRunner::new();
         tx_runner
             .run(
-                &mut self.storage,
+                &self.storage,
                 &mut self.write_log,
                 &mut gas_meter,
                 tx.code,
