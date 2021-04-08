@@ -17,6 +17,9 @@ build-release:
 clippy:
 	$(cargo) clippy
 
+clippy-check:
+	$(cargo) clippy -- -D warnings
+
 install:
 	# Warning: built in debug mode for now
 	$(cargo) install --path ./ --debug
@@ -41,6 +44,9 @@ test-debug:
 
 fmt:
 	$(cargo) +$(nightly) fmt
+
+fmt-check:
+	$(cargo) +$(nightly) fmt --all -- --check
 
 watch:
 	$(cargo) watch
