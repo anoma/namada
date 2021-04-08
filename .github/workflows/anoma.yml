@@ -42,7 +42,7 @@ jobs:
           toolchain: stable
           override: true
       - run: rustup component add rustfmt
-      - run: make fmt
+      - run: make fmt-check
 
   clippy:
     name: Clippy
@@ -55,4 +55,4 @@ jobs:
           toolchain: stable
           override: true
       - run: rustup component add clippy
-      - run: make clippy
+      - run: make clippy-check
