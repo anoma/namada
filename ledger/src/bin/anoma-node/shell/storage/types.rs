@@ -482,7 +482,7 @@ impl<'a> Iterator for PrefixIterator<'a> {
 
     fn next(&mut self) -> Option<(Vec<u8>, Vec<u8>)> {
         match self.0.next() {
-            Some(kv) => Some((kv.0.to_vec(), kv.1.to_vec())),
+            Some((key, val)) => Some((key.to_vec(), val.to_vec())),
             None => None,
         }
     }
@@ -491,22 +491,5 @@ impl<'a> Iterator for PrefixIterator<'a> {
 impl<'a> std::fmt::Debug for PrefixIterator<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("PrefixIterator")
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct PrefixIteratorId(u64);
-
-impl PrefixIteratorId {
-    pub fn new(id: u64) -> Self {
-        PrefixIteratorId(id)
-    }
-
-    pub fn id(&self) -> u64 {
-        self.0
-    }
-
-    pub fn next_id(&self) -> PrefixIteratorId {
-        PrefixIteratorId(self.0 + 1)
     }
 }

@@ -14,6 +14,7 @@ use tokio::sync::mpsc::Sender;
 use wasmer::Instance;
 use wasmparser::{Validator, WasmFeatures};
 
+use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
 use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Storage};
@@ -143,12 +144,19 @@ impl TxRunner {
         validate_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let env_storage =
+        let storage =
             unsafe { TxEnvHostWrapper::new(storage as *mut _ as *mut c_void) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let write_log = unsafe {
             TxEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
+        };
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
+        let iterators = unsafe {
+            TxEnvHostWrapper::new(
+                &mut PrefixIterators::new() as *mut _ as *mut c_void
+            )
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
@@ -164,8 +172,9 @@ impl TxRunner {
             .map_err(Error::MemoryError)?;
         let tx_imports = host_env::prepare_tx_imports(
             &self.wasm_store,
-            env_storage,
+            storage,
             write_log,
+            iterators,
             gas_meter,
             initial_memory,
         );
@@ -173,12 +182,7 @@ impl TxRunner {
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::InstantiationError)?;
-        let ret = Self::run_with_input(tx_code, tx_data);
-
-        // post wasm code running
-        storage.iter_release();
-
-        ret
+        Self::run_with_input(tx_code, tx_data)
     }
 
     fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {
@@ -246,6 +250,7 @@ impl VpRunner {
         let write_log = unsafe {
             VpEnvHostWrapper::new(write_log as *const _ as *const c_void)
         };
+        let iterators = Arc::new(Mutex::new(PrefixIterators::new()));
 
         let vp_code = prepare_wasm_code(vp_code)?;
 
@@ -259,6 +264,7 @@ impl VpRunner {
             addr,
             storage,
             write_log,
+            iterators,
             gas_meter,
             initial_memory,
         );

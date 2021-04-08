@@ -13,10 +13,9 @@ use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
 pub use self::types::{
-    Address, BasicAddress, BlockHash, BlockHeight, Key, KeySeg, MerkleTree,
-    PrefixIterator, PrefixIteratorId, ValidatorAddress, Value,
+    Address, BasicAddress, BlockHash, BlockHeight, Hash256, Key, KeySeg,
+    MerkleTree, PrefixIterator, ValidatorAddress, Value, CHAIN_ID_LENGTH,
 };
-use self::types::{Hash256, CHAIN_ID_LENGTH};
 use super::MerkleRoot;
 
 #[derive(Error, Debug)]
@@ -35,7 +34,7 @@ static VP_WASM: &'static [u8] =
     include_bytes!("../../../../../../vp_template/vp.wasm");
 
 #[derive(Debug)]
-pub struct Storage<'a> {
+pub struct Storage {
     db: db::DB,
     chain_id: String,
     // TODO Because the transaction may modify and state, we'll probably need
@@ -44,8 +43,6 @@ pub struct Storage<'a> {
     // to the state of the latter
     block: BlockStorage,
     current_height: BlockHeight,
-    iter_index: PrefixIteratorId,
-    iterators: HashMap<PrefixIteratorId, PrefixIterator<'a>>,
 }
 
 #[derive(Debug)]
@@ -56,7 +53,7 @@ pub struct BlockStorage {
     subspaces: HashMap<Key, Vec<u8>>,
 }
 
-impl<'a> Storage<'a> {
+impl Storage {
     pub fn new<T: AsRef<Path>>(db_path: T) -> Self {
         let tree = MerkleTree::default();
         let subspaces = HashMap::new();
@@ -72,8 +69,6 @@ impl<'a> Storage<'a> {
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
             current_height: BlockHeight(0),
-            iter_index: PrefixIteratorId::new(0),
-            iterators: HashMap::new(),
         }
     }
 
@@ -168,28 +163,8 @@ impl<'a> Storage<'a> {
     }
 
     /// Returns an ID for a prefix iterator
-    pub fn iter_prefix(&'a mut self, prefix: &Key) -> PrefixIteratorId {
-        let iter = self.db.iter_prefix(self.current_height, prefix);
-        let iter_id = self.iter_index;
-        self.iterators.insert(iter_id, iter);
-        self.iter_index = iter_id.next_id();
-        iter_id
-    }
-
-    /// Returns a value from the specified iterator
-    pub fn iter_next(
-        &mut self,
-        iter_id: PrefixIteratorId,
-    ) -> Option<(Vec<u8>, Vec<u8>)> {
-        match self.iterators.get_mut(&iter_id) {
-            Some(iter) => iter.next(),
-            None => None,
-        }
-    }
-
-    /// Release all iterators
-    pub fn iter_release(&mut self) {
-        self.iterators.clear();
+    pub fn iter_prefix(&self, prefix: &Key) -> PrefixIterator {
+        self.db.iter_prefix(self.current_height, prefix)
     }
 
     /// Write a value to the specified subspace and returns the gas cost and the

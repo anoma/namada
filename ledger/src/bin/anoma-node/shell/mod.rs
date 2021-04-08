@@ -69,9 +69,9 @@ pub fn reset(config: Config) -> Result<()> {
 }
 
 #[derive(Debug)]
-pub struct Shell<'a> {
+pub struct Shell {
     abci: AbciReceiver,
-    storage: storage::Storage<'a>,
+    storage: storage::Storage,
     // The gas meter is sync with mutex to allow VPs sharing it
     // TODO it should be possible to impl a lock-free gas metering for VPs
     gas_meter: Arc<Mutex<BlockGasMeter>>,
@@ -89,7 +89,7 @@ pub enum MempoolTxType {
 
 pub struct MerkleRoot(pub Vec<u8>);
 
-impl<'a> Shell<'a> {
+impl Shell {
     pub fn new(abci: AbciReceiver, db_path: &PathBuf) -> Self {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
@@ -198,7 +198,7 @@ impl<'a> Shell<'a> {
     }
 }
 
-impl<'a> Shell<'a> {
+impl Shell {
     pub fn init_chain(&mut self, chain_id: String) -> Result<()> {
         self.storage
             .set_chain_id(&chain_id)
