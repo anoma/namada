@@ -30,8 +30,8 @@ struct Transaction {
     code: Vec<u8>
     // Arbitrary data
     data: Vec<u8>,
-    // Set of validators whose VPs should be triggered by this tx
-    validators: HashSet<Address>,
+    // Set of addresses whose VPs should be triggered by this tx
+    verifiers: HashSet<Address>,
     gas_limit: TODO,
 }
 ```
@@ -92,7 +92,7 @@ flowchart TD
 
 The code is allowed to read and write anything from [accounts' sub-spaces](./accounts.md#dynamic-storage-sub-space) and to [initialize new accounts](./accounts.md#initializing-a-new-account). Other data that is not in an account's subspace is read-only, e.g. chain and block metadata, account addresses and potentially keys.
 
-In addition to the validators specified in a transaction, each account whose sub-space has been modified by the tx triggers its VP. The VPs are then given the prior and posterior state from the account's sub-space together with the tx to decide if it accepts the tx's state modifications.
+In addition to the verifiers specified in a transaction, each account whose sub-space has been modified by the tx triggers its VP. The VPs are then given the prior and posterior state from the account's sub-space together with the tx to decide if it accepts the tx's state modifications.
 
 Within a single tx the execution of the validity predicates will be parallelized and thus the fee for VPs execution would their maximum value (plus some portion of the fees for each of the other parallelized VPs - nothing should be "free"). Once any of the VPs rejects the modifications, execution is aborted, the transaction is rejected and state changes discarded. If all the VPs accept the modifications, the transaction is successful and modifications are committed to storage as the input of the next tx.
 
