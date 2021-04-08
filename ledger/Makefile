@@ -36,6 +36,9 @@ run-reset:
 	# runs the node daemon
 	$(cargo) run --bin anomad -- reset-ledger
 
+audit:
+	$(cargo) audit
+
 test:
 	$(cargo) test
 
