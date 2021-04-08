@@ -1,13 +1,22 @@
-# The gossip/orderbook
+# The gossip network
 
-## High level Overview
+The gossip network runs in parralel to the ledger network and is used to
+propagate information like intents. The network is based on
+[libp2p](https://libp2p.io/) that takes of creating a decentralize network and
+encrypting any messages. On top of it, it uses the network behaviour
+[GossipSub](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) that
+takes care of gossiping the message to all participant and has a grading system
+to bans node that does not follow the rules.
 
-The orderbook network runs in parallel to the ledger network. It purpose is to
-gossip any expression of intents that can be picked up by a matchmaker in order
-to create valid transaction.
+The gossip network is used to propagate message of two differents applications,
+intents for the orderbook application, and message for distributed keys
+generation application.
 
-![orderbook and ledger network interaction ](./gossip/orderbook_network.svg  "orderbook network")
+- [orderbook](./gossip/orderbook.md)
+- [distributed key generation](./gossip/dkg.md)
 
-## Orderbook process
+## Gossip process
 
-![global orderbook process](./gossip/orderbook_process.svg  "orderbook process")
+High level overview of the gossip processing
+
+![gossip process](./gossip/gossip_process.svg  "gossip process")

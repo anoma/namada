@@ -1,22 +1,8 @@
 # Orderbook filter
 
-The orderbook checks intent on arrival and periodically with two differents
- filters:
+The orderbook is define with a intent filter. It is gossiped to any attach peers
+and is bounded in size and runtime. To send an intent to peers, it must pass its
+corresponding filter. When receiving an intent the orderbook checks the filter,
+if the filter does not validate the intent then the peer score is lowered until
+a threshold and getting ban.
 
-- An inclusive filter, low on computation and gossiped to all others peers. This
-  filter allow for a quick validation to check the interest of a node.
-
-- An exclusive filter, can be high on computation and is only run locally on the
-  node. This filter might do more detailed check but can't be gossiped.
-
-If a peer does not respect the inclusive filter, it score is lowered until a
-thresold that ban it for some time.
-
-When the inclusive filter is updated it must be gossiped to other peers and the
-peers score is reseted.
-
-Each orderbook can parametrize how often the intents must be checked out,
-balancing the computation cost of validating and gossiping intent that wont be
-matched.
-
-![filter logic](./filter.svg "filter logic")

@@ -2,15 +2,9 @@
 
 tracking issue [#36](https://github.com/heliaxdev/rd-pm/issues/36)
 
-TODO describe type, life cycle
-
-## Intent :
-
-There is only a single intent type.
-
-The intent allows arbitrary data that must be used by the matchmaker to craft
-transaction. Some arbitrary field might be exported to specific field, like
-`timestamp`, when they are mainstream.
+There is only a single intent type that is composed of arbitrary data. Some
+informations wildly use might be exported in the futur to specific field, like
+`timestamp`.
 
 ```rust
 struct Intent {
@@ -19,6 +13,11 @@ struct Intent {
 }
 ```
 
-## Intent life cycle
+The arbitrary data will be given to any interested matchmaker to craft valid
+transaction. This means that this data encoding must be known the
+matchmaker. Some default template will be provided for that encoding for most
+general cases.
 
-![intent life cycle](./intent_life_cycle.svg "intent life cycle")
+The user of anoma can define themself there own encoding and an easy plugin
+system will be implemented for that. The chosen encoding must define alongside a
+matchmaker program, see [matchmaker](./matchmaker.md).
