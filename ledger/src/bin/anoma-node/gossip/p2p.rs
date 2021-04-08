@@ -11,7 +11,7 @@ use tokio::sync::mpsc::Receiver;
 
 use super::dkg::DKG;
 use super::network_behaviour::Behaviour;
-use super::orderbook::{self,Orderbook};
+use super::orderbook::{self, Orderbook};
 use super::types::NetworkEvent;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;

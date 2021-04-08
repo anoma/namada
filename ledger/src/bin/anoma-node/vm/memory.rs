@@ -24,7 +24,6 @@ const TX_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 const MATCHMAKER_MEMORY_INIT_PAGES: u32 = 400; // 12.8 MiB
-const MATCHMAKER_MEMORY_MAX_PAGES: u32 = 800; // 25.6 MiB
 
 /// Prepare memory for instantiating a transaction module
 pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
@@ -48,15 +47,12 @@ pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
     Ok(memory)
 }
 
-/// Prepare memory for instantiating a transaction module
+/// Prepare memory for instantiating a matchmaker module
 pub fn prepare_matchmaker_memory(
     store: &wasmer::Store,
 ) -> Result<wasmer::Memory> {
-    let mem_type = wasmer::MemoryType::new(
-        MATCHMAKER_MEMORY_INIT_PAGES,
-        Some(MATCHMAKER_MEMORY_MAX_PAGES),
-        false,
-    );
+    let mem_type =
+        wasmer::MemoryType::new(MATCHMAKER_MEMORY_INIT_PAGES, None, false);
     Memory::new(store, mem_type).map_err(Error::InitMemoryError)
 }
 

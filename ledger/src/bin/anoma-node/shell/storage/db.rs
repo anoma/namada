@@ -22,9 +22,8 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
-use super::types::{BlockHeight, KeySeg};
-use super::{Address, BlockHash, MerkleTree};
-use crate::shell::storage::types::Value;
+use super::types::{BlockHeight, Key, KeySeg, Value};
+use super::{BlockHash, MerkleTree};
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -37,6 +36,8 @@ pub enum Error {
     Temporary { error: String },
     #[error("Found an unknown key: {key}")]
     UnknownKey { key: String },
+    #[error("Key error {0}")]
+    KeyError(super::types::Error),
     #[error("RocksDB error: {0}")]
     RocksDBError(rocksdb::Error),
 }
@@ -96,6 +97,7 @@ fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
 }
 
 impl DB {
+    #[allow(dead_code)]
     pub fn flush(&self) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(true);
@@ -108,43 +110,50 @@ impl DB {
         &mut self,
         tree: &MerkleTree,
         hash: &BlockHash,
-        height: &BlockHeight,
-        subspaces: &HashMap<Address, HashMap<String, Vec<u8>>>,
+        height: BlockHeight,
+        subspaces: &HashMap<Key, Vec<u8>>,
     ) -> Result<()> {
         let mut batch = WriteBatch::default();
 
-        let prefix = height.to_key_seg();
+        let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
-            let prefix = format!("{}/tree", prefix);
+            let prefix_key = prefix_key
+                .push(&"tree".to_owned())
+                .map_err(Error::KeyError)?;
             // Merkle root hash
             {
-                let key = format!("{}/root", prefix);
+                let key = prefix_key
+                    .push(&"root".to_owned())
+                    .map_err(Error::KeyError)?;
                 let value = tree.0.root();
-                batch.put(key, value.as_slice());
+                batch.put(key.to_string(), value.as_slice());
             }
             // Tree's store
             {
-                let key = format!("{}/store", prefix);
+                let key = prefix_key
+                    .push(&"store".to_owned())
+                    .map_err(Error::KeyError)?;
                 let value = tree.0.store();
-                batch.put(key, value.encode());
+                batch.put(key.to_string(), value.encode());
             }
         }
         // Block hash
         {
-            let key = format!("{}/hash", prefix);
+            let key = prefix_key
+                .push(&"hash".to_owned())
+                .map_err(Error::KeyError)?;
             let value = hash;
-            batch.put(key, value.encode());
+            batch.put(key.to_string(), value.encode());
         }
         // SubSpace
         {
-            subspaces.iter().for_each(|(addr, subspace)| {
-                let subspace_prefix =
-                    format!("{}/subspace/{}", prefix, addr.to_key_seg());
-                subspace.iter().for_each(|(column, value)| {
-                    let key = format!("{}/{}", subspace_prefix, column);
-                    batch.put(key, value);
-                });
+            let subspace_prefix = prefix_key
+                .push(&"subspace".to_owned())
+                .map_err(Error::KeyError)?;
+            subspaces.iter().for_each(|(key, value)| {
+                let key = subspace_prefix.join(key);
+                batch.put(key.to_string(), value);
             });
         }
         let mut write_opts = WriteOptions::default();
@@ -175,21 +184,14 @@ impl DB {
     pub fn read(
         &self,
         height: BlockHeight,
-        addr: &Address,
-        column: &str,
+        key: &Key,
     ) -> Result<Option<Vec<u8>>> {
-        let key = format!(
-            "{}/subspace/{}/{}",
-            height.to_key_seg(),
-            addr.to_key_seg(),
-            column
-        );
-        if let Some(bytes) = self.0.get(key).map_err(Error::RocksDBError)? {
-            return Ok(Some(bytes));
-        }
-
-        match height.prev_height() {
-            Some(prev) => self.read(prev, addr, column),
+        let key = Key::from(height.to_db_key())
+            .push(&"subspace".to_owned())
+            .map_err(Error::KeyError)?
+            .join(key);
+        match self.0.get(key.to_string()).map_err(Error::RocksDBError)? {
+            Some(bytes) => Ok(Some(bytes)),
             None => Ok(None),
         }
     }
@@ -202,7 +204,7 @@ impl DB {
             MerkleTree,
             BlockHash,
             BlockHeight,
-            HashMap<Address, HashMap<String, Vec<u8>>>,
+            HashMap<Key, Vec<u8>>,
         )>,
     > {
         let chain_id;
@@ -224,17 +226,16 @@ impl DB {
             None => return Ok(None),
         }
         // Load data at the height
-        let prefix = format!("{}/", height.to_key_seg());
+        let prefix = format!("{}/", height.to_string());
         let mut read_opts = ReadOptions::default();
         read_opts.set_total_order_seek(false);
         let next_height_prefix =
-            format!("{}/", height.next_height().to_key_seg());
+            format!("{}/", height.next_height().to_string());
         read_opts.set_iterate_upper_bound(next_height_prefix);
         let mut root = None;
         let mut store = None;
         let mut hash = None;
-        let mut subspaces: HashMap<Address, HashMap<String, Vec<u8>>> =
-            HashMap::new();
+        let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
         for (key, bytes) in self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
@@ -263,31 +264,16 @@ impl DB {
                         None => unknown_key_error(path)?,
                     },
                     "hash" => hash = Some(BlockHash::decode(bytes.to_vec())),
-                    "subspace" => match segments.get(2) {
-                        Some(addr_str) => {
-                            let addr =
-                                Address::from_key_seg(&(*addr_str).to_owned())
-                                    .map_err(|e| Error::Temporary {
-                                        error: format!(
-                                            "Cannot parse address from key \
-                                             segment: {}",
-                                            e
-                                        ),
-                                    })?;
-                            let column = segments.split_off(3).join("/");
-                            match subspaces.get_mut(&addr) {
-                                Some(subspace) => {
-                                    subspace.insert(column, bytes.to_vec());
-                                }
-                                None => {
-                                    let mut subspace = HashMap::new();
-                                    subspace.insert(column, bytes.to_vec());
-                                    subspaces.insert(addr, subspace);
-                                }
-                            };
-                        }
-                        None => unknown_key_error(path)?,
-                    },
+                    "subspace" => {
+                        let key = Key::parse(segments.split_off(2).join("/"))
+                            .map_err(|e| Error::Temporary {
+                            error: format!(
+                                "Cannot parse key segments {}: {}",
+                                path, e
+                            ),
+                        })?;
+                        subspaces.insert(key, bytes.to_vec());
+                    }
                     _ => unknown_key_error(path)?,
                 },
                 None => unknown_key_error(path)?,

@@ -4,6 +4,7 @@
 //! of this module.
 
 use std::convert::{TryFrom, TryInto};
+use std::fs;
 use std::fs::File;
 use std::io::{self, Write};
 use std::net::SocketAddr;
@@ -116,6 +117,11 @@ pub fn reset(config: Config) {
         ])
         .output()
         .expect("TEMPORARY: Failed to reset tendermint node's data");
+    fs::remove_dir_all(format!(
+        "{}/config",
+        &config.tendermint_home_dir().to_string_lossy()
+    ))
+    .expect("TEMPORARY: Failed to reset tendermint node's config");
 }
 
 #[derive(Clone, Debug)]

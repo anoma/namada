@@ -29,7 +29,6 @@ pub struct BlockGasMeter {
 impl BlockGasMeter {
     /// Add gas cost for the current transaction.
     pub fn add(&mut self, gas: u64) -> Result<()> {
-        log::info!("add {}", gas);
         self.transaction_gas = self
             .transaction_gas
             .checked_add(gas)

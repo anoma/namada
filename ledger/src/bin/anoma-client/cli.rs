@@ -1,45 +1,52 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::Write;
 
-use anoma::cli::{
-    self, ClientOpts, CraftIntentArg, InlinedClientOpts, IntentArg,
-};
+use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
 use anoma_data_template;
 use borsh::BorshSerialize;
-use clap::Clap;
 use color_eyre::eyre::Result;
+use eyre::Context;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 
 pub async fn main() -> Result<()> {
-    match ClientOpts::parse() {
-        ClientOpts::Inlined(ops) => Ok(exec_inlined(ops).await),
-    }
-}
+    let mut app = cli::anoma_client_cli();
 
-async fn exec_inlined(ops: InlinedClientOpts) {
-    match ops {
-        InlinedClientOpts::Tx(tx) => exec_tx(tx).await,
-        InlinedClientOpts::Intent(IntentArg {
-            orderbook,
-            data_path,
-        }) => {
-            gossip_intent(orderbook, data_path).await;
+    let matches = app.clone().get_matches();
+
+    match matches.subcommand() {
+        Some((cli::TX_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let path = args.value_of(cli::PATH_TX_ARG).unwrap().to_string();
+            let data = args.value_of(cli::DATA_TX_ARG);
+            exec_tx(path, data).await;
+            Ok(())
         }
-        InlinedClientOpts::CraftIntent(CraftIntentArg {
-            addr,
-            token_sell,
-            amount_sell,
-            token_buy,
-            amount_buy,
-            file,
-        }) => {
+        Some((cli::INTENT_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let orderbook =
+                args.value_of(cli::ORDERBOOK_ARG).unwrap().to_string();
+            let data = args.value_of(cli::DATA_INTENT_ARG).unwrap().to_string();
+            gossip_intent(orderbook, data).await;
+            Ok(())
+        }
+        Some((cli::CRAFT_INTENT_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let addr = cli::parse_string(args, cli::ADDRESS_ARG).unwrap();
+            let token_sell =
+                cli::parse_string(args, cli::TOKEN_SELL_ARG).unwrap();
+            let amount_sell = cli::parse_u64(args, cli::AMOUNT_SELL_ARG)
+                .expect("not a valid amount");
+            let token_buy =
+                args.value_of(cli::TOKEN_BUY_ARG).unwrap().to_string();
+            let amount_buy = cli::parse_u64(args, cli::AMOUNT_BUY_ARG)
+                .expect("not a valid amount");
+            let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
             craft_intent(
                 addr,
                 token_sell,
@@ -47,23 +54,30 @@ async fn exec_inlined(ops: InlinedClientOpts) {
                 token_buy,
                 amount_buy,
                 file,
-            )
-            .await;
+            );
+            Ok(())
         }
+        Some((cli::CRAFT_DATA_TX_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let source = args.value_of(cli::SOURCE_ARG).unwrap().to_string();
+            let target = args.value_of(cli::TARGET_ARG).unwrap().to_string();
+            let token = args.value_of(cli::TOKEN_ARG).unwrap().to_string();
+            let amount = cli::parse_u64(args, cli::AMOUNT_ARG)
+                .expect("not a valid amount");
+            let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
+            craft_tx_data(source, target, token, amount, file);
+            Ok(())
+        }
+        _ => app.print_help().wrap_err("Can't display help."),
     }
 }
 
-async fn exec_tx(
-    cli::Tx {
-        code_path,
-        data_hex,
-    }: cli::Tx,
-) {
+async fn exec_tx(code_path: String, data_path: Option<&str>) {
     // TODO tendermint cache blocks the same transaction sent more than once,
     // add a counter or timestamp?
 
     let code = std::fs::read(code_path).unwrap();
-    let data = data_hex.map(|hex| hex::decode(hex).unwrap());
+    let data = data_path.map(|data_path| std::fs::read(data_path).unwrap());
     let tx = Tx { code, data };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();
@@ -100,9 +114,8 @@ async fn gossip_intent(orderbook_addr: String, data_path: String) {
     };
     let _response = client.send_message(message).await.unwrap();
 }
-// TODO Instead it might be better to incorporate a cli into the
-// anoma_data_template ?
-async fn craft_intent(
+
+fn craft_intent(
     addr: String,
     token_sell: String,
     amount_sell: u64,
@@ -110,12 +123,33 @@ async fn craft_intent(
     amount_buy: u64,
     file: String,
 ) {
-    let data = anoma_data_template::IntentData {
+    let data = anoma_data_template::Intent {
         addr,
         token_sell,
         amount_sell,
         token_buy,
         amount_buy,
+    };
+    let data_bytes = data.try_to_vec().unwrap();
+    let mut file = File::create(file).unwrap();
+    file.write_all(&data_bytes).unwrap();
+}
+
+fn craft_tx_data(
+    source: String,
+    target: String,
+    token: String,
+    amount: u64,
+    file: String,
+) {
+    use anoma_data_template::*;
+    let data = TxData {
+        transfers: vec![Transfer {
+            source,
+            target,
+            token,
+            amount,
+        }],
     };
     let data_bytes = data.try_to_vec().unwrap();
     let mut file = File::create(file).unwrap();

@@ -46,10 +46,10 @@ impl Mempool {
     }
 
     // TODO This is inefficient.
-    pub fn find_map(
+    pub fn find_map<F: Fn(&Intent, &Intent) -> bool>(
         &mut self,
         intent1: &Intent,
-        f: &dyn Fn(&Intent, &Intent) -> bool,
+        f: F,
     ) -> bool {
         let id1: &IntentId = &IntentId::new(intent1);
         let res = self.intents.iter().find(|(id2, intent2)| {

@@ -1,4 +1,4 @@
-# Transaction script wasm template
+# Matchmaker script wasm template
 
 This is just a template of a wasm module for matchmaker script.
 
