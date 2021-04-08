@@ -60,8 +60,6 @@ impl WasmerEnv for VpEnv {
 
 #[derive(Clone)]
 pub struct MatchmakerEnv {
-    // not thread-safe, assuming single-threaded Tx runner
-    // pub ledger: TxShellWrapper,
     pub tx_code: Vec<u8>,
     pub inject_tx: Sender<Tx>,
     pub memory: AnomaMemory,
@@ -595,6 +593,7 @@ fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
     log::info!("WASM Validity predicate log: {}", str);
 }
 
+/// Inject a transaction from matchmaker's matched intents to the ledger
 fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
     let inject_tx: &Sender<Tx> = &env.inject_tx;
     let tx_data = env

@@ -3,7 +3,7 @@ rustup = $(env) rustup
 
 build-release:
 	$(cargo) build --release && \
-	cp "./target/wasm32-unknown-unknown/release/tx_intent_template.wasm" tx.wasm
+	cp "./target/wasm32-unknown-unknown/release/tx_template.wasm" tx.wasm
 
 build:
 	$(cargo) build

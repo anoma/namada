@@ -47,7 +47,7 @@ pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
     Ok(memory)
 }
 
-/// Prepare memory for instantiating a transaction module
+/// Prepare memory for instantiating a matchmaker module
 pub fn prepare_matchmaker_memory(
     store: &wasmer::Store,
 ) -> Result<wasmer::Memory> {
