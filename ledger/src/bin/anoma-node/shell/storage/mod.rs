@@ -162,7 +162,7 @@ impl Storage {
         }
     }
 
-    /// Returns an ID for a prefix iterator
+    /// Returns a prefix iterator
     pub fn iter_prefix(&self, prefix: &Key) -> PrefixIterator {
         self.db.iter_prefix(self.current_height, prefix)
     }
