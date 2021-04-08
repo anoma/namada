@@ -323,7 +323,6 @@ impl MatchmakerRunner {
 
     pub fn run(
         &self,
-        // ledger: TxShellWrapper,
         matchmaker_code: impl AsRef<[u8]>,
         intent1_data: impl AsRef<[u8]>,
         intent2_data: impl AsRef<[u8]>,
