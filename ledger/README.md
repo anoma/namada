@@ -45,15 +45,13 @@ make install
 make run-anoma
 
 # Reset the state (resets Tendermint too)
-anoma reset-ledger
-anoma node reset-ledger
 cargo run --bin anomad -- reset-ledger
 
 # craft a transaction data to file `tx_data_file`
 cargo run --bin anomac -- craft-tx-data --source ba --target va --token xtz --amount 10 --file tx_data_file
 
 # Submit a transaction with a wasm code
-cargo run --bin anoma -- tx --data ... --path ../tx_template/tx.wasm --data tx_data_file
+cargo run --bin anoma -- tx --path ../tx_template/tx.wasm --data tx_data_file
 
 # Watch and on change run a node (the state will be persisted)
 cargo watch -x "run --bin anomad -- run-anoma"
@@ -61,18 +59,17 @@ cargo watch -x "run --bin anomad -- run-anoma"
 # Watch and on change reset & run a node
 cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 
-# run orderbook daemon
 # run orderbook daemon with rpc server
 cargo run --bin anoma -- run-gossip --rpc --orderbook --matchmaker ../tx_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
 
-# run orderbook daemon with rpc server and  matchmaker
-cargo run --bin anomad -- --rpc run-gossip --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
-
-# Submit an intent (need a rpc server)
-cargo run --bin anomac -- intent intent_data.json
+# run orderbook daemon with rpc server and matchmaker
+cargo run --bin anomad -- --rpc run-gossip --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_template/tx.wasm --ledger-address "tcp://127.0.0.1:26658"
 
 # craft an intent to file `intent_data_file`
 cargo run --bin anomac -- craft-intent --addr ba --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file
+
+# Submit an intent (need a rpc server), hardcoded address
+cargo run --bin anomac -- intent --orderbook "http://[::1]:39111" --data intent_data_file
 
 # Format the code
 make fmt
