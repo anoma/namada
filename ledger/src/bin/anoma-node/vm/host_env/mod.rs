@@ -5,6 +5,8 @@ use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
+use anoma_vm_env::memory::KeyVal;
+use borsh::BorshSerialize;
 use tokio::sync::mpsc::Sender;
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
@@ -362,17 +364,11 @@ fn tx_storage_iter_prefix(
 /// Storage prefix iterator next function exposed to the wasm VM Tx environment.
 /// It will read a key value pair from the write log first and if no entry found
 /// then from the storage.
-fn tx_storage_iter_next(
-    env: &TxEnv,
-    iter_id: u64,
-    key_ptr: u64,
-    value_ptr: u64,
-) -> u64 {
+fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
     log::debug!(
-        "tx_storage_iter_next iter_id {}, key_ptr {}, value_ptr {}",
+        "tx_storage_iter_next iter_id {}, result_ptr {}",
         iter_id,
-        key_ptr,
-        value_ptr,
+        result_ptr,
     );
 
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
@@ -386,11 +382,14 @@ fn tx_storage_iter_next(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
             Some(&write_log::StorageModification::Write { ref value }) => {
+                let key_val = KeyVal {
+                    key,
+                    val: value.clone(),
+                }
+                .try_to_vec()
+                .expect("cannot serialize the key value pair");
                 env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, value)
+                    .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
                 return 1;
             }
@@ -399,11 +398,11 @@ fn tx_storage_iter_next(
                 continue;
             }
             None => {
+                let key_val = KeyVal { key, val }
+                    .try_to_vec()
+                    .expect("cannot serialize the key value pair");
                 env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, val)
+                    .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
                 return 1;
             }
@@ -422,14 +421,12 @@ fn tx_storage_iter_next(
 fn tx_storage_iter_next_varlen(
     env: &TxEnv,
     iter_id: u64,
-    key_ptr: u64,
-    value_ptr: u64,
+    result_ptr: u64,
 ) -> i64 {
     log::debug!(
-        "tx_storage_iter_next iter_id {}, key_ptr {}, value_ptr {}",
+        "tx_storage_iter_next iter_id {}, result_ptr {}",
         iter_id,
-        key_ptr,
-        value_ptr,
+        result_ptr,
     );
 
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
@@ -443,13 +440,16 @@ fn tx_storage_iter_next_varlen(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
             Some(&write_log::StorageModification::Write { ref value }) => {
+                let key_val = KeyVal {
+                    key,
+                    val: value.clone(),
+                }
+                .try_to_vec()
+                .expect("cannot serialize the key value pair");
                 let len: i64 =
-                    value.len().try_into().expect("data length overflow");
+                    key_val.len().try_into().expect("data length overflow");
                 env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, value)
+                    .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
                 return len;
             }
@@ -458,13 +458,13 @@ fn tx_storage_iter_next_varlen(
                 continue;
             }
             None => {
+                let key_val = KeyVal { key, val }
+                    .try_to_vec()
+                    .expect("cannot serialize the key value pair");
                 let len: i64 =
-                    val.len().try_into().expect("data length overflow");
+                    key_val.len().try_into().expect("data length overflow");
                 env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, val)
+                    .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
                 return len;
             }
@@ -742,17 +742,11 @@ fn vp_storage_iter_prefix(
 
 /// Storage prefix iterator next (before tx execution) function exposed to the
 /// wasm VM VP environment. It will read a key value pair from the storage.
-fn vp_storage_iter_pre_next(
-    env: &VpEnv,
-    iter_id: u64,
-    key_ptr: u64,
-    value_ptr: u64,
-) -> u64 {
+fn vp_storage_iter_pre_next(env: &VpEnv, iter_id: u64, result_ptr: u64) -> u64 {
     log::debug!(
-        "vp_storage_iter_pre_next iter_id {}, key_ptr {}, value_ptr {}",
+        "vp_storage_iter_pre_next iter_id {}, result_ptr {}",
         iter_id,
-        key_ptr,
-        value_ptr,
+        result_ptr,
     );
 
     let iterators: &mut PrefixIterators =
@@ -761,11 +755,11 @@ fn vp_storage_iter_pre_next(
     if let Some((key, val)) = iterators.next(iter_id) {
         let key = String::from_utf8(key)
             .expect("Cannot convert from bytes to key string");
+        let key_val = KeyVal { key, val }
+            .try_to_vec()
+            .expect("cannot serialize the key value pair");
         env.memory
-            .write_string(key_ptr, key)
-            .expect("cannot write to memory");
-        env.memory
-            .write_bytes(value_ptr, val)
+            .write_bytes(result_ptr, key_val)
             .expect("cannot write to memory");
         return 1;
     }
@@ -779,14 +773,12 @@ fn vp_storage_iter_pre_next(
 fn vp_storage_iter_post_next(
     env: &VpEnv,
     iter_id: u64,
-    key_ptr: u64,
-    value_ptr: u64,
+    result_ptr: u64,
 ) -> u64 {
     log::debug!(
-        "vp_storage_iter_post_next iter_id {}, key_ptr {}, value_ptr {}",
+        "vp_storage_iter_post_next iter_id {}, result_ptr {}",
         iter_id,
-        key_ptr,
-        value_ptr,
+        result_ptr,
     );
 
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
@@ -800,11 +792,14 @@ fn vp_storage_iter_post_next(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
             Some(&write_log::StorageModification::Write { ref value }) => {
+                let key_val = KeyVal {
+                    key,
+                    val: value.clone(),
+                }
+                .try_to_vec()
+                .expect("cannot serialize the key value pair");
                 env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, value)
+                    .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
                 return 1;
             }
@@ -813,11 +808,11 @@ fn vp_storage_iter_post_next(
                 continue;
             }
             None => {
+                let key_val = KeyVal { key, val }
+                    .try_to_vec()
+                    .expect("cannot serialize the key value pair");
                 env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, val)
+                    .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
                 return 1;
             }
@@ -835,14 +830,12 @@ fn vp_storage_iter_post_next(
 fn vp_storage_iter_pre_next_varlen(
     env: &VpEnv,
     iter_id: u64,
-    key_ptr: u64,
-    value_ptr: u64,
+    result_ptr: u64,
 ) -> i64 {
     log::debug!(
-        "vp_storage_iter_pre_next iter_id {}, key_ptr {}, value_ptr {}",
+        "vp_storage_iter_pre_next_varlen iter_id {}, result_ptr {}",
         iter_id,
-        key_ptr,
-        value_ptr,
+        result_ptr,
     );
 
     let iterators: &mut PrefixIterators =
@@ -851,12 +844,12 @@ fn vp_storage_iter_pre_next_varlen(
     if let Some((key, val)) = iterators.next(iter_id) {
         let key = String::from_utf8(key)
             .expect("Cannot convert from bytes to key string");
-        let len: i64 = val.len().try_into().expect("data length overflow");
+        let key_val = KeyVal { key, val }
+            .try_to_vec()
+            .expect("cannot serialize the key value pair");
+        let len: i64 = key_val.len().try_into().expect("data length overflow");
         env.memory
-            .write_string(key_ptr, key)
-            .expect("cannot write to memory");
-        env.memory
-            .write_bytes(value_ptr, val)
+            .write_bytes(result_ptr, key_val)
             .expect("cannot write to memory");
         return len;
     }
@@ -873,14 +866,12 @@ fn vp_storage_iter_pre_next_varlen(
 fn vp_storage_iter_post_next_varlen(
     env: &VpEnv,
     iter_id: u64,
-    key_ptr: u64,
-    value_ptr: u64,
+    result_ptr: u64,
 ) -> i64 {
     log::debug!(
-        "vp_storage_iter_post_next_varlen iter_id {}, key_ptr {}, value_ptr {}",
+        "vp_storage_iter_post_next_varlen iter_id {}, result_ptr {}",
         iter_id,
-        key_ptr,
-        value_ptr,
+        result_ptr,
     );
 
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
@@ -894,13 +885,16 @@ fn vp_storage_iter_post_next_varlen(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
             Some(&write_log::StorageModification::Write { ref value }) => {
+                let key_val = KeyVal {
+                    key,
+                    val: value.clone(),
+                }
+                .try_to_vec()
+                .expect("cannot serialize the key value pair");
                 let len: i64 =
-                    value.len().try_into().expect("data length overflow");
+                    key_val.len().try_into().expect("data length overflow");
                 env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, value)
+                    .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
                 return len;
             }
@@ -909,13 +903,13 @@ fn vp_storage_iter_post_next_varlen(
                 continue;
             }
             None => {
+                let key_val = KeyVal { key, val }
+                    .try_to_vec()
+                    .expect("cannot serialize the key value pair");
                 let len: i64 =
-                    val.len().try_into().expect("data length overflow");
+                    key_val.len().try_into().expect("data length overflow");
                 env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, val)
+                    .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
                 return len;
             }

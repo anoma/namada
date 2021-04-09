@@ -29,6 +29,12 @@ pub type VpInput<'a> = (String, &'a Data, &'a KeysChanged);
 pub type MatchmakerInput = Data;
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct KeyVal {
+    pub key: String,
+    pub val: Vec<u8>,
+}
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct StorageReadInput {
     pub addr: String,
     pub key: String,
