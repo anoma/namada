@@ -56,9 +56,7 @@ fn handle_subcommand(program: &str, mut sub_args: Vec<String>) -> Result<()> {
     let env_vars = env::vars_os();
 
     #[cfg(feature = "dev")]
-    let is_cargo = env::var("CARGO").is_ok();
-    #[cfg(feature = "dev")]
-    let cmd = if is_cargo {
+    let cmd = if env::var("CARGO").is_ok() {
         // When the command is ran from inside `cargo run`, we also want to
         // call the sub-command via `cargo run` to rebuild if necessary.
         // We do this by prepending the arguments with `cargo run` arguments.
