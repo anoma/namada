@@ -1,17 +1,19 @@
-use anoma_vm_env::tx_prelude::*;
+use anoma_data_template::*;
+use anoma_vm_env::{transaction, tx_prelude::*};
 
-/// The module interface callable by wasm runtime:
-#[no_mangle]
-pub extern "C" fn apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
-    let slice = unsafe { slice::from_raw_parts(tx_data_ptr as *const u8, tx_data_len as _) };
-    let tx_data = slice.to_vec() as memory::Data;
-
-    let log_msg = format!("apply_tx called with tx_data: {:#?}", tx_data);
-    unsafe {
-        log_string(log_msg.as_ptr() as _, log_msg.len() as _);
+transaction! {
+    fn apply_tx(tx_data: memory::Data) {
+        let tx = TxData::try_from_slice(&tx_data[..]).unwrap();
+        for Transfer {
+            source,
+            target,
+            token,
+            amount,
+        } in tx.transfers
+        {
+            apply_transfer(source, target, token, amount);
+        }
     }
-
-    do_apply_tx(tx_data);
 }
 
 fn apply_transfer(src: String, dest: String, token: String, amount: u64) -> bool {
@@ -72,18 +74,5 @@ fn apply_transfer(src: String, dest: String, token: String, amount: u64) -> bool
         }
     } else {
         false
-    }
-}
-
-fn do_apply_tx(tx_data: memory::Data) {
-    let tx = anoma_data_template::TxData::try_from_slice(&tx_data[..]).unwrap();
-    for anoma_data_template::Transfer {
-        source,
-        target,
-        token,
-        amount,
-    } in tx.transfers
-    {
-        apply_transfer(source, target, token, amount);
     }
 }

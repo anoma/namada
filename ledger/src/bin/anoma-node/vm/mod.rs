@@ -18,9 +18,9 @@ use self::host_env::write_log::WriteLog;
 use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Storage};
 
-const TX_ENTRYPOINT: &str = "apply_tx";
-const VP_ENTRYPOINT: &str = "validate_tx";
-const MATCHMAKER_ENTRYPOINT: &str = "match_intent";
+const TX_ENTRYPOINT: &str = "_apply_tx";
+const VP_ENTRYPOINT: &str = "_validate_tx";
+const MATCHMAKER_ENTRYPOINT: &str = "_match_intent";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 /// This is used to attach the Ledger's host structures to transaction, which is
