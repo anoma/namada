@@ -13,9 +13,10 @@ impl Hash for Intent {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use prost::Message;
     use types::Tx;
+
+    use super::*;
 
     #[test]
     fn encoding_round_trip() {

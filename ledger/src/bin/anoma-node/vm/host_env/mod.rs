@@ -125,11 +125,11 @@ pub fn prepare_vp_imports(
         "env" => {
             "memory" => initial_memory,
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_charge_gas),
-            "read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
-            "read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
-            "read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
-            "read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
-            "log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
+            "_read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
+            "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
+            "_read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
+            "_read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
+            "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
         },
     }
 }
@@ -151,10 +151,10 @@ pub fn prepare_matchmaker_imports(
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            "send_match" => wasmer::Function::new_native_with_env(wasm_store,
+            "_send_match" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env.clone(),
                                                                   send_match),
-            "log_string" => wasmer::Function::new_native_with_env(wasm_store,
+            "_log_string" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env,
                                                                   matchmaker_log_string),
         },

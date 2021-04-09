@@ -434,11 +434,11 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::shell::storage::ValidatorAddress;
     use tempdir::TempDir;
     use wasmer_vm;
 
     use super::*;
+    use crate::shell::storage::ValidatorAddress;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.

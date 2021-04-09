@@ -4,12 +4,18 @@ pub mod tx {
     pub use core::slice;
     pub use std::mem::size_of;
 
+    /// This macro expects a function with signature:
+    ///
+    /// ```
+    /// fn apply_tx(tx_data: memory::Data)
+    /// ```
+    /// TODO try to switch to procedural macros instead
     #[macro_export]
     macro_rules! transaction {
         (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) $body:block ) => {
             fn $fn( $($arg: $type),* ) $body
 
-            // The module interface callable by wasm runtime
+            // The module entrypoint callable by wasm runtime
             #[no_mangle]
             extern "C" fn _apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
                 let slice = unsafe {
@@ -25,15 +31,7 @@ pub mod tx {
         }
     }
 
-    /// Log a string. The message will be printed at the [`log::Level::Info`].
-    pub fn log_string<T: AsRef<str>>(msg: T) {
-        let msg = msg.as_ref();
-        unsafe {
-            _log_string(msg.as_ptr() as _, msg.len() as _);
-        }
-    }
-
-    /// Try to read a fixed-length value at given key from storage.
+    /// Try to read a fixed-length value at the given key from storage.
     pub fn read<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
@@ -45,12 +43,11 @@ pub mod tx {
             None
         } else {
             let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size) };
-            // TODO error handling
-            Some(T::try_from_slice(slice).unwrap())
+            T::try_from_slice(slice).ok()
         }
     }
 
-    /// Try to read a variable-length value at given key from storage.
+    /// Try to read a variable-length value at the given key from storage.
     pub fn read_varlen<K: AsRef<str>, T: BorshDeserialize>(
         key: K,
     ) -> Option<T> {
@@ -69,15 +66,11 @@ pub mod tx {
         } else {
             let slice =
                 unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
-            // allocate bytes for the length of the found value to offset the
-            // next allocation
-            let _alloc: Vec<u8> = Vec::with_capacity(found as _);
-            // TODO error handling
-            Some(T::try_from_slice(slice).unwrap())
+            T::try_from_slice(slice).ok()
         }
     }
 
-    /// Write a value at given key to storage.
+    /// Write a value at the given key to storage.
     pub fn write<K: AsRef<str>, T: BorshSerialize>(key: K, val: T) {
         let key = key.as_ref();
         let mut buf: Vec<u8> = Vec::with_capacity(size_of::<T>());
@@ -92,9 +85,18 @@ pub mod tx {
         };
     }
 
+    /// Delete a value at the given key from storage.
     pub fn delete<K: AsRef<str>, T: BorshSerialize>(key: K) {
         let key = key.as_ref();
         unsafe { _delete(key.as_ptr() as _, key.len() as _) };
+    }
+
+    /// Log a string. The message will be printed at the [`log::Level::Info`].
+    pub fn log_string<T: AsRef<str>>(msg: T) {
+        let msg = msg.as_ref();
+        unsafe {
+            _log_string(msg.as_ptr() as _, msg.len() as _);
+        }
     }
 
     /// These host functions are implemented in the Anoma's [`host_env`]
@@ -129,12 +131,17 @@ pub mod vp {
     pub use core::slice;
     pub use std::mem::size_of;
 
+    /// This macro expects a function with signature:
+    ///
+    /// ```
+    /// fn validate_tx(tx_data: memory::Data, addr: &str, keys_changed: Vec<String>) -> bool
+    /// ```
     #[macro_export]
     macro_rules! validity_predicate {
         (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
             fn $fn( $($arg: $type),* ) -> $ret $body
 
-            // The module interface callable by wasm runtime
+            // The module entrypoint callable by wasm runtime
             #[no_mangle]
             extern "C" fn _validate_tx(
                 // VP's account's address
@@ -168,14 +175,6 @@ pub mod vp {
                 };
                 let keys_changed: Vec<String> = Vec::try_from_slice(slice).unwrap();
 
-                let log_msg = format!(
-                    "validate_tx called with addr: {}, key_changed: {:#?}, tx_data: {:#?}",
-                    addr, keys_changed, tx_data
-                );
-                unsafe {
-                    log_string(log_msg.as_ptr() as _, log_msg.len() as _);
-                }
-
                 // run validation with the concrete type(s)
                 if $fn(tx_data, addr, keys_changed) {
                     1
@@ -186,45 +185,139 @@ pub mod vp {
         }
     }
 
-    // TODO temporarily public
-    /// The environment provides calls to host functions via this C interface:
+    /// Try to read a fixed-length value at the given key from storage before
+    /// transaction execution.
+    pub fn read_pre<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+        let key = key.as_ref();
+        let size = size_of::<T>();
+        let result = Vec::with_capacity(size);
+        let found = unsafe {
+            _read_pre(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+        };
+        if found == 0 {
+            None
+        } else {
+            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size) };
+            T::try_from_slice(slice).ok()
+        }
+    }
+
+    /// Try to read a fixed-length value at the given key from storage after
+    /// transaction execution.
+    pub fn read_post<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+        let key = key.as_ref();
+        let size = size_of::<T>();
+        let result = Vec::with_capacity(size);
+        let found = unsafe {
+            _read_post(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+        };
+        if found == 0 {
+            None
+        } else {
+            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size) };
+            T::try_from_slice(slice).ok()
+        }
+    }
+
+    /// Try to read a variable-length value at the given key from storage before
+    /// transaction execution.
+    pub fn read_pre_varlen<K: AsRef<str>, T: BorshDeserialize>(
+        key: K,
+    ) -> Option<T> {
+        let key = key.as_ref();
+        let size = size_of::<T>();
+        let result = Vec::with_capacity(size);
+        let found = unsafe {
+            _read_pre_varlen(
+                key.as_ptr() as _,
+                key.len() as _,
+                result.as_ptr() as _,
+            )
+        };
+        if found == -1 {
+            None
+        } else {
+            let slice =
+                unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
+            T::try_from_slice(slice).ok()
+        }
+    }
+
+    /// Try to read a variable-length value at the given key from storage after
+    /// transaction execution.
+    pub fn read_post_varlen<K: AsRef<str>, T: BorshDeserialize>(
+        key: K,
+    ) -> Option<T> {
+        let key = key.as_ref();
+        let size = size_of::<T>();
+        let result = Vec::with_capacity(size);
+        let found = unsafe {
+            _read_post_varlen(
+                key.as_ptr() as _,
+                key.len() as _,
+                result.as_ptr() as _,
+            )
+        };
+        if found == -1 {
+            None
+        } else {
+            let slice =
+                unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
+            T::try_from_slice(slice).ok()
+        }
+    }
+
+    /// Log a string. The message will be printed at the [`log::Level::Info`].
+    pub fn log_string<T: AsRef<str>>(msg: T) {
+        let msg = msg.as_ref();
+        unsafe {
+            _log_string(msg.as_ptr() as _, msg.len() as _);
+        }
+    }
+
+    /// These host functions are implemented in the Anoma's [`host_env`]
+    /// module. The environment provides calls to them via this C interface.
     extern "C" {
         // Read fixed-length prior state, returns 1 if the key is present, 0
         // otherwise.
-        pub fn read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
+        fn _read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
 
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        pub fn read_pre_varlen(
-            key_ptr: u64,
-            key_len: u64,
-            result_ptr: u64,
-        ) -> i64;
+        fn _read_pre_varlen(key_ptr: u64, key_len: u64, result_ptr: u64)
+            -> i64;
 
         // Read fixed-length posterior state, returns 1 if the key is present, 0
         // otherwise.
-        pub fn read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
+        fn _read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        pub fn read_post_varlen(
+        fn _read_post_varlen(
             key_ptr: u64,
             key_len: u64,
             result_ptr: u64,
         ) -> i64;
 
         // Requires a node running with "Info" log level
-        pub fn log_string(str_ptr: u64, str_len: u64);
+        fn _log_string(str_ptr: u64, str_len: u64);
     }
 }
 
 /// Matchmaker environment imports
 pub mod matchmaker {
+    use anoma_data_template::TxData;
     pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
+    use std::mem::size_of;
 
+    /// This macro expects a function with signature:
+    ///
+    /// ```
+    /// fn match_intent(intent_1: Intent, intent_2: Intent) -> bool
+    /// ```
     #[macro_export]
     macro_rules! matchmaker {
         (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
@@ -238,11 +331,6 @@ pub mod matchmaker {
                 intent_data_2_ptr: u64,
                 intent_data_2_len: u64,
             ) -> u64 {
-                let log_msg = "start matchmaker";
-                unsafe {
-                    log_string(log_msg.as_ptr() as _, log_msg.len() as _);
-                }
-
                 let get_intent_data = |ptr, len| {
                     let slice = unsafe {
                         slice::from_raw_parts(ptr as *const u8, len as _)
@@ -262,15 +350,46 @@ pub mod matchmaker {
         }
     }
 
-    // TODO temporarily public
-    /// The environment provides calls to host functions via this C interface:
+    /// Try to read a fixed-length value at the given key from the ledger.
+    pub fn read<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+        let key = key.as_ref();
+        let size = size_of::<T>();
+        let result = Vec::with_capacity(size);
+        let found = unsafe {
+            _read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+        };
+        if found == 0 {
+            None
+        } else {
+            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size) };
+            T::try_from_slice(slice).ok()
+        }
+    }
+
+    pub fn send_match(tx_data: TxData) {
+        let tx_data_bytes = tx_data.try_to_vec().unwrap();
+        unsafe {
+            _send_match(tx_data_bytes.as_ptr() as _, tx_data_bytes.len() as _)
+        };
+    }
+
+    /// Log a string. The message will be printed at the [`log::Level::Info`].
+    pub fn log_string<T: AsRef<str>>(msg: T) {
+        let msg = msg.as_ref();
+        unsafe {
+            _log_string(msg.as_ptr() as _, msg.len() as _);
+        }
+    }
+
+    /// These host functions are implemented in the Anoma's [`host_env`]
+    /// module. The environment provides calls to them via this C interface.
     extern "C" {
         // Read fixed-length data, returns 1 if the key is present, 0 otherwise.
-        pub fn read(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
+        pub fn _read(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
 
-        pub fn send_match(data_ptr: u64, data_len: u64);
+        pub fn _send_match(data_ptr: u64, data_len: u64);
 
         // Requires a node running with "Info" log level
-        pub fn log_string(str_ptr: u64, str_len: u64);
+        pub fn _log_string(str_ptr: u64, str_len: u64);
     }
 }
