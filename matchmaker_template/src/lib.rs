@@ -2,7 +2,9 @@ use anoma_data_template::*;
 use anoma_vm_env::{matchmaker, matchmaker_prelude::*};
 
 matchmaker! {
-    fn match_intent(intent_1: Intent, intent_2: Intent) -> bool {
+    fn match_intent(intent_1: Vec<u8>, intent_2: Vec<u8>) -> bool {
+        let intent_1 = decode_intent_data(intent_1);
+        let intent_2 = decode_intent_data(intent_2);
         log_string(format!("match_intent\nintent_1: {:#?}\nintent_2: {:#?}", intent_1, intent_2));
 
         if intent_1.token_sell == intent_2.token_buy
@@ -26,10 +28,15 @@ matchmaker! {
                 transfers: vec![tx_1, tx_2],
             };
 
-            send_match(tx_data);
+            let tx_data_bytes = tx_data.try_to_vec().unwrap();
+            send_match(tx_data_bytes);
             true
         } else {
             false
         }
     }
+}
+
+fn decode_intent_data(bytes: Vec<u8>) -> Intent {
+    anoma_data_template::Intent::try_from_slice(&bytes[..]).unwrap()
 }

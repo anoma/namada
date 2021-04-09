@@ -145,7 +145,6 @@ dependencies = [
 name = "anoma_vm_env"
 version = "0.1.0"
 dependencies = [
- "anoma_data_template",
  "borsh",
 ]
 

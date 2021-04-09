@@ -308,7 +308,6 @@ pub mod vp {
 
 /// Matchmaker environment imports
 pub mod matchmaker {
-    use anoma_data_template::TxData;
     pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     use std::mem::size_of;
@@ -335,7 +334,7 @@ pub mod matchmaker {
                     let slice = unsafe {
                         slice::from_raw_parts(ptr as *const u8, len as _)
                     };
-                    anoma_data_template::Intent::try_from_slice(&slice).unwrap()
+                    slice.to_vec()
                 };
 
                 if $fn(
@@ -366,11 +365,8 @@ pub mod matchmaker {
         }
     }
 
-    pub fn send_match(tx_data: TxData) {
-        let tx_data_bytes = tx_data.try_to_vec().unwrap();
-        unsafe {
-            _send_match(tx_data_bytes.as_ptr() as _, tx_data_bytes.len() as _)
-        };
+    pub fn send_match(tx_data: Vec<u8>) {
+        unsafe { _send_match(tx_data.as_ptr() as _, tx_data.len() as _) };
     }
 
     /// Log a string. The message will be printed at the [`log::Level::Info`].
