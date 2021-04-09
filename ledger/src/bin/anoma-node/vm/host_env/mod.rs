@@ -376,8 +376,6 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val)) = iterators.next(iter_id) {
-        let key = String::from_utf8(key)
-            .expect("Cannot convert from bytes to key string");
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -434,8 +432,6 @@ fn tx_storage_iter_next_varlen(
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val)) = iterators.next(iter_id) {
-        let key = String::from_utf8(key)
-            .expect("Cannot convert from bytes to key string");
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -753,8 +749,6 @@ fn vp_storage_iter_pre_next(env: &VpEnv, iter_id: u64, result_ptr: u64) -> u64 {
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
     if let Some((key, val)) = iterators.next(iter_id) {
-        let key = String::from_utf8(key)
-            .expect("Cannot convert from bytes to key string");
         let key_val = KeyVal { key, val }
             .try_to_vec()
             .expect("cannot serialize the key value pair");
@@ -786,8 +780,6 @@ fn vp_storage_iter_post_next(
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val)) = iterators.next(iter_id) {
-        let key = String::from_utf8(key)
-            .expect("Cannot convert from bytes to key string");
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -842,8 +834,6 @@ fn vp_storage_iter_pre_next_varlen(
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
     if let Some((key, val)) = iterators.next(iter_id) {
-        let key = String::from_utf8(key)
-            .expect("Cannot convert from bytes to key string");
         let key_val = KeyVal { key, val }
             .try_to_vec()
             .expect("cannot serialize the key value pair");
@@ -879,8 +869,6 @@ fn vp_storage_iter_post_next_varlen(
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val)) = iterators.next(iter_id) {
-        let key = String::from_utf8(key)
-            .expect("Cannot convert from bytes to key string");
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {

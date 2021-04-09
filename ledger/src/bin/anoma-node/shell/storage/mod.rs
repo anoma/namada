@@ -105,7 +105,7 @@ impl Storage {
                 self.block.height,
                 &self.block.subspaces,
             )
-            .map_err(|e| Error::DBError(e).into())?;
+            .map_err(Error::DBError)?;
         self.current_height = self.block.height;
         Ok(())
     }

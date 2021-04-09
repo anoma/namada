@@ -469,20 +469,30 @@ fn new_blake2b() -> Blake2b {
     Blake2bBuilder::new(32).personal(b"anoma storage").build()
 }
 
-pub struct PrefixIterator<'a>(rocksdb::DBIterator<'a>);
+pub struct PrefixIterator<'a> {
+    iter: rocksdb::DBIterator<'a>,
+    db_prefix: String,
+}
 
 impl<'a> PrefixIterator<'a> {
-    pub fn new(iter: rocksdb::DBIterator<'a>) -> Self {
-        PrefixIterator(iter)
+    pub fn new(iter: rocksdb::DBIterator<'a>, db_prefix: String) -> Self {
+        PrefixIterator { iter, db_prefix }
     }
 }
 
 impl<'a> Iterator for PrefixIterator<'a> {
-    type Item = (Vec<u8>, Vec<u8>);
+    type Item = (String, Vec<u8>);
 
-    fn next(&mut self) -> Option<(Vec<u8>, Vec<u8>)> {
-        match self.0.next() {
-            Some((key, val)) => Some((key.to_vec(), val.to_vec())),
+    fn next(&mut self) -> Option<(String, Vec<u8>)> {
+        match self.iter.next() {
+            Some((key, val)) => {
+                let key = String::from_utf8(key.to_vec())
+                    .expect("Cannot convert from bytes to key string");
+                match key.strip_prefix(&self.db_prefix) {
+                    Some(k) => Some((k.to_owned(), val.to_vec())),
+                    None => self.next(),
+                }
+            }
             None => None,
         }
     }

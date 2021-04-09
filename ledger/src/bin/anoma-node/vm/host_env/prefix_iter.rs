@@ -22,7 +22,7 @@ impl<'a> PrefixIterators<'a> {
         id
     }
 
-    pub fn next(&mut self, id: PrefixIteratorId) -> Option<(Vec<u8>, Vec<u8>)> {
+    pub fn next(&mut self, id: PrefixIteratorId) -> Option<(String, Vec<u8>)> {
         match self.iterators.get_mut(&id) {
             Some(iter) => iter.next(),
             None => None,

@@ -201,8 +201,8 @@ impl DB {
         height: BlockHeight,
         prefix: &Key,
     ) -> PrefixIterator {
-        let prefix =
-            format!("{}/subspace/{}", height.to_string(), prefix.to_string());
+        let db_prefix = format!("{}/subspace/", height.to_string());
+        let prefix = format!("{}{}", db_prefix, prefix.to_string());
 
         let mut read_opts = ReadOptions::default();
         // don't use the prefix bloom filter
@@ -217,7 +217,7 @@ impl DB {
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
         );
-        PrefixIterator::new(iter)
+        PrefixIterator::new(iter, db_prefix)
     }
 
     pub fn read_last_block(
