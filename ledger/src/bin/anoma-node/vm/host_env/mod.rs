@@ -17,9 +17,6 @@ use super::{TxEnvHostWrapper, VpEnvHostWrapper};
 use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Key, Storage};
 
-const FROM_STORAGE: bool = true;
-const FROM_WRITE_LOG: bool = false;
-
 #[derive(Clone)]
 struct TxEnv<'a> {
     // not thread-safe, assuming single-threaded Tx runner
@@ -50,7 +47,8 @@ struct VpEnv<'a> {
     storage: VpEnvHostWrapper<Storage>,
     // not thread-safe, assuming read-only access from parallel Vp runners
     write_log: VpEnvHostWrapper<WriteLog>,
-    iterators: Arc<Mutex<PrefixIterators<'a>>>,
+    // TODO: tentatively use TxEnvHostWrapper, please replace it with MutEnvHostWrapper
+    iterators: TxEnvHostWrapper<PrefixIterators<'a>>,
     // TODO In parallel runs, we can change only the maximum used gas of all
     // the VPs that we ran.
     gas_meter: Arc<Mutex<BlockGasMeter>>,
@@ -123,7 +121,8 @@ pub fn prepare_vp_imports(
     addr: Address,
     storage: VpEnvHostWrapper<Storage>,
     write_log: VpEnvHostWrapper<WriteLog>,
-    iterators: Arc<Mutex<PrefixIterators<'static>>>,
+    // TODO: tentatively use TxEnvHostWrapper, please replace it with MutEnvHostWrapper
+    iterators: TxEnvHostWrapper<PrefixIterators<'static>>,
     gas_meter: Arc<Mutex<BlockGasMeter>>,
     initial_memory: Memory,
 ) -> ImportObject {
@@ -238,12 +237,38 @@ fn tx_storage_read(
     );
 
     let key = Key::parse(key).expect("Cannot parse the key string");
-    let len = tx_storage_read_with_len(env, key, result_ptr);
-    if len == -1 {
-        //fail, key not found
-        0
-    } else {
-        1
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&key) {
+        Some(&write_log::StorageModification::Write { ref value }) => {
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            return 1;
+        }
+        Some(&write_log::StorageModification::Delete) => {
+            // fail, given key has been deleted
+            return 0;
+        }
+        None => {
+            // when not found in write log, try to read from the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (value, _gas) =
+                storage.read(&key).expect("storage read failed");
+            match value {
+                Some(value) => {
+                    env.memory
+                        .write_bytes(result_ptr, value)
+                        .expect("cannot write to memory");
+                    return 1;
+                }
+                None => {
+                    // fail, key not found
+                    return 0;
+                }
+            }
+        }
     }
 }
 
@@ -271,7 +296,43 @@ fn tx_storage_read_varlen(
     );
 
     let key = Key::parse(key).expect("Cannot parse the key string");
-    tx_storage_read_with_len(env, key, result_ptr)
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&key) {
+        Some(&write_log::StorageModification::Write { ref value }) => {
+            let len: i64 =
+                value.len().try_into().expect("data length overflow");
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            len
+        }
+        Some(&write_log::StorageModification::Delete) => {
+            // fail, given key has been deleted
+            -1
+        }
+        None => {
+            // when not found in write log, try to read from the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (value, _gas) =
+                storage.read(&key).expect("storage read failed");
+            match value {
+                Some(value) => {
+                    let len: i64 =
+                        value.len().try_into().expect("data length overflow");
+                    env.memory
+                        .write_bytes(result_ptr, value)
+                        .expect("cannot write to memory");
+                    len
+                }
+                None => {
+                    // fail, key not found
+                    -1
+                }
+            }
+        }
+    }
 }
 
 /// Storage prefix iterator function exposed to the wasm VM Tx environment.
@@ -314,13 +375,42 @@ fn tx_storage_iter_next(
         value_ptr,
     );
 
-    let len = tx_stroage_iter_next_kv(env, iter_id, key_ptr, value_ptr);
-    if len == -1 {
-        // fail, key not found
-        0
-    } else {
-        1
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some((key, val)) = iterators.next(iter_id) {
+        let key = String::from_utf8(key)
+            .expect("Cannot convert from bytes to key string");
+        match write_log.read(
+            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+        ) {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                env.memory
+                    .write_string(key_ptr, key)
+                    .expect("cannot write to memory");
+                env.memory
+                    .write_bytes(value_ptr, value)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                env.memory
+                    .write_string(key_ptr, key)
+                    .expect("cannot write to memory");
+                env.memory
+                    .write_bytes(value_ptr, val)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+        }
     }
+    // fail, key not found
+    0
 }
 
 /// Storage prefix iterator next function exposed to the wasm VM Tx environment.
@@ -342,7 +432,46 @@ fn tx_storage_iter_next_varlen(
         value_ptr,
     );
 
-    tx_stroage_iter_next_kv(env, iter_id, key_ptr, value_ptr)
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some((key, val)) = iterators.next(iter_id) {
+        let key = String::from_utf8(key)
+            .expect("Cannot convert from bytes to key string");
+        match write_log.read(
+            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+        ) {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                let len: i64 =
+                    value.len().try_into().expect("data length overflow");
+                env.memory
+                    .write_string(key_ptr, key)
+                    .expect("cannot write to memory");
+                env.memory
+                    .write_bytes(value_ptr, value)
+                    .expect("cannot write to memory");
+                return len;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                let len: i64 =
+                    val.len().try_into().expect("data length overflow");
+                env.memory
+                    .write_string(key_ptr, key)
+                    .expect("cannot write to memory");
+                env.memory
+                    .write_bytes(value_ptr, val)
+                    .expect("cannot write to memory");
+                return len;
+            }
+        }
+    }
+    // key not found
+    -1
 }
 
 /// Storage write function exposed to the wasm VM Tx environment. The given
@@ -402,13 +531,27 @@ fn vp_storage_read_pre(
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
 
+    // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
-    let len = vp_storage_read_with_len(env, key, result_ptr, FROM_STORAGE);
-    if len == -1 {
-        // fail, key not found
-        0
-    } else {
-        1
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (value, _gas) = storage.read(&key).expect("storage read failed");
+    log::debug!(
+        "vp_storage_read_pre addr {}, key {}, value {:#?}",
+        env.addr,
+        key,
+        value,
+    );
+    match value {
+        Some(value) => {
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            return 1;
+        }
+        None => {
+            // fail, key not found
+            return 0;
+        }
     }
 }
 
@@ -433,13 +576,38 @@ fn vp_storage_read_post(
         result_ptr,
     );
 
+    // try to read from the write log first
     let key = Key::parse(key).expect("Cannot parse the key string");
-    let len = vp_storage_read_with_len(env, key, result_ptr, FROM_WRITE_LOG);
-    if len == -1 {
-        // fail, key not found
-        0
-    } else {
-        1
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&key) {
+        Some(&write_log::StorageModification::Write { ref value }) => {
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            return 1;
+        }
+        Some(&write_log::StorageModification::Delete) => {
+            // fail, given key has been deleted
+            return 0;
+        }
+        None => {
+            // when not found in write log, try to read from the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (value, _gas) =
+                storage.read(&key).expect("storage read failed");
+            match value {
+                Some(value) => {
+                    env.memory
+                        .write_bytes(result_ptr, value)
+                        .expect("cannot write to memory");
+                    return 1;
+                }
+                None => {
+                    // fail, key not found
+                    return 0;
+                }
+            }
+        }
     }
 }
 
@@ -459,8 +627,30 @@ fn vp_storage_read_pre_varlen(
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
 
+    // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
-    vp_storage_read_with_len(env, key, result_ptr, FROM_STORAGE)
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (value, _gas) = storage.read(&key).expect("storage read failed");
+    log::debug!(
+        "vp_storage_read_pre addr {}, key {}, value {:#?}",
+        env.addr,
+        key,
+        value,
+    );
+    match value {
+        Some(value) => {
+            let len: i64 =
+                value.len().try_into().expect("data length overflow");
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            len
+        }
+        None => {
+            // fail, key not found
+            -1
+        }
+    }
 }
 
 /// Storage read posterior state (after tx execution) function exposed to the
@@ -487,8 +677,43 @@ fn vp_storage_read_post_varlen(
         result_ptr,
     );
 
+    // try to read from the write log first
     let key = Key::parse(key).expect("Cannot parse the key string");
-    vp_storage_read_with_len(env, key, result_ptr, FROM_WRITE_LOG)
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&key) {
+        Some(&write_log::StorageModification::Write { ref value }) => {
+            let len: i64 =
+                value.len().try_into().expect("data length overflow");
+            env.memory
+                .write_bytes(result_ptr, value)
+                .expect("cannot write to memory");
+            len
+        }
+        Some(&write_log::StorageModification::Delete) => {
+            // fail, given key has been deleted
+            -1
+        }
+        None => {
+            // when not found in write log, try to read from the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (value, _gas) =
+                storage.read(&key).expect("storage read failed");
+            match value {
+                Some(value) => {
+                    let len: i64 =
+                        value.len().try_into().expect("data length overflow");
+                    env.memory
+                        .write_bytes(result_ptr, value)
+                        .expect("cannot write to memory");
+                    len
+                }
+                None => {
+                    // fail, key not found
+                    -1
+                }
+            }
+        }
+    }
 }
 
 /// Storage prefix iterator function exposed to the wasm VM VP environment.
@@ -509,10 +734,8 @@ fn vp_storage_iter_prefix(
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let mut iterators = env
-        .iterators
-        .lock()
-        .expect("Cannot get lock on the prefix iterators");
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
     let iter = storage.iter_prefix(&prefix);
     iterators.insert(iter).id()
 }
@@ -532,14 +755,22 @@ fn vp_storage_iter_pre_next(
         value_ptr,
     );
 
-    let len =
-        vp_storage_iter_next_kv(env, iter_id, key_ptr, value_ptr, FROM_STORAGE);
-    if len == -1 {
-        // fail, key not found
-        0
-    } else {
-        1
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    if let Some((key, val)) = iterators.next(iter_id) {
+        let key = String::from_utf8(key)
+            .expect("Cannot convert from bytes to key string");
+        env.memory
+            .write_string(key_ptr, key)
+            .expect("cannot write to memory");
+        env.memory
+            .write_bytes(value_ptr, val)
+            .expect("cannot write to memory");
+        return 1;
     }
+    // key not found
+    0
 }
 
 /// Storage prefix iterator next (after tx execution) function exposed to the
@@ -558,19 +789,42 @@ fn vp_storage_iter_post_next(
         value_ptr,
     );
 
-    let len = vp_storage_iter_next_kv(
-        env,
-        iter_id,
-        key_ptr,
-        value_ptr,
-        FROM_WRITE_LOG,
-    );
-    if len == -1 {
-        // fail, key not found
-        0
-    } else {
-        1
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some((key, val)) = iterators.next(iter_id) {
+        let key = String::from_utf8(key)
+            .expect("Cannot convert from bytes to key string");
+        match write_log.read(
+            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+        ) {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                env.memory
+                    .write_string(key_ptr, key)
+                    .expect("cannot write to memory");
+                env.memory
+                    .write_bytes(value_ptr, value)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                env.memory
+                    .write_string(key_ptr, key)
+                    .expect("cannot write to memory");
+                env.memory
+                    .write_bytes(value_ptr, val)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+        }
     }
+    // key not found
+    0
 }
 
 /// Storage prefix iterator for prior state (before tx execution) function
@@ -591,7 +845,23 @@ fn vp_storage_iter_pre_next_varlen(
         value_ptr,
     );
 
-    vp_storage_iter_next_kv(env, iter_id, key_ptr, value_ptr, FROM_STORAGE)
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    if let Some((key, val)) = iterators.next(iter_id) {
+        let key = String::from_utf8(key)
+            .expect("Cannot convert from bytes to key string");
+        let len: i64 = val.len().try_into().expect("data length overflow");
+        env.memory
+            .write_string(key_ptr, key)
+            .expect("cannot write to memory");
+        env.memory
+            .write_bytes(value_ptr, val)
+            .expect("cannot write to memory");
+        return len;
+    }
+    // key not found
+    -1
 }
 
 /// Storage prefix iterator next for posterior state (after tx execution)
@@ -613,7 +883,46 @@ fn vp_storage_iter_post_next_varlen(
         value_ptr,
     );
 
-    vp_storage_iter_next_kv(env, iter_id, key_ptr, value_ptr, FROM_WRITE_LOG)
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some((key, val)) = iterators.next(iter_id) {
+        let key = String::from_utf8(key)
+            .expect("Cannot convert from bytes to key string");
+        match write_log.read(
+            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+        ) {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                let len: i64 =
+                    value.len().try_into().expect("data length overflow");
+                env.memory
+                    .write_string(key_ptr, key)
+                    .expect("cannot write to memory");
+                env.memory
+                    .write_bytes(value_ptr, value)
+                    .expect("cannot write to memory");
+                return len;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                let len: i64 =
+                    val.len().try_into().expect("data length overflow");
+                env.memory
+                    .write_string(key_ptr, key)
+                    .expect("cannot write to memory");
+                env.memory
+                    .write_bytes(value_ptr, val)
+                    .expect("cannot write to memory");
+                return len;
+            }
+        }
+    }
+    // key not found
+    -1
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
@@ -661,190 +970,4 @@ fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
         data: Some(tx_data),
     };
     inject_tx.try_send(tx).expect("failed to send tx")
-}
-
-fn tx_storage_read_with_len(env: &TxEnv, key: Key, result_ptr: u64) -> i64 {
-    // try to read from the write log first
-    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    match write_log.read(&key) {
-        Some(&write_log::StorageModification::Write { ref value }) => {
-            let len: i64 =
-                value.len().try_into().expect("data length overflow");
-            env.memory
-                .write_bytes(result_ptr, value)
-                .expect("cannot write to memory");
-            len
-        }
-        Some(&write_log::StorageModification::Delete) => {
-            // fail, given key has been deleted
-            -1
-        }
-        None => {
-            // when not found in write log, try to read from the storage
-            let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
-            match value {
-                Some(value) => {
-                    let len: i64 =
-                        value.len().try_into().expect("data length overflow");
-                    env.memory
-                        .write_bytes(result_ptr, value)
-                        .expect("cannot write to memory");
-                    len
-                }
-                None => {
-                    // fail, key not found
-                    -1
-                }
-            }
-        }
-    }
-}
-
-fn tx_stroage_iter_next_kv(
-    env: &TxEnv,
-    iter_id: u64,
-    key_ptr: u64,
-    value_ptr: u64,
-) -> i64 {
-    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    let iterators: &mut PrefixIterators =
-        unsafe { &mut *(env.iterators.get()) };
-    let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
-        let key = String::from_utf8(key)
-            .expect("Cannot convert from bytes to key string");
-        match write_log.read(
-            &Key::parse(key.clone()).expect("Cannot parse the key string"),
-        ) {
-            Some(&write_log::StorageModification::Write { ref value }) => {
-                let len: i64 =
-                    value.len().try_into().expect("data length overflow");
-                env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, value)
-                    .expect("cannot write to memory");
-                return len;
-            }
-            Some(&write_log::StorageModification::Delete) => {
-                // check the next because the key has already deleted
-                continue;
-            }
-            None => {
-                let len: i64 =
-                    val.len().try_into().expect("data length overflow");
-                env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, val)
-                    .expect("cannot write to memory");
-                return len;
-            }
-        }
-    }
-    // key not found
-    -1
-}
-
-fn vp_storage_read_with_len(
-    env: &VpEnv,
-    key: Key,
-    result_ptr: u64,
-    from_storage: bool,
-) -> i64 {
-    // try to read from the write log first
-    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    match write_log.read(&key) {
-        Some(&write_log::StorageModification::Write { ref value })
-            if !from_storage =>
-        {
-            let len: i64 =
-                value.len().try_into().expect("data length overflow");
-            env.memory
-                .write_bytes(result_ptr, value)
-                .expect("cannot write to memory");
-            len
-        }
-        Some(&write_log::StorageModification::Delete) if !from_storage => {
-            // fail, given key has been deleted
-            -1
-        }
-        None | _ => {
-            // when not found in write log, try to read from the storage
-            let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
-            match value {
-                Some(value) => {
-                    let len: i64 =
-                        value.len().try_into().expect("data length overflow");
-                    env.memory
-                        .write_bytes(result_ptr, value)
-                        .expect("cannot write to memory");
-                    len
-                }
-                None => {
-                    // fail, key not found
-                    -1
-                }
-            }
-        }
-    }
-}
-
-fn vp_storage_iter_next_kv(
-    env: &VpEnv,
-    iter_id: u64,
-    key_ptr: u64,
-    value_ptr: u64,
-    from_storage: bool,
-) -> i64 {
-    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    let mut iterators = env
-        .iterators
-        .lock()
-        .expect("Cannot get lock on the prefix iterators");
-    let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
-        let key = String::from_utf8(key)
-            .expect("Cannot convert from bytes to key string");
-        match write_log.read(
-            &Key::parse(key.clone()).expect("Cannot parse the key string"),
-        ) {
-            Some(&write_log::StorageModification::Write { ref value })
-                if !from_storage =>
-            {
-                let len: i64 =
-                    value.len().try_into().expect("data length overflow");
-                env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, value)
-                    .expect("cannot write to memory");
-                return len;
-            }
-            Some(&write_log::StorageModification::Delete) if !from_storage => {
-                // check the next because the key has already deleted
-                continue;
-            }
-            None | _ => {
-                let len: i64 =
-                    val.len().try_into().expect("data length overflow");
-                env.memory
-                    .write_string(key_ptr, key)
-                    .expect("cannot write to memory");
-                env.memory
-                    .write_bytes(value_ptr, val)
-                    .expect("cannot write to memory");
-                return len;
-            }
-        }
-    }
-    // key not found
-    -1
 }

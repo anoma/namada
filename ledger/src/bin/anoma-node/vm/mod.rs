@@ -250,7 +250,12 @@ impl VpRunner {
         let write_log = unsafe {
             VpEnvHostWrapper::new(write_log as *const _ as *const c_void)
         };
-        let iterators = Arc::new(Mutex::new(PrefixIterators::new()));
+        // TODO: tentatively use TxEnvHostWrapper, please replace it with MutEnvHostWrapper
+        let iterators = unsafe {
+            TxEnvHostWrapper::new(
+                &mut PrefixIterators::new() as *mut _ as *mut c_void
+            )
+        };
 
         let vp_code = prepare_wasm_code(vp_code)?;
 
