@@ -9,7 +9,7 @@
 use clap::{Arg, ArgMatches};
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
-const CLI_DESCRIPTION: &str = "Anoma cli interface.";
+const APP_NAME: &str = "Anoma";
 const CLI_VERSION: &str = "0.1.0";
 const NODE_VERSION: &str = "0.1.0";
 const CLIENT_VERSION: &str = "0.1.0";
@@ -52,60 +52,70 @@ pub const AMOUNT_ARG: &str = "amount";
 type App = clap::App<'static>;
 
 pub fn anoma_inline_cli() -> App {
-    App::new(CLI_DESCRIPTION)
+    App::new(APP_NAME)
         .version(CLI_VERSION)
         .author(AUTHOR)
-        .about(CLI_DESCRIPTION)
-        .subcommand(build_run_gossip_subcommand())
-        .subcommand(build_run_ledger_subcommand())
-        .subcommand(build_reset_ledger_subcommand())
-        .subcommand(build_client_tx_subcommand())
-        .subcommand(build_client_intent_subcommand())
-        .subcommand(
-            App::new(NODE_COMMAND)
-                .about("Node sub-commands")
-                .subcommand(anoma_node_cli()),
-        )
-        .subcommand(
-            App::new(CLIENT_COMMAND)
-                .about("Client sub-commands")
-                .subcommand(anoma_client_cli()),
-        )
+        .about("Anoma command line interface.")
+        // Inlined commands from the node and the client.
+        // NOTE: If these are changed, please also update the
+        // `handle_command` function in `src/bin/anoma/cli.rs`.
+        .subcommand(run_gossip_subcommand())
+        .subcommand(run_ledger_subcommand())
+        .subcommand(reset_ledger_subcommand())
+        .subcommand(client_tx_subcommand())
+        .subcommand(client_intent_subcommand())
+        // Node sub-commands
+        .subcommand(add_node_commands(
+            App::new(NODE_COMMAND).about("Node sub-commands"),
+        ))
+        // Client sub-commands
+        .subcommand(add_client_commands(
+            App::new(CLIENT_COMMAND).about("Client sub-commands"),
+        ))
 }
 
 pub fn anoma_client_cli() -> App {
-    App::new(CLI_DESCRIPTION)
-        .version(CLI_VERSION)
-        .author(AUTHOR)
-        .about("Anoma client interface.")
-        .subcommand(build_client_tx_subcommand())
-        .subcommand(build_client_intent_subcommand())
-        .subcommand(build_client_craft_intent_subcommand())
-        .subcommand(build_client_craft_tx_data_subcommand())
+    add_client_commands(
+        App::new(APP_NAME)
+            .version(CLIENT_VERSION)
+            .author(AUTHOR)
+            .about("Anoma client command line interface."),
+    )
+}
+
+fn add_client_commands(app: App) -> App {
+    app.subcommand(client_tx_subcommand())
+        .subcommand(client_intent_subcommand())
+        .subcommand(client_craft_intent_subcommand())
+        .subcommand(client_craft_tx_data_subcommand())
 }
 
 pub fn anoma_node_cli() -> App {
-    App::new(CLI_DESCRIPTION)
-        .version(CLI_VERSION)
-        .author(AUTHOR)
-        .about("Anoma node cli.")
-        .arg(
-            Arg::new("base")
-                .short('b')
-                .long("base-dir")
-                .takes_value(true)
-                .required(false)
-                .default_value(".anoma")
-                .about("Set the base directiory."),
-        )
-        .subcommand(build_run_gossip_subcommand())
-        .subcommand(build_run_ledger_subcommand())
-        .subcommand(build_reset_ledger_subcommand())
+    add_node_commands(
+        App::new(APP_NAME)
+            .version(NODE_VERSION)
+            .author(AUTHOR)
+            .about("Anoma node command line interface.")
+            .arg(
+                Arg::new("base")
+                    .short('b')
+                    .long("base-dir")
+                    .takes_value(true)
+                    .required(false)
+                    .default_value(".anoma")
+                    .about("Set the base directiory."),
+            ),
+    )
 }
 
-fn build_client_tx_subcommand() -> App {
+fn add_node_commands(app: App) -> App {
+    app.subcommand(run_gossip_subcommand())
+        .subcommand(run_ledger_subcommand())
+        .subcommand(reset_ledger_subcommand())
+}
+
+fn client_tx_subcommand() -> App {
     App::new(TX_COMMAND)
-        .version(CLIENT_VERSION)
         .about("Send an transaction.")
         .arg(
             Arg::new(DATA_TX_ARG)
@@ -126,9 +136,8 @@ fn build_client_tx_subcommand() -> App {
         )
 }
 
-fn build_client_intent_subcommand() -> App {
+fn client_intent_subcommand() -> App {
     App::new(INTENT_COMMAND)
-        .version(CLIENT_VERSION)
         .about("Send an intent.")
         .arg(
             Arg::new(ORDERBOOK_INTENT_ARG)
@@ -149,9 +158,8 @@ fn build_client_intent_subcommand() -> App {
         )
 }
 
-fn build_client_craft_intent_subcommand() -> App {
+fn client_craft_intent_subcommand() -> App {
     App::new(CRAFT_INTENT_COMMAND)
-        .version(CLIENT_VERSION)
         .about("Craft an intent.")
         .arg(
             Arg::new(ADDRESS_ARG)
@@ -198,9 +206,8 @@ fn build_client_craft_intent_subcommand() -> App {
         )
 }
 
-fn build_client_craft_tx_data_subcommand() -> App {
+fn client_craft_tx_data_subcommand() -> App {
     App::new(CRAFT_DATA_TX_COMMAND)
-        .version(CLIENT_VERSION)
         .about("Craft a transaction data.")
         .arg(
             Arg::new("source")
@@ -240,9 +247,8 @@ fn build_client_craft_tx_data_subcommand() -> App {
         )
 }
 
-fn build_run_gossip_subcommand() -> App {
+fn run_gossip_subcommand() -> App {
     App::new(RUN_GOSSIP_COMMAND)
-        .version(NODE_VERSION)
         .about("Run Anoma gossip service.")
         .arg(
             Arg::new(ADDRESS_ARG)
@@ -303,16 +309,12 @@ fn build_run_gossip_subcommand() -> App {
         )
 }
 
-fn build_run_ledger_subcommand() -> App {
-    App::new(RUN_LEDGER_COMMAND)
-        .version(NODE_VERSION)
-        .about("Run Anoma node service.")
+fn run_ledger_subcommand() -> App {
+    App::new(RUN_LEDGER_COMMAND).about("Run Anoma node service.")
 }
 
-fn build_reset_ledger_subcommand() -> App {
-    App::new(RESET_LEDGER_COMMAND)
-        .version(NODE_VERSION)
-        .about("Reset Anoma node state.")
+fn reset_ledger_subcommand() -> App {
+    App::new(RESET_LEDGER_COMMAND).about("Reset Anoma node state.")
 }
 
 pub fn parse_vector(args: &ArgMatches, field: &str) -> Option<Vec<String>> {
