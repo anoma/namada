@@ -1,31 +1,4 @@
-// TODO the memory types, serialization, and other "plumbing" code will be
-// injected into the wasm module by the host to reduce file size
-use anoma_vm_env::memory;
-use borsh::BorshDeserialize;
-use core::slice;
-
-/// The environment provides calls to host functions via this C interface:
-extern "C" {
-    // Read fixed-length prior state, returns 1 if the key is present, 0 otherwise.
-    fn read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
-
-    // Read variable-length prior state when we don't know the size up-front,
-    // returns the size of the value (can be 0), or -1 if the key is not
-    // present.
-    fn read_pre_varlen(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
-
-    // Read fixed-length posterior state, returns 1 if the key is present, 0
-    // otherwise.
-    fn read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
-
-    // Read variable-length posterior state when we don't know the size up-front,
-    // returns the size of the value (can be 0), or -1 if the key is not
-    // present.
-    fn read_post_varlen(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
-
-    // Requires a node running with "Info" log level
-    fn log_string(str_ptr: u64, str_len: u64);
-}
+use anoma_vm_env::vp_prelude::*;
 
 /// The module interface callable by wasm runtime:
 #[no_mangle]
