@@ -445,6 +445,7 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use crate::shell::storage::ValidatorAddress;
     use tempdir::TempDir;
     use wasmer_vm;
 
@@ -559,7 +560,7 @@ mod tests {
 
         let runner = VpRunner::new();
         let tx_data = vec![];
-        let addr = Address::new_address(String::from("va"));
+        let addr = Address::Validator(ValidatorAddress("va".into()));
         let db_path = TempDir::new("anoma_test")
             .expect("Unable to create a temporary DB directory");
         let storage = Storage::new(db_path.path());

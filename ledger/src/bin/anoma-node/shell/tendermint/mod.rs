@@ -194,8 +194,38 @@ impl tendermint_abci::Application for AbciWrapper {
         resp
     }
 
-    fn query(&self, _request: RequestQuery) -> ResponseQuery {
-        Default::default()
+    fn query(&self, request: RequestQuery) -> ResponseQuery {
+        let mut resp = ResponseQuery::default();
+
+        let (reply, reply_receiver) = channel();
+        let path = request.path;
+        let data = request.data;
+        let height = request.height as u64;
+        let prove = request.prove;
+
+        self.sender
+            .send(AbciMsg::AbciQuery {
+                reply,
+                path,
+                data,
+                height: BlockHeight(height),
+                prove,
+            })
+            .expect("TEMPORARY: failed to send AbciQuery request");
+
+        let result = reply_receiver
+            .recv()
+            .expect("TEMPORARY: failed to recv AbciQuery response");
+
+        match result {
+            Ok(res) => resp.info = res.to_string(),
+            Err(msg) => {
+                resp.code = 1;
+                resp.log = String::from(msg);
+            }
+        }
+
+        resp
     }
 
     fn check_tx(&self, req: RequestCheckTx) -> ResponseCheckTx {
