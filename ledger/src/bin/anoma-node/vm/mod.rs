@@ -18,9 +18,9 @@ use self::host_env::write_log::WriteLog;
 use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Storage};
 
-const TX_ENTRYPOINT: &str = "apply_tx";
-const VP_ENTRYPOINT: &str = "validate_tx";
-const MATCHMAKER_ENTRYPOINT: &str = "match_intent";
+const TX_ENTRYPOINT: &str = "_apply_tx";
+const VP_ENTRYPOINT: &str = "_validate_tx";
+const MATCHMAKER_ENTRYPOINT: &str = "_match_intent";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 /// This is used to attach the Ledger's host structures to transaction, which is
@@ -434,11 +434,11 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::shell::storage::ValidatorAddress;
     use tempdir::TempDir;
     use wasmer_vm;
 
     use super::*;
+    use crate::shell::storage::ValidatorAddress;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.

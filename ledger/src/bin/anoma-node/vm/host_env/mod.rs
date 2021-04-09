@@ -94,11 +94,11 @@ pub fn prepare_tx_imports(
         "env" => {
             "memory" => initial_memory,
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_charge_gas),
-            "read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read),
-            "write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
-            "delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
-            "read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
-            "log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
+            "_read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read),
+            "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
+            "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
+            "_read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
+            "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
 }
@@ -125,11 +125,11 @@ pub fn prepare_vp_imports(
         "env" => {
             "memory" => initial_memory,
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_charge_gas),
-            "read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
-            "read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
-            "read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
-            "read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
-            "log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
+            "_read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
+            "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
+            "_read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
+            "_read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
+            "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
         },
     }
 }
@@ -151,10 +151,10 @@ pub fn prepare_matchmaker_imports(
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            "send_match" => wasmer::Function::new_native_with_env(wasm_store,
+            "_send_match" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env.clone(),
                                                                   send_match),
-            "log_string" => wasmer::Function::new_native_with_env(wasm_store,
+            "_log_string" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env,
                                                                   matchmaker_log_string),
         },
@@ -324,7 +324,7 @@ fn tx_storage_write(
     key_len: u64,
     val_ptr: u64,
     val_len: u64,
-) -> u64 {
+) {
     let key = env
         .memory
         .read_string(key_ptr, key_len as _)
@@ -340,8 +340,6 @@ fn tx_storage_write(
 
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
     write_log.write(&key, value);
-
-    1
 }
 
 /// Storage delete function exposed to the wasm VM Tx environment. The given

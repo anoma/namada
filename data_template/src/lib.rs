@@ -18,6 +18,6 @@ pub struct Transfer {
 }
 
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
-pub struct TxData{
-    pub transfers: Vec<Transfer>
+pub struct TxData {
+    pub transfers: Vec<Transfer>,
 }
