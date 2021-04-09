@@ -238,11 +238,13 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
-        let mut gas_meter = self
-            .gas_meter
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        gas_meter
+        let gas_meter = self.gas_meter.clone();
+        let mut cloned_gas_meter =
+            gas_meter.lock().expect("Cannot get lock on the gas meter");
+
+        let mut cloned_write_log = self.write_log.clone();
+
+        cloned_gas_meter
             .add_base_transaction_fee(tx_bytes.len())
             .map_err(Error::GasError)?;
 
@@ -255,16 +257,15 @@ impl Shell {
         tx_runner
             .run(
                 &self.storage,
-                &mut self.write_log,
-                &mut gas_meter,
+                &mut cloned_write_log,
+                &mut cloned_gas_meter,
                 tx.code,
                 &tx_data,
             )
             .map_err(Error::TxRunnerError)?;
 
         // get changed keys grouped by the address
-        let keys_changed: HashMap<Address, Vec<String>> = self
-            .write_log
+        let keys_changed: HashMap<Address, Vec<String>> = cloned_write_log
             .get_changed_keys()
             .iter()
             .fold(HashMap::new(), |mut acc, key| {
@@ -280,7 +281,7 @@ impl Shell {
             });
 
         // drop the lock on the gas meter, the VPs will access it via the mutex
-        drop(gas_meter);
+        drop(cloned_gas_meter);
 
         let mut accept = true;
         // TODO run in parallel for all accounts
@@ -300,7 +301,7 @@ impl Shell {
                     &tx_data,
                     addr.clone(),
                     &self.storage,
-                    &self.write_log,
+                    &cloned_write_log,
                     self.gas_meter.clone(),
                     keys,
                 )
