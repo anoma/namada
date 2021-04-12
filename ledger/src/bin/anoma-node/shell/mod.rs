@@ -323,7 +323,8 @@ impl Shell {
         let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
 
         if accept && gas.is_ok() {
-            Ok("Transaction success".to_string())
+            Ok(format!("Transaction success, gas cost: {}", gas.unwrap())
+                .to_string())
         } else if gas.is_err() {
             Ok("Transaction failed: gas overflow.".to_string())
         } else if !accept {
