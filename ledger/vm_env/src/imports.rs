@@ -3,6 +3,7 @@ pub mod tx {
     pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     pub use std::mem::size_of;
+    use crate::memory::KeyVal;
 
     /// This macro expects a function with signature:
     ///
@@ -91,6 +92,36 @@ pub mod tx {
         unsafe { _delete(key.as_ptr() as _, key.len() as _) };
     }
 
+    /// Get an iterator with the given prefix
+    pub fn iter_prefix<K: AsRef<str>>(prefix: K) -> u64 {
+        let prefix = prefix.as_ref();
+        unsafe {
+            _iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        }
+    }
+
+    /// Read a key-value pair from the corresponding iterator
+    pub fn iter_next<T: BorshDeserialize>(iter_id: u64) -> Option<(String, T)> {
+        let result: Vec<u8> = Vec::with_capacity(0);
+        let size = unsafe {
+            _iter_next_varlen(iter_id, result.as_ptr() as _)
+        };
+        if size == -1 {
+            None
+        } else {
+            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+            match KeyVal::try_from_slice(slice) {
+                Ok(key_val) => {
+                    match T::try_from_slice(&key_val.val) {
+                        Ok(v) => Some((key_val.key, v)),
+                        Err(_) => None
+                    }
+                }
+                Err(_) => None
+            }
+        }
+    }
+
     /// Log a string. The message will be printed at the [`log::Level::Info`].
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -117,11 +148,20 @@ pub mod tx {
         // otherwise.
         fn _delete(key_ptr: u64, key_len: u64) -> u64;
 
+        // Get an ID of a data iterator with key prefix
+        fn _iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
+
+        // Read data from the specified iterator, returns 1 if it exists,
+        // 0 otherwise.
+        fn _iter_next(iter_id: u64, result_ptr: u64) -> u64;
+
+        // Read variable-length data when we don't know the size up-front,
+        // returns the size of the value (can be 0), or -1 if the key is not
+        // present.
+        fn _iter_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
+
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);
-
-        // fn iterate_prefix(key) -> iter;
-        // fn iter_next(iter) -> (key, value);
     }
 }
 
@@ -130,6 +170,7 @@ pub mod vp {
     pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     pub use std::mem::size_of;
+    use crate::memory::KeyVal;
 
     /// This macro expects a function with signature:
     ///
@@ -267,6 +308,60 @@ pub mod vp {
         }
     }
 
+    /// Get an iterator with the given prefix
+    pub fn iter_prefix<K: AsRef<str>>(prefix: K) -> u64 {
+        let prefix = prefix.as_ref();
+        unsafe {
+            _iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        }
+    }
+
+    /// Read a key-value pair from the corresponding iterator before
+    /// transaction execution
+    pub fn iter_pre_next<T: BorshDeserialize>(iter_id: u64) -> Option<(String, T)> {
+        let result: Vec<u8> = Vec::with_capacity(0);
+        let size = unsafe {
+            _iter_pre_next_varlen(iter_id, result.as_ptr() as _)
+        };
+        if size == -1 {
+            None
+        } else {
+            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+            match KeyVal::try_from_slice(slice) {
+                Ok(key_val) => {
+                    match T::try_from_slice(&key_val.val) {
+                        Ok(v) => Some((key_val.key, v)),
+                        Err(_) => None
+                    }
+                }
+                Err(_) => None
+            }
+        }
+    }
+
+    /// Read a key-value pair from the corresponding iterator after transaction
+    /// execution
+    pub fn iter_post_next<T: BorshDeserialize>(iter_id: u64) -> Option<(String, T)> {
+        let result: Vec<u8> = Vec::with_capacity(0);
+        let size = unsafe {
+            _iter_post_next_varlen(iter_id, result.as_ptr() as _)
+        };
+        if size == -1 {
+            None
+        } else {
+            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+            match KeyVal::try_from_slice(slice) {
+                Ok(key_val) => {
+                    match T::try_from_slice(&key_val.val) {
+                        Ok(v) => Some((key_val.key, v)),
+                        Err(_) => None
+                    }
+                }
+                Err(_) => None
+            }
+        }
+    }
+
     /// Log a string. The message will be printed at the [`log::Level::Info`].
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -300,6 +395,27 @@ pub mod vp {
             key_len: u64,
             result_ptr: u64,
         ) -> i64;
+
+        // Get an ID of a data iterator with key prefix
+        fn _iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
+
+        // Read data from the specified iterator, returns 1 if it exists,
+        // 0 otherwise.
+        fn _iter_pre_next(iter_id: u64, result_ptr: u64) -> u64;
+
+        // Read variable-length prior state when we don't know the size up-front,
+        // returns the size of the value (can be 0), or -1 if the key is not
+        // present.
+        fn _iter_pre_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
+
+        // Read data from the specified iterator, returns 1 if it exists,
+        // 0 otherwise.
+        fn _iter_post_next(iter_id: u64, result_ptr: u64) -> u64;
+
+        // Read variable-length posterior state when we don't know the size
+        // up-front, returns the size of the value (can be 0), or -1 if the
+        // key is not present.
+        fn _iter_post_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
 
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);

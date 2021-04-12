@@ -918,17 +918,6 @@ fn tx_log_string(env: &TxEnv, str_ptr: u64, str_len: u64) {
     log::info!("WASM Transaction log: {}", str);
 }
 
-/// Log a string from exposed to the wasm VM VP environment. The message will be
-/// printed at the [`log::Level::Info`].
-fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
-    let str = env
-        .memory
-        .read_string(str_ptr, str_len as _)
-        .expect("Cannot read the string from memory");
-
-    log::info!("WASM Validity predicate log: {}", str);
-}
-
 /// Log a string from exposed to the wasm VM matchmaker environment. The message
 /// will be printed at the [`log::Level::Info`].
 fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
@@ -938,6 +927,17 @@ fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
         .expect("Cannot read the string from memory");
 
     log::info!("WASM Matchmaker log: {}", str);
+}
+
+/// Log a string from exposed to the wasm VM VP environment. The message will be
+/// printed at the [`log::Level::Info`].
+fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
+    let str = env
+        .memory
+        .read_string(str_ptr, str_len as _)
+        .expect("Cannot read the string from memory");
+
+    log::info!("WASM Validity predicate log: {}", str);
 }
 
 /// Inject a transaction from matchmaker's matched intents to the ledger
