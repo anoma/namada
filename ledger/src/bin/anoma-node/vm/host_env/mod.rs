@@ -15,20 +15,19 @@ use wasmer::{
 use self::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
-use super::{TxEnvHostWrapper, VpEnvHostWrapper};
+use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Key, Storage};
 
 #[derive(Clone)]
 struct TxEnv<'a> {
+    storage: EnvHostWrapper<Storage>,
     // not thread-safe, assuming single-threaded Tx runner
-    storage: TxEnvHostWrapper<Storage>,
+    write_log: MutEnvHostWrapper<WriteLog>,
     // not thread-safe, assuming single-threaded Tx runner
-    write_log: TxEnvHostWrapper<WriteLog>,
+    iterators: MutEnvHostWrapper<PrefixIterators<'a>>,
     // not thread-safe, assuming single-threaded Tx runner
-    iterators: TxEnvHostWrapper<PrefixIterators<'a>>,
-    // not thread-safe, assuming single-threaded Tx runner
-    gas_meter: TxEnvHostWrapper<BlockGasMeter>,
+    gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     memory: AnomaMemory,
 }
 
@@ -45,12 +44,13 @@ impl<'a> WasmerEnv for TxEnv<'a> {
 struct VpEnv<'a> {
     /// The address of the account that owns the VP
     addr: Address,
-    // not thread-safe, assuming read-only access from parallel Vp runners
-    storage: VpEnvHostWrapper<Storage>,
-    // not thread-safe, assuming read-only access from parallel Vp runners
-    write_log: VpEnvHostWrapper<WriteLog>,
-    // TODO: tentatively use TxEnvHostWrapper, please replace it with MutEnvHostWrapper
-    iterators: TxEnvHostWrapper<PrefixIterators<'a>>,
+    // this is not thread-safe, but because each VP has its own instance there
+    // is no shared access
+    iterators: MutEnvHostWrapper<PrefixIterators<'a>>,
+    // thread-safe read-only access from parallel Vp runners
+    storage: EnvHostWrapper<Storage>,
+    // thread-safe read-only access from parallel Vp runners
+    write_log: EnvHostWrapper<WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
     // the VPs that we ran.
     gas_meter: Arc<Mutex<BlockGasMeter>>,
@@ -86,10 +86,10 @@ impl WasmerEnv for MatchmakerEnv {
 /// transaction code
 pub fn prepare_tx_imports(
     wasm_store: &Store,
-    storage: TxEnvHostWrapper<Storage>,
-    write_log: TxEnvHostWrapper<WriteLog>,
-    iterators: TxEnvHostWrapper<PrefixIterators<'static>>,
-    gas_meter: TxEnvHostWrapper<BlockGasMeter>,
+    storage: EnvHostWrapper<Storage>,
+    write_log: MutEnvHostWrapper<WriteLog>,
+    iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
+    gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
     let env = TxEnv {
@@ -121,10 +121,9 @@ pub fn prepare_tx_imports(
 pub fn prepare_vp_imports(
     wasm_store: &Store,
     addr: Address,
-    storage: VpEnvHostWrapper<Storage>,
-    write_log: VpEnvHostWrapper<WriteLog>,
-    // TODO: tentatively use TxEnvHostWrapper, please replace it with MutEnvHostWrapper
-    iterators: TxEnvHostWrapper<PrefixIterators<'static>>,
+    storage: EnvHostWrapper<Storage>,
+    write_log: EnvHostWrapper<WriteLog>,
+    iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
     gas_meter: Arc<Mutex<BlockGasMeter>>,
     initial_memory: Memory,
 ) -> ImportObject {
