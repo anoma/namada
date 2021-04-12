@@ -127,7 +127,7 @@ fn build_client_tx_subcommand() -> App {
         )
         .arg(
             Arg::new(DRY_RUN_TX_ARG)
-                .long("dry-run")
+                .long(DRY_RUN_TX_ARG)
                 .takes_value(false)
                 .required(false)
                 .about("Dry run the transaction."),
