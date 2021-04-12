@@ -29,7 +29,7 @@ run-gossip:
 	# runs the node gossip daemon with default orderbook activated
 	$(cargo) run --bin anomad -- run-gossip --orderbook
 
-run-reset:
+reset-anoma:
 	# runs the node daemon
 	$(cargo) run --bin anomad -- reset-ledger
 

@@ -24,7 +24,8 @@ pub async fn main() -> Result<()> {
             // here unwrap is safe as the arguments are required
             let path = args.value_of(cli::PATH_TX_ARG).unwrap().to_string();
             let data = args.value_of(cli::DATA_TX_ARG);
-            exec_tx(path, data).await;
+            let dry = args.is_present(cli::DRY_RUN_TX_ARG);
+            exec_tx(path, data, dry).await;
             Ok(())
         }
         Some((cli::INTENT_COMMAND, args)) => {
@@ -72,7 +73,7 @@ pub async fn main() -> Result<()> {
     }
 }
 
-async fn exec_tx(code_path: String, data_path: Option<&str>) {
+async fn exec_tx(code_path: String, data_path: Option<&str>, dry: bool) {
     // TODO tendermint cache blocks the same transaction sent more than once,
     // add a counter or timestamp?
 
@@ -93,9 +94,20 @@ async fn exec_tx(code_path: String, data_path: Option<&str>) {
 
     let client =
         HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
-    // TODO broadcast_tx_commit shouldn't be used live
-    let response = client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
-    println!("{:#?}", response);
+    // TODO broadcast_tx_commit shouldn't be used live;
+    if dry {
+        let path = std::str::FromStr::from_str("dry_run_tx").unwrap();
+
+        let response = client
+            .abci_query(Some(path), tx_bytes, None, false)
+            .await
+            .unwrap();
+        println!("{:#?}", response);
+    } else {
+        let response =
+            client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
+        println!("{:#?}", response);
+    }
 }
 
 async fn gossip_intent(orderbook_addr: String, data_path: String) {
