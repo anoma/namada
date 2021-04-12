@@ -1,5 +1,3 @@
-use anoma::bookkeeper::Bookkeeper;
-use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
 use anoma::types::Topic;
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
@@ -33,10 +31,9 @@ pub struct P2P {
 
 impl P2P {
     pub fn new(
-        bookkeeper: Bookkeeper,
         config: &anoma::config::Gossip,
     ) -> Result<(Self, Receiver<NetworkEvent>, Option<Receiver<Tx>>)> {
-        let local_key: Keypair = Ed25519(bookkeeper.key);
+        let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
         // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
@@ -75,20 +72,20 @@ impl P2P {
         ))
     }
 
-    pub fn prepare(&mut self, config: &Config) -> Result<()> {
-        for topic in &config.gossip.topics {
+    pub fn prepare(&mut self, config: &anoma::config::Gossip) -> Result<()> {
+        for topic in &config.topics {
             let topic = IdentTopic::new(topic.to_string());
             self.swarm.gossipsub.subscribe(&topic).unwrap();
         }
 
         // Listen on given address
         Swarm::listen_on(&mut self.swarm, {
-            config.gossip.get_address().parse().unwrap()
+            config.get_address().parse().unwrap()
         })
         .unwrap();
 
         // Reach out to another node if specified
-        for to_dial in &config.gossip.peers {
+        for to_dial in &config.peers {
             let dialing = to_dial.clone();
             match to_dial.parse() {
                 Ok(to_dial) => match Swarm::dial_addr(&mut self.swarm, to_dial)

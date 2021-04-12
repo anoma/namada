@@ -37,14 +37,14 @@ pub async fn main() -> Result<()> {
         }
         Some((cli::CRAFT_INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let addr = cli::parse_string(args, cli::ADDRESS_ARG).unwrap();
+            let addr = cli::parse_string_opt(args, cli::ADDRESS_ARG).unwrap();
             let token_sell =
-                cli::parse_string(args, cli::TOKEN_SELL_ARG).unwrap();
-            let amount_sell = cli::parse_u64(args, cli::AMOUNT_SELL_ARG)
+                cli::parse_string_opt(args, cli::TOKEN_SELL_ARG).unwrap();
+            let amount_sell = cli::parse_u64_opt(args, cli::AMOUNT_SELL_ARG)
                 .expect("not a valid amount");
             let token_buy =
                 args.value_of(cli::TOKEN_BUY_ARG).unwrap().to_string();
-            let amount_buy = cli::parse_u64(args, cli::AMOUNT_BUY_ARG)
+            let amount_buy = cli::parse_u64_opt(args, cli::AMOUNT_BUY_ARG)
                 .expect("not a valid amount");
             let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
             craft_intent(
@@ -62,7 +62,7 @@ pub async fn main() -> Result<()> {
             let source = args.value_of(cli::SOURCE_ARG).unwrap().to_string();
             let target = args.value_of(cli::TARGET_ARG).unwrap().to_string();
             let token = args.value_of(cli::TOKEN_ARG).unwrap().to_string();
-            let amount = cli::parse_u64(args, cli::AMOUNT_ARG)
+            let amount = cli::parse_u64_opt(args, cli::AMOUNT_ARG)
                 .expect("not a valid amount");
             let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
             craft_tx_data(source, target, token, amount, file);

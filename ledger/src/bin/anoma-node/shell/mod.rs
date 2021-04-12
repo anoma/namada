@@ -46,10 +46,10 @@ pub fn run(config: Config) -> Result<()> {
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, &config.db_home_dir());
-    let addr = format!("{}:{}", config.tendermint.host, config.tendermint.port)
+    let addr = format!("{}:{}", config.ledger.host, config.ledger.port)
         .parse()
         .map_err(|e| Error::Temporary {
-            error: format!("cannot parse tendermint address {}", e),
+            error: format!("cannot parse ledger address {}", e),
         })?;
     // Run Tendermint ABCI server in another thread
     std::thread::spawn(move || tendermint::run(sender, config, addr));

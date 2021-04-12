@@ -10,6 +10,8 @@ use std::collections::HashSet;
 
 use clap::{Arg, ArgMatches};
 
+use super::config;
+
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
 const APP_NAME: &str = "Anoma";
 const CLI_VERSION: &str = "0.1.0";
@@ -319,7 +321,7 @@ fn reset_ledger_subcommand() -> App {
     App::new(RESET_LEDGER_COMMAND).about("Reset Anoma node state.")
 }
 
-pub fn parse_hashset(
+pub fn parse_hashset_opt(
     args: &ArgMatches,
     field: &str,
 ) -> Option<HashSet<String>> {
@@ -330,7 +332,7 @@ pub fn parse_hashset(
     })
 }
 
-pub fn parse_address(
+pub fn parse_address_opt(
     args: &ArgMatches,
     field: &str,
 ) -> Option<(String, String)> {
@@ -347,10 +349,46 @@ pub fn parse_bool(args: &ArgMatches, field: &str) -> bool {
     args.is_present(field)
 }
 
-pub fn parse_string(args: &ArgMatches, field: &str) -> Option<String> {
+pub fn parse_string_opt(args: &ArgMatches, field: &str) -> Option<String> {
     args.value_of(field).map(|s| s.to_string())
 }
 
-pub fn parse_u64(args: &ArgMatches, field: &str) -> Option<u64> {
+pub fn parse_u64_opt(args: &ArgMatches, field: &str) -> Option<u64> {
     args.value_of(field).and_then(|s| s.parse().ok())
+}
+
+pub fn update_gossip_config(args: &ArgMatches, config: &mut config::Gossip) {
+    if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
+        config.peers = peers;
+    }
+
+    config.set_address(parse_address_opt(args, ADDRESS_ARG));
+
+    config.enable_dkg(parse_bool(args, DKG_ARG));
+
+    if parse_bool(args, ORDERBOOK_ARG) {
+        let matchmaker_pgm = parse_string_opt(args, MATCHMAKER_ARG);
+        let tx_template = parse_string_opt(args, TX_TEMPLATE_ARG);
+        let ledger_address = parse_address_opt(args, LEDGER_ADDRESS_ARG);
+        let matchmaker_cfg = if let (
+            Some(matchmaker_pgm),
+            Some(tx_template),
+            Some((ledger_host, ledger_port)),
+        ) =
+            (matchmaker_pgm, tx_template, ledger_address)
+        {
+            Some(config::Matchmaker::new(
+                matchmaker_pgm,
+                tx_template,
+                ledger_host,
+                ledger_port,
+            ))
+        } else {
+            None
+        };
+        let orderbook =
+            config.orderbook.get_or_insert(config::Orderbook::default());
+        orderbook.matchmaker = matchmaker_cfg;
+    }
+    config.rpc = parse_bool(args, RPC_ARG);
 }

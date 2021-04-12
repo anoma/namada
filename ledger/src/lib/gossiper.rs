@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Bookkeeper {
+pub struct Gossiper {
     pub address: String,
     #[serde(with = "keypair_serde")]
     pub key: Keypair,
@@ -38,14 +38,14 @@ mod keypair_serde {
     }
 }
 
-impl Bookkeeper {
-    // Generates a new orderbook
+impl Gossiper {
+    // Generates a new gossiper
     #[allow(dead_code)]
     pub fn new() -> Self {
         let key = Keypair::generate();
         let mut hasher = Sha256::new();
         hasher.update(key.public().encode());
         let address = format!("{:.40X}", hasher.finalize());
-        Bookkeeper { address, key }
+        Gossiper { address, key }
     }
 }

@@ -8,7 +8,6 @@ mod types;
 
 use std::thread;
 
-use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
 use mpsc::Receiver;
 use prost::Message;
@@ -22,20 +21,14 @@ use super::rpc;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Bad Bookkeeper file")]
-    BadBookkeeper(std::io::Error),
     #[error("Error gossip dispatcher {0}")]
     P2pDispatcherError(String),
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: Config) -> Result<()> {
-    let bookkeeper = config
-        .get_bookkeeper()
-        .or_else(|e| Err(Error::BadBookkeeper(e)))?;
-
-    let rpc_event_receiver = if config.gossip.rpc {
+pub fn run(config: anoma::config::Gossip) -> Result<()> {
+    let rpc_event_receiver = if config.rpc {
         let (tx, rx) = mpsc::channel(100);
         thread::spawn(|| rpc::rpc_server(tx).unwrap());
         Some(rx)
@@ -44,7 +37,7 @@ pub fn run(config: Config) -> Result<()> {
     };
 
     let (mut gossip, network_event_receiver, matchmaker_event_receiver) =
-        p2p::P2P::new(bookkeeper, &config.gossip)
+        p2p::P2P::new(&config)
             .expect("TEMPORARY: unable to build gossip layer");
     gossip.prepare(&config).expect("gossip prepraration failed");
 
