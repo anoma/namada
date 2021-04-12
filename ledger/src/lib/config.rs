@@ -1,5 +1,6 @@
 //! Node and client configuration settings
 
+use std::collections::HashSet;
 use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
@@ -26,51 +27,100 @@ pub struct Tendermint {
     pub port: String,
     pub network: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Matchmaker {
+    pub matchmaker: String,
+    pub tx_template: String,
+    pub ledger_host: String,
+    pub ledger_port: String,
+}
+impl Matchmaker {
+    pub fn new(
+        matchmaker: String,
+        tx_template: String,
+        ledger_host: String,
+        ledger_port: String,
+    ) -> Self {
+        Self {
+            matchmaker,
+            tx_template,
+            ledger_host,
+            ledger_port,
+        }
+    }
+
+    pub fn get_ledger_address(&self) -> String {
+        format!("tcp://{}:{}", self.ledger_host, self.ledger_port)
+    }
+
+    pub fn set_ledger_address(&mut self, ledger_address: (String, String)) {
+        self.ledger_host = ledger_address.0;
+        self.ledger_port = ledger_address.1;
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Orderbook {
+    pub matchmaker: Option<Matchmaker>,
+}
+
+impl Orderbook {
+    pub fn new(matchmaker: Option<Matchmaker>) -> Self {
+        Self { matchmaker }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Gossip {
     pub host: String,
     pub port: String,
     pub rpc: bool,
-    pub peers: Vec<String>,
-    pub topics: Vec<Topic>,
-    pub matchmaker: Option<String>,
-    pub tx_template: Option<String>,
-    pub ledger_addr: Option<(String, String)>,
-}
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    pub node: Node,
-    pub tendermint: Tendermint,
-    pub p2p: Gossip,
+    pub peers: HashSet<String>,
+    pub topics: HashSet<Topic>,
+    pub orderbook: Option<Orderbook>,
 }
 
 impl Gossip {
+    pub fn new(
+        host: String,
+        port: String,
+        rpc: bool,
+        peers: HashSet<String>,
+        topics: HashSet<Topic>,
+        orderbook: Option<Orderbook>,
+    ) -> Self {
+        Self {
+            host,
+            port,
+            rpc,
+            peers,
+            topics,
+            orderbook,
+        }
+    }
+
     // TODO here, and in set_address, we assumes a ip4+tcp address but it would
     // be nice to allow all accepted address by libp2p
     pub fn get_address(&self) -> String {
         format!("/ip4/{}/tcp/{}", self.host, self.port)
     }
 
-    pub fn get_ledger_address(&self) -> Option<String> {
-        self.ledger_addr
-            .as_ref()
-            .map(|(host, port)| format!("tcp://{}:{}", host, port))
-    }
-
-    pub fn set_dkg_topic(&mut self, enable: bool) {
+    pub fn enable_dkg(&mut self, enable: bool) {
         if enable {
-            self.set_topic(Topic::Dkg);
+            self.topics.insert(Topic::Dkg);
+        } else {
+            self.topics.remove(&Topic::Dkg);
         }
     }
 
-    pub fn set_orderbook_topic(&mut self, enable: bool) {
-        if enable {
-            self.set_topic(Topic::Orderbook);
+    pub fn enable_orderbook(&mut self, orderbook_cfg: Option<Orderbook>) {
+        self.orderbook = orderbook_cfg;
+        if self.orderbook.is_some() {
+            self.topics.insert(Topic::Orderbook);
+        } else {
+            self.topics.remove(&Topic::Orderbook);
         }
-    }
-
-    fn set_topic(&mut self, topic: Topic) {
-        self.topics.push(topic);
     }
 
     pub fn set_address(&mut self, address: Option<(String, String)>) {
@@ -79,10 +129,13 @@ impl Gossip {
             self.port = addr.1;
         }
     }
+}
 
-    pub fn set_ledger_address(&mut self, address: Option<(String, String)>) {
-        self.ledger_addr = address;
-    }
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub node: Node,
+    pub tendermint: Tendermint,
+    pub gossip: Gossip,
 }
 
 impl Config {

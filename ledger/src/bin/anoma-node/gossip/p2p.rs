@@ -1,6 +1,7 @@
 use anoma::bookkeeper::Bookkeeper;
 use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
+use anoma::types::Topic;
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -27,17 +28,13 @@ pub struct P2P {
     pub swarm: Swarm,
     pub orderbook: Option<Orderbook>,
     pub dkg: Option<DKG>,
-    pub ledger: Option<String>,
+    // pub ledger: Option<String>,
 }
 
 impl P2P {
     pub fn new(
         bookkeeper: Bookkeeper,
-        orderbook: bool,
-        dkg: bool,
-        matchmaker: Option<String>,
-        tx_template: Option<String>,
-        ledger: Option<String>,
+        config: &anoma::config::Gossip,
     ) -> Result<(Self, Receiver<NetworkEvent>, Option<Receiver<Tx>>)> {
         let local_key: Keypair = Ed25519(bookkeeper.key);
         let local_peer_id: PeerId = PeerId::from(local_key.public());
@@ -49,22 +46,29 @@ impl P2P {
         let (gossipsub, network_event_receiver) = Behaviour::new(local_key);
         let swarm = Swarm::new(transport, gossipsub, local_peer_id);
 
-        let (orderbook, matchmaker_event_receiver) = if orderbook {
-            let (orderbook, matchmaker_event_receiver) =
-                Orderbook::new(matchmaker, tx_template);
-            (Some(orderbook), matchmaker_event_receiver)
+        let (orderbook, matchmaker_event_receiver) =
+            if let Some(orderbook_conf) = &config.orderbook {
+                let (orderbook, matchmaker_event_receiver) =
+                    Orderbook::new(&orderbook_conf);
+                (Some(orderbook), matchmaker_event_receiver)
+            } else {
+                (None, None)
+            };
+
+        let dkg = if config.topics.contains(&Topic::Dkg) {
+            Some(DKG::new())
         } else {
-            (None, None)
+            None
         };
 
-        let dkg = if dkg { Some(DKG::new()) } else { None };
-
+        // TODO this is ugly but mandatory so far because of the problem of the
+        // dispatcher explain in mod.matchmaker_dispatcher
         Ok((
             Self {
                 swarm,
                 orderbook,
                 dkg,
-                ledger,
+                // ledger,
             },
             network_event_receiver,
             matchmaker_event_receiver,
@@ -72,19 +76,19 @@ impl P2P {
     }
 
     pub fn prepare(&mut self, config: &Config) -> Result<()> {
-        for topic in &config.p2p.topics {
+        for topic in &config.gossip.topics {
             let topic = IdentTopic::new(topic.to_string());
             self.swarm.gossipsub.subscribe(&topic).unwrap();
         }
 
         // Listen on given address
         Swarm::listen_on(&mut self.swarm, {
-            config.p2p.get_address().parse().unwrap()
+            config.gossip.get_address().parse().unwrap()
         })
         .unwrap();
 
         // Reach out to another node if specified
-        for to_dial in &config.p2p.peers {
+        for to_dial in &config.gossip.peers {
             let dialing = to_dial.clone();
             match to_dial.parse() {
                 Ok(to_dial) => match Swarm::dial_addr(&mut self.swarm, to_dial)
@@ -118,7 +122,7 @@ impl P2P {
                 let mut tix_bytes = vec![];
                 intent.encode(&mut tix_bytes).unwrap();
                 let _message_id = self.swarm.gossipsub.publish(
-                    IdentTopic::new(anoma::types::Topic::Orderbook.to_string()),
+                    IdentTopic::new(Topic::Orderbook.to_string()),
                     tix_bytes,
                 );
             }
@@ -141,9 +145,7 @@ impl P2P {
 
     pub async fn handle_network_event(&mut self, event: NetworkEvent) {
         match event {
-            NetworkEvent::Message(msg)
-                if msg.topic == anoma::types::Topic::Orderbook =>
-            {
+            NetworkEvent::Message(msg) if msg.topic == Topic::Orderbook => {
                 if let Some(orderbook) = &mut self.orderbook {
                     let validity =
                         match orderbook.apply_raw_intent(&msg.data).await {

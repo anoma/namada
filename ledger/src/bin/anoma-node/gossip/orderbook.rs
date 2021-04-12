@@ -35,21 +35,16 @@ pub struct Orderbook {
 
 impl Orderbook {
     pub fn new(
-        matchmaker: Option<String>,
-        tx_template: Option<String>,
+        config: &anoma::config::Orderbook,
     ) -> (Self, Option<Receiver<Tx>>) {
         let (matchmaker, matchmaker_event_receiver) =
-        // TODO instead matchmaker cli option should be something like Option<(String, String)>
-            if matchmaker.is_some() && tx_template.is_some() {
-                let matchmaker = matchmaker.unwrap();
-                let tx_template = tx_template.unwrap();
+            if let Some(matchmaker) = &config.matchmaker {
                 let (matchmaker, matchmaker_event_receiver) =
-                    Matchmaker::new(matchmaker, tx_template);
+                    Matchmaker::new(&matchmaker);
                 (Some(matchmaker), Some(matchmaker_event_receiver))
             } else {
                 (None, None)
             };
-
         (
             Self {
                 mempool: Mempool::new(),

@@ -10,7 +10,6 @@ use std::thread;
 
 use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
-use anoma::types::Topic;
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
@@ -25,7 +24,7 @@ use super::rpc;
 pub enum Error {
     #[error("Bad Bookkeeper file")]
     BadBookkeeper(std::io::Error),
-    #[error("Error p2p dispatcher {0}")]
+    #[error("Error gossip dispatcher {0}")]
     P2pDispatcherError(String),
 }
 
@@ -36,7 +35,7 @@ pub fn run(config: Config) -> Result<()> {
         .get_bookkeeper()
         .or_else(|e| Err(Error::BadBookkeeper(e)))?;
 
-    let rpc_event_receiver = if config.p2p.rpc {
+    let rpc_event_receiver = if config.gossip.rpc {
         let (tx, rx) = mpsc::channel(100);
         thread::spawn(|| rpc::rpc_server(tx).unwrap());
         Some(rx)
@@ -44,20 +43,14 @@ pub fn run(config: Config) -> Result<()> {
         None
     };
 
-    let (mut p2p, event_receiver, matchmaker_event_receiver) = p2p::P2P::new(
-        bookkeeper,
-        config.p2p.topics.contains(&Topic::Orderbook),
-        config.p2p.topics.contains(&Topic::Dkg),
-        config.p2p.matchmaker.clone(),
-        config.p2p.tx_template.clone(),
-        config.p2p.get_ledger_address().clone(),
-    )
-    .expect("TEMPORARY: unable to build p2p layer");
-    p2p.prepare(&config).expect("p2p prepraration failed");
+    let (mut gossip, network_event_receiver, matchmaker_event_receiver) =
+        p2p::P2P::new(bookkeeper, &config.gossip)
+            .expect("TEMPORARY: unable to build gossip layer");
+    gossip.prepare(&config).expect("gossip prepraration failed");
 
     dispatcher(
-        p2p,
-        event_receiver,
+        gossip,
+        network_event_receiver,
         rpc_event_receiver,
         matchmaker_event_receiver,
     )
@@ -94,7 +87,7 @@ pub async fn matchmaker_dispatcher(
 
 #[tokio::main]
 pub async fn dispatcher(
-    mut p2p: P2P,
+    mut gossip: P2P,
     mut network_event_receiver: Receiver<NetworkEvent>,
     rpc_event_receiver: Option<Receiver<IntentMessage>>,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
@@ -108,8 +101,8 @@ pub async fn dispatcher(
             loop {
                 tokio::select! {
                     Some(event) = rpc_event_receiver.recv() =>
-                        p2p.handle_rpc_event(event).await ,
-                    swarm_event = p2p.swarm.next() => {
+                        gossip.handle_rpc_event(event).await ,
+                    swarm_event = gossip.swarm.next() => {
                         // All events are handled by the
                         // `NetworkBehaviourEventProcess`es.  I.e. the
                         // `swarm.next()` future drives the `Swarm` without ever
@@ -117,14 +110,14 @@ pub async fn dispatcher(
                         panic!("Unexpected event: {:?}", swarm_event);
                     },
                     Some(event) = network_event_receiver.recv() =>
-                        p2p.handle_network_event(event).await
+                        gossip.handle_network_event(event).await
                 };
             }
         }
         None => {
             loop {
                 tokio::select! {
-                    swarm_event = p2p.swarm.next() => {
+                    swarm_event = gossip.swarm.next() => {
                         // All events are handled by the
                         // `NetworkBehaviourEventProcess`es.  I.e. the
                         // `swarm.next()` future drives the `Swarm` without ever
@@ -132,7 +125,7 @@ pub async fn dispatcher(
                         panic!("Unexpected event: {:?}", swarm_event);
                     },
                     Some(event) = network_event_receiver.recv() =>
-                        p2p.handle_network_event(event).await
+                        gossip.handle_network_event(event).await
                 }
             }
         }

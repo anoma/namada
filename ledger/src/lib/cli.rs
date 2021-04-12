@@ -6,6 +6,8 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
+use std::collections::HashSet;
+
 use clap::{Arg, ArgMatches};
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
@@ -317,23 +319,28 @@ fn reset_ledger_subcommand() -> App {
     App::new(RESET_LEDGER_COMMAND).about("Reset Anoma node state.")
 }
 
-pub fn parse_vector(args: &ArgMatches, field: &str) -> Option<Vec<String>> {
+pub fn parse_hashset(
+    args: &ArgMatches,
+    field: &str,
+) -> Option<HashSet<String>> {
     args.values_of(field).map(|peers| {
-        peers.map(|peer| peer.to_string()).collect::<Vec<String>>()
+        peers
+            .map(|peer| peer.to_string())
+            .collect::<HashSet<String>>()
     })
 }
+
 pub fn parse_address(
     args: &ArgMatches,
     field: &str,
 ) -> Option<(String, String)> {
-    let address = args.value_of(field).map(|s| s.to_string());
-    match address {
-        Some(address) => {
-            let split_addresses: Vec<String> =
-                address.split(":").map(|s| s.to_string()).collect();
-            Some((split_addresses[0].clone(), split_addresses[1].clone()))
-        }
-        None => None,
+    let address = args.value_of(field).map(ToString::to_string);
+    if let Some(address) = address {
+        let split_addresses: Vec<String> =
+            address.split(':').map(ToString::to_string).collect();
+        Some((split_addresses[0].clone(), split_addresses[1].clone()))
+    } else {
+        None
     }
 }
 pub fn parse_bool(args: &ArgMatches, field: &str) -> bool {

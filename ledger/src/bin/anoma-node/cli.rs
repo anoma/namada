@@ -19,29 +19,43 @@ pub fn main() -> Result<()> {
         Some((cli::RUN_GOSSIP_COMMAND, args)) => {
             // TODO: this could be refactored into a function that updates
             // config
-            cli::parse_vector(args, cli::PEERS_ARG)
-                .map(|peers| config.p2p.peers = peers);
+            cli::parse_hashset(args, cli::PEERS_ARG)
+                .map(|peers| config.gossip.peers = peers);
 
             let address = cli::parse_address(args, cli::ADDRESS_ARG);
-            config.p2p.set_address(address);
+            config.gossip.set_address(address);
 
-            let dkg = cli::parse_bool(args, cli::DKG_ARG);
-            config.p2p.set_dkg_topic(dkg);
+            config
+                .gossip
+                .enable_dkg(cli::parse_bool(args, cli::DKG_ARG));
 
-            let orderbook = cli::parse_bool(args, cli::ORDERBOOK_ARG);
-            config.p2p.set_orderbook_topic(orderbook);
-
-            config.p2p.rpc = cli::parse_bool(args, cli::RPC_ARG);
-
-            config.p2p.matchmaker =
-                cli::parse_string(args, cli::MATCHMAKER_ARG);
-
-            config.p2p.tx_template =
-                cli::parse_string(args, cli::TX_TEMPLATE_ARG);
-
-            let ledger_address =
-                cli::parse_address(args, cli::LEDGER_ADDRESS_ARG);
-            config.p2p.set_ledger_address(ledger_address);
+            if cli::parse_bool(args, cli::ORDERBOOK_ARG) {
+                let matchmaker_pgm =
+                    cli::parse_string(args, cli::MATCHMAKER_ARG);
+                let tx_template = cli::parse_string(args, cli::TX_TEMPLATE_ARG);
+                let ledger_address =
+                    cli::parse_address(args, cli::LEDGER_ADDRESS_ARG);
+                let matchmaker_cfg = if let (
+                    Some(matchmaker_pgm),
+                    Some(tx_template),
+                    Some((ledger_host, ledger_port)),
+                ) =
+                    (matchmaker_pgm, tx_template, ledger_address)
+                {
+                    Some(anoma::config::Matchmaker::new(
+                        matchmaker_pgm,
+                        tx_template,
+                        ledger_host,
+                        ledger_port,
+                    ))
+                } else {
+                    None
+                };
+                config.gossip.enable_orderbook(Some(
+                    anoma::config::Orderbook::new(matchmaker_cfg),
+                ));
+            }
+            config.gossip.rpc = cli::parse_bool(args, cli::RPC_ARG);
 
             gossip::run(config).wrap_err("Failed to run gossip service")
         }
