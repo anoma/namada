@@ -73,12 +73,12 @@ pub async fn main() -> Result<()> {
     }
 }
 
-async fn exec_tx(code_path: String, data_hex: Option<&str>, dry: bool) {
+async fn exec_tx(code_path: String, data_path: Option<&str>, dry: bool) {
     // TODO tendermint cache blocks the same transaction sent more than once,
     // add a counter or timestamp?
 
     let code = std::fs::read(code_path).unwrap();
-    let data = data_hex.map(|data_path| std::fs::read(data_path).unwrap());
+    let data = data_path.map(|data_path| std::fs::read(data_path).unwrap());
     let tx = Tx { code, data };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();
