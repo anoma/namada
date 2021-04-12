@@ -197,8 +197,8 @@ impl Shell {
                     reply,
                     path,
                     data,
-                    height,
-                    prove,
+                    height: _,
+                    prove: _,
                 } => {
                     if path == "dry_run_tx" {
                         let result = self
