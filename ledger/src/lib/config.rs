@@ -54,13 +54,14 @@ impl Gossip {
 
     pub fn get_ledger_address(&self) -> Option<String> {
         if self.ledger_host.is_some() && self.ledger_port.is_some() {
-            return Some(format!(
+            Some(format!(
                 "tcp://{}:{}",
                 self.ledger_host.clone().unwrap(),
                 self.ledger_port.clone().unwrap()
-            ));
+            ))
+        } else {
+            None
         }
-        return None;
     }
 
     pub fn set_dkg_topic(&mut self, enable: bool) {
