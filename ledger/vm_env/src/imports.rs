@@ -3,7 +3,8 @@ pub mod tx {
     pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     pub use std::mem::size_of;
-    use crate::memory::KeyVal;
+    use crate::memory::{KeyVal, KeyValIterator};
+    use std::marker::PhantomData;
 
     /// This macro expects a function with signature:
     ///
@@ -93,31 +94,35 @@ pub mod tx {
     }
 
     /// Get an iterator with the given prefix
-    pub fn iter_prefix<K: AsRef<str>>(prefix: K) -> u64 {
+    pub fn iter_prefix<K: AsRef<str>, T: BorshDeserialize>(prefix: K) -> KeyValIterator<T> {
         let prefix = prefix.as_ref();
-        unsafe {
+        let iter_id = unsafe {
             _iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-        }
+        };
+        KeyValIterator(iter_id, PhantomData)
     }
 
-    /// Read a key-value pair from the corresponding iterator
-    pub fn iter_next<T: BorshDeserialize>(iter_id: u64) -> Option<(String, T)> {
-        let result: Vec<u8> = Vec::with_capacity(0);
-        let size = unsafe {
-            _iter_next_varlen(iter_id, result.as_ptr() as _)
-        };
-        if size == -1 {
-            None
-        } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
-            match KeyVal::try_from_slice(slice) {
-                Ok(key_val) => {
-                    match T::try_from_slice(&key_val.val) {
-                        Ok(v) => Some((key_val.key, v)),
-                        Err(_) => None
+    impl<T: BorshDeserialize> Iterator for KeyValIterator<T> {
+        type Item = (String, T);
+
+        fn next(&mut self) -> Option<(String, T)> {
+            let result: Vec<u8> = Vec::with_capacity(0);
+            let size = unsafe {
+                _iter_next_varlen(self.0, result.as_ptr() as _)
+            };
+            if size == -1 {
+                None
+            } else {
+                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                match KeyVal::try_from_slice(slice) {
+                    Ok(key_val) => {
+                        match T::try_from_slice(&key_val.val) {
+                            Ok(v) => Some((key_val.key, v)),
+                            Err(_) => None
+                        }
                     }
+                    Err(_) => None
                 }
-                Err(_) => None
             }
         }
     }
@@ -170,7 +175,8 @@ pub mod vp {
     pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     pub use std::mem::size_of;
-    use crate::memory::KeyVal;
+    use crate::memory::{KeyVal, PostKeyValIterator, PreKeyValIterator};
+    use std::marker::PhantomData;
 
     /// This macro expects a function with signature:
     ///
@@ -308,56 +314,70 @@ pub mod vp {
         }
     }
 
-    /// Get an iterator with the given prefix
-    pub fn iter_prefix<K: AsRef<str>>(prefix: K) -> u64 {
+    /// Get an iterator with the given prefix before transaction execution
+    pub fn iter_prefix_pre<K: AsRef<str>, T: BorshDeserialize>(prefix: K) -> PreKeyValIterator<T> {
         let prefix = prefix.as_ref();
-        unsafe {
+        let iter_id = unsafe {
             _iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-        }
+        };
+        PreKeyValIterator(iter_id, PhantomData)
     }
 
-    /// Read a key-value pair from the corresponding iterator before
-    /// transaction execution
-    pub fn iter_pre_next<T: BorshDeserialize>(iter_id: u64) -> Option<(String, T)> {
-        let result: Vec<u8> = Vec::with_capacity(0);
-        let size = unsafe {
-            _iter_pre_next_varlen(iter_id, result.as_ptr() as _)
-        };
-        if size == -1 {
-            None
-        } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
-            match KeyVal::try_from_slice(slice) {
-                Ok(key_val) => {
-                    match T::try_from_slice(&key_val.val) {
-                        Ok(v) => Some((key_val.key, v)),
-                        Err(_) => None
+    impl<T: BorshDeserialize> Iterator for PreKeyValIterator<T> {
+        type Item = (String, T);
+
+        fn next(&mut self) -> Option<(String, T)> {
+            let result: Vec<u8> = Vec::with_capacity(0);
+            let size = unsafe {
+                _iter_pre_next_varlen(self.0, result.as_ptr() as _)
+            };
+            if size == -1 {
+                None
+            } else {
+                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                match KeyVal::try_from_slice(slice) {
+                    Ok(key_val) => {
+                        match T::try_from_slice(&key_val.val) {
+                            Ok(v) => Some((key_val.key, v)),
+                            Err(_) => None
+                        }
                     }
+                    Err(_) => None
                 }
-                Err(_) => None
             }
         }
     }
 
-    /// Read a key-value pair from the corresponding iterator after transaction
-    /// execution
-    pub fn iter_post_next<T: BorshDeserialize>(iter_id: u64) -> Option<(String, T)> {
-        let result: Vec<u8> = Vec::with_capacity(0);
-        let size = unsafe {
-            _iter_post_next_varlen(iter_id, result.as_ptr() as _)
+    /// Get an iterator with the given prefix after transaction execution
+    pub fn iter_prefix_post<K: AsRef<str>, T: BorshDeserialize>(prefix: K) -> PostKeyValIterator<T> {
+        let prefix = prefix.as_ref();
+        let iter_id = unsafe {
+            _iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
         };
-        if size == -1 {
-            None
-        } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
-            match KeyVal::try_from_slice(slice) {
-                Ok(key_val) => {
-                    match T::try_from_slice(&key_val.val) {
-                        Ok(v) => Some((key_val.key, v)),
-                        Err(_) => None
+        PostKeyValIterator(iter_id, PhantomData)
+    }
+
+    impl<T: BorshDeserialize> Iterator for PostKeyValIterator<T> {
+        type Item = (String, T);
+
+        fn next(&mut self) -> Option<(String, T)> {
+            let result: Vec<u8> = Vec::with_capacity(0);
+            let size = unsafe {
+                _iter_post_next_varlen(self.0, result.as_ptr() as _)
+            };
+            if size == -1 {
+                None
+            } else {
+                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                match KeyVal::try_from_slice(slice) {
+                    Ok(key_val) => {
+                        match T::try_from_slice(&key_val.val) {
+                            Ok(v) => Some((key_val.key, v)),
+                            Err(_) => None
+                        }
                     }
+                    Err(_) => None
                 }
-                Err(_) => None
             }
         }
     }
