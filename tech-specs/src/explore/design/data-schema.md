@@ -24,12 +24,16 @@ struct MultiSig {
 When the transaction is applied, the data is stored together with a reference to the derived data schema, e.g.:
 
 ```json
-MultiSig: {
-  struct: {
-    named_fields: {
-      threshold: "u64",
-      counter: "u64",
-      keys: {sequence: "PublicKey"}
+{
+  "MultiSig": {
+    "struct": {
+      "named_fields": {
+        "threshold": "u64",
+        "counter": "u64",
+        "keys": {
+          "sequence": "PublicKey"
+        }
+      }
     }
   }
 }
