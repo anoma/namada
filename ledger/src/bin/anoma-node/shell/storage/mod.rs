@@ -13,10 +13,9 @@ use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
 pub use self::types::{
-    Address, BasicAddress, BlockHash, BlockHeight, Key, KeySeg, MerkleTree,
-    ValidatorAddress, Value,
+    Address, BasicAddress, BlockHash, BlockHeight, Hash256, Key, KeySeg,
+    MerkleTree, PrefixIterator, ValidatorAddress, Value, CHAIN_ID_LENGTH,
 };
-use self::types::{Hash256, CHAIN_ID_LENGTH};
 use super::MerkleRoot;
 
 #[derive(Error, Debug)]
@@ -43,6 +42,7 @@ pub struct Storage {
     // for write-only. When the block is committed, the former will be updated
     // to the state of the latter
     block: BlockStorage,
+    current_height: BlockHeight,
 }
 
 #[derive(Debug)]
@@ -68,6 +68,7 @@ impl Storage {
             db: db::open(db_path).unwrap(),
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
+            current_height: BlockHeight(0),
         }
     }
 
@@ -82,6 +83,7 @@ impl Storage {
             self.block.hash = hash;
             self.block.height = height;
             self.block.subspaces = subspaces;
+            self.current_height = height;
             log::debug!("Loaded storage from DB: {:#?}", self);
             return Ok(Some((
                 MerkleRoot(
@@ -103,7 +105,9 @@ impl Storage {
                 self.block.height,
                 &self.block.subspaces,
             )
-            .map_err(|e| Error::DBError(e).into())
+            .map_err(Error::DBError)?;
+        self.current_height = self.block.height;
+        Ok(())
     }
 
     /// # Storage reads
@@ -147,7 +151,7 @@ impl Storage {
 
         match self
             .db
-            .read(self.block.height, key)
+            .read(self.current_height, key)
             .map_err(Error::DBError)?
         {
             Some(v) => {
@@ -156,6 +160,11 @@ impl Storage {
             }
             None => Ok((None, 0)),
         }
+    }
+
+    /// Returns a prefix iterator
+    pub fn iter_prefix(&self, prefix: &Key) -> PrefixIterator {
+        self.db.iter_prefix(self.current_height, prefix)
     }
 
     /// Write a value to the specified subspace and returns the gas cost and the

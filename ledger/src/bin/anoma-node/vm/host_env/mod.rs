@@ -1,14 +1,18 @@
+pub mod prefix_iter;
 pub mod write_log;
 
 use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
+use anoma_vm_env::memory::KeyVal;
+use borsh::BorshSerialize;
 use tokio::sync::mpsc::Sender;
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
 };
 
+use self::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
@@ -16,16 +20,18 @@ use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Key, Storage};
 
 #[derive(Clone)]
-struct TxEnv {
+struct TxEnv<'a> {
     storage: EnvHostWrapper<Storage>,
     // not thread-safe, assuming single-threaded Tx runner
     write_log: MutEnvHostWrapper<WriteLog>,
+    // not thread-safe, assuming single-threaded Tx runner
+    iterators: MutEnvHostWrapper<PrefixIterators<'a>>,
     // not thread-safe, assuming single-threaded Tx runner
     gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     memory: AnomaMemory,
 }
 
-impl WasmerEnv for TxEnv {
+impl<'a> WasmerEnv for TxEnv<'a> {
     fn init_with_instance(
         &mut self,
         instance: &Instance,
@@ -35,9 +41,12 @@ impl WasmerEnv for TxEnv {
 }
 
 #[derive(Clone)]
-struct VpEnv {
+struct VpEnv<'a> {
     /// The address of the account that owns the VP
     addr: Address,
+    // this is not thread-safe, but because each VP has its own instance there
+    // is no shared access
+    iterators: MutEnvHostWrapper<PrefixIterators<'a>>,
     // thread-safe read-only access from parallel Vp runners
     storage: EnvHostWrapper<Storage>,
     // thread-safe read-only access from parallel Vp runners
@@ -48,7 +57,7 @@ struct VpEnv {
     memory: AnomaMemory,
 }
 
-impl WasmerEnv for VpEnv {
+impl<'a> WasmerEnv for VpEnv<'a> {
     fn init_with_instance(
         &mut self,
         instance: &Instance,
@@ -79,12 +88,14 @@ pub fn prepare_tx_imports(
     wasm_store: &Store,
     storage: EnvHostWrapper<Storage>,
     write_log: MutEnvHostWrapper<WriteLog>,
+    iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
     gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
     let env = TxEnv {
         storage,
         write_log,
+        iterators,
         gas_meter,
         memory: AnomaMemory::default(),
     };
@@ -97,6 +108,9 @@ pub fn prepare_tx_imports(
             "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
             "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
             "_read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
+            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_prefix),
+            "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
+            "_iter_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next_varlen),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
@@ -109,6 +123,7 @@ pub fn prepare_vp_imports(
     addr: Address,
     storage: EnvHostWrapper<Storage>,
     write_log: EnvHostWrapper<WriteLog>,
+    iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
     gas_meter: Arc<Mutex<BlockGasMeter>>,
     initial_memory: Memory,
 ) -> ImportObject {
@@ -116,6 +131,7 @@ pub fn prepare_vp_imports(
         addr,
         storage,
         write_log,
+        iterators,
         gas_meter,
         memory: AnomaMemory::default(),
     };
@@ -128,6 +144,11 @@ pub fn prepare_vp_imports(
             "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
             "_read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
             "_read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
+            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_prefix),
+            "_iter_pre_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next),
+            "_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next),
+            "_iter_pre_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next_varlen),
+            "_iter_post_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next_varlen),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
         },
     }
@@ -313,6 +334,139 @@ fn tx_storage_read_varlen(
             }
         }
     }
+}
+
+/// Storage prefix iterator function exposed to the wasm VM Tx environment.
+/// It will try to get an iterator from the storage and return the corresponding
+/// ID of the interator.
+fn tx_storage_iter_prefix(
+    env: &TxEnv,
+    prefix_ptr: u64,
+    prefix_len: u64,
+) -> u64 {
+    let prefix = env
+        .memory
+        .read_string(prefix_ptr, prefix_len as _)
+        .expect("Cannot read the prefix from memory");
+
+    log::debug!("tx_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+
+    let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
+
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter = storage.iter_prefix(&prefix);
+    iterators.insert(iter).id()
+}
+
+/// Storage prefix iterator next function exposed to the wasm VM Tx environment.
+/// It will read a key value pair from the write log first and if no entry found
+/// then from the storage.
+fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
+    log::debug!(
+        "tx_storage_iter_next iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some((key, val)) = iterators.next(iter_id) {
+        match write_log.read(
+            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+        ) {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                let key_val = KeyVal {
+                    key,
+                    val: value.clone(),
+                }
+                .try_to_vec()
+                .expect("cannot serialize the key value pair");
+                env.memory
+                    .write_bytes(result_ptr, key_val)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                let key_val = KeyVal { key, val }
+                    .try_to_vec()
+                    .expect("cannot serialize the key value pair");
+                env.memory
+                    .write_bytes(result_ptr, key_val)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+        }
+    }
+    // fail, key not found
+    0
+}
+
+/// Storage prefix iterator next function exposed to the wasm VM Tx environment.
+/// It will try to read from the write log first and if no entry found then from
+/// the storage.
+///
+/// Returns [`-1`] when the key is not present, or the length of the data when
+/// the key is present (the length may be [`0`]).
+fn tx_storage_iter_next_varlen(
+    env: &TxEnv,
+    iter_id: u64,
+    result_ptr: u64,
+) -> i64 {
+    log::debug!(
+        "tx_storage_iter_next iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some((key, val)) = iterators.next(iter_id) {
+        match write_log.read(
+            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+        ) {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                let key_val = KeyVal {
+                    key,
+                    val: value.clone(),
+                }
+                .try_to_vec()
+                .expect("cannot serialize the key value pair");
+                let len: i64 =
+                    key_val.len().try_into().expect("data length overflow");
+                env.memory
+                    .write_bytes(result_ptr, key_val)
+                    .expect("cannot write to memory");
+                return len;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                let key_val = KeyVal { key, val }
+                    .try_to_vec()
+                    .expect("cannot serialize the key value pair");
+                let len: i64 =
+                    key_val.len().try_into().expect("data length overflow");
+                env.memory
+                    .write_bytes(result_ptr, key_val)
+                    .expect("cannot write to memory");
+                return len;
+            }
+        }
+    }
+    // key not found
+    -1
 }
 
 /// Storage write function exposed to the wasm VM Tx environment. The given
@@ -555,6 +709,201 @@ fn vp_storage_read_post_varlen(
             }
         }
     }
+}
+
+/// Storage prefix iterator function exposed to the wasm VM VP environment.
+/// It will try to get an iterator from the storage and return the corresponding
+/// ID of the interator.
+fn vp_storage_iter_prefix(
+    env: &VpEnv,
+    prefix_ptr: u64,
+    prefix_len: u64,
+) -> u64 {
+    let prefix = env
+        .memory
+        .read_string(prefix_ptr, prefix_len as _)
+        .expect("Cannot read the prefix from memory");
+
+    log::debug!("vp_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+
+    let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
+
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter = storage.iter_prefix(&prefix);
+    iterators.insert(iter).id()
+}
+
+/// Storage prefix iterator next (before tx execution) function exposed to the
+/// wasm VM VP environment. It will read a key value pair from the storage.
+fn vp_storage_iter_pre_next(env: &VpEnv, iter_id: u64, result_ptr: u64) -> u64 {
+    log::debug!(
+        "vp_storage_iter_pre_next iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    if let Some((key, val)) = iterators.next(iter_id) {
+        let key_val = KeyVal { key, val }
+            .try_to_vec()
+            .expect("cannot serialize the key value pair");
+        env.memory
+            .write_bytes(result_ptr, key_val)
+            .expect("cannot write to memory");
+        return 1;
+    }
+    // key not found
+    0
+}
+
+/// Storage prefix iterator next (after tx execution) function exposed to the
+/// wasm VM VP environment. It will read a key value pair from the write log
+/// first and if no entry found then from the storage.
+fn vp_storage_iter_post_next(
+    env: &VpEnv,
+    iter_id: u64,
+    result_ptr: u64,
+) -> u64 {
+    log::debug!(
+        "vp_storage_iter_post_next iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some((key, val)) = iterators.next(iter_id) {
+        match write_log.read(
+            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+        ) {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                let key_val = KeyVal {
+                    key,
+                    val: value.clone(),
+                }
+                .try_to_vec()
+                .expect("cannot serialize the key value pair");
+                env.memory
+                    .write_bytes(result_ptr, key_val)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                let key_val = KeyVal { key, val }
+                    .try_to_vec()
+                    .expect("cannot serialize the key value pair");
+                env.memory
+                    .write_bytes(result_ptr, key_val)
+                    .expect("cannot write to memory");
+                return 1;
+            }
+        }
+    }
+    // key not found
+    0
+}
+
+/// Storage prefix iterator for prior state (before tx execution) function
+/// exposed to the wasm VM VP environment. It will try to read from the storage.
+///
+/// Returns [`-1`] when the key is not present, or the length of the data when
+/// the key is present (the length may be [`0`]).
+fn vp_storage_iter_pre_next_varlen(
+    env: &VpEnv,
+    iter_id: u64,
+    result_ptr: u64,
+) -> i64 {
+    log::debug!(
+        "vp_storage_iter_pre_next_varlen iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    if let Some((key, val)) = iterators.next(iter_id) {
+        let key_val = KeyVal { key, val }
+            .try_to_vec()
+            .expect("cannot serialize the key value pair");
+        let len: i64 = key_val.len().try_into().expect("data length overflow");
+        env.memory
+            .write_bytes(result_ptr, key_val)
+            .expect("cannot write to memory");
+        return len;
+    }
+    // key not found
+    -1
+}
+
+/// Storage prefix iterator next for posterior state (after tx execution)
+/// function exposed to the wasm VM VP environment. It will try to read from the
+/// write log first and if no entry found then from the storage.
+///
+/// Returns [`-1`] when the key is not present, or the length of the data when
+/// the key is present (the length may be [`0`]).
+fn vp_storage_iter_post_next_varlen(
+    env: &VpEnv,
+    iter_id: u64,
+    result_ptr: u64,
+) -> i64 {
+    log::debug!(
+        "vp_storage_iter_post_next_varlen iter_id {}, result_ptr {}",
+        iter_id,
+        result_ptr,
+    );
+
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let iterators: &mut PrefixIterators =
+        unsafe { &mut *(env.iterators.get()) };
+    let iter_id = PrefixIteratorId::new(iter_id);
+    while let Some((key, val)) = iterators.next(iter_id) {
+        match write_log.read(
+            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+        ) {
+            Some(&write_log::StorageModification::Write { ref value }) => {
+                let key_val = KeyVal {
+                    key,
+                    val: value.clone(),
+                }
+                .try_to_vec()
+                .expect("cannot serialize the key value pair");
+                let len: i64 =
+                    key_val.len().try_into().expect("data length overflow");
+                env.memory
+                    .write_bytes(result_ptr, key_val)
+                    .expect("cannot write to memory");
+                return len;
+            }
+            Some(&write_log::StorageModification::Delete) => {
+                // check the next because the key has already deleted
+                continue;
+            }
+            None => {
+                let key_val = KeyVal { key, val }
+                    .try_to_vec()
+                    .expect("cannot serialize the key value pair");
+                let len: i64 =
+                    key_val.len().try_into().expect("data length overflow");
+                env.memory
+                    .write_bytes(result_ptr, key_val)
+                    .expect("cannot write to memory");
+                return len;
+            }
+        }
+    }
+    // key not found
+    -1
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be

@@ -14,6 +14,7 @@ use tokio::sync::mpsc::Sender;
 use wasmer::Instance;
 use wasmparser::{Validator, WasmFeatures};
 
+use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
 use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Storage};
@@ -163,6 +164,13 @@ impl TxRunner {
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
+        let iterators = unsafe {
+            MutEnvHostWrapper::new(
+                &mut PrefixIterators::new() as *mut _ as *mut c_void
+            )
+        };
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
         let gas_meter = unsafe {
             MutEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
         };
@@ -177,6 +185,7 @@ impl TxRunner {
             &self.wasm_store,
             storage,
             write_log,
+            iterators,
             gas_meter,
             initial_memory,
         );
@@ -242,15 +251,20 @@ impl VpRunner {
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
 
-        // This is not thread-safe, we're assuming read-only access from
-        // parallel Vp runners.
+        // Read-only access from parallel Vp runners
         let storage = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
-        // This is also not thread-safe, we're assuming read-only access from
-        // parallel Vp runners.
+        // Read-only access from parallel Vp runners
         let write_log = unsafe {
             EnvHostWrapper::new(write_log as *const _ as *const c_void)
+        };
+        // This is not thread-safe, but because each VP has its own instance
+        // there is no shared access
+        let iterators = unsafe {
+            MutEnvHostWrapper::new(
+                &mut PrefixIterators::new() as *mut _ as *mut c_void
+            )
         };
 
         let vp_code = prepare_wasm_code(vp_code)?;
@@ -265,6 +279,7 @@ impl VpRunner {
             addr,
             storage,
             write_log,
+            iterators,
             gas_meter,
             initial_memory,
         );
