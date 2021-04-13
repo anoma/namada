@@ -1,8 +1,8 @@
 mod dkg;
+mod gossip_intent;
 mod matchmaker;
 mod mempool;
 mod network_behaviour;
-mod orderbook;
 mod p2p;
 mod types;
 

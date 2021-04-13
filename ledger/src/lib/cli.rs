@@ -32,7 +32,7 @@ pub const CRAFT_DATA_TX_COMMAND: &str = "craft-tx-data";
 pub const PEERS_ARG: &str = "peers";
 pub const ADDRESS_ARG: &str = "address";
 pub const DKG_ARG: &str = "dkg";
-pub const ORDERBOOK_ARG: &str = "orderbook";
+pub const INTENT_ARG: &str = "intent";
 pub const RPC_ARG: &str = "rpc";
 pub const MATCHMAKER_ARG: &str = "matchmaker";
 pub const TX_TEMPLATE_ARG: &str = "tx-template";
@@ -42,7 +42,7 @@ pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
 pub const DATA_INTENT_ARG: &str = "data";
 pub const DATA_TX_ARG: &str = "data";
 pub const PATH_TX_ARG: &str = "path";
-pub const ORDERBOOK_INTENT_ARG: &str = "orderbook";
+pub const NODE_INTENT_ARG: &str = "node";
 pub const TOKEN_SELL_ARG: &str = "token-sell";
 pub const TOKEN_BUY_ARG: &str = "token-buy";
 pub const AMOUNT_SELL_ARG: &str = "amount-sell";
@@ -144,11 +144,11 @@ fn client_intent_subcommand() -> App {
     App::new(INTENT_COMMAND)
         .about("Send an intent.")
         .arg(
-            Arg::new(ORDERBOOK_INTENT_ARG)
-                .long("orderbook")
+            Arg::new(NODE_INTENT_ARG)
+                .long(NODE_INTENT_ARG)
                 .takes_value(true)
                 .required(true)
-                .about("The orderbook address."),
+                .about("The gossip node address."),
         )
         .arg(
             Arg::new(DATA_INTENT_ARG)
@@ -277,11 +277,11 @@ fn run_gossip_subcommand() -> App {
                 .about("Enable DKG gossip topic."),
         )
         .arg(
-            Arg::new(ORDERBOOK_ARG)
-                .long(ORDERBOOK_ARG)
+            Arg::new(INTENT_ARG)
+                .long(INTENT_ARG)
                 .multiple(false)
                 .takes_value(false)
-                .about("Enable Orderbook gossip topic."),
+                .about("Enable intent gossip."),
         )
         .arg(
             Arg::new(RPC_ARG)
@@ -366,7 +366,7 @@ pub fn update_gossip_config(args: &ArgMatches, config: &mut config::Gossip) {
 
     config.enable_dkg(parse_bool(args, DKG_ARG));
 
-    if parse_bool(args, ORDERBOOK_ARG) {
+    if parse_bool(args, INTENT_ARG) {
         let matchmaker_pgm = parse_string_opt(args, MATCHMAKER_ARG);
         let tx_template = parse_string_opt(args, TX_TEMPLATE_ARG);
         let ledger_address = parse_address_opt(args, LEDGER_ADDRESS_ARG);
@@ -386,9 +386,10 @@ pub fn update_gossip_config(args: &ArgMatches, config: &mut config::Gossip) {
         } else {
             None
         };
-        let orderbook =
-            config.orderbook.get_or_insert(config::Orderbook::default());
-        orderbook.matchmaker = matchmaker_cfg;
+        let intent_gossip = config
+            .intent_gossip
+            .get_or_insert(config::IntentGossip::default());
+        intent_gossip.matchmaker = matchmaker_cfg;
     }
     config.rpc = parse_bool(args, RPC_ARG);
 }

@@ -9,8 +9,8 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::dkg::DKG;
+use super::gossip_intent::{self, GossipIntent};
 use super::network_behaviour::Behaviour;
-use super::orderbook::{self, Orderbook};
 use super::types::NetworkEvent;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
@@ -24,9 +24,8 @@ type Result<T> = std::result::Result<T, Error>;
 
 pub struct P2P {
     pub swarm: Swarm,
-    pub orderbook: Option<Orderbook>,
+    pub gossip_intent: Option<GossipIntent>,
     pub dkg: Option<DKG>,
-    // pub ledger: Option<String>,
 }
 
 impl P2P {
@@ -43,11 +42,11 @@ impl P2P {
         let (gossipsub, network_event_receiver) = Behaviour::new(local_key);
         let swarm = Swarm::new(transport, gossipsub, local_peer_id);
 
-        let (orderbook, matchmaker_event_receiver) =
-            if let Some(orderbook_conf) = &config.orderbook {
-                let (orderbook, matchmaker_event_receiver) =
-                    Orderbook::new(&orderbook_conf);
-                (Some(orderbook), matchmaker_event_receiver)
+        let (gossip_intent, matchmaker_event_receiver) =
+            if let Some(gossip_intent_conf) = &config.intent_gossip {
+                let (gossip_intent, matchmaker_event_receiver) =
+                    GossipIntent::new(&gossip_intent_conf);
+                (Some(gossip_intent), matchmaker_event_receiver)
             } else {
                 (None, None)
             };
@@ -108,10 +107,10 @@ impl P2P {
             IntentMessage {
                 intent: Some(intent),
             },
-            Some(orderbook),
-        ) = (event, &mut self.orderbook)
+            Some(gossip_intent),
+        ) = (event, &mut self.gossip_intent)
         {
-            if orderbook
+            if gossip_intent
                 .apply_intent(intent.clone())
                 .await
                 .expect("failed to apply intent")
@@ -119,7 +118,7 @@ impl P2P {
                 let mut tix_bytes = vec![];
                 intent.encode(&mut tix_bytes).unwrap();
                 let _message_id = self.swarm.gossipsub.publish(
-                    IdentTopic::new(Topic::Orderbook.to_string()),
+                    IdentTopic::new(Topic::Intent.to_string()),
                     tix_bytes,
                 );
             }
@@ -142,18 +141,18 @@ impl P2P {
 
     pub async fn handle_network_event(&mut self, event: NetworkEvent) {
         match event {
-            NetworkEvent::Message(msg) if msg.topic == Topic::Orderbook => {
-                if let Some(orderbook) = &mut self.orderbook {
+            NetworkEvent::Message(msg) if msg.topic == Topic::Intent => {
+                if let Some(gossip_intent) = &mut self.gossip_intent {
                     let validity =
-                        match orderbook.apply_raw_intent(&msg.data).await {
-                            orderbook::Result::Ok(true) => {
+                        match gossip_intent.apply_raw_intent(&msg.data).await {
+                            gossip_intent::Result::Ok(true) => {
                                 MessageAcceptance::Accept
                             }
-                            orderbook::Result::Ok(false) => {
+                            gossip_intent::Result::Ok(false) => {
                                 MessageAcceptance::Ignore
                             }
-                            orderbook::Result::Err(
-                                orderbook::OrderbookError::DecodeError(..),
+                            gossip_intent::Result::Err(
+                                gossip_intent::Error::DecodeError(..),
                             ) => MessageAcceptance::Reject,
                         };
                     self.swarm

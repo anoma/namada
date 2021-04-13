@@ -61,11 +61,11 @@ impl Matchmaker {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Orderbook {
+pub struct IntentGossip {
     pub matchmaker: Option<Matchmaker>,
 }
 
-impl Default for Orderbook {
+impl Default for IntentGossip {
     fn default() -> Self {
         Self { matchmaker: None }
     }
@@ -83,9 +83,9 @@ pub struct Gossip {
     pub host: String,
     pub port: String,
     pub rpc: bool,
+    pub intent_gossip: Option<IntentGossip>,
     pub peers: HashSet<String>,
     pub topics: HashSet<Topic>,
-    pub orderbook: Option<Orderbook>,
 }
 
 impl Default for Gossip {
@@ -96,8 +96,8 @@ impl Default for Gossip {
             port: String::from("20201"),
             rpc: false,
             peers: HashSet::new(),
-            topics: HashSet::new(),
-            orderbook: None,
+            topics: [Topic::Intent].iter().cloned().collect(),
+            intent_gossip: Some(IntentGossip::default()),
         }
     }
 }
