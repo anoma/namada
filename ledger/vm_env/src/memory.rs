@@ -11,6 +11,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use std::marker::PhantomData;
+use std::collections::HashSet;
 
 /// The data type that can be attached to the operation that initiated the
 /// wasm call (tx, VP, matchmaker, filter)
@@ -20,11 +21,14 @@ pub type Data = Vec<u8>;
 /// by the transaction for the account associated with the VP
 pub type KeysChanged = Vec<String>;
 
+/// The verifiers to trigger VPs
+pub type Verifiers = HashSet<String>;
+
 /// Input for transaction wasm module call
 pub type TxInput = Data;
 
 /// Input for validity predicate wasm module call
-pub type VpInput<'a> = (String, &'a Data, &'a KeysChanged);
+pub type VpInput<'a> = (String, &'a Data, &'a KeysChanged, &'a Verifiers);
 
 /// Input for matchmaker wasm module call
 pub type MatchmakerInput = Data;

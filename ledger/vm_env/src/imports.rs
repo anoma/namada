@@ -127,6 +127,14 @@ pub mod tx {
         }
     }
 
+    /// Insert a verifier
+    pub fn insert_verifier<A: AsRef<str>>(addr: A) {
+        let addr = addr.as_ref();
+        unsafe {
+            _insert_verifier(addr.as_ptr() as _, addr.len() as _)
+        }
+    }
+
     /// Log a string. The message will be printed at the [`log::Level::Info`].
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -165,6 +173,9 @@ pub mod tx {
         // present.
         fn _iter_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
 
+        // Insert a verifier
+        fn _insert_verifier(addr_ptr: u64, addr_len: u64);
+
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);
     }
@@ -199,6 +210,8 @@ pub mod vp {
                 tx_data_len: u64,
                 keys_changed_ptr: u64,
                 keys_changed_len: u64,
+                verifiers_ptr: u64,
+                verifiers_len: u64,
             ) -> u64 {
                 // TODO more plumbing here
                 let slice = unsafe {
@@ -222,8 +235,16 @@ pub mod vp {
                 };
                 let keys_changed: Vec<String> = Vec::try_from_slice(slice).unwrap();
 
+                let slice = unsafe {
+                    slice::from_raw_parts(
+                        verifiers_ptr as *const u8,
+                        verifiers_len as _,
+                    )
+                };
+                let verifiers: HashSet<String> = HashSet::try_from_slice(slice).unwrap();
+
                 // run validation with the concrete type(s)
-                if $fn(tx_data, addr, keys_changed) {
+                if $fn(tx_data, addr, keys_changed, verifiers) {
                     1
                 } else {
                     0
