@@ -56,19 +56,15 @@ impl P2P {
         } else {
             None
         };
+        let mut p2p = Self {
+            swarm,
+            gossip_intent,
+            dkg,
+            // ledger,
+        };
+        p2p.prepare(&config).expect("gossip prepraration failed");
 
-        // TODO this is ugly but mandatory so far because of the problem of the
-        // dispatcher explain in mod.matchmaker_dispatcher
-        Ok((
-            Self {
-                swarm,
-                orderbook,
-                dkg,
-                // ledger,
-            },
-            network_event_receiver,
-            matchmaker_event_receiver,
-        ))
+        Ok((p2p, network_event_receiver, matchmaker_event_receiver))
     }
 
     pub fn prepare(&mut self, config: &anoma::config::Gossip) -> Result<()> {
@@ -89,13 +85,13 @@ impl P2P {
             match to_dial.parse() {
                 Ok(to_dial) => match Swarm::dial_addr(&mut self.swarm, to_dial)
                 {
-                    Ok(_) => println!("Dialed {:?}", dialing),
+                    Ok(_) => log::info!("Dialed {:?}", dialing),
                     Err(e) => {
-                        println!("Dial {:?} failed: {:?}", dialing, e)
+                        log::debug!("Dial {:?} failed: {:?}", dialing, e)
                     }
                 },
                 Err(err) => {
-                    println!("Failed to parse address to dial: {:?}", err)
+                    log::debug!("Failed to parse address to dial: {:?}", err)
                 }
             }
         }

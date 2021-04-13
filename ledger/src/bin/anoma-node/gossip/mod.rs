@@ -36,10 +36,9 @@ pub fn run(config: anoma::config::Gossip) -> Result<()> {
         None
     };
 
-    let (mut gossip, network_event_receiver, matchmaker_event_receiver) =
+    let (gossip, network_event_receiver, matchmaker_event_receiver) =
         p2p::P2P::new(&config)
             .expect("TEMPORARY: unable to build gossip layer");
-    gossip.prepare(&config).expect("gossip prepraration failed");
 
     dispatcher(
         gossip,
