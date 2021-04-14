@@ -22,7 +22,7 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
-use super::types::{BlockHeight, Key, KeySeg, Value};
+use super::types::{BlockHeight, Key, KeySeg, PrefixIterator, Value};
 use super::{BlockHash, MerkleTree};
 
 // TODO the DB schema will probably need some kind of versioning
@@ -194,6 +194,30 @@ impl DB {
             Some(bytes) => Ok(Some(bytes)),
             None => Ok(None),
         }
+    }
+
+    pub fn iter_prefix(
+        &self,
+        height: BlockHeight,
+        prefix: &Key,
+    ) -> PrefixIterator {
+        let db_prefix = format!("{}/subspace/", height.to_string());
+        let prefix = format!("{}{}", db_prefix, prefix.to_string());
+
+        let mut read_opts = ReadOptions::default();
+        // don't use the prefix bloom filter
+        read_opts.set_total_order_seek(true);
+        let mut upper_prefix = prefix.clone().into_bytes();
+        if let Some(last) = upper_prefix.pop() {
+            upper_prefix.push(last + 1);
+        }
+        read_opts.set_iterate_upper_bound(upper_prefix);
+
+        let iter = self.0.iterator_opt(
+            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+            read_opts,
+        );
+        PrefixIterator::new(iter, db_prefix)
     }
 
     pub fn read_last_block(

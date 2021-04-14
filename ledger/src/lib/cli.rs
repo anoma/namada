@@ -46,6 +46,7 @@ pub const DATA_TX_ARG: &str = "data";
 pub const PATH_TX_ARG: &str = "path";
 pub const DATA_INTENT_ARG: &str = "data";
 pub const NODE_INTENT_ARG: &str = "node";
+pub const DRY_RUN_TX_ARG: &str = "dry-run";
 pub const TOKEN_SELL_ARG: &str = "token-sell";
 pub const TOKEN_BUY_ARG: &str = "token-buy";
 pub const AMOUNT_SELL_ARG: &str = "amount-sell";
@@ -141,6 +142,13 @@ fn client_tx_subcommand() -> App {
                 .takes_value(true)
                 .required(true)
                 .about("The path to the wasm code to be executed."),
+        )
+        .arg(
+            Arg::new(DRY_RUN_TX_ARG)
+                .long(DRY_RUN_TX_ARG)
+                .takes_value(false)
+                .required(false)
+                .about("Dry run the transaction."),
         )
 }
 

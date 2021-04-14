@@ -17,6 +17,9 @@ build-release:
 clippy:
 	$(cargo) clippy
 
+clippy-check:
+	$(cargo) clippy -- -D warnings
+
 install:
 	# Warning: built in debug mode for now
 	$(cargo) install --path ./ --debug
@@ -29,9 +32,12 @@ run-gossip:
 	# runs the node gossip daemon with default orderbook activated
 	$(cargo) run --bin anomad -- run-gossip --orderbook
 
-run-reset:
+reset-anoma:
 	# runs the node daemon
 	$(cargo) run --bin anomad -- reset-ledger
+
+audit:
+	$(cargo) audit
 
 test:
 	$(cargo) test
@@ -41,6 +47,9 @@ test-debug:
 
 fmt:
 	$(cargo) +$(nightly) fmt
+
+fmt-check:
+	$(cargo) +$(nightly) fmt --all -- --check
 
 watch:
 	$(cargo) watch
