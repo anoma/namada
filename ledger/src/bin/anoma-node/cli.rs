@@ -9,7 +9,7 @@ use crate::{gossip, shell};
 pub fn main() -> Result<()> {
     let mut app = cli::anoma_node_cli();
 
-    let matches = app.clone().get_matches();
+    let matches = &app.get_matches_mut();
 
     // here unwrap is safe as the argument has a default
     let home = matches.value_of("base").unwrap().to_string();
@@ -17,14 +17,18 @@ pub fn main() -> Result<()> {
 
     match matches.subcommand() {
         Some((cli::RUN_GOSSIP_COMMAND, args)) => {
-            cli::update_gossip_config(args, &mut config.gossip);
-            gossip::run(config.gossip).wrap_err("Failed to run gossip service")
+            let mut gossip_cfg = config.gossip.unwrap_or_default();
+            cli::update_gossip_config(args, &mut gossip_cfg)
+                .expect("failed to update config with cli option");
+            gossip::run(gossip_cfg).wrap_err("Failed to run gossip service")
         }
         Some((cli::RUN_LEDGER_COMMAND, _)) => {
-            shell::run(config).wrap_err("Failed to run Anoma node")
+            let ledger_cfg = config.ledger.unwrap_or_default();
+            shell::run(ledger_cfg).wrap_err("Failed to run Anoma node")
         }
         Some((cli::RESET_LEDGER_COMMAND, _)) => {
-            shell::reset(config).wrap_err("Failed to reset Anoma node")
+            let ledger_cfg = config.ledger.unwrap_or_default();
+            shell::reset(ledger_cfg).wrap_err("Failed to reset Anoma node")
         }
         _ => app.print_help().wrap_err("Can't display help."),
     }

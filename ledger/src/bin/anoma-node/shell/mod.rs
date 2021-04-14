@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 
 use anoma::bytes::ByteBuf;
-use anoma::config::Config;
 use anoma::protobuf::types::Tx;
 use prost::Message;
 use thiserror::Error;
@@ -42,23 +41,18 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: Config) -> Result<()> {
+pub fn run(config: anoma::config::Ledger) -> Result<()> {
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
-    let shell = Shell::new(receiver, &config.db_home_dir());
-    let addr = format!("{}:{}", config.ledger.host, config.ledger.port)
-        .parse()
-        .map_err(|e| Error::Temporary {
-            error: format!("cannot parse ledger address {}", e),
-        })?;
+    let shell = Shell::new(receiver, &config.db);
     // Run Tendermint ABCI server in another thread
-    std::thread::spawn(move || tendermint::run(sender, config, addr));
+    std::thread::spawn(move || tendermint::run(sender, config));
     shell.run()
 }
 
-pub fn reset(config: Config) -> Result<()> {
+pub fn reset(config: anoma::config::Ledger) -> Result<()> {
     // simply nuke the DB files
-    let db_path = config.db_home_dir();
+    let db_path = &config.db;
     match std::fs::remove_dir_all(&db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,

@@ -7,6 +7,7 @@
 //! respectively.
 
 use std::collections::HashSet;
+use std::str::FromStr;
 
 use clap::{Arg, ArgMatches};
 
@@ -29,6 +30,7 @@ pub const TX_COMMAND: &str = "tx";
 pub const CRAFT_DATA_TX_COMMAND: &str = "craft-tx-data";
 
 // gossip args
+pub const BASE_ARG: &str = "base-dir";
 pub const PEERS_ARG: &str = "peers";
 pub const ADDRESS_ARG: &str = "address";
 pub const DKG_ARG: &str = "dkg";
@@ -39,9 +41,9 @@ pub const TX_TEMPLATE_ARG: &str = "tx-template";
 pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
 
 // client args
-pub const DATA_INTENT_ARG: &str = "data";
 pub const DATA_TX_ARG: &str = "data";
 pub const PATH_TX_ARG: &str = "path";
+pub const DATA_INTENT_ARG: &str = "data";
 pub const NODE_INTENT_ARG: &str = "node";
 pub const TOKEN_SELL_ARG: &str = "token-sell";
 pub const TOKEN_BUY_ARG: &str = "token-buy";
@@ -101,9 +103,9 @@ pub fn anoma_node_cli() -> App {
             .author(AUTHOR)
             .about("Anoma node command line interface.")
             .arg(
-                Arg::new("base")
+                Arg::new(BASE_ARG)
                     .short('b')
-                    .long("base-dir")
+                    .long(BASE_ARG)
                     .takes_value(true)
                     .required(false)
                     .default_value(".anoma")
@@ -123,7 +125,7 @@ fn client_tx_subcommand() -> App {
         .about("Send an transaction.")
         .arg(
             Arg::new(DATA_TX_ARG)
-                .long("data")
+                .long(DATA_TX_ARG)
                 .takes_value(true)
                 .required(false)
                 .about(
@@ -133,7 +135,7 @@ fn client_tx_subcommand() -> App {
         )
         .arg(
             Arg::new(PATH_TX_ARG)
-                .long("path")
+                .long(PATH_TX_ARG)
                 .takes_value(true)
                 .required(true)
                 .about("The path to the wasm code to be executed."),
@@ -152,7 +154,7 @@ fn client_intent_subcommand() -> App {
         )
         .arg(
             Arg::new(DATA_INTENT_ARG)
-                .long("data")
+                .long(DATA_INTENT_ARG)
                 .takes_value(true)
                 .required(true)
                 .about(
@@ -332,57 +334,46 @@ pub fn parse_hashset_opt(
     })
 }
 
-pub fn parse_address_opt(
+pub fn parse_opt<F: FromStr>(
     args: &ArgMatches,
     field: &str,
-) -> Option<(String, String)> {
-    let address = args.value_of(field).map(ToString::to_string);
-    if let Some(address) = address {
-        let split_addresses: Vec<String> =
-            address.split(':').map(ToString::to_string).collect();
-        Some((split_addresses[0].clone(), split_addresses[1].clone()))
-    } else {
-        None
-    }
-}
-pub fn parse_bool(args: &ArgMatches, field: &str) -> bool {
-    args.is_present(field)
+) -> Option<Result<F, F::Err>> {
+    args.value_of(field).map(|address| address.parse())
 }
 
 pub fn parse_string_opt(args: &ArgMatches, field: &str) -> Option<String> {
     args.value_of(field).map(|s| s.to_string())
 }
 
-pub fn parse_u64_opt(args: &ArgMatches, field: &str) -> Option<u64> {
-    args.value_of(field).and_then(|s| s.parse().ok())
-}
-
-pub fn update_gossip_config(args: &ArgMatches, config: &mut config::Gossip) {
+pub fn update_gossip_config(
+    args: &ArgMatches,
+    config: &mut config::Gossip,
+) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
         config.peers = peers;
     }
 
-    config.set_address(parse_address_opt(args, ADDRESS_ARG));
+    if let Some(addr) = parse_opt(args, ADDRESS_ARG) {
+        config.address = addr?
+    }
 
-    config.enable_dkg(parse_bool(args, DKG_ARG));
+    config.enable_dkg(args.is_present(DKG_ARG));
 
-    if parse_bool(args, INTENT_ARG) {
-        let matchmaker_pgm = parse_string_opt(args, MATCHMAKER_ARG);
-        let tx_template = parse_string_opt(args, TX_TEMPLATE_ARG);
-        let ledger_address = parse_address_opt(args, LEDGER_ADDRESS_ARG);
+    if args.is_present(INTENT_ARG) {
+        let matchmaker = parse_opt(args, MATCHMAKER_ARG);
+        let tx_template = parse_opt(args, TX_TEMPLATE_ARG);
+        let ledger_address = parse_opt(args, LEDGER_ADDRESS_ARG);
         let matchmaker_cfg = if let (
-            Some(matchmaker_pgm),
+            Some(matchmaker),
             Some(tx_template),
-            Some((ledger_host, ledger_port)),
-        ) =
-            (matchmaker_pgm, tx_template, ledger_address)
+            Some(ledger_address),
+        ) = (matchmaker, tx_template, ledger_address)
         {
-            Some(config::Matchmaker::new(
-                matchmaker_pgm,
-                tx_template,
-                ledger_host,
-                ledger_port,
-            ))
+            Some(config::Matchmaker {
+                matchmaker: matchmaker?,
+                tx_template: tx_template?,
+                ledger_address: ledger_address?,
+            })
         } else {
             None
         };
@@ -391,5 +382,6 @@ pub fn update_gossip_config(args: &ArgMatches, config: &mut config::Gossip) {
             .get_or_insert(config::IntentGossip::default());
         intent_gossip.matchmaker = matchmaker_cfg;
     }
-    config.rpc = parse_bool(args, RPC_ARG);
+    config.rpc = args.is_present(RPC_ARG);
+    Ok(())
 }

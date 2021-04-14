@@ -39,13 +39,13 @@ pub async fn main() -> Result<()> {
             let addr = cli::parse_string_opt(args, cli::ADDRESS_ARG).unwrap();
             let token_sell =
                 cli::parse_string_opt(args, cli::TOKEN_SELL_ARG).unwrap();
-            let amount_sell = cli::parse_u64_opt(args, cli::AMOUNT_SELL_ARG)
-                .expect("not a valid amount");
+            let amount_sell = cli::parse_opt(args, cli::AMOUNT_SELL_ARG)
+                .expect("not a valid amount")?;
             let token_buy =
-                args.value_of(cli::TOKEN_BUY_ARG).unwrap().to_string();
-            let amount_buy = cli::parse_u64_opt(args, cli::AMOUNT_BUY_ARG)
-                .expect("not a valid amount");
-            let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
+                cli::parse_string_opt(args, cli::TOKEN_BUY_ARG).unwrap();
+            let amount_buy = cli::parse_opt(args, cli::AMOUNT_BUY_ARG)
+                .expect("not a valid amount")?;
+            let file = cli::parse_string_opt(args, cli::FILE_ARG).unwrap();
             craft_intent(
                 addr,
                 token_sell,
@@ -58,12 +58,12 @@ pub async fn main() -> Result<()> {
         }
         Some((cli::CRAFT_DATA_TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let source = args.value_of(cli::SOURCE_ARG).unwrap().to_string();
-            let target = args.value_of(cli::TARGET_ARG).unwrap().to_string();
-            let token = args.value_of(cli::TOKEN_ARG).unwrap().to_string();
-            let amount = cli::parse_u64_opt(args, cli::AMOUNT_ARG)
-                .expect("not a valid amount");
-            let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
+            let source = cli::parse_string_opt(args, cli::SOURCE_ARG).unwrap();
+            let target = cli::parse_string_opt(args, cli::TARGET_ARG).unwrap();
+            let token = cli::parse_string_opt(args, cli::TOKEN_ARG).unwrap();
+            let amount = cli::parse_opt(args, cli::AMOUNT_ARG)
+                .expect("not a valid amount")?;
+            let file = cli::parse_string_opt(args, cli::FILE_ARG).unwrap();
             craft_tx_data(source, target, token, amount, file);
             Ok(())
         }

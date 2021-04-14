@@ -74,10 +74,7 @@ impl P2P {
         }
 
         // Listen on given address
-        Swarm::listen_on(&mut self.swarm, {
-            config.get_address().parse().unwrap()
-        })
-        .unwrap();
+        Swarm::listen_on(&mut self.swarm, config.address.clone()).unwrap();
 
         // Reach out to another node if specified
         for to_dial in &config.peers {
