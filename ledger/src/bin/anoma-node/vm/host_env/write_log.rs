@@ -18,7 +18,7 @@ pub enum StorageModification {
     Delete,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WriteLog {
     block_write_log: HashMap<Key, StorageModification>,
     tx_write_log: HashMap<Key, StorageModification>,

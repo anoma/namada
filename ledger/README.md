@@ -58,13 +58,15 @@ cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 cargo run --bin anoma -- run-gossip --rpc --orderbook --matchmaker ../tx_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
 
 # run orderbook daemon with rpc server and matchmaker
-cargo run --bin anomad -- --rpc run-gossip --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_template/tx.wasm --ledger-address "tcp://127.0.0.1:26658"
+cargo run --bin anomad -- run-gossip --rpc --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_template/tx.wasm --ledger-address "tcp://127.0.0.1:26658"
 
-# craft an intent to file `intent_data_file`
-cargo run --bin anomac -- craft-intent --addr ba --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file
+# craft two opposite intents
+cargo run --bin anomac -- craft-intent --address ba --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file_A
+cargo run --bin anomac -- craft-intent --address va --token-buy eth --amount-buy 20 --token-sell xtz --amount-sell 10 --file intent_data_file_B
 
-# Submit an intent (need a rpc server), hardcoded address
-cargo run --bin anomac -- intent --orderbook "http://[::1]:39111" --data intent_data_file
+# Submit the intents (need a rpc server), hardcoded address
+cargo run --bin anomac -- intent --orderbook "http://[::1]:39111" --data intent_data_file_A
+cargo run --bin anomac -- intent --orderbook "http://[::1]:39111" --data intent_data_file_B
 
 # Format the code
 make fmt

@@ -35,7 +35,8 @@ pub struct Gossip {
     pub topics: Vec<Topic>,
     pub matchmaker: Option<String>,
     pub tx_template: Option<String>,
-    pub ledger_addr: Option<(String, String)>,
+    pub ledger_host: Option<String>,
+    pub ledger_port: Option<String>,
 }
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -52,9 +53,15 @@ impl Gossip {
     }
 
     pub fn get_ledger_address(&self) -> Option<String> {
-        self.ledger_addr
-            .as_ref()
-            .map(|(host, port)| format!("tcp://{}:{}", host, port))
+        if self.ledger_host.is_some() && self.ledger_port.is_some() {
+            Some(format!(
+                "tcp://{}:{}",
+                self.ledger_host.clone().unwrap(),
+                self.ledger_port.clone().unwrap()
+            ))
+        } else {
+            None
+        }
     }
 
     pub fn set_dkg_topic(&mut self, enable: bool) {
@@ -81,7 +88,10 @@ impl Gossip {
     }
 
     pub fn set_ledger_address(&mut self, address: Option<(String, String)>) {
-        self.ledger_addr = address;
+        if let Some((host, port)) = address {
+            self.ledger_host = Some(host);
+            self.ledger_port = Some(port);
+        }
     }
 }
 

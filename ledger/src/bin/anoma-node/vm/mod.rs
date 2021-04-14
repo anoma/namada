@@ -14,67 +14,78 @@ use tokio::sync::mpsc::Sender;
 use wasmer::Instance;
 use wasmparser::{Validator, WasmFeatures};
 
+use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
 use crate::shell::gas::BlockGasMeter;
 use crate::shell::storage::{Address, Storage};
 
-const TX_ENTRYPOINT: &str = "apply_tx";
-const VP_ENTRYPOINT: &str = "validate_tx";
-const MATCHMAKER_ENTRYPOINT: &str = "match_intent";
+const TX_ENTRYPOINT: &str = "_apply_tx";
+const VP_ENTRYPOINT: &str = "_validate_tx";
+const MATCHMAKER_ENTRYPOINT: &str = "_match_intent";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
-/// This is used to attach the Ledger's host structures to transaction, which is
-/// used for implementing some host calls. It's not thread-safe, we're assuming
-/// single-threaded Tx runner.
-pub struct TxEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
-unsafe impl<T> Send for TxEnvHostWrapper<T> {}
-unsafe impl<T> Sync for TxEnvHostWrapper<T> {}
+/// This is used to attach the Ledger's host structures to wasm environment,
+/// which is used for implementing some host calls. It wraps an immutable
+/// reference, so the access is thread-safe, but because of the unsafe
+/// reference conversion, care must be taken that while this reference is
+/// borrowed, no other process can modify it.
+pub struct EnvHostWrapper<T>(*const c_void, PhantomData<T>);
+unsafe impl<T> Send for EnvHostWrapper<T> {}
+unsafe impl<T> Sync for EnvHostWrapper<T> {}
 
 // Have to manually implement [`Clone`], because the derived [`Clone`] for
 // [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
-impl<T> Clone for TxEnvHostWrapper<T> {
+impl<T> Clone for EnvHostWrapper<T> {
     fn clone(&self) -> Self {
         Self(self.0, PhantomData)
     }
 }
 
-impl<T> TxEnvHostWrapper<T> {
-    /// This is not thread-safe, see [`TxEnvHostWrapper`]
-    unsafe fn new(host_structure: *mut c_void) -> Self {
-        Self(host_structure, PhantomData)
-    }
-
-    /// This is not thread-safe, see [`TxEnvHostWrapper`]
-    pub unsafe fn get(&self) -> *mut T {
-        self.0 as *mut T
-    }
-}
-/// This is used to attach the Ledger's host structures to validity predicate
-/// environment, which is used for implementing some host calls. It's not
-/// thread-safe, we're assuming read-only access from parallel Vp runners.
-pub struct VpEnvHostWrapper<T>(*const c_void, PhantomData<T>);
-unsafe impl<T> Send for VpEnvHostWrapper<T> {}
-unsafe impl<T> Sync for VpEnvHostWrapper<T> {}
-
-// Same as for [`TxEnvHostWrapper`], we have to manually implement [`Clone`],
-// because the derived [`Clone`] for [`PhantomData<T>`] puts the bound on [`T:
-// Clone`].
-impl<T> Clone for VpEnvHostWrapper<T> {
-    fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
-    }
-}
-
-impl<T> VpEnvHostWrapper<T> {
-    /// This is not thread-safe, see [`VpEnvHostWrapper`]
+impl<T> EnvHostWrapper<T> {
+    /// Because this is unsafe, care must be taken that while this reference
+    /// is borrowed, no other process can modify it.
     unsafe fn new(host_structure: *const c_void) -> Self {
         Self(host_structure, PhantomData)
     }
 
-    /// This is not thread-safe, see [`VpEnvHostWrapper`]
+    /// Because this is unsafe, care must be taken that while this reference
+    /// is borrowed, no other process can modify it.
     #[allow(dead_code)]
     pub unsafe fn get(&self) -> *const T {
         self.0 as *const T
+    }
+}
+
+/// This is used to attach the Ledger's host structures to wasm environment,
+/// which is used for implementing some host calls. Because it's mutable, it's
+/// not thread-safe. Also, care must be taken that while this reference is
+/// borrowed, no other process can read or modify it.
+pub struct MutEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
+unsafe impl<T> Send for MutEnvHostWrapper<T> {}
+unsafe impl<T> Sync for MutEnvHostWrapper<T> {}
+
+// Same as for [`EnvHostWrapper`], we have to manually implement [`Clone`],
+// because the derived [`Clone`] for [`PhantomData<T>`] puts the bound on [`T:
+// Clone`].
+impl<T> Clone for MutEnvHostWrapper<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, PhantomData)
+    }
+}
+
+impl<T> MutEnvHostWrapper<T> {
+    /// This is not thread-safe. Also, because this is unsafe, care must be
+    /// taken that while this reference is borrowed, no other process can read
+    /// or modify it.
+    unsafe fn new(host_structure: *mut c_void) -> Self {
+        Self(host_structure, PhantomData)
+    }
+
+    /// This is not thread-safe. Also, because this is unsafe, care must be
+    /// taken that while this reference is borrowed, no other process can read
+    /// or modify it.
+    pub unsafe fn get(&self) -> *mut T {
+        self.0 as *mut T
     }
 }
 
@@ -134,7 +145,7 @@ impl TxRunner {
 
     pub fn run(
         &self,
-        storage: &mut Storage,
+        storage: &Storage,
         write_log: &mut WriteLog,
         gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
@@ -143,17 +154,25 @@ impl TxRunner {
         validate_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage =
-            unsafe { TxEnvHostWrapper::new(storage as *mut _ as *mut c_void) };
+        let storage = unsafe {
+            EnvHostWrapper::new(storage as *const _ as *const c_void)
+        };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let write_log = unsafe {
-            TxEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
+            MutEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
+        };
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
+        let iterators = unsafe {
+            MutEnvHostWrapper::new(
+                &mut PrefixIterators::new() as *mut _ as *mut c_void
+            )
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let gas_meter = unsafe {
-            TxEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
+            MutEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
         };
 
         let tx_code = prepare_wasm_code(&tx_code)?;
@@ -166,6 +185,7 @@ impl TxRunner {
             &self.wasm_store,
             storage,
             write_log,
+            iterators,
             gas_meter,
             initial_memory,
         );
@@ -231,15 +251,20 @@ impl VpRunner {
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
 
-        // This is not thread-safe, we're assuming read-only access from
-        // parallel Vp runners.
+        // Read-only access from parallel Vp runners
         let storage = unsafe {
-            VpEnvHostWrapper::new(storage as *const _ as *const c_void)
+            EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
-        // This is also not thread-safe, we're assuming read-only access from
-        // parallel Vp runners.
+        // Read-only access from parallel Vp runners
         let write_log = unsafe {
-            VpEnvHostWrapper::new(write_log as *const _ as *const c_void)
+            EnvHostWrapper::new(write_log as *const _ as *const c_void)
+        };
+        // This is not thread-safe, but because each VP has its own instance
+        // there is no shared access
+        let iterators = unsafe {
+            MutEnvHostWrapper::new(
+                &mut PrefixIterators::new() as *mut _ as *mut c_void
+            )
         };
 
         let vp_code = prepare_wasm_code(vp_code)?;
@@ -254,6 +279,7 @@ impl VpRunner {
             addr,
             storage,
             write_log,
+            iterators,
             gas_meter,
             initial_memory,
         );
@@ -434,11 +460,11 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::shell::storage::ValidatorAddress;
     use tempdir::TempDir;
     use wasmer_vm;
 
     use super::*;
+    use crate::shell::storage::ValidatorAddress;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
