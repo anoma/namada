@@ -11,8 +11,9 @@ pub fn main() -> Result<()> {
 
     let matches = &app.get_matches_mut();
 
-    // here unwrap is safe as the argument has a default
-    let home = cli::parse_string_opt(&matches, cli::BASE_ARG).unwrap();
+    // here unwrap is safe to use req as the argument even it's not mandatory
+    // because it has a default
+    let home = cli::parse_string_req(&matches, cli::BASE_ARG);
 
     match matches.subcommand() {
         Some((cli::RUN_GOSSIP_COMMAND, args)) => {

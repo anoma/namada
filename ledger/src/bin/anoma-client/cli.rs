@@ -22,7 +22,7 @@ pub async fn main() -> Result<()> {
     match matches.subcommand() {
         Some((cli::TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let path = args.value_of(cli::PATH_TX_ARG).unwrap().to_string();
+            let path = cli::parse_string_req(args, cli::PATH_TX_ARG);
             let data = args.value_of(cli::DATA_TX_ARG);
             let dry = args.is_present(cli::DRY_RUN_TX_ARG);
             exec_tx(path, data, dry).await;
@@ -30,23 +30,19 @@ pub async fn main() -> Result<()> {
         }
         Some((cli::INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let node = args.value_of(cli::NODE_INTENT_ARG).unwrap().to_string();
-            let data = args.value_of(cli::DATA_INTENT_ARG).unwrap().to_string();
+            let node = cli::parse_string_req(args, cli::NODE_INTENT_ARG);
+            let data = cli::parse_string_req(args, cli::DATA_INTENT_ARG);
             gossip_intent(node, data).await;
             Ok(())
         }
         Some((cli::CRAFT_INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let addr = cli::parse_string_opt(args, cli::ADDRESS_ARG).unwrap();
-            let token_sell =
-                cli::parse_string_opt(args, cli::TOKEN_SELL_ARG).unwrap();
-            let amount_sell = cli::parse_opt(args, cli::AMOUNT_SELL_ARG)
-                .expect("not a valid amount")?;
-            let token_buy =
-                cli::parse_string_opt(args, cli::TOKEN_BUY_ARG).unwrap();
-            let amount_buy = cli::parse_opt(args, cli::AMOUNT_BUY_ARG)
-                .expect("not a valid amount")?;
-            let file = cli::parse_string_opt(args, cli::FILE_ARG).unwrap();
+            let addr = cli::parse_string_req(args, cli::ADDRESS_ARG);
+            let token_sell = cli::parse_string_req(args, cli::TOKEN_SELL_ARG);
+            let amount_sell = cli::parse_req(args, cli::AMOUNT_SELL_ARG)?;
+            let token_buy = cli::parse_string_req(args, cli::TOKEN_BUY_ARG);
+            let amount_buy = cli::parse_req(args, cli::AMOUNT_BUY_ARG)?;
+            let file = cli::parse_string_req(args, cli::FILE_ARG);
             craft_intent(
                 addr,
                 token_sell,
@@ -59,12 +55,11 @@ pub async fn main() -> Result<()> {
         }
         Some((cli::CRAFT_DATA_TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let source = cli::parse_string_opt(args, cli::SOURCE_ARG).unwrap();
-            let target = cli::parse_string_opt(args, cli::TARGET_ARG).unwrap();
-            let token = cli::parse_string_opt(args, cli::TOKEN_ARG).unwrap();
-            let amount = cli::parse_opt(args, cli::AMOUNT_ARG)
-                .expect("not a valid amount")?;
-            let file = cli::parse_string_opt(args, cli::FILE_ARG).unwrap();
+            let source = cli::parse_string_req(args, cli::SOURCE_ARG);
+            let target = cli::parse_string_req(args, cli::TARGET_ARG);
+            let token = cli::parse_string_req(args, cli::TOKEN_ARG);
+            let amount = cli::parse_req(args, cli::AMOUNT_ARG)?;
+            let file = cli::parse_string_req(args, cli::FILE_ARG);
             craft_tx_data(source, target, token, amount, file);
             Ok(())
         }

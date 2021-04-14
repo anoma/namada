@@ -355,8 +355,19 @@ pub fn parse_opt<F: FromStr>(
     args.value_of(field).map(|address| address.parse())
 }
 
+pub fn parse_req<F: FromStr>(
+    args: &ArgMatches,
+    field: &str,
+) -> Result<F, F::Err> {
+    parse_opt(args, field).expect("field is mandatory")
+}
+
 pub fn parse_string_opt(args: &ArgMatches, field: &str) -> Option<String> {
     args.value_of(field).map(|s| s.to_string())
+}
+
+pub fn parse_string_req(args: &ArgMatches, field: &str) -> String {
+    parse_string_opt(args, field).expect("field is mandatory")
 }
 
 pub fn update_gossip_config(
