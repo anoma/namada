@@ -24,6 +24,7 @@ pub const CLIENT_COMMAND: &str = "client";
 pub const RUN_GOSSIP_COMMAND: &str = "run-gossip";
 pub const RUN_LEDGER_COMMAND: &str = "run-ledger";
 pub const RESET_LEDGER_COMMAND: &str = "reset-ledger";
+pub const GENERATE_CONFIG_COMMAND: &str = "generate-config";
 pub const INTENT_COMMAND: &str = "intent";
 pub const CRAFT_INTENT_COMMAND: &str = "craft-intent";
 pub const TX_COMMAND: &str = "tx";
@@ -118,6 +119,7 @@ fn add_node_commands(app: App) -> App {
     app.subcommand(run_gossip_subcommand())
         .subcommand(run_ledger_subcommand())
         .subcommand(reset_ledger_subcommand())
+        .subcommand(generate_config())
 }
 
 fn client_tx_subcommand() -> App {
@@ -321,6 +323,10 @@ fn run_ledger_subcommand() -> App {
 
 fn reset_ledger_subcommand() -> App {
     App::new(RESET_LEDGER_COMMAND).about("Reset Anoma node state.")
+}
+
+fn generate_config() -> App {
+    App::new(GENERATE_CONFIG_COMMAND).about("Generate default node config.")
 }
 
 pub fn parse_hashset_opt(
