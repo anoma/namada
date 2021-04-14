@@ -1,5 +1,6 @@
 //! Shared code for the node, client etc.
 
+pub mod address;
 pub mod bookkeeper;
 pub mod bytes;
 pub mod cli;
