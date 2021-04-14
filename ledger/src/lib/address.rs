@@ -72,7 +72,7 @@ impl FromStr for AddressName {
                 return Err(ParseError::AddressNameStartsWithDigit);
             }
             if let Some('-') = s.chars().last() {
-                return Err(ParseError::AddressNameStartsWithHyphen);
+                return Err(ParseError::AddressNameEndsWithHyphen);
             }
             let inner = s.to_string();
             Ok(Self(inner))
