@@ -321,7 +321,10 @@ fn run_gossip_subcommand() -> App {
                 .long(LEDGER_ADDRESS_ARG)
                 .multiple(false)
                 .takes_value(true)
-                .about("The address of the ledger as host:port."),
+                .about(
+                    "The address of the ledger as host:port that the \
+                     matchmaker must send the transaction to.",
+                ),
         )
 }
 
@@ -375,7 +378,7 @@ pub fn update_gossip_config(
     config: &mut config::Gossip,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
-        config.peers = peers;
+        config.peers = peers
     }
 
     if let Some(addr) = parse_opt(args, ADDRESS_ARG) {
@@ -384,29 +387,44 @@ pub fn update_gossip_config(
 
     config.enable_dkg(args.is_present(DKG_ARG));
 
-    if args.is_present(INTENT_ARG) {
-        let matchmaker = parse_opt(args, MATCHMAKER_ARG);
-        let tx_template = parse_opt(args, TX_TEMPLATE_ARG);
-        let ledger_address = parse_opt(args, LEDGER_ADDRESS_ARG);
-        let matchmaker_cfg = if let (
+    if args.is_present(INTENT_ARG) && config.intent_gossip.is_none() {
+        config.intent_gossip = Some(config::IntentGossip::default())
+    }
+
+    if let Some(mut intent_gossip_cfg) = config.intent_gossip.as_mut() {
+        // TODO here we should not use .ok() but instead expect() but I did not
+        // find yet the correct way
+        let matchmaker_arg =
+            parse_opt(args, MATCHMAKER_ARG).and_then(|v| v.ok());
+        let tx_template_arg =
+            parse_opt(args, TX_TEMPLATE_ARG).and_then(|v| v.ok());
+        let ledger_address_arg =
+            parse_opt(args, LEDGER_ADDRESS_ARG).and_then(|v| v.ok());
+        if let Some(mut matchmaker_cfg) = intent_gossip_cfg.matchmaker.as_mut()
+        {
+            if let Some(matchmaker) = matchmaker_arg {
+                matchmaker_cfg.matchmaker = matchmaker
+            }
+            if let Some(tx_template) = tx_template_arg {
+                matchmaker_cfg.tx_template = tx_template
+            }
+            if let Some(ledger_address) = ledger_address_arg {
+                matchmaker_cfg.ledger_address = ledger_address
+            }
+        } else if let (
             Some(matchmaker),
             Some(tx_template),
             Some(ledger_address),
-        ) = (matchmaker, tx_template, ledger_address)
+        ) = (matchmaker_arg, tx_template_arg, ledger_address_arg)
         {
-            Some(config::Matchmaker {
-                matchmaker: matchmaker?,
-                tx_template: tx_template?,
-                ledger_address: ledger_address?,
-            })
-        } else {
-            None
-        };
-        let intent_gossip = config
-            .intent_gossip
-            .get_or_insert(config::IntentGossip::default());
-        intent_gossip.matchmaker = matchmaker_cfg;
-    }
+            let matchmaker_cfg = Some(config::Matchmaker {
+                matchmaker,
+                tx_template,
+                ledger_address,
+            });
+            intent_gossip_cfg.matchmaker = matchmaker_cfg
+        }
+    };
     config.rpc = args.is_present(RPC_ARG);
     Ok(())
 }
