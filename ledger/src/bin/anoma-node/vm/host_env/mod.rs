@@ -192,9 +192,13 @@ pub fn prepare_matchmaker_imports(
 
 /// Called from tx wasm to request to use the given gas amount
 fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
+    tx_add_gas(env, used_gas as _)
+}
+
+fn tx_add_gas(env: &TxEnv, used_gas: u64) {
     let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     // if we run out of gas, we need to stop the execution
-    match gas_meter.add(used_gas as _) {
+    match gas_meter.add(used_gas) {
         Err(err) => {
             log::warn!(
                 "Stopping transaction execution because of gas error: {}",
@@ -208,12 +212,16 @@ fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
 
 /// Called from VP wasm to request to use the given gas amount
 fn vp_charge_gas(env: &VpEnv, used_gas: i32) {
+    vp_add_gas(env, used_gas as _)
+}
+
+fn vp_add_gas(env: &VpEnv, used_gas: u64) {
     let mut gas_meter = env
         .gas_meter
         .lock()
         .expect("Cannot get lock on the gas meter");
     // if we run out of gas, we need to stop the execution
-    match gas_meter.add(used_gas as _) {
+    match gas_meter.add(used_gas) {
         Err(err) => {
             log::warn!(
                 "Stopping validity predicate execution because of gas error: \
@@ -264,10 +272,10 @@ fn tx_storage_read(
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             match value {
                 Some(value) => {
+                    tx_add_gas(env, gas);
                     env.memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
@@ -355,10 +363,10 @@ fn tx_storage_read_varlen(
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             match value {
                 Some(value) => {
+                    tx_add_gas(env, gas);
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
                     env.memory
@@ -413,7 +421,7 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
+    while let Some((key, val, gas)) = iterators.next(iter_id) {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -434,6 +442,7 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
                 continue;
             }
             None => {
+                tx_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -469,7 +478,7 @@ fn tx_storage_iter_next_varlen(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
+    while let Some((key, val, gas)) = iterators.next(iter_id) {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -492,6 +501,7 @@ fn tx_storage_iter_next_varlen(
                 continue;
             }
             None => {
+                tx_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -568,7 +578,7 @@ fn vp_storage_read_pre(
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let (value, _gas) = storage.read(&key).expect("storage read failed");
+    let (value, gas) = storage.read(&key).expect("storage read failed");
     log::debug!(
         "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
@@ -577,6 +587,7 @@ fn vp_storage_read_pre(
     );
     match value {
         Some(value) => {
+            vp_add_gas(env, gas);
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
@@ -627,10 +638,10 @@ fn vp_storage_read_post(
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             match value {
                 Some(value) => {
+                    vp_add_gas(env, gas);
                     env.memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
@@ -664,7 +675,7 @@ fn vp_storage_read_pre_varlen(
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let (value, _gas) = storage.read(&key).expect("storage read failed");
+    let (value, gas) = storage.read(&key).expect("storage read failed");
     log::debug!(
         "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
@@ -673,6 +684,7 @@ fn vp_storage_read_pre_varlen(
     );
     match value {
         Some(value) => {
+            vp_add_gas(env, gas);
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
             env.memory
@@ -730,10 +742,10 @@ fn vp_storage_read_post_varlen(
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             match value {
                 Some(value) => {
+                    vp_add_gas(env, gas);
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
                     env.memory
@@ -834,7 +846,8 @@ fn vp_storage_iter_pre_next(env: &VpEnv, iter_id: u64, result_ptr: u64) -> u64 {
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    if let Some((key, val)) = iterators.next(iter_id) {
+    if let Some((key, val, gas)) = iterators.next(iter_id) {
+        vp_add_gas(env, gas);
         let key_val = KeyVal { key, val }
             .try_to_vec()
             .expect("cannot serialize the key value pair");
@@ -865,7 +878,7 @@ fn vp_storage_iter_post_next(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
+    while let Some((key, val, gas)) = iterators.next(iter_id) {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -886,6 +899,7 @@ fn vp_storage_iter_post_next(
                 continue;
             }
             None => {
+                vp_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -919,7 +933,8 @@ fn vp_storage_iter_pre_next_varlen(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    if let Some((key, val)) = iterators.next(iter_id) {
+    if let Some((key, val, gas)) = iterators.next(iter_id) {
+        vp_add_gas(env, gas);
         let key_val = KeyVal { key, val }
             .try_to_vec()
             .expect("cannot serialize the key value pair");
@@ -954,7 +969,7 @@ fn vp_storage_iter_post_next_varlen(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
+    while let Some((key, val, gas)) = iterators.next(iter_id) {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -977,6 +992,7 @@ fn vp_storage_iter_post_next_varlen(
                 continue;
             }
             None => {
+                vp_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
