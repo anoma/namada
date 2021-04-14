@@ -110,6 +110,7 @@ pub fn prepare_tx_imports(
             "memory" => initial_memory,
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_charge_gas),
             "_read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read),
+            "_has_key" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_has_key),
             "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
             "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
             "_read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
@@ -150,6 +151,8 @@ pub fn prepare_vp_imports(
             "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
             "_read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
             "_read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
+            "_has_key_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_pre),
+            "_has_key_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_post),
             "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_prefix),
             "_iter_pre_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next),
             "_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next),
@@ -274,6 +277,40 @@ fn tx_storage_read(
                     // fail, key not found
                     return 0;
                 }
+            }
+        }
+    }
+}
+
+/// Storage `has_key` function exposed to the wasm VM Tx environment. It will
+/// try to check the write log first and if no entry found then the storage.
+fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("tx_storage_has_key {}, key {}", key, key_ptr,);
+
+    let key = Key::parse(key).expect("Cannot parse the key string");
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&key) {
+        Some(&write_log::StorageModification::Write { .. }) => 1,
+        Some(&write_log::StorageModification::Delete) => {
+            // the given key has been deleted
+            0
+        }
+        None => {
+            // when not found in write log, try to check the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let present =
+                storage.has_key(&key).expect("storage has_key failed");
+            if present {
+                1
+            } else {
+                0
             }
         }
     }
@@ -712,6 +749,62 @@ fn vp_storage_read_post_varlen(
                     // fail, key not found
                     -1
                 }
+            }
+        }
+    }
+}
+
+/// Storage `has_key` in prior state (before tx execution) function exposed to
+/// the wasm VM VP environment. It will try to read from the storage.
+fn vp_storage_has_key_pre(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("vp_storage_has_key_pre {}, key {}", key, key_ptr,);
+
+    let key = Key::parse(key).expect("Cannot parse the key string");
+
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let present = storage.has_key(&key).expect("storage has_key failed");
+    if present {
+        1
+    } else {
+        0
+    }
+}
+
+/// Storage `has_key` in posterior state (after tx execution) function exposed
+/// to the wasm VM VP environment. It will
+/// try to check the write log first and if no entry found then the storage.
+fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("vp_storage_has_key_post {}, key {}", key, key_ptr,);
+
+    let key = Key::parse(key).expect("Cannot parse the key string");
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&key) {
+        Some(&write_log::StorageModification::Write { .. }) => 1,
+        Some(&write_log::StorageModification::Delete) => {
+            // the given key has been deleted
+            0
+        }
+        None => {
+            // when not found in write log, try to check the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let present =
+                storage.has_key(&key).expect("storage has_key failed");
+            if present {
+                1
+            } else {
+                0
             }
         }
     }
