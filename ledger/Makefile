@@ -24,15 +24,15 @@ install:
 	# Warning: built in debug mode for now
 	$(cargo) install --path ./ --debug
 
-run-anoma:
+run-ledger:
 	# runs the node daemon
 	$(cargo) run --bin anomad -- run-ledger
 
 run-gossip:
-	# runs the node gossip daemon with default orderbook activated
-	$(cargo) run --bin anomad -- run-gossip --orderbook
+	# runs the node gossip daemon
+	$(cargo) run --bin anomad -- run-gossip
 
-reset-anoma:
+reset-ledger:
 	# runs the node daemon
 	$(cargo) run --bin anomad -- reset-ledger
 
@@ -64,7 +64,9 @@ doc:
 # Build the validity predicate and transaction wasm from templates
 build-wasm-scripts:
 	make -C ../vp_template && \
-	make -C ../tx_template
+	make -C ../tx_template && \
+	make -C ../matchmaker_template
+
 
 dev-deps:
 	$(rustup) toolchain install $(nightly)
