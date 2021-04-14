@@ -1,6 +1,7 @@
 pub mod prefix_iter;
 pub mod write_log;
 
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
@@ -17,7 +18,7 @@ use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::BlockGasMeter;
-use crate::shell::storage::{Address, Key, Storage};
+use crate::shell::storage::{Address, Key, KeySeg, Storage};
 
 #[derive(Clone)]
 struct TxEnv<'a> {
@@ -26,6 +27,8 @@ struct TxEnv<'a> {
     write_log: MutEnvHostWrapper<WriteLog>,
     // not thread-safe, assuming single-threaded Tx runner
     iterators: MutEnvHostWrapper<PrefixIterators<'a>>,
+    // not thread-safe, assuming single-threaded Tx runner
+    verifiers: MutEnvHostWrapper<HashSet<Address>>,
     // not thread-safe, assuming single-threaded Tx runner
     gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     memory: AnomaMemory,
@@ -89,6 +92,7 @@ pub fn prepare_tx_imports(
     storage: EnvHostWrapper<Storage>,
     write_log: MutEnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
+    verifiers: MutEnvHostWrapper<HashSet<Address>>,
     gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
@@ -96,6 +100,7 @@ pub fn prepare_tx_imports(
         storage,
         write_log,
         iterators,
+        verifiers,
         gas_meter,
         memory: AnomaMemory::default(),
     };
@@ -111,6 +116,7 @@ pub fn prepare_tx_imports(
             "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_prefix),
             "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
             "_iter_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next_varlen),
+            "_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_insert_verifier),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
@@ -904,6 +910,22 @@ fn vp_storage_iter_post_next_varlen(
     }
     // key not found
     -1
+}
+
+/// Verifier insertion function exposed to the wasm VM Tx environment.
+fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
+    let addr = env
+        .memory
+        .read_string(addr_ptr, addr_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
+
+    let addr = Address::parse(addr).expect("Cannot parse the address string");
+
+    let verifiers: &mut HashSet<Address> =
+        unsafe { &mut *(env.verifiers.get()) };
+    verifiers.insert(addr);
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be

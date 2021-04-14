@@ -1,6 +1,7 @@
 pub mod host_env;
 mod memory;
 
+use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
@@ -147,6 +148,7 @@ impl TxRunner {
         &self,
         storage: &Storage,
         write_log: &mut WriteLog,
+        verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
         tx_data: &Vec<u8>,
@@ -171,6 +173,11 @@ impl TxRunner {
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
+        let verifiers = unsafe {
+            MutEnvHostWrapper::new(verifiers as *mut _ as *mut c_void)
+        };
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
         let gas_meter = unsafe {
             MutEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
         };
@@ -186,6 +193,7 @@ impl TxRunner {
             storage,
             write_log,
             iterators,
+            verifiers,
             gas_meter,
             initial_memory,
         );
@@ -248,6 +256,7 @@ impl VpRunner {
         write_log: &WriteLog,
         gas_meter: Arc<Mutex<BlockGasMeter>>,
         keys_changed: &Vec<String>,
+        verifiers: &HashSet<String>,
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
 
@@ -273,7 +282,8 @@ impl VpRunner {
             .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let input: VpInput = (addr.to_string(), tx_data, keys_changed);
+        let input: VpInput =
+            (addr.to_string(), tx_data, keys_changed, verifiers);
         let vp_imports = host_env::prepare_vp_imports(
             &self.wasm_store,
             addr,
@@ -304,6 +314,8 @@ impl VpRunner {
             tx_data_len,
             keys_changed_ptr,
             keys_changed_len,
+            verifiers_ptr,
+            verifiers_len,
         } = memory::write_vp_inputs(memory, input)
             .map_err(Error::MemoryError)?;
 
@@ -312,7 +324,7 @@ impl VpRunner {
             .exports
             .get_function(VP_ENTRYPOINT)
             .map_err(Error::MissingModuleEntrypoint)?
-            .native::<(u64, u64, u64, u64, u64, u64), u64>()
+            .native::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>()
             .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
                 entrypoint: VP_ENTRYPOINT,
                 error,
@@ -325,6 +337,8 @@ impl VpRunner {
                 tx_data_len,
                 keys_changed_ptr,
                 keys_changed_len,
+                verifiers_ptr,
+                verifiers_len,
             )
             .map_err(Error::RuntimeError)?;
         log::debug!("is_valid {}", is_valid);
