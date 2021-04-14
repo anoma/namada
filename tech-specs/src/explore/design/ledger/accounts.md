@@ -13,13 +13,13 @@ There's only a single account type. Each account is associated with:
 
 There are two types of address: transparent and shielded. 
 
-The transparent addresses are similar to domain names and the ones used in e.g. [ens as specified in EIP-137](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-137.md) and [account IDs in Near protocol](https://nomicon.io/DataStructures/Account.html). These are the addresses of accounts associated with dynamic storage sub-spaces, where the address of the account is the prefix key segment of its sub-space.
+The transparent addresses are similar to domain names and the ones used in e.g. [ENS as specified in EIP-137](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-137.md) and [account IDs in Near protocol](https://nomicon.io/DataStructures/Account.html). These are the addresses of accounts associated with dynamic storage sub-spaces, where the address of the account is the prefix key segment of its sub-space.
 
 The shielded addresses are used for private transactions and they are not directly associated with storage sub-spaces.
 
 ### Transparent addresses
 
-A transparent address is a human-readable string very similar to a domain name, containing lowercase (uppercase can be converted to lower case by clients) only alpha-numeric characters, `-`, `_` and `.` as a separator between the "levels" of the address. The last segment of an address is said to be a top-level name and each predecessor segment is the sub-name of its successor.
+A transparent address is a human-readable string very similar to a domain name, containing lowercase (uppercase can be converted to lower case by clients) only alpha-numeric characters, `-`, `_` and `.` as a separator between the "levels" of the address. The last segment of an address is said to be the top-level name and each predecessor segment is the sub-name of its successor.
 
 The length of an address must be at least 3 characters. For compatibility with a legacy DNS TXT record, the upper limit is 255 characters and 64 for each name in an address (which should be sufficient anyway).
 
@@ -31,7 +31,7 @@ These addresses can be chosen by users who wish to [initialize a new account](#i
 - the top-level names under certain length (to be specified) cannot be initialized directly, they may be [auctioned like in ENS registrar as described in EIP-162](https://github.com/ethereum/EIPs/issues/162).
   - some top-level names may be reserved
 
-For convenience, the `anoma` top-level address is initially setup to allow initialization of any previously unused second-level address, e.g. `bob.anoma` (we may want to revise this before launch to e.g. action the short ones, like with top-level names to make the process more fair).
+For convenience, the `anoma` top-level address is initially setup to allow initialization of any previously unused second-level address, e.g. `bob.anoma` (we may want to revise this before launch to e.g. action the short ones, like with top-level names to make the process fairer).
 
 Like in ENS, the addresses are stored on chain by their hash. Likewise, this is for two reasons:
 - help preserve privacy of addresses that were not revealed publicly and to prevent trivial enumeration of registered names (of course, you can still try to enumerate by hashes)
