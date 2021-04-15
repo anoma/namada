@@ -9,9 +9,11 @@ pub struct Gossiper {
     #[serde(with = "keypair_serde")]
     pub key: Keypair,
 }
+// TODO Here instead of encoding to bytes, it would be nice to encode to hex
+// instead. Bytes makes the config file a bit less readible
 
-// TODO this is needed because libp2p does not export ed255519 serde feature
-// maybe a MR for libp2p to export theses functions ?
+// TODO this is needed because libp2p does not export ed255519 serde
+// feature maybe a MR for libp2p to export theses functions ?
 #[cfg(feature = "dev")]
 mod keypair_serde {
     use libp2p::identity::ed25519::Keypair;
