@@ -19,7 +19,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable # nightly?
+          toolchain: nightly
           components: rustfmt, clippy
           override: true 
       - uses: actions/cache@v2
