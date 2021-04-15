@@ -9,11 +9,13 @@ use thiserror::Error;
 use super::Hash256;
 
 const MAX_ADDRESS_LEN: usize = 255;
-const MIN_NAME_LEN: usize = 3;
-const MAX_NAME_LEN: usize = 64;
+const MIN_ADDRESS_LEN: usize = 3;
+const MAX_LABEL_LEN: usize = 64;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Address must be at least {MIN_ADDRESS_LEN} characters long")]
+    AddressTooShort,
     #[error("Address must be at most {MAX_ADDRESS_LEN} characters long")]
     AddressTooLong,
     #[error("Address must not contain non-ASCII characters")]
@@ -22,15 +24,15 @@ pub enum Error {
         "Address can only contain ASCII alphanumeric characters, hyphens and full stops"
     )]
     AddressContainsInvalidCharacter,
-    #[error("Address label must be at least {MIN_NAME_LEN} characters long")]
-    LabelTooShort,
-    #[error("Address label must be at most {MAX_NAME_LEN} characters long")]
+    #[error("Address label cannot be be empty")]
+    EmptyLabel,
+    #[error("Address label must be at most {MAX_LABEL_LEN} characters long")]
     LabelTooLong,
-    #[error("Address label must not begin with hyphen")]
+    #[error("Address label cannot begin with hyphen")]
     LabelStartsWithHyphen,
-    #[error("Address label must not end with hyphen")]
+    #[error("Address label cannot end with hyphen")]
     LabelEndsWithHyphen,
-    #[error("Address label must not begin with a digit")]
+    #[error("Address label cannot begin with a digit")]
     LabelStartsWithDigit,
 }
 
@@ -76,6 +78,9 @@ impl FromStr for Address {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
+        if s.len() < MIN_ADDRESS_LEN {
+            return Err(Error::AddressTooShort);
+        }
         if s.len() > MAX_ADDRESS_LEN {
             return Err(Error::AddressTooLong);
         }
@@ -118,24 +123,24 @@ impl FromStr for Label {
     /// To validate a string to be parsed properly, a [`Label`] should not be
     /// parsed directly. Instead parse the whole [`Address`].
     fn from_str(s: &str) -> Result<Self> {
-        if s.len() < MIN_NAME_LEN {
-            Err(Error::LabelTooShort)
-        } else if s.len() > MAX_NAME_LEN {
-            Err(Error::LabelTooLong)
-        } else {
-            // safe to `unwrap`, because we checked the min length
-            let first_char = s.chars().nth(0).unwrap();
-            if '-' == first_char {
-                return Err(Error::LabelStartsWithHyphen);
+        match s.chars().nth(0) {
+            None => Err(Error::EmptyLabel),
+            Some(first_char) => {
+                if s.len() > MAX_LABEL_LEN {
+                    return Err(Error::LabelTooLong);
+                }
+                if '-' == first_char {
+                    return Err(Error::LabelStartsWithHyphen);
+                }
+                if first_char.is_ascii_digit() {
+                    return Err(Error::LabelStartsWithDigit);
+                }
+                if let Some('-') = s.chars().last() {
+                    return Err(Error::LabelEndsWithHyphen);
+                }
+                let inner = s.to_string();
+                Ok(Self(inner))
             }
-            if first_char.is_ascii_digit() {
-                return Err(Error::LabelStartsWithDigit);
-            }
-            if let Some('-') = s.chars().last() {
-                return Err(Error::LabelEndsWithHyphen);
-            }
-            let inner = s.to_string();
-            Ok(Self(inner))
         }
     }
 }
