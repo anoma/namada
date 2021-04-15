@@ -90,8 +90,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/anoma-prototype/ledger/target
-          key: cache-v3-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v3-cargo-
+          key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cache-v4-cargo-
       - name: Run clippy
         run: make clippy-check
         working-directory: ledger
