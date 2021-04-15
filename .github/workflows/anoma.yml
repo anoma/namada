@@ -34,8 +34,6 @@ jobs:
               cd ~
               pwd
               ls
-              cd runner
-              ls
               echo "---"
               ls ~/.cargo/registry
               du -hs ~/.cargo/registry
