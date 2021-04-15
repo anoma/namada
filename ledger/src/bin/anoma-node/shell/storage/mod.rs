@@ -13,8 +13,8 @@ use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
 pub use self::types::{
-    Address, BasicAddress, BlockHash, BlockHeight, Hash256, Key, KeySeg,
-    MerkleTree, PrefixIterator, ValidatorAddress, Value, CHAIN_ID_LENGTH,
+    Address, BlockHash, BlockHeight, Hash256, Key, KeySeg, MerkleTree,
+    PrefixIterator, Value, CHAIN_ID_LENGTH,
 };
 use super::MerkleRoot;
 

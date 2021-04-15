@@ -474,11 +474,12 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
     use tempdir::TempDir;
     use wasmer_vm;
 
     use super::*;
-    use crate::shell::storage::ValidatorAddress;
+    use crate::shell::storage::Address;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
@@ -589,7 +590,7 @@ mod tests {
 
         let runner = VpRunner::new();
         let tx_data = vec![];
-        let addr = Address::Validator(ValidatorAddress("va".into()));
+        let addr: Address = FromStr::from_str("test").unwrap();
         let db_path = TempDir::new("anoma_test")
             .expect("Unable to create a temporary DB directory");
         let storage = Storage::new(db_path.path());

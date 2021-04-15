@@ -75,6 +75,7 @@ wasmer-engine-jit = "1.0.2"
 parity-wasm = "0.42.2"
 pwasm-utils = "0.17.0"
 wasmparser = "0.77.0"
+nonempty = "0.6.0"
 
 [dev-dependencies]
 cargo-watch = "7.5.0"

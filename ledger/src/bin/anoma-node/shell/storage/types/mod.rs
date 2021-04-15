@@ -1,7 +1,14 @@
 //! The key and values that may be persisted in a DB.
 
-use std::convert::{TryFrom, TryInto};
+mod address;
+
+pub use address::Address;
+
 use std::fmt::Display;
+use std::{
+    convert::{TryFrom, TryInto},
+    str::FromStr,
+};
 
 use anoma::bytes::ByteBuf;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
@@ -15,6 +22,10 @@ use thiserror::Error;
 pub enum Error {
     #[error("TEMPORARY error: {error}")]
     Temporary { error: String },
+    #[error("Error parsing address: {0}")]
+    ParseAddress(address::Error),
+    #[error("Error parsing address from a storage key")]
+    ParseAddressFromKey,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -47,28 +58,6 @@ pub struct BlockHash([u8; 32]);
 pub struct MerkleTree(
     pub SparseMerkleTree<Blake2bHasher, H256, DefaultStore<H256>>,
 );
-
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum Address {
-    Validator(ValidatorAddress),
-    Basic(BasicAddress),
-}
-
-impl Display for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let addr = match self {
-            Address::Validator(ValidatorAddress(addr)) => addr,
-            Address::Basic(BasicAddress(addr)) => addr,
-        };
-        f.write_str(addr)
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct BasicAddress(pub String);
-
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct ValidatorAddress(pub String);
 
 // TODO make a derive macro for Hash256 https://doc.rust-lang.org/book/ch19-06-macros.html#how-to-write-a-custom-derive-macro
 pub trait Hash256 {
@@ -165,18 +154,13 @@ pub enum DbKeySeg {
 }
 
 impl KeySeg for DbKeySeg {
-    fn parse(string: String) -> Result<Self> {
+    fn parse(mut string: String) -> Result<Self> {
         match string.chars().nth(0) {
             Some(c) if c == '@' => {
-                // TODO: single address type
-                match string.chars().nth(1) {
-                    Some(c) if c == 'b' => Ok(BasicAddress::parse(string)
-                        .map(Address::Basic)
-                        .map(DbKeySeg::AddressSeg)?),
-                    _ => Ok(ValidatorAddress::parse(string)
-                        .map(Address::Validator)
-                        .map(DbKeySeg::AddressSeg)?),
-                }
+                let _ = string.remove(0);
+                FromStr::from_str(&string)
+                    .map_err(Error::ParseAddress)
+                    .map(DbKeySeg::AddressSeg)
             }
             _ => Ok(DbKeySeg::StringSeg(string)),
         }
@@ -184,7 +168,7 @@ impl KeySeg for DbKeySeg {
 
     fn to_string(&self) -> String {
         match self {
-            DbKeySeg::AddressSeg(addr) => ToString::to_string(&addr),
+            DbKeySeg::AddressSeg(addr) => format!("{}", addr),
             DbKeySeg::StringSeg(seg) => seg.to_owned(),
         }
     }
@@ -312,91 +296,23 @@ impl core::fmt::Debug for BlockHash {
     }
 }
 
-impl Hash256 for Address {
-    fn hash256(&self) -> H256 {
-        match self {
-            Address::Basic(addr) => addr.hash256(),
-            Address::Validator(addr) => addr.hash256(),
-        }
-    }
-}
 impl KeySeg for Address {
     fn to_string(&self) -> String {
-        match self {
-            Address::Validator(addr) => addr.to_string(),
-            Address::Basic(addr) => addr.to_string(),
-        }
+        format!("@{}", self)
     }
 
-    fn parse(seg: String) -> Result<Self> {
-        BasicAddress::parse(seg.clone())
-            .map(Address::Basic)
-            .or(ValidatorAddress::parse(seg.clone()).map(Address::Validator))
-            .map_err(|_e| Error::Temporary {
-                error: format!(
-                    "TEMPORARY: Address must start with \"b\" or \"v\", got {}",
-                    seg
-                ),
-            })
+    fn parse(mut seg: String) -> Result<Self> {
+        match seg.chars().nth(0) {
+            Some(c) if c == '@' => {
+                let _ = seg.remove(0);
+                FromStr::from_str(&seg).map_err(Error::ParseAddress)
+            }
+            _ => Err(Error::ParseAddressFromKey),
+        }
     }
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.clone())
-    }
-}
-
-impl Hash256 for BasicAddress {
-    fn hash256(&self) -> H256 {
-        self.0.hash256()
-    }
-}
-impl KeySeg for BasicAddress {
-    fn to_string(&self) -> String {
-        self.0.clone()
-    }
-
-    fn parse(seg: String) -> Result<Self> {
-        match seg.chars().nth(0) {
-            Some(c) if c == '@' => Ok(Self(seg.clone())),
-            _ => Err(Error::Temporary {
-                error: format!(
-                    "TEMPORARY: BasicAddress must start with \"@b\", got {}",
-                    seg
-                ),
-            }),
-        }
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::AddressSeg(Address::Basic(self.clone()))
-    }
-}
-
-impl Hash256 for ValidatorAddress {
-    fn hash256(&self) -> H256 {
-        self.0.hash256()
-    }
-}
-impl KeySeg for ValidatorAddress {
-    fn parse(seg: String) -> Result<Self> {
-        match seg.chars().nth(0) {
-            Some(c) if c == '@' => Ok(Self(seg.clone())),
-            _ => Err(Error::Temporary {
-                error: format!(
-                    "TEMPORARY: ValidatorAddress must start with \"@v\", got \
-                     {}",
-                    seg
-                ),
-            }),
-        }
-    }
-
-    fn to_string(&self) -> String {
-        self.0.clone()
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::AddressSeg(Address::Validator(self.clone()))
     }
 }
 

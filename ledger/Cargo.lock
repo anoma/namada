@@ -24,6 +24,7 @@ dependencies = [
  "hex",
  "libp2p",
  "log",
+ "nonempty",
  "parity-wasm",
  "prost",
  "prost-types",
@@ -2790,6 +2791,12 @@ dependencies = [
  "memchr",
  "version_check 0.9.2",
 ]
+
+[[package]]
+name = "nonempty"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fa586da3e43cc7df44aae0e21ed2e743218b876de3f38035683d30bd8a3828e"
 
 [[package]]
 name = "notify"
