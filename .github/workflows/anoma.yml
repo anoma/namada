@@ -31,8 +31,10 @@ jobs:
       - name: Debug
         run: |
               ls ~/.cargo/registry
+              du -hs .cargo/registry
               echo "---"
               ls ~/.cargo/git
+              du -hs ~/.cargo/git
               echo "---"
               ls ~/anoma-prototype
               echo "---"
@@ -44,13 +46,11 @@ jobs:
         working-directory: ledger
       - name: Debug2
         run: |
-              ls ~/.cargo/registry
+              ls ~/anoma-prototype/tx_template
               echo "---"
-              ls ~/.cargo/git
+              ls ~/anoma-prototype/vp_template
               echo "---"
-              ls ~/anoma-prototype
-              echo "---"
-              ls ~/anoma-prototype/ledger   
+              ls ~/anoma-prototype/ledger/target
       - name: Run build
         run: make build
         working-directory: ledger
