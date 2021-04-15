@@ -40,7 +40,7 @@ make install
 cargo run --bin anomad -- generate-config
 
 # Run Anoma daemon (this will also initialize and run Tendermint node)
-make run-anoma
+make run-ledger
 
 # Reset the state (resets Tendermint too)
 cargo run --bin anomad -- reset-ledger
@@ -52,7 +52,7 @@ cargo run --bin anomac -- craft-tx-data --source ba --target va --token xtz --am
 cargo run --bin anoma -- tx --path ../tx_template/tx.wasm --data tx_data_file
 
 # Watch and on change run a node (the state will be persisted)
-cargo watch -x "run --bin anomad -- run-anoma"
+cargo watch -x "run --bin anomad -- run-ledger"
 
 # Watch and on change reset & run a node
 cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"

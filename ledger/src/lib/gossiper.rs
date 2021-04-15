@@ -2,6 +2,7 @@ use libp2p::identity::ed25519::Keypair;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+// TODO use conditional compilation to not write private key to file
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Gossiper {
     pub address: String,
@@ -9,7 +10,7 @@ pub struct Gossiper {
     pub key: Keypair,
 }
 
-// XXX TODO this is needed because libp2p does not export ed255519 serde feature
+// TODO this is needed because libp2p does not export ed255519 serde feature
 // maybe a MR for libp2p to export theses functions ?
 #[cfg(feature = "dev")]
 mod keypair_serde {

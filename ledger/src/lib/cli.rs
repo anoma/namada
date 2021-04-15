@@ -7,9 +7,12 @@
 //! respectively.
 
 use std::collections::HashSet;
+use std::convert::TryInto;
+use std::fmt::Debug;
 use std::str::FromStr;
 
 use clap::{Arg, ArgMatches};
+use libp2p::Multiaddr;
 
 use super::config;
 
@@ -323,7 +326,7 @@ fn run_gossip_subcommand() -> App {
                 .takes_value(true)
                 .about(
                     "The address of the ledger as host:port that the \
-                     matchmaker must send the transaction to.",
+                     matchmaker must send transactions to.",
                 ),
         )
 }
@@ -382,6 +385,9 @@ pub fn update_gossip_config(
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
         config.peers = peers
+            .iter()
+            .map(|p| Multiaddr::from_str(p).expect("error while parsing peer"))
+            .collect()
     }
 
     if let Some(addr) = parse_opt(args, ADDRESS_ARG) {
@@ -413,14 +419,28 @@ pub fn update_gossip_config(
             Some(matchmaker),
             Some(tx_template),
             Some(ledger_address),
-        ) = (matchmaker_arg, tx_template_arg, ledger_address_arg)
-        {
+        ) = (
+            matchmaker_arg.as_ref(),
+            tx_template_arg.as_ref(),
+            ledger_address_arg,
+        ) {
             let matchmaker_cfg = Some(config::Matchmaker {
-                matchmaker,
-                tx_template,
+                matchmaker: matchmaker.clone(),
+                tx_template: tx_template.clone(),
                 ledger_address,
             });
             intent_gossip_cfg.matchmaker = matchmaker_cfg
+        } else if matchmaker_arg.is_some()
+            || tx_template_arg.is_some()
+            || ledger_address_arg.is_some()
+        // if at least one argument is not none then fail
+        {
+            panic!(
+                "No complete matchmaker configuration found (matchmaker \
+                 program path, tx template path, and ledger address). Please \
+                 update the configuration with default value or use all cli \
+                 argument to use the matchmaker"
+            );
         }
     };
     config.rpc = args.is_present(RPC_ARG);

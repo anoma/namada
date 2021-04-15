@@ -19,8 +19,6 @@ use crate::vm::{self, TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
     #[error("Error removing the DB data: {0}")]
     RemoveDB(std::io::Error),
     #[error("Storage error: {0}")]

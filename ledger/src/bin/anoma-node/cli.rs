@@ -33,7 +33,7 @@ pub fn main() -> Result<()> {
                     Err(err) => {
                         log::debug!(
                             "Tried to generate config in {} but failed with: \
-                             {}",
+                             {}. Using default config (with new generated key)",
                             home,
                             err
                         );

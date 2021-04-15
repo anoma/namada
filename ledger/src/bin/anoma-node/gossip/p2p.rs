@@ -78,17 +78,10 @@ impl P2P {
 
         // Reach out to another node if specified
         for to_dial in &config.peers {
-            let dialing = to_dial.clone();
-            match to_dial.parse() {
-                Ok(to_dial) => match Swarm::dial_addr(&mut self.swarm, to_dial)
-                {
-                    Ok(_) => log::info!("Dialed {:?}", dialing),
-                    Err(e) => {
-                        log::debug!("Dial {:?} failed: {:?}", dialing, e)
-                    }
-                },
-                Err(err) => {
-                    log::debug!("Failed to parse address to dial: {:?}", err)
+            match Swarm::dial_addr(&mut self.swarm, to_dial.clone()) {
+                Ok(_) => log::info!("Dialed {:?}", to_dial.clone()),
+                Err(e) => {
+                    log::debug!("Dial {:?} failed: {:?}", to_dial.clone(), e)
                 }
             }
         }

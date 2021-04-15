@@ -17,19 +17,21 @@ use crate::types::Topic;
 pub enum Error {
     #[error("Error while reading config: {0}")]
     ReadError(config::ConfigError),
-    #[error("Error while casting config: {0}")]
-    CastError(config::ConfigError),
+    #[error("Error while deserializing config: {0}")]
+    DeserializationError(config::ConfigError),
     #[error("Error while serializing to toml: {0}")]
     TomlError(toml::ser::Error),
     #[error("Error while writing config: {0}")]
     WriteError(std::io::Error),
     #[error("Error while creating config file: {0}")]
     FileError(std::io::Error),
+    #[error("A config file already exists in {0}")]
+    AlreadyExistingConfig(PathBuf)
 }
 pub const BASEDIR: &str = ".anoma";
-pub const FILENAME: &str = "config.json";
-pub const TENDERMINT: &str = "tendermint";
-pub const DB: &str = "db";
+pub const FILENAME: &str = "config.toml";
+pub const TENDERMINT_DIR: &str = "tendermint";
+pub const DB_DIR: &str = "db";
 
 pub type Result<T> = std::result::Result<T, Error>;
 const VALUE_AFTER_TABLE_ERROR_MSG: &str = r#"
@@ -68,8 +70,8 @@ impl Default for Ledger {
         Self {
             // this two value are override when generating a default config in
             // config::generate(base_dir). There must be a better way ?
-            tendermint: PathBuf::from(BASEDIR).join(TENDERMINT),
-            db: PathBuf::from(BASEDIR).join(DB),
+            tendermint: PathBuf::from(BASEDIR).join(TENDERMINT_DIR),
+            db: PathBuf::from(BASEDIR).join(DB_DIR),
             address: SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 26658,
@@ -81,8 +83,8 @@ impl Default for Ledger {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Matchmaker {
-    pub matchmaker: String,
-    pub tx_template: String,
+    pub matchmaker: PathBuf,
+    pub tx_template: PathBuf,
     pub ledger_address: SocketAddr,
 }
 
@@ -99,25 +101,23 @@ impl Default for IntentGossip {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Gossip {
-    pub gossiper: Gossiper,
-    // TODO instead use address type from libp2p ?
     pub address: Multiaddr,
     pub rpc: bool,
-    pub intent_gossip: Option<IntentGossip>,
-    // TODO instead use address type from libp2p ?
-    pub peers: HashSet<String>,
+    pub peers: HashSet<Multiaddr>,
     pub topics: HashSet<Topic>,
+    pub gossiper: Gossiper,
+    pub intent_gossip: Option<IntentGossip>,
 }
 
 impl Default for Gossip {
     fn default() -> Self {
         Self {
-            gossiper: Gossiper::new(),
             // TODO there must be a better option here
             address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
             rpc: false,
             peers: HashSet::new(),
             topics: [Topic::Intent].iter().cloned().collect(),
+            gossiper: Gossiper::new(),
             intent_gossip: Some(IntentGossip::default()),
         }
     }
@@ -159,7 +159,8 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn read(base_dir_path: String) -> Result<Self> {
+    // TODO try to check from any "config.*" file instead of only .yaml
+    pub fn read(base_dir_path: &str) -> Result<Self> {
         let file_path = PathBuf::from(base_dir_path).join(FILENAME);
         let mut config = config::Config::new();
         config
@@ -167,21 +168,23 @@ impl Config {
                 file_path.to_str().expect("uncorrect file"),
             ))
             .map_err(Error::ReadError)?;
-        config.try_into().map_err(Error::CastError)
+        config.try_into().map_err(Error::DeserializationError)
     }
 
-    pub fn generate(base_dir_path: String) -> Result<()> {
+    pub fn generate(base_dir_path: &str) -> Result<Self> {
         let base_dir = PathBuf::from(base_dir_path);
         let mut config = Config::default();
         let mut ledger_cfg = config
             .ledger
             .as_mut()
-            .expect("ledger cfg, safe because default has ledger");
-        ledger_cfg.db = base_dir.join(DB);
-        ledger_cfg.tendermint = base_dir.join(TENDERMINT);
-        config.write(base_dir)
+            .expect("safe because default has ledger");
+        ledger_cfg.db = base_dir.join(DB_DIR);
+        ledger_cfg.tendermint = base_dir.join(TENDERMINT_DIR);
+        config.write(base_dir)?;
+        Ok(config)
     }
 
+    // TODO add format in config instead and serialize it to that format
     fn write(&self, base_dir: PathBuf) -> Result<()> {
         create_dir_all(&base_dir).map_err(Error::FileError)?;
         let file_path = base_dir.join(FILENAME);
