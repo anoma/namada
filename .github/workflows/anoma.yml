@@ -20,8 +20,9 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
+          target: nightly-2021-03-09-x86_64-unknown-linux-gnu
           components: rustfmt, clippy
-          override: true 
+          override: true
       - uses: actions/cache@v2
         with:
           path: |
