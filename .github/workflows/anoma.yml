@@ -29,6 +29,14 @@ jobs:
             ~/work/work/anoma-prototype/anoma-prototype/ledger/target
           key: cache-v3-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cache-v3-cargo- 
+      - name: Debug
+        run: |
+              du -hs ~/.cargo/registry
+              du -hs ~/.cargo/git
+              du -hs ~/work/work/anoma-prototype/anoma-prototype/tx_template
+              du -hs ~/work/work/anoma-prototype/anoma-prototype/vp_template
+              du -hs ~/work/work/anoma-prototype/anoma-prototype/ledger/target
+        working-directory: ledger
       - name: Run requirements
         run: |
               make -C ../tx_template deps
