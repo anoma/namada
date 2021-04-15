@@ -34,6 +34,9 @@ jobs:
               cd ~
               pwd
               ls
+              cd $GITHUB_WORKSPACE
+              pwd
+              ls
               echo "---"
               ls ~/.cargo/registry
               du -hs ~/.cargo/registry
