@@ -19,8 +19,8 @@ pub enum Error {
     ReadError(config::ConfigError),
     #[error("Error while casting config: {0}")]
     CastError(config::ConfigError),
-    #[error("Error while casting to json: {0}")]
-    JsonError(serde_json::Error),
+    #[error("Error while serializing to toml: {0}")]
+    TomlError(toml::ser::Error),
     #[error("Error while writing config: {0}")]
     WriteError(std::io::Error),
     #[error("Error while creating config file: {0}")]
@@ -32,6 +32,28 @@ pub const TENDERMINT: &str = "tendermint";
 pub const DB: &str = "db";
 
 pub type Result<T> = std::result::Result<T, Error>;
+const VALUE_AFTER_TABLE_ERROR_MSG: &str = r#"
+Error while serializing to toml. It means that some nested structure is followed
+ by simple fields.
+This fails:
+    struct Nested{
+       i:int
+    }
+
+    struct Broken{
+       nested:Nested,
+       simple:int
+    }
+And this is correct
+    struct Nested{
+       i:int
+    }
+
+    struct Correct{
+       simple:int
+       nested:Nested,
+    }
+"#;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ledger {
@@ -163,11 +185,14 @@ impl Config {
     fn write(&self, base_dir: PathBuf) -> Result<()> {
         create_dir_all(&base_dir).map_err(Error::FileError)?;
         let file_path = base_dir.join(FILENAME);
+        }
         let mut file = File::create(file_path).map_err(Error::FileError)?;
-        // TODO I tried to use toml instead but toml serializer is failing with
-        // "values must be emitted before tables". Maybe it's a fixable error ?
-        let json =
-            serde_json::to_string_pretty(&self).map_err(Error::JsonError)?;
-        file.write_all(json.as_bytes()).map_err(Error::WriteError)
+        let toml = toml::ser::to_string(&self).map_err(|err| {
+            if let toml::ser::Error::ValueAfterTable = err {
+                log::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
+            }
+            Error::TomlError(err)
+        })?;
+        file.write_all(toml.as_bytes()).map_err(Error::WriteError)
     }
 }
