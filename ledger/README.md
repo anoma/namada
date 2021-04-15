@@ -36,8 +36,11 @@ make
 # Build and link the executables
 make install
 
+# generate default config in .anoma/
+cargo run --bin anomad -- generate-config
+
 # Run Anoma daemon (this will also initialize and run Tendermint node)
-make run-anoma
+make run-ledger
 
 # Reset the state (resets Tendermint too)
 cargo run --bin anomad -- reset-ledger
@@ -49,24 +52,24 @@ cargo run --bin anomac -- craft-tx-data --source ba --target va --token xtz --am
 cargo run --bin anoma -- tx --path ../tx_template/tx.wasm --data tx_data_file
 
 # Watch and on change run a node (the state will be persisted)
-cargo watch -x "run --bin anomad -- run-anoma"
+cargo watch -x "run --bin anomad -- run-ledger"
 
 # Watch and on change reset & run a node
 cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 
-# run orderbook daemon with rpc server
-cargo run --bin anoma -- run-gossip --rpc --orderbook --matchmaker ../tx_template/tx.wasm --ledger-address  "tcp://127.0.0.1:26658"
+# run orderbook daemon with rpc server with default config file (or add --intent)
+cargo run --bin anoma -- run-gossip --rpc
 
-# run orderbook daemon with rpc server and matchmaker
-cargo run --bin anomad -- run-gossip --rpc --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_template/tx.wasm --ledger-address "tcp://127.0.0.1:26658"
+# run orderbook daemon with rpc server and matchmaker with default config file (or add --intent)
+cargo run --bin anomad -- run-gossip --rpc --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_template/tx.wasm --ledger-address "tcp://127.0.0.1:26658"
 
 # craft two opposite intents
 cargo run --bin anomac -- craft-intent --address ba --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file_A
 cargo run --bin anomac -- craft-intent --address va --token-buy eth --amount-buy 20 --token-sell xtz --amount-sell 10 --file intent_data_file_B
 
 # Submit the intents (need a rpc server), hardcoded address
-cargo run --bin anomac -- intent --orderbook "http://[::1]:39111" --data intent_data_file_A
-cargo run --bin anomac -- intent --orderbook "http://[::1]:39111" --data intent_data_file_B
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_data_file_A
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_data_file_B
 
 # Format the code
 make fmt

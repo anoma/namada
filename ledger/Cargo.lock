@@ -42,6 +42,7 @@ dependencies = [
  "tendermint-rpc",
  "thiserror",
  "tokio",
+ "toml 0.5.8",
  "tonic",
  "tonic-build",
  "wasmer",

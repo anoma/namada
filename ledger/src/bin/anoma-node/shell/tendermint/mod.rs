@@ -7,12 +7,10 @@ use std::convert::{TryFrom, TryInto};
 use std::fs;
 use std::fs::File;
 use std::io::{self, Write};
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
 
-use anoma::config::Config;
 use anoma::genesis::{self, Validator};
 use serde_json::json;
 use tendermint_abci::{self, ServerBuilder};
@@ -78,8 +76,8 @@ pub enum AbciMsg {
 }
 
 /// Run the ABCI server in the current thread (blocking).
-pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
-    let home_dir = config.tendermint_home_dir();
+pub fn run(sender: AbciSender, config: anoma::config::Ledger) {
+    let home_dir = config.tendermint;
     let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
     Command::new("tendermint")
@@ -105,14 +103,14 @@ pub fn run(sender: AbciSender, config: Config, addr: SocketAddr) {
 
     // bind and run the ABCI server
     let server = ServerBuilder::default()
-        .bind(addr, AbciWrapper { sender })
+        .bind(config.address, AbciWrapper { sender })
         .expect("TEMPORARY: failed to bind ABCI server address");
     server
         .listen()
         .expect("TEMPORARY: failed to start up ABCI server")
 }
 
-pub fn reset(config: Config) {
+pub fn reset(config: anoma::config::Ledger) {
     // reset all the Tendermint state, if any
     Command::new("tendermint")
         .args(&[
@@ -120,13 +118,13 @@ pub fn reset(config: Config) {
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
             // "--log-level=\"*debug\"",
             "--home",
-            &config.tendermint_home_dir().to_string_lossy(),
+            &config.tendermint.to_string_lossy(),
         ])
         .output()
         .expect("TEMPORARY: Failed to reset tendermint node's data");
     fs::remove_dir_all(format!(
         "{}/config",
-        &config.tendermint_home_dir().to_string_lossy()
+        &config.tendermint.to_string_lossy()
     ))
     .expect("TEMPORARY: Failed to reset tendermint node's config");
 }

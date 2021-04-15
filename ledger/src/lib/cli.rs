@@ -6,7 +6,14 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
+use std::collections::HashSet;
+use std::fmt::Debug;
+use std::str::FromStr;
+
 use clap::{Arg, ArgMatches};
+use libp2p::Multiaddr;
+
+use super::config;
 
 const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
 const APP_NAME: &str = "Anoma";
@@ -19,26 +26,28 @@ pub const CLIENT_COMMAND: &str = "client";
 pub const RUN_GOSSIP_COMMAND: &str = "run-gossip";
 pub const RUN_LEDGER_COMMAND: &str = "run-ledger";
 pub const RESET_LEDGER_COMMAND: &str = "reset-ledger";
+pub const GENERATE_CONFIG_COMMAND: &str = "generate-config";
 pub const INTENT_COMMAND: &str = "intent";
 pub const CRAFT_INTENT_COMMAND: &str = "craft-intent";
 pub const TX_COMMAND: &str = "tx";
 pub const CRAFT_DATA_TX_COMMAND: &str = "craft-tx-data";
 
 // gossip args
+pub const BASE_ARG: &str = "base-dir";
 pub const PEERS_ARG: &str = "peers";
 pub const ADDRESS_ARG: &str = "address";
 pub const DKG_ARG: &str = "dkg";
-pub const ORDERBOOK_ARG: &str = "orderbook";
+pub const INTENT_ARG: &str = "intent";
 pub const RPC_ARG: &str = "rpc";
 pub const MATCHMAKER_ARG: &str = "matchmaker";
 pub const TX_TEMPLATE_ARG: &str = "tx-template";
 pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
 
 // client args
-pub const DATA_INTENT_ARG: &str = "data";
 pub const DATA_TX_ARG: &str = "data";
 pub const PATH_TX_ARG: &str = "path";
-pub const ORDERBOOK_INTENT_ARG: &str = "orderbook";
+pub const DATA_INTENT_ARG: &str = "data";
+pub const NODE_INTENT_ARG: &str = "node";
 pub const DRY_RUN_TX_ARG: &str = "dry-run";
 pub const TOKEN_SELL_ARG: &str = "token-sell";
 pub const TOKEN_BUY_ARG: &str = "token-buy";
@@ -98,9 +107,9 @@ pub fn anoma_node_cli() -> App {
             .author(AUTHOR)
             .about("Anoma node command line interface.")
             .arg(
-                Arg::new("base")
+                Arg::new(BASE_ARG)
                     .short('b')
-                    .long("base-dir")
+                    .long(BASE_ARG)
                     .takes_value(true)
                     .required(false)
                     .default_value(".anoma")
@@ -113,6 +122,7 @@ fn add_node_commands(app: App) -> App {
     app.subcommand(run_gossip_subcommand())
         .subcommand(run_ledger_subcommand())
         .subcommand(reset_ledger_subcommand())
+        .subcommand(generate_config())
 }
 
 fn client_tx_subcommand() -> App {
@@ -120,7 +130,7 @@ fn client_tx_subcommand() -> App {
         .about("Send an transaction.")
         .arg(
             Arg::new(DATA_TX_ARG)
-                .long("data")
+                .long(DATA_TX_ARG)
                 .takes_value(true)
                 .required(false)
                 .about(
@@ -130,7 +140,7 @@ fn client_tx_subcommand() -> App {
         )
         .arg(
             Arg::new(PATH_TX_ARG)
-                .long("path")
+                .long(PATH_TX_ARG)
                 .takes_value(true)
                 .required(true)
                 .about("The path to the wasm code to be executed."),
@@ -148,15 +158,15 @@ fn client_intent_subcommand() -> App {
     App::new(INTENT_COMMAND)
         .about("Send an intent.")
         .arg(
-            Arg::new(ORDERBOOK_INTENT_ARG)
-                .long("orderbook")
+            Arg::new(NODE_INTENT_ARG)
+                .long(NODE_INTENT_ARG)
                 .takes_value(true)
                 .required(true)
-                .about("The orderbook address."),
+                .about("The gossip node address."),
         )
         .arg(
             Arg::new(DATA_INTENT_ARG)
-                .long("data")
+                .long(DATA_INTENT_ARG)
                 .takes_value(true)
                 .required(true)
                 .about(
@@ -281,11 +291,11 @@ fn run_gossip_subcommand() -> App {
                 .about("Enable DKG gossip topic."),
         )
         .arg(
-            Arg::new(ORDERBOOK_ARG)
-                .long(ORDERBOOK_ARG)
+            Arg::new(INTENT_ARG)
+                .long(INTENT_ARG)
                 .multiple(false)
                 .takes_value(false)
-                .about("Enable Orderbook gossip topic."),
+                .about("Enable intent gossip."),
         )
         .arg(
             Arg::new(RPC_ARG)
@@ -313,7 +323,10 @@ fn run_gossip_subcommand() -> App {
                 .long(LEDGER_ADDRESS_ARG)
                 .multiple(false)
                 .takes_value(true)
-                .about("The address of the ledger as host:port."),
+                .about(
+                    "The address of the ledger as host:port that the \
+                     matchmaker must send transactions to.",
+                ),
         )
 }
 
@@ -325,33 +338,110 @@ fn reset_ledger_subcommand() -> App {
     App::new(RESET_LEDGER_COMMAND).about("Reset Anoma node state.")
 }
 
-pub fn parse_vector(args: &ArgMatches, field: &str) -> Option<Vec<String>> {
-    args.values_of(field).map(|peers| {
-        peers.map(|peer| peer.to_string()).collect::<Vec<String>>()
-    })
-}
-pub fn parse_address(
-    args: &ArgMatches,
-    field: &str,
-) -> Option<(String, String)> {
-    let address = args.value_of(field).map(|s| s.to_string());
-    match address {
-        Some(address) => {
-            let split_addresses: Vec<String> =
-                address.split(":").map(|s| s.to_string()).collect();
-            Some((split_addresses[0].clone(), split_addresses[1].clone()))
-        }
-        None => None,
-    }
-}
-pub fn parse_bool(args: &ArgMatches, field: &str) -> bool {
-    args.is_present(field)
+fn generate_config() -> App {
+    App::new(GENERATE_CONFIG_COMMAND).about("Generate default node config.")
 }
 
-pub fn parse_string(args: &ArgMatches, field: &str) -> Option<String> {
+pub fn parse_hashset_opt(
+    args: &ArgMatches,
+    field: &str,
+) -> Option<HashSet<String>> {
+    args.values_of(field).map(|peers| {
+        peers
+            .map(|peer| peer.to_string())
+            .collect::<HashSet<String>>()
+    })
+}
+
+pub fn parse_opt<F>(args: &ArgMatches, field: &str) -> Option<F>
+where
+    F: FromStr,
+    F::Err: Debug,
+{
+    args.value_of(field)
+        .map(|address| address.parse().expect("failed to parse the argument"))
+}
+
+pub fn parse_req<F>(args: &ArgMatches, field: &str) -> F
+where
+    F: FromStr,
+    F::Err: Debug,
+{
+    parse_opt(args, field).expect("field is mandatory")
+}
+
+pub fn parse_string_opt(args: &ArgMatches, field: &str) -> Option<String> {
     args.value_of(field).map(|s| s.to_string())
 }
 
-pub fn parse_u64(args: &ArgMatches, field: &str) -> Option<u64> {
-    args.value_of(field).and_then(|s| s.parse().ok())
+pub fn parse_string_req(args: &ArgMatches, field: &str) -> String {
+    parse_string_opt(args, field).expect("field is mandatory")
+}
+
+pub fn update_gossip_config(
+    args: &ArgMatches,
+    config: &mut config::Gossip,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
+        config.peers = peers
+            .iter()
+            .map(|p| Multiaddr::from_str(p).expect("error while parsing peer"))
+            .collect()
+    }
+
+    if let Some(addr) = parse_opt(args, ADDRESS_ARG) {
+        config.address = addr
+    }
+
+    config.enable_dkg(args.is_present(DKG_ARG));
+
+    if args.is_present(INTENT_ARG) && config.intent_gossip.is_none() {
+        config.intent_gossip = Some(config::IntentGossip::default())
+    }
+
+    if let Some(mut intent_gossip_cfg) = config.intent_gossip.as_mut() {
+        let matchmaker_arg = parse_opt(args, MATCHMAKER_ARG);
+        let tx_template_arg = parse_opt(args, TX_TEMPLATE_ARG);
+        let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);
+        if let Some(mut matchmaker_cfg) = intent_gossip_cfg.matchmaker.as_mut()
+        {
+            if let Some(matchmaker) = matchmaker_arg {
+                matchmaker_cfg.matchmaker = matchmaker
+            }
+            if let Some(tx_template) = tx_template_arg {
+                matchmaker_cfg.tx_template = tx_template
+            }
+            if let Some(ledger_address) = ledger_address_arg {
+                matchmaker_cfg.ledger_address = ledger_address
+            }
+        } else if let (
+            Some(matchmaker),
+            Some(tx_template),
+            Some(ledger_address),
+        ) = (
+            matchmaker_arg.as_ref(),
+            tx_template_arg.as_ref(),
+            ledger_address_arg,
+        ) {
+            let matchmaker_cfg = Some(config::Matchmaker {
+                matchmaker: matchmaker.clone(),
+                tx_template: tx_template.clone(),
+                ledger_address,
+            });
+            intent_gossip_cfg.matchmaker = matchmaker_cfg
+        } else if matchmaker_arg.is_some()
+            || tx_template_arg.is_some()
+            || ledger_address_arg.is_some()
+        // if at least one argument is not none then fail
+        {
+            panic!(
+                "No complete matchmaker configuration found (matchmaker \
+                 program path, tx template path, and ledger address). Please \
+                 update the configuration with default value or use all cli \
+                 argument to use the matchmaker"
+            );
+        }
+    };
+    config.rpc = args.is_present(RPC_ARG);
+    Ok(())
 }
