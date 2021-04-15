@@ -31,7 +31,7 @@ jobs:
       - name: Debug
         run: |
               ls ~/.cargo/registry
-              du -hs .cargo/registry
+              du -hs ~/.cargo/registry
               echo "---"
               ls ~/.cargo/git
               du -hs ~/.cargo/git
