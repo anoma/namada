@@ -30,6 +30,18 @@ jobs:
           restore-keys: cache-v2-cargo-
       - name: Run requirements
         run: |
+              ls ~/.cargo/registry
+              echo "---"
+              ls ~/.cargo/git
+              echo "---"
+              ls ~/anoma-prototype/tx_template
+              echo "---"
+              ls ~/anoma-prototype/vp_template
+              echo "---"
+              ls ~/anoma-prototype/ledger/target
+        working-directory: ledger   
+      - name: Run requirements
+        run: |
               make -C ../tx_template deps
               make build-wasm-scripts
         working-directory: ledger   
