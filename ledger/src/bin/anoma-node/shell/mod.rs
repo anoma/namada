@@ -93,7 +93,7 @@ impl Shell {
     pub fn new(abci: AbciReceiver, db_path: &PathBuf) -> Self {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
-        let key11 = Key::parse("@va/balance/eth".to_owned())
+        let key11 = Key::parse("@ada/balance/eth".to_owned())
             .expect("Unable to convert string into a key");
         storage
             .write(
@@ -101,7 +101,7 @@ impl Shell {
                 vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
             )
             .expect("Unable to set the initial balance for validator account");
-        let key12 = Key::parse("@va/balance/xtz".to_owned())
+        let key12 = Key::parse("@ada/balance/xtz".to_owned())
             .expect("Unable to convert string into a key");
         storage
             .write(
@@ -109,7 +109,7 @@ impl Shell {
                 vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
             )
             .expect("Unable to set the initial balance for validator account");
-        let key21 = Key::parse("@ba/balance/eth".to_owned())
+        let key21 = Key::parse("@alan/balance/eth".to_owned())
             .expect("Unable to convert string into a key");
         storage
             .write(
@@ -117,7 +117,7 @@ impl Shell {
                 vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
             )
             .expect("Unable to set the initial balance for basic account");
-        let key22 = Key::parse("@ba/balance/xtz".to_owned())
+        let key22 = Key::parse("@alan/balance/xtz".to_owned())
             .expect("Unable to convert string into a key");
         storage
             .write(

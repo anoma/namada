@@ -43,7 +43,7 @@ make run-anoma
 cargo run --bin anomad -- reset-ledger
 
 # craft a transaction data to file `tx_data_file`
-cargo run --bin anomac -- craft-tx-data --source ba --target va --token xtz --amount 10 --file tx_data_file
+cargo run --bin anomac -- craft-tx-data --source alan --target ada --token xtz --amount 10 --file tx_data_file
 
 # Submit a transaction with a wasm code
 cargo run --bin anoma -- tx --path ../tx_template/tx.wasm --data tx_data_file
@@ -61,8 +61,8 @@ cargo run --bin anoma -- run-gossip --rpc --orderbook --matchmaker ../tx_templat
 cargo run --bin anomad -- run-gossip --rpc --orderbook --matchmaker ../matchmaker_template/matchmaker.wasm --tx-template ../tx_template/tx.wasm --ledger-address "tcp://127.0.0.1:26658"
 
 # craft two opposite intents
-cargo run --bin anomac -- craft-intent --address ba --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file_A
-cargo run --bin anomac -- craft-intent --address va --token-buy eth --amount-buy 20 --token-sell xtz --amount-sell 10 --file intent_data_file_B
+cargo run --bin anomac -- craft-intent --address alan --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file_A
+cargo run --bin anomac -- craft-intent --address ada --token-buy eth --amount-buy 20 --token-sell xtz --amount-sell 10 --file intent_data_file_B
 
 # Submit the intents (need a rpc server), hardcoded address
 cargo run --bin anomac -- intent --orderbook "http://[::1]:39111" --data intent_data_file_A
