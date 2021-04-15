@@ -19,7 +19,7 @@ The shielded addresses are used for private transactions and they are not direct
 
 ### Transparent addresses
 
-A transparent address is a human-readable string very similar to a domain name, containing lowercase (uppercase can be converted to lower case by clients) only alpha-numeric ASCII characters, hyphen (`-`) and full stop (`.`) as a separator between the "labels" of the address. The last label of an address is said to be the top-level name and each predecessor segment is the sub-name of its successor.
+A transparent address is a human-readable string very similar to a domain name, containing only alpha-numeric ASCII characters, hyphen (`-`) and full stop (`.`) as a separator between the "labels" of the address. The letter case is not significant and any upper case letters are converted to lower case. The last label of an address is said to be the top-level name and each predecessor segment is the sub-name of its successor.
 
 The length of an address must be at least 3 characters. For compatibility with a legacy DNS TXT record, we'll use syntax as defined in [RFC-1034 - section 3.5 DNS preferred name syntax](https://www.ietf.org/rfc/rfc1034.txt). That is, the upper limit is 255 characters and 63 for each label in an address (which should be sufficient anyway); and the label must not begin or end with hyphen (`-`) and must not begin with a digit.
 
