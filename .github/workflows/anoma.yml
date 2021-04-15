@@ -24,18 +24,18 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/work/work/anoma-prototype/anoma-prototype/tx_template
-            ~/work/work/anoma-prototype/anoma-prototype/vp_template
-            ~/work/work/anoma-prototype/anoma-prototype/ledger/target
-          key: cache-v3-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v3-cargo- 
+            ~/work/anoma-prototype/anoma-prototype/tx_template
+            ~/work/anoma-prototype/anoma-prototype/vp_template
+            ~/work/anoma-prototype/anoma-prototype/ledger/target
+          key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cache-v4-cargo- 
       - name: Debug
         run: |
               du -hs ~/.cargo/registry
               du -hs ~/.cargo/git
-              du -hs ~/work/work/anoma-prototype/anoma-prototype/tx_template
-              du -hs ~/work/work/anoma-prototype/anoma-prototype/vp_template
-              du -hs ~/work/work/anoma-prototype/anoma-prototype/ledger/target
+              du -hs ~/work/anoma-prototype/anoma-prototype/tx_template
+              du -hs ~/work/anoma-prototype/anoma-prototype/vp_template
+              du -hs ~/work/anoma-prototype/anoma-prototype/ledger/target
         working-directory: ledger
       - name: Run requirements
         run: |
@@ -72,8 +72,8 @@ jobs:
   #           ~/work/work/anoma-prototype/anoma-prototype/tx_template
   #           ~/work/work/anoma-prototype/anoma-prototype/vp_template
   #           ~/work/work/anoma-prototype/anoma-prototype/ledger/target
-  #         key: cache-v3-cargo-${{ hashFiles('**/Cargo.lock') }}
-  #         restore-keys: cache-v3-cargo- 
+  #         key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: cache-v4-cargo- 
   #     - name: Run fmt
   #       run: make fmt-check
   #       working-directory: ledger
