@@ -7,7 +7,7 @@ on:
       - master
 
 jobs:
-  check:
+  build:
     name: Build Anoma
     runs-on: ubuntu-latest
     defaults:
@@ -19,9 +19,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
-          target: nightly-2021-03-09-x86_64-unknown-linux-gnu
-          components: rustfmt, clippy
+          toolchain: stable
           override: true
       - uses: actions/cache@v2
         with:
@@ -41,7 +39,60 @@ jobs:
         run: make build
       - name: Run test
         run: make test
+
+  format:
+    name: Format Anoma
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ledger
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          target: nightly-2021-03-09-x86_64-unknown-linux-gnu
+          components: rustfmt
+          override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ../vp_template
+            ../tx_template
+            target
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-key: cargo-
       - name: Run fmt
         run: make fmt-check
+
+  lint:
+    name: Format Anoma
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ledger
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          components: clippy
+          override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ../vp_template
+            ../tx_template
+            target
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-key: cargo-
       - name: Run clippy
         run: make clippy-check
