@@ -39,9 +39,9 @@ pub async fn main() -> Result<()> {
             // here unwrap is safe as the arguments are required
             let addr = cli::parse_string_req(args, cli::ADDRESS_ARG);
             let token_sell = cli::parse_string_req(args, cli::TOKEN_SELL_ARG);
-            let amount_sell = cli::parse_req(args, cli::AMOUNT_SELL_ARG)?;
+            let amount_sell = cli::parse_req(args, cli::AMOUNT_SELL_ARG);
             let token_buy = cli::parse_string_req(args, cli::TOKEN_BUY_ARG);
-            let amount_buy = cli::parse_req(args, cli::AMOUNT_BUY_ARG)?;
+            let amount_buy = cli::parse_req(args, cli::AMOUNT_BUY_ARG);
             let file = cli::parse_string_req(args, cli::FILE_ARG);
             craft_intent(
                 addr,
@@ -58,7 +58,7 @@ pub async fn main() -> Result<()> {
             let source = cli::parse_string_req(args, cli::SOURCE_ARG);
             let target = cli::parse_string_req(args, cli::TARGET_ARG);
             let token = cli::parse_string_req(args, cli::TOKEN_ARG);
-            let amount = cli::parse_req(args, cli::AMOUNT_ARG)?;
+            let amount = cli::parse_req(args, cli::AMOUNT_ARG);
             let file = cli::parse_string_req(args, cli::FILE_ARG);
             craft_tx_data(source, target, token, amount, file);
             Ok(())

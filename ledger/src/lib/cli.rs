@@ -351,17 +351,20 @@ pub fn parse_hashset_opt(
     })
 }
 
-pub fn parse_opt<F: FromStr>(
-    args: &ArgMatches,
-    field: &str,
-) -> Option<Result<F, F::Err>> {
-    args.value_of(field).map(|address| address.parse())
+pub fn parse_opt<F>(args: &ArgMatches, field: &str) -> Option<F>
+where
+    F: FromStr,
+    F::Err: Debug,
+{
+    args.value_of(field)
+        .map(|address| address.parse().expect("failed to parse the argument"))
 }
 
-pub fn parse_req<F: FromStr>(
-    args: &ArgMatches,
-    field: &str,
-) -> Result<F, F::Err> {
+pub fn parse_req<F>(args: &ArgMatches, field: &str) -> F
+where
+    F: FromStr,
+    F::Err: Debug,
+{
     parse_opt(args, field).expect("field is mandatory")
 }
 
@@ -382,7 +385,7 @@ pub fn update_gossip_config(
     }
 
     if let Some(addr) = parse_opt(args, ADDRESS_ARG) {
-        config.address = addr?
+        config.address = addr
     }
 
     config.enable_dkg(args.is_present(DKG_ARG));
@@ -392,14 +395,9 @@ pub fn update_gossip_config(
     }
 
     if let Some(mut intent_gossip_cfg) = config.intent_gossip.as_mut() {
-        // TODO here we should not use .ok() but instead expect() but I did not
-        // find yet the correct way
-        let matchmaker_arg =
-            parse_opt(args, MATCHMAKER_ARG).and_then(|v| v.ok());
-        let tx_template_arg =
-            parse_opt(args, TX_TEMPLATE_ARG).and_then(|v| v.ok());
-        let ledger_address_arg =
-            parse_opt(args, LEDGER_ADDRESS_ARG).and_then(|v| v.ok());
+        let matchmaker_arg = parse_opt(args, MATCHMAKER_ARG);
+        let tx_template_arg = parse_opt(args, TX_TEMPLATE_ARG);
+        let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);
         if let Some(mut matchmaker_cfg) = intent_gossip_cfg.matchmaker.as_mut()
         {
             if let Some(matchmaker) = matchmaker_arg {
