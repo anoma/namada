@@ -30,6 +30,11 @@ jobs:
           restore-keys: cache-v2-cargo-
       - name: Debug
         run: |
+              echo pwd
+              cd ~
+              echo pwd
+              ls
+              echo "---"
               ls ~/.cargo/registry
               du -hs ~/.cargo/registry
               echo "---"
