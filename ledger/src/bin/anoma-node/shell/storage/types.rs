@@ -486,12 +486,11 @@ impl<'a> Iterator for PrefixIterator<'a> {
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
         match self.iter.next() {
             Some((key, val)) => {
-                // calculate the gas cost for actual read size
-                let gas = key.len() + val.len();
+                let len = val.len();
                 let key = String::from_utf8(key.to_vec())
                     .expect("Cannot convert from bytes to key string");
                 match key.strip_prefix(&self.db_prefix) {
-                    Some(k) => Some((k.to_owned(), val.to_vec(), gas as _)),
+                    Some(k) => Some((k.to_owned(), val.to_vec(), len as _)),
                     None => self.next(),
                 }
             }
