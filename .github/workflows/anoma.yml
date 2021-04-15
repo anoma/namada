@@ -41,58 +41,58 @@ jobs:
         run: make test
         working-directory: ledger
 
-  format:
-    name: Format Anoma
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ledger
+  # format:
+  #   name: Format Anoma
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: ledger
 
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly-2021-03-09
-          components: rustfmt
-          override: true
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/work/work/anoma-prototype/anoma-prototype/tx_template
-            ~/work/work/anoma-prototype/anoma-prototype/vp_template
-            ~/work/work/anoma-prototype/anoma-prototype/ledger/target
-          key: cache-v3-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v3-cargo- 
-      - name: Run fmt
-        run: make fmt-check
-        working-directory: ledger
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: nightly-2021-03-09
+  #         components: rustfmt
+  #         override: true
+  #     - uses: actions/cache@v2
+  #       with:
+  #         path: |
+  #           ~/.cargo/registry
+  #           ~/.cargo/git
+  #           ~/work/work/anoma-prototype/anoma-prototype/tx_template
+  #           ~/work/work/anoma-prototype/anoma-prototype/vp_template
+  #           ~/work/work/anoma-prototype/anoma-prototype/ledger/target
+  #         key: cache-v3-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: cache-v3-cargo- 
+  #     - name: Run fmt
+  #       run: make fmt-check
+  #       working-directory: ledger
 
-  lint:
-    name: Lint Anoma
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ledger
+  # lint:
+  #   name: Lint Anoma
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: ledger
 
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          components: clippy
-          override: true
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/anoma-prototype/ledger/target
-          key: cache-v3-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v3-cargo-
-      - name: Run clippy
-        run: make clippy-check
-        working-directory: ledger
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: nightly
+  #         components: clippy
+  #         override: true
+  #     - uses: actions/cache@v2
+  #       with:
+  #         path: |
+  #           ~/.cargo/registry
+  #           ~/.cargo/git
+  #           ~/anoma-prototype/ledger/target
+  #         key: cache-v3-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: cache-v3-cargo-
+  #     - name: Run clippy
+  #       run: make clippy-check
+  #       working-directory: ledger
