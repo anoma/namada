@@ -527,11 +527,13 @@ mod tests {
             .expect("Unable to create a temporary DB directory");
         let mut storage = Storage::new(db_path.path());
         let mut write_log = WriteLog::new();
+        let mut verifiers = HashSet::new();
         let mut gas_meter = BlockGasMeter::default();
         let error = runner
             .run(
                 &mut storage,
                 &mut write_log,
+                &mut verifiers,
                 &mut gas_meter,
                 tx_code,
                 &tx_data,
@@ -596,6 +598,7 @@ mod tests {
         let write_log = WriteLog::new();
         let gas_meter = Arc::new(Mutex::new(BlockGasMeter::default()));
         let keys_changed = vec![];
+        let verifiers = HashSet::new();
         let error = runner
             .run(
                 vp_code,
@@ -605,6 +608,7 @@ mod tests {
                 &write_log,
                 gas_meter,
                 &keys_changed,
+                &verifiers,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \
