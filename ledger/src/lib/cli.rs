@@ -7,7 +7,6 @@
 //! respectively.
 
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::fmt::Debug;
 use std::str::FromStr;
 

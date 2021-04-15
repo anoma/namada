@@ -171,7 +171,7 @@ impl Config {
         config.try_into().map_err(Error::DeserializationError)
     }
 
-    pub fn generate(base_dir_path: &str) -> Result<Self> {
+    pub fn generate(base_dir_path: &str, replace:bool) -> Result<Self> {
         let base_dir = PathBuf::from(base_dir_path);
         let mut config = Config::default();
         let mut ledger_cfg = config
@@ -180,15 +180,15 @@ impl Config {
             .expect("safe because default has ledger");
         ledger_cfg.db = base_dir.join(DB_DIR);
         ledger_cfg.tendermint = base_dir.join(TENDERMINT_DIR);
-        config.write(base_dir)?;
+        config.write(base_dir, replace)?;
         Ok(config)
     }
 
     // TODO add format in config instead and serialize it to that format
-    fn write(&self, base_dir: PathBuf) -> Result<()> {
+    fn write(&self, base_dir: PathBuf, replace:bool) -> Result<()> {
         create_dir_all(&base_dir).map_err(Error::FileError)?;
         let file_path = base_dir.join(FILENAME);
-        if file_path.exists() {
+        if file_path.exists() && !replace {
             Err(Error::AlreadyExistingConfig(file_path))
         } else {
             let mut file = File::create(file_path).map_err(Error::FileError)?;
