@@ -10,9 +10,6 @@ jobs:
   build:
     name: Build Anoma
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ledger
 
     steps:
       - uses: actions/checkout@v2
@@ -34,11 +31,14 @@ jobs:
       - name: Run requirements
         run: |
               make -C ../tx_template deps
-              make build-wasm-scripts   
+              make build-wasm-scripts
+        working-directory: ledger   
       - name: Run build
         run: make build
+        working-directory: ledger
       - name: Run test
         run: make test
+        working-directory: ledger
 
   format:
     name: Format Anoma
@@ -67,6 +67,7 @@ jobs:
           restore-key: cargo-
       - name: Run fmt
         run: make fmt-check
+        working-directory: ledger
 
   lint:
     name: Lint Anoma
@@ -93,3 +94,4 @@ jobs:
           restore-keys: cargo-
       - name: Run clippy
         run: make clippy-check
+        working-directory: ledger
