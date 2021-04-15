@@ -19,14 +19,14 @@ The shielded addresses are used for private transactions and they are not direct
 
 ### Transparent addresses
 
-A transparent address is a human-readable string very similar to a domain name, containing lowercase (uppercase can be converted to lower case by clients) only alpha-numeric characters, hyphen (`-`), underscore (`_`) and full stop (`.`) as a separator between the "levels" of the address. The last segment of an address is said to be the top-level name and each predecessor segment is the sub-name of its successor.
+A transparent address is a human-readable string very similar to a domain name, containing lowercase (uppercase can be converted to lower case by clients) only alpha-numeric ASCII characters, hyphen (`-`) and full stop (`.`) as a separator between the "labels" of the address. The last label of an address is said to be the top-level name and each predecessor segment is the sub-name of its successor.
 
-The length of an address must be at least 3 characters. For compatibility with a legacy DNS TXT record, the upper limit is 255 characters and 64 for each name in an address (which should be sufficient anyway); and the name must not begin or end with hyphen (`-`) and must not begin with a digit.
+The length of an address must be at least 3 characters. For compatibility with a legacy DNS TXT record, we'll use syntax as defined in [RFC-1034 - section 3.5 DNS preferred name syntax](https://www.ietf.org/rfc/rfc1034.txt). That is, the upper limit is 255 characters and 63 for each label in an address (which should be sufficient anyway); and the label must not begin or end with hyphen (`-`) and must not begin with a digit.
 
 These addresses can be chosen by users who wish to [initialize a new account](#initializing-a-new-account), following these rules:
 
 - a new address must be initialized on-chain
-  - each sub-name must be authorized by the predecessor level address (e.g. initializing address `free.eth` must be authorized by `eth`, or `gives.free.eth` by `free.eth`, etc.) 
+  - each sub-label must be authorized by the predecessor level address (e.g. initializing address `free.eth` must be authorized by `eth`, or `gives.free.eth` by `free.eth`, etc.) 
   - note that besides the address creation, each address level is considered to be a distinct address with its own dynamic storage sub-space and validity predicate.
 - the top-level names under certain length (to be specified) cannot be initialized directly, they may be [auctioned like in ENS registrar as described in EIP-162](https://eips.ethereum.org/EIPS/eip-162).
   - some top-level names may be reserved
