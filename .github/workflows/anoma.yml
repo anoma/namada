@@ -23,11 +23,11 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/anoma-prototype/ledger/vp_template
-            ~/anoma-prototype/ledger/tx_template
-            target
-          key: cache-v1-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v1-cargo-
+            ~/anoma-prototype/tx_template
+            ~/anoma-prototype/vp_template
+            ~/anoma-prototype/ledger/target
+          key: cache-v2-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cache-v2-cargo-
       - name: Run requirements
         run: |
               make -C ../tx_template deps
@@ -89,9 +89,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: cache-v1-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v1-cargo-
+            ~/anoma-prototype/ledger/target
+          key: cache-v2-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cache-v2-cargo-
       - name: Run clippy
         run: make clippy-check
         working-directory: ledger
