@@ -2,7 +2,8 @@ name: Anoma CI
 
 on:
   pull_request:
-    types: [review_requested, ready_for_review]
+    # types: [review_requested, ready_for_review]
+    types: [synchronize]
     branches:
       - master
 
