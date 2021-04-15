@@ -28,23 +28,29 @@ jobs:
             ~/anoma-prototype/ledger/target
           key: cache-v2-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cache-v2-cargo-
-      - name: Run requirements
+      - name: Debug
         run: |
               ls ~/.cargo/registry
               echo "---"
               ls ~/.cargo/git
               echo "---"
-              ls ~/anoma-prototype/tx_template
+              ls ~/anoma-prototype
               echo "---"
-              ls ~/anoma-prototype/vp_template
-              echo "---"
-              ls ~/anoma-prototype/ledger/target
-        working-directory: ledger   
+              ls ~/anoma-prototype/ledger   
       - name: Run requirements
         run: |
               make -C ../tx_template deps
               make build-wasm-scripts
-        working-directory: ledger   
+        working-directory: ledger
+      - name: Debug2
+        run: |
+              ls ~/.cargo/registry
+              echo "---"
+              ls ~/.cargo/git
+              echo "---"
+              ls ~/anoma-prototype
+              echo "---"
+              ls ~/anoma-prototype/ledger   
       - name: Run build
         run: make build
         working-directory: ledger
