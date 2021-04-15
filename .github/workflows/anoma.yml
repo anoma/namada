@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build Anoma
+    name: Lint Anoma
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -53,7 +53,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
-          target: nightly-2021-03-09
+          # target: nightly-2021-03-09
           components: rustfmt
           override: true
       - uses: actions/cache@v2
