@@ -19,56 +19,31 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
-          override: true
-      - run: make build
-
-  test:
-    name: Test Suite
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ledger
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+          toolchain: stable # nightly?
+          components: rustfmt, clippy
+          override: true 
+      - uses: actions/cache@v2
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: make test
-
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ledger
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add rustfmt
-      - run: make fmt-check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ledger
-        
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add clippy
-      - run: make clippy-check
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-key: cargo-
+      - name: Run requirements
+        uses: actions-rs/cargo@v1
+        run: |
+              make -C ../tx_template deps
+              make build-wasm-scripts   
+      - name: Run build
+        uses: actions-rs/cargo@v1
+        run: make build
+      - name: Run test
+        uses: actions-rs/cargo@v1
+        run: make test
+      - name: Run fmt
+        uses: actions-rs/cargo@v1
+        run: make fmt-check
+      - name: Run clippy
+        uses: actions-rs/cargo@v1
+        run: make clippy-check
