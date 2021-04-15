@@ -27,6 +27,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ../vp_template
+            ../tx_template
             target
           key: cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-key: cargo-
