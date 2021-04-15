@@ -42,11 +42,9 @@ jobs:
         working-directory: ledger
 
   format:
+    if: github.event.pull_request.draft == false
     name: Format Anoma
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ledger
 
     steps:
       - uses: actions/checkout@v2
@@ -71,11 +69,9 @@ jobs:
         working-directory: ledger
 
   lint:
+    if: github.event.pull_request.draft == false
     name: Lint Anoma
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ledger
 
     steps:
       - uses: actions/checkout@v2
