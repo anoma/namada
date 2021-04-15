@@ -185,14 +185,17 @@ impl Config {
     fn write(&self, base_dir: PathBuf) -> Result<()> {
         create_dir_all(&base_dir).map_err(Error::FileError)?;
         let file_path = base_dir.join(FILENAME);
+        if file_path.exists() {
+            Err(Error::AlreadyExistingConfig(file_path))
+        } else {
+            let mut file = File::create(file_path).map_err(Error::FileError)?;
+            let toml = toml::ser::to_string(&self).map_err(|err| {
+                if let toml::ser::Error::ValueAfterTable = err {
+                    log::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
+                }
+                Error::TomlError(err)
+            })?;
+            file.write_all(toml.as_bytes()).map_err(Error::WriteError)
         }
-        let mut file = File::create(file_path).map_err(Error::FileError)?;
-        let toml = toml::ser::to_string(&self).map_err(|err| {
-            if let toml::ser::Error::ValueAfterTable = err {
-                log::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
-            }
-            Error::TomlError(err)
-        })?;
-        file.write_all(toml.as_bytes()).map_err(Error::WriteError)
     }
 }
