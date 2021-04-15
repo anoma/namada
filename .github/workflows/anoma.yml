@@ -92,6 +92,6 @@ jobs:
             ../tx_template
             target
           key: cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-key: cargo-
+          restore-keys: cargo-
       - name: Run clippy
         run: make clippy-check
