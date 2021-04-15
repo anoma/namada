@@ -52,8 +52,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
-          target: nightly-2021-03-09
+          toolchain: nightly-2021-03-09
           components: rustfmt
           override: true
       - uses: actions/cache@v2
