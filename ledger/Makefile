@@ -49,7 +49,7 @@ fmt:
 	$(cargo) +$(nightly) fmt
 
 fmt-check:
-	$(cargo) fmt --all -- --check
+	$(cargo) fmt +nightly  --all -- --check
 
 watch:
 	$(cargo) watch

@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Lint Anoma
+    name: Build Anoma
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,11 +26,11 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ../vp_template
-            ../tx_template
+            ~/anoma-prototype/ledger/vp_template
+            ~/anoma-prototype/ledger/tx_template
             target
           key: cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-key: cargo-
+          restore-keys: cargo-
       - name: Run requirements
         run: |
               make -C ../tx_template deps
@@ -70,7 +70,7 @@ jobs:
         run: make fmt-check
 
   lint:
-    name: Format Anoma
+    name: Lint Anoma
     runs-on: ubuntu-latest
     defaults:
       run:
