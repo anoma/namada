@@ -33,21 +33,19 @@ These addresses can be chosen by users who wish to [initialize a new account](#i
 
 For convenience, the `anoma` top-level address is initially setup to allow initialization of any previously unused second-level address, e.g. `bob.anoma` (we may want to revise this before launch to e.g. action the short ones, like with top-level names to make the process fairer).
 
-Like in ENS, the addresses are stored on chain by their hash. The hash is computed with the namehash function as specified in [EIP-137](https://eips.ethereum.org/EIPS/eip-137#namehash-algorithm). Likewise, this is for two reasons:
+Like in ENS, the addresses are stored on chain by their hash, encoded with [bech32m](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki) ([not yet adopted in Zcash](https://github.com/zcash/zips/issues/484)), which is an improved version of [bech32](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki). Likewise, this is for two reasons:
 - help preserve privacy of addresses that were not revealed publicly and to prevent trivial enumeration of registered names (of course, you can still try to enumerate by hashes)
-- using fixed-length hash string in the ledger simplifies gas accounting
-
-### Shielded addresses
-
-Similar to [Zcash Sapling protocol payment addresses and keys (section 3.1)](https://raw.githubusercontent.com/zcash/zips/master/protocol/protocol.pdf), users can generate spending keys for private payments. A shielded payment address, incoming viewing key and full viewing key are derived from a spending key. In a private payment, a shielded payment address is hashed with a diversifier into a diversified transmission key. When a different diversifier function is chosen for different transactions, it prevents the transmission key from being matched across the transactions.
-
-Shielded addresses are encoded with [bech32m](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki) ([not yet adopted in Zcash](https://github.com/zcash/zips/issues/484)), which is an improved version of [bech32](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki).
+- using fixed-length string in the ledger simplifies gas accounting
 
 The human-readable prefix (as specified for [bech32](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki#specification)) in the address encoding is:
 - `"a"` for Anoma live network
 - `"atest"` for test network
 
-The encoding of the spending and viewing keys is not yet decided, but for consistency we'll probably use a the same schema with different prefixes for anything that can use an identifier.
+### Shielded addresses
+
+Similar to [Zcash Sapling protocol payment addresses and keys (section 3.1)](https://raw.githubusercontent.com/zcash/zips/master/protocol/protocol.pdf), users can generate spending keys for private payments. A shielded payment address, incoming viewing key and full viewing key are derived from a spending key. In a private payment, a shielded payment address is hashed with a diversifier into a diversified transmission key. When a different diversifier function is chosen for different transactions, it prevents the transmission key from being matched across the transactions.
+
+The encoding of the shielded addresses, spending and viewing keys is not yet decided, but for consistency we'll probably use a the same schema with different prefixes for anything that can use an identifier.
 
 - TODO consider using a schema similar to the [unified addresses proposed in Zcash](https://github.com/zcash/zips/issues/482), that are designed to unify the payment addresses across different versions by encoding a typecode and the length of the payment address together with it. This may be especially useful for the protocol upgrade system and fractal scaling system.
 
