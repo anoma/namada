@@ -211,28 +211,66 @@ impl Shell {
     }
 }
 
+struct VpResult {
+    pub accepted_vps: HashSet<Address>,
+    pub rejected_vps: HashSet<Address>,
+    pub changed_keys: Vec<String>,
+}
+
+impl VpResult {
+    pub fn new(
+        accepted_vps: HashSet<Address>,
+        rejected_vps: HashSet<Address>,
+        changed_keys: Vec<String>,
+    ) -> Self {
+        Self {
+            accepted_vps: accepted_vps,
+            rejected_vps: rejected_vps,
+            changed_keys: changed_keys,
+        }
+    }
+}
+
+impl fmt::Display for VpResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Vps -> accepted: {:?}. rejected: {:?}, keys: {:?}",
+            self.accepted_vps, self.rejected_vps, self.changed_keys,
+        )
+    }
+}
+
+impl Default for VpResult {
+    fn default() -> Self {
+        Self {
+            accepted_vps: HashSet::new(),
+            rejected_vps: HashSet::new(),
+            changed_keys: Vec::new(),
+        }
+    }
+}
+
 struct TxResult {
     // a value of 0 indicates that the transaction overflowed with gas
     gas_used: u64,
-    vps: HashSet<Address>,
-    failing_vps: HashSet<Address>,
+    vps: VpResult,
+    valid: bool,
 }
 
 impl TxResult {
-    pub fn new(
-        gas: Result<u64>,
-        vps: Result<HashSet<Address>>,
-        failed_vps: Result<HashSet<Address>>,
-    ) -> Self {
-        TxResult {
+    pub fn new(gas: Result<u64>, vps: Result<VpResult>) -> Self {
+        let mut tx_result = TxResult {
             gas_used: gas.unwrap_or(0),
-            vps: vps.unwrap_or(HashSet::new()),
-            failing_vps: failed_vps.unwrap_or(HashSet::new()),
-        }
+            vps: vps.unwrap_or(VpResult::default()),
+            valid: false,
+        };
+        tx_result.valid = tx_result.is_tx_correct();
+        tx_result
     }
 
     pub fn is_tx_correct(&self) -> bool {
-        self.gas_used > 0 && self.failing_vps.len() == 0
+        self.gas_used > 0 && self.vps.rejected_vps.len() == 0
     }
 }
 
@@ -240,11 +278,10 @@ impl fmt::Display for TxResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Transaction status is: {}. Gas used: {}, vps: {:?}, failing vps: {:?}",
+            "Transaction status is: {}. Gas used: {}, vps: {}",
             self.is_tx_correct(),
             self.gas_used,
-            self.vps,
-            self.failing_vps
+            self.vps.to_string(),
         )
     }
 }
@@ -309,7 +346,7 @@ impl Shell {
             .expect("Cannot get lock on the gas meter");
         let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
 
-        Ok(TxResult::new(gas, Ok(verifiers), vps_result).to_string())
+        Ok(TxResult::new(gas, vps_result).to_string())
     }
 
     /// Validate and apply a transaction.
@@ -452,15 +489,15 @@ fn check_vps(
     write_log: &mut WriteLog,
     verifiers: &HashSet<Address>,
     dry_run: bool,
-) -> Result<HashSet<Address>> {
+) -> Result<VpResult> {
     let verifiers = get_verifiers(write_log, verifiers);
     let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
 
-    // let default: Vec<u8> = vec![];
-    // let tx_data = &tx.data.unwrap_or(default);
     let tx_data = tx.data.clone().unwrap_or(vec![]);
 
-    let mut failed_vps = HashSet::new();
+    let mut rejected_vps = HashSet::new();
+    let mut accepted_vps = HashSet::new();
+    let mut changed_keys: Vec<String> = Vec::new();
 
     for (addr, keys) in verifiers {
         let vp = storage
@@ -485,13 +522,16 @@ fn check_vps(
             })?;
         if !accept {
             if !dry_run {
-                failed_vps.insert(addr.clone());
+                rejected_vps.insert(addr.clone());
                 break;
             }
-            failed_vps.insert(addr.clone());
+            rejected_vps.insert(addr.clone());
+        } else {
+            accepted_vps.insert(addr.clone());
+            changed_keys.append(&mut keys.clone());
         }
     }
-    Ok(failed_vps)
+    Ok(VpResult::new(accepted_vps, rejected_vps, changed_keys))
 }
 
 fn execute_tx(
