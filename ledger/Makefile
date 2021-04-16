@@ -15,10 +15,10 @@ build-release:
 	$(cargo) build --release
 
 clippy:
-	$(cargo) clippy
+	$(cargo) +$(nightly) clippy
 
 clippy-check:
-	$(cargo) clippy -- -D warnings
+	$(cargo) +$(nightly) clippy -- -D warnings
 
 install:
 	# Warning: built in debug mode for now
