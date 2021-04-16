@@ -242,59 +242,24 @@ impl Shell {
 
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
 
-        let tx_data = tx.data.unwrap_or(vec![]);
-        let mut verifiers = HashSet::new();
-
         // Execute the transaction code
-        let tx_runner = TxRunner::new();
-        tx_runner
-            .run(
-                &self.storage,
-                &mut cloned_write_log,
-                &mut verifiers,
-                &mut cloned_gas_meter,
-                tx.code,
-                &tx_data,
-            )
-            .map_err(Error::TxRunnerError)?;
+        let verifiers = execute_tx(
+            &tx,
+            &self.storage,
+            &mut cloned_gas_meter,
+            &mut cloned_write_log,
+        )?;
 
         // drop the lock on the gas meter, the VPs will access it via the mutex
         drop(cloned_gas_meter);
 
-        let verifiers = get_verifiers(&self.write_log, &verifiers);
-        let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
-        let mut accept = true;
-        // TODO run in parallel for all accounts
-        // Run a VP for every account with modified storage sub-space
-        //   - all must return `true` to accept the tx
-        //   - cancel all remaining workers and fail if any returns `false`
-        for (addr, keys) in verifiers {
-            let vp = self
-                .storage
-                .validity_predicate(&addr)
-                .map_err(Error::StorageError)?;
-
-            let vp_runner = VpRunner::new();
-            accept = vp_runner
-                .run(
-                    vp,
-                    &tx_data,
-                    addr.clone(),
-                    &self.storage,
-                    &cloned_write_log,
-                    self.gas_meter.clone(),
-                    &keys,
-                    &addresses,
-                )
-                .map_err(|error| Error::VpRunnerError {
-                    addr: addr.clone(),
-                    error,
-                })?;
-            if !accept {
-                log::debug!("{} rejected transaction", addr);
-                break;
-            };
-        }
+        let vps_result = check_vps(
+            &tx,
+            &self.storage,
+            gas_meter,
+            &mut cloned_write_log,
+            &verifiers,
+        );
 
         // maybe we can return the total gas used by the transaction?
         let mut gas_meter = self
@@ -303,12 +268,12 @@ impl Shell {
             .expect("Cannot get lock on the gas meter");
         let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
 
-        if accept && gas.is_ok() {
+        if vps_result.is_ok() && gas.is_ok() {
             Ok(format!("Transaction success, gas cost: {}", gas.unwrap())
                 .to_string())
         } else if gas.is_err() {
             Ok("Transaction failed: gas overflow.".to_string())
-        } else if !accept {
+        } else if vps_result.is_err() {
             Ok("Transaction failed: VPs are not satisfied.".to_string())
         } else {
             Ok("Transaction failed.".to_string())
@@ -327,61 +292,27 @@ impl Shell {
 
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
 
-        let tx_data = tx.data.unwrap_or(vec![]);
-        let mut verifiers = HashSet::new();
-
         // Execute the transaction code
-        let tx_runner = TxRunner::new();
-        tx_runner
-            .run(
-                &self.storage,
-                &mut self.write_log,
-                &mut verifiers,
-                &mut gas_meter,
-                tx.code,
-                &tx_data,
-            )
-            .map_err(Error::TxRunnerError)?;
+        let verifiers = execute_tx(
+            &tx,
+            &self.storage,
+            &mut gas_meter,
+            &mut self.write_log,
+        )?;
 
         // drop the lock on the gas meter, the VPs will access it via the mutex
         drop(gas_meter);
 
-        let verifiers = get_verifiers(&self.write_log, &verifiers);
-        let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
-        let mut accept = true;
-        // TODO run in parallel for all accounts
-        // Run a VP for every account with modified storage sub-space
-        //   - all must return `true` to accept the tx
-        //   - cancel all remaining workers and fail if any returns `false`
-        for (addr, keys) in verifiers {
-            let vp = self
-                .storage
-                .validity_predicate(&addr)
-                .map_err(Error::StorageError)?;
+        let vps_result = check_vps(
+            &tx,
+            &self.storage,
+            self.gas_meter.clone(),
+            &mut self.write_log,
+            &verifiers,
+        );
 
-            let vp_runner = VpRunner::new();
-            accept = vp_runner
-                .run(
-                    vp,
-                    &tx_data,
-                    addr.clone(),
-                    &self.storage,
-                    &self.write_log,
-                    self.gas_meter.clone(),
-                    &keys,
-                    &addresses,
-                )
-                .map_err(|error| Error::VpRunnerError {
-                    addr: addr.clone(),
-                    error,
-                })?;
-            if !accept {
-                log::debug!("{} rejected transaction", addr);
-                break;
-            };
-        }
         // Apply the transaction if accepted by all the VPs
-        if accept {
+        if vps_result.is_ok() {
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
@@ -479,4 +410,72 @@ fn get_verifiers(
         }
     }
     verifiers
+}
+
+fn check_vps(
+    tx: &Tx,
+    storage: &Storage,
+    gas_meter: Arc<Mutex<BlockGasMeter>>,
+    write_log: &mut WriteLog,
+    verifiers: &HashSet<Address>,
+) -> Result<()> {
+    let verifiers = get_verifiers(write_log, verifiers);
+    let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
+
+    // let default: Vec<u8> = vec![];
+    // let tx_data = &tx.data.unwrap_or(default);
+    let tx_data = tx.data.clone().unwrap_or(vec![]);
+
+    for (addr, keys) in verifiers {
+        let vp = storage
+            .validity_predicate(&addr)
+            .map_err(Error::StorageError)?;
+
+        let vp_runner = VpRunner::new();
+        let accept = vp_runner
+            .run(
+                vp,
+                tx_data.as_ref(),
+                addr.clone(),
+                storage,
+                write_log,
+                gas_meter.clone(),
+                &keys,
+                &addresses,
+            )
+            .map_err(|error| Error::VpRunnerError {
+                addr: addr.clone(),
+                error,
+            })?;
+        if !accept {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn execute_tx(
+    tx: &Tx,
+    storage: &Storage,
+    gas_meter: &mut BlockGasMeter,
+    write_log: &mut WriteLog,
+) -> Result<HashSet<Address>> {
+    let tx_code = tx.code.clone();
+    let tx_data = tx.data.clone().unwrap_or(vec![]);
+    let mut verifiers = HashSet::new();
+
+    let tx_runner = TxRunner::new();
+
+    tx_runner
+        .run(
+            storage,
+            write_log,
+            &mut verifiers,
+            gas_meter,
+            tx_code,
+            &tx_data,
+        )
+        .map_err(Error::TxRunnerError)?;
+
+    Ok(verifiers)
 }
