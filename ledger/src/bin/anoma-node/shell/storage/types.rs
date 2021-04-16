@@ -134,6 +134,11 @@ impl Key {
         }
         addresses
     }
+
+    /// Returns the length
+    pub fn len(&self) -> usize {
+        self.to_string().len()
+    }
 }
 
 impl Display for Key {

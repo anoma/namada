@@ -313,8 +313,9 @@ fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
         None => {
             // when not found in write log, try to check the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let present =
+            let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
+            tx_add_gas(env, gas);
             if present { 1 } else { 0 }
         }
     }
@@ -403,7 +404,8 @@ fn tx_storage_iter_prefix(
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
-    let iter = storage.iter_prefix(&prefix);
+    let (iter, gas) = storage.iter_prefix(&prefix);
+    tx_add_gas(env, gas);
     iterators.insert(iter).id()
 }
 
@@ -775,7 +777,8 @@ fn vp_storage_has_key_pre(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
     let key = Key::parse(key).expect("Cannot parse the key string");
 
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let present = storage.has_key(&key).expect("storage has_key failed");
+    let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
+    vp_add_gas(env, gas);
     if present { 1 } else { 0 }
 }
 
@@ -803,8 +806,9 @@ fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
         None => {
             // when not found in write log, try to check the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let present =
+            let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
+            vp_add_gas(env, gas);
             if present { 1 } else { 0 }
         }
     }
@@ -830,7 +834,8 @@ fn vp_storage_iter_prefix(
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
-    let iter = storage.iter_prefix(&prefix);
+    let (iter, gas) = storage.iter_prefix(&prefix);
+    vp_add_gas(env, gas);
     iterators.insert(iter).id()
 }
 
@@ -1023,6 +1028,7 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
     verifiers.insert(addr);
+    tx_add_gas(env, addr_len);
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
