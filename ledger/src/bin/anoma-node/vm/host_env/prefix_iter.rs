@@ -22,7 +22,11 @@ impl<'a> PrefixIterators<'a> {
         id
     }
 
-    pub fn next(&mut self, id: PrefixIteratorId) -> Option<(String, Vec<u8>)> {
+    /// Returns a key-value pair and the gas cost
+    pub fn next(
+        &mut self,
+        id: PrefixIteratorId,
+    ) -> Option<(String, Vec<u8>, u64)> {
         match self.iterators.get_mut(&id) {
             Some(iter) => iter.next(),
             None => None,
