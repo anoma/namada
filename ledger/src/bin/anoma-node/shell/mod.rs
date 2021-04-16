@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 
-use anoma::bytes::ByteBuf;
+use anoma_shared::bytes::ByteBuf;
 use anoma::config::Config;
 use anoma::protobuf::types::Tx;
 use prost::Message;

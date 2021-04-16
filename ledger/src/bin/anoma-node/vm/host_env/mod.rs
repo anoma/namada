@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
-use anoma_vm_env::memory::KeyVal;
+use anoma_shared::vm_memory::KeyVal;
 use borsh::BorshSerialize;
 use tokio::sync::mpsc::Sender;
 use wasmer::{

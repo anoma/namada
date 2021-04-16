@@ -2,8 +2,8 @@
 //! Addresses](tech-specs/src/explore/design/ledger/accounts.md#addresses).
 
 use bech32::{self, FromBase32, ToBase32, Variant};
-use nonempty::NonEmpty;
-use sparse_merkle_tree::H256;
+use borsh::{BorshDeserialize, BorshSerialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,
     convert::TryInto,
@@ -13,8 +13,6 @@ use std::{
     str::FromStr,
 };
 use thiserror::Error;
-
-use super::Hash256;
 
 const MAX_RAW_ADDRESS_LEN: usize = 255;
 const MIN_RAW_ADDRESS_LEN: usize = 3;
@@ -65,29 +63,61 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize,
+)]
 pub struct Address {
-    pub hash: H256,
+    pub hash: String,
     // TODO add raw for "dev"
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 pub struct RawAddress {
     pub raw: String,
-    labels: NonEmpty<Label>,
+    labels: Vec<Label>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 pub struct Label(String);
+
+fn hash_raw(str: impl AsRef<str>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(&str.as_ref());
+    format!("{:X}", hasher.finalize())
+}
 
 impl Address {
     pub fn root() -> Self {
-        Self { hash: H256::zero() }
+        let hash = hash_raw("");
+        Self { hash }
     }
 
     /// Encode the hash of the given address as a Bech32m [`String`].
     pub fn encode(&self) -> String {
-        let bytes: [u8; HASH_LEN] = self.hash.into();
+        let bytes: [u8; HASH_LEN] = self
+            .hash
+            .as_bytes()
+            .clone()
+            .try_into()
+            .expect("Unexpected hash length");
         bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT)
             .expect(&format!(
                 "The human-readable part {} should never cause failure",
@@ -108,18 +138,17 @@ impl Address {
         }
         let hash: Vec<u8> = FromBase32::from_base32(&hash_base32)
             .map_err(Error::DecodeBase32)?;
-        let hash_len = hash.len();
-        let hash: [u8; HASH_LEN] = hash
-            .try_into()
-            .or(Err(Error::UnexpectedHashLength(hash_len)))?;
-        Ok(Self {
-            hash: H256::from(hash),
-        })
+        // let hash_len = hash.len();
+        // let hash: [u8; HASH_LEN] = hash
+        //     .try_into()
+        //     .or(Err(Error::UnexpectedHashLength(hash_len)))?;
+        let hash = String::from_utf8(hash).expect("TODO");
+        Ok(Self { hash })
     }
 }
 
-impl From<H256> for Address {
-    fn from(hash: H256) -> Self {
+impl From<String> for Address {
+    fn from(hash: String) -> Self {
         Self { hash }
     }
 }
@@ -127,15 +156,18 @@ impl From<H256> for Address {
 impl RawAddress {
     pub fn hash(&self) -> Address {
         Address {
-            hash: self.hash256(),
+            hash: hash_raw(&self.raw),
         }
     }
 
     pub fn parent_raw(&self) -> Option<Self> {
-        NonEmpty::from_vec(self.labels.tail.clone()).map(|labels| {
-            let raw = labels_to_str(&labels);
-            Self { raw, labels }
-        })
+        if self.labels.len() <= 1 {
+            return None;
+        }
+        let mut labels = self.labels.clone();
+        labels.remove(0);
+        let raw = labels_to_str(&labels);
+        Some(Self { raw, labels })
     }
 
     #[allow(dead_code)]
@@ -146,7 +178,7 @@ impl RawAddress {
     }
 }
 
-fn labels_to_str(labels: &NonEmpty<Label>) -> String {
+fn labels_to_str(labels: &Vec<Label>) -> String {
     labels
         .iter()
         .map(|l| l.0.clone())
@@ -172,18 +204,6 @@ impl Display for Address {
     }
 }
 
-impl Hash256 for Address {
-    fn hash256(&self) -> H256 {
-        self.hash.clone()
-    }
-}
-
-impl Hash256 for RawAddress {
-    fn hash256(&self) -> H256 {
-        self.raw.hash256()
-    }
-}
-
 impl FromStr for RawAddress {
     type Err = Error;
 
@@ -204,13 +224,10 @@ impl FromStr for RawAddress {
             return Err(Error::AddressContainsInvalidCharacter);
         }
         let raw = s.to_ascii_lowercase();
-        let labels = NonEmpty::from_vec(
-            raw
-                .split('.')
-                .map(|label| Label::from_str(label))
-                .collect::<std::result::Result<Vec<_>, _>>()?,
-        )
-        .expect("The output of string split should never be empty, even when the source string is empty");
+        let labels = raw
+            .split('.')
+            .map(|label| Label::from_str(label))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(RawAddress { raw, labels })
     }
 }

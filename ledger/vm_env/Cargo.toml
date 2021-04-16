@@ -5,4 +5,5 @@ name = "anoma_vm_env"
 version = "0.1.0"
 
 [dependencies]
+anoma_shared = { path = "../src/lib/shared" }
 borsh = "0.8.2"

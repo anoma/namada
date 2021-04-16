@@ -13,6 +13,7 @@ use super::dkg::DKG;
 use super::network_behaviour::Behaviour;
 use super::orderbook::{self, Orderbook};
 use super::types::NetworkEvent;
+use anoma::types::Topic;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -118,7 +119,7 @@ impl P2P {
                 let mut tix_bytes = vec![];
                 intent.encode(&mut tix_bytes).unwrap();
                 let _message_id = self.swarm.gossipsub.publish(
-                    IdentTopic::new(anoma::types::Topic::Orderbook.to_string()),
+                    IdentTopic::new(Topic::Orderbook.to_string()),
                     tix_bytes,
                 );
             }
@@ -142,7 +143,7 @@ impl P2P {
     pub async fn handle_network_event(&mut self, event: NetworkEvent) {
         match event {
             NetworkEvent::Message(msg)
-                if msg.topic == anoma::types::Topic::Orderbook =>
+                if msg.topic == Topic::Orderbook =>
             {
                 if let Some(orderbook) = &mut self.orderbook {
                     let validity =

@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
-use anoma_vm_env::memory::{TxInput, VpInput};
+use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
@@ -282,9 +282,7 @@ impl VpRunner {
             .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        // TODO share type in vm_env
-        let verifiers = HashSet::new();
-        let input: VpInput = (addr.encode(), tx_data, keys_changed, &verifiers);
+        let input: VpInput = (addr.encode(), tx_data, keys_changed, verifiers);
         let vp_imports = host_env::prepare_vp_imports(
             &self.wasm_store,
             addr.clone(),

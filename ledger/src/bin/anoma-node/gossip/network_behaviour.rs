@@ -10,6 +10,7 @@ use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviourEventProcess;
 use libp2p::NetworkBehaviour;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use anoma::types::Topic;
 
 use super::types::{self, NetworkEvent};
 
@@ -26,15 +27,15 @@ impl From<GossipsubMessage> for types::NetworkEvent {
     }
 }
 
-pub fn topic_of(topic_hash: &TopicHash) -> anoma::types::Topic {
+pub fn topic_of(topic_hash: &TopicHash) -> Topic {
     if topic_hash
-        == &IdentTopic::new(anoma::types::Topic::Dkg.to_string()).hash()
+        == &IdentTopic::new(Topic::Dkg.to_string()).hash()
     {
-        anoma::types::Topic::Dkg
+        Topic::Dkg
     } else if topic_hash
-        == &IdentTopic::new(anoma::types::Topic::Orderbook.to_string()).hash()
+        == &IdentTopic::new(Topic::Orderbook.to_string()).hash()
     {
-        anoma::types::Topic::Orderbook
+        Topic::Orderbook
     } else {
         panic!("topic_hash does not correspond to any topic of interest")
     }

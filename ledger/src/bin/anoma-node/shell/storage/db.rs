@@ -22,8 +22,9 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
-use super::types::{BlockHeight, Key, KeySeg, PrefixIterator, Value};
+use super::types::{PrefixIterator, Value};
 use super::{BlockHash, MerkleTree};
+use anoma_shared::types::{BlockHeight, Key, KeySeg};
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -37,7 +38,7 @@ pub enum Error {
     #[error("Found an unknown key: {key}")]
     UnknownKey { key: String },
     #[error("Key error {0}")]
-    KeyError(super::types::Error),
+    KeyError(anoma_shared::types::Error),
     #[error("RocksDB error: {0}")]
     RocksDBError(rocksdb::Error),
 }

@@ -8,21 +8,23 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 
-use anoma::bytes::ByteBuf;
-use sparse_merkle_tree::{SparseMerkleTree, H256};
+use sparse_merkle_tree::H256;
 use thiserror::Error;
 
-use self::types::DbKeySeg;
-pub use self::types::{
-    Address, BlockHash, BlockHeight, Hash256, Key, KeySeg, MerkleTree,
-    PrefixIterator, RawAddress, Value, CHAIN_ID_LENGTH,
-};
+use self::types::Hash256;
+pub use self::types::PrefixIterator;
+
 use super::MerkleRoot;
+use anoma_shared::types::DbKeySeg;
+pub use anoma_shared::types::{
+    Address, BlockHash, BlockHeight, Key, KeySeg, RawAddress, CHAIN_ID_LENGTH,
+};
+pub use types::MerkleTree;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Key error {0}")]
-    KeyError(types::Error),
+    KeyError(anoma_shared::types::Error),
     #[error("Database error: {0}")]
     DBError(db::Error),
     #[error("Merkle tree error: {0}")]
@@ -235,20 +237,5 @@ impl Storage {
             // TODO: this temporarily loads default VP template if none found
             None => Ok(VP_WASM.to_vec()),
         }
-    }
-}
-
-impl Default for MerkleTree {
-    fn default() -> Self {
-        MerkleTree(SparseMerkleTree::default())
-    }
-}
-
-impl core::fmt::Debug for MerkleTree {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let root_hash = format!("{}", ByteBuf(self.0.root().as_slice()));
-        f.debug_struct("MerkleTree")
-            .field("root_hash", &root_hash)
-            .finish()
     }
 }

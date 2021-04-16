@@ -1,4 +1,4 @@
-use anoma_vm_env::memory;
+use anoma_shared::vm_memory;
 use borsh::BorshSerialize;
 use thiserror::Error;
 use wasmer::{HostEnvInitError, LazyInit, Memory};
@@ -64,7 +64,7 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data_bytes: &memory::Data,
+    tx_data_bytes: &vm_memory::Data,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as _;
@@ -92,7 +92,7 @@ pub struct VpCallInput {
 /// Write validity predicate inputs into wasm memory
 pub fn write_vp_inputs(
     memory: &wasmer::Memory,
-    (addr, tx_data_bytes, keys_changed, verifiers): memory::VpInput,
+    (addr, tx_data_bytes, keys_changed, verifiers): vm_memory::VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
     // String utf8 encoding is more space-efficient than Borsh encoding
