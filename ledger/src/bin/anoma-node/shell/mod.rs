@@ -214,14 +214,20 @@ impl Shell {
 struct TxResult {
     // a value of 0 indicates that the transaction overflowed with gas
     gas_used: u64,
+    vps: HashSet<Address>,
     failing_vps: HashSet<Address>,
 }
 
 impl TxResult {
-    pub fn new(gas: Result<u64>, vps: Result<HashSet<Address>>) -> Self {
+    pub fn new(
+        gas: Result<u64>,
+        vps: Result<HashSet<Address>>,
+        failed_vps: Result<HashSet<Address>>,
+    ) -> Self {
         TxResult {
             gas_used: gas.unwrap_or(0),
-            failing_vps: vps.unwrap_or(HashSet::new()),
+            vps: vps.unwrap_or(HashSet::new()),
+            failing_vps: failed_vps.unwrap_or(HashSet::new()),
         }
     }
 
@@ -234,9 +240,10 @@ impl fmt::Display for TxResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Transaction status is: {}. Gas used: {}, failing vps: {:?}",
+            "Transaction status is: {}. Gas used: {}, vps: {:?}, failing vps: {:?}",
             self.is_tx_correct(),
             self.gas_used,
+            self.vps,
             self.failing_vps
         )
     }
@@ -302,7 +309,7 @@ impl Shell {
             .expect("Cannot get lock on the gas meter");
         let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
 
-        Ok(TxResult::new(gas, vps_result).to_string())
+        Ok(TxResult::new(gas, Ok(verifiers), vps_result).to_string())
     }
 
     /// Validate and apply a transaction.
