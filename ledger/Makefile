@@ -46,10 +46,10 @@ test-debug:
 	$(debug-cargo) test -- --nocapture
 
 fmt:
-	$(cargo) +$(nightly) fmt
+	$(cargo) +$(nightly) fmt --all
 
 fmt-check:
-	$(cargo) +$(nightly) fmt  --all -- --check
+	$(cargo) +$(nightly) fmt --all -- --check
 
 watch:
 	$(cargo) watch
