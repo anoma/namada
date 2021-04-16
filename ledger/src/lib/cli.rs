@@ -41,6 +41,7 @@ pub const INTENT_ARG: &str = "intent";
 pub const RPC_ARG: &str = "rpc";
 pub const MATCHMAKER_ARG: &str = "matchmaker";
 pub const TX_TEMPLATE_ARG: &str = "tx-template";
+pub const PUBLIC_FILTER_ARG: &str = "public-filter";
 pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
 
 // client args
@@ -319,6 +320,13 @@ fn run_gossip_subcommand() -> App {
                 .about("The tx template to use with the matchmaker"),
         )
         .arg(
+            Arg::new(PUBLIC_FILTER_ARG)
+                .long(PUBLIC_FILTER_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .about("The public filter to use for the gossip intent"),
+        )
+        .arg(
             Arg::new(LEDGER_ADDRESS_ARG)
                 .long(LEDGER_ADDRESS_ARG)
                 .multiple(false)
@@ -400,6 +408,9 @@ pub fn update_gossip_config(
     }
 
     if let Some(mut intent_gossip_cfg) = config.intent_gossip.as_mut() {
+        intent_gossip_cfg.public_filter_path =
+            parse_opt(args, PUBLIC_FILTER_ARG);
+
         let matchmaker_arg = parse_opt(args, MATCHMAKER_ARG);
         let tx_template_arg = parse_opt(args, TX_TEMPLATE_ARG);
         let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);

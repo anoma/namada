@@ -46,7 +46,7 @@ pub fn main() -> Result<()> {
 // for dev purpose this is useful so if the config change it automatically
 // generate the default one
 #[cfg(feature = "dev")]
-fn get_cfg (home: String) -> Config {
+fn get_cfg(home: String) -> Config {
     match Config::read(&home) {
         Ok(config) => config,
         Err(err) => {
@@ -63,8 +63,8 @@ fn get_cfg (home: String) -> Config {
                 }
                 Err(err) => {
                     log::error!(
-                        "Tried to generate config in {} but failed with: \
-                         {}. Using default config (with new generated key)",
+                        "Tried to generate config in {} but failed with: {}. \
+                         Using default config (with new generated key)",
                         home,
                         err
                     );
@@ -76,6 +76,6 @@ fn get_cfg (home: String) -> Config {
 }
 
 #[cfg(not(feature = "dev"))]
-fn get_cfg (home: String) -> Config {
+fn get_cfg(home: String) -> Config {
     Config::read(&home).expect("Failed to read config file.")
 }

@@ -26,7 +26,7 @@ pub enum Error {
     #[error("Error while creating config file: {0}")]
     FileError(std::io::Error),
     #[error("A config file already exists in {0}")]
-    AlreadyExistingConfig(PathBuf)
+    AlreadyExistingConfig(PathBuf),
 }
 pub const BASEDIR: &str = ".anoma";
 pub const FILENAME: &str = "config.toml";
@@ -91,11 +91,15 @@ pub struct Matchmaker {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IntentGossip {
     pub matchmaker: Option<Matchmaker>,
+    pub public_filter_path: Option<PathBuf>,
 }
 
 impl Default for IntentGossip {
     fn default() -> Self {
-        Self { matchmaker: None }
+        Self {
+            matchmaker: None,
+            public_filter_path: None,
+        }
     }
 }
 
@@ -171,7 +175,7 @@ impl Config {
         config.try_into().map_err(Error::DeserializationError)
     }
 
-    pub fn generate(base_dir_path: &str, replace:bool) -> Result<Self> {
+    pub fn generate(base_dir_path: &str, replace: bool) -> Result<Self> {
         let base_dir = PathBuf::from(base_dir_path);
         let mut config = Config::default();
         let mut ledger_cfg = config
@@ -185,7 +189,7 @@ impl Config {
     }
 
     // TODO add format in config instead and serialize it to that format
-    fn write(&self, base_dir: PathBuf, replace:bool) -> Result<()> {
+    fn write(&self, base_dir: PathBuf, replace: bool) -> Result<()> {
         create_dir_all(&base_dir).map_err(Error::FileError)?;
         let file_path = base_dir.join(FILENAME);
         if file_path.exists() && !replace {
