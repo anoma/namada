@@ -1,4 +1,6 @@
-use anoma::protobuf::types::{IntentMessage, Tx};
+use anoma::protobuf::types::{
+    intent_broadcaster_message, Intent, IntentBroadcasterMessage, Tx,
+};
 use anoma::types::Topic;
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
@@ -88,14 +90,8 @@ impl P2P {
         Ok(())
     }
 
-    pub async fn handle_rpc_event(&mut self, event: IntentMessage) {
-        if let (
-            IntentMessage {
-                intent: Some(intent),
-            },
-            Some(gossip_intent),
-        ) = (event, &mut self.gossip_intent)
-        {
+    pub async fn handle_rpc_event(&mut self, intent: Intent) {
+        if let Some(gossip_intent) = &mut self.gossip_intent {
             if gossip_intent
                 .apply_intent(intent.clone())
                 .await

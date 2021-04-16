@@ -5,6 +5,7 @@ use std::io::Write;
 
 use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
+use anoma::protobuf::services::{rpc_message, RpcMessage};
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
 use anoma_data_template;
@@ -111,13 +112,13 @@ async fn gossip_intent(node_addr: String, data_path: String) {
         data,
         timestamp: Some(std::time::SystemTime::now().into()),
     };
-    let intent_message = types::IntentMessage {
-        intent: Some(intent),
+    let message = RpcMessage {
+        message: Some(rpc_message::Message::Intent(intent)),
     };
-    let message = types::Message {
-        message: Some(types::message::Message::IntentMessage(intent_message)),
-    };
-    let _response = client.send_message(message).await.unwrap();
+    let _response = client
+        .send_message(message)
+        .await
+        .expect("failed to send message and/or receive rpc response");
 }
 
 fn craft_intent(

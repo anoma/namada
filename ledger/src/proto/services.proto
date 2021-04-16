@@ -5,7 +5,14 @@ package services;
 import "types.proto";
 
 service RPCService {
-  rpc SendMessage(types.Message) returns (RpcResponse);
+  rpc SendMessage(RpcMessage) returns (RpcResponse);
+}
+
+message RpcMessage {
+  oneof message {
+    types.Intent intent = 1;
+    types.DkgMessage dkg = 2;
+  }
 }
 
 message RpcResponse {

@@ -1,9 +1,24 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RpcMessage {
+    #[prost(oneof = "rpc_message::Message", tags = "1, 2")]
+    pub message: ::core::option::Option<rpc_message::Message>,
+}
+/// Nested message and enum types in `RpcMessage`.
+pub mod rpc_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Message {
+        #[prost(message, tag = "1")]
+        Intent(super::super::types::Intent),
+        #[prost(message, tag = "2")]
+        Dkg(super::super::types::DkgMessage),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RpcResponse {
     #[prost(string, tag = "1")]
     pub result: ::prost::alloc::string::String,
 }
-/// Generated client implementations.
+#[doc = r" Generated client implementations."]
 pub mod rpc_service_client {
     #![allow(unused_variables, dead_code, missing_docs)]
     use tonic::codegen::*;
@@ -11,7 +26,7 @@ pub mod rpc_service_client {
         inner: tonic::client::Grpc<T>,
     }
     impl RpcServiceClient<tonic::transport::Channel> {
-        /// Attempt to create a new client by connecting to a given endpoint.
+        #[doc = r" Attempt to create a new client by connecting to a given endpoint."]
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
             D: std::convert::TryInto<tonic::transport::Endpoint>,
@@ -32,7 +47,6 @@ pub mod rpc_service_client {
             let inner = tonic::client::Grpc::new(inner);
             Self { inner }
         }
-
         pub fn with_interceptor(
             inner: T,
             interceptor: impl Into<tonic::Interceptor>,
@@ -41,10 +55,9 @@ pub mod rpc_service_client {
                 tonic::client::Grpc::with_interceptor(inner, interceptor);
             Self { inner }
         }
-
         pub async fn send_message(
             &mut self,
-            request: impl tonic::IntoRequest<super::super::types::Message>,
+            request: impl tonic::IntoRequest<super::RpcMessage>,
         ) -> Result<tonic::Response<super::RpcResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
@@ -73,17 +86,16 @@ pub mod rpc_service_client {
         }
     }
 }
-/// Generated server implementations.
+#[doc = r" Generated server implementations."]
 pub mod rpc_service_server {
     #![allow(unused_variables, dead_code, missing_docs)]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for
-    /// use with RpcServiceServer.
+    #[doc = "Generated trait containing gRPC methods that should be implemented for use with RpcServiceServer."]
     #[async_trait]
     pub trait RpcService: Send + Sync + 'static {
         async fn send_message(
             &self,
-            request: tonic::Request<super::super::types::Message>,
+            request: tonic::Request<super::RpcMessage>,
         ) -> Result<tonic::Response<super::RpcResponse>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -97,7 +109,6 @@ pub mod rpc_service_server {
             let inner = _Inner(inner, None);
             Self { inner }
         }
-
         pub fn with_interceptor(
             inner: T,
             interceptor: impl Into<tonic::Interceptor>,
@@ -113,17 +124,15 @@ pub mod rpc_service_server {
         B: HttpBody + Send + Sync + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
+        type Response = http::Response<tonic::body::BoxBody>;
         type Error = Never;
         type Future = BoxFuture<Self::Response, Self::Error>;
-        type Response = http::Response<tonic::body::BoxBody>;
-
         fn poll_ready(
             &mut self,
             _cx: &mut Context<'_>,
         ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
-
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
@@ -131,21 +140,17 @@ pub mod rpc_service_server {
                     #[allow(non_camel_case_types)]
                     struct SendMessageSvc<T: RpcService>(pub Arc<T>);
                     impl<T: RpcService>
-                        tonic::server::UnaryService<
-                            super::super::types::Message,
-                        > for SendMessageSvc<T>
+                        tonic::server::UnaryService<super::RpcMessage>
+                        for SendMessageSvc<T>
                     {
+                        type Response = super::RpcResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
-                        type Response = super::RpcResponse;
-
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::super::types::Message,
-                            >,
+                            request: tonic::Request<super::RpcMessage>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {

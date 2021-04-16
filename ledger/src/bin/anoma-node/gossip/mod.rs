@@ -8,7 +8,7 @@ mod types;
 
 use std::thread;
 
-use anoma::protobuf::types::{IntentMessage, Tx};
+use anoma::protobuf::types::{Intent, Tx};
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
@@ -39,7 +39,6 @@ pub fn run(config: anoma::config::Gossip) -> Result<()> {
     let (gossip, network_event_receiver, matchmaker_event_receiver) =
         p2p::P2P::new(&config)
             .expect("TEMPORARY: unable to build gossip layer");
-
     dispatcher(
         gossip,
         network_event_receiver,
@@ -81,7 +80,7 @@ pub async fn matchmaker_dispatcher(
 pub async fn dispatcher(
     mut gossip: P2P,
     mut network_event_receiver: Receiver<NetworkEvent>,
-    rpc_event_receiver: Option<Receiver<IntentMessage>>,
+    rpc_event_receiver: Option<Receiver<Intent>>,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
     if let Some(matchmaker_event_receiver) = matchmaker_event_receiver {

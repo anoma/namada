@@ -1,4 +1,6 @@
-use anoma::protobuf::types::{Intent, Tx};
+use anoma::protobuf::types::{
+    Intent, IntentBroadcasterMessage, Tx,
+};
 use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
