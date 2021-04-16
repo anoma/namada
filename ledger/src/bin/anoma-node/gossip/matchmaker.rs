@@ -2,12 +2,12 @@ use anoma::protobuf::types::{Intent, Tx};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use super::mempool::{self, Mempool};
+use super::mempool::{self, IntentMempool};
 use crate::vm;
 
 #[derive(Debug)]
 pub struct Matchmaker {
-    pub mempool: Mempool,
+    mempool: IntentMempool,
     inject_tx: Sender<Tx>,
     matchmaker_code: Vec<u8>,
     tx_code: Vec<u8>,
@@ -28,7 +28,7 @@ impl Matchmaker {
         let (inject_tx, rx) = channel::<Tx>(100);
         (
             Self {
-                mempool: Mempool::new(),
+                mempool: IntentMempool::new(),
                 matchmaker_code: std::fs::read(&config.matchmaker).unwrap(),
                 tx_code: std::fs::read(&config.tx_template).unwrap(),
                 inject_tx,
@@ -39,7 +39,7 @@ impl Matchmaker {
 
     pub fn add(&mut self, intent: Intent) -> Result<bool> {
         self.mempool
-            .put_intent(intent)
+            .put(intent)
             .map_err(Error::MempoolFailed)
     }
 

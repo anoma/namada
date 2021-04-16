@@ -152,7 +152,7 @@ impl P2P {
                                     filter,
                                 )),
                         }) => {
-                            match gossip_intent.add_filter(filter).await {
+                            match gossip_intent.add_filter(msg.peer, filter).await {
                                 // Never propagate filter, because node are
                                 // only interested on filter of connected
                                 // node
@@ -169,9 +169,12 @@ impl P2P {
                             }
                         }
                         Ok(..) => MessageAcceptance::Reject,
-                        Err(gossip_intent::Error::DecodeError(..)) => {
+                        Err(gossip_intent::Error::FilterMempoolError(..)) => {
                             MessageAcceptance::Reject
                         }
+                        Err(gossip_intent::Error::DecodeError(..)) => {
+                            MessageAcceptance::Reject
+                        },
                         Err(gossip_intent::Error::PublicFilterSize(_)) => {
                             MessageAcceptance::Reject
                         }

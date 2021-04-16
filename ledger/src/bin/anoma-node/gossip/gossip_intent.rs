@@ -1,13 +1,14 @@
 use anoma::protobuf::types::{
     Intent, IntentBroadcasterMessage, PublicFilter, Tx,
 };
+use libp2p::PeerId;
 use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::filter::{self, FilterValidate};
 use super::matchmaker::Matchmaker;
-use super::mempool::Mempool;
+use super::mempool::FilterMempool;
 
 pub const MAX_SIZE_PUBLIC_FILTER: u64 = bytesize::MB;
 
@@ -23,13 +24,15 @@ pub enum Error {
     PublicFilterSize(u64),
     #[error("Error while getting the metadata of the file: {0}")]
     FileError(std::io::Error),
+    #[error("Error while getting the metadata of the file: {0}")]
+    FilterMempoolError(super::mempool::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct GossipIntent {
-    pub mempool: Mempool,
+    pub filter_mempool: FilterMempool,
     pub filter: Option<PublicFilter>,
     pub matchmaker: Option<Matchmaker>,
 }
@@ -62,7 +65,7 @@ impl GossipIntent {
             Self {
                 filter,
                 matchmaker,
-                mempool: Mempool::new(),
+                filter_mempool: FilterMempool::new(),
             },
             matchmaker_event_receiver,
         ))
@@ -89,8 +92,8 @@ impl GossipIntent {
         }
     }
 
-    pub async fn add_filter(&mut self, _FILTER: PublicFilter) -> Result<bool> {
-        Ok(true)
+    pub async fn add_filter(&mut self, peer_id:PeerId, filter: PublicFilter) -> Result<bool> {
+        self.filter_mempool.put(peer_id, filter).map_err(Error::FilterMempoolError)
     }
 
     pub fn parse_raw_msg(

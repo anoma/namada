@@ -29,23 +29,15 @@ impl IntentId {
 }
 
 #[derive(Debug)]
-pub struct Mempool {
-    intents: HashMap<IntentId, Intent>,
-    filter: HashMap<PeerId, PublicFilter>,
-}
+pub struct IntentMempool(HashMap<IntentId,Intent>);
 
-impl Mempool {
+impl IntentMempool{
     pub fn new() -> Self {
-        Self {
-            intents: HashMap::default(),
-            filter: HashMap::default(),
-        }
+        Self(HashMap::default())
     }
 
-    pub fn put_intent(&mut self, intent: Intent) -> Result<bool> {
-        let already_exists_intent =
-            self.intents.insert(IntentId::new(&intent), intent);
-        Ok(already_exists_intent.is_none())
+    pub fn put(&mut self, intent: Intent) -> Result<bool> {
+        Ok(self.0.insert(IntentId::new(&intent), intent).is_none())
     }
 
     // TODO This is inefficient.
@@ -55,7 +47,7 @@ impl Mempool {
         f: F,
     ) -> bool {
         let id1: &IntentId = &IntentId::new(intent1);
-        let res = self.intents.iter().find(|(id2, intent2)| {
+        let res = self.0.iter().find(|(id2, intent2)| {
             if &id1 == id2 {
                 false
             } else {
@@ -63,5 +55,18 @@ impl Mempool {
             }
         });
         res.is_some()
+    }
+}
+
+#[derive(Debug)]
+pub struct FilterMempool(HashMap<PeerId, PublicFilter>);
+
+impl FilterMempool{
+    pub fn new() -> Self {
+        Self(HashMap::default())
+    }
+
+    pub fn put(&mut self, peer_id:PeerId, filter: PublicFilter) -> Result<bool> {
+        Ok(self.0.insert(peer_id, filter).is_none())
     }
 }
