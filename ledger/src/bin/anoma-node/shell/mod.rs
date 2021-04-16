@@ -2,6 +2,7 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
+use core::fmt;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
@@ -196,6 +197,7 @@ impl Shell {
                         let result = self
                             .dry_run_tx(&data)
                             .map_err(|e| format!("{}", e));
+
                         reply.send(result).map_err(|e| {
                             Error::AbciChannelSendError(format!(
                                 "ApplyTx {}",
@@ -206,6 +208,37 @@ impl Shell {
                 }
             }
         }
+    }
+}
+
+struct TxResult {
+    // a value of 0 indicates that the transaction overflowed with gas
+    gas_used: u64,
+    failing_vps: HashSet<Address>,
+}
+
+impl TxResult {
+    pub fn new(gas: Result<u64>, vps: Result<HashSet<Address>>) -> Self {
+        TxResult {
+            gas_used: gas.unwrap_or(0),
+            failing_vps: vps.unwrap_or(HashSet::new()),
+        }
+    }
+
+    pub fn is_tx_correct(&self) -> bool {
+        self.gas_used > 0 && self.failing_vps.len() == 0
+    }
+}
+
+impl fmt::Display for TxResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Transaction status is: {}. Gas used: {}, failing vps: {:?}",
+            self.is_tx_correct(),
+            self.gas_used,
+            self.failing_vps
+        )
     }
 }
 
@@ -259,6 +292,7 @@ impl Shell {
             gas_meter,
             &mut cloned_write_log,
             &verifiers,
+            true,
         );
 
         // maybe we can return the total gas used by the transaction?
@@ -268,16 +302,7 @@ impl Shell {
             .expect("Cannot get lock on the gas meter");
         let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
 
-        if vps_result.is_ok() && gas.is_ok() {
-            Ok(format!("Transaction success, gas cost: {}", gas.unwrap())
-                .to_string())
-        } else if gas.is_err() {
-            Ok("Transaction failed: gas overflow.".to_string())
-        } else if vps_result.is_err() {
-            Ok("Transaction failed: VPs are not satisfied.".to_string())
-        } else {
-            Ok("Transaction failed.".to_string())
-        }
+        Ok(TxResult::new(gas, vps_result).to_string())
     }
 
     /// Validate and apply a transaction.
@@ -309,6 +334,7 @@ impl Shell {
             self.gas_meter.clone(),
             &mut self.write_log,
             &verifiers,
+            false,
         );
 
         // Apply the transaction if accepted by all the VPs
@@ -418,13 +444,16 @@ fn check_vps(
     gas_meter: Arc<Mutex<BlockGasMeter>>,
     write_log: &mut WriteLog,
     verifiers: &HashSet<Address>,
-) -> Result<()> {
+    dry_run: bool,
+) -> Result<HashSet<Address>> {
     let verifiers = get_verifiers(write_log, verifiers);
     let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
 
     // let default: Vec<u8> = vec![];
     // let tx_data = &tx.data.unwrap_or(default);
     let tx_data = tx.data.clone().unwrap_or(vec![]);
+
+    let mut failed_vps = HashSet::new();
 
     for (addr, keys) in verifiers {
         let vp = storage
@@ -448,10 +477,14 @@ fn check_vps(
                 error,
             })?;
         if !accept {
-            break;
+            if !dry_run {
+                failed_vps.insert(addr.clone());
+                break;
+            }
+            failed_vps.insert(addr.clone());
         }
     }
-    Ok(())
+    Ok(failed_vps)
 }
 
 fn execute_tx(
