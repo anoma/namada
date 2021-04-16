@@ -21,6 +21,8 @@ pub type Swarm = libp2p::Swarm<Behaviour>;
 pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),
+    #[error("Failed initializing the broadcaster intent app: {0}")]
+    GossipIntentError(gossip_intent::Error),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -47,7 +49,8 @@ impl P2P {
         let (gossip_intent, matchmaker_event_receiver) =
             if let Some(gossip_intent_conf) = &config.intent_gossip {
                 let (gossip_intent, matchmaker_event_receiver) =
-                    GossipIntent::new(&gossip_intent_conf);
+                    GossipIntent::new(&gossip_intent_conf)
+                        .map_err(Error::GossipIntentError)?;
                 (Some(gossip_intent), matchmaker_event_receiver)
             } else {
                 (None, None)
@@ -125,18 +128,60 @@ impl P2P {
         match event {
             NetworkEvent::Message(msg) if msg.topic == Topic::Intent => {
                 if let Some(gossip_intent) = &mut self.gossip_intent {
-                    let validity =
-                        match gossip_intent.apply_raw_intent(&msg.data).await {
-                            gossip_intent::Result::Ok(true) => {
-                                MessageAcceptance::Accept
-                            }
-                            gossip_intent::Result::Ok(false) => {
+                    let validity = match gossip_intent.parse_raw_msg(&msg.data)
+                    {
+                        Ok(IntentBroadcasterMessage {
+                            message:
+                                Some(intent_broadcaster_message::Message::Intent(
+                                    intent,
+                                )),
+                        }) => match gossip_intent.apply_intent(intent).await {
+                            Ok(true) => MessageAcceptance::Accept,
+                            Ok(false) => MessageAcceptance::Reject,
+                            Err(e) => {
+                                log::error!(
+                                    "Error while trying to apply an intent: {}",
+                                    e
+                                );
                                 MessageAcceptance::Ignore
                             }
-                            gossip_intent::Result::Err(
-                                gossip_intent::Error::DecodeError(..),
-                            ) => MessageAcceptance::Reject,
-                        };
+                        },
+                        Ok(IntentBroadcasterMessage {
+                            message:
+                                Some(intent_broadcaster_message::Message::Filter(
+                                    filter,
+                                )),
+                        }) => {
+                            match gossip_intent.add_filter(filter).await {
+                                // Never propagate filter, because node are
+                                // only interested on filter of connected
+                                // node
+                                Ok(true) => MessageAcceptance::Ignore,
+                                Ok(false) => MessageAcceptance::Reject,
+                                Err(e) => {
+                                    log::error!(
+                                        "Error while trying to add a filter: \
+                                         {}",
+                                        e
+                                    );
+                                    MessageAcceptance::Ignore
+                                }
+                            }
+                        }
+                        Ok(..) => MessageAcceptance::Reject,
+                        Err(gossip_intent::Error::DecodeError(..)) => {
+                            MessageAcceptance::Reject
+                        }
+                        Err(gossip_intent::Error::PublicFilterSize(_)) => {
+                            MessageAcceptance::Reject
+                        }
+                        Err(gossip_intent::Error::FilterError(_)) => {
+                            MessageAcceptance::Reject
+                        }
+                        Err(gossip_intent::Error::FileError(_)) => {
+                            MessageAcceptance::Ignore
+                        }
+                    };
                     self.swarm
                         .gossipsub
                         .report_message_validation_result(
@@ -153,7 +198,10 @@ impl P2P {
                             &msg.peer,
                             MessageAcceptance::Ignore,
                         )
-                        .expect("Failed to validate the message ");
+                        .expect(
+                            "No application activated in this node, all \
+                             messages are ignore",
+                        );
                 }
             }
             NetworkEvent::Message(msg) => {

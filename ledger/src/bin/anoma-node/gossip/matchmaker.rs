@@ -38,7 +38,9 @@ impl Matchmaker {
     }
 
     pub fn add(&mut self, intent: Intent) -> Result<bool> {
-        self.mempool.put(intent).map_err(Error::MempoolFailed)
+        self.mempool
+            .put_intent(intent)
+            .map_err(Error::MempoolFailed)
     }
 
     pub async fn try_match_intent(&mut self, intent: &Intent) -> bool {

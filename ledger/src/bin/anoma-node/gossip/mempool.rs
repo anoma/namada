@@ -2,7 +2,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
-use anoma::protobuf::types::Intent;
+use anoma::protobuf::types::{Intent, PublicFilter};
+use libp2p::PeerId;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -30,16 +31,18 @@ impl IntentId {
 #[derive(Debug)]
 pub struct Mempool {
     intents: HashMap<IntentId, Intent>,
+    filter: HashMap<PeerId, PublicFilter>,
 }
 
 impl Mempool {
     pub fn new() -> Self {
         Self {
             intents: HashMap::default(),
+            filter: HashMap::default(),
         }
     }
 
-    pub fn put(&mut self, intent: Intent) -> Result<bool> {
+    pub fn put_intent(&mut self, intent: Intent) -> Result<bool> {
         let already_exists_intent =
             self.intents.insert(IntentId::new(&intent), intent);
         Ok(already_exists_intent.is_none())
