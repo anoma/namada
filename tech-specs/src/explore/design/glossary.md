@@ -8,7 +8,7 @@ orderbooks via a p2p layer. Each orderbook maintains a list of interests that
 describe what intents it is interested in.
 - **intent**  
 An expression of intent describes a particular trade an account agrees to.
-- ***matchmaker**  
+- **matchmaker**  
 The matchmaker checks the orderbook mempool and tries to match expression of
 intents together. For each match it crafts a valid transaction and submits it to
 the base ledger.
