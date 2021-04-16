@@ -18,3 +18,8 @@ pub mod matchmaker_prelude {
     pub use super::imports::matchmaker::*;
     pub use super::memory;
 }
+
+pub mod filter_prelude {
+    pub use super::imports::filter::*;
+    pub use super::memory;
+}

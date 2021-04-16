@@ -502,7 +502,7 @@ pub mod matchmaker {
     /// This macro expects a function with signature:
     ///
     /// ```
-    /// fn match_intent(intent_1: Intent, intent_2: Intent) -> bool
+    /// fn match_intent(intent_1: Vec<u8>, intent_2: Vec<u8>) -> bool
     /// ```
     #[macro_export]
     macro_rules! matchmaker {
@@ -572,6 +572,63 @@ pub mod matchmaker {
 
         pub fn _send_match(data_ptr: u64, data_len: u64);
 
+        // Requires a node running with "Info" log level
+        pub fn _log_string(str_ptr: u64, str_len: u64);
+    }
+}
+
+
+
+/// Filter environment imports
+pub mod filter {
+    pub use borsh::{BorshDeserialize, BorshSerialize};
+    pub use core::slice;
+
+    /// This macro expects a function with signature:
+    ///
+    /// ```
+    /// fn validate_intent(intent: Vec<u8>) -> bool
+    /// ```
+    #[macro_export]
+    macro_rules! filter {
+        (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
+            fn $fn( $($arg: $type),* ) -> $ret $body
+
+            /// The module interface callable by wasm runtime
+            #[no_mangle]
+            extern "C" fn _validate_intent(
+                intent_data_ptr: u64,
+                intent_data_len: u64,
+            ) -> u64 {
+                let get_intent_data = |ptr, len| {
+                    let slice = unsafe {
+                        slice::from_raw_parts(ptr as *const u8, len as _)
+                    };
+                    slice.to_vec()
+                };
+
+                if $fn(
+                    get_intent_data(intent_data_ptr, intent_data_len),
+                ) {
+                    0
+                } else {
+                    1
+                }
+            }
+        }
+    }
+
+    /// Log a string. The message will be printed at the [`log::Level::Info`].
+    pub fn log_string<T: AsRef<str>>(msg: T) {
+        let msg = msg.as_ref();
+        unsafe {
+            _log_string(msg.as_ptr() as _, msg.len() as _);
+        }
+    }
+
+    /// These host functions are implemented in the Anoma's [`host_env`]
+    /// module. The environment provides calls to them via this C interface.
+    extern "C" {
         // Requires a node running with "Info" log level
         pub fn _log_string(str_ptr: u64, str_len: u64);
     }

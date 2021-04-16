@@ -23,6 +23,7 @@ use crate::shell::storage::{Address, Storage};
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
 const MATCHMAKER_ENTRYPOINT: &str = "_match_intent";
+const FILTER_ENTRYPOINT: &str = "_validate_intent";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 /// This is used to attach the Ledger's host structures to wasm environment,
@@ -427,6 +428,72 @@ impl MatchmakerRunner {
                 intent_data_2_ptr,
                 intent_data_2_len,
             )
+            .map_err(Error::RuntimeError)?;
+        Ok(found_match == 0)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FilterRunner {
+    wasm_store: wasmer::Store,
+}
+
+impl FilterRunner {
+    pub fn new() -> Self {
+        let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let wasm_store =
+            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        Self { wasm_store }
+    }
+
+    pub fn run(
+        &self,
+        code: impl AsRef<[u8]>,
+        intent_data: impl AsRef<[u8]>,
+    ) -> Result<bool> {
+        validate_wasm(code.as_ref())?;
+        let code = prepare_wasm_code(code)?;
+        let filter_module: wasmer::Module =
+            wasmer::Module::new(&self.wasm_store, &code)
+                .map_err(Error::CompileError)?;
+        let initial_memory = memory::prepare_filter_memory(&self.wasm_store)
+            .map_err(Error::MemoryError)?;
+
+        let filter_imports =
+            host_env::prepare_filter_imports(&self.wasm_store, initial_memory);
+        // compile and run the matchmaker wasm code
+        let filter_code =
+            wasmer::Instance::new(&filter_module, &filter_imports)
+                .map_err(Error::InstantiationError)?;
+
+        Self::run_with_input(&filter_code, intent_data)
+    }
+
+    fn run_with_input(
+        code: &Instance,
+        intent_data: impl AsRef<[u8]>,
+    ) -> Result<bool> {
+        let memory = code
+            .exports
+            .get_memory("memory")
+            .map_err(Error::MissingModuleMemory)?;
+        let memory::FilterCallInput {
+            intent_data_ptr,
+            intent_data_len,
+        }: memory::FilterCallInput =
+            memory::write_filter_inputs(&memory, intent_data)
+                .map_err(Error::MemoryError)?;
+        let apply_filter = code
+            .exports
+            .get_function(FILTER_ENTRYPOINT)
+            .map_err(Error::MissingModuleEntrypoint)?
+            .native::<(u64, u64), u64>()
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: FILTER_ENTRYPOINT,
+                error,
+            })?;
+        let found_match = apply_filter
+            .call(intent_data_ptr, intent_data_len)
             .map_err(Error::RuntimeError)?;
         Ok(found_match == 0)
     }

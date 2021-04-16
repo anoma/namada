@@ -12,6 +12,7 @@ dependencies = [
  "blake2b-rs",
  "borsh",
  "byteorder",
+ "bytesize",
  "cargo-watch",
  "clap 3.0.0-beta.2",
  "clippy",
@@ -642,6 +643,12 @@ name = "bytes"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
+
+[[package]]
+name = "bytesize"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81a18687293a1546b67c246452202bbbf143d239cb43494cc163da14979082da"
 
 [[package]]
 name = "cache-padded"
