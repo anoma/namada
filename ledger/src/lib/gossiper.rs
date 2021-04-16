@@ -52,7 +52,7 @@ impl Gossiper {
     }
 }
 
-impl Default for gossiper::Gossiper {
+impl Default for Gossiper {
     fn default() -> Self {
         Self::new()
     }
