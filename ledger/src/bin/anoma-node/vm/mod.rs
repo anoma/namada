@@ -17,8 +17,8 @@ use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
-use crate::shell::gas::BlockGasMeter;
-use crate::shell::storage::{Address, Storage};
+use crate::shell::storage::Storage;
+use crate::shell::{gas::BlockGasMeter, storage::Address};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -251,12 +251,12 @@ impl VpRunner {
         &self,
         vp_code: T,
         tx_data: &Vec<u8>,
-        addr: Address,
+        addr: &Address,
         storage: &Storage,
         write_log: &WriteLog,
         gas_meter: Arc<Mutex<BlockGasMeter>>,
         keys_changed: &Vec<String>,
-        verifiers: &HashSet<String>,
+        verifiers: &HashSet<Address>,
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
 
@@ -282,11 +282,12 @@ impl VpRunner {
             .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let input: VpInput =
-            (addr.to_string(), tx_data, keys_changed, verifiers);
+        // TODO share type in vm_env
+        let verifiers = HashSet::new();
+        let input: VpInput = (addr.encode(), tx_data, keys_changed, &verifiers);
         let vp_imports = host_env::prepare_vp_imports(
             &self.wasm_store,
-            addr,
+            addr.clone(),
             storage,
             write_log,
             iterators,
@@ -479,7 +480,7 @@ mod tests {
     use wasmer_vm;
 
     use super::*;
-    use crate::shell::storage::Address;
+    use crate::shell::storage::RawAddress;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
@@ -528,11 +529,13 @@ mod tests {
             .expect("Unable to create a temporary DB directory");
         let mut storage = Storage::new(db_path.path());
         let mut write_log = WriteLog::new();
+        let mut verifiers: HashSet<Address> = HashSet::new();
         let mut gas_meter = BlockGasMeter::default();
         let error = runner
             .run(
                 &mut storage,
                 &mut write_log,
+                &mut verifiers,
                 &mut gas_meter,
                 tx_code,
                 &tx_data,
@@ -590,22 +593,25 @@ mod tests {
 
         let runner = VpRunner::new();
         let tx_data = vec![];
-        let addr: Address = FromStr::from_str("test").unwrap();
+        let raw_addr: RawAddress = FromStr::from_str("test").unwrap();
+        let addr: Address = raw_addr.hash();
         let db_path = TempDir::new("anoma_test")
             .expect("Unable to create a temporary DB directory");
         let storage = Storage::new(db_path.path());
         let write_log = WriteLog::new();
         let gas_meter = Arc::new(Mutex::new(BlockGasMeter::default()));
         let keys_changed = vec![];
+        let verifiers: HashSet<Address> = HashSet::new();
         let error = runner
             .run(
                 vp_code,
                 &tx_data,
-                addr,
+                &addr,
                 &storage,
                 &write_log,
                 gas_meter,
                 &keys_changed,
+                &verifiers,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \

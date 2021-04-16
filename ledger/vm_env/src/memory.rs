@@ -10,8 +10,8 @@
 //!    host-to-guest.
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use std::marker::PhantomData;
 use std::collections::HashSet;
+use std::marker::PhantomData;
 
 /// The data type that can be attached to the operation that initiated the
 /// wasm call (tx, VP, matchmaker, filter)

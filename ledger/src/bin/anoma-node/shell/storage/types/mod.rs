@@ -2,7 +2,7 @@
 
 mod address;
 
-pub use address::Address;
+pub use address::{Address, RawAddress};
 
 use std::fmt::Display;
 use std::{
@@ -112,7 +112,7 @@ impl Key {
         v.join("/")
     }
 
-    /// Returns addresses from the segments
+    /// Returns the addresses from the key segments
     pub fn find_addresses(&self) -> Vec<Address> {
         let mut addresses = Vec::new();
         for s in &self.segments {
@@ -156,9 +156,18 @@ pub enum DbKeySeg {
 impl KeySeg for DbKeySeg {
     fn parse(mut string: String) -> Result<Self> {
         match string.chars().nth(0) {
+            // TODO reserve non-alphanumerical prefix characters for internal
+            // usage raw addresses are prefixed with `'@'`
             Some(c) if c == '@' => {
                 let _ = string.remove(0);
                 FromStr::from_str(&string)
+                    .map_err(Error::ParseAddress)
+                    .map(|raw: RawAddress| DbKeySeg::AddressSeg(raw.hash()))
+            }
+            // address hashes are prefixed with `'#'`
+            Some(c) if c == '#' => {
+                let _ = string.remove(0);
+                Address::decode(&string)
                     .map_err(Error::ParseAddress)
                     .map(DbKeySeg::AddressSeg)
             }
@@ -168,7 +177,9 @@ impl KeySeg for DbKeySeg {
 
     fn to_string(&self) -> String {
         match self {
-            DbKeySeg::AddressSeg(addr) => format!("{}", addr),
+            DbKeySeg::AddressSeg(addr) => {
+                format!("#{}", addr.encode())
+            }
             DbKeySeg::StringSeg(seg) => seg.to_owned(),
         }
     }
@@ -296,7 +307,7 @@ impl core::fmt::Debug for BlockHash {
     }
 }
 
-impl KeySeg for Address {
+impl KeySeg for RawAddress {
     fn to_string(&self) -> String {
         format!("@{}", self)
     }
@@ -312,7 +323,7 @@ impl KeySeg for Address {
     }
 
     fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::AddressSeg(self.clone())
+        DbKeySeg::AddressSeg(self.hash())
     }
 }
 

@@ -12,9 +12,10 @@ use anoma::bytes::ByteBuf;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
+use self::types::DbKeySeg;
 pub use self::types::{
     Address, BlockHash, BlockHeight, Hash256, Key, KeySeg, MerkleTree,
-    PrefixIterator, Value, CHAIN_ID_LENGTH,
+    PrefixIterator, RawAddress, Value, CHAIN_ID_LENGTH,
 };
 use super::MerkleRoot;
 
@@ -224,8 +225,10 @@ impl Storage {
 
     /// Get a validity predicate for the given account address
     pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
-        let key = Key::from(addr.to_db_key())
-            .push(&"vp".to_owned())
+        let addr = DbKeySeg::AddressSeg(addr.clone());
+        let key = Key::from(addr)
+            // TODO reserve "?" for validity predicates?
+            .push(&"?".to_owned())
             .map_err(Error::KeyError)?;
         match self.read(&key)?.0 {
             Some(vp) => Ok(vp.clone()),

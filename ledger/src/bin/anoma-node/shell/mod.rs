@@ -270,7 +270,7 @@ impl Shell {
         drop(cloned_gas_meter);
 
         let verifiers = get_verifiers(&self.write_log, &verifiers);
-        let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
+        let addresses = verifiers.keys().collect();
         let mut accept = true;
         // TODO run in parallel for all accounts
         // Run a VP for every account with modified storage sub-space
@@ -287,7 +287,7 @@ impl Shell {
                 .run(
                     vp,
                     &tx_data,
-                    addr.clone(),
+                    &addr,
                     &self.storage,
                     &cloned_write_log,
                     self.gas_meter.clone(),
@@ -355,7 +355,7 @@ impl Shell {
         drop(gas_meter);
 
         let verifiers = get_verifiers(&self.write_log, &verifiers);
-        let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
+        let addresses = verifiers.keys().collect();
         let mut accept = true;
         // TODO run in parallel for all accounts
         // Run a VP for every account with modified storage sub-space
@@ -372,7 +372,7 @@ impl Shell {
                 .run(
                     vp,
                     &tx_data,
-                    addr.clone(),
+                    &addr,
                     &self.storage,
                     &self.write_log,
                     self.gas_meter.clone(),

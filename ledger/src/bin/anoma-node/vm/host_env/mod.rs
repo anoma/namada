@@ -17,8 +17,8 @@ use self::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
-use crate::shell::gas::BlockGasMeter;
-use crate::shell::storage::{Address, Key, KeySeg, Storage};
+use crate::shell::storage::{Key, KeySeg, RawAddress, Storage};
+use crate::shell::{gas::BlockGasMeter, storage::Address};
 
 #[derive(Clone)]
 struct TxEnv<'a> {
@@ -921,11 +921,12 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
 
     log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
-    let addr = Address::parse(addr).expect("Cannot parse the address string");
+    let addr =
+        RawAddress::parse(addr).expect("Cannot parse the address string");
 
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
-    verifiers.insert(addr);
+    verifiers.insert(addr.hash());
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
