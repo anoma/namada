@@ -2,7 +2,7 @@
 
 ## Tendermint ABCI
 
-We'll be using Tendermint state-machine replication engine via ABCI. It provides many useful things, such as a BFT consensus protocol, P2P layer with peer exchange, block sync and mempool layer.
+We are using the Tendermint state-machine replication engine via ABCI. It provides many useful things, such as a BFT consensus protocol, P2P layer with peer exchange, block sync and mempool layer.
 
 Useful resources:
 - Tendermint ABCI <https://docs.tendermint.com/master/spec/abci/>
@@ -12,16 +12,18 @@ Useful resources:
 Rust ABCI implementations:
 - <https://github.com/informalsystems/tendermint-rs>
   - the future update planned for this crate is to add async support
-  - longer term, its goal is to be able to [seamlessly switch from Go Tendermint to Rust](https://github.com/informalsystems/tendermint-rs/issues/29#issuecomment-672444401)
+  - longer term the goal is to be able to [seamlessly switch from Go Tendermint
+    to Rust Tendermint](https://github.com/informalsystems/tendermint-rs/issues/29#issuecomment-672444401)
   - includes RPC and light-client libraries
 - <https://github.com/devashishdxt/abci-rs>
   - async support
 - <https://github.com/tendermint/rust-abci>
-  - deprecated in favour of informalsystems/tendermint-rs
+  - deprecated in favor of informalsystems/tendermint-rs
 
 ### ABCI Integration
 
-The ledger wraps the Tendermint node inside Anoma node. The Tendermint node communicates with the Anoma shell via 4 layers as illustrated below.
+The ledger wraps the Tendermint node inside the Anoma node. The Tendermint node
+communicates with the Anoma shell via four layers as illustrated below.
 
 ```mermaid
 flowchart LR
@@ -49,7 +51,10 @@ The *consensus* connection allows the shell to:
 - end a block
 - commit a block
 
-The *mempool* connection asks the shell to validate transactions before they get stored in the mempool and broadcasted to peers. The mempool will signify that the transaction is either new, when it's not been validated before, or to be re-checked when it's been validated at some previous level.
+The *mempool* connection asks the shell to validate transactions before they get
+stored in the mempool and broadcasted to peers. The mempool will signify that
+the transaction is either new, when it has not been validated before, or to be
+re-checked when it has been validated at some previous level.
 
 The *query* connection is used for:
 - the Tendermint node asks the last known state from the shell to determine if it needs to replay any blocks

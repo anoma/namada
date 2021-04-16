@@ -1,3 +1,3 @@
 # Design
 
-This section should cover the exploration of the possible design directions of the involved components.
+This section covers the exploration of the possible design directions of the involved components.
