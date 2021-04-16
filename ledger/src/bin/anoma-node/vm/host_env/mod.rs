@@ -1,6 +1,7 @@
 pub mod prefix_iter;
 pub mod write_log;
 
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
@@ -17,7 +18,7 @@ use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::BlockGasMeter;
-use crate::shell::storage::{Address, Key, Storage};
+use crate::shell::storage::{Address, Key, KeySeg, Storage};
 
 #[derive(Clone)]
 struct TxEnv<'a> {
@@ -26,6 +27,8 @@ struct TxEnv<'a> {
     write_log: MutEnvHostWrapper<WriteLog>,
     // not thread-safe, assuming single-threaded Tx runner
     iterators: MutEnvHostWrapper<PrefixIterators<'a>>,
+    // not thread-safe, assuming single-threaded Tx runner
+    verifiers: MutEnvHostWrapper<HashSet<Address>>,
     // not thread-safe, assuming single-threaded Tx runner
     gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     memory: AnomaMemory,
@@ -89,6 +92,7 @@ pub fn prepare_tx_imports(
     storage: EnvHostWrapper<Storage>,
     write_log: MutEnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
+    verifiers: MutEnvHostWrapper<HashSet<Address>>,
     gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
@@ -96,6 +100,7 @@ pub fn prepare_tx_imports(
         storage,
         write_log,
         iterators,
+        verifiers,
         gas_meter,
         memory: AnomaMemory::default(),
     };
@@ -105,12 +110,14 @@ pub fn prepare_tx_imports(
             "memory" => initial_memory,
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_charge_gas),
             "_read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read),
+            "_has_key" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_has_key),
             "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
             "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
             "_read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
             "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_prefix),
             "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
             "_iter_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next_varlen),
+            "_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_insert_verifier),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
@@ -144,6 +151,8 @@ pub fn prepare_vp_imports(
             "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
             "_read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
             "_read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
+            "_has_key_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_pre),
+            "_has_key_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_post),
             "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_prefix),
             "_iter_pre_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next),
             "_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next),
@@ -183,9 +192,13 @@ pub fn prepare_matchmaker_imports(
 
 /// Called from tx wasm to request to use the given gas amount
 fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
+    tx_add_gas(env, used_gas as _)
+}
+
+fn tx_add_gas(env: &TxEnv, used_gas: u64) {
     let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     // if we run out of gas, we need to stop the execution
-    match gas_meter.add(used_gas as _) {
+    match gas_meter.add(used_gas) {
         Err(err) => {
             log::warn!(
                 "Stopping transaction execution because of gas error: {}",
@@ -199,12 +212,16 @@ fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
 
 /// Called from VP wasm to request to use the given gas amount
 fn vp_charge_gas(env: &VpEnv, used_gas: i32) {
+    vp_add_gas(env, used_gas as _)
+}
+
+fn vp_add_gas(env: &VpEnv, used_gas: u64) {
     let mut gas_meter = env
         .gas_meter
         .lock()
         .expect("Cannot get lock on the gas meter");
     // if we run out of gas, we need to stop the execution
-    match gas_meter.add(used_gas as _) {
+    match gas_meter.add(used_gas) {
         Err(err) => {
             log::warn!(
                 "Stopping validity predicate execution because of gas error: \
@@ -255,10 +272,10 @@ fn tx_storage_read(
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             match value {
                 Some(value) => {
+                    tx_add_gas(env, gas);
                     env.memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
@@ -269,6 +286,37 @@ fn tx_storage_read(
                     return 0;
                 }
             }
+        }
+    }
+}
+
+/// Storage `has_key` function exposed to the wasm VM Tx environment. It will
+/// try to check the write log first and if no entry found then the storage.
+fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("tx_storage_has_key {}, key {}", key, key_ptr,);
+
+    let key = Key::parse(key).expect("Cannot parse the key string");
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&key) {
+        Some(&write_log::StorageModification::Write { .. }) => 1,
+        Some(&write_log::StorageModification::Delete) => {
+            // the given key has been deleted
+            0
+        }
+        None => {
+            // when not found in write log, try to check the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (present, gas) =
+                storage.has_key(&key).expect("storage has_key failed");
+            tx_add_gas(env, gas);
+            if present { 1 } else { 0 }
         }
     }
 }
@@ -316,10 +364,10 @@ fn tx_storage_read_varlen(
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             match value {
                 Some(value) => {
+                    tx_add_gas(env, gas);
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
                     env.memory
@@ -356,7 +404,8 @@ fn tx_storage_iter_prefix(
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
-    let iter = storage.iter_prefix(&prefix);
+    let (iter, gas) = storage.iter_prefix(&prefix);
+    tx_add_gas(env, gas);
     iterators.insert(iter).id()
 }
 
@@ -374,7 +423,7 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
+    while let Some((key, val, gas)) = iterators.next(iter_id) {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -395,6 +444,7 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
                 continue;
             }
             None => {
+                tx_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -430,7 +480,7 @@ fn tx_storage_iter_next_varlen(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
+    while let Some((key, val, gas)) = iterators.next(iter_id) {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -453,6 +503,7 @@ fn tx_storage_iter_next_varlen(
                 continue;
             }
             None => {
+                tx_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -529,7 +580,7 @@ fn vp_storage_read_pre(
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let (value, _gas) = storage.read(&key).expect("storage read failed");
+    let (value, gas) = storage.read(&key).expect("storage read failed");
     log::debug!(
         "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
@@ -538,6 +589,7 @@ fn vp_storage_read_pre(
     );
     match value {
         Some(value) => {
+            vp_add_gas(env, gas);
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
@@ -588,10 +640,10 @@ fn vp_storage_read_post(
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             match value {
                 Some(value) => {
+                    vp_add_gas(env, gas);
                     env.memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
@@ -625,7 +677,7 @@ fn vp_storage_read_pre_varlen(
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let (value, _gas) = storage.read(&key).expect("storage read failed");
+    let (value, gas) = storage.read(&key).expect("storage read failed");
     log::debug!(
         "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
@@ -634,6 +686,7 @@ fn vp_storage_read_pre_varlen(
     );
     match value {
         Some(value) => {
+            vp_add_gas(env, gas);
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
             env.memory
@@ -691,10 +744,10 @@ fn vp_storage_read_post_varlen(
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
-            let (value, _gas) =
-                storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             match value {
                 Some(value) => {
+                    vp_add_gas(env, gas);
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
                     env.memory
@@ -707,6 +760,56 @@ fn vp_storage_read_post_varlen(
                     -1
                 }
             }
+        }
+    }
+}
+
+/// Storage `has_key` in prior state (before tx execution) function exposed to
+/// the wasm VM VP environment. It will try to read from the storage.
+fn vp_storage_has_key_pre(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("vp_storage_has_key_pre {}, key {}", key, key_ptr,);
+
+    let key = Key::parse(key).expect("Cannot parse the key string");
+
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
+    vp_add_gas(env, gas);
+    if present { 1 } else { 0 }
+}
+
+/// Storage `has_key` in posterior state (after tx execution) function exposed
+/// to the wasm VM VP environment. It will
+/// try to check the write log first and if no entry found then the storage.
+fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
+    let key = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("vp_storage_has_key_post {}, key {}", key, key_ptr,);
+
+    let key = Key::parse(key).expect("Cannot parse the key string");
+
+    // try to read from the write log first
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    match write_log.read(&key) {
+        Some(&write_log::StorageModification::Write { .. }) => 1,
+        Some(&write_log::StorageModification::Delete) => {
+            // the given key has been deleted
+            0
+        }
+        None => {
+            // when not found in write log, try to check the storage
+            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let (present, gas) =
+                storage.has_key(&key).expect("storage has_key failed");
+            vp_add_gas(env, gas);
+            if present { 1 } else { 0 }
         }
     }
 }
@@ -731,7 +834,8 @@ fn vp_storage_iter_prefix(
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
-    let iter = storage.iter_prefix(&prefix);
+    let (iter, gas) = storage.iter_prefix(&prefix);
+    vp_add_gas(env, gas);
     iterators.insert(iter).id()
 }
 
@@ -747,7 +851,8 @@ fn vp_storage_iter_pre_next(env: &VpEnv, iter_id: u64, result_ptr: u64) -> u64 {
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    if let Some((key, val)) = iterators.next(iter_id) {
+    if let Some((key, val, gas)) = iterators.next(iter_id) {
+        vp_add_gas(env, gas);
         let key_val = KeyVal { key, val }
             .try_to_vec()
             .expect("cannot serialize the key value pair");
@@ -778,7 +883,7 @@ fn vp_storage_iter_post_next(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
+    while let Some((key, val, gas)) = iterators.next(iter_id) {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -799,6 +904,7 @@ fn vp_storage_iter_post_next(
                 continue;
             }
             None => {
+                vp_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -832,7 +938,8 @@ fn vp_storage_iter_pre_next_varlen(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    if let Some((key, val)) = iterators.next(iter_id) {
+    if let Some((key, val, gas)) = iterators.next(iter_id) {
+        vp_add_gas(env, gas);
         let key_val = KeyVal { key, val }
             .try_to_vec()
             .expect("cannot serialize the key value pair");
@@ -867,7 +974,7 @@ fn vp_storage_iter_post_next_varlen(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val)) = iterators.next(iter_id) {
+    while let Some((key, val, gas)) = iterators.next(iter_id) {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
@@ -890,6 +997,7 @@ fn vp_storage_iter_post_next_varlen(
                 continue;
             }
             None => {
+                vp_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -904,6 +1012,23 @@ fn vp_storage_iter_post_next_varlen(
     }
     // key not found
     -1
+}
+
+/// Verifier insertion function exposed to the wasm VM Tx environment.
+fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
+    let addr = env
+        .memory
+        .read_string(addr_ptr, addr_len as _)
+        .expect("Cannot read the key from memory");
+
+    log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
+
+    let addr = Address::parse(addr).expect("Cannot parse the address string");
+
+    let verifiers: &mut HashSet<Address> =
+        unsafe { &mut *(env.verifiers.get()) };
+    verifiers.insert(addr);
+    tx_add_gas(env, addr_len);
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be

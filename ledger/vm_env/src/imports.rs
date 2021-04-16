@@ -1,10 +1,10 @@
 /// Transaction environment imports
 pub mod tx {
+    use crate::memory::{KeyVal, KeyValIterator};
     pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
-    pub use std::mem::size_of;
-    use crate::memory::{KeyVal, KeyValIterator};
     use std::marker::PhantomData;
+    pub use std::mem::size_of;
 
     /// This macro expects a function with signature:
     ///
@@ -72,6 +72,13 @@ pub mod tx {
         }
     }
 
+    /// Check if the given key is present in storage.
+    pub fn has_key(key: impl AsRef<str>) -> bool {
+        let key = key.as_ref();
+        let found = unsafe { _has_key(key.as_ptr() as _, key.len() as _) };
+        found == 1
+    }
+
     /// Write a value at the given key to storage.
     pub fn write<K: AsRef<str>, T: BorshSerialize>(key: K, val: T) {
         let key = key.as_ref();
@@ -94,11 +101,12 @@ pub mod tx {
     }
 
     /// Get an iterator with the given prefix
-    pub fn iter_prefix<K: AsRef<str>, T: BorshDeserialize>(prefix: K) -> KeyValIterator<T> {
+    pub fn iter_prefix<K: AsRef<str>, T: BorshDeserialize>(
+        prefix: K,
+    ) -> KeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id = unsafe {
-            _iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-        };
+        let iter_id =
+            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
         KeyValIterator(iter_id, PhantomData)
     }
 
@@ -107,24 +115,29 @@ pub mod tx {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe {
-                _iter_next_varlen(self.0, result.as_ptr() as _)
-            };
+            let size =
+                unsafe { _iter_next_varlen(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
-                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                let slice = unsafe {
+                    slice::from_raw_parts(result.as_ptr(), size as _)
+                };
                 match KeyVal::try_from_slice(slice) {
-                    Ok(key_val) => {
-                        match T::try_from_slice(&key_val.val) {
-                            Ok(v) => Some((key_val.key, v)),
-                            Err(_) => None
-                        }
-                    }
-                    Err(_) => None
+                    Ok(key_val) => match T::try_from_slice(&key_val.val) {
+                        Ok(v) => Some((key_val.key, v)),
+                        Err(_) => None,
+                    },
+                    Err(_) => None,
                 }
             }
         }
+    }
+
+    /// Insert a verifier
+    pub fn insert_verifier<A: AsRef<str>>(addr: A) {
+        let addr = addr.as_ref();
+        unsafe { _insert_verifier(addr.as_ptr() as _, addr.len() as _) }
     }
 
     /// Log a string. The message will be printed at the [`log::Level::Info`].
@@ -146,6 +159,9 @@ pub mod tx {
         // not present.
         fn _read_varlen(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
+        // Returns 1 if the key is present, 0 otherwise.
+        fn _has_key(key_ptr: u64, key_len: u64) -> u64;
+
         // Write key/value, returns 1 on success, 0 otherwise.
         fn _write(key_ptr: u64, key_len: u64, val_ptr: u64, val_len: u64);
 
@@ -165,6 +181,9 @@ pub mod tx {
         // present.
         fn _iter_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
 
+        // Insert a verifier
+        fn _insert_verifier(addr_ptr: u64, addr_len: u64);
+
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);
     }
@@ -172,11 +191,11 @@ pub mod tx {
 
 /// Validity predicate environment imports
 pub mod vp {
+    use crate::memory::{KeyVal, PostKeyValIterator, PreKeyValIterator};
     pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
-    pub use std::mem::size_of;
-    use crate::memory::{KeyVal, PostKeyValIterator, PreKeyValIterator};
     use std::marker::PhantomData;
+    pub use std::mem::size_of;
 
     /// This macro expects a function with signature:
     ///
@@ -199,6 +218,8 @@ pub mod vp {
                 tx_data_len: u64,
                 keys_changed_ptr: u64,
                 keys_changed_len: u64,
+                verifiers_ptr: u64,
+                verifiers_len: u64,
             ) -> u64 {
                 // TODO more plumbing here
                 let slice = unsafe {
@@ -222,8 +243,16 @@ pub mod vp {
                 };
                 let keys_changed: Vec<String> = Vec::try_from_slice(slice).unwrap();
 
+                let slice = unsafe {
+                    slice::from_raw_parts(
+                        verifiers_ptr as *const u8,
+                        verifiers_len as _,
+                    )
+                };
+                let verifiers: HashSet<String> = HashSet::try_from_slice(slice).unwrap();
+
                 // run validation with the concrete type(s)
-                if $fn(tx_data, addr, keys_changed) {
+                if $fn(tx_data, addr, keys_changed, verifiers) {
                     1
                 } else {
                     0
@@ -314,12 +343,29 @@ pub mod vp {
         }
     }
 
+    /// Check if the given key was present in storage before transaction
+    /// execution.
+    pub fn has_key_pre(key: impl AsRef<str>) -> bool {
+        let key = key.as_ref();
+        let found = unsafe { _has_key_pre(key.as_ptr() as _, key.len() as _) };
+        found == 1
+    }
+
+    /// Check if the given key is present in storage after transaction
+    /// execution.
+    pub fn has_key_post(key: impl AsRef<str>) -> bool {
+        let key = key.as_ref();
+        let found = unsafe { _has_key_post(key.as_ptr() as _, key.len() as _) };
+        found == 1
+    }
+
     /// Get an iterator with the given prefix before transaction execution
-    pub fn iter_prefix_pre<K: AsRef<str>, T: BorshDeserialize>(prefix: K) -> PreKeyValIterator<T> {
+    pub fn iter_prefix_pre<K: AsRef<str>, T: BorshDeserialize>(
+        prefix: K,
+    ) -> PreKeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id = unsafe {
-            _iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-        };
+        let iter_id =
+            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
         PreKeyValIterator(iter_id, PhantomData)
     }
 
@@ -328,32 +374,32 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe {
-                _iter_pre_next_varlen(self.0, result.as_ptr() as _)
-            };
+            let size =
+                unsafe { _iter_pre_next_varlen(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
-                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                let slice = unsafe {
+                    slice::from_raw_parts(result.as_ptr(), size as _)
+                };
                 match KeyVal::try_from_slice(slice) {
-                    Ok(key_val) => {
-                        match T::try_from_slice(&key_val.val) {
-                            Ok(v) => Some((key_val.key, v)),
-                            Err(_) => None
-                        }
-                    }
-                    Err(_) => None
+                    Ok(key_val) => match T::try_from_slice(&key_val.val) {
+                        Ok(v) => Some((key_val.key, v)),
+                        Err(_) => None,
+                    },
+                    Err(_) => None,
                 }
             }
         }
     }
 
     /// Get an iterator with the given prefix after transaction execution
-    pub fn iter_prefix_post<K: AsRef<str>, T: BorshDeserialize>(prefix: K) -> PostKeyValIterator<T> {
+    pub fn iter_prefix_post<K: AsRef<str>, T: BorshDeserialize>(
+        prefix: K,
+    ) -> PostKeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id = unsafe {
-            _iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-        };
+        let iter_id =
+            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
         PostKeyValIterator(iter_id, PhantomData)
     }
 
@@ -362,21 +408,20 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe {
-                _iter_post_next_varlen(self.0, result.as_ptr() as _)
-            };
+            let size =
+                unsafe { _iter_post_next_varlen(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
-                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                let slice = unsafe {
+                    slice::from_raw_parts(result.as_ptr(), size as _)
+                };
                 match KeyVal::try_from_slice(slice) {
-                    Ok(key_val) => {
-                        match T::try_from_slice(&key_val.val) {
-                            Ok(v) => Some((key_val.key, v)),
-                            Err(_) => None
-                        }
-                    }
-                    Err(_) => None
+                    Ok(key_val) => match T::try_from_slice(&key_val.val) {
+                        Ok(v) => Some((key_val.key, v)),
+                        Err(_) => None,
+                    },
+                    Err(_) => None,
                 }
             }
         }
@@ -416,6 +461,12 @@ pub mod vp {
             result_ptr: u64,
         ) -> i64;
 
+        // Returns 1 if the key is present in prior state, 0 otherwise.
+        fn _has_key_pre(key_ptr: u64, key_len: u64) -> u64;
+
+        // Returns 1 if the key is present in posterior state, 0 otherwise.
+        fn _has_key_post(key_ptr: u64, key_len: u64) -> u64;
+
         // Get an ID of a data iterator with key prefix
         fn _iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
@@ -423,9 +474,9 @@ pub mod vp {
         // 0 otherwise.
         fn _iter_pre_next(iter_id: u64, result_ptr: u64) -> u64;
 
-        // Read variable-length prior state when we don't know the size up-front,
-        // returns the size of the value (can be 0), or -1 if the key is not
-        // present.
+        // Read variable-length prior state when we don't know the size
+        // up-front, returns the size of the value (can be 0), or -1 if
+        // the key is not present.
         fn _iter_pre_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
 
         // Read data from the specified iterator, returns 1 if it exists,

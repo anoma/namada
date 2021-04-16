@@ -20,6 +20,7 @@
     - [Upgrade system](./explore/design/upgrade-system.md)
     - [Crypto primitives](./explore/design/crypto-primitives.md)
     - [Storage](./explore/design/storage.md)
+      - [Data schema](./explore/design/data-schema.md)
     - [Actors](./explore/design/actors.md)
   - [Prototypes](./explore/prototypes/README.md)
     - [Base ledger](./explore/prototypes/base-ledger.md)

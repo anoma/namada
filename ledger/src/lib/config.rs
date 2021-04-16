@@ -1,158 +1,204 @@
-//! Node and client configuration settings
-
-use std::fs;
+//! Node and client configuration
+use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use serde::Deserialize;
+use libp2p::multiaddr::Multiaddr;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::bookkeeper::Bookkeeper;
+use crate::gossiper::Gossiper;
 use crate::types::Topic;
 
-const BOOKKEEPER_KEY_FILE: &str = "priv_bookkepeer_key.json";
-
-#[derive(Debug, Deserialize)]
-pub struct Node {
-    home: PathBuf,
-    tendermint_path: PathBuf,
-    db_path: PathBuf,
-    libp2p_path: PathBuf,
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Error while reading config: {0}")]
+    ReadError(config::ConfigError),
+    #[error("Error while deserializing config: {0}")]
+    DeserializationError(config::ConfigError),
+    #[error("Error while serializing to toml: {0}")]
+    TomlError(toml::ser::Error),
+    #[error("Error while writing config: {0}")]
+    WriteError(std::io::Error),
+    #[error("Error while creating config file: {0}")]
+    FileError(std::io::Error),
+    #[error("A config file already exists in {0}")]
+    AlreadyExistingConfig(PathBuf)
 }
+pub const BASEDIR: &str = ".anoma";
+pub const FILENAME: &str = "config.toml";
+pub const TENDERMINT_DIR: &str = "tendermint";
+pub const DB_DIR: &str = "db";
 
-#[derive(Debug, Deserialize)]
-pub struct Tendermint {
-    pub host: String,
-    pub port: String,
+pub type Result<T> = std::result::Result<T, Error>;
+const VALUE_AFTER_TABLE_ERROR_MSG: &str = r#"
+Error while serializing to toml. It means that some nested structure is followed
+ by simple fields.
+This fails:
+    struct Nested{
+       i:int
+    }
+
+    struct Broken{
+       nested:Nested,
+       simple:int
+    }
+And this is correct
+    struct Nested{
+       i:int
+    }
+
+    struct Correct{
+       simple:int
+       nested:Nested,
+    }
+"#;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Ledger {
+    pub tendermint: PathBuf,
+    pub db: PathBuf,
+    pub address: SocketAddr,
     pub network: String,
 }
-#[derive(Debug, Deserialize)]
-pub struct Gossip {
-    pub host: String,
-    pub port: String,
-    pub rpc: bool,
-    pub peers: Vec<String>,
-    pub topics: Vec<Topic>,
-    pub matchmaker: Option<String>,
-    pub tx_template: Option<String>,
-    pub ledger_host: Option<String>,
-    pub ledger_port: Option<String>,
+
+impl Default for Ledger {
+    fn default() -> Self {
+        Self {
+            // this two value are override when generating a default config in
+            // config::generate(base_dir). There must be a better way ?
+            tendermint: PathBuf::from(BASEDIR).join(TENDERMINT_DIR),
+            db: PathBuf::from(BASEDIR).join(DB_DIR),
+            address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                26658,
+            ),
+            network: String::from("mainnet"),
+        }
+    }
 }
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    pub node: Node,
-    pub tendermint: Tendermint,
-    pub p2p: Gossip,
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Matchmaker {
+    pub matchmaker: PathBuf,
+    pub tx_template: PathBuf,
+    pub ledger_address: SocketAddr,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IntentGossip {
+    pub matchmaker: Option<Matchmaker>,
+}
+
+impl Default for IntentGossip {
+    fn default() -> Self {
+        Self { matchmaker: None }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Gossip {
+    pub address: Multiaddr,
+    pub rpc: bool,
+    pub peers: HashSet<Multiaddr>,
+    pub topics: HashSet<Topic>,
+    pub gossiper: Gossiper,
+    pub intent_gossip: Option<IntentGossip>,
+}
+
+impl Default for Gossip {
+    fn default() -> Self {
+        Self {
+            // TODO there must be a better option here
+            address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
+            rpc: false,
+            peers: HashSet::new(),
+            topics: [Topic::Intent].iter().cloned().collect(),
+            gossiper: Gossiper::new(),
+            intent_gossip: Some(IntentGossip::default()),
+        }
+    }
 }
 
 impl Gossip {
-    // TODO here, and in set_address, we assumes a ip4+tcp address but it would
-    // be nice to allow all accepted address by libp2p
-    pub fn get_address(&self) -> String {
-        format!("/ip4/{}/tcp/{}", self.host, self.port)
-    }
-
-    pub fn get_ledger_address(&self) -> Option<String> {
-        if self.ledger_host.is_some() && self.ledger_port.is_some() {
-            Some(format!(
-                "tcp://{}:{}",
-                self.ledger_host.clone().unwrap(),
-                self.ledger_port.clone().unwrap()
-            ))
+    pub fn enable_dkg(&mut self, enable: bool) {
+        if enable {
+            self.topics.insert(Topic::Dkg);
         } else {
-            None
+            self.topics.remove(&Topic::Dkg);
         }
     }
 
-    pub fn set_dkg_topic(&mut self, enable: bool) {
-        if enable {
-            self.set_topic(Topic::Dkg);
+    pub fn enable_intent(&mut self, intent_gossip_cfg: Option<IntentGossip>) {
+        self.intent_gossip = intent_gossip_cfg;
+        if self.intent_gossip.is_some() {
+            self.topics.insert(Topic::Intent);
+        } else {
+            self.topics.remove(&Topic::Intent);
         }
     }
+}
 
-    pub fn set_orderbook_topic(&mut self, enable: bool) {
-        if enable {
-            self.set_topic(Topic::Orderbook);
-        }
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Config {
+    pub ledger: Option<Ledger>,
+    pub gossip: Option<Gossip>,
+}
 
-    fn set_topic(&mut self, topic: Topic) {
-        self.topics.push(topic);
-    }
-
-    pub fn set_address(&mut self, address: Option<(String, String)>) {
-        if let Some(addr) = address {
-            self.host = addr.0;
-            self.port = addr.1;
-        }
-    }
-
-    pub fn set_ledger_address(&mut self, address: Option<(String, String)>) {
-        if let Some((host, port)) = address {
-            self.ledger_host = Some(host);
-            self.ledger_port = Some(port);
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            ledger: Some(Ledger::default()),
+            // TODO Should it be None by default
+            gossip: Some(Gossip::default()),
         }
     }
 }
 
 impl Config {
-    pub fn new(home: String) -> Result<Self, config::ConfigError> {
+    // TODO try to check from any "config.*" file instead of only .yaml
+    pub fn read(base_dir_path: &str) -> Result<Self> {
+        let file_path = PathBuf::from(base_dir_path).join(FILENAME);
         let mut config = config::Config::new();
-
-        config.set_default("node.home", home.to_string())?;
-        config.set_default("node.db_path", "db")?;
-        config.set_default("node.libp2p_path", "libp2p")?;
-        config.set_default("node.tendermint_path", "tendermint")?;
-
-        config.set_default("tendermint.host", "127.0.0.1")?;
-        config.set_default("tendermint.port", 26658)?;
-        config.set_default("tendermint.network", "mainnet")?;
-
-        config.set_default("p2p.host", "127.0.0.1")?;
-        config.set_default("p2p.port", 20201)?;
-        config.set_default("p2p.peers", Vec::<String>::new())?;
-        config.set_default("p2p.topics", vec![Topic::Orderbook.to_string()])?;
-        config.set_default("p2p.rpc", true)?;
-        config.set_default::<Option<String>>("p2p.matchmaker", None)?;
-        config.set_default::<Option<String>>("p2p.tx_template", None)?;
-        config.set_default::<Option<String>>("p2p.ledger_host", None)?;
-        config.set_default::<Option<String>>("p2p.ledger_port", None)?;
-
-        config.merge(
-            config::File::with_name(&format!("{}/{}", home, "settings.toml"))
-                .required(false),
-        )?;
-
-        config.try_into()
+        config
+            .merge(config::File::with_name(
+                file_path.to_str().expect("uncorrect file"),
+            ))
+            .map_err(Error::ReadError)?;
+        config.try_into().map_err(Error::DeserializationError)
     }
 
-    pub fn tendermint_home_dir(&self) -> PathBuf {
-        self.node.home.join(&self.node.tendermint_path)
+    pub fn generate(base_dir_path: &str, replace:bool) -> Result<Self> {
+        let base_dir = PathBuf::from(base_dir_path);
+        let mut config = Config::default();
+        let mut ledger_cfg = config
+            .ledger
+            .as_mut()
+            .expect("safe because default has ledger");
+        ledger_cfg.db = base_dir.join(DB_DIR);
+        ledger_cfg.tendermint = base_dir.join(TENDERMINT_DIR);
+        config.write(base_dir, replace)?;
+        Ok(config)
     }
 
-    pub fn gossip_home_dir(&self) -> PathBuf {
-        self.node.home.join(&self.node.libp2p_path)
-    }
-
-    pub fn db_home_dir(&self) -> PathBuf {
-        self.node.home.join(&self.node.db_path)
-    }
-
-    pub fn get_bookkeeper(&self) -> Result<Bookkeeper, std::io::Error> {
-        if self.gossip_home_dir().join(BOOKKEEPER_KEY_FILE).exists() {
-            let conf_file = self.gossip_home_dir().join(BOOKKEEPER_KEY_FILE);
-            let json_string = fs::read_to_string(conf_file.as_path())?;
-            let bookkeeper = serde_json::from_str::<Bookkeeper>(&json_string)?;
-            Ok(bookkeeper)
+    // TODO add format in config instead and serialize it to that format
+    fn write(&self, base_dir: PathBuf, replace:bool) -> Result<()> {
+        create_dir_all(&base_dir).map_err(Error::FileError)?;
+        let file_path = base_dir.join(FILENAME);
+        if file_path.exists() && !replace {
+            Err(Error::AlreadyExistingConfig(file_path))
         } else {
-            let path = self.gossip_home_dir();
-            create_dir_all(&path).unwrap();
-            let path = path.join(BOOKKEEPER_KEY_FILE);
-            let account: Bookkeeper = Bookkeeper::new();
-            let mut file = File::create(path)?;
-            let json = serde_json::to_string(&account)?;
-            file.write_all(json.as_bytes()).map(|_| ()).unwrap();
-            Ok(account)
+            let mut file = File::create(file_path).map_err(Error::FileError)?;
+            let toml = toml::ser::to_string(&self).map_err(|err| {
+                if let toml::ser::Error::ValueAfterTable = err {
+                    log::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
+                }
+                Error::TomlError(err)
+            })?;
+            file.write_all(toml.as_bytes()).map_err(Error::WriteError)
         }
     }
 }

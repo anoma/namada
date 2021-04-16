@@ -58,7 +58,9 @@ The considered options for a DB backend are given in [Libraries & Tools / Databa
 
 ### RocksDB
 
-In terms of RocksDB, the mutable part would be the Active memtable. When committed, it would switch to ReadOnly memtable, which is then flushed to disk and compacted.
+A committed block is not immediately persisted on RocksDB. When the block is committed, a set of key-value pairs which compose the block is written to the memtable on RocksDB. For the efficient sequential write, a flush is executed to persist the data on the memtable to the disk as a file when the size of the memtable is getting big (the threshold is one of the tuning parameters).
+
+We can disable write-ahead log(WAL) which protects these data on the memtable from a crash by persisting the write logs to the disk. Disabling WAL helps reduce the write amplification. That's because WAL isn't required for Anoma because other nodes have the block. The blocks which have not been persisted to the disk by flush can be recovered even if an Anoma node crashes.
 
 ## Implementation
 
@@ -92,29 +94,31 @@ The persistent DB implementation (e.g. RocksDB).
 
 ### DB keys
 
-The DB keys are composed of key segments. A key segment can be an `Address` (there can be multiple addresses involved in a key) or any user defined non-empty utf-8 string (maybe limited to only alphanumerical characters).
+The DB keys are composed of key segments. A key segment can be an `Address` which starts with `@` (there can be multiple addresses involved in a key) or any user defined non-empty utf-8 string (maybe limited to only alphanumerical characters).
 
-In the DB storage, the keys would be prefixed by the block height. This would be hidden from the wasm environment, which only operates at the current block height.
+In the DB storage, the keys would be prefixed by the block height and the space type. This would be hidden from the wasm environment, which only operates at the current block height. For example, when the block height is `123` and the key specified by the storage is `@my_address/balance/token`, the actual key for the persistent DB implementation would be `123/subspace/@my_address/balance/token`.
 
 This could roughly be implemented as:
 
 ```
 struct Key {
-    segments: Vec<KeySeg>
+    segments: Vec<DbKeySeg>
 }
 
 impl Key {
     fn parse(string: String) -> Result<Self, Error> {..}
-    fn join(&self, other: KeySeg) -> Self {..}
-    fn into_string(self) -> String;
+    fn push(&self, other: &KeySeg) -> Self {..}
+    fn join(&self, other: &Key) -> Self {..}
+    fn into_string(&self) -> String;
     // find addresses included in the key, used to find which validity-predicates should be triggered by a key space change
-    fn find_addresses(&self) -> Vec<Address>;
+    fn find_addresses(&self) -> Vec<Address> {..}
 }
 
 // Provide a trait so that we can define new pre-defined key segment types inside wasm environment and also ad-hoc key segments defined by wasm users
 trait KeySeg {
     fn parse(string: String) -> Result<Self, Error>;
-    fn into_string(self) -> String;
+    fn to_string(&self) -> String;
+    fn to_db_key(&self) -> DbKeySeg;
 }
 
 enum DbKeySeg {

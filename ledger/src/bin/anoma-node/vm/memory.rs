@@ -85,12 +85,14 @@ pub struct VpCallInput {
     pub tx_data_len: u64,
     pub keys_changed_ptr: u64,
     pub keys_changed_len: u64,
+    pub verifiers_ptr: u64,
+    pub verifiers_len: u64,
 }
 
 /// Write validity predicate inputs into wasm memory
 pub fn write_vp_inputs(
     memory: &wasmer::Memory,
-    (addr, tx_data_bytes, keys_changed): memory::VpInput,
+    (addr, tx_data_bytes, keys_changed, verifiers): memory::VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
     // String utf8 encoding is more space-efficient than Borsh encoding
@@ -106,8 +108,19 @@ pub fn write_vp_inputs(
     let keys_changed_ptr = tx_data_ptr + tx_data_len;
     let keys_changed_len = keys_changed_bytes.len() as _;
 
-    let bytes =
-        [&addr_bytes[..], tx_data_bytes, &keys_changed_bytes[..]].concat();
+    let verifiers_bytes = verifiers.try_to_vec().expect(
+        "TEMPORARY: failed to serialize verifiers for validity predicate",
+    );
+    let verifiers_ptr = keys_changed_ptr + keys_changed_len;
+    let verifiers_len = verifiers_bytes.len() as _;
+
+    let bytes = [
+        &addr_bytes[..],
+        tx_data_bytes,
+        &keys_changed_bytes[..],
+        &verifiers_bytes[..],
+    ]
+    .concat();
     write_memory_bytes(memory, addr_ptr, bytes)?;
 
     Ok(VpCallInput {
@@ -117,6 +130,8 @@ pub fn write_vp_inputs(
         tx_data_len,
         keys_changed_ptr,
         keys_changed_len,
+        verifiers_ptr,
+        verifiers_len,
     })
 }
 

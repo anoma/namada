@@ -2,12 +2,11 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 
 use anoma::bytes::ByteBuf;
-use anoma::config::Config;
 use anoma::protobuf::types::Tx;
 use prost::Message;
 use thiserror::Error;
@@ -20,8 +19,6 @@ use crate::vm::{self, TxRunner, VpRunner};
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
     #[error("Error removing the DB data: {0}")]
     RemoveDB(std::io::Error),
     #[error("Storage error: {0}")]
@@ -42,23 +39,18 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: Config) -> Result<()> {
+pub fn run(config: anoma::config::Ledger) -> Result<()> {
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
-    let shell = Shell::new(receiver, &config.db_home_dir());
-    let addr = format!("{}:{}", config.tendermint.host, config.tendermint.port)
-        .parse()
-        .map_err(|e| Error::Temporary {
-            error: format!("cannot parse tendermint address {}", e),
-        })?;
+    let shell = Shell::new(receiver, &config.db);
     // Run Tendermint ABCI server in another thread
-    std::thread::spawn(move || tendermint::run(sender, config, addr));
+    std::thread::spawn(move || tendermint::run(sender, config));
     shell.run()
 }
 
-pub fn reset(config: Config) -> Result<()> {
+pub fn reset(config: anoma::config::Ledger) -> Result<()> {
     // simply nuke the DB files
-    let db_path = config.db_home_dir();
+    let db_path = &config.db;
     match std::fs::remove_dir_all(&db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,
@@ -251,6 +243,7 @@ impl Shell {
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
 
         let tx_data = tx.data.unwrap_or(vec![]);
+        let mut verifiers = HashSet::new();
 
         // Execute the transaction code
         let tx_runner = TxRunner::new();
@@ -258,37 +251,24 @@ impl Shell {
             .run(
                 &self.storage,
                 &mut cloned_write_log,
+                &mut verifiers,
                 &mut cloned_gas_meter,
                 tx.code,
                 &tx_data,
             )
             .map_err(Error::TxRunnerError)?;
 
-        // get changed keys grouped by the address
-        let keys_changed: HashMap<Address, Vec<String>> = cloned_write_log
-            .get_changed_keys()
-            .iter()
-            .fold(HashMap::new(), |mut acc, key| {
-                for addr in &key.find_addresses() {
-                    match acc.get_mut(&addr) {
-                        Some(keys) => keys.push(key.to_string()),
-                        None => {
-                            acc.insert(addr.clone(), vec![key.to_string()]);
-                        }
-                    }
-                }
-                acc
-            });
-
         // drop the lock on the gas meter, the VPs will access it via the mutex
         drop(cloned_gas_meter);
 
+        let verifiers = get_verifiers(&self.write_log, &verifiers);
+        let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
         let mut accept = true;
         // TODO run in parallel for all accounts
         // Run a VP for every account with modified storage sub-space
         //   - all must return `true` to accept the tx
         //   - cancel all remaining workers and fail if any returns `false`
-        for (addr, keys) in keys_changed.iter() {
+        for (addr, keys) in verifiers {
             let vp = self
                 .storage
                 .validity_predicate(&addr)
@@ -303,7 +283,8 @@ impl Shell {
                     &self.storage,
                     &cloned_write_log,
                     self.gas_meter.clone(),
-                    keys,
+                    &keys,
+                    &addresses,
                 )
                 .map_err(|error| Error::VpRunnerError {
                     addr: addr.clone(),
@@ -347,6 +328,7 @@ impl Shell {
         let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
 
         let tx_data = tx.data.unwrap_or(vec![]);
+        let mut verifiers = HashSet::new();
 
         // Execute the transaction code
         let tx_runner = TxRunner::new();
@@ -354,38 +336,24 @@ impl Shell {
             .run(
                 &self.storage,
                 &mut self.write_log,
+                &mut verifiers,
                 &mut gas_meter,
                 tx.code,
                 &tx_data,
             )
             .map_err(Error::TxRunnerError)?;
 
-        // get changed keys grouped by the address
-        let keys_changed: HashMap<Address, Vec<String>> = self
-            .write_log
-            .get_changed_keys()
-            .iter()
-            .fold(HashMap::new(), |mut acc, key| {
-                for addr in &key.find_addresses() {
-                    match acc.get_mut(&addr) {
-                        Some(keys) => keys.push(key.to_string()),
-                        None => {
-                            acc.insert(addr.clone(), vec![key.to_string()]);
-                        }
-                    }
-                }
-                acc
-            });
-
         // drop the lock on the gas meter, the VPs will access it via the mutex
         drop(gas_meter);
 
+        let verifiers = get_verifiers(&self.write_log, &verifiers);
+        let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
         let mut accept = true;
         // TODO run in parallel for all accounts
         // Run a VP for every account with modified storage sub-space
         //   - all must return `true` to accept the tx
         //   - cancel all remaining workers and fail if any returns `false`
-        for (addr, keys) in keys_changed.iter() {
+        for (addr, keys) in verifiers {
             let vp = self
                 .storage
                 .validity_predicate(&addr)
@@ -400,7 +368,8 @@ impl Shell {
                     &self.storage,
                     &self.write_log,
                     self.gas_meter.clone(),
-                    keys,
+                    &keys,
+                    &addresses,
                 )
                 .map_err(|error| Error::VpRunnerError {
                     addr: addr.clone(),
@@ -487,4 +456,27 @@ impl Shell {
         }
         result
     }
+}
+
+fn get_verifiers(
+    write_log: &WriteLog,
+    verifiers: &HashSet<Address>,
+) -> HashMap<Address, Vec<String>> {
+    let mut verifiers =
+        verifiers.iter().fold(HashMap::new(), |mut acc, addr| {
+            acc.insert(addr.clone(), vec![]);
+            acc
+        });
+    // get changed keys grouped by the address
+    for key in &write_log.get_changed_keys() {
+        for addr in &key.find_addresses() {
+            match verifiers.get_mut(&addr) {
+                Some(keys) => keys.push(key.to_string()),
+                None => {
+                    verifiers.insert(addr.clone(), vec![key.to_string()]);
+                }
+            }
+        }
+    }
+    verifiers
 }

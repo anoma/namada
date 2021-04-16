@@ -22,7 +22,7 @@ pub async fn main() -> Result<()> {
     match matches.subcommand() {
         Some((cli::TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let path = args.value_of(cli::PATH_TX_ARG).unwrap().to_string();
+            let path = cli::parse_string_req(args, cli::PATH_TX_ARG);
             let data = args.value_of(cli::DATA_TX_ARG);
             let dry = args.is_present(cli::DRY_RUN_TX_ARG);
             exec_tx(path, data, dry).await;
@@ -30,24 +30,19 @@ pub async fn main() -> Result<()> {
         }
         Some((cli::INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let orderbook =
-                args.value_of(cli::ORDERBOOK_ARG).unwrap().to_string();
-            let data = args.value_of(cli::DATA_INTENT_ARG).unwrap().to_string();
-            gossip_intent(orderbook, data).await;
+            let node = cli::parse_string_req(args, cli::NODE_INTENT_ARG);
+            let data = cli::parse_string_req(args, cli::DATA_INTENT_ARG);
+            gossip_intent(node, data).await;
             Ok(())
         }
         Some((cli::CRAFT_INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let addr = cli::parse_string(args, cli::ADDRESS_ARG).unwrap();
-            let token_sell =
-                cli::parse_string(args, cli::TOKEN_SELL_ARG).unwrap();
-            let amount_sell = cli::parse_u64(args, cli::AMOUNT_SELL_ARG)
-                .expect("not a valid amount");
-            let token_buy =
-                args.value_of(cli::TOKEN_BUY_ARG).unwrap().to_string();
-            let amount_buy = cli::parse_u64(args, cli::AMOUNT_BUY_ARG)
-                .expect("not a valid amount");
-            let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
+            let addr = cli::parse_string_req(args, cli::ADDRESS_ARG);
+            let token_sell = cli::parse_string_req(args, cli::TOKEN_SELL_ARG);
+            let amount_sell = cli::parse_req(args, cli::AMOUNT_SELL_ARG);
+            let token_buy = cli::parse_string_req(args, cli::TOKEN_BUY_ARG);
+            let amount_buy = cli::parse_req(args, cli::AMOUNT_BUY_ARG);
+            let file = cli::parse_string_req(args, cli::FILE_ARG);
             craft_intent(
                 addr,
                 token_sell,
@@ -60,12 +55,11 @@ pub async fn main() -> Result<()> {
         }
         Some((cli::CRAFT_DATA_TX_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
-            let source = args.value_of(cli::SOURCE_ARG).unwrap().to_string();
-            let target = args.value_of(cli::TARGET_ARG).unwrap().to_string();
-            let token = args.value_of(cli::TOKEN_ARG).unwrap().to_string();
-            let amount = cli::parse_u64(args, cli::AMOUNT_ARG)
-                .expect("not a valid amount");
-            let file = args.value_of(cli::FILE_ARG).unwrap().to_string();
+            let source = cli::parse_string_req(args, cli::SOURCE_ARG);
+            let target = cli::parse_string_req(args, cli::TARGET_ARG);
+            let token = cli::parse_string_req(args, cli::TOKEN_ARG);
+            let amount = cli::parse_req(args, cli::AMOUNT_ARG);
+            let file = cli::parse_string_req(args, cli::FILE_ARG);
             craft_tx_data(source, target, token, amount, file);
             Ok(())
         }
@@ -110,9 +104,8 @@ async fn exec_tx(code_path: String, data_path: Option<&str>, dry: bool) {
     }
 }
 
-async fn gossip_intent(orderbook_addr: String, data_path: String) {
-    println!("address : {:?}", orderbook_addr);
-    let mut client = RpcServiceClient::connect(orderbook_addr).await.unwrap();
+async fn gossip_intent(node_addr: String, data_path: String) {
+    let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let data = std::fs::read(data_path).expect("data file IO error");
     let intent = types::Intent {
         data,

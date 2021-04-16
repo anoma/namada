@@ -30,8 +30,6 @@ struct Transaction {
     code: Vec<u8>
     // Arbitrary data
     data: Vec<u8>,
-    // Set of addresses whose VPs should be triggered by this tx
-    verifiers: HashSet<Address>,
     gas_limit: TODO,
 }
 ```
