@@ -37,6 +37,12 @@ jobs:
       - name: Run build
         run: make build
         working-directory: ledger
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly-2021-03-09
+          components: clippy
+          override: true
       - name: Run clippy
         run: make clippy-check
         working-directory: ledger
