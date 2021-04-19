@@ -259,23 +259,25 @@ fn tx_storage_read(
     // try to read from the write log first
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     match write_log.read(&key) {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some((&write_log::StorageModification::Write { ref value }, gas)) => {
+            tx_add_gas(env, gas);
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
             return 1;
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some((&write_log::StorageModification::Delete, gas)) => {
             // fail, given key has been deleted
+            tx_add_gas(env, gas);
             return 0;
         }
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
+            tx_add_gas(env, gas);
             match value {
                 Some(value) => {
-                    tx_add_gas(env, gas);
                     env.memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
@@ -305,9 +307,13 @@ fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
     // try to read from the write log first
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     match write_log.read(&key) {
-        Some(&write_log::StorageModification::Write { .. }) => 1,
-        Some(&write_log::StorageModification::Delete) => {
+        Some((&write_log::StorageModification::Write { .. }, gas)) => {
+            tx_add_gas(env, gas);
+            1
+        }
+        Some((&write_log::StorageModification::Delete, gas)) => {
             // the given key has been deleted
+            tx_add_gas(env, gas);
             0
         }
         None => {
@@ -349,7 +355,8 @@ fn tx_storage_read_varlen(
     // try to read from the write log first
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     match write_log.read(&key) {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some((&write_log::StorageModification::Write { ref value }, gas)) => {
+            tx_add_gas(env, gas);
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
             env.memory
@@ -357,17 +364,18 @@ fn tx_storage_read_varlen(
                 .expect("cannot write to memory");
             len
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some((&write_log::StorageModification::Delete, gas)) => {
             // fail, given key has been deleted
+            tx_add_gas(env, gas);
             -1
         }
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
+            tx_add_gas(env, gas);
             match value {
                 Some(value) => {
-                    tx_add_gas(env, gas);
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
                     env.memory
@@ -427,7 +435,11 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
-            Some(&write_log::StorageModification::Write { ref value }) => {
+            Some((
+                &write_log::StorageModification::Write { ref value },
+                gas,
+            )) => {
+                tx_add_gas(env, gas);
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -439,7 +451,8 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
                     .expect("cannot write to memory");
                 return 1;
             }
-            Some(&write_log::StorageModification::Delete) => {
+            Some((&write_log::StorageModification::Delete, gas)) => {
+                tx_add_gas(env, gas);
                 // check the next because the key has already deleted
                 continue;
             }
@@ -484,7 +497,11 @@ fn tx_storage_iter_next_varlen(
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
-            Some(&write_log::StorageModification::Write { ref value }) => {
+            Some((
+                &write_log::StorageModification::Write { ref value },
+                gas,
+            )) => {
+                tx_add_gas(env, gas);
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -498,7 +515,8 @@ fn tx_storage_iter_next_varlen(
                     .expect("cannot write to memory");
                 return len;
             }
-            Some(&write_log::StorageModification::Delete) => {
+            Some((&write_log::StorageModification::Delete, gas)) => {
+                tx_add_gas(env, gas);
                 // check the next because the key has already deleted
                 continue;
             }
@@ -543,7 +561,9 @@ fn tx_storage_write(
     let key = Key::parse(key).expect("Cannot parse the key string");
 
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
-    write_log.write(&key, value);
+    let (gas, _size_diff) = write_log.write(&key, value);
+    tx_add_gas(env, gas);
+    // TODO: charge the size diff
 }
 
 /// Storage delete function exposed to the wasm VM Tx environment. The given
@@ -559,7 +579,9 @@ fn tx_storage_delete(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
     let key = Key::parse(key).expect("Cannot parse the key string");
 
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
-    write_log.delete(&key);
+    let (gas, _size_diff) = write_log.delete(&key);
+    tx_add_gas(env, gas);
+    // TODO: charge the size diff
 
     1
 }
@@ -581,6 +603,7 @@ fn vp_storage_read_pre(
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let (value, gas) = storage.read(&key).expect("storage read failed");
+    vp_add_gas(env, gas);
     log::debug!(
         "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
@@ -589,7 +612,6 @@ fn vp_storage_read_pre(
     );
     match value {
         Some(value) => {
-            vp_add_gas(env, gas);
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
@@ -627,13 +649,15 @@ fn vp_storage_read_post(
     let key = Key::parse(key).expect("Cannot parse the key string");
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     match write_log.read(&key) {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some((&write_log::StorageModification::Write { ref value }, gas)) => {
+            vp_add_gas(env, gas);
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
             return 1;
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some((&write_log::StorageModification::Delete, gas)) => {
+            vp_add_gas(env, gas);
             // fail, given key has been deleted
             return 0;
         }
@@ -641,9 +665,9 @@ fn vp_storage_read_post(
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
+            vp_add_gas(env, gas);
             match value {
                 Some(value) => {
-                    vp_add_gas(env, gas);
                     env.memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
@@ -678,6 +702,7 @@ fn vp_storage_read_pre_varlen(
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let (value, gas) = storage.read(&key).expect("storage read failed");
+    vp_add_gas(env, gas);
     log::debug!(
         "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
@@ -686,7 +711,6 @@ fn vp_storage_read_pre_varlen(
     );
     match value {
         Some(value) => {
-            vp_add_gas(env, gas);
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
             env.memory
@@ -729,7 +753,8 @@ fn vp_storage_read_post_varlen(
     let key = Key::parse(key).expect("Cannot parse the key string");
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     match write_log.read(&key) {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+        Some((&write_log::StorageModification::Write { ref value }, gas)) => {
+            vp_add_gas(env, gas);
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
             env.memory
@@ -737,7 +762,8 @@ fn vp_storage_read_post_varlen(
                 .expect("cannot write to memory");
             len
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some((&write_log::StorageModification::Delete, gas)) => {
+            vp_add_gas(env, gas);
             // fail, given key has been deleted
             -1
         }
@@ -745,9 +771,9 @@ fn vp_storage_read_post_varlen(
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
+            vp_add_gas(env, gas);
             match value {
                 Some(value) => {
-                    vp_add_gas(env, gas);
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
                     env.memory
@@ -798,8 +824,12 @@ fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
     // try to read from the write log first
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     match write_log.read(&key) {
-        Some(&write_log::StorageModification::Write { .. }) => 1,
-        Some(&write_log::StorageModification::Delete) => {
+        Some((&write_log::StorageModification::Write { .. }, gas)) => {
+            vp_add_gas(env, gas);
+            1
+        }
+        Some((&write_log::StorageModification::Delete, gas)) => {
+            vp_add_gas(env, gas);
             // the given key has been deleted
             0
         }
@@ -887,7 +917,11 @@ fn vp_storage_iter_post_next(
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
-            Some(&write_log::StorageModification::Write { ref value }) => {
+            Some((
+                &write_log::StorageModification::Write { ref value },
+                gas,
+            )) => {
+                vp_add_gas(env, gas);
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -899,7 +933,8 @@ fn vp_storage_iter_post_next(
                     .expect("cannot write to memory");
                 return 1;
             }
-            Some(&write_log::StorageModification::Delete) => {
+            Some((&write_log::StorageModification::Delete, gas)) => {
+                vp_add_gas(env, gas);
                 // check the next because the key has already deleted
                 continue;
             }
@@ -978,7 +1013,11 @@ fn vp_storage_iter_post_next_varlen(
         match write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         ) {
-            Some(&write_log::StorageModification::Write { ref value }) => {
+            Some((
+                &write_log::StorageModification::Write { ref value },
+                gas,
+            )) => {
+                vp_add_gas(env, gas);
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -992,7 +1031,8 @@ fn vp_storage_iter_post_next_varlen(
                     .expect("cannot write to memory");
                 return len;
             }
-            Some(&write_log::StorageModification::Delete) => {
+            Some((&write_log::StorageModification::Delete, gas)) => {
+                vp_add_gas(env, gas);
                 // check the next because the key has already deleted
                 continue;
             }

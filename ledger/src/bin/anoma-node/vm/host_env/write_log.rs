@@ -34,26 +34,65 @@ impl WriteLog {
 }
 
 impl WriteLog {
-    /// Read a value at the given key, returns [`None`] if the key is not
-    /// present in the write log
-    pub fn read(&self, key: &Key) -> Option<&StorageModification> {
+    /// Read a value at the given key and return the value and the gas cost,
+    /// returns [`None`] if the key is not present in the write log
+    pub fn read(&self, key: &Key) -> Option<(&StorageModification, u64)> {
         // try to read from tx write log first
-        self.tx_write_log.get(&key).or_else(|| {
+        match self.tx_write_log.get(&key).or_else(|| {
             // if not found, then try to read from block write log
             self.block_write_log.get(&key)
-        })
+        }) {
+            Some(v) => {
+                let gas = match v {
+                    StorageModification::Write { ref value } => {
+                        key.len() + value.len()
+                    }
+                    StorageModification::Delete => key.len(),
+                };
+                Some((v, gas as _))
+            }
+            None => None,
+        }
     }
 
-    /// Write a key and a value
-    pub fn write(&mut self, key: &Key, value: Vec<u8>) {
-        self.tx_write_log
-            .insert(key.clone(), StorageModification::Write { value });
+    /// Write a key and a value and return the gas cost and the size difference
+    pub fn write(&mut self, key: &Key, value: Vec<u8>) -> (u64, i64) {
+        let len = value.len();
+        let gas = key.len() + len;
+        let size_diff = match self
+            .tx_write_log
+            .insert(key.clone(), StorageModification::Write { value })
+        {
+            Some(prev) => match prev {
+                StorageModification::Write { ref value } => {
+                    len as i64 - value.len() as i64
+                }
+                StorageModification::Delete => len as i64,
+            },
+            // set just the length of the value because we don't know if
+            // the previous value exists on the storage
+            None => len as i64,
+        };
+        (gas as _, size_diff)
     }
 
-    /// Delete a key and its value
-    pub fn delete(&mut self, key: &Key) {
-        self.tx_write_log
-            .insert(key.clone(), StorageModification::Delete);
+    /// Delete a key and its value, and return the gas cost and the size
+    /// difference
+    pub fn delete(&mut self, key: &Key) -> (u64, i64) {
+        let size_diff = match self
+            .tx_write_log
+            .insert(key.clone(), StorageModification::Delete)
+        {
+            Some(prev) => match prev {
+                StorageModification::Write { ref value } => value.len() as i64,
+                StorageModification::Delete => 0,
+            },
+            // set 0 because we don't know if the previous value exists on the
+            // storage
+            None => 0,
+        };
+        let gas = key.len() + (-size_diff as usize);
+        (gas as _, size_diff)
     }
 
     pub fn get_changed_keys(&self) -> Vec<&Key> {
