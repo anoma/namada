@@ -16,7 +16,7 @@ message Intent {
   google.protobuf.Timestamp timestamp = 2;
 }
 
-message PublicFilter{
+message Filter{
   bytes code = 1;
 }
 
@@ -28,7 +28,7 @@ message IntentBroadcasterMessage{
 
   oneof message {
     Intent intent = 1;
-    PublicFilter filter = 2;
+    Filter filter = 2;
     DkgMessage dkg = 3;
   }
 }

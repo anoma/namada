@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
-use anoma::protobuf::types::{Intent, PublicFilter};
+use anoma::protobuf::types::{Filter, Intent};
 use libp2p::PeerId;
 use thiserror::Error;
 
@@ -29,9 +29,9 @@ impl IntentId {
 }
 
 #[derive(Debug)]
-pub struct IntentMempool(HashMap<IntentId,Intent>);
+pub struct IntentMempool(HashMap<IntentId, Intent>);
 
-impl IntentMempool{
+impl IntentMempool {
     pub fn new() -> Self {
         Self(HashMap::default())
     }
@@ -59,14 +59,14 @@ impl IntentMempool{
 }
 
 #[derive(Debug)]
-pub struct FilterMempool(HashMap<PeerId, PublicFilter>);
+pub struct FilterMempool(HashMap<PeerId, Filter>);
 
-impl FilterMempool{
+impl FilterMempool {
     pub fn new() -> Self {
         Self(HashMap::default())
     }
 
-    pub fn put(&mut self, peer_id:PeerId, filter: PublicFilter) -> Result<bool> {
+    pub fn put(&mut self, peer_id: PeerId, filter: Filter) -> Result<bool> {
         Ok(self.0.insert(peer_id, filter).is_none())
     }
 }

@@ -86,6 +86,7 @@ pub struct Matchmaker {
     pub matchmaker: PathBuf,
     pub tx_template: PathBuf,
     pub ledger_address: SocketAddr,
+    pub filter: Option<PathBuf>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

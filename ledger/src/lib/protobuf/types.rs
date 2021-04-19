@@ -13,7 +13,7 @@ pub struct Intent {
     pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublicFilter {
+pub struct Filter {
     #[prost(bytes = "vec", tag = "1")]
     pub code: ::prost::alloc::vec::Vec<u8>,
 }
@@ -34,7 +34,7 @@ pub mod intent_broadcaster_message {
         #[prost(message, tag = "1")]
         Intent(super::Intent),
         #[prost(message, tag = "2")]
-        Filter(super::PublicFilter),
+        Filter(super::Filter),
         #[prost(message, tag = "3")]
         Dkg(super::DkgMessage),
     }

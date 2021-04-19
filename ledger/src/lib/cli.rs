@@ -43,6 +43,7 @@ pub const MATCHMAKER_ARG: &str = "matchmaker";
 pub const TX_TEMPLATE_ARG: &str = "tx-template";
 pub const PUBLIC_FILTER_ARG: &str = "public-filter";
 pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
+pub const MATCHMAKER_FILTER_ARG: &str = "matchmaker-filter";
 
 // client args
 pub const DATA_TX_ARG: &str = "data";
@@ -336,6 +337,13 @@ fn run_gossip_subcommand() -> App {
                      matchmaker must send transactions to.",
                 ),
         )
+        .arg(
+            Arg::new(MATCHMAKER_FILTER_ARG)
+                .long(MATCHMAKER_FILTER_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .about("The private filter for the matchmaker"),
+        )
 }
 
 fn run_ledger_subcommand() -> App {
@@ -414,6 +422,7 @@ pub fn update_gossip_config(
         let matchmaker_arg = parse_opt(args, MATCHMAKER_ARG);
         let tx_template_arg = parse_opt(args, TX_TEMPLATE_ARG);
         let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);
+        let filter_arg = parse_opt(args, MATCHMAKER_FILTER_ARG);
         if let Some(mut matchmaker_cfg) = intent_gossip_cfg.matchmaker.as_mut()
         {
             if let Some(matchmaker) = matchmaker_arg {
@@ -425,19 +434,25 @@ pub fn update_gossip_config(
             if let Some(ledger_address) = ledger_address_arg {
                 matchmaker_cfg.ledger_address = ledger_address
             }
+            if let Some(filter) = filter_arg {
+                matchmaker_cfg.filter = Some(filter)
+            }
         } else if let (
             Some(matchmaker),
             Some(tx_template),
             Some(ledger_address),
+            Some(filter),
         ) = (
             matchmaker_arg.as_ref(),
             tx_template_arg.as_ref(),
             ledger_address_arg,
+            filter_arg.as_ref(),
         ) {
             let matchmaker_cfg = Some(config::Matchmaker {
                 matchmaker: matchmaker.clone(),
                 tx_template: tx_template.clone(),
                 ledger_address,
+                filter: Some(filter.clone()),
             });
             intent_gossip_cfg.matchmaker = matchmaker_cfg
         } else if matchmaker_arg.is_some()

@@ -152,7 +152,10 @@ impl P2P {
                                     filter,
                                 )),
                         }) => {
-                            match gossip_intent.add_filter(msg.peer, filter).await {
+                            match gossip_intent
+                                .add_filter(msg.peer, filter)
+                                .await
+                            {
                                 // Never propagate filter, because node are
                                 // only interested on filter of connected
                                 // node
@@ -169,19 +172,23 @@ impl P2P {
                             }
                         }
                         Ok(..) => MessageAcceptance::Reject,
-                        Err(gossip_intent::Error::FilterMempoolError(..)) => {
+                        Err(gossip_intent::Error::FilterMempool(..)) => {
                             MessageAcceptance::Reject
                         }
                         Err(gossip_intent::Error::DecodeError(..)) => {
                             MessageAcceptance::Reject
-                        },
-                        Err(gossip_intent::Error::PublicFilterSize(_)) => {
+                        }
+                        Err(gossip_intent::Error::FilterSize(_)) => {
                             MessageAcceptance::Reject
                         }
-                        Err(gossip_intent::Error::FilterError(_)) => {
+                        Err(gossip_intent::Error::Filter(_)) => {
                             MessageAcceptance::Reject
                         }
-                        Err(gossip_intent::Error::FileError(_)) => {
+                        Err(gossip_intent::Error::FilterInit(_))
+                        | Err(gossip_intent::Error::MatchmakerInit(_)) => {
+                            MessageAcceptance::Ignore
+                        }
+                        Err(gossip_intent::Error::File(_)) => {
                             MessageAcceptance::Ignore
                         }
                     };
