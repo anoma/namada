@@ -18,7 +18,7 @@ const MAX_RAW_ADDRESS_LEN: usize = 255;
 const MIN_RAW_ADDRESS_LEN: usize = 3;
 const MAX_LABEL_LEN: usize = 64;
 
-const HASH_LEN: usize = 32;
+const HASH_LEN: usize = 64;
 /// human-readable part of Bech32m encoded address
 const ADDRESS_HRP: &str = "a";
 const ADDRESS_BECH32_VARIANT: bech32::Variant = Variant::Bech32m;
@@ -31,9 +31,7 @@ pub enum Error {
     AddressTooLong,
     #[error("Address must not contain non-ASCII characters")]
     AddressNonAscii,
-    #[error(
-        "Address can only contain ASCII alphanumeric characters, hyphens and full stops"
-    )]
+    #[error("Address can only contain ASCII alphanumeric characters, hyphens and full stops")]
     AddressContainsInvalidCharacter,
     #[error("Address label cannot be be empty")]
     EmptyLabel,
@@ -49,13 +47,9 @@ pub enum Error {
     DecodeBech32(bech32::Error),
     #[error("Error decoding address from base32: {0}")]
     DecodeBase32(bech32::Error),
-    #[error(
-        "Unexpected Bech32m human-readable part {0}, expected {ADDRESS_HRP}"
-    )]
+    #[error("Unexpected Bech32m human-readable part {0}, expected {ADDRESS_HRP}")]
     UnexpectedBech32Prefix(String),
-    #[error(
-        "Unexpected Bech32m variant {0:?}, expected {ADDRESS_BECH32_VARIANT:?}"
-    )]
+    #[error("Unexpected Bech32m variant {0:?}, expected {ADDRESS_BECH32_VARIANT:?}")]
     UnexpectedBech32Variant(bech32::Variant),
     #[error("Unexpected address hash length {0}, expected {HASH_LEN}")]
     UnexpectedHashLength(usize),
@@ -63,39 +57,19 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(
-    Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
 pub struct Address {
     pub hash: String,
     // TODO add raw for "dev"
 }
 
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
 pub struct RawAddress {
     pub raw: String,
     labels: Vec<Label>,
 }
 
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
 pub struct Label(String);
 
 fn hash_raw(str: impl AsRef<str>) -> String {
@@ -112,17 +86,17 @@ impl Address {
 
     /// Encode the hash of the given address as a Bech32m [`String`].
     pub fn encode(&self) -> String {
+        println!("self.hash {}", self.hash);
         let bytes: [u8; HASH_LEN] = self
             .hash
             .as_bytes()
             .clone()
             .try_into()
             .expect("Unexpected hash length");
-        bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT)
-            .expect(&format!(
-                "The human-readable part {} should never cause failure",
-                ADDRESS_HRP
-            ))
+        bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT).expect(&format!(
+            "The human-readable part {} should never cause failure",
+            ADDRESS_HRP
+        ))
     }
 
     /// Decode an address from a hexadecimal [`String`] of its hash.
@@ -136,8 +110,7 @@ impl Address {
             ADDRESS_BECH32_VARIANT => {}
             _ => return Err(Error::UnexpectedBech32Variant(variant)),
         }
-        let hash: Vec<u8> = FromBase32::from_base32(&hash_base32)
-            .map_err(Error::DecodeBase32)?;
+        let hash: Vec<u8> = FromBase32::from_base32(&hash_base32).map_err(Error::DecodeBase32)?;
         // let hash_len = hash.len();
         // let hash: [u8; HASH_LEN] = hash
         //     .try_into()
