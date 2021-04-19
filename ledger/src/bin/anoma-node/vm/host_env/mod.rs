@@ -17,8 +17,8 @@ use self::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
-use crate::shell::storage::{Key, KeySeg, RawAddress, Storage};
-use crate::shell::{gas::BlockGasMeter, storage::Address};
+use crate::shell::gas::BlockGasMeter;
+use crate::shell::storage::{Address, Key, KeySeg, RawAddress, Storage};
 
 #[derive(Clone)]
 struct TxEnv<'a> {

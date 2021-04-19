@@ -17,8 +17,8 @@ use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
-use crate::shell::storage::Storage;
-use crate::shell::{gas::BlockGasMeter, storage::Address};
+use crate::shell::gas::BlockGasMeter;
+use crate::shell::storage::{Address, Storage};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -474,6 +474,7 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
     use tempdir::TempDir;
     use wasmer_vm;
 

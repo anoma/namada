@@ -1,7 +1,7 @@
 //! The key and values that may be persisted in a DB.
 
-use anoma_shared::types::{Address, BlockHash, Key};
-use anoma_shared::{bytes::ByteBuf, types::BlockHeight};
+use anoma_shared::bytes::ByteBuf;
+use anoma_shared::types::{Address, BlockHash, BlockHeight, Key};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sparse_merkle_tree::blake2b::Blake2bHasher;

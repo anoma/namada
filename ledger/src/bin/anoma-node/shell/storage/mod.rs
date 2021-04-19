@@ -8,18 +8,17 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 
-use sparse_merkle_tree::H256;
-use thiserror::Error;
-
-use self::types::Hash256;
-pub use self::types::PrefixIterator;
-
-use super::MerkleRoot;
 use anoma_shared::types::DbKeySeg;
 pub use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, KeySeg, RawAddress, CHAIN_ID_LENGTH,
 };
+use sparse_merkle_tree::H256;
+use thiserror::Error;
 pub use types::MerkleTree;
+
+use self::types::Hash256;
+pub use self::types::PrefixIterator;
+use super::MerkleRoot;
 
 #[derive(Error, Debug)]
 pub enum Error {

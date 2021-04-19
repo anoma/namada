@@ -14,6 +14,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
+use anoma_shared::types::{BlockHeight, Key, KeySeg};
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -24,7 +25,6 @@ use thiserror::Error;
 
 use super::types::{PrefixIterator, Value};
 use super::{BlockHash, MerkleTree};
-use anoma_shared::types::{BlockHeight, Key, KeySeg};
 
 // TODO the DB schema will probably need some kind of versioning
 

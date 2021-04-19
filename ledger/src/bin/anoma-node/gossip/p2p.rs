@@ -1,6 +1,7 @@
 use anoma::bookkeeper::Bookkeeper;
 use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
+use anoma::types::Topic;
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -13,7 +14,6 @@ use super::dkg::DKG;
 use super::network_behaviour::Behaviour;
 use super::orderbook::{self, Orderbook};
 use super::types::NetworkEvent;
-use anoma::types::Topic;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -142,9 +142,7 @@ impl P2P {
 
     pub async fn handle_network_event(&mut self, event: NetworkEvent) {
         match event {
-            NetworkEvent::Message(msg)
-                if msg.topic == Topic::Orderbook =>
-            {
+            NetworkEvent::Message(msg) if msg.topic == Topic::Orderbook => {
                 if let Some(orderbook) = &mut self.orderbook {
                     let validity =
                         match orderbook.apply_raw_intent(&msg.data).await {

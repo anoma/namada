@@ -2,6 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
+use anoma::types::Topic;
 use libp2p::gossipsub::{
     self, Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic,
     MessageAuthenticity, MessageId, TopicHash, ValidationMode,
@@ -10,7 +11,6 @@ use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviourEventProcess;
 use libp2p::NetworkBehaviour;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use anoma::types::Topic;
 
 use super::types::{self, NetworkEvent};
 
@@ -28,9 +28,7 @@ impl From<GossipsubMessage> for types::NetworkEvent {
 }
 
 pub fn topic_of(topic_hash: &TopicHash) -> Topic {
-    if topic_hash
-        == &IdentTopic::new(Topic::Dkg.to_string()).hash()
-    {
+    if topic_hash == &IdentTopic::new(Topic::Dkg.to_string()).hash() {
         Topic::Dkg
     } else if topic_hash
         == &IdentTopic::new(Topic::Orderbook.to_string()).hash()
