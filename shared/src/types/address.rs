@@ -11,6 +11,7 @@ use std::{
     hash::Hash,
     iter::FromIterator,
     str::FromStr,
+    string,
 };
 use thiserror::Error;
 
@@ -53,6 +54,8 @@ pub enum Error {
     UnexpectedBech32Variant(bech32::Variant),
     #[error("Unexpected address hash length {0}, expected {HASH_LEN}")]
     UnexpectedHashLength(usize),
+    #[error("Address must be encoded with utf-8")]
+    NonUtf8Address(string::FromUtf8Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -111,11 +114,7 @@ impl Address {
             _ => return Err(Error::UnexpectedBech32Variant(variant)),
         }
         let hash: Vec<u8> = FromBase32::from_base32(&hash_base32).map_err(Error::DecodeBase32)?;
-        // let hash_len = hash.len();
-        // let hash: [u8; HASH_LEN] = hash
-        //     .try_into()
-        //     .or(Err(Error::UnexpectedHashLength(hash_len)))?;
-        let hash = String::from_utf8(hash).expect("TODO");
+        let hash = String::from_utf8(hash).map_err(Error::NonUtf8Address)?;
         Ok(Self { hash })
     }
 }
