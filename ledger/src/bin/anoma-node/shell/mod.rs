@@ -307,82 +307,27 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
-        let gas_meter = self.gas_meter.clone();
-        let mut cloned_gas_meter =
-            gas_meter.lock().expect("Cannot get lock on the gas meter");
-
-        let mut cloned_write_log = self.write_log.clone();
-
-        cloned_gas_meter
-            .add_base_transaction_fee(tx_bytes.len())
-            .map_err(Error::GasError)?;
-
-        let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
-
-        // Execute the transaction code
-        let verifiers = execute_tx(
-            &tx,
+        let gas_meter = BlockGasMeter::default();
+        let mut write_log = self.write_log.clone();
+        let result = run_tx(
+            tx_bytes,
+            Arc::new(Mutex::new(gas_meter)),
+            &mut write_log,
             &self.storage,
-            &mut cloned_gas_meter,
-            &mut cloned_write_log,
         )?;
-
-        // drop the lock on the gas meter, the VPs will access it via the mutex
-        drop(cloned_gas_meter);
-
-        let vps_result = check_vps(
-            &tx,
-            &self.storage,
-            gas_meter,
-            &mut cloned_write_log,
-            &verifiers,
-            true,
-        );
-
-        // maybe we can return the total gas used by the transaction?
-        let mut gas_meter = self
-            .gas_meter
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
-
-        Ok(TxResult::new(gas, vps_result).to_string())
+        Ok(result.to_string())
     }
 
     /// Validate and apply a transaction.
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
-        let mut gas_meter = self
-            .gas_meter
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        gas_meter
-            .add_base_transaction_fee(tx_bytes.len())
-            .map_err(Error::GasError)?;
-
-        let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
-
-        // Execute the transaction code
-        let verifiers = execute_tx(
-            &tx,
-            &self.storage,
-            &mut gas_meter,
-            &mut self.write_log,
-        )?;
-
-        // drop the lock on the gas meter, the VPs will access it via the mutex
-        drop(gas_meter);
-
-        let vps_result = check_vps(
-            &tx,
-            &self.storage,
+        let result = run_tx(
+            tx_bytes,
             self.gas_meter.clone(),
             &mut self.write_log,
-            &verifiers,
-            false,
-        );
-
+            &self.storage,
+        )?;
         // Apply the transaction if accepted by all the VPs
-        if vps_result.is_ok() {
+        if result.vps.rejected_vps.is_empty() {
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
@@ -391,12 +336,7 @@ impl Shell {
         } else {
             self.write_log.drop_tx();
         }
-
-        let mut gas_meter = self
-            .gas_meter
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        gas_meter.finalize_transaction().map_err(Error::GasError)
+        Ok(result.gas_used)
     }
 
     /// Begin a new block.
@@ -480,6 +420,44 @@ fn get_verifiers(
         }
     }
     verifiers
+}
+
+fn run_tx(
+    tx_bytes: &[u8],
+    gas_meter_mutex: Arc<Mutex<BlockGasMeter>>,
+    write_log: &mut WriteLog,
+    storage: &Storage,
+) -> Result<TxResult> {
+    let mut gas_meter = gas_meter_mutex
+        .lock()
+        .expect("Cannot get lock on the gas meter");
+    gas_meter
+        .add_base_transaction_fee(tx_bytes.len())
+        .map_err(Error::GasError)?;
+
+    let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
+
+    // Execute the transaction code
+    let verifiers = execute_tx(&tx, storage, &mut gas_meter, write_log)?;
+
+    // drop the lock on the gas meter, the VPs will access it via the mutex
+    drop(gas_meter);
+
+    let vps_result = check_vps(
+        &tx,
+        storage,
+        gas_meter_mutex.clone(),
+        write_log,
+        &verifiers,
+        true,
+    );
+
+    let mut gas_meter = gas_meter_mutex
+        .lock()
+        .expect("Cannot get lock on the gas meter");
+    let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
+
+    Ok(TxResult::new(gas, vps_result))
 }
 
 fn check_vps(
