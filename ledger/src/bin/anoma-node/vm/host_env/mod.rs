@@ -242,10 +242,11 @@ fn tx_storage_read(
     key_len: u64,
     result_ptr: u64,
 ) -> u64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    tx_add_gas(env, gas);
 
     log::debug!(
         "tx_storage_read {}, key {}, result_ptr {}",
@@ -262,9 +263,11 @@ fn tx_storage_read(
     tx_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
-            env.memory
+            let gas = env
+                .memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
+            tx_add_gas(env, gas);
             return 1;
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -278,9 +281,11 @@ fn tx_storage_read(
             tx_add_gas(env, gas);
             match value {
                 Some(value) => {
-                    env.memory
+                    let gas = env
+                        .memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
+                    tx_add_gas(env, gas);
                     return 1;
                 }
                 None => {
@@ -295,10 +300,11 @@ fn tx_storage_read(
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
 fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    tx_add_gas(env, gas);
 
     log::debug!("tx_storage_has_key {}, key {}", key, key_ptr,);
 
@@ -336,10 +342,11 @@ fn tx_storage_read_varlen(
     key_len: u64,
     result_ptr: u64,
 ) -> i64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    tx_add_gas(env, gas);
 
     log::debug!(
         "tx_storage_read {}, key {}, result_ptr {}",
@@ -358,9 +365,11 @@ fn tx_storage_read_varlen(
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            env.memory
+            let gas = env
+                .memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
+            tx_add_gas(env, gas);
             len
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -376,9 +385,11 @@ fn tx_storage_read_varlen(
                 Some(value) => {
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
-                    env.memory
+                    let gas = env
+                        .memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
+                    tx_add_gas(env, gas);
                     len
                 }
                 None => {
@@ -398,10 +409,11 @@ fn tx_storage_iter_prefix(
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> u64 {
-    let prefix = env
+    let (prefix, gas) = env
         .memory
         .read_string(prefix_ptr, prefix_len as _)
         .expect("Cannot read the prefix from memory");
+    tx_add_gas(env, gas);
 
     log::debug!("tx_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
@@ -442,9 +454,11 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
                 }
                 .try_to_vec()
                 .expect("cannot serialize the key value pair");
-                env.memory
+                let gas = env
+                    .memory
                     .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
+                tx_add_gas(env, gas);
                 return 1;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -455,9 +469,11 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
-                env.memory
+                let gas = env
+                    .memory
                     .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
+                tx_add_gas(env, gas);
                 return 1;
             }
         }
@@ -502,9 +518,11 @@ fn tx_storage_iter_next_varlen(
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                env.memory
+                let gas = env
+                    .memory
                     .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
+                tx_add_gas(env, gas);
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -517,9 +535,11 @@ fn tx_storage_iter_next_varlen(
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                env.memory
+                let gas = env
+                    .memory
                     .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
+                tx_add_gas(env, gas);
                 return len;
             }
         }
@@ -537,14 +557,16 @@ fn tx_storage_write(
     val_ptr: u64,
     val_len: u64,
 ) {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
-    let value = env
+    tx_add_gas(env, gas);
+    let (value, gas) = env
         .memory
         .read_bytes(val_ptr, val_len as _)
         .expect("Cannot read the value from memory");
+    tx_add_gas(env, gas);
 
     log::debug!("tx_storage_update {}, {:#?}", key, value);
 
@@ -559,10 +581,11 @@ fn tx_storage_write(
 /// Storage delete function exposed to the wasm VM Tx environment. The given
 /// key/value will be written as deleted to the write log.
 fn tx_storage_delete(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    tx_add_gas(env, gas);
 
     log::debug!("tx_storage_delete {}", key);
 
@@ -584,10 +607,11 @@ fn vp_storage_read_pre(
     key_len: u64,
     result_ptr: u64,
 ) -> u64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    vp_add_gas(env, gas);
 
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
@@ -602,9 +626,11 @@ fn vp_storage_read_pre(
     );
     match value {
         Some(value) => {
-            env.memory
+            let gas = env
+                .memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
+            vp_add_gas(env, gas);
             return 1;
         }
         None => {
@@ -623,10 +649,11 @@ fn vp_storage_read_post(
     key_len: u64,
     result_ptr: u64,
 ) -> u64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    vp_add_gas(env, gas);
 
     log::debug!(
         "vp_storage_read_post {}, key {}, result_ptr {}",
@@ -642,9 +669,11 @@ fn vp_storage_read_post(
     vp_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
-            env.memory
+            let gas = env
+                .memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
+            vp_add_gas(env, gas);
             return 1;
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -658,9 +687,11 @@ fn vp_storage_read_post(
             vp_add_gas(env, gas);
             match value {
                 Some(value) => {
-                    env.memory
+                    let gas = env
+                        .memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
+                    vp_add_gas(env, gas);
                     return 1;
                 }
                 None => {
@@ -683,10 +714,11 @@ fn vp_storage_read_pre_varlen(
     key_len: u64,
     result_ptr: u64,
 ) -> i64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    vp_add_gas(env, gas);
 
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
@@ -703,9 +735,11 @@ fn vp_storage_read_pre_varlen(
         Some(value) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            env.memory
+            let gas = env
+                .memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
+            vp_add_gas(env, gas);
             len
         }
         None => {
@@ -727,10 +761,11 @@ fn vp_storage_read_post_varlen(
     key_len: u64,
     result_ptr: u64,
 ) -> i64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    vp_add_gas(env, gas);
 
     log::debug!(
         "vp_storage_read_post {}, key {}, result_ptr {}",
@@ -748,9 +783,11 @@ fn vp_storage_read_post_varlen(
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            env.memory
+            let gas = env
+                .memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
+            vp_add_gas(env, gas);
             len
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -766,9 +803,11 @@ fn vp_storage_read_post_varlen(
                 Some(value) => {
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
-                    env.memory
+                    let gas = env
+                        .memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
+                    vp_add_gas(env, gas);
                     len
                 }
                 None => {
@@ -783,10 +822,11 @@ fn vp_storage_read_post_varlen(
 /// Storage `has_key` in prior state (before tx execution) function exposed to
 /// the wasm VM VP environment. It will try to read from the storage.
 fn vp_storage_has_key_pre(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    vp_add_gas(env, gas);
 
     log::debug!("vp_storage_has_key_pre {}, key {}", key, key_ptr,);
 
@@ -802,10 +842,11 @@ fn vp_storage_has_key_pre(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
 /// to the wasm VM VP environment. It will
 /// try to check the write log first and if no entry found then the storage.
 fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
-    let key = env
+    let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len as _)
         .expect("Cannot read the key from memory");
+    vp_add_gas(env, gas);
 
     log::debug!("vp_storage_has_key_post {}, key {}", key, key_ptr,);
 
@@ -840,10 +881,11 @@ fn vp_storage_iter_prefix(
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> u64 {
-    let prefix = env
+    let (prefix, gas) = env
         .memory
         .read_string(prefix_ptr, prefix_len as _)
         .expect("Cannot read the prefix from memory");
+    vp_add_gas(env, gas);
 
     log::debug!("vp_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
@@ -874,9 +916,11 @@ fn vp_storage_iter_pre_next(env: &VpEnv, iter_id: u64, result_ptr: u64) -> u64 {
         let key_val = KeyVal { key, val }
             .try_to_vec()
             .expect("cannot serialize the key value pair");
-        env.memory
+        let gas = env
+            .memory
             .write_bytes(result_ptr, key_val)
             .expect("cannot write to memory");
+        vp_add_gas(env, gas);
         return 1;
     }
     // key not found
@@ -914,9 +958,11 @@ fn vp_storage_iter_post_next(
                 }
                 .try_to_vec()
                 .expect("cannot serialize the key value pair");
-                env.memory
+                let gas = env
+                    .memory
                     .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
+                vp_add_gas(env, gas);
                 return 1;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -927,9 +973,11 @@ fn vp_storage_iter_post_next(
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
-                env.memory
+                let gas = env
+                    .memory
                     .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
+                vp_add_gas(env, gas);
                 return 1;
             }
         }
@@ -963,9 +1011,11 @@ fn vp_storage_iter_pre_next_varlen(
             .try_to_vec()
             .expect("cannot serialize the key value pair");
         let len: i64 = key_val.len().try_into().expect("data length overflow");
-        env.memory
+        let gas = env
+            .memory
             .write_bytes(result_ptr, key_val)
             .expect("cannot write to memory");
+        vp_add_gas(env, gas);
         return len;
     }
     // key not found
@@ -1008,9 +1058,11 @@ fn vp_storage_iter_post_next_varlen(
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                env.memory
+                let gas = env
+                    .memory
                     .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
+                vp_add_gas(env, gas);
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -1023,9 +1075,11 @@ fn vp_storage_iter_post_next_varlen(
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                env.memory
+                let gas = env
+                    .memory
                     .write_bytes(result_ptr, key_val)
                     .expect("cannot write to memory");
+                vp_add_gas(env, gas);
                 return len;
             }
         }
@@ -1036,10 +1090,11 @@ fn vp_storage_iter_post_next_varlen(
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
 fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
-    let addr = env
+    let (addr, gas) = env
         .memory
         .read_string(addr_ptr, addr_len as _)
         .expect("Cannot read the key from memory");
+    tx_add_gas(env, gas);
 
     log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
@@ -1054,10 +1109,11 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
 /// printed at the [`log::Level::Info`].
 fn tx_log_string(env: &TxEnv, str_ptr: u64, str_len: u64) {
-    let str = env
+    let (str, gas) = env
         .memory
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
+    tx_add_gas(env, gas);
 
     log::info!("WASM Transaction log: {}", str);
 }
@@ -1065,7 +1121,7 @@ fn tx_log_string(env: &TxEnv, str_ptr: u64, str_len: u64) {
 /// Log a string from exposed to the wasm VM matchmaker environment. The message
 /// will be printed at the [`log::Level::Info`].
 fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
-    let str = env
+    let (str, _gas) = env
         .memory
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
@@ -1076,10 +1132,11 @@ fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`log::Level::Info`].
 fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
-    let str = env
+    let (str, gas) = env
         .memory
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
+    vp_add_gas(env, gas);
 
     log::info!("WASM Validity predicate log: {}", str);
 }
@@ -1087,7 +1144,7 @@ fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
 /// Inject a transaction from matchmaker's matched intents to the ledger
 fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
     let inject_tx: &Sender<Tx> = &env.inject_tx;
-    let tx_data = env
+    let (tx_data, _gas) = env
         .memory
         .read_bytes(data_ptr, data_len as _)
         .expect("Cannot read the key from memory");
