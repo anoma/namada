@@ -141,15 +141,16 @@ impl<'a> PrefixIterator<'a> {
 }
 
 impl<'a> Iterator for PrefixIterator<'a> {
-    type Item = (String, Vec<u8>);
+    type Item = (String, Vec<u8>, u64);
 
-    fn next(&mut self) -> Option<(String, Vec<u8>)> {
+    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
         match self.iter.next() {
             Some((key, val)) => {
+                let len = val.len();
                 let key = String::from_utf8(key.to_vec())
                     .expect("Cannot convert from bytes to key string");
                 match key.strip_prefix(&self.db_prefix) {
-                    Some(k) => Some((k.to_owned(), val.to_vec())),
+                    Some(k) => Some((k.to_owned(), val.to_vec(), len as _)),
                     None => self.next(),
                 }
             }

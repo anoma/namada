@@ -1,7 +1,7 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
-use anoma::cli;
 use anoma::config::Config;
+use anoma::{cli, config};
 use eyre::{Context, Result};
 
 use crate::{gossip, shell};
@@ -9,48 +9,73 @@ use crate::{gossip, shell};
 pub fn main() -> Result<()> {
     let mut app = cli::anoma_node_cli();
 
-    let matches = app.clone().get_matches();
+    let matches = &app.get_matches_mut();
 
-    // here unwrap is safe as the argument has a default
-    let home = matches.value_of("base").unwrap().to_string();
-    let mut config = Config::new(home).expect("error config");
+    // here unwrap is safe to use req as the argument even it's not mandatory
+    // because it has a default
+    let home = cli::parse_string_req(&matches, cli::BASE_ARG);
 
     match matches.subcommand() {
         Some((cli::RUN_GOSSIP_COMMAND, args)) => {
-            // TODO: this could be refactored into a function that updates
-            // config
-            cli::parse_vector(args, cli::PEERS_ARG)
-                .map(|peers| config.p2p.peers = peers);
-
-            let address = cli::parse_address(args, cli::ADDRESS_ARG);
-            config.p2p.set_address(address);
-
-            let dkg = cli::parse_bool(args, cli::DKG_ARG);
-            config.p2p.set_dkg_topic(dkg);
-
-            let orderbook = cli::parse_bool(args, cli::ORDERBOOK_ARG);
-            config.p2p.set_orderbook_topic(orderbook);
-
-            config.p2p.rpc = cli::parse_bool(args, cli::RPC_ARG);
-
-            config.p2p.matchmaker =
-                cli::parse_string(args, cli::MATCHMAKER_ARG);
-
-            config.p2p.tx_template =
-                cli::parse_string(args, cli::TX_TEMPLATE_ARG);
-
-            let ledger_address =
-                cli::parse_address(args, cli::LEDGER_ADDRESS_ARG);
-            config.p2p.set_ledger_address(ledger_address);
-
-            gossip::run(config).wrap_err("Failed to run gossip service")
+            let config = get_cfg(home);
+            let mut gossip_cfg = config.gossip.unwrap_or_default();
+            cli::update_gossip_config(args, &mut gossip_cfg)
+                .expect("failed to update config with cli option");
+            gossip::run(gossip_cfg).wrap_err("Failed to run gossip service")
         }
         Some((cli::RUN_LEDGER_COMMAND, _)) => {
-            shell::run(config).wrap_err("Failed to run Anoma node")
+            let config = get_cfg(home);
+            let ledger_cfg = config.ledger.unwrap_or_default();
+            shell::run(ledger_cfg).wrap_err("Failed to run Anoma node")
         }
         Some((cli::RESET_LEDGER_COMMAND, _)) => {
-            shell::reset(config).wrap_err("Failed to reset Anoma node")
+            let config = get_cfg(home);
+            let ledger_cfg = config.ledger.unwrap_or_default();
+            shell::reset(ledger_cfg).wrap_err("Failed to reset Anoma node")
+        }
+        Some((cli::GENERATE_CONFIG_COMMAND, _args)) => {
+            let gen_config = config::Config::generate(&home, false)
+                .wrap_err("failed to generate default config")?;
+            log::debug!("generated config {:?}", gen_config);
+            Ok(())
         }
         _ => app.print_help().wrap_err("Can't display help."),
     }
+}
+
+// for dev purpose this is useful so if the config change it automatically
+// generate the default one
+#[cfg(feature = "dev")]
+fn get_cfg(home: String) -> Config {
+    match Config::read(&home) {
+        Ok(config) => config,
+        Err(err) => {
+            log::error!(
+                "Tried to read config in {} but failed with: {}",
+                home,
+                err
+            );
+            // generate(home,true) replace current config if it exists
+            match config::Config::generate(&home, true) {
+                Ok(config) => {
+                    log::warn!("Generated default config in {}", home,);
+                    config
+                }
+                Err(err) => {
+                    log::error!(
+                        "Tried to generate config in {} but failed with: {}. \
+                         Using default config (with new generated key)",
+                        home,
+                        err
+                    );
+                    config::Config::default()
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "dev"))]
+fn get_cfg(home: String) -> Config {
+    Config::read(&home).expect("Failed to read config file.")
 }

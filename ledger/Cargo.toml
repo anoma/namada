@@ -76,6 +76,7 @@ wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
 wasmer-engine-jit = "1.0.2"
 wasmparser = "0.77.0"
+toml = "0.5.8"
 
 [dev-dependencies]
 cargo-watch = "7.5.0"

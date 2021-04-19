@@ -528,7 +528,7 @@ mod tests {
             .expect("Unable to create a temporary DB directory");
         let mut storage = Storage::new(db_path.path());
         let mut write_log = WriteLog::new();
-        let mut verifiers: HashSet<Address> = HashSet::new();
+        let mut verifiers = HashSet::new();
         let mut gas_meter = BlockGasMeter::default();
         let error = runner
             .run(
@@ -600,7 +600,7 @@ mod tests {
         let write_log = WriteLog::new();
         let gas_meter = Arc::new(Mutex::new(BlockGasMeter::default()));
         let keys_changed = vec![];
-        let verifiers: HashSet<Address> = HashSet::new();
+        let verifiers = HashSet::new();
         let error = runner
             .run(
                 vp_code,

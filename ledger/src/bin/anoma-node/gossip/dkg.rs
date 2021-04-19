@@ -1,6 +1,6 @@
-pub struct DKG {}
+pub struct Dkg {}
 
-impl DKG {
+impl Dkg {
     pub fn new() -> Self {
         Self {}
     }

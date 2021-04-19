@@ -32,8 +32,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-static VP_WASM: &'static [u8] =
-    include_bytes!("../../../../../../vp_template/vp.wasm");
+static VP_WASM: &[u8] = include_bytes!("../../../../../../vp_template/vp.wasm");
 
 #[derive(Debug)]
 pub struct Storage {
@@ -131,24 +130,29 @@ impl Storage {
         Ok(())
     }
 
-    pub fn has_key(&self, key: &Key) -> Result<bool> {
-        Ok(!self
-            .block
-            .tree
-            .0
-            .get(&key.hash256())
-            .map_err(Error::MerkleTreeError)?
-            .is_zero())
+    pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
+        let gas = key.len();
+        Ok((
+            !self
+                .block
+                .tree
+                .0
+                .get(&key.hash256())
+                .map_err(Error::MerkleTreeError)?
+                .is_zero(),
+            gas as _,
+        ))
     }
 
     /// Returns a value from the specified subspace and the gas cost
     pub fn read(&self, key: &Key) -> Result<(Option<Vec<u8>>, u64)> {
-        if !self.has_key(key)? {
+        if !self.has_key(key)?.0 {
             return Ok((None, 0));
         }
 
         if let Some(v) = self.block.subspaces.get(key) {
-            return Ok((Some(v.to_vec()), v.len() as u64));
+            let gas = key.len() + v.len();
+            return Ok((Some(v.to_vec()), gas as _));
         }
 
         match self
@@ -157,16 +161,19 @@ impl Storage {
             .map_err(Error::DBError)?
         {
             Some(v) => {
-                let len = v.len() as u64;
-                Ok((Some(v), len))
+                let gas = key.len() + v.len();
+                Ok((Some(v), gas as _))
             }
             None => Ok((None, 0)),
         }
     }
 
-    /// Returns a prefix iterator
-    pub fn iter_prefix(&self, prefix: &Key) -> PrefixIterator {
-        self.db.iter_prefix(self.current_height, prefix)
+    /// Returns a prefix iterator and the gas cost
+    pub fn iter_prefix(&self, prefix: &Key) -> (PrefixIterator, u64) {
+        (
+            self.db.iter_prefix(self.current_height, prefix),
+            prefix.len() as _,
+        )
     }
 
     /// Write a value to the specified subspace and returns the gas cost and the
@@ -175,18 +182,19 @@ impl Storage {
         self.update_tree(key.hash256(), value.hash256())?;
 
         let len = value.len();
+        let gas = key.len() + len;
         let size_diff = match self.block.subspaces.insert(key.clone(), value) {
             Some(old) => len as i64 - old.len() as i64,
-            None => 0,
+            None => len as i64,
         };
-        Ok((len as u64, size_diff))
+        Ok((gas as _, size_diff))
     }
 
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
     pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
         let mut size_diff = 0;
-        if self.has_key(key)? {
+        if self.has_key(key)?.0 {
             // update the merkle tree with a zero as a tombstone
             self.update_tree(key.hash256(), H256::zero())?;
 
@@ -195,7 +203,8 @@ impl Storage {
                 None => 0,
             };
         }
-        Ok((-size_diff as u64, size_diff))
+        let gas = key.len() + (-size_diff as usize);
+        Ok((gas as _, size_diff))
     }
 
     /// # Block header data

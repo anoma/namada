@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Eq, Hash)]
 pub enum Topic {
     Dkg,
-    Orderbook,
+    Intent,
 }
 
 impl std::fmt::Display for Topic {
@@ -13,7 +13,7 @@ impl std::fmt::Display for Topic {
             "{}",
             match self {
                 Self::Dkg => "dkg",
-                Self::Orderbook => "orderbook",
+                Self::Intent => "intent",
             }
         )
     }

@@ -1,55 +1,37 @@
 use anoma::protobuf::types::{Intent, Tx};
 use prost::Message;
+use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::matchmaker::Matchmaker;
 use super::mempool::Mempool;
 
-#[derive(Debug, Clone)]
-pub enum OrderbookError {
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Error while decoding intent: {0}")]
     DecodeError(prost::DecodeError),
 }
 
-impl std::fmt::Display for OrderbookError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::DecodeError(prost_error) => write!(f, "{}", prost_error),
-        }
-    }
-}
-impl std::error::Error for OrderbookError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::DecodeError(prost_error) => Some(prost_error),
-        }
-    }
-}
-
-pub type Result<T> = std::result::Result<T, OrderbookError>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
-pub struct Orderbook {
+pub struct GossipIntent {
     pub mempool: Mempool,
     pub matchmaker: Option<Matchmaker>,
 }
 
-impl Orderbook {
+impl GossipIntent {
     pub fn new(
-        matchmaker: Option<String>,
-        tx_template: Option<String>,
+        config: &anoma::config::IntentGossip,
     ) -> (Self, Option<Receiver<Tx>>) {
         let (matchmaker, matchmaker_event_receiver) =
-        // TODO instead matchmaker cli option should be something like Option<(String, String)>
-            if matchmaker.is_some() && tx_template.is_some() {
-                let matchmaker = matchmaker.unwrap();
-                let tx_template = tx_template.unwrap();
+            if let Some(matchmaker) = &config.matchmaker {
                 let (matchmaker, matchmaker_event_receiver) =
-                    Matchmaker::new(matchmaker, tx_template);
+                    Matchmaker::new(&matchmaker);
                 (Some(matchmaker), Some(matchmaker_event_receiver))
             } else {
                 (None, None)
             };
-
         (
             Self {
                 mempool: Mempool::new(),
@@ -68,8 +50,7 @@ impl Orderbook {
     }
 
     pub async fn apply_raw_intent(&mut self, data: &Vec<u8>) -> Result<bool> {
-        let intent =
-            Intent::decode(&data[..]).map_err(OrderbookError::DecodeError)?;
+        let intent = Intent::decode(&data[..]).map_err(Error::DecodeError)?;
         self.apply_intent(intent).await
     }
 }

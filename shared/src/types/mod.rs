@@ -31,22 +31,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub const CHAIN_ID_LENGTH: usize = 20;
 const BLOCK_HASH_LENGTH: usize = 32;
 
-#[derive(
-    Clone,
-    Copy,
-    BorshSerialize,
-    BorshDeserialize,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Debug,
-)]
+#[derive(Clone, Copy, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct BlockHeight(pub u64);
 
-#[derive(
-    Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord,
-)]
+#[derive(Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BlockHash([u8; 32]);
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -107,6 +95,11 @@ impl Key {
             }
         }
         addresses
+    }
+
+    /// Returns the length
+    pub fn len(&self) -> usize {
+        self.to_string().len()
     }
 }
 

@@ -30,10 +30,8 @@ impl From<GossipsubMessage> for types::NetworkEvent {
 pub fn topic_of(topic_hash: &TopicHash) -> Topic {
     if topic_hash == &IdentTopic::new(Topic::Dkg.to_string()).hash() {
         Topic::Dkg
-    } else if topic_hash
-        == &IdentTopic::new(Topic::Orderbook.to_string()).hash()
-    {
-        Topic::Orderbook
+    } else if topic_hash == &IdentTopic::new(Topic::Intent.to_string()).hash() {
+        Topic::Intent
     } else {
         panic!("topic_hash does not correspond to any topic of interest")
     }
@@ -59,7 +57,7 @@ impl Behaviour {
 
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
-            .protocol_id_prefix("orderbook")
+            .protocol_id_prefix("gossip_intent")
             .heartbeat_interval(Duration::from_secs(10))
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id)

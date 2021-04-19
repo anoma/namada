@@ -10,7 +10,7 @@ The VM should provide:
   - check & sanitize modules
   - inject gas metering
   - inject stack height metering
-- a runner for VPs and transactions code
+- a runner for VPs and transaction code
 - encode/decode wasm for transfer & storage
 - [manage runtime memory](#wasm-memory)
 - wasm development helpers
@@ -51,9 +51,9 @@ The accounts sub-space storage is described under [accounts' dynamic storage sub
 
 ### VPs environment
 
-Because VPs are stateless, everything that's exposed in the VPs environment should be read-only:
+Because VPs are stateless, everything that is exposed in the VPs environment should be read-only:
 
-- storage API to account's sub-space the [storage write log](#storage-write-log)
+- storage API to account sub-space the [storage write log](#storage-write-log)
 - transaction API
 
 ### Transactions environment
@@ -88,7 +88,7 @@ We're currently using borsch for storage serialization, which is also a good opt
 The data being passed between the host and the guest in the order of the execution:
 
 - For transactions:
-  - host-to-guest: pass tx.data to tx code call
+  - host-to-guest: pass tx.data to tx.code call
   - guest-to-host: parameters of environment functions calls, including storage modifications (pending on storage API)
   - host-to-guest: return results for host calls
 - For validity predicates:

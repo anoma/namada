@@ -1,5 +1,3 @@
-use anoma::bookkeeper::Bookkeeper;
-use anoma::config::Config;
 use anoma::protobuf::types::{IntentMessage, Tx};
 use anoma::types::Topic;
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
@@ -10,9 +8,9 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::dkg::DKG;
+use super::dkg::Dkg as DKG;
+use super::gossip_intent::{self, GossipIntent};
 use super::network_behaviour::Behaviour;
-use super::orderbook::{self, Orderbook};
 use super::types::NetworkEvent;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
@@ -26,21 +24,15 @@ type Result<T> = std::result::Result<T, Error>;
 
 pub struct P2P {
     pub swarm: Swarm,
-    pub orderbook: Option<Orderbook>,
+    pub gossip_intent: Option<GossipIntent>,
     pub dkg: Option<DKG>,
-    pub ledger: Option<String>,
 }
 
 impl P2P {
     pub fn new(
-        bookkeeper: Bookkeeper,
-        orderbook: bool,
-        dkg: bool,
-        matchmaker: Option<String>,
-        tx_template: Option<String>,
-        ledger: Option<String>,
+        config: &anoma::config::Gossip,
     ) -> Result<(Self, Receiver<NetworkEvent>, Option<Receiver<Tx>>)> {
-        let local_key: Keypair = Ed25519(bookkeeper.key);
+        let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
         // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
@@ -50,53 +42,46 @@ impl P2P {
         let (gossipsub, network_event_receiver) = Behaviour::new(local_key);
         let swarm = Swarm::new(transport, gossipsub, local_peer_id);
 
-        let (orderbook, matchmaker_event_receiver) = if orderbook {
-            let (orderbook, matchmaker_event_receiver) =
-                Orderbook::new(matchmaker, tx_template);
-            (Some(orderbook), matchmaker_event_receiver)
+        let (gossip_intent, matchmaker_event_receiver) =
+            if let Some(gossip_intent_conf) = &config.intent_gossip {
+                let (gossip_intent, matchmaker_event_receiver) =
+                    GossipIntent::new(&gossip_intent_conf);
+                (Some(gossip_intent), matchmaker_event_receiver)
+            } else {
+                (None, None)
+            };
+
+        let dkg = if config.topics.contains(&Topic::Dkg) {
+            Some(DKG::new())
         } else {
-            (None, None)
+            None
         };
+        let mut p2p = Self {
+            swarm,
+            gossip_intent,
+            dkg,
+            // ledger,
+        };
+        p2p.prepare(&config).expect("gossip prepraration failed");
 
-        let dkg = if dkg { Some(DKG::new()) } else { None };
-
-        Ok((
-            Self {
-                swarm,
-                orderbook,
-                dkg,
-                ledger,
-            },
-            network_event_receiver,
-            matchmaker_event_receiver,
-        ))
+        Ok((p2p, network_event_receiver, matchmaker_event_receiver))
     }
 
-    pub fn prepare(&mut self, config: &Config) -> Result<()> {
-        for topic in &config.p2p.topics {
+    pub fn prepare(&mut self, config: &anoma::config::Gossip) -> Result<()> {
+        for topic in &config.topics {
             let topic = IdentTopic::new(topic.to_string());
             self.swarm.gossipsub.subscribe(&topic).unwrap();
         }
 
         // Listen on given address
-        Swarm::listen_on(&mut self.swarm, {
-            config.p2p.get_address().parse().unwrap()
-        })
-        .unwrap();
+        Swarm::listen_on(&mut self.swarm, config.address.clone()).unwrap();
 
         // Reach out to another node if specified
-        for to_dial in &config.p2p.peers {
-            let dialing = to_dial.clone();
-            match to_dial.parse() {
-                Ok(to_dial) => match Swarm::dial_addr(&mut self.swarm, to_dial)
-                {
-                    Ok(_) => println!("Dialed {:?}", dialing),
-                    Err(e) => {
-                        println!("Dial {:?} failed: {:?}", dialing, e)
-                    }
-                },
-                Err(err) => {
-                    println!("Failed to parse address to dial: {:?}", err)
+        for to_dial in &config.peers {
+            match Swarm::dial_addr(&mut self.swarm, to_dial.clone()) {
+                Ok(_) => log::info!("Dialed {:?}", to_dial.clone()),
+                Err(e) => {
+                    log::debug!("Dial {:?} failed: {:?}", to_dial.clone(), e)
                 }
             }
         }
@@ -108,10 +93,10 @@ impl P2P {
             IntentMessage {
                 intent: Some(intent),
             },
-            Some(orderbook),
-        ) = (event, &mut self.orderbook)
+            Some(gossip_intent),
+        ) = (event, &mut self.gossip_intent)
         {
-            if orderbook
+            if gossip_intent
                 .apply_intent(intent.clone())
                 .await
                 .expect("failed to apply intent")
@@ -119,7 +104,7 @@ impl P2P {
                 let mut tix_bytes = vec![];
                 intent.encode(&mut tix_bytes).unwrap();
                 let _message_id = self.swarm.gossipsub.publish(
-                    IdentTopic::new(Topic::Orderbook.to_string()),
+                    IdentTopic::new(Topic::Intent.to_string()),
                     tix_bytes,
                 );
             }
@@ -142,18 +127,18 @@ impl P2P {
 
     pub async fn handle_network_event(&mut self, event: NetworkEvent) {
         match event {
-            NetworkEvent::Message(msg) if msg.topic == Topic::Orderbook => {
-                if let Some(orderbook) = &mut self.orderbook {
+            NetworkEvent::Message(msg) if msg.topic == Topic::Intent => {
+                if let Some(gossip_intent) = &mut self.gossip_intent {
                     let validity =
-                        match orderbook.apply_raw_intent(&msg.data).await {
-                            orderbook::Result::Ok(true) => {
+                        match gossip_intent.apply_raw_intent(&msg.data).await {
+                            gossip_intent::Result::Ok(true) => {
                                 MessageAcceptance::Accept
                             }
-                            orderbook::Result::Ok(false) => {
+                            gossip_intent::Result::Ok(false) => {
                                 MessageAcceptance::Ignore
                             }
-                            orderbook::Result::Err(
-                                orderbook::OrderbookError::DecodeError(..),
+                            gossip_intent::Result::Err(
+                                gossip_intent::Error::DecodeError(..),
                             ) => MessageAcceptance::Reject,
                         };
                     self.swarm

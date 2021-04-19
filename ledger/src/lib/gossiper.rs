@@ -2,15 +2,18 @@ use libp2p::identity::ed25519::Keypair;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+// TODO use conditional compilation to not write private key to file
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Bookkeeper {
+pub struct Gossiper {
     pub address: String,
     #[serde(with = "keypair_serde")]
     pub key: Keypair,
 }
+// TODO Here instead of encoding to bytes, it would be nice to encode to hex
+// instead. Bytes makes the config file a bit less readible
 
-// XXX TODO this is needed because libp2p does not export ed255519 serde feature
-// maybe a MR for libp2p to export theses functions ?
+// TODO this is needed because libp2p does not export ed255519 serde
+// feature maybe a MR for libp2p to export theses functions ?
 #[cfg(feature = "dev")]
 mod keypair_serde {
     use libp2p::identity::ed25519::Keypair;
@@ -38,14 +41,19 @@ mod keypair_serde {
     }
 }
 
-impl Bookkeeper {
-    // Generates a new orderbook
-    #[allow(dead_code)]
+impl Gossiper {
+    // Generates a new gossiper
     pub fn new() -> Self {
         let key = Keypair::generate();
         let mut hasher = Sha256::new();
         hasher.update(key.public().encode());
         let address = format!("{:.40X}", hasher.finalize());
-        Bookkeeper { address, key }
+        Gossiper { address, key }
+    }
+}
+
+impl Default for Gossiper {
+    fn default() -> Self {
+        Self::new()
     }
 }

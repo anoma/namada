@@ -24,16 +24,13 @@ pub enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 impl Matchmaker {
-    pub fn new(
-        matchmaker_code_path: String,
-        tx_code_path: String,
-    ) -> (Self, Receiver<Tx>) {
+    pub fn new(config: &anoma::config::Matchmaker) -> (Self, Receiver<Tx>) {
         let (inject_tx, rx) = channel::<Tx>(100);
         (
             Self {
                 mempool: Mempool::new(),
-                matchmaker_code: std::fs::read(matchmaker_code_path).unwrap(),
-                tx_code: std::fs::read(tx_code_path).unwrap(),
+                matchmaker_code: std::fs::read(&config.matchmaker).unwrap(),
+                tx_code: std::fs::read(&config.tx_template).unwrap(),
                 inject_tx,
             },
             rx,
