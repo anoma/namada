@@ -37,6 +37,9 @@ jobs:
       - name: Run build
         run: make build
         working-directory: ledger
+      - name: Run clippy
+        run: make clippy-check
+        working-directory: ledger
       - name: Run test
         run: make test
         working-directory: ledger
@@ -66,29 +69,4 @@ jobs:
           restore-keys: cache-v4-cargo- 
       - name: Run fmt
         run: make fmt-check
-        working-directory: ledger
-
-  lint:
-    if: github.event.pull_request.draft == false
-    name: Lint Anoma
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          components: clippy
-          override: true
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/anoma-prototype/ledger/target
-          key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v4-cargo-
-      - name: Run clippy
-        run: make clippy-check
         working-directory: ledger
