@@ -316,11 +316,7 @@ fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
-            if present {
-                1
-            } else {
-                0
-            }
+            if present { 1 } else { 0 }
         }
     }
 }
@@ -783,11 +779,7 @@ fn vp_storage_has_key_pre(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
-    if present {
-        1
-    } else {
-        0
-    }
+    if present { 1 } else { 0 }
 }
 
 /// Storage `has_key` in posterior state (after tx execution) function exposed
@@ -817,11 +809,7 @@ fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
-            if present {
-                1
-            } else {
-                0
-            }
+            if present { 1 } else { 0 }
         }
     }
 }
