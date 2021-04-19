@@ -43,12 +43,17 @@ mod keypair_serde {
 
 impl Gossiper {
     // Generates a new gossiper
-    #[allow(dead_code)]
     pub fn new() -> Self {
         let key = Keypair::generate();
         let mut hasher = Sha256::new();
         hasher.update(key.public().encode());
         let address = format!("{:.40X}", hasher.finalize());
         Gossiper { address, key }
+    }
+}
+
+impl Default for Gossiper {
+    fn default() -> Self {
+        Self::new()
     }
 }
