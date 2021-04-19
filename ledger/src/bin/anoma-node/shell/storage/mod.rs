@@ -30,8 +30,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-static VP_WASM: &'static [u8] =
-    include_bytes!("../../../../../../vp_template/vp.wasm");
+static VP_WASM: &[u8] = include_bytes!("../../../../../../vp_template/vp.wasm");
 
 #[derive(Debug)]
 pub struct Storage {

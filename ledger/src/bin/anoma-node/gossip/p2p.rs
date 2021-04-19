@@ -8,7 +8,7 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::dkg::DKG;
+use super::dkg::Dkg as DKG;
 use super::gossip_intent::{self, GossipIntent};
 use super::network_behaviour::Behaviour;
 use super::types::NetworkEvent;

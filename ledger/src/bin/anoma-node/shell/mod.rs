@@ -2,6 +2,7 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
+use core::fmt;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
@@ -196,6 +197,7 @@ impl Shell {
                         let result = self
                             .dry_run_tx(&data)
                             .map_err(|e| format!("{}", e));
+
                         reply.send(result).map_err(|e| {
                             Error::AbciChannelSendError(format!(
                                 "ApplyTx {}",
@@ -206,6 +208,81 @@ impl Shell {
                 }
             }
         }
+    }
+}
+
+struct VpResult {
+    pub accepted_vps: HashSet<Address>,
+    pub rejected_vps: HashSet<Address>,
+    pub changed_keys: Vec<String>,
+}
+
+impl VpResult {
+    pub fn new(
+        accepted_vps: HashSet<Address>,
+        rejected_vps: HashSet<Address>,
+        changed_keys: Vec<String>,
+    ) -> Self {
+        Self {
+            accepted_vps,
+            rejected_vps,
+            changed_keys,
+        }
+    }
+}
+
+impl fmt::Display for VpResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Vps -> accepted: {:?}. rejected: {:?}, keys: {:?}",
+            self.accepted_vps, self.rejected_vps, self.changed_keys,
+        )
+    }
+}
+
+impl Default for VpResult {
+    fn default() -> Self {
+        Self {
+            accepted_vps: HashSet::new(),
+            rejected_vps: HashSet::new(),
+            changed_keys: Vec::new(),
+        }
+    }
+}
+
+struct TxResult {
+    // a value of 0 indicates that the transaction overflowed with gas
+    gas_used: u64,
+    vps: VpResult,
+    valid: bool,
+}
+
+impl TxResult {
+    pub fn new(gas: Result<u64>, vps: Result<VpResult>) -> Self {
+        let mut tx_result = TxResult {
+            gas_used: gas.unwrap_or(0),
+            vps: vps.unwrap_or(VpResult::default()),
+            valid: false,
+        };
+        tx_result.valid = tx_result.is_tx_correct();
+        tx_result
+    }
+
+    pub fn is_tx_correct(&self) -> bool {
+        self.gas_used > 0 && self.vps.rejected_vps.len() == 0
+    }
+}
+
+impl fmt::Display for TxResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Transaction is valid: {}. Gas used: {}, vps: {}",
+            self.valid,
+            self.gas_used,
+            self.vps.to_string(),
+        )
     }
 }
 
@@ -230,158 +307,27 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
-        let gas_meter = self.gas_meter.clone();
-        let mut cloned_gas_meter =
-            gas_meter.lock().expect("Cannot get lock on the gas meter");
-
-        let mut cloned_write_log = self.write_log.clone();
-
-        cloned_gas_meter
-            .add_base_transaction_fee(tx_bytes.len())
-            .map_err(Error::GasError)?;
-
-        let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
-
-        let tx_data = tx.data.unwrap_or(vec![]);
-        let mut verifiers = HashSet::new();
-
-        // Execute the transaction code
-        let tx_runner = TxRunner::new();
-        tx_runner
-            .run(
-                &self.storage,
-                &mut cloned_write_log,
-                &mut verifiers,
-                &mut cloned_gas_meter,
-                tx.code,
-                &tx_data,
-            )
-            .map_err(Error::TxRunnerError)?;
-
-        // drop the lock on the gas meter, the VPs will access it via the mutex
-        drop(cloned_gas_meter);
-
-        let verifiers = get_verifiers(&self.write_log, &verifiers);
-        let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
-        let mut accept = true;
-        // TODO run in parallel for all accounts
-        // Run a VP for every account with modified storage sub-space
-        //   - all must return `true` to accept the tx
-        //   - cancel all remaining workers and fail if any returns `false`
-        for (addr, keys) in verifiers {
-            let vp = self
-                .storage
-                .validity_predicate(&addr)
-                .map_err(Error::StorageError)?;
-
-            let vp_runner = VpRunner::new();
-            accept = vp_runner
-                .run(
-                    vp,
-                    &tx_data,
-                    addr.clone(),
-                    &self.storage,
-                    &cloned_write_log,
-                    self.gas_meter.clone(),
-                    &keys,
-                    &addresses,
-                )
-                .map_err(|error| Error::VpRunnerError {
-                    addr: addr.clone(),
-                    error,
-                })?;
-            if !accept {
-                log::debug!("{} rejected transaction", addr);
-                break;
-            };
-        }
-
-        // maybe we can return the total gas used by the transaction?
-        let mut gas_meter = self
-            .gas_meter
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
-
-        if accept && gas.is_ok() {
-            Ok(format!("Transaction success, gas cost: {}", gas.unwrap())
-                .to_string())
-        } else if gas.is_err() {
-            Ok("Transaction failed: gas overflow.".to_string())
-        } else if !accept {
-            Ok("Transaction failed: VPs are not satisfied.".to_string())
-        } else {
-            Ok("Transaction failed.".to_string())
-        }
+        let gas_meter = BlockGasMeter::default();
+        let mut write_log = self.write_log.clone();
+        let result = run_tx(
+            tx_bytes,
+            Arc::new(Mutex::new(gas_meter)),
+            &mut write_log,
+            &self.storage,
+        )?;
+        Ok(result.to_string())
     }
 
     /// Validate and apply a transaction.
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
-        let mut gas_meter = self
-            .gas_meter
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        gas_meter
-            .add_base_transaction_fee(tx_bytes.len())
-            .map_err(Error::GasError)?;
-
-        let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
-
-        let tx_data = tx.data.unwrap_or(vec![]);
-        let mut verifiers = HashSet::new();
-
-        // Execute the transaction code
-        let tx_runner = TxRunner::new();
-        tx_runner
-            .run(
-                &self.storage,
-                &mut self.write_log,
-                &mut verifiers,
-                &mut gas_meter,
-                tx.code,
-                &tx_data,
-            )
-            .map_err(Error::TxRunnerError)?;
-
-        // drop the lock on the gas meter, the VPs will access it via the mutex
-        drop(gas_meter);
-
-        let verifiers = get_verifiers(&self.write_log, &verifiers);
-        let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
-        let mut accept = true;
-        // TODO run in parallel for all accounts
-        // Run a VP for every account with modified storage sub-space
-        //   - all must return `true` to accept the tx
-        //   - cancel all remaining workers and fail if any returns `false`
-        for (addr, keys) in verifiers {
-            let vp = self
-                .storage
-                .validity_predicate(&addr)
-                .map_err(Error::StorageError)?;
-
-            let vp_runner = VpRunner::new();
-            accept = vp_runner
-                .run(
-                    vp,
-                    &tx_data,
-                    addr.clone(),
-                    &self.storage,
-                    &self.write_log,
-                    self.gas_meter.clone(),
-                    &keys,
-                    &addresses,
-                )
-                .map_err(|error| Error::VpRunnerError {
-                    addr: addr.clone(),
-                    error,
-                })?;
-            if !accept {
-                log::debug!("{} rejected transaction", addr);
-                break;
-            };
-        }
+        let result = run_tx(
+            tx_bytes,
+            self.gas_meter.clone(),
+            &mut self.write_log,
+            &self.storage,
+        )?;
         // Apply the transaction if accepted by all the VPs
-        if accept {
+        if result.vps.rejected_vps.is_empty() {
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
@@ -390,12 +336,7 @@ impl Shell {
         } else {
             self.write_log.drop_tx();
         }
-
-        let mut gas_meter = self
-            .gas_meter
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        gas_meter.finalize_transaction().map_err(Error::GasError)
+        Ok(result.gas_used)
     }
 
     /// Begin a new block.
@@ -479,4 +420,120 @@ fn get_verifiers(
         }
     }
     verifiers
+}
+
+fn run_tx(
+    tx_bytes: &[u8],
+    gas_meter_mutex: Arc<Mutex<BlockGasMeter>>,
+    write_log: &mut WriteLog,
+    storage: &Storage,
+) -> Result<TxResult> {
+    let mut gas_meter = gas_meter_mutex
+        .lock()
+        .expect("Cannot get lock on the gas meter");
+    gas_meter
+        .add_base_transaction_fee(tx_bytes.len())
+        .map_err(Error::GasError)?;
+
+    let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
+
+    // Execute the transaction code
+    let verifiers = execute_tx(&tx, storage, &mut gas_meter, write_log)?;
+
+    // drop the lock on the gas meter, the VPs will access it via the mutex
+    drop(gas_meter);
+
+    let vps_result = check_vps(
+        &tx,
+        storage,
+        gas_meter_mutex.clone(),
+        write_log,
+        &verifiers,
+        true,
+    );
+
+    let mut gas_meter = gas_meter_mutex
+        .lock()
+        .expect("Cannot get lock on the gas meter");
+    let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
+
+    Ok(TxResult::new(gas, vps_result))
+}
+
+fn check_vps(
+    tx: &Tx,
+    storage: &Storage,
+    gas_meter: Arc<Mutex<BlockGasMeter>>,
+    write_log: &mut WriteLog,
+    verifiers: &HashSet<Address>,
+    dry_run: bool,
+) -> Result<VpResult> {
+    let verifiers = get_verifiers(write_log, verifiers);
+    let addresses = verifiers.keys().map(|addr| addr.to_string()).collect();
+
+    let tx_data = tx.data.clone().unwrap_or(vec![]);
+
+    let mut rejected_vps = HashSet::new();
+    let mut accepted_vps = HashSet::new();
+    let mut changed_keys: Vec<String> = Vec::new();
+
+    for (addr, keys) in verifiers {
+        let vp = storage
+            .validity_predicate(&addr)
+            .map_err(Error::StorageError)?;
+
+        let vp_runner = VpRunner::new();
+        let accept = vp_runner
+            .run(
+                vp,
+                tx_data.as_ref(),
+                addr.clone(),
+                storage,
+                write_log,
+                gas_meter.clone(),
+                &keys,
+                &addresses,
+            )
+            .map_err(|error| Error::VpRunnerError {
+                addr: addr.clone(),
+                error,
+            })?;
+        if !accept {
+            if !dry_run {
+                rejected_vps.insert(addr.clone());
+                break;
+            }
+            rejected_vps.insert(addr.clone());
+        } else {
+            accepted_vps.insert(addr.clone());
+            changed_keys.append(&mut keys.clone());
+        }
+    }
+    Ok(VpResult::new(accepted_vps, rejected_vps, changed_keys))
+}
+
+fn execute_tx(
+    tx: &Tx,
+    storage: &Storage,
+    gas_meter: &mut BlockGasMeter,
+    write_log: &mut WriteLog,
+) -> Result<HashSet<Address>> {
+    let tx_code = tx.code.clone();
+    let tx_data = tx.data.clone().unwrap_or(vec![]);
+    let mut verifiers = HashSet::new();
+
+    let tx_runner = TxRunner::new();
+
+    tx_runner
+        .run(
+            storage,
+            write_log,
+            &mut verifiers,
+            gas_meter,
+            tx_code,
+            &tx_data,
+        )
+        .map_err(Error::TxRunnerError)?;
+
+    Ok(verifiers)
 }

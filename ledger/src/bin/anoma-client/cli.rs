@@ -7,7 +7,7 @@ use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
-use anoma_data_template;
+// use anoma_data_template;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use eyre::Context;
