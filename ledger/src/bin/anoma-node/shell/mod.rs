@@ -224,9 +224,9 @@ impl VpResult {
         changed_keys: Vec<String>,
     ) -> Self {
         Self {
-            accepted_vps: accepted_vps,
-            rejected_vps: rejected_vps,
-            changed_keys: changed_keys,
+            accepted_vps,
+            rejected_vps,
+            changed_keys,
         }
     }
 }
@@ -278,8 +278,8 @@ impl fmt::Display for TxResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Transaction status is: {}. Gas used: {}, vps: {}",
-            self.is_tx_correct(),
+            "Transaction is valid: {}. Gas used: {}, vps: {}",
+            self.valid,
             self.gas_used,
             self.vps.to_string(),
         )

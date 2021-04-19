@@ -75,7 +75,8 @@ fn handle_subcommand(program: &str, mut sub_args: Vec<String>) -> Result<()> {
         .args(sub_args)
         .envs(env_vars)
         .status()
-        .expect(&format!("Couldn't run {} command.", cmd));
+        .unwrap_or_else(|_| panic!("Couldn't run {} command.", cmd));
+        // .expect(&format!("Couldn't run {} command.", cmd));
     if result.success() {
         Ok(())
     } else {
