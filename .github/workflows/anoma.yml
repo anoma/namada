@@ -28,7 +28,7 @@ jobs:
             ~/work/anoma-prototype/anoma-prototype/vp_template
             ~/work/anoma-prototype/anoma-prototype/ledger/target
           key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v4-cargo- 
+          restore-keys: cache-v4-cargo-
       - name: Run requirements
         run: |
               make -C ../tx_template deps
@@ -36,15 +36,6 @@ jobs:
         working-directory: ledger
       - name: Run build
         run: make build
-        working-directory: ledger
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly-2021-03-09
-          components: clippy
-          override: true
-      - name: Run clippy
-        run: make clippy-check
         working-directory: ledger
       - name: Run test
         run: make test
@@ -75,4 +66,31 @@ jobs:
           restore-keys: cache-v4-cargo- 
       - name: Run fmt
         run: make fmt-check
+        working-directory: ledger
+
+  lint:
+    if: github.event.pull_request.draft == false
+    name: Lint Anoma
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          components: clippy
+          override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/work/anoma-prototype/anoma-prototype/tx_template
+            ~/work/anoma-prototype/anoma-prototype/vp_template
+            ~/work/anoma-prototype/anoma-prototype/ledger/target
+          key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cache-v4-cargo-
+      - name: Run clippy
+        run: make clippy-check
         working-directory: ledger
