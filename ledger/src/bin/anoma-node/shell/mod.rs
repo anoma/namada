@@ -3,11 +3,9 @@ pub mod storage;
 mod tendermint;
 
 use core::fmt;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::{mpsc, Arc, Mutex};
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
