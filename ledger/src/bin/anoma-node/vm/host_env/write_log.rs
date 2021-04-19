@@ -36,7 +36,7 @@ impl WriteLog {
 impl WriteLog {
     /// Read a value at the given key and return the value and the gas cost,
     /// returns [`None`] if the key is not present in the write log
-    pub fn read(&self, key: &Key) -> Option<(&StorageModification, u64)> {
+    pub fn read(&self, key: &Key) -> (Option<&StorageModification>, u64) {
         // try to read from tx write log first
         match self.tx_write_log.get(&key).or_else(|| {
             // if not found, then try to read from block write log
@@ -49,9 +49,9 @@ impl WriteLog {
                     }
                     StorageModification::Delete => key.len(),
                 };
-                Some((v, gas as _))
+                (Some(v), gas as _)
             }
-            None => None,
+            None => (None, key.len() as _),
         }
     }
 
