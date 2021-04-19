@@ -78,8 +78,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
-          components: clippy
+          toolchain: nightly-2021-03-09
+          components: rustfmt
           override: true
       - uses: actions/cache@v2
         with:
