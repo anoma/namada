@@ -539,7 +539,7 @@ mod tests {
                 &mut verifiers,
                 &mut gas_meter,
                 tx_code,
-                &tx_data,
+                tx_data,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \
@@ -606,13 +606,13 @@ mod tests {
         let error = runner
             .run(
                 vp_code,
-                &tx_data,
+                tx_data,
                 &addr,
                 &storage,
                 &write_log,
                 gas_meter,
-                &keys_changed,
-                &verifiers,
+                keys_changed,
+                verifiers,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \
