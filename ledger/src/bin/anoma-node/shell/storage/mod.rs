@@ -55,7 +55,7 @@ pub struct BlockStorage {
 }
 
 impl Storage {
-    pub fn new<T: AsRef<Path>>(db_path: T) -> Self {
+    pub fn new(db_path: impl AsRef<Path>) -> Self {
         let tree = MerkleTree::default();
         let subspaces = HashMap::new();
         let block = BlockStorage {
@@ -76,8 +76,13 @@ impl Storage {
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
-        if let Some((chain_id, tree, hash, height, subspaces)) =
-            self.db.read_last_block().map_err(Error::DBError)?
+        if let Some(db::BlockState {
+            chain_id,
+            tree,
+            hash,
+            height,
+            subspaces,
+        }) = self.db.read_last_block().map_err(Error::DBError)?
         {
             self.chain_id = chain_id;
             self.block.tree = tree;
@@ -241,7 +246,7 @@ impl Storage {
             .push(&"?".to_owned())
             .map_err(Error::KeyError)?;
         match self.read(&key)?.0 {
-            Some(vp) => Ok(vp.clone()),
+            Some(vp) => Ok(vp),
             // TODO: this temporarily loads default VP template if none found
             None => Ok(VP_WASM.to_vec()),
         }

@@ -28,7 +28,7 @@ pub type Verifiers = HashSet<Address>;
 pub type TxInput = Data;
 
 /// Input for validity predicate wasm module call
-pub type VpInput<'a> = (String, &'a Data, &'a KeysChanged, &'a Verifiers);
+pub type VpInput<'a> = (String, Data, KeysChanged, Verifiers);
 
 /// Input for matchmaker wasm module call
 pub type MatchmakerInput = Data;

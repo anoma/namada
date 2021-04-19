@@ -45,7 +45,15 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn open<P: AsRef<Path>>(path: P) -> Result<DB> {
+pub struct BlockState {
+    pub chain_id: String,
+    pub tree: MerkleTree,
+    pub hash: BlockHash,
+    pub height: BlockHeight,
+    pub subspaces: HashMap<Key, Vec<u8>>,
+}
+
+pub fn open(path: impl AsRef<Path>) -> Result<DB> {
     let mut cf_opts = Options::default();
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
     cf_opts.set_level_compaction_dynamic_level_bytes(true);
@@ -71,7 +79,7 @@ pub fn open<P: AsRef<Path>>(path: P) -> Result<DB> {
     // TODO use column families
     rocksdb::DB::open_cf_descriptors(&cf_opts, path, vec![])
         .map(DB)
-        .map_err(|e| Error::RocksDBError(e).into())
+        .map_err(Error::RocksDBError)
 }
 
 fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
@@ -83,16 +91,17 @@ fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
 
     let result_a_h = a_vec[0].parse::<u64>();
     let result_b_h = b_vec[0].parse::<u64>();
-    if result_a_h.is_err() || result_b_h.is_err() {
-        // the key doesn't include the height
-        a_str.cmp(b_str)
-    } else {
-        let a_h = result_a_h.unwrap();
-        let b_h = result_b_h.unwrap();
-        if a_h == b_h {
-            a_vec[1..].cmp(&b_vec[1..])
-        } else {
-            a_h.cmp(&b_h)
+    match (result_a_h, result_b_h) {
+        (Ok(a_h), Ok(b_h)) => {
+            if a_h == b_h {
+                a_vec[1..].cmp(&b_vec[1..])
+            } else {
+                a_h.cmp(&b_h)
+            }
+        }
+        _ => {
+            // the key doesn't include the height
+            a_str.cmp(b_str)
         }
     }
 }
@@ -102,9 +111,7 @@ impl DB {
     pub fn flush(&self) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(true);
-        self.0
-            .flush_opt(&flush_opts)
-            .map_err(|e| Error::RocksDBError(e).into())
+        self.0.flush_opt(&flush_opts).map_err(Error::RocksDBError)
     }
 
     pub fn write_block(
@@ -163,15 +170,16 @@ impl DB {
         // write_opts.disable_wal(true);
         self.0
             .write_opt(batch, &write_opts)
-            .map_err(|e| Error::RocksDBError(e))?;
+            .map_err(Error::RocksDBError)?;
         // Block height - write after everything else is written
         // NOTE for async writes, we need to take care that all previous heights
         // are known when updating this
         self.0
             .put_opt("height", height.encode(), &write_opts)
-            .map_err(|e| Error::RocksDBError(e).into())
+            .map_err(Error::RocksDBError)
     }
 
+    #[allow(clippy::ptr_arg)]
     pub fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
         let mut write_opts = WriteOptions::default();
         // TODO: disable WAL when we can shutdown with flush
@@ -179,7 +187,7 @@ impl DB {
         // write_opts.disable_wal(true);
         self.0
             .put_opt("chain_id", chain_id.encode(), &write_opts)
-            .map_err(|e| Error::RocksDBError(e).into())
+            .map_err(Error::RocksDBError)
     }
 
     pub fn read(
@@ -221,17 +229,7 @@ impl DB {
         PrefixIterator::new(iter, db_prefix)
     }
 
-    pub fn read_last_block(
-        &mut self,
-    ) -> Result<
-        Option<(
-            String,
-            MerkleTree,
-            BlockHash,
-            BlockHeight,
-            HashMap<Key, Vec<u8>>,
-        )>,
-    > {
+    pub fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         let chain_id;
         let height;
         // Chain ID
@@ -304,16 +302,21 @@ impl DB {
                 None => unknown_key_error(path)?,
             }
         }
-        if root.is_none() || store.is_none() || hash.is_none() {
-            Err(Error::Temporary {
-                error: format!("Essential data couldn't be read from the DB"),
-            })
-        } else {
-            let tree = MerkleTree(SparseMerkleTree::new(
-                root.unwrap(),
-                store.unwrap(),
-            ));
-            Ok(Some((chain_id, tree, hash.unwrap(), height, subspaces)))
+        match (root, store, hash) {
+            (Some(root), Some(store), Some(hash)) => {
+                let tree = MerkleTree(SparseMerkleTree::new(root, store));
+                Ok(Some(BlockState {
+                    chain_id,
+                    tree,
+                    hash,
+                    height,
+                    subspaces,
+                }))
+            }
+            _ => Err(Error::Temporary {
+                error: "Essential data couldn't be read from the DB"
+                    .to_string(),
+            }),
         }
     }
 }
@@ -321,6 +324,5 @@ impl DB {
 fn unknown_key_error(key: &str) -> Result<()> {
     Err(Error::UnknownKey {
         key: key.to_owned(),
-    }
-    .into())
+    })
 }

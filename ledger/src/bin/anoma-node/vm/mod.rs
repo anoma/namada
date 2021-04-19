@@ -151,7 +151,7 @@ impl TxRunner {
         verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
-        tx_data: &Vec<u8>,
+        tx_data: Vec<u8>,
     ) -> Result<()> {
         validate_wasm(&tx_code)?;
 
@@ -204,7 +204,7 @@ impl TxRunner {
         Self::run_with_input(tx_code, tx_data)
     }
 
-    fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {
+    fn run_with_input(tx_code: Instance, tx_data: TxInput) -> Result<()> {
         // We need to write the inputs in the memory exported from the wasm
         // module
         let memory = tx_code
@@ -247,16 +247,18 @@ impl VpRunner {
         Self { wasm_store }
     }
 
+    // TODO consider using a wrapper object for all the host env references
+    #[allow(clippy::too_many_arguments)]
     pub fn run<T: AsRef<[u8]>>(
         &self,
         vp_code: T,
-        tx_data: &Vec<u8>,
+        tx_data: Vec<u8>,
         addr: &Address,
         storage: &Storage,
         write_log: &WriteLog,
         gas_meter: Arc<Mutex<BlockGasMeter>>,
-        keys_changed: &Vec<String>,
-        verifiers: &HashSet<Address>,
+        keys_changed: Vec<String>,
+        verifiers: HashSet<Address>,
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
 

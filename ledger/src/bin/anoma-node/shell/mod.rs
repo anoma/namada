@@ -3,9 +3,11 @@ pub mod storage;
 mod tendermint;
 
 use core::fmt;
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
@@ -83,7 +85,7 @@ pub enum MempoolTxType {
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl Shell {
-    pub fn new(abci: AbciReceiver, db_path: &PathBuf) -> Self {
+    pub fn new(abci: AbciReceiver, db_path: impl AsRef<Path>) -> Self {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
         let key11 = Key::parse("@ada/balance/eth".to_owned())
@@ -262,7 +264,7 @@ impl TxResult {
     pub fn new(gas: Result<u64>, vps: Result<VpResult>) -> Self {
         let mut tx_result = TxResult {
             gas_used: gas.unwrap_or(0),
-            vps: vps.unwrap_or(VpResult::default()),
+            vps: vps.unwrap_or_default(),
             valid: false,
         };
         tx_result.valid = tx_result.is_tx_correct();
@@ -270,7 +272,7 @@ impl TxResult {
     }
 
     pub fn is_tx_correct(&self) -> bool {
-        self.gas_used > 0 && self.vps.rejected_vps.len() == 0
+        self.gas_used > 0 && self.vps.rejected_vps.is_empty()
     }
 }
 
@@ -301,7 +303,7 @@ impl Shell {
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> Result<()> {
-        let _tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
+        let _tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
         Ok(())
     }
 
@@ -435,7 +437,7 @@ fn run_tx(
         .add_base_transaction_fee(tx_bytes.len())
         .map_err(Error::GasError)?;
 
-    let tx = Tx::decode(&tx_bytes[..]).map_err(Error::TxDecodingError)?;
+    let tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
 
     // Execute the transaction code
     let verifiers = execute_tx(&tx, storage, &mut gas_meter, write_log)?;
@@ -469,9 +471,9 @@ fn check_vps(
     dry_run: bool,
 ) -> Result<VpResult> {
     let verifiers = get_verifiers(write_log, verifiers);
-    let addresses = verifiers.keys().collect();
+    let addresses: HashSet<Address> = verifiers.keys().collect();
 
-    let tx_data = tx.data.clone().unwrap_or(vec![]);
+    let tx_data = tx.data.clone().unwrap_or_default();
 
     let mut rejected_vps = HashSet::new();
     let mut accepted_vps = HashSet::new();
@@ -486,13 +488,13 @@ fn check_vps(
         let accept = vp_runner
             .run(
                 vp,
-                tx_data.as_ref(),
+                tx_data.clone(),
                 &addr,
                 storage,
                 write_log,
                 gas_meter.clone(),
-                &keys,
-                &addresses,
+                keys.clone(),
+                addresses.clone(),
             )
             .map_err(|error| Error::VpRunnerError {
                 addr: addr.clone(),
@@ -500,12 +502,12 @@ fn check_vps(
             })?;
         if !accept {
             if !dry_run {
-                rejected_vps.insert(addr.clone());
+                rejected_vps.insert(addr);
                 break;
             }
-            rejected_vps.insert(addr.clone());
+            rejected_vps.insert(addr);
         } else {
-            accepted_vps.insert(addr.clone());
+            accepted_vps.insert(addr);
             changed_keys.append(&mut keys.clone());
         }
     }
@@ -519,7 +521,7 @@ fn execute_tx(
     write_log: &mut WriteLog,
 ) -> Result<HashSet<Address>> {
     let tx_code = tx.code.clone();
-    let tx_data = tx.data.clone().unwrap_or(vec![]);
+    let tx_data = tx.data.clone().unwrap_or_default();
     let mut verifiers = HashSet::new();
 
     let tx_runner = TxRunner::new();
@@ -531,7 +533,7 @@ fn execute_tx(
             &mut verifiers,
             gas_meter,
             tx_code,
-            &tx_data,
+            tx_data,
         )
         .map_err(Error::TxRunnerError)?;
 

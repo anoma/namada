@@ -198,15 +198,12 @@ fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
 fn tx_add_gas(env: &TxEnv, used_gas: u64) {
     let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     // if we run out of gas, we need to stop the execution
-    match gas_meter.add(used_gas) {
-        Err(err) => {
-            log::warn!(
-                "Stopping transaction execution because of gas error: {}",
-                err
-            );
-            unreachable!()
-        }
-        _ => {}
+    if let Err(err) = gas_meter.add(used_gas) {
+        log::warn!(
+            "Stopping transaction execution because of gas error: {}",
+            err
+        );
+        unreachable!()
     }
 }
 
@@ -221,16 +218,13 @@ fn vp_add_gas(env: &VpEnv, used_gas: u64) {
         .lock()
         .expect("Cannot get lock on the gas meter");
     // if we run out of gas, we need to stop the execution
-    match gas_meter.add(used_gas) {
-        Err(err) => {
-            log::warn!(
-                "Stopping validity predicate execution because of gas error: \
+    if let Err(err) = gas_meter.add(used_gas) {
+        log::warn!(
+            "Stopping validity predicate execution because of gas error: \
                  {}",
-                err
-            );
-            unreachable!()
-        }
-        _ => {}
+            err
+        );
+        unreachable!()
     }
 }
 
@@ -263,11 +257,11 @@ fn tx_storage_read(
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
-            return 1;
+            1
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            return 0;
+            0
         }
         None => {
             // when not found in write log, try to read from the storage
@@ -279,11 +273,11 @@ fn tx_storage_read(
                     env.memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
-                    return 1;
+                    1
                 }
                 None => {
                     // fail, key not found
-                    return 0;
+                    0
                 }
             }
         }
@@ -316,7 +310,11 @@ fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
-            if present { 1 } else { 0 }
+            if present {
+                1
+            } else {
+                0
+            }
         }
     }
 }
@@ -593,11 +591,11 @@ fn vp_storage_read_pre(
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
-            return 1;
+            1
         }
         None => {
             // fail, key not found
-            return 0;
+            0
         }
     }
 }
@@ -631,11 +629,11 @@ fn vp_storage_read_post(
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
-            return 1;
+            1
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            return 0;
+            0
         }
         None => {
             // when not found in write log, try to read from the storage
@@ -647,11 +645,11 @@ fn vp_storage_read_post(
                     env.memory
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
-                    return 1;
+                    1
                 }
                 None => {
                     // fail, key not found
-                    return 0;
+                    0
                 }
             }
         }
@@ -779,7 +777,11 @@ fn vp_storage_has_key_pre(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
-    if present { 1 } else { 0 }
+    if present {
+        1
+    } else {
+        0
+    }
 }
 
 /// Storage `has_key` in posterior state (after tx execution) function exposed
@@ -809,7 +811,11 @@ fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
-            if present { 1 } else { 0 }
+            if present {
+                1
+            } else {
+                0
+            }
         }
     }
 }
