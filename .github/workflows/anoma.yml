@@ -43,7 +43,7 @@ jobs:
 
   format:
     if: github.event.pull_request.draft == false
-    name: Format Anoma
+    name: Format and Lint Anoma
     runs-on: ubuntu-latest
 
     steps:
@@ -52,7 +52,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly-2021-03-09
-          components: rustfmt
+          components: rustfmt, clippy
           override: true
       - uses: actions/cache@v2
         with:
@@ -67,30 +67,6 @@ jobs:
       - name: Run fmt
         run: make fmt-check
         working-directory: ledger
-
-  lint:
-    if: github.event.pull_request.draft == false
-    name: Lint Anoma
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly-2021-03-09
-          components: clippy
-          override: true
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/work/anoma-prototype/anoma-prototype/tx_template
-            ~/work/anoma-prototype/anoma-prototype/vp_template
-            ~/work/anoma-prototype/anoma-prototype/ledger/target
-          key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v4-cargo-
       - name: Run clippy
         run: make clippy-check
         working-directory: ledger
