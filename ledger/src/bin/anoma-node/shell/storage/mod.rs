@@ -144,8 +144,9 @@ impl Storage {
 
     /// Returns a value from the specified subspace and the gas cost
     pub fn read(&self, key: &Key) -> Result<(Option<Vec<u8>>, u64)> {
-        if !self.has_key(key)?.0 {
-            return Ok((None, 0));
+        let (present, gas) = self.has_key(key)?;
+        if !present {
+            return Ok((None, gas));
         }
 
         if let Some(v) = self.block.subspaces.get(key) {
@@ -162,7 +163,7 @@ impl Storage {
                 let gas = key.len() + v.len();
                 Ok((Some(v), gas as _))
             }
-            None => Ok((None, 0)),
+            None => Ok((None, key.len() as _)),
         }
     }
 
@@ -182,7 +183,7 @@ impl Storage {
         let len = value.len();
         let gas = key.len() + len;
         let size_diff = match self.block.subspaces.insert(key.clone(), value) {
-            Some(old) => len as i64 - old.len() as i64,
+            Some(prev) => len as i64 - prev.len() as i64,
             None => len as i64,
         };
         Ok((gas as _, size_diff))
@@ -197,7 +198,7 @@ impl Storage {
             self.update_tree(key.hash256(), H256::zero())?;
 
             size_diff -= match self.block.subspaces.remove(key) {
-                Some(old) => old.len() as i64,
+                Some(prev) => prev.len() as i64,
                 None => 0,
             };
         }
