@@ -15,10 +15,10 @@ build-release:
 	$(cargo) build --release
 
 clippy:
-	$(cargo) clippy
+	$(cargo) +$(nightly) clippy
 
 clippy-check:
-	$(cargo) clippy -- -D warnings
+	$(cargo) +$(nightly) clippy -- -D warnings
 
 install:
 	# Warning: built in debug mode for now
@@ -46,10 +46,10 @@ test-debug:
 	$(debug-cargo) test -- --nocapture
 
 fmt:
-	$(cargo) +$(nightly) fmt
+	$(cargo) +$(nightly) fmt --all
 
 fmt-check:
-	$(cargo) +$(nightly) fmt  --all -- --check
+	$(cargo) +$(nightly) fmt --all -- --check
 
 watch:
 	$(cargo) watch
