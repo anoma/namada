@@ -71,7 +71,7 @@ pub struct RawAddress {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
-pub struct Label(String);
+struct Label(String);
 
 fn hash_raw(str: impl AsRef<str>) -> String {
     let mut hasher = Sha256::new();
