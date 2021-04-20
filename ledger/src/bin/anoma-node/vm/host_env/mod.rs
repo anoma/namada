@@ -259,16 +259,15 @@ fn tx_storage_read(
     // try to read from the write log first
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     let (log_val, gas) = write_log.read(&key);
+    tx_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
-            tx_add_gas(env, gas);
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
             return 1;
         }
         Some(&write_log::StorageModification::Delete) => {
-            tx_add_gas(env, gas);
             // fail, given key has been deleted
             return 0;
         }
@@ -308,14 +307,11 @@ fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
     // try to read from the write log first
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     let (log_val, gas) = write_log.read(&key);
+    tx_add_gas(env, gas);
     match log_val {
-        Some(&write_log::StorageModification::Write { .. }) => {
-            tx_add_gas(env, gas);
-            1
-        }
+        Some(&write_log::StorageModification::Write { .. }) => 1,
         Some(&write_log::StorageModification::Delete) => {
             // the given key has been deleted
-            tx_add_gas(env, gas);
             0
         }
         None => {
@@ -357,9 +353,9 @@ fn tx_storage_read_varlen(
     // try to read from the write log first
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     let (log_val, gas) = write_log.read(&key);
+    tx_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
-            tx_add_gas(env, gas);
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
             env.memory
@@ -368,7 +364,6 @@ fn tx_storage_read_varlen(
             len
         }
         Some(&write_log::StorageModification::Delete) => {
-            tx_add_gas(env, gas);
             // fail, given key has been deleted
             -1
         }
@@ -434,13 +429,13 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val, gas)) = iterators.next(iter_id) {
+    while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
         let (log_val, log_gas) = write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         );
+        tx_add_gas(env, iter_gas + log_gas);
         match log_val {
             Some(&write_log::StorageModification::Write { ref value }) => {
-                tx_add_gas(env, log_gas);
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -453,12 +448,10 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
                 return 1;
             }
             Some(&write_log::StorageModification::Delete) => {
-                tx_add_gas(env, log_gas);
                 // check the next because the key has already deleted
                 continue;
             }
             None => {
-                tx_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -494,13 +487,13 @@ fn tx_storage_iter_next_varlen(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val, gas)) = iterators.next(iter_id) {
+    while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
         let (log_val, log_gas) = write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         );
+        tx_add_gas(env, iter_gas + log_gas);
         match log_val {
             Some(&write_log::StorageModification::Write { ref value }) => {
-                tx_add_gas(env, log_gas);
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -515,12 +508,10 @@ fn tx_storage_iter_next_varlen(
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
-                tx_add_gas(env, log_gas);
                 // check the next because the key has already deleted
                 continue;
             }
             None => {
-                tx_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -648,16 +639,15 @@ fn vp_storage_read_post(
     let key = Key::parse(key).expect("Cannot parse the key string");
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     let (log_val, gas) = write_log.read(&key);
+    vp_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
-            vp_add_gas(env, gas);
             env.memory
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
             return 1;
         }
         Some(&write_log::StorageModification::Delete) => {
-            vp_add_gas(env, gas);
             // fail, given key has been deleted
             return 0;
         }
@@ -753,9 +743,9 @@ fn vp_storage_read_post_varlen(
     let key = Key::parse(key).expect("Cannot parse the key string");
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     let (log_val, gas) = write_log.read(&key);
+    vp_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
-            vp_add_gas(env, gas);
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
             env.memory
@@ -764,7 +754,6 @@ fn vp_storage_read_post_varlen(
             len
         }
         Some(&write_log::StorageModification::Delete) => {
-            vp_add_gas(env, gas);
             // fail, given key has been deleted
             -1
         }
@@ -825,13 +814,10 @@ fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
     // try to read from the write log first
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
     let (log_val, gas) = write_log.read(&key);
+    vp_add_gas(env, gas);
     match log_val {
-        Some(&write_log::StorageModification::Write { .. }) => {
-            vp_add_gas(env, gas);
-            1
-        }
+        Some(&write_log::StorageModification::Write { .. }) => 1,
         Some(&write_log::StorageModification::Delete) => {
-            vp_add_gas(env, gas);
             // the given key has been deleted
             0
         }
@@ -915,13 +901,13 @@ fn vp_storage_iter_post_next(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val, gas)) = iterators.next(iter_id) {
+    while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
         let (log_val, log_gas) = write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         );
+        vp_add_gas(env, iter_gas + log_gas);
         match log_val {
             Some(&write_log::StorageModification::Write { ref value }) => {
-                vp_add_gas(env, log_gas);
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -934,12 +920,10 @@ fn vp_storage_iter_post_next(
                 return 1;
             }
             Some(&write_log::StorageModification::Delete) => {
-                vp_add_gas(env, log_gas);
                 // check the next because the key has already deleted
                 continue;
             }
             None => {
-                vp_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");
@@ -1009,13 +993,13 @@ fn vp_storage_iter_post_next_varlen(
     let iterators: &mut PrefixIterators =
         unsafe { &mut *(env.iterators.get()) };
     let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val, gas)) = iterators.next(iter_id) {
+    while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
         let (log_val, log_gas) = write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         );
+        vp_add_gas(env, iter_gas + log_gas);
         match log_val {
             Some(&write_log::StorageModification::Write { ref value }) => {
-                vp_add_gas(env, log_gas);
                 let key_val = KeyVal {
                     key,
                     val: value.clone(),
@@ -1030,12 +1014,10 @@ fn vp_storage_iter_post_next_varlen(
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
-                vp_add_gas(env, log_gas);
                 // check the next because the key has already deleted
                 continue;
             }
             None => {
-                vp_add_gas(env, gas);
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
                     .expect("cannot serialize the key value pair");

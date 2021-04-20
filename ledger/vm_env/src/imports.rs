@@ -1,10 +1,12 @@
 /// Transaction environment imports
 pub mod tx {
-    use crate::memory::{KeyVal, KeyValIterator};
-    pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     use std::marker::PhantomData;
     pub use std::mem::size_of;
+
+    pub use borsh::{BorshDeserialize, BorshSerialize};
+
+    use crate::memory::{KeyVal, KeyValIterator};
 
     /// This macro expects a function with signature:
     ///
@@ -191,11 +193,13 @@ pub mod tx {
 
 /// Validity predicate environment imports
 pub mod vp {
-    use crate::memory::{KeyVal, PostKeyValIterator, PreKeyValIterator};
-    pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     use std::marker::PhantomData;
     pub use std::mem::size_of;
+
+    pub use borsh::{BorshDeserialize, BorshSerialize};
+
+    use crate::memory::{KeyVal, PostKeyValIterator, PreKeyValIterator};
 
     /// This macro expects a function with signature:
     ///
@@ -446,7 +450,7 @@ pub mod vp {
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
         fn _read_pre_varlen(key_ptr: u64, key_len: u64, result_ptr: u64)
-            -> i64;
+        -> i64;
 
         // Read fixed-length posterior state, returns 1 if the key is present, 0
         // otherwise.
@@ -495,9 +499,10 @@ pub mod vp {
 
 /// Matchmaker environment imports
 pub mod matchmaker {
-    pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     use std::mem::size_of;
+
+    pub use borsh::{BorshDeserialize, BorshSerialize};
 
     /// This macro expects a function with signature:
     ///

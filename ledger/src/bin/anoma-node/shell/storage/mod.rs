@@ -145,8 +145,9 @@ impl Storage {
 
     /// Returns a value from the specified subspace and the gas cost
     pub fn read(&self, key: &Key) -> Result<(Option<Vec<u8>>, u64)> {
-        if !self.has_key(key)?.0 {
-            return Ok((None, key.len() as _));
+        let (present, gas) = self.has_key(key)?;
+        if !present {
+            return Ok((None, gas));
         }
 
         if let Some(v) = self.block.subspaces.get(key) {
