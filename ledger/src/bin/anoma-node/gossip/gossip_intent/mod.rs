@@ -3,11 +3,10 @@ mod matchmaker;
 mod mempool;
 
 use anoma::protobuf::types::{Intent, IntentBroadcasterMessage, Tx};
+use matchmaker::Matchmaker;
 use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
-
-use matchmaker::Matchmaker;
 
 // TODO split Error and Result type in two, one for Result/Error that can only
 // happens localy and the other that can happens locally and in the network
@@ -41,24 +40,28 @@ impl GossipIntent {
         } else {
             (None, None)
         };
-        Ok((
-            Self {
-                matchmaker,
-            },
-            matchmaker_event_receiver,
-        ))
+        Ok((Self { matchmaker }, matchmaker_event_receiver))
     }
 
-    async fn apply_matchmaker(&mut self, intent: Intent) -> Option<Result<bool>> {
+    async fn apply_matchmaker(
+        &mut self,
+        intent: Intent,
+    ) -> Option<Result<bool>> {
         if let Some(matchmaker) = &mut self.matchmaker {
-            Some(matchmaker.try_match_intent(&intent).await.map_err(Error::Matchmaker))
-        } else {None}
+            Some(
+                matchmaker
+                    .try_match_intent(&intent)
+                    .await
+                    .map_err(Error::Matchmaker),
+            )
+        } else {
+            None
+        }
     }
 
     pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
         self.apply_matchmaker(intent).await;
         Ok(true)
-
     }
 
     pub fn parse_raw_msg(

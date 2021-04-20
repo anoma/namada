@@ -582,12 +582,11 @@ pub mod matchmaker {
     }
 }
 
-
-
 /// Filter environment imports
 pub mod filter {
-    pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
+
+    pub use borsh::{BorshDeserialize, BorshSerialize};
 
     /// This macro expects a function with signature:
     ///

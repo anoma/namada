@@ -88,7 +88,6 @@ pub struct Matchmaker {
     pub filter: Option<PathBuf>,
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Gossip {
     pub address: Multiaddr,
@@ -108,7 +107,7 @@ impl Default for Gossip {
             peers: HashSet::new(),
             topics: HashSet::new(),
             gossiper: Gossiper::new(),
-            matchmaker: None
+            matchmaker: None,
         }
     }
 }

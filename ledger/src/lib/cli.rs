@@ -405,8 +405,7 @@ pub fn update_gossip_config(
     let tx_template_arg = parse_opt(args, TX_TEMPLATE_ARG);
     let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);
     let filter_arg = parse_opt(args, MATCHMAKER_FILTER_ARG);
-    if let Some(mut matchmaker_cfg) = config.matchmaker.as_mut()
-    {
+    if let Some(mut matchmaker_cfg) = config.matchmaker.as_mut() {
         if let Some(matchmaker) = matchmaker_arg {
             matchmaker_cfg.matchmaker = matchmaker
         }
@@ -443,10 +442,10 @@ pub fn update_gossip_config(
     // if at least one argument is not none then fail
     {
         panic!(
-            "No complete matchmaker configuration found (matchmaker \
-             program path, tx template path, and ledger address). Please \
-             update the configuration with default value or use all cli \
-             argument to use the matchmaker"
+            "No complete matchmaker configuration found (matchmaker program \
+             path, tx template path, and ledger address). Please update the \
+             configuration with default value or use all cli argument to use \
+             the matchmaker"
         );
     }
     config.rpc = args.is_present(RPC_ARG);

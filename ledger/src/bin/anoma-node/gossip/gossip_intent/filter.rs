@@ -16,8 +16,8 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
-pub struct Filter{
-    code: Vec<u8>
+pub struct Filter {
+    code: Vec<u8>,
 }
 
 impl Filter {
