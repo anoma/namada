@@ -24,6 +24,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/work/anoma-prototype/anoma-prototype/matchmaker_template
+            ~/work/anoma-prototype/anoma-prototype/tx_template
+            ~/work/anoma-prototype/anoma-prototype/vp_template
             ~/work/anoma-prototype/anoma-prototype
           key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cache-v4-cargo-
@@ -55,6 +58,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/work/anoma-prototype/anoma-prototype/matchmaker_template
+            ~/work/anoma-prototype/anoma-prototype/tx_template
+            ~/work/anoma-prototype/anoma-prototype/vp_template
             ~/work/anoma-prototype/anoma-prototype/ledger
           key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cache-v4-cargo- 
