@@ -95,6 +95,10 @@ impl Key {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    pub fn validity_predicate(addr: &Address) -> Result<Self> {
+        Self::from(addr.to_db_key()).push(&"?".to_owned())
+    }
 }
 
 impl Display for Key {
@@ -278,5 +282,25 @@ impl KeySeg for RawAddress {
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.hash())
+    }
+}
+
+impl KeySeg for Address {
+    fn to_string(&self) -> String {
+        format!("#{}", self)
+    }
+
+    fn parse(mut seg: String) -> Result<Self> {
+        match seg.chars().next() {
+            Some(c) if c == '#' => {
+                let _ = seg.remove(0);
+                Ok(From::from(seg))
+            }
+            _ => Err(Error::ParseAddressFromKey),
+        }
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::AddressSeg(self.clone())
     }
 }

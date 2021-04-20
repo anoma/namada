@@ -126,6 +126,20 @@ pub mod tx {
         unsafe { _insert_verifier(addr.as_ptr() as _, addr.len() as _) }
     }
 
+    // Initialize a new account
+    pub fn init_account(addr: impl AsRef<str>, vp: impl AsRef<[u8]>) {
+        let addr = addr.as_ref();
+        let vp = vp.as_ref();
+        unsafe {
+            _init_account(
+                addr.as_ptr() as _,
+                addr.len() as _,
+                vp.as_ptr() as _,
+                vp.len() as _,
+            )
+        }
+    }
+
     /// Log a string. The message will be printed at the [`log::Level::Info`].
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -169,6 +183,9 @@ pub mod tx {
 
         // Insert a verifier
         fn _insert_verifier(addr_ptr: u64, addr_len: u64);
+
+        // Initialize a new account
+        fn _init_account(addr_ptr: u64, addr_len: u64, vp_ptr: u64, vp_len: u64);
 
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);

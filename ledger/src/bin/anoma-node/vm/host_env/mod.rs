@@ -118,6 +118,7 @@ pub fn prepare_tx_imports(
             "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
             "_iter_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next_varlen),
             "_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_insert_verifier),
+            "_init_account" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_init_account),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
@@ -267,6 +268,17 @@ fn tx_storage_read(
             // fail, given key has been deleted
             0
         }
+        Some(&write_log::StorageModification::InitAccount {
+            ref vp, ..
+        }) => {
+            // read the VP of a new account
+            let gas = env
+                .memory
+                .write_bytes(result_ptr, vp)
+                .expect("cannot write to memory");
+            tx_add_gas(env, gas);
+            1
+        }
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
@@ -313,13 +325,18 @@ fn tx_storage_has_key(env: &TxEnv, key_ptr: u64, key_len: u64) -> u64 {
             // the given key has been deleted
             0
         }
+        Some(&write_log::StorageModification::InitAccount { .. }) => 1,
         None => {
             // when not found in write log, try to check the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
-            if present { 1 } else { 0 }
+            if present {
+                1
+            } else {
+                0
+            }
         }
     }
 }
@@ -368,6 +385,18 @@ fn tx_storage_read_varlen(
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
             -1
+        }
+        Some(&write_log::StorageModification::InitAccount {
+            ref vp, ..
+        }) => {
+            // read the VP of a new account
+            let len: i64 = vp.len() as _;
+            let gas = env
+                .memory
+                .write_bytes(result_ptr, vp)
+                .expect("cannot write to memory");
+            tx_add_gas(env, gas);
+            len
         }
         None => {
             // when not found in write log, try to read from the storage
@@ -458,6 +487,10 @@ fn tx_storage_iter_next(env: &TxEnv, iter_id: u64, result_ptr: u64) -> u64 {
                 // check the next because the key has already deleted
                 continue;
             }
+            Some(&write_log::StorageModification::InitAccount { .. }) => {
+                // a VP of a new account doesn't need to be iterated
+                continue;
+            }
             None => {
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
@@ -520,6 +553,10 @@ fn tx_storage_iter_next_varlen(
             }
             Some(&write_log::StorageModification::Delete) => {
                 // check the next because the key has already deleted
+                continue;
+            }
+            Some(&write_log::StorageModification::InitAccount { .. }) => {
+                // a VP of a new account doesn't need to be iterated
                 continue;
             }
             None => {
@@ -673,6 +710,17 @@ fn vp_storage_read_post(
             // fail, given key has been deleted
             0
         }
+        Some(&write_log::StorageModification::InitAccount {
+            ref vp, ..
+        }) => {
+            // read the VP of a new account
+            let gas = env
+                .memory
+                .write_bytes(result_ptr, vp)
+                .expect("cannot write to memory");
+            vp_add_gas(env, gas);
+            1
+        }
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
@@ -787,6 +835,18 @@ fn vp_storage_read_post_varlen(
             // fail, given key has been deleted
             -1
         }
+        Some(&write_log::StorageModification::InitAccount {
+            ref vp, ..
+        }) => {
+            // read the VP of a new account
+            let len: i64 = vp.len() as _;
+            let gas = env
+                .memory
+                .write_bytes(result_ptr, vp)
+                .expect("cannot write to memory");
+            vp_add_gas(env, gas);
+            len
+        }
         None => {
             // when not found in write log, try to read from the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
@@ -828,7 +888,11 @@ fn vp_storage_has_key_pre(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
-    if present { 1 } else { 0 }
+    if present {
+        1
+    } else {
+        0
+    }
 }
 
 /// Storage `has_key` in posterior state (after tx execution) function exposed
@@ -855,13 +919,18 @@ fn vp_storage_has_key_post(env: &VpEnv, key_ptr: u64, key_len: u64) -> u64 {
             // the given key has been deleted
             0
         }
+        Some(&write_log::StorageModification::InitAccount { .. }) => 1,
         None => {
             // when not found in write log, try to check the storage
             let storage: &Storage = unsafe { &*(env.storage.get()) };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
-            if present { 1 } else { 0 }
+            if present {
+                1
+            } else {
+                0
+            }
         }
     }
 }
@@ -960,6 +1029,10 @@ fn vp_storage_iter_post_next(
             }
             Some(&write_log::StorageModification::Delete) => {
                 // check the next because the key has already deleted
+                continue;
+            }
+            Some(&write_log::StorageModification::InitAccount { .. }) => {
+                // a VP of a new account doesn't need to be iterated
                 continue;
             }
             None => {
@@ -1062,6 +1135,10 @@ fn vp_storage_iter_post_next_varlen(
                 // check the next because the key has already deleted
                 continue;
             }
+            Some(&write_log::StorageModification::InitAccount { .. }) => {
+                // a VP of a new account doesn't need to be iterated
+                continue;
+            }
             None => {
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
@@ -1098,6 +1175,37 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
         unsafe { &mut *(env.verifiers.get()) };
     verifiers.insert(addr.hash());
     tx_add_gas(env, addr_len);
+}
+
+/// Try to initialize a new account with a given address. The action must be
+/// authorized by the parent address.
+fn tx_init_account(
+    env: &TxEnv,
+    addr_ptr: u64,
+    addr_len: u64,
+    vp_ptr: u64,
+    vp_len: u64,
+) {
+    let (addr, gas) = env
+        .memory
+        .read_string(addr_ptr, addr_len as _)
+        .expect("Cannot read the address from memory");
+    tx_add_gas(env, gas);
+    let (vp, gas) = env
+        .memory
+        .read_bytes(vp_ptr, vp_len as _)
+        .expect("Cannot read validity predicate from memory");
+    tx_add_gas(env, gas);
+
+    let addr =
+        RawAddress::parse(addr).expect("Cannot parse the address string");
+    let parent_addr = addr.parent();
+
+    log::debug!("tx_init_account address: {}, parent: {}", addr, parent_addr);
+
+    let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
+    let gas = write_log.init_account(addr.hash(), parent_addr.hash(), vp);
+    tx_add_gas(env, gas);
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be

@@ -113,6 +113,14 @@ impl Address {
         let hash = String::from_utf8(hash).map_err(Error::NonUtf8Address)?;
         Ok(Self { hash })
     }
+
+    pub fn len(&self) -> usize {
+        self.hash.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.hash.is_empty()
+    }
 }
 
 impl From<String> for Address {
