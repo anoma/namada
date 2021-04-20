@@ -11,7 +11,7 @@ service RPCService {
 message RpcMessage {
   oneof message {
     types.Intent intent = 1;
-    types.DkgMessage dkg = 2;
+    types.Dkg dkg = 2;
   }
 }
 

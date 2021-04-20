@@ -16,19 +16,18 @@ message Intent {
   google.protobuf.Timestamp timestamp = 2;
 }
 
-message Filter{
-  bytes code = 1;
+message IntentBroadcasterMessage{
+  oneof intent_message {
+    Intent intent = 1;
+  }
 }
 
-message DkgMessage {
+message Dkg {
   string data = 1;
 }
 
-message IntentBroadcasterMessage{
-
-  oneof message {
-    Intent intent = 1;
-    Filter filter = 2;
-    DkgMessage dkg = 3;
+message DkgBroadcasterMessage{
+  oneof dkg_message {
+    Dkg dkg = 1;
   }
 }

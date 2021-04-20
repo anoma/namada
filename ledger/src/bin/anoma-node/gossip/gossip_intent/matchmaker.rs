@@ -1,8 +1,8 @@
-use anoma::protobuf::types::{Filter, Intent, Tx};
+use anoma::protobuf::types::{Intent, Tx};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use super::filter::FilterValidate;
+use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
 use crate::vm;
 
@@ -74,7 +74,7 @@ impl Matchmaker {
         if self.apply_filter(intent).await? {
             self.mempool
                 .put(intent.clone())
-                .map_err(Error::MempoolFailed);
+                .map_err(Error::MempoolFailed)?;
             let tx_code = &self.tx_code;
             let matchmaker_runner = vm::MatchmakerRunner::new();
             let matchmaker_code = &self.matchmaker_code;

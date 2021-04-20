@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::gossiper::Gossiper;
-use crate::types::Topic;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -89,29 +88,15 @@ pub struct Matchmaker {
     pub filter: Option<PathBuf>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IntentGossip {
-    pub matchmaker: Option<Matchmaker>,
-    pub public_filter_path: Option<PathBuf>,
-}
-
-impl Default for IntentGossip {
-    fn default() -> Self {
-        Self {
-            matchmaker: None,
-            public_filter_path: None,
-        }
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Gossip {
     pub address: Multiaddr,
     pub rpc: bool,
     pub peers: HashSet<Multiaddr>,
-    pub topics: HashSet<Topic>,
+    pub topics: HashSet<String>,
     pub gossiper: Gossiper,
-    pub intent_gossip: Option<IntentGossip>,
+    pub matchmaker: Option<Matchmaker>,
 }
 
 impl Default for Gossip {
@@ -121,28 +106,9 @@ impl Default for Gossip {
             address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
             rpc: false,
             peers: HashSet::new(),
-            topics: [Topic::Intent].iter().cloned().collect(),
+            topics: HashSet::new(),
             gossiper: Gossiper::new(),
-            intent_gossip: Some(IntentGossip::default()),
-        }
-    }
-}
-
-impl Gossip {
-    pub fn enable_dkg(&mut self, enable: bool) {
-        if enable {
-            self.topics.insert(Topic::Dkg);
-        } else {
-            self.topics.remove(&Topic::Dkg);
-        }
-    }
-
-    pub fn enable_intent(&mut self, intent_gossip_cfg: Option<IntentGossip>) {
-        self.intent_gossip = intent_gossip_cfg;
-        if self.intent_gossip.is_some() {
-            self.topics.insert(Topic::Intent);
-        } else {
-            self.topics.remove(&Topic::Intent);
+            matchmaker: None
         }
     }
 }
