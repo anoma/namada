@@ -1107,19 +1107,19 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
-/// printed at the [`log::Level::Info`].
+/// printed at the [`log::Level::Info`]. This function is for development only.
 fn tx_log_string(env: &TxEnv, str_ptr: u64, str_len: u64) {
-    let (str, gas) = env
+    let (str, _gas) = env
         .memory
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
-    tx_add_gas(env, gas);
 
     log::info!("WASM Transaction log: {}", str);
 }
 
 /// Log a string from exposed to the wasm VM matchmaker environment. The message
-/// will be printed at the [`log::Level::Info`].
+/// will be printed at the [`log::Level::Info`]. This function is for
+/// development only.
 fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
     let (str, _gas) = env
         .memory
@@ -1130,13 +1130,12 @@ fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be
-/// printed at the [`log::Level::Info`].
+/// printed at the [`log::Level::Info`]. This function is for development only.
 fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
     let (str, gas) = env
         .memory
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
-    vp_add_gas(env, gas);
 
     log::info!("WASM Validity predicate log: {}", str);
 }
