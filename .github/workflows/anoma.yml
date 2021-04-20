@@ -62,8 +62,10 @@ jobs:
             ~/work/anoma-prototype/anoma-prototype/tx_template/target
             ~/work/anoma-prototype/anoma-prototype/vp_template/target
             ~/work/anoma-prototype/anoma-prototype/target
-          key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v4-cargo- 
+          # The key has to be different from build as rustfmt and clippy don't 
+          # share the same build artifacts 
+          key: cache-v4-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cache-v4-lint- 
       - name: Run fmt
         run: make fmt-check
       - name: Run clippy
