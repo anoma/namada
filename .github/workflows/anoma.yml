@@ -24,10 +24,10 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/work/anoma-prototype/anoma-prototype/matchmaker_template
-            ~/work/anoma-prototype/anoma-prototype/tx_template
-            ~/work/anoma-prototype/anoma-prototype/vp_template
-            ~/work/anoma-prototype/anoma-prototype
+            ~/work/anoma-prototype/anoma-prototype/matchmaker_template/target
+            ~/work/anoma-prototype/anoma-prototype/tx_template/target
+            ~/work/anoma-prototype/anoma-prototype/vp_template/target
+            ~/work/anoma-prototype/anoma-prototype/target
           key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cache-v4-cargo-
       - name: Run requirements
@@ -58,10 +58,10 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/work/anoma-prototype/anoma-prototype/matchmaker_template
-            ~/work/anoma-prototype/anoma-prototype/tx_template
-            ~/work/anoma-prototype/anoma-prototype/vp_template
-            ~/work/anoma-prototype/anoma-prototype/ledger
+            ~/work/anoma-prototype/anoma-prototype/matchmaker_template/target
+            ~/work/anoma-prototype/anoma-prototype/tx_template/target
+            ~/work/anoma-prototype/anoma-prototype/vp_template/target
+            ~/work/anoma-prototype/anoma-prototype/target
           key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cache-v4-cargo- 
       - name: Run fmt
