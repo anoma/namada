@@ -8,7 +8,7 @@ pub mod tx {
 
     /// This macro expects a function with signature:
     ///
-    /// ```
+    /// ```ignore
     /// fn apply_tx(tx_data: vm_memory::Data)
     /// ```
     /// TODO try to switch to procedural macros instead
@@ -185,7 +185,7 @@ pub mod vp {
 
     /// This macro expects a function with signature:
     ///
-    /// ```
+    /// ```ignore
     /// fn validate_tx(tx_data: vm_memory::Data, addr: &str, keys_changed: Vec<String>) -> bool
     /// ```
     #[macro_export]
@@ -455,7 +455,7 @@ pub mod matchmaker {
 
     /// This macro expects a function with signature:
     ///
-    /// ```
+    /// ```ignore
     /// fn match_intent(intent_1: Intent, intent_2: Intent) -> bool
     /// ```
     #[macro_export]
