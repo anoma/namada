@@ -241,32 +241,47 @@ impl AnomaMemory {
         Ok(())
     }
 
-    /// Read bytes from memory at the given offset and length
-    pub fn read_bytes(&self, offset: u64, len: usize) -> Result<Vec<u8>> {
+    /// Read bytes from memory at the given offset and length, return the bytes
+    /// and the gas cost
+    pub fn read_bytes(
+        &self,
+        offset: u64,
+        len: usize,
+    ) -> Result<(Vec<u8>, u64)> {
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
-        read_memory_bytes(memory, offset, len)
+        let bytes = read_memory_bytes(memory, offset, len)?;
+        let gas = bytes.len();
+        Ok((bytes, gas as _))
     }
 
-    /// Write bytes into memory at the given offset
-    pub fn write_bytes<T>(&self, offset: u64, bytes: T) -> Result<()>
+    /// Write bytes into memory at the given offset and return the gas cost
+    pub fn write_bytes<T>(&self, offset: u64, bytes: T) -> Result<u64>
     where
         T: AsRef<[u8]>,
     {
+        let gas = bytes.as_ref().len();
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
-        write_memory_bytes(memory, offset, bytes)
+        write_memory_bytes(memory, offset, bytes)?;
+        Ok(gas as _)
     }
 
-    /// Read string from memory at the given offset and bytes length
-    pub fn read_string(&self, offset: u64, len: usize) -> Result<String> {
-        let bytes = self.read_bytes(offset, len)?;
-        Ok(std::str::from_utf8(&bytes)
+    /// Read string from memory at the given offset and bytes length, and return
+    /// the gas cost
+    pub fn read_string(
+        &self,
+        offset: u64,
+        len: usize,
+    ) -> Result<(String, u64)> {
+        let (bytes, gas) = self.read_bytes(offset, len)?;
+        let string = std::str::from_utf8(&bytes)
             .expect("unable to decode string from memory")
-            .to_string())
+            .to_string();
+        Ok((string, gas as _))
     }
 
-    /// Write string into memory at the given offset
+    /// Write string into memory at the given offset and return the gas cost
     #[allow(dead_code)]
-    pub fn write_string(&self, offset: u64, string: String) -> Result<()> {
+    pub fn write_string(&self, offset: u64, string: String) -> Result<u64> {
         self.write_bytes(offset, string.as_bytes())
     }
 }
