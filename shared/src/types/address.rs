@@ -89,7 +89,6 @@ impl Address {
 
     /// Encode the hash of the given address as a Bech32m [`String`].
     pub fn encode(&self) -> String {
-        println!("self.hash {}", self.hash);
         let bytes: [u8; HASH_LEN] = self
             .hash
             .as_bytes()
