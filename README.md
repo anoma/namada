@@ -6,9 +6,7 @@ The ledger currently requires that [Tendermint version 0.34.x](https://github.co
 
 The transaction code can currently be built from [tx_template](../tx_template) and validity predicates from [vp_template](../vp_template), which is Rust code compiled to wasm.
 
-The transaction template calls `transfer` function from the host environment (Anoma shell) with some hard-coded values for the transfer source, destination and amount (this is temporary until we have more complete storage API for transactions).
-
-The validity predicate template receives the `transfer` data and can validate a transaction and the key changes that is has performed modification.
+The transaction template calls functions from the host environment. The validity predicate template can validate a transaction and the key changes that is has performed.
 
 The validity predicate is currently hard-coded in the shell and used for every account. To experiment with a different validity predicate, build it from the template and restart the shell.
 
