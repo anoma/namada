@@ -59,7 +59,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize, Hash)]
 pub struct Address {
     pub hash: String,
 }
@@ -88,10 +88,14 @@ impl Address {
     /// Encode the hash of the given address as a Bech32m [`String`].
     pub fn encode(&self) -> String {
         let bytes = self.hash.as_bytes();
-        bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT).expect(&format!(
-            "The human-readable part {} should never cause failure",
-            ADDRESS_HRP
-        ))
+        bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT).unwrap_or_else(
+            |_| {
+                panic!(
+                    "The human-readable part {} should never cause a failure",
+                    ADDRESS_HRP
+                )
+            },
+        )
     }
 
     /// Decode an address from a hexadecimal [`String`] of its hash.
@@ -146,18 +150,12 @@ impl RawAddress {
     }
 }
 
-fn labels_to_str(labels: &Vec<Label>) -> String {
+fn labels_to_str(labels: &[Label]) -> String {
     labels
         .iter()
         .map(|l| l.0.clone())
         .collect::<Vec<String>>()
         .join(".")
-}
-
-impl Hash for Address {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.hash.hash(state)
-    }
 }
 
 impl Debug for Address {
@@ -212,7 +210,7 @@ impl FromStr for Label {
     /// To validate a string to be parsed properly, a [`Label`] should not be
     /// parsed directly. Instead parse the whole [`Address`].
     fn from_str(s: &str) -> Result<Self> {
-        match s.chars().nth(0) {
+        match s.chars().next() {
             None => Err(Error::EmptyLabel),
             Some(first_char) => {
                 if s.len() > MAX_LABEL_LEN {

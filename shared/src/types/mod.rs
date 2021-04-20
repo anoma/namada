@@ -75,16 +75,6 @@ impl Key {
         Key { segments }
     }
 
-    /// Returns string from the segments
-    pub fn to_string(&self) -> String {
-        let v: Vec<String> = self
-            .segments
-            .iter()
-            .map(|s| DbKeySeg::to_string(s))
-            .collect();
-        v.join("/")
-    }
-
     /// Returns the addresses from the key segments
     pub fn find_addresses(&self) -> Vec<Address> {
         let mut addresses = Vec::new();
@@ -101,11 +91,21 @@ impl Key {
     pub fn len(&self) -> usize {
         self.to_string().len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl Display for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.to_string())
+        let segs: Vec<String> = self
+            .segments
+            .iter()
+            .map(|s| DbKeySeg::to_string(s))
+            .collect();
+        let key = segs.join("/");
+        f.write_str(&key)
     }
 }
 
@@ -133,7 +133,7 @@ pub enum DbKeySeg {
 
 impl KeySeg for DbKeySeg {
     fn parse(mut string: String) -> Result<Self> {
-        match string.chars().nth(0) {
+        match string.chars().next() {
             // TODO reserve non-alphanumerical prefix characters for internal
             // usage raw addresses are prefixed with `'@'`
             Some(c) if c == '@' => {
@@ -267,7 +267,7 @@ impl KeySeg for RawAddress {
     }
 
     fn parse(mut seg: String) -> Result<Self> {
-        match seg.chars().nth(0) {
+        match seg.chars().next() {
             Some(c) if c == '@' => {
                 let _ = seg.remove(0);
                 FromStr::from_str(&seg).map_err(Error::ParseAddress)
