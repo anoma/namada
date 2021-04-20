@@ -1132,7 +1132,7 @@ fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`log::Level::Info`]. This function is for development only.
 fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
-    let (str, gas) = env
+    let (str, _gas) = env
         .memory
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
