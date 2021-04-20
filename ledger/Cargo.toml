@@ -71,16 +71,15 @@ tendermint-proto = {git = "https://github.com/informalsystems/tendermint-rs"}
 tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", features = ["full"]}
+toml = "0.5.8"
 tonic = "0.4.0"
 wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
 wasmer-engine-jit = "1.0.2"
 wasmparser = "0.77.0"
-toml = "0.5.8"
 
 [dev-dependencies]
 cargo-watch = "7.5.0"
-clippy = "0.0.302"
 tempdir = "0.3.7"
 wasmer-vm = "1.0.2"
 
