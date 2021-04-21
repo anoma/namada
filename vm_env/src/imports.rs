@@ -132,6 +132,19 @@ pub mod tx {
         unsafe { _insert_verifier(addr.as_ptr() as _, addr.len() as _) }
     }
 
+    /// Update a validity predicate
+    pub fn update_validity_predicate(addr: impl AsRef<str>, code: Vec<u8>) {
+        let addr = addr.as_ref();
+        unsafe {
+            _update_validity_predicate(
+                addr.as_ptr() as _,
+                addr.len() as _,
+                code.as_ptr() as _,
+                code.len() as _,
+            )
+        };
+    }
+
     /// Log a string. The message will be printed at the [`log::Level::Info`].
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -175,6 +188,14 @@ pub mod tx {
 
         // Insert a verifier
         fn _insert_verifier(addr_ptr: u64, addr_len: u64);
+
+        // Update a validity predicate
+        fn _update_validity_predicate(
+            addr_ptr: u64,
+            addr_len: u64,
+            code_ptr: u64,
+            code_len: u64,
+        );
 
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);

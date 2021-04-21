@@ -6,7 +6,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,
-    convert::TryInto,
     fmt::{Debug, Display},
     hash::Hash,
     iter::FromIterator,
@@ -63,9 +62,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
 pub struct Address {
     pub hash: String,
-    // TODO add raw for "dev"
 }
 
+/// invariant, the raw string is equal to labels.join(".").
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
 pub struct RawAddress {
     pub raw: String,
@@ -89,13 +88,7 @@ impl Address {
 
     /// Encode the hash of the given address as a Bech32m [`String`].
     pub fn encode(&self) -> String {
-        println!("self.hash {}", self.hash);
-        let bytes: [u8; HASH_LEN] = self
-            .hash
-            .as_bytes()
-            .clone()
-            .try_into()
-            .expect("Unexpected hash length");
+        let bytes = self.hash.as_bytes();
         bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT).expect(&format!(
             "The human-readable part {} should never cause failure",
             ADDRESS_HRP
@@ -126,27 +119,31 @@ impl From<String> for Address {
 }
 
 impl RawAddress {
+    pub fn root() -> Self {
+        Self {
+            raw: "".into(),
+            labels: vec![],
+        }
+    }
     pub fn hash(&self) -> Address {
         Address {
             hash: hash_raw(&self.raw),
         }
     }
 
-    pub fn parent_raw(&self) -> Option<Self> {
+    pub fn parent(&self) -> Self {
         if self.labels.len() <= 1 {
-            return None;
+            return Self::root();
         }
         let mut labels = self.labels.clone();
         labels.remove(0);
         let raw = labels_to_str(&labels);
-        Some(Self { raw, labels })
+        Self { raw, labels }
     }
 
     #[allow(dead_code)]
-    pub fn parent(&self) -> Address {
-        self.parent_raw()
-            .map(|p| p.hash())
-            .unwrap_or(Address::root())
+    pub fn parent_hash(&self) -> Address {
+        self.parent().hash()
     }
 }
 
