@@ -9,8 +9,8 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::{gossip_intent, network_behaviour::Behaviour};
-use super::types::NetworkEvent;
+use super::{gossip_intent::types::IntentBroadcasterEvent, network_behaviour::Behaviour};
+use super::gossip_intent;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -31,7 +31,8 @@ pub struct P2P {
 impl P2P {
     pub fn new(
         config: &anoma::config::Gossip,
-    ) -> Result<(Self, Receiver<NetworkEvent>, Option<Receiver<Tx>>)> {
+    ) -> Result<(Self, Receiver<IntentBroadcasterEvent>, Option<Receiver<Tx>>)>
+    {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
@@ -45,10 +46,10 @@ impl P2P {
 
         let (intent_process, matchmaker_event_receiver) =
             gossip_intent::GossipIntent::new(&config)
-            .map_err(Error::GossipIntentError)?;
+                .map_err(Error::GossipIntentError)?;
         let mut p2p = Self {
             swarm,
-            intent_process
+            intent_process,
         };
         p2p.prepare(&config).expect("gossip prepraration failed");
 
@@ -58,7 +59,7 @@ impl P2P {
     pub fn prepare(&mut self, config: &anoma::config::Gossip) -> Result<()> {
         for topic in &config.topics {
             let topic = IdentTopic::new(topic.to_string());
-            self.swarm.gossipsub.subscribe(&topic).unwrap();
+            self.swarm.intent_broadcaster.subscribe(&topic).unwrap();
         }
 
         // Listen on given address
@@ -87,7 +88,7 @@ impl P2P {
             intent.encode(&mut tix_bytes).unwrap();
             let _message_id = self
                 .swarm
-                .gossipsub
+                .intent_broadcaster
                 .publish(IdentTopic::new("intent".to_string()), tix_bytes);
         }
     }
@@ -106,17 +107,19 @@ impl P2P {
     // _response = client.broadcast_tx_commit(tx_bytes.into()).await;     }
     // }
 
-    pub async fn handle_network_event(&mut self, event: NetworkEvent) {
+    pub async fn handle_network_event(
+        &mut self,
+        event: IntentBroadcasterEvent,
+    ) {
+        let message_id = event.message_id();
         match event {
-            NetworkEvent::Message {
-                topic:_,
+            IntentBroadcasterEvent::Message {
+                topic: _,
                 data,
                 peer,
-                message_id,
             } => {
                 let intent_process = &mut self.intent_process;
                 let validity = match intent_process.parse_raw_msg(data) {
-
                     Ok(IntentBroadcasterMessage {
                         intent_message:
                             Some(intent_broadcaster_message::IntentMessage::Intent(
@@ -137,13 +140,13 @@ impl P2P {
                     Err(gossip_intent::Error::DecodeError(..)) => {
                         MessageAcceptance::Reject
                     }
-                    Err(gossip_intent::Error::MatchmakerInit(..)) |
-                    Err(gossip_intent::Error::Matchmaker(..)) => {
+                    Err(gossip_intent::Error::MatchmakerInit(..))
+                    | Err(gossip_intent::Error::Matchmaker(..)) => {
                         MessageAcceptance::Ignore
                     }
                 };
                 self.swarm
-                    .gossipsub
+                    .intent_broadcaster
                     .report_message_validation_result(
                         &message_id,
                         &peer,

@@ -1,7 +1,6 @@
 mod gossip_intent;
 mod network_behaviour;
 mod p2p;
-mod types;
 
 use std::thread;
 
@@ -12,8 +11,8 @@ use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc;
 
+use self::gossip_intent::types::IntentBroadcasterEvent;
 use self::p2p::P2P;
-use self::types::NetworkEvent;
 use super::rpc;
 
 #[derive(Error, Debug)]
@@ -76,7 +75,7 @@ pub async fn matchmaker_dispatcher(
 #[tokio::main]
 pub async fn dispatcher(
     mut gossip: P2P,
-    mut network_event_receiver: Receiver<NetworkEvent>,
+    mut network_event_receiver: Receiver<IntentBroadcasterEvent>,
     rpc_event_receiver: Option<Receiver<Intent>>,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
