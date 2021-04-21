@@ -1244,6 +1244,7 @@ fn tx_init_account(
 
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
+    // If the parent address doesn't exist, the tx will be declined
     verifiers.insert(parent_addr.hash());
     tx_add_gas(env, gas);
 }

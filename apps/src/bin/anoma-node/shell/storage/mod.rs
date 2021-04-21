@@ -238,13 +238,13 @@ impl Storage {
         Ok(())
     }
 
-    /// Get a validity predicate for the given account address
-    pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
+    /// Get a validity predicate for the given account address and the gas cost
+    /// for reading it.
+    pub fn validity_predicate(
+        &self,
+        addr: &Address,
+    ) -> Result<(Option<Vec<u8>>, u64)> {
         let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
-        match self.read(&key)?.0 {
-            Some(vp) => Ok(vp),
-            // TODO: this temporarily loads default VP template if none found
-            None => Ok(VP_WASM.to_vec()),
-        }
+        self.read(&key)
     }
 }
