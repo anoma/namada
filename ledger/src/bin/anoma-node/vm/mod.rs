@@ -254,12 +254,12 @@ impl VpRunner {
         addr: Address,
         storage: &Storage,
         write_log: &WriteLog,
-        gas_meter: Arc<Mutex<BlockGasMeter>>,
+        vp_gas_meter: &mut BlockGasMeter,
         keys_changed: &Vec<String>,
         verifiers: &HashSet<String>,
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
-
+        
         // Read-only access from parallel Vp runners
         let storage = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
@@ -273,6 +273,12 @@ impl VpRunner {
         let iterators = unsafe {
             MutEnvHostWrapper::new(
                 &mut PrefixIterators::new() as *mut _ as *mut c_void
+            )
+        };
+
+        let gas_meter = unsafe {
+            MutEnvHostWrapper::new(
+                vp_gas_meter as *mut _ as *mut c_void
             )
         };
 

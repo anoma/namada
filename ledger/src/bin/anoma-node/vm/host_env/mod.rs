@@ -132,7 +132,7 @@ pub fn prepare_vp_imports(
     storage: EnvHostWrapper<Storage>,
     write_log: EnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
-    gas_meter: Arc<Mutex<BlockGasMeter>>,
+    gas_meter: MutEnvHostWrapper<BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
     let env = VpEnv {

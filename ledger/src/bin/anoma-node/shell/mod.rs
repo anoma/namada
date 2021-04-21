@@ -9,6 +9,7 @@ use std::sync::{mpsc, Arc, Mutex};
 
 use anoma::bytes::ByteBuf;
 use anoma::protobuf::types::Tx;
+use gas::VpGasMeter;
 use prost::Message;
 use thiserror::Error;
 
@@ -67,7 +68,7 @@ pub struct Shell {
     storage: storage::Storage,
     // The gas meter is sync with mutex to allow VPs sharing it
     // TODO it should be possible to impl a lock-free gas metering for VPs
-    gas_meter: Arc<Mutex<BlockGasMeter>>,
+    gas_meter: BlockGasMeter,
     write_log: WriteLog,
 }
 
@@ -455,6 +456,7 @@ fn run_tx(
     let mut gas_meter = gas_meter_mutex
         .lock()
         .expect("Cannot get lock on the gas meter");
+    // gas_meter.add(gas) TODO: add this line
     let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
 
     Ok(TxResult::new(gas, vps_result))
@@ -463,7 +465,7 @@ fn run_tx(
 fn check_vps(
     tx: &Tx,
     storage: &Storage,
-    gas_meter_mutex: Arc<Mutex<BlockGasMeter>>,
+    gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
     verifiers: &HashSet<Address>,
     dry_run: bool,
@@ -477,19 +479,25 @@ fn check_vps(
     let mut accepted_vps = HashSet::new();
     let mut changed_keys: Vec<String> = Vec::new();
 
+    let cache_vp_lookup: HashMap<Address, Vec<u8>> = HashMap::new();
+
     for (addr, keys) in verifiers {
         let vp = storage
             .validity_predicate(&addr)
             .map_err(Error::StorageError)?;
 
-        let mut gas_meter = gas_meter_mutex
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        gas_meter
-            .add_compiling_fee(vp.len())
-            .map_err(Error::GasError)?;
-        drop(gas_meter);
+        gas_meter.add_compiling_fee(vp.len()).map_err(Error::GasError)?;
+        cache_vp_lookup.insert(addr, vp);
+    }
 
+    let initial_gas = gas_meter.get_current_transaction_gas();
+    let vp_meters: Vec<VpGasMeter> = Vec::new();
+
+    for (addr, keys) in verifiers {
+        let vp = cache_vp_lookup.get(&addr);
+
+        let vp_gas_meter = VpGasMeter::new(initial_gas);
+        
         let vp_runner = VpRunner::new();
         let accept = vp_runner
             .run(
@@ -498,7 +506,7 @@ fn check_vps(
                 addr.clone(),
                 storage,
                 write_log,
-                gas_meter_mutex.clone(),
+                &mut vp_gas_meter,
                 &keys,
                 &addresses,
             )
@@ -516,7 +524,14 @@ fn check_vps(
             accepted_vps.insert(addr.clone());
             changed_keys.append(&mut keys.clone());
         }
+        vp_meters.push(vp_gas_meter);
     }
+
+    let max_gas = vp_meters.iter().map(|&x| x.vp_gas).max().unwrap();
+    let rest_gas = vp_meters.iter().filter(|&meter| meter.vp_gas != max_gas).map(|&x| x.vp_gas).collect();
+    gas_meter.add(max_gas);
+    gas_meter.add_parallel_fee(rest_gas);
+
     Ok(VpResult::new(accepted_vps, rejected_vps, changed_keys))
 }
 
@@ -548,3 +563,4 @@ fn execute_tx(
 
     Ok(verifiers)
 }
+

@@ -11,8 +11,10 @@ pub enum Error {
 }
 
 const TX_GAS_PER_BYTE: u64 = 2;
+const PARALLEL_GAS_FEE: u64 = 1;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
+
 
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
@@ -21,10 +23,38 @@ const TRANSACTION_GAS_LIMIT: u64 = 10_000_000;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockGasMeter {
     block_gas: u64,
     transaction_gas: u64,
+}
+#[derive(Debug, Clone)]
+pub struct VpGasMeter {
+    pub vp_gas: u64
+}
+
+impl VpGasMeter {
+
+    pub fn add(&mut self, gas: u64) -> Result<()> {
+        self.vp_gas = self
+            .vp_gas
+            .checked_add(gas)
+            .ok_or(Error::GasOverflow)?;
+
+        if self.vp_gas > TRANSACTION_GAS_LIMIT {
+            return Err(Error::TransactionGasExceedededError);
+        }
+        Ok(())
+    }
+
+}
+
+impl VpGasMeter {
+    pub fn new(vp_gas: u64) -> Self {
+        Self {
+            vp_gas: vp_gas
+        }
+    }
 }
 
 impl BlockGasMeter {
@@ -75,6 +105,18 @@ impl BlockGasMeter {
         self.transaction_gas = 0;
         self.block_gas = 0;
     }
+
+    pub fn add_parallel_fee(&mut self, vps_gases: Vec<u64>) -> Result<()> {
+        vps_gases.sort();
+        let mid = vps_gases.len() / 2;
+        let median_gas = vps_gases[mid];
+        self.add(median_gas)
+    }
+
+    pub fn get_current_transaction_gas(&mut self) -> u64 {
+        self.transaction_gas
+    }
+
 }
 
 impl Default for BlockGasMeter {
