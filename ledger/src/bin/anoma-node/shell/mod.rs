@@ -463,7 +463,7 @@ fn run_tx(
 fn check_vps(
     tx: &Tx,
     storage: &Storage,
-    gas_meter: Arc<Mutex<BlockGasMeter>>,
+    gas_meter_mutex: Arc<Mutex<BlockGasMeter>>,
     write_log: &mut WriteLog,
     verifiers: &HashSet<Address>,
     dry_run: bool,
@@ -482,6 +482,14 @@ fn check_vps(
             .validity_predicate(&addr)
             .map_err(Error::StorageError)?;
 
+        let mut gas_meter = gas_meter_mutex
+            .lock()
+            .expect("Cannot get lock on the gas meter");
+        gas_meter
+            .add_compiling_fee(vp.len())
+            .map_err(Error::GasError)?;
+        drop(gas_meter);
+
         let vp_runner = VpRunner::new();
         let accept = vp_runner
             .run(
@@ -490,7 +498,7 @@ fn check_vps(
                 addr.clone(),
                 storage,
                 write_log,
-                gas_meter.clone(),
+                gas_meter_mutex.clone(),
                 &keys,
                 &addresses,
             )
@@ -519,6 +527,9 @@ fn execute_tx(
     write_log: &mut WriteLog,
 ) -> Result<HashSet<Address>> {
     let tx_code = tx.code.clone();
+    gas_meter
+        .add_compiling_fee(tx_code.len())
+        .map_err(Error::GasError)?;
     let tx_data = tx.data.clone().unwrap_or(vec![]);
     let mut verifiers = HashSet::new();
 
