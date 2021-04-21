@@ -1219,17 +1219,17 @@ fn tx_init_account(
     env: &TxEnv,
     addr_ptr: u64,
     addr_len: u64,
-    vp_ptr: u64,
-    vp_len: u64,
+    code_ptr: u64,
+    code_len: u64,
 ) {
     let (addr, gas) = env
         .memory
         .read_string(addr_ptr, addr_len as _)
         .expect("Cannot read the address from memory");
     tx_add_gas(env, gas);
-    let (vp, gas) = env
+    let (code, gas) = env
         .memory
-        .read_bytes(vp_ptr, vp_len as _)
+        .read_bytes(code_ptr, code_len as _)
         .expect("Cannot read validity predicate from memory");
     tx_add_gas(env, gas);
 
@@ -1240,7 +1240,11 @@ fn tx_init_account(
     log::debug!("tx_init_account address: {}, parent: {}", addr, parent_addr);
 
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
-    let gas = write_log.init_account(addr.hash(), parent_addr.hash(), vp);
+    let gas = write_log.init_account(addr.hash(), parent_addr.hash(), code);
+
+    let verifiers: &mut HashSet<Address> =
+        unsafe { &mut *(env.verifiers.get()) };
+    verifiers.insert(parent_addr.hash());
     tx_add_gas(env, gas);
 }
 

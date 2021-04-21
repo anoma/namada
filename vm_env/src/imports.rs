@@ -144,8 +144,12 @@ pub mod tx {
     }
 
     /// Update a validity predicate
-    pub fn update_validity_predicate(addr: impl AsRef<str>, code: Vec<u8>) {
+    pub fn update_validity_predicate(
+        addr: impl AsRef<str>,
+        code: impl AsRef<[u8]>,
+    ) {
         let addr = addr.as_ref();
+        let code = code.as_ref();
         unsafe {
             _update_validity_predicate(
                 addr.as_ptr() as _,
@@ -157,15 +161,15 @@ pub mod tx {
     }
 
     // Initialize a new account
-    pub fn init_account(addr: impl AsRef<str>, vp: impl AsRef<[u8]>) {
+    pub fn init_account(addr: impl AsRef<str>, code: impl AsRef<[u8]>) {
         let addr = addr.as_ref();
-        let vp = vp.as_ref();
+        let code = code.as_ref();
         unsafe {
             _init_account(
                 addr.as_ptr() as _,
                 addr.len() as _,
-                vp.as_ptr() as _,
-                vp.len() as _,
+                code.as_ptr() as _,
+                code.len() as _,
             )
         }
     }
@@ -226,8 +230,8 @@ pub mod tx {
         fn _init_account(
             addr_ptr: u64,
             addr_len: u64,
-            vp_ptr: u64,
-            vp_len: u64,
+            code_ptr: u64,
+            code_len: u64,
         );
 
         // Requires a node running with "Info" log level
