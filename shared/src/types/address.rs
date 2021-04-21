@@ -1,17 +1,16 @@
 //! Implements transparent addresses as described in [Accounts
 //! Addresses](tech-specs/src/explore/design/ledger/accounts.md#addresses).
 
+use std::collections::HashSet;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
+use std::iter::FromIterator;
+use std::str::FromStr;
+use std::string;
+
 use bech32::{self, FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest, Sha256};
-use std::{
-    collections::HashSet,
-    fmt::{Debug, Display},
-    hash::Hash,
-    iter::FromIterator,
-    str::FromStr,
-    string,
-};
 use thiserror::Error;
 
 const MAX_RAW_ADDRESS_LEN: usize = 255;
@@ -31,7 +30,10 @@ pub enum Error {
     AddressTooLong,
     #[error("Address must not contain non-ASCII characters")]
     AddressNonAscii,
-    #[error("Address can only contain ASCII alphanumeric characters, hyphens and full stops")]
+    #[error(
+        "Address can only contain ASCII alphanumeric characters, hyphens and \
+         full stops"
+    )]
     AddressContainsInvalidCharacter,
     #[error("Address label cannot be be empty")]
     EmptyLabel,
@@ -47,9 +49,13 @@ pub enum Error {
     DecodeBech32(bech32::Error),
     #[error("Error decoding address from base32: {0}")]
     DecodeBase32(bech32::Error),
-    #[error("Unexpected Bech32m human-readable part {0}, expected {ADDRESS_HRP}")]
+    #[error(
+        "Unexpected Bech32m human-readable part {0}, expected {ADDRESS_HRP}"
+    )]
     UnexpectedBech32Prefix(String),
-    #[error("Unexpected Bech32m variant {0:?}, expected {ADDRESS_BECH32_VARIANT:?}")]
+    #[error(
+        "Unexpected Bech32m variant {0:?}, expected {ADDRESS_BECH32_VARIANT:?}"
+    )]
     UnexpectedBech32Variant(bech32::Variant),
     #[error("Unexpected address hash length {0}, expected {HASH_LEN}")]
     UnexpectedHashLength(usize),
@@ -59,18 +65,45 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize, Hash)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    Hash,
+)]
 pub struct Address {
     pub hash: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 pub struct RawAddress {
     pub raw: String,
     labels: Vec<Label>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 pub struct Label(String);
 
 fn hash_raw(str: impl AsRef<str>) -> String {
@@ -88,14 +121,13 @@ impl Address {
     /// Encode the hash of the given address as a Bech32m [`String`].
     pub fn encode(&self) -> String {
         let bytes = self.hash.as_bytes();
-        bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT).unwrap_or_else(
-            |_| {
+        bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT)
+            .unwrap_or_else(|_| {
                 panic!(
                     "The human-readable part {} should never cause a failure",
                     ADDRESS_HRP
                 )
-            },
-        )
+            })
     }
 
     /// Decode an address from a hexadecimal [`String`] of its hash.
@@ -109,7 +141,8 @@ impl Address {
             ADDRESS_BECH32_VARIANT => {}
             _ => return Err(Error::UnexpectedBech32Variant(variant)),
         }
-        let hash: Vec<u8> = FromBase32::from_base32(&hash_base32).map_err(Error::DecodeBase32)?;
+        let hash: Vec<u8> = FromBase32::from_base32(&hash_base32)
+            .map_err(Error::DecodeBase32)?;
         let hash = String::from_utf8(hash).map_err(Error::NonUtf8Address)?;
         Ok(Self { hash })
     }
@@ -128,6 +161,7 @@ impl RawAddress {
             labels: vec![],
         }
     }
+
     pub fn hash(&self) -> Address {
         Address {
             hash: hash_raw(&self.raw),

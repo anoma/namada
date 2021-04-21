@@ -2,17 +2,15 @@
 
 mod address;
 
-pub use address::{Address, RawAddress};
-
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use std::{
-    convert::{TryFrom, TryInto},
-    str::FromStr,
-};
+use std::str::FromStr;
 
-use crate::bytes::ByteBuf;
+pub use address::{Address, RawAddress};
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
+
+use crate::bytes::ByteBuf;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -31,10 +29,22 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub const CHAIN_ID_LENGTH: usize = 20;
 const BLOCK_HASH_LENGTH: usize = 32;
 
-#[derive(Clone, Copy, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(
+    Clone,
+    Copy,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+)]
 pub struct BlockHeight(pub u64);
 
-#[derive(Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub struct BlockHash([u8; 32]);
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
