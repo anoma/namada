@@ -118,6 +118,7 @@ pub fn prepare_tx_imports(
             "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
             "_iter_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next_varlen),
             "_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_insert_verifier),
+            "_update_validity_predicate" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_update_validity_predicate),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
@@ -1104,6 +1105,41 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
         unsafe { &mut *(env.verifiers.get()) };
     verifiers.insert(addr);
     tx_add_gas(env, addr_len);
+}
+
+/// Update a validity predicate function exposed to the wasm VM Tx environment
+fn tx_update_validity_predicate(
+    env: &TxEnv,
+    addr_ptr: u64,
+    addr_len: u64,
+    code_ptr: u64,
+    code_len: u64,
+) {
+    let (addr, gas) = env
+        .memory
+        .read_string(addr_ptr, addr_len as _)
+        .expect("Cannot read the address from memory");
+    log::debug!(
+        "tx_update_validity_predicate {}, addr_ptr {}",
+        addr,
+        addr_ptr
+    );
+    tx_add_gas(env, gas);
+
+    let key = Key::parse(addr)
+        .expect("Cannot parse the address")
+        .push(&"?".to_owned())
+        .expect("Cannot make the key for the VP");
+    let (code, gas) = env
+        .memory
+        .read_bytes(code_ptr, code_len as _)
+        .expect("Cannot read the VP code");
+    tx_add_gas(env, gas);
+
+    let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
+    let (gas, _size_diff) = write_log.write(&key, code);
+    tx_add_gas(env, gas);
+    // TODO: charge the size diff
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
