@@ -11,6 +11,7 @@ pub enum Error {
 }
 
 const TX_GAS_PER_BYTE: u64 = 2;
+const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
 
 /// The maximum value should be less or equal to i64::MAX
@@ -46,6 +47,11 @@ impl BlockGasMeter {
         log::info!("add_base_transaction_fee {}", bytes_len);
         self.add(BASE_TRANSACTION_FEE)?;
         self.add(bytes_len as u64 * TX_GAS_PER_BYTE)
+    }
+
+    // Add the compiling cost proportionate to the code length
+    pub fn add_compiling_fee(&mut self, bytes_len: usize) -> Result<()> {
+        self.add(bytes_len as u64 * COMPILE_GAS_PER_BYTE)
     }
 
     /// Add the transaction gas to the block's total gas. Returns the
