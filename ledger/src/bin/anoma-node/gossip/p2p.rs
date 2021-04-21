@@ -9,8 +9,9 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::{gossip_intent::types::IntentBroadcasterEvent, network_behaviour::Behaviour};
 use super::gossip_intent;
+use super::gossip_intent::types::IntentBroadcasterEvent;
+use super::network_behaviour::Behaviour;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -41,7 +42,7 @@ impl P2P {
             .map_err(Error::TransportError)?;
 
         let (gossipsub, network_event_receiver) =
-            Behaviour::new(local_key, config.topics.clone());
+            Behaviour::new(local_key, config);
         let swarm = Swarm::new(transport, gossipsub, local_peer_id);
 
         let (intent_process, matchmaker_event_receiver) =

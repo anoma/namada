@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use libp2p::multiaddr::Multiaddr;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -88,6 +89,14 @@ pub struct Matchmaker {
     pub filter: Option<PathBuf>,
 }
 
+// TODO maybe add also maxCount for a maximum number of subscription for a
+// filter
+#[derive(Debug, Serialize, Deserialize)]
+pub enum SubscriptionFilter {
+    RegexFilter(#[serde(with = "serde_regex")] Regex),
+    WhitelistFilter(Vec<String>),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Gossip {
     pub address: Multiaddr,
@@ -96,6 +105,7 @@ pub struct Gossip {
     pub topics: HashSet<String>,
     pub gossiper: Gossiper,
     pub matchmaker: Option<Matchmaker>,
+    pub subscription_filter: SubscriptionFilter,
 }
 
 impl Default for Gossip {
@@ -104,6 +114,7 @@ impl Default for Gossip {
             // TODO there must be a better option here
             address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
             rpc: false,
+            subscription_filter: SubscriptionFilter::WhitelistFilter(Vec::new()),
             peers: HashSet::new(),
             topics: HashSet::new(),
             gossiper: Gossiper::new(),

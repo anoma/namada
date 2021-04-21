@@ -31,10 +31,12 @@ dependencies = [
  "pwasm-utils",
  "rand 0.7.3",
  "rand_core 0.5.1",
+ "regex",
  "rocksdb",
  "serde 1.0.123",
  "serde_bytes",
  "serde_json",
+ "serde_regex",
  "sha2 0.9.3",
  "sparse-merkle-tree",
  "tempdir",
@@ -3694,6 +3696,16 @@ checksum = "ea1c6153794552ea7cf7cf63b1231a25de00ec90db326ba6264440fa08e31486"
 dependencies = [
  "itoa",
  "ryu",
+ "serde 1.0.123",
+]
+
+[[package]]
+name = "serde_regex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8136f1a4ea815d7eac4101cfd0b16dc0cb5e1fe1b8609dfd728058656b7badf"
+dependencies = [
+ "regex",
  "serde 1.0.123",
 ]
 
