@@ -79,6 +79,7 @@ pub struct Address {
     pub hash: String,
 }
 
+/// invariant, the raw string is equal to labels.join(".").
 #[derive(
     Clone,
     Debug,
