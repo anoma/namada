@@ -33,15 +33,17 @@ dev = []
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 
 [dependencies]
-anoma_vm_env = {path = "vm_env"}
 anoma_data_template = {path = "../data_template"}
+anoma_shared = {path = "../shared"}
 base64 = "0.13.0"
+bech32 = "0.8.0"
 blake2b-rs = "0.2.0"
 borsh = "0.8.1"
 byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2"}
 color-eyre = "0.5.10"
+config = "0.9"
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
 ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend"]}
 env_logger = "0.8.2"
@@ -50,8 +52,10 @@ futures = "0.3"
 hex = "0.4.2"
 libp2p = "0.35.1"
 log = "0.4.14"
+parity-wasm = "0.42.2"
 prost = "0.7.0"
 prost-types = "0.7.0"
+pwasm-utils = "0.17.0"
 rand = {version = "0.7", default-features = false}
 rand_core = {version = "0.5", default-features = false}
 rocksdb = "0.15"
@@ -63,23 +67,19 @@ sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", b
 # TODO Not yet released on crates
 tendermint-abci = {git = "https://github.com/informalsystems/tendermint-rs"}
 # must be the same version as in tendermint-abci
-config = "0.9"
 tendermint-proto = {git = "https://github.com/informalsystems/tendermint-rs"}
 tendermint-rpc = {version = "0.18.0", features = ["http-client"]}
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", features = ["full"]}
+toml = "0.5.8"
 tonic = "0.4.0"
 wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
 wasmer-engine-jit = "1.0.2"
-parity-wasm = "0.42.2"
-pwasm-utils = "0.17.0"
 wasmparser = "0.77.0"
-toml = "0.5.8"
 
 [dev-dependencies]
 cargo-watch = "7.5.0"
-clippy = "0.0.302"
 tempdir = "0.3.7"
 wasmer-vm = "1.0.2"
 

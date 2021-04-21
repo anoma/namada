@@ -8,20 +8,22 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 
-use anoma::bytes::ByteBuf;
-use sparse_merkle_tree::{SparseMerkleTree, H256};
-use thiserror::Error;
-
-pub use self::types::{
-    Address, BasicAddress, BlockHash, BlockHeight, Hash256, Key, KeySeg,
-    MerkleTree, PrefixIterator, ValidatorAddress, Value, CHAIN_ID_LENGTH,
+use anoma_shared::types::DbKeySeg;
+pub use anoma_shared::types::{
+    Address, BlockHash, BlockHeight, Key, KeySeg, RawAddress, CHAIN_ID_LENGTH,
 };
+use sparse_merkle_tree::H256;
+use thiserror::Error;
+pub use types::MerkleTree;
+
+use self::types::Hash256;
+pub use self::types::PrefixIterator;
 use super::MerkleRoot;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Key error {0}")]
-    KeyError(types::Error),
+    KeyError(anoma_shared::types::Error),
     #[error("Database error: {0}")]
     DBError(db::Error),
     #[error("Merkle tree error: {0}")]
@@ -53,7 +55,7 @@ pub struct BlockStorage {
 }
 
 impl Storage {
-    pub fn new<T: AsRef<Path>>(db_path: T) -> Self {
+    pub fn new(db_path: impl AsRef<Path>) -> Self {
         let tree = MerkleTree::default();
         let subspaces = HashMap::new();
         let block = BlockStorage {
@@ -74,8 +76,13 @@ impl Storage {
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
-        if let Some((chain_id, tree, hash, height, subspaces)) =
-            self.db.read_last_block().map_err(Error::DBError)?
+        if let Some(db::BlockState {
+            chain_id,
+            tree,
+            hash,
+            height,
+            subspaces,
+        }) = self.db.read_last_block().map_err(Error::DBError)?
         {
             self.chain_id = chain_id;
             self.block.tree = tree;
@@ -234,28 +241,15 @@ impl Storage {
 
     /// Get a validity predicate for the given account address
     pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
-        let key = Key::from(addr.to_db_key())
-            .push(&"vp".to_owned())
+        let addr = DbKeySeg::AddressSeg(addr.clone());
+        let key = Key::from(addr)
+            // TODO reserve "?" for validity predicates?
+            .push(&"?".to_owned())
             .map_err(Error::KeyError)?;
         match self.read(&key)?.0 {
-            Some(vp) => Ok(vp.clone()),
+            Some(vp) => Ok(vp),
             // TODO: this temporarily loads default VP template if none found
             None => Ok(VP_WASM.to_vec()),
         }
-    }
-}
-
-impl Default for MerkleTree {
-    fn default() -> Self {
-        MerkleTree(SparseMerkleTree::default())
-    }
-}
-
-impl core::fmt::Debug for MerkleTree {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let root_hash = format!("{}", ByteBuf(self.0.root().as_slice()));
-        f.debug_struct("MerkleTree")
-            .field("root_hash", &root_hash)
-            .finish()
     }
 }

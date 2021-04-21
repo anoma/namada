@@ -49,8 +49,12 @@ impl GossipIntent {
         Ok(true)
     }
 
-    pub async fn apply_raw_intent(&mut self, data: &Vec<u8>) -> Result<bool> {
-        let intent = Intent::decode(&data[..]).map_err(Error::DecodeError)?;
+    pub async fn apply_raw_intent(
+        &mut self,
+        data: impl AsRef<[u8]>,
+    ) -> Result<bool> {
+        let intent =
+            Intent::decode(data.as_ref()).map_err(Error::DecodeError)?;
         self.apply_intent(intent).await
     }
 }

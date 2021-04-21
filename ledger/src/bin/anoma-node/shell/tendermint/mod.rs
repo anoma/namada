@@ -178,10 +178,11 @@ impl tendermint_abci::Application for AbciWrapper {
         let genesis = genesis::genesis();
         let mut abci_validator =
             tendermint_proto::abci::ValidatorUpdate::default();
-        let mut pub_key = tendermint_proto::crypto::PublicKey::default();
-        pub_key.sum = Some(tendermint_proto::crypto::public_key::Sum::Ed25519(
-            genesis.validator.keypair.public.to_bytes().to_vec(),
-        ));
+        let pub_key = tendermint_proto::crypto::PublicKey {
+            sum: Some(tendermint_proto::crypto::public_key::Sum::Ed25519(
+                genesis.validator.keypair.public.to_bytes().to_vec(),
+            )),
+        };
         abci_validator.pub_key = Some(pub_key);
         abci_validator.power = genesis
             .validator
@@ -216,10 +217,10 @@ impl tendermint_abci::Application for AbciWrapper {
             .expect("TEMPORARY: failed to recv AbciQuery response");
 
         match result {
-            Ok(res) => resp.info = res.to_string(),
+            Ok(res) => resp.info = res,
             Err(msg) => {
                 resp.code = 1;
-                resp.log = String::from(msg);
+                resp.log = msg;
             }
         }
 
@@ -251,7 +252,7 @@ impl tendermint_abci::Application for AbciWrapper {
             Ok(_) => resp.info = "Mempool validation passed".to_string(),
             Err(msg) => {
                 resp.code = 1;
-                resp.log = String::from(msg);
+                resp.log = msg;
             }
         }
         resp
@@ -324,7 +325,7 @@ impl tendermint_abci::Application for AbciWrapper {
             },
             Err(msg) => {
                 resp.code = 1;
-                resp.log = String::from(msg);
+                resp.log = msg;
             }
         }
         resp

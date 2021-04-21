@@ -2,6 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
+use anoma::types::Topic;
 use libp2p::gossipsub::{
     self, Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic,
     MessageAuthenticity, MessageId, TopicHash, ValidationMode,
@@ -26,15 +27,11 @@ impl From<GossipsubMessage> for types::NetworkEvent {
     }
 }
 
-pub fn topic_of(topic_hash: &TopicHash) -> anoma::types::Topic {
-    if topic_hash
-        == &IdentTopic::new(anoma::types::Topic::Dkg.to_string()).hash()
-    {
-        anoma::types::Topic::Dkg
-    } else if topic_hash
-        == &IdentTopic::new(anoma::types::Topic::Intent.to_string()).hash()
-    {
-        anoma::types::Topic::Intent
+pub fn topic_of(topic_hash: &TopicHash) -> Topic {
+    if topic_hash == &IdentTopic::new(Topic::Dkg.to_string()).hash() {
+        Topic::Dkg
+    } else if topic_hash == &IdentTopic::new(Topic::Intent.to_string()).hash() {
+        Topic::Intent
     } else {
         panic!("topic_hash does not correspond to any topic of interest")
     }

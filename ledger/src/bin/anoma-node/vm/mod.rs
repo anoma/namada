@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
-use anoma_vm_env::memory::{TxInput, VpInput};
+use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
@@ -151,7 +151,7 @@ impl TxRunner {
         verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
-        tx_data: &Vec<u8>,
+        tx_data: Vec<u8>,
     ) -> Result<()> {
         validate_wasm(&tx_code)?;
 
@@ -204,7 +204,7 @@ impl TxRunner {
         Self::run_with_input(tx_code, tx_data)
     }
 
-    fn run_with_input(tx_code: Instance, tx_data: &TxInput) -> Result<()> {
+    fn run_with_input(tx_code: Instance, tx_data: TxInput) -> Result<()> {
         // We need to write the inputs in the memory exported from the wasm
         // module
         let memory = tx_code
@@ -247,16 +247,18 @@ impl VpRunner {
         Self { wasm_store }
     }
 
+    // TODO consider using a wrapper object for all the host env references
+    #[allow(clippy::too_many_arguments)]
     pub fn run<T: AsRef<[u8]>>(
         &self,
         vp_code: T,
-        tx_data: &Vec<u8>,
-        addr: Address,
+        tx_data: Vec<u8>,
+        addr: &Address,
         storage: &Storage,
         write_log: &WriteLog,
         gas_meter: Arc<Mutex<BlockGasMeter>>,
-        keys_changed: &Vec<String>,
-        verifiers: &HashSet<String>,
+        keys_changed: Vec<String>,
+        verifiers: HashSet<Address>,
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
 
@@ -282,11 +284,10 @@ impl VpRunner {
             .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let input: VpInput =
-            (addr.to_string(), tx_data, keys_changed, verifiers);
+        let input: VpInput = (addr.encode(), tx_data, keys_changed, verifiers);
         let vp_imports = host_env::prepare_vp_imports(
             &self.wasm_store,
-            addr,
+            addr.clone(),
             storage,
             write_log,
             iterators,
@@ -474,11 +475,13 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use tempdir::TempDir;
     use wasmer_vm;
 
     use super::*;
-    use crate::shell::storage::ValidatorAddress;
+    use crate::shell::storage::RawAddress;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
@@ -536,7 +539,7 @@ mod tests {
                 &mut verifiers,
                 &mut gas_meter,
                 tx_code,
-                &tx_data,
+                tx_data,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \
@@ -591,7 +594,8 @@ mod tests {
 
         let runner = VpRunner::new();
         let tx_data = vec![];
-        let addr = Address::Validator(ValidatorAddress("va".into()));
+        let raw_addr: RawAddress = FromStr::from_str("test").unwrap();
+        let addr: Address = raw_addr.hash();
         let db_path = TempDir::new("anoma_test")
             .expect("Unable to create a temporary DB directory");
         let storage = Storage::new(db_path.path());
@@ -602,13 +606,13 @@ mod tests {
         let error = runner
             .run(
                 vp_code,
-                &tx_data,
-                addr,
+                tx_data,
+                &addr,
                 &storage,
                 &write_log,
                 gas_meter,
-                &keys_changed,
-                &verifiers,
+                keys_changed,
+                verifiers,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \

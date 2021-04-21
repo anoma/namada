@@ -4,6 +4,7 @@
 - [Exploration](./explore/README.md)
   - [Design](./explore/design/README.md)
     - [Glossary](./explore/design/glossary.md)
+    - [Overview](./explore/design/overview.md)
     - [The ledger](./explore/design/ledger.md)
       - [Accounts](./explore/design/ledger/accounts.md)
       - [WASM VM](./explore/design/ledger/wasm-vm.md)

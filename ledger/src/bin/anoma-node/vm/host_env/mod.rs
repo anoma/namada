@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
-use anoma_vm_env::memory::KeyVal;
+use anoma_shared::vm_memory::KeyVal;
 use borsh::BorshSerialize;
 use tokio::sync::mpsc::Sender;
 use wasmer::{
@@ -18,7 +18,7 @@ use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::BlockGasMeter;
-use crate::shell::storage::{Address, Key, KeySeg, Storage};
+use crate::shell::storage::{Address, Key, KeySeg, RawAddress, Storage};
 
 #[derive(Clone)]
 struct TxEnv<'a> {
@@ -199,15 +199,12 @@ fn tx_charge_gas(env: &TxEnv, used_gas: i32) {
 fn tx_add_gas(env: &TxEnv, used_gas: u64) {
     let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     // if we run out of gas, we need to stop the execution
-    match gas_meter.add(used_gas) {
-        Err(err) => {
-            log::warn!(
-                "Stopping transaction execution because of gas error: {}",
-                err
-            );
-            unreachable!()
-        }
-        _ => {}
+    if let Err(err) = gas_meter.add(used_gas) {
+        log::warn!(
+            "Stopping transaction execution because of gas error: {}",
+            err
+        );
+        unreachable!()
     }
 }
 
@@ -222,16 +219,12 @@ fn vp_add_gas(env: &VpEnv, used_gas: u64) {
         .lock()
         .expect("Cannot get lock on the gas meter");
     // if we run out of gas, we need to stop the execution
-    match gas_meter.add(used_gas) {
-        Err(err) => {
-            log::warn!(
-                "Stopping validity predicate execution because of gas error: \
-                 {}",
-                err
-            );
-            unreachable!()
-        }
-        _ => {}
+    if let Err(err) = gas_meter.add(used_gas) {
+        log::warn!(
+            "Stopping validity predicate execution because of gas error: {}",
+            err
+        );
+        unreachable!()
     }
 }
 
@@ -269,11 +262,11 @@ fn tx_storage_read(
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
             tx_add_gas(env, gas);
-            return 1;
+            1
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            return 0;
+            0
         }
         None => {
             // when not found in write log, try to read from the storage
@@ -287,11 +280,11 @@ fn tx_storage_read(
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
                     tx_add_gas(env, gas);
-                    return 1;
+                    1
                 }
                 None => {
                     // fail, key not found
-                    return 0;
+                    0
                 }
             }
         }
@@ -632,11 +625,11 @@ fn vp_storage_read_pre(
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
             vp_add_gas(env, gas);
-            return 1;
+            1
         }
         None => {
             // fail, key not found
-            return 0;
+            0
         }
     }
 }
@@ -675,11 +668,11 @@ fn vp_storage_read_post(
                 .write_bytes(result_ptr, value)
                 .expect("cannot write to memory");
             vp_add_gas(env, gas);
-            return 1;
+            1
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            return 0;
+            0
         }
         None => {
             // when not found in write log, try to read from the storage
@@ -693,11 +686,11 @@ fn vp_storage_read_post(
                         .write_bytes(result_ptr, value)
                         .expect("cannot write to memory");
                     vp_add_gas(env, gas);
-                    return 1;
+                    1
                 }
                 None => {
                     // fail, key not found
-                    return 0;
+                    0
                 }
             }
         }
@@ -1099,11 +1092,12 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
 
     log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
-    let addr = Address::parse(addr).expect("Cannot parse the address string");
+    let addr =
+        RawAddress::parse(addr).expect("Cannot parse the address string");
 
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
-    verifiers.insert(addr);
+    verifiers.insert(addr.hash());
     tx_add_gas(env, addr_len);
 }
 
