@@ -14,6 +14,4 @@ struct Intent {
 ```
 
 The arbitrary data will be broadcasted to any interested matchmaker to craft
-valid transaction. If the user wants the intent to found a match with a public
-matchmaker he must use a known data schema or else no matchmaker will be able to
-decode his intent. (see [data schema](../data-schema.md)).
+valid transactions. For an intent to find a match with a public matchmaker, it must use a known data schema or else no matchmaker will be able to decode its data (see [data schema](../data-schema.md)).
