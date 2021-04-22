@@ -1,0 +1,15 @@
+[workspace]
+
+members = [
+  "apps",
+  "shared",
+  "vm_env",
+  "data_template",
+]
+
+# wasm packages have to be built separately
+exclude = [
+  "matchmaker_template",
+  "tx_template",
+  "vp_template",
+]

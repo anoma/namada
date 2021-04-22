@@ -1,0 +1,13 @@
+[package]
+authors = ["Heliax <TODO@heliax.dev>"]
+edition = "2018"
+name = "anoma_shared"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bech32 = "0.8.0"
+borsh = "0.8.1"
+sha2 = "0.9.3"
+thiserror = "1.0.24"
