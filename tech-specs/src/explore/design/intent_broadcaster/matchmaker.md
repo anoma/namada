@@ -1,14 +1,9 @@
 # Matchmaker
 
-The matchmaker is a process that can be activated in any orderbook process. It
-tries to match any number of intents to create a fulfilling transaction. The
-matchmaker is defined with three wasm modules, a filter, a matchmaker program and
-a transaction template.
-
-The filter is a small program that is used to filter in order to prevent
-flooding the matchmaker program. This filter logic might be removed in the futur
-and any
-
+The matchmaker is a process that can be activated in any intent broadcaster
+process. It tries to match any number of intents to create a fulfilling
+transaction. The matchmaker is defined with three wasm modules, a filter, a
+matchmaker program and a transaction template.
 
 ![matchmaker process](./matchmaker_process.svg "matchmaker process")
 
