@@ -9,11 +9,12 @@ use std::ops::Deref;
 use std::path::Path;
 
 pub use anoma_shared::types::{
-    Address, BlockHash, BlockHeight, Key, KeySeg, RawAddress, CHAIN_ID_LENGTH,
+    Address, BlockHash, BlockHeight, Key, KeySeg, RawAddress,
+    BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
 use sparse_merkle_tree::H256;
 use thiserror::Error;
-pub use types::MerkleTree;
+use types::MerkleTree;
 
 use self::types::Hash256;
 pub use self::types::PrefixIterator;
@@ -252,5 +253,28 @@ impl Storage {
     pub fn exists(&self, addr: &Address) -> Result<(bool, u64)> {
         let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
         self.has_key(&key)
+    }
+
+    /// Get the chain ID
+    pub fn get_chain_id(&self) -> String {
+        self.chain_id.clone()
+    }
+
+    /// Get the committed block height
+    pub fn get_block_height(&self) -> BlockHeight {
+        self.current_height
+    }
+
+    /// Get a block hash
+    pub fn get_block_hash(
+        &self,
+        height: BlockHeight,
+    ) -> Result<(Option<BlockHash>, u64)> {
+        if height == self.block.height {
+            return Ok((Some(self.block.hash.clone()), BLOCK_HASH_LENGTH as _));
+        }
+
+        let hash = self.db.read_block_hash(height).map_err(Error::DBError)?;
+        Ok((hash, BLOCK_HASH_LENGTH as _))
     }
 }

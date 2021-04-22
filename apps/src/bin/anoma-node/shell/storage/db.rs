@@ -14,7 +14,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
-use anoma_shared::types::{BlockHeight, Key, KeySeg};
+use anoma_shared::types::{BlockHash, BlockHeight, Key, KeySeg};
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -23,8 +23,7 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
-use super::types::{PrefixIterator, Value};
-use super::{BlockHash, MerkleTree};
+use super::types::{MerkleTree, PrefixIterator, Value};
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -227,6 +226,19 @@ impl DB {
             read_opts,
         );
         PrefixIterator::new(iter, db_prefix)
+    }
+
+    pub fn read_block_hash(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHash>> {
+        let key = Key::from(height.to_db_key())
+            .push(&"hash".to_owned())
+            .map_err(Error::KeyError)?;
+        match self.0.get(key.to_string()).map_err(Error::RocksDBError)? {
+            Some(bytes) => Ok(Some(BlockHash::decode(bytes.to_vec()))),
+            None => Ok(None),
+        }
     }
 
     pub fn read_last_block(&mut self) -> Result<Option<BlockState>> {

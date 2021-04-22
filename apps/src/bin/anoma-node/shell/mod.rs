@@ -9,11 +9,12 @@ use std::sync::{mpsc, Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
+use anoma_shared::types::{Address, BlockHash, BlockHeight, Key};
 use prost::Message;
 use thiserror::Error;
 
 use self::gas::BlockGasMeter;
-use self::storage::{Address, BlockHash, BlockHeight, Key, Storage};
+use self::storage::Storage;
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::vm::host_env::write_log::WriteLog;
 use crate::vm::{self, TxRunner, VpRunner};
