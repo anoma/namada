@@ -214,8 +214,7 @@ fn vp_charge_gas(env: &VpEnv, used_gas: i32) {
 }
 
 fn vp_add_gas(env: &VpEnv, used_gas: u64) {
-    let gas_meter: &mut VpGasMeter =
-        unsafe { &mut *(env.gas_meter.get()) };
+    let gas_meter: &mut VpGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     match gas_meter.add(used_gas) {
         Err(err) => {
             log::warn!(

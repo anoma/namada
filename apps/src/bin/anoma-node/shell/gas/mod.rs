@@ -29,16 +29,13 @@ pub struct BlockGasMeter {
 }
 #[derive(Debug, Clone)]
 pub struct VpGasMeter {
-    pub vp_gas: u64
+    pub vp_gas: u64,
 }
 
 impl VpGasMeter {
 
     pub fn add(&mut self, gas: u64) -> Result<()> {
-        self.vp_gas = self
-            .vp_gas
-            .checked_add(gas)
-            .ok_or(Error::GasOverflow)?;
+        self.vp_gas = self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow)?;
 
         if self.vp_gas > TRANSACTION_GAS_LIMIT {
             return Err(Error::TransactionGasExceedededError);
@@ -50,9 +47,7 @@ impl VpGasMeter {
 
 impl VpGasMeter {
     pub fn new(vp_gas: u64) -> Self {
-        Self {
-            vp_gas: vp_gas
-        }
+        Self { vp_gas: vp_gas }
     }
 }
 

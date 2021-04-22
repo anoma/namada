@@ -278,9 +278,7 @@ impl VpRunner {
         };
 
         let gas_meter = unsafe {
-            MutEnvHostWrapper::new(
-                vp_gas_meter as *mut _ as *mut c_void
-            )
+            MutEnvHostWrapper::new(vp_gas_meter as *mut _ as *mut c_void)
         };
 
         let vp_code = prepare_wasm_code(vp_code)?;

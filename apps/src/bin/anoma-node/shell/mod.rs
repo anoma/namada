@@ -4,9 +4,9 @@ mod tendermint;
 
 use core::fmt;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
-use std::sync::{mpsc};
+
 use std::path::Path;
+use std::sync::{mpsc};
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
@@ -310,12 +310,7 @@ impl Shell {
     pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
         let mut gas_meter = BlockGasMeter::default();
         let mut write_log = self.write_log.clone();
-        let result = run_tx(
-            tx_bytes,
-            &mut gas_meter,
-            &mut write_log,
-            &self.storage,
-        )?;
+        let result = run_tx(tx_bytes, &mut gas_meter, &mut write_log, &self.storage)?;
         Ok(result.to_string())
     }
 
@@ -434,14 +429,7 @@ fn run_tx(
     // Execute the transaction code
     let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
 
-    let vps_result = check_vps(
-        &tx,
-        storage,
-        block_gas_meter,
-        write_log,
-        &verifiers,
-        true,
-    );
+    let vps_result = check_vps(&tx, storage, block_gas_meter, write_log, &verifiers,true);
 
     let gas = block_gas_meter.finalize_transaction().map_err(Error::GasError);
 
@@ -472,7 +460,9 @@ fn check_vps(
             .validity_predicate(&addr)
             .map_err(Error::StorageError)?;
 
-        gas_meter.add_compiling_fee(vp.len()).map_err(Error::GasError)?;
+        gas_meter
+            .add_compiling_fee(vp.len())
+            .map_err(Error::GasError)?;
         cache_vp_lookup.insert(addr.clone(), vp);
     }
 
@@ -513,7 +503,8 @@ fn check_vps(
     }
 
     // let max_gas = vp_meters.iter().map(|&x| x.vp_gas).max().unwrap();
-    let mut consumed_gas = vp_meters.iter().map(|x| x.vp_gas).collect::<Vec<u64>>();
+    let mut consumed_gas = 
+        vp_meters.iter().map(|x| x.vp_gas).collect::<Vec<u64>>();
     // sort decresing order
     consumed_gas.sort_by(|a, b| b.cmp(a));
     
@@ -522,7 +513,9 @@ fn check_vps(
     consumed_gas.drain(0..1);
 
     gas_meter.add(max_gas_used).map_err(Error::GasError)?;
-    gas_meter.add_parallel_fee(&mut consumed_gas).map_err(Error::GasError)?;
+    gas_meter
+        .add_parallel_fee(&mut consumed_gas)
+        .map_err(Error::GasError)?;
 
     Ok(VpResult::new(accepted_vps, rejected_vps, changed_keys))
 }
