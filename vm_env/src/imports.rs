@@ -150,8 +150,12 @@ pub mod tx {
     }
 
     /// Update a validity predicate
-    pub fn update_validity_predicate(addr: impl AsRef<str>, code: Vec<u8>) {
+    pub fn update_validity_predicate(
+        addr: impl AsRef<str>,
+        code: impl AsRef<[u8]>,
+    ) {
         let addr = addr.as_ref();
+        let code = code.as_ref();
         unsafe {
             _update_validity_predicate(
                 addr.as_ptr() as _,
@@ -160,6 +164,20 @@ pub mod tx {
                 code.len() as _,
             )
         };
+    }
+
+    // Initialize a new account
+    pub fn init_account(addr: impl AsRef<str>, code: impl AsRef<[u8]>) {
+        let addr = addr.as_ref();
+        let code = code.as_ref();
+        unsafe {
+            _init_account(
+                addr.as_ptr() as _,
+                addr.len() as _,
+                code.as_ptr() as _,
+                code.len() as _,
+            )
+        }
     }
 
     /// Log a string. The message will be printed at the [`log::Level::Info`].
@@ -208,6 +226,14 @@ pub mod tx {
 
         // Update a validity predicate
         fn _update_validity_predicate(
+            addr_ptr: u64,
+            addr_len: u64,
+            code_ptr: u64,
+            code_len: u64,
+        );
+
+        // Initialize a new account
+        fn _init_account(
             addr_ptr: u64,
             addr_len: u64,
             code_ptr: u64,

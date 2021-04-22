@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anoma_shared::types::Address;
 use thiserror::Error;
 
 use crate::shell::storage::{self, Key, Storage};
@@ -16,6 +17,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum StorageModification {
     Write { value: Vec<u8> },
     Delete,
+    InitAccount { parent: Address, vp: Vec<u8> },
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +50,9 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                     StorageModification::Delete => key.len(),
+                    StorageModification::InitAccount { ref parent, ref vp } => {
+                        key.len() + parent.len() + vp.len()
+                    }
                 };
                 (Some(v), gas as _)
             }
@@ -68,6 +73,7 @@ impl WriteLog {
                     len as i64 - value.len() as i64
                 }
                 StorageModification::Delete => len as i64,
+                StorageModification::InitAccount { .. } => 0,
             },
             // set just the length of the value because we don't know if
             // the previous value exists on the storage
@@ -86,6 +92,7 @@ impl WriteLog {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => value.len() as i64,
                 StorageModification::Delete => 0,
+                StorageModification::InitAccount { .. } => 0,
             },
             // set 0 because we don't know if the previous value exists on the
             // storage
@@ -93,6 +100,21 @@ impl WriteLog {
         };
         let gas = key.len() + (-size_diff as usize);
         (gas as _, size_diff)
+    }
+
+    /// Initialize a new account and return the gas cost.
+    pub fn init_account(
+        &mut self,
+        addr: Address,
+        parent: Address,
+        vp: Vec<u8>,
+    ) -> u64 {
+        let key = Key::validity_predicate(&addr)
+            .expect("Unable to create a validity predicate key");
+        let gas = (key.len() + parent.len() + vp.len()) as _;
+        self.tx_write_log
+            .insert(key, StorageModification::InitAccount { parent, vp });
+        gas
     }
 
     pub fn get_changed_keys(&self) -> Vec<&Key> {
@@ -128,6 +150,11 @@ impl WriteLog {
                 }
                 StorageModification::Delete => {
                     storage.delete(key).map_err(Error::StorageError)?;
+                }
+                StorageModification::InitAccount { vp, .. } => {
+                    storage
+                        .write(key, vp.clone())
+                        .map_err(Error::StorageError)?;
                 }
             }
         }

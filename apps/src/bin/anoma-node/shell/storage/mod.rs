@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 
-use anoma_shared::types::DbKeySeg;
 pub use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, KeySeg, RawAddress, CHAIN_ID_LENGTH,
 };
@@ -241,15 +240,17 @@ impl Storage {
 
     /// Get a validity predicate for the given account address
     pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
-        let addr = DbKeySeg::AddressSeg(addr.clone());
-        let key = Key::from(addr)
-            // TODO reserve "?" for validity predicates?
-            .push(&"?".to_owned())
-            .map_err(Error::KeyError)?;
+        let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
         match self.read(&key)?.0 {
             Some(vp) => Ok(vp),
             // TODO: this temporarily loads default VP template if none found
             None => Ok(VP_WASM.to_vec()),
         }
+    }
+
+    /// Check if the given address exists on chain and return the gas cost.
+    pub fn exists(&self, addr: &Address) -> Result<(bool, u64)> {
+        let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
+        self.has_key(&key)
     }
 }

@@ -507,11 +507,10 @@ fn check_vps(
                 error,
             })?;
         if !accept {
+            rejected_vps.insert(addr);
             if !dry_run {
-                rejected_vps.insert(addr);
                 break;
             }
-            rejected_vps.insert(addr);
         } else {
             accepted_vps.insert(addr);
             changed_keys.append(&mut keys.clone());
