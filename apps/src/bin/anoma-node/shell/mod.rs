@@ -6,6 +6,7 @@ use core::fmt;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::mpsc;
+use std::vec;
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
@@ -456,25 +457,37 @@ fn check_vps(
     let mut accepted_vps = HashSet::new();
     let mut changed_keys: Vec<String> = Vec::new();
 
-    let mut cache_vp_lookup: HashMap<Address, Vec<u8>> = HashMap::new();
+    // let mut cache_vp_lookup: HashMap<Address, Vec<u8>> = HashMap::new();
 
-    for addr in verifiers.keys() {
-        let vp = storage
-            .validity_predicate(&addr)
-            .map_err(Error::StorageError)?;
+    // for addr in verifiers.keys() {
+    //     let vp = storage
+    //         .validity_predicate(&addr)
+    //         .map_err(Error::StorageError)?;
 
-        gas_meter
-            .add_compiling_fee(vp.len())
-            .map_err(Error::GasError)?;
-        cache_vp_lookup.insert(addr.clone(), vp);
-    }
+    //     gas_meter
+    //         .add_compiling_fee(vp.len())
+    //         .map_err(Error::GasError)?;
+    //     cache_vp_lookup.insert(addr.clone(), vp);
+    // }
+    let verifiers_vps: Vec<(&Address, &Vec<String>, Vec<u8>)> = verifiers
+        .iter()
+        .map(|(addr, keys)| {
+            let vp = storage
+                .validity_predicate(&addr)
+                .map_err(Error::StorageError)?;
+
+            gas_meter
+                .add_compiling_fee(vp.len())
+                .map_err(Error::GasError)?;
+
+            Ok((addr, keys, vp))
+        })
+        .collect::<std::result::Result<_, _>>()?;
 
     let initial_gas = gas_meter.get_current_transaction_gas();
     let mut vp_meters: Vec<VpGasMeter> = Vec::new();
 
-    for (addr, keys) in &verifiers {
-        let vp = cache_vp_lookup.get(&addr).unwrap();
-
+    for (addr, keys, vp) in verifiers_vps {
         let mut vp_gas_meter = VpGasMeter::new(initial_gas);
 
         let vp_runner = VpRunner::new();
@@ -505,21 +518,18 @@ fn check_vps(
         vp_meters.push(vp_gas_meter);
     }
 
-    // let max_gas = vp_meters.iter().map(|&x| x.vp_gas).max().unwrap();
     let mut consumed_gas =
         vp_meters.iter().map(|x| x.vp_gas).collect::<Vec<u64>>();
     // sort decresing order
     consumed_gas.sort_by(|a, b| b.cmp(a));
 
     // I'm assuming that at least 1 VP will always be there
-    let max_gas_used = *consumed_gas.get(0).unwrap();
-    consumed_gas.drain(0..1);
-
-    gas_meter.add(max_gas_used).map_err(Error::GasError)?;
-    gas_meter
-        .add_parallel_fee(&mut consumed_gas)
-        .map_err(Error::GasError)?;
-
+    if let Some((max_gas_used, rest)) = consumed_gas.split_first() {
+        gas_meter.add(*max_gas_used).map_err(Error::GasError)?;
+        gas_meter
+            .add_parallel_fee(&mut rest.to_vec())
+            .map_err(Error::GasError)?;
+    }
     Ok(VpResult::new(accepted_vps, rejected_vps, changed_keys))
 }
 

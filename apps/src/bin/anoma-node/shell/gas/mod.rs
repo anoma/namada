@@ -13,6 +13,7 @@ pub enum Error {
 const TX_GAS_PER_BYTE: u64 = 2;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
+const PARALLEL_GAS_MULTIPLER: f64 = 0.1;
 
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
@@ -99,8 +100,8 @@ impl BlockGasMeter {
 
     pub fn add_parallel_fee(&mut self, vps_gases: &mut Vec<u64>) -> Result<()> {
         let mean_gas =
-            vps_gases.iter().sum::<u64>() as u64 / vps_gases.len() as u64;
-        self.add(mean_gas)
+            vps_gases.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLER;
+        self.add(mean_gas as u64)
     }
 
     pub fn get_current_transaction_gas(&mut self) -> u64 {
