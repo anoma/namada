@@ -240,11 +240,18 @@ impl Storage {
 
     /// Get a validity predicate for the given account address and the gas cost
     /// for reading it.
-    pub fn validity_predicate(
-        &self,
-        addr: &Address,
-    ) -> Result<(Option<Vec<u8>>, u64)> {
+    pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
         let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
-        self.read(&key)
+        match self.read(&key)?.0 {
+            Some(vp) => Ok(vp),
+            // TODO: this temporarily loads default VP template if none found
+            None => Ok(VP_WASM.to_vec()),
+        }
+    }
+
+    /// Check if the given address exists on chain and return the gas cost.
+    pub fn exists(&self, addr: &Address) -> Result<(bool, u64)> {
+        let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
+        self.has_key(&key)
     }
 }

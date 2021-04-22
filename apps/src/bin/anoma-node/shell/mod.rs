@@ -478,56 +478,42 @@ fn check_vps(
     let mut changed_keys: Vec<String> = Vec::new();
 
     for (addr, keys) in verifiers {
-        let (vp, gas) = storage
+        let vp = storage
             .validity_predicate(&addr)
             .map_err(Error::StorageError)?;
+
         let mut gas_meter = gas_meter_mutex
             .lock()
             .expect("Cannot get lock on the gas meter");
-        gas_meter.add(gas)?;
+        gas_meter
+            .add_compiling_fee(vp.len())
+            .map_err(Error::GasError)?;
+        drop(gas_meter);
 
-        match vp {
-            None => {
-                // If the address doesn't exist, reject the transaction.
-                // This is required by the logic that initializes a new account
-                // address, which must be verified by its parent's address.
-                rejected_vps.insert(addr);
-                if !dry_run {
-                    break;
-                }
+        let vp_runner = VpRunner::new();
+        let accept = vp_runner
+            .run(
+                vp,
+                tx_data.clone(),
+                &addr,
+                storage,
+                write_log,
+                gas_meter_mutex.clone(),
+                keys.clone(),
+                addresses.clone(),
+            )
+            .map_err(|error| Error::VpRunnerError {
+                addr: addr.clone(),
+                error,
+            })?;
+        if !accept {
+            rejected_vps.insert(addr);
+            if !dry_run {
+                break;
             }
-            Some(vp) => {
-                gas_meter
-                    .add_compiling_fee(vp.len())
-                    .map_err(Error::GasError)?;
-                drop(gas_meter);
-
-                let vp_runner = VpRunner::new();
-                let accept = vp_runner
-                    .run(
-                        vp,
-                        tx_data.clone(),
-                        &addr,
-                        storage,
-                        write_log,
-                        gas_meter_mutex.clone(),
-                        keys.clone(),
-                        addresses.clone(),
-                    )
-                    .map_err(|error| Error::VpRunnerError {
-                        addr: addr.clone(),
-                        error,
-                    })?;
-                if !accept {
-                    rejected_vps.insert(addr);
-                    if !dry_run {
-                        break;
-                    }
-                } else {
-                    accepted_vps.insert(addr);
-                    changed_keys.append(&mut keys.clone());
-                }
-            }
+        } else {
+            accepted_vps.insert(addr);
+            changed_keys.append(&mut keys.clone());
         }
     }
     Ok(VpResult::new(accepted_vps, rejected_vps, changed_keys))

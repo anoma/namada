@@ -1236,15 +1236,29 @@ fn tx_init_account(
     let addr =
         RawAddress::parse(addr).expect("Cannot parse the address string");
     let parent_addr = addr.parent();
+    let parent_addr_hash = parent_addr.hash();
 
     log::debug!("tx_init_account address: {}, parent: {}", addr, parent_addr);
 
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (parent_exists, gas) = storage
+        .exists(&parent_addr_hash)
+        .expect("Cannot read storage");
+    tx_add_gas(env, gas);
+    // If the parent address doesn't exist, the tx will be declined
+    if !parent_exists {
+        log::warn!(
+            "Cannot initialize an account address {}, because the parent address {} doesn't exist",
+            addr,
+            parent_addr
+        );
+        unreachable!()
+    }
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
-    let gas = write_log.init_account(addr.hash(), parent_addr.hash(), code);
+    let gas = write_log.init_account(addr.hash(), parent_addr_hash, code);
 
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
-    // If the parent address doesn't exist, the tx will be declined
     verifiers.insert(parent_addr.hash());
     tx_add_gas(env, gas);
 }
