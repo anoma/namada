@@ -1,6 +1,6 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RpcMessage {
-    #[prost(oneof = "rpc_message::Message", tags = "1, 2")]
+    #[prost(oneof = "rpc_message::Message", tags = "1, 2, 3")]
     pub message: ::core::option::Option<rpc_message::Message>,
 }
 /// Nested message and enum types in `RpcMessage`.
@@ -11,6 +11,8 @@ pub mod rpc_message {
         Intent(super::super::types::Intent),
         #[prost(message, tag = "2")]
         Dkg(super::super::types::Dkg),
+        #[prost(message, tag = "3")]
+        Topic(super::super::types::SubscribeTopic),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

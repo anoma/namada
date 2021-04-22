@@ -13,6 +13,11 @@ pub struct Intent {
     pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubscribeTopic {
+    #[prost(string, tag = "1")]
+    pub topic: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IntentBroadcasterMessage {
     #[prost(oneof = "intent_broadcaster_message::IntentMessage", tags = "1")]
     pub intent_message:

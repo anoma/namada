@@ -4,7 +4,8 @@ mod p2p;
 
 use std::thread;
 
-use anoma::protobuf::types::{Intent, Tx};
+use anoma::protobuf::services::rpc_message;
+use anoma::protobuf::types::Tx;
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
@@ -76,7 +77,7 @@ pub async fn matchmaker_dispatcher(
 pub async fn dispatcher(
     mut gossip: P2P,
     mut network_event_receiver: Receiver<IntentBroadcasterEvent>,
-    rpc_event_receiver: Option<Receiver<Intent>>,
+    rpc_event_receiver: Option<Receiver<rpc_message::Message>>,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
     if let Some(matchmaker_event_receiver) = matchmaker_event_receiver {

@@ -1,5 +1,7 @@
+use anoma::protobuf::services::rpc_message;
+use anoma::protobuf::types;
 use anoma::protobuf::types::{
-    intent_broadcaster_message, Intent, IntentBroadcasterMessage, Tx,
+    intent_broadcaster_message, IntentBroadcasterMessage, Tx,
 };
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
@@ -8,6 +10,7 @@ use libp2p::PeerId;
 use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
+use types::SubscribeTopic;
 
 use super::gossip_intent;
 use super::gossip_intent::types::IntentBroadcasterEvent;
@@ -59,7 +62,7 @@ impl P2P {
 
     pub fn prepare(&mut self, config: &anoma::config::Gossip) -> Result<()> {
         for topic in &config.topics {
-            let topic = IdentTopic::new(topic.to_string());
+            let topic = IdentTopic::new(topic);
             self.swarm.intent_broadcaster.subscribe(&topic).unwrap();
         }
 
@@ -78,20 +81,34 @@ impl P2P {
         Ok(())
     }
 
-    pub async fn handle_rpc_event(&mut self, intent: Intent) {
+    pub async fn handle_rpc_event(&mut self, event: rpc_message::Message) {
         let intent_process = &mut self.intent_process;
-        if intent_process
-            .apply_intent(intent.clone())
-            .await
-            .expect("failed to apply intent")
-        {
-            let mut tix_bytes = vec![];
-            intent.encode(&mut tix_bytes).unwrap();
-            let _message_id = self
-                .swarm
-                .intent_broadcaster
-                .publish(IdentTopic::new("intent".to_string()), tix_bytes);
-        }
+        match event {
+            rpc_message::Message::Intent(intent) => {
+                if intent_process
+                    .apply_intent(intent.clone())
+                    .await
+                    .expect("failed to apply intent")
+                {
+                    let mut tix_bytes = vec![];
+                    intent.encode(&mut tix_bytes).unwrap();
+                    let _message_id = self.swarm.intent_broadcaster.publish(
+                        IdentTopic::new("intent".to_string()),
+                        tix_bytes,
+                    );
+                }
+            }
+            rpc_message::Message::Dkg(_dkg_msg) => {
+                panic!("not yet implemented")
+            }
+            rpc_message::Message::Topic(SubscribeTopic { topic }) => {
+                let topic = IdentTopic::new(topic);
+                self.swarm
+                    .intent_broadcaster
+                    .subscribe(&topic)
+                    .unwrap_or_else(|_| panic!("failed to subscribe to topic {:?}", topic));
+            }
+        };
     }
 
     // pub async fn handle_matchmaker_event(&mut self, event: Option<Tx>) {

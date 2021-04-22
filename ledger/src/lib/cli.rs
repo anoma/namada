@@ -28,6 +28,7 @@ pub const RUN_LEDGER_COMMAND: &str = "run-ledger";
 pub const RESET_LEDGER_COMMAND: &str = "reset-ledger";
 pub const GENERATE_CONFIG_COMMAND: &str = "generate-config";
 pub const INTENT_COMMAND: &str = "intent";
+pub const SUBSCRIBE_TOPIC_COMMAND: &str = "subscribe-topic";
 pub const CRAFT_INTENT_COMMAND: &str = "craft-intent";
 pub const TX_COMMAND: &str = "tx";
 pub const CRAFT_DATA_TX_COMMAND: &str = "craft-tx-data";
@@ -75,6 +76,7 @@ pub fn anoma_inline_cli() -> App {
         .subcommand(reset_ledger_subcommand())
         .subcommand(client_tx_subcommand())
         .subcommand(client_intent_subcommand())
+        .subcommand(client_subscribe_topic_subcommand())
         // Node sub-commands
         .subcommand(add_node_commands(
             App::new(NODE_COMMAND).about("Node sub-commands"),
@@ -174,6 +176,25 @@ fn client_intent_subcommand() -> App {
                     "The data of the intent, that contains all value \
                      necessary for the matchmaker.",
                 ),
+        )
+}
+
+fn client_subscribe_topic_subcommand() -> App {
+    App::new(SUBSCRIBE_TOPIC_COMMAND)
+        .about("subscribe to a topic.")
+        .arg(
+            Arg::new(NODE_INTENT_ARG)
+                .long(NODE_INTENT_ARG)
+                .takes_value(true)
+                .required(true)
+                .about("The gossip node address."),
+        )
+        .arg(
+            Arg::new(TOPIC_ARG)
+                .long(TOPIC_ARG)
+                .takes_value(true)
+                .required(true)
+                .about("The new topic of interest for that node."),
         )
 }
 

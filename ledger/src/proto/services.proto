@@ -12,6 +12,7 @@ message RpcMessage {
   oneof message {
     types.Intent intent = 1;
     types.Dkg dkg = 2;
+    types.SubscribeTopic topic = 3;
   }
 }
 

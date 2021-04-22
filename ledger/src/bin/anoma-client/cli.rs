@@ -36,6 +36,13 @@ pub async fn main() -> Result<()> {
             gossip_intent(node, data).await;
             Ok(())
         }
+        Some((cli::SUBSCRIBE_TOPIC_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let node = cli::parse_string_req(args, cli::NODE_INTENT_ARG);
+            let topic = cli::parse_string_req(args, cli::TOPIC_ARG);
+            subscribe_topic(node, topic).await;
+            Ok(())
+        }
         Some((cli::CRAFT_INTENT_COMMAND, args)) => {
             // here unwrap is safe as the arguments are required
             let addr = cli::parse_string_req(args, cli::ADDRESS_ARG);
@@ -114,6 +121,19 @@ async fn gossip_intent(node_addr: String, data_path: String) {
     };
     let message = RpcMessage {
         message: Some(rpc_message::Message::Intent(intent)),
+    };
+    let _response = client
+        .send_message(message)
+        .await
+        .expect("failed to send message and/or receive rpc response");
+}
+
+async fn subscribe_topic(node_addr: String, topic: String) {
+    let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
+    let message = RpcMessage {
+        message: Some(rpc_message::Message::Topic(types::SubscribeTopic {
+            topic,
+        })),
     };
     let _response = client
         .send_message(message)
