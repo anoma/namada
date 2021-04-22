@@ -1246,6 +1246,7 @@ fn tx_init_account(
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
     let gas = write_log.init_account(addr.hash(), parent_addr_hash, code);
 
+    // ensure that the parent address verifies the account creation
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
     verifiers.insert(parent_addr.hash());
