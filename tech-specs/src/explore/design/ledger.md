@@ -1,5 +1,7 @@
 # The ledger
 
+The ledger depends on [Tendermint node](https://github.com/tendermint/tendermint). Running the Anoma node will also initialize and run Tendermint node. Anoma communicates with Tendermint via the ABCI.
+
 ## Tendermint ABCI
 
 We are using the Tendermint state-machine replication engine via ABCI. It provides many useful things, such as a BFT consensus protocol, P2P layer with peer exchange, block sync and mempool layer.
