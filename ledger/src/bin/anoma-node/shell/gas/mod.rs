@@ -11,7 +11,6 @@ pub enum Error {
 }
 
 const TX_GAS_PER_BYTE: u64 = 2;
-const PARALLEL_GAS_FEE: u64 = 1;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
 
@@ -106,7 +105,7 @@ impl BlockGasMeter {
         self.block_gas = 0;
     }
 
-    pub fn add_parallel_fee(&mut self, vps_gases: Vec<u64>) -> Result<()> {
+    pub fn add_parallel_fee(&mut self, vps_gases: &mut Vec<u64>) -> Result<()> {
         vps_gases.sort();
         let mid = vps_gases.len() / 2;
         let median_gas = vps_gases[mid];

@@ -4,7 +4,6 @@ mod memory;
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
 use anoma_vm_env::memory::{TxInput, VpInput};
@@ -17,7 +16,7 @@ use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
-use crate::shell::gas::BlockGasMeter;
+use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::{Address, Storage};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
@@ -254,7 +253,7 @@ impl VpRunner {
         addr: Address,
         storage: &Storage,
         write_log: &WriteLog,
-        vp_gas_meter: &mut BlockGasMeter,
+        vp_gas_meter: &mut VpGasMeter,
         keys_changed: &Vec<String>,
         verifiers: &HashSet<String>,
     ) -> Result<bool> {
@@ -602,7 +601,7 @@ mod tests {
             .expect("Unable to create a temporary DB directory");
         let storage = Storage::new(db_path.path());
         let write_log = WriteLog::new();
-        let gas_meter = Arc::new(Mutex::new(BlockGasMeter::default()));
+        let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = vec![];
         let verifiers = HashSet::new();
         let error = runner
@@ -612,7 +611,7 @@ mod tests {
                 addr,
                 &storage,
                 &write_log,
-                gas_meter,
+                &mut gas_meter,
                 &keys_changed,
                 &verifiers,
             )
