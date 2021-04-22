@@ -215,16 +215,12 @@ fn vp_charge_gas(env: &VpEnv, used_gas: i32) {
 
 fn vp_add_gas(env: &VpEnv, used_gas: u64) {
     let gas_meter: &mut VpGasMeter = unsafe { &mut *(env.gas_meter.get()) };
-    match gas_meter.add(used_gas) {
-        Err(err) => {
-            log::warn!(
-                "Stopping validity predicate execution because of gas error: \
-                 {}",
-                err
-            );
-            unreachable!()
-        }
-        _ => {}
+    if let Err(err) = gas_meter.add(used_gas) {
+        log::warn!(
+            "Stopping transaction execution because of gas error: {}",
+            err
+        );
+        unreachable!()
     }
 }
 

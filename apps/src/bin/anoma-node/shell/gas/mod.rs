@@ -14,7 +14,6 @@ const TX_GAS_PER_BYTE: u64 = 2;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
 
-
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
 const BLOCK_GAS_LIMIT: u64 = 10_000_000_000;
@@ -33,7 +32,6 @@ pub struct VpGasMeter {
 }
 
 impl VpGasMeter {
-
     pub fn add(&mut self, gas: u64) -> Result<()> {
         self.vp_gas = self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow)?;
 
@@ -42,12 +40,11 @@ impl VpGasMeter {
         }
         Ok(())
     }
-
 }
 
 impl VpGasMeter {
     pub fn new(vp_gas: u64) -> Self {
-        Self { vp_gas: vp_gas }
+        Self { vp_gas }
     }
 }
 
@@ -101,7 +98,7 @@ impl BlockGasMeter {
     }
 
     pub fn add_parallel_fee(&mut self, vps_gases: &mut Vec<u64>) -> Result<()> {
-        vps_gases.sort();
+        vps_gases.sort_unstable();
         let mid = vps_gases.len() / 2;
         let median_gas = vps_gases[mid];
         self.add(median_gas)
@@ -110,7 +107,6 @@ impl BlockGasMeter {
     pub fn get_current_transaction_gas(&mut self) -> u64 {
         self.transaction_gas
     }
-
 }
 
 impl Default for BlockGasMeter {

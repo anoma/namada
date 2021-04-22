@@ -260,7 +260,7 @@ impl VpRunner {
         verifiers: HashSet<Address>,
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
-        
+
         // Read-only access from parallel Vp runners
         let storage = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
@@ -481,7 +481,6 @@ mod tests {
     use std::str::FromStr;
 
     use tempdir::TempDir;
-    use wasmer_vm;
 
     use super::*;
     use crate::shell::storage::RawAddress;
@@ -614,8 +613,8 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                keys_changed.clone(),
-                verifiers.clone(),
+                keys_changed,
+                verifiers,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \

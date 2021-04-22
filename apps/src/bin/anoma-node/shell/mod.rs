@@ -4,9 +4,8 @@ mod tendermint;
 
 use core::fmt;
 use std::collections::{HashMap, HashSet};
-
 use std::path::Path;
-use std::sync::{mpsc};
+use std::sync::mpsc;
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
@@ -310,7 +309,8 @@ impl Shell {
     pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
         let mut gas_meter = BlockGasMeter::default();
         let mut write_log = self.write_log.clone();
-        let result = run_tx(tx_bytes, &mut gas_meter, &mut write_log, &self.storage)?;
+        let result =
+            run_tx(tx_bytes, &mut gas_meter, &mut write_log, &self.storage)?;
         Ok(result.to_string())
     }
 
@@ -429,9 +429,12 @@ fn run_tx(
     // Execute the transaction code
     let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
 
-    let vps_result = check_vps(&tx, storage, block_gas_meter, write_log, &verifiers,true);
+    let vps_result =
+        check_vps(&tx, storage, block_gas_meter, write_log, &verifiers, true);
 
-    let gas = block_gas_meter.finalize_transaction().map_err(Error::GasError);
+    let gas = block_gas_meter
+        .finalize_transaction()
+        .map_err(Error::GasError);
 
     Ok(TxResult::new(gas, vps_result))
 }
@@ -455,7 +458,7 @@ fn check_vps(
 
     let mut cache_vp_lookup: HashMap<Address, Vec<u8>> = HashMap::new();
 
-    for (addr, _) in &verifiers {
+    for addr in verifiers.keys() {
         let vp = storage
             .validity_predicate(&addr)
             .map_err(Error::StorageError)?;
@@ -473,7 +476,7 @@ fn check_vps(
         let vp = cache_vp_lookup.get(&addr).unwrap();
 
         let mut vp_gas_meter = VpGasMeter::new(initial_gas);
-        
+
         let vp_runner = VpRunner::new();
         let accept = vp_runner
             .run(
@@ -503,13 +506,13 @@ fn check_vps(
     }
 
     // let max_gas = vp_meters.iter().map(|&x| x.vp_gas).max().unwrap();
-    let mut consumed_gas = 
+    let mut consumed_gas =
         vp_meters.iter().map(|x| x.vp_gas).collect::<Vec<u64>>();
     // sort decresing order
     consumed_gas.sort_by(|a, b| b.cmp(a));
-    
+
     // I'm assuming that at least 1 VP will always be there
-    let max_gas_used = consumed_gas.get(0).unwrap().clone();
+    let max_gas_used = *consumed_gas.get(0).unwrap();
     consumed_gas.drain(0..1);
 
     gas_meter.add(max_gas_used).map_err(Error::GasError)?;
@@ -548,4 +551,3 @@ fn execute_tx(
 
     Ok(verifiers)
 }
-
