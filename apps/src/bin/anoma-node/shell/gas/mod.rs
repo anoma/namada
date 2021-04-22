@@ -98,10 +98,9 @@ impl BlockGasMeter {
     }
 
     pub fn add_parallel_fee(&mut self, vps_gases: &mut Vec<u64>) -> Result<()> {
-        vps_gases.sort_unstable();
-        let mid = vps_gases.len() / 2;
-        let median_gas = vps_gases[mid];
-        self.add(median_gas)
+        let mean_gas =
+            vps_gases.iter().sum::<u64>() as u64 / vps_gases.len() as u64;
+        self.add(mean_gas)
     }
 
     pub fn get_current_transaction_gas(&mut self) -> u64 {
