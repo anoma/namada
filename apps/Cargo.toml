@@ -1,8 +1,9 @@
 [package]
 authors = ["Heliax <TODO@heliax.dev>"]
-description = "Anoma node daemon"
+description = "Anoma apps"
 edition = "2018"
 name = "Anoma"
+readme = "../README.md"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

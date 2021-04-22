@@ -63,9 +63,9 @@ doc:
 
 # Build the validity predicate and transaction wasm from templates
 build-wasm-scripts:
-	make -C ../vp_template && \
-	make -C ../tx_template && \
-	make -C ../matchmaker_template
+	make -C vp_template && \
+	make -C tx_template && \
+	make -C matchmaker_template
 
 
 dev-deps:

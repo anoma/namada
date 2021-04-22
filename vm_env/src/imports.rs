@@ -1,14 +1,15 @@
 /// Transaction environment imports
 pub mod tx {
-    use anoma_shared::vm_memory::KeyVal;
-    pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::vm_memory::KeyVal;
+    pub use borsh::{BorshDeserialize, BorshSerialize};
+
     /// This macro expects a function with signature:
     ///
-    /// ```
+    /// ```ignore
     /// fn apply_tx(tx_data: vm_memory::Data)
     /// ```
     /// TODO try to switch to procedural macros instead
@@ -46,11 +47,14 @@ pub mod tx {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe { _iter_next_varlen(self.0, result.as_ptr() as _) };
+            let size =
+                unsafe { _iter_next_varlen(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
-                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                let slice = unsafe {
+                    slice::from_raw_parts(result.as_ptr(), size as _)
+                };
                 match KeyVal::try_from_slice(slice) {
                     Ok(key_val) => match T::try_from_slice(&key_val.val) {
                         Ok(v) => Some((key_val.key, v)),
@@ -67,7 +71,9 @@ pub mod tx {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found = unsafe { _read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _) };
+        let found = unsafe {
+            _read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+        };
         if found == 0 {
             None
         } else {
@@ -77,16 +83,24 @@ pub mod tx {
     }
 
     /// Try to read a variable-length value at the given key from storage.
-    pub fn read_varlen<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+    pub fn read_varlen<K: AsRef<str>, T: BorshDeserialize>(
+        key: K,
+    ) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found =
-            unsafe { _read_varlen(key.as_ptr() as _, key.len() as _, result.as_ptr() as _) };
+        let found = unsafe {
+            _read_varlen(
+                key.as_ptr() as _,
+                key.len() as _,
+                result.as_ptr() as _,
+            )
+        };
         if found == -1 {
             None
         } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
+            let slice =
+                unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
             T::try_from_slice(slice).ok()
         }
     }
@@ -120,9 +134,12 @@ pub mod tx {
     }
 
     /// Get an iterator with the given prefix
-    pub fn iter_prefix<K: AsRef<str>, T: BorshDeserialize>(prefix: K) -> KeyValIterator<T> {
+    pub fn iter_prefix<K: AsRef<str>, T: BorshDeserialize>(
+        prefix: K,
+    ) -> KeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id = unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
+        let iter_id =
+            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
         KeyValIterator(iter_id, PhantomData)
     }
 
@@ -204,15 +221,16 @@ pub mod tx {
 
 /// Validity predicate environment imports
 pub mod vp {
-    use anoma_shared::vm_memory::KeyVal;
-    pub use borsh::{BorshDeserialize, BorshSerialize};
     pub use core::slice;
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::vm_memory::KeyVal;
+    pub use borsh::{BorshDeserialize, BorshSerialize};
+
     /// This macro expects a function with signature:
     ///
-    /// ```
+    /// ```ignore
     /// fn validate_tx(tx_data: vm_memory::Data, addr: &str, keys_changed: Vec<String>) -> bool
     /// ```
     #[macro_export]
@@ -288,7 +306,9 @@ pub mod vp {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found = unsafe { _read_pre(key.as_ptr() as _, key.len() as _, result.as_ptr() as _) };
+        let found = unsafe {
+            _read_pre(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+        };
         if found == 0 {
             None
         } else {
@@ -303,7 +323,9 @@ pub mod vp {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found = unsafe { _read_post(key.as_ptr() as _, key.len() as _, result.as_ptr() as _) };
+        let found = unsafe {
+            _read_post(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+        };
         if found == 0 {
             None
         } else {
@@ -314,32 +336,48 @@ pub mod vp {
 
     /// Try to read a variable-length value at the given key from storage before
     /// transaction execution.
-    pub fn read_pre_varlen<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+    pub fn read_pre_varlen<K: AsRef<str>, T: BorshDeserialize>(
+        key: K,
+    ) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found =
-            unsafe { _read_pre_varlen(key.as_ptr() as _, key.len() as _, result.as_ptr() as _) };
+        let found = unsafe {
+            _read_pre_varlen(
+                key.as_ptr() as _,
+                key.len() as _,
+                result.as_ptr() as _,
+            )
+        };
         if found == -1 {
             None
         } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
+            let slice =
+                unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
             T::try_from_slice(slice).ok()
         }
     }
 
     /// Try to read a variable-length value at the given key from storage after
     /// transaction execution.
-    pub fn read_post_varlen<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+    pub fn read_post_varlen<K: AsRef<str>, T: BorshDeserialize>(
+        key: K,
+    ) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found =
-            unsafe { _read_post_varlen(key.as_ptr() as _, key.len() as _, result.as_ptr() as _) };
+        let found = unsafe {
+            _read_post_varlen(
+                key.as_ptr() as _,
+                key.len() as _,
+                result.as_ptr() as _,
+            )
+        };
         if found == -1 {
             None
         } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
+            let slice =
+                unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
             T::try_from_slice(slice).ok()
         }
     }
@@ -361,9 +399,12 @@ pub mod vp {
     }
 
     /// Get an iterator with the given prefix before transaction execution
-    pub fn iter_prefix_pre<K: AsRef<str>, T: BorshDeserialize>(prefix: K) -> PreKeyValIterator<T> {
+    pub fn iter_prefix_pre<K: AsRef<str>, T: BorshDeserialize>(
+        prefix: K,
+    ) -> PreKeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id = unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
+        let iter_id =
+            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
         PreKeyValIterator(iter_id, PhantomData)
     }
 
@@ -372,11 +413,14 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe { _iter_pre_next_varlen(self.0, result.as_ptr() as _) };
+            let size =
+                unsafe { _iter_pre_next_varlen(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
-                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                let slice = unsafe {
+                    slice::from_raw_parts(result.as_ptr(), size as _)
+                };
                 match KeyVal::try_from_slice(slice) {
                     Ok(key_val) => match T::try_from_slice(&key_val.val) {
                         Ok(v) => Some((key_val.key, v)),
@@ -393,7 +437,8 @@ pub mod vp {
         prefix: K,
     ) -> PostKeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id = unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
+        let iter_id =
+            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
         PostKeyValIterator(iter_id, PhantomData)
     }
 
@@ -402,11 +447,14 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe { _iter_post_next_varlen(self.0, result.as_ptr() as _) };
+            let size =
+                unsafe { _iter_post_next_varlen(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
-                let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
+                let slice = unsafe {
+                    slice::from_raw_parts(result.as_ptr(), size as _)
+                };
                 match KeyVal::try_from_slice(slice) {
                     Ok(key_val) => match T::try_from_slice(&key_val.val) {
                         Ok(v) => Some((key_val.key, v)),
@@ -436,7 +484,8 @@ pub mod vp {
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        fn _read_pre_varlen(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
+        fn _read_pre_varlen(key_ptr: u64, key_len: u64, result_ptr: u64)
+        -> i64;
 
         // Read fixed-length posterior state, returns 1 if the key is present, 0
         // otherwise.
@@ -445,7 +494,11 @@ pub mod vp {
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        fn _read_post_varlen(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
+        fn _read_post_varlen(
+            key_ptr: u64,
+            key_len: u64,
+            result_ptr: u64,
+        ) -> i64;
 
         // Returns 1 if the key is present in prior state, 0 otherwise.
         fn _has_key_pre(key_ptr: u64, key_len: u64) -> u64;
@@ -488,7 +541,7 @@ pub mod matchmaker {
 
     /// This macro expects a function with signature:
     ///
-    /// ```
+    /// ```ignore
     /// fn match_intent(intent_1: Intent, intent_2: Intent) -> bool
     /// ```
     #[macro_export]
@@ -534,7 +587,9 @@ pub mod matchmaker {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found = unsafe { _read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _) };
+        let found = unsafe {
+            _read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+        };
         if found == 0 {
             None
         } else {

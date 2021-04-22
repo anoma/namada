@@ -9,9 +9,11 @@
 //!    The environment inputs are passed guest-to-host and outputs back from
 //!    host-to-guest.
 
-use crate::types::Address;
-use borsh::{BorshDeserialize, BorshSerialize};
 use std::collections::HashSet;
+
+use borsh::{BorshDeserialize, BorshSerialize};
+
+use crate::types::Address;
 
 /// The data type that can be attached to the operation that initiated the
 /// wasm call (tx, VP, matchmaker, filter)

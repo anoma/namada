@@ -2,17 +2,15 @@
 
 mod address;
 
-pub use address::{Address, RawAddress};
-
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use std::{
-    convert::{TryFrom, TryInto},
-    str::FromStr,
-};
+use std::str::FromStr;
 
-use crate::bytes::ByteBuf;
+pub use address::{Address, RawAddress};
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
+
+use crate::bytes::ByteBuf;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -31,10 +29,22 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub const CHAIN_ID_LENGTH: usize = 20;
 const BLOCK_HASH_LENGTH: usize = 32;
 
-#[derive(Clone, Copy, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(
+    Clone,
+    Copy,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+)]
 pub struct BlockHeight(pub u64);
 
-#[derive(Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub struct BlockHash([u8; 32]);
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -75,16 +85,6 @@ impl Key {
         Key { segments }
     }
 
-    /// Returns string from the segments
-    pub fn to_string(&self) -> String {
-        let v: Vec<String> = self
-            .segments
-            .iter()
-            .map(|s| DbKeySeg::to_string(s))
-            .collect();
-        v.join("/")
-    }
-
     /// Returns the addresses from the key segments
     pub fn find_addresses(&self) -> Vec<Address> {
         let mut addresses = Vec::new();
@@ -101,11 +101,21 @@ impl Key {
     pub fn len(&self) -> usize {
         self.to_string().len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl Display for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.to_string())
+        let segs: Vec<String> = self
+            .segments
+            .iter()
+            .map(|s| DbKeySeg::to_string(s))
+            .collect();
+        let key = segs.join("/");
+        f.write_str(&key)
     }
 }
 
@@ -133,7 +143,7 @@ pub enum DbKeySeg {
 
 impl KeySeg for DbKeySeg {
     fn parse(mut string: String) -> Result<Self> {
-        match string.chars().nth(0) {
+        match string.chars().next() {
             // TODO reserve non-alphanumerical prefix characters for internal
             // usage raw addresses are prefixed with `'@'`
             Some(c) if c == '@' => {
@@ -267,7 +277,7 @@ impl KeySeg for RawAddress {
     }
 
     fn parse(mut seg: String) -> Result<Self> {
-        match seg.chars().nth(0) {
+        match seg.chars().next() {
             Some(c) if c == '@' => {
                 let _ = seg.remove(0);
                 FromStr::from_str(&seg).map_err(Error::ParseAddress)
