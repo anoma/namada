@@ -58,7 +58,7 @@ cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 cargo run --bin anoma -- run-gossip --rpc
 
 # run orderbook daemon with rpc server and matchmaker with default config file (or add --intent)
-cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "tcp://127.0.0.1:26658"
+cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
 cargo run --bin anomac -- craft-intent --address alan --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file_A

@@ -16,6 +16,12 @@ pub mod tx {
     #[macro_export]
     macro_rules! transaction {
         (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) $body:block ) => {
+            use wee_alloc;
+
+            // Use `wee_alloc` as the global allocator.
+            #[global_allocator]
+            static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
             fn $fn( $($arg: $type),* ) $body
 
             // The module entrypoint callable by wasm runtime
@@ -230,6 +236,12 @@ pub mod vp {
     #[macro_export]
     macro_rules! validity_predicate {
         (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
+            use wee_alloc;
+
+            // Use `wee_alloc` as the global allocator.
+            #[global_allocator]
+            static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
             fn $fn( $($arg: $type),* ) -> $ret $body
 
             // The module entrypoint callable by wasm runtime
@@ -535,6 +547,12 @@ pub mod matchmaker {
     #[macro_export]
     macro_rules! matchmaker {
         (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
+            use wee_alloc;
+
+            // Use `wee_alloc` as the global allocator.
+            #[global_allocator]
+            static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
             fn $fn( $($arg: $type),* ) -> $ret $body
 
             /// The module interface callable by wasm runtime
