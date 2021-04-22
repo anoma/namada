@@ -8,9 +8,8 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 
-pub use anoma_shared::types::{
-    Address, BlockHash, BlockHeight, Key, KeySeg, RawAddress,
-    BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+use anoma_shared::types::{
+    Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
 use sparse_merkle_tree::H256;
 use thiserror::Error;
