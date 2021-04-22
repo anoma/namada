@@ -358,8 +358,11 @@ where
     F: FromStr,
     F::Err: Debug,
 {
-    args.value_of(field)
-        .map(|address| address.parse().expect("failed to parse the argument"))
+    args.value_of(field).map(|arg| {
+        arg.parse().unwrap_or_else(|e| {
+            panic!("failed to parse the argument {}, error: {:?}", arg, e)
+        })
+    })
 }
 
 pub fn parse_req<F>(args: &ArgMatches, field: &str) -> F
