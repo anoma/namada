@@ -238,8 +238,7 @@ impl Storage {
         Ok(())
     }
 
-    /// Get a validity predicate for the given account address and the gas cost
-    /// for reading it.
+    /// Get a validity predicate for the given account address
     pub fn validity_predicate(&self, addr: &Address) -> Result<Vec<u8>> {
         let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
         match self.read(&key)?.0 {
