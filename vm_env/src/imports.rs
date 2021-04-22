@@ -499,7 +499,7 @@ pub mod vp {
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
         fn _read_pre_varlen(key_ptr: u64, key_len: u64, result_ptr: u64)
-            -> i64;
+        -> i64;
 
         // Read fixed-length posterior state, returns 1 if the key is present, 0
         // otherwise.

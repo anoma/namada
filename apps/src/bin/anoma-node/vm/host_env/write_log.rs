@@ -101,6 +101,7 @@ impl WriteLog {
         let gas = key.len() + (-size_diff as usize);
         (gas as _, size_diff)
     }
+
     /// Initialize a new account and return the gas cost.
     pub fn init_account(
         &mut self,
