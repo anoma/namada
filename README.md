@@ -39,11 +39,11 @@ make run-ledger
 # Reset the state (resets Tendermint too)
 cargo run --bin anomad -- reset-ledger
 
-# craft a transaction data to file `tx_data_file`
-cargo run --bin anomac -- craft-tx-data --source alan --target ada --token xan --amount 10 --file tx_data_file
+# craft a transaction data to file `tx.data`
+cargo run --bin anomac -- craft-tx-data --source alan --target ada --token xan --amount 10 --file tx.data
 
 # Submit a transaction with a wasm code
-cargo run --bin anoma -- tx --path tx_template/tx.wasm --data tx_data_file
+cargo run --bin anoma -- tx --path tx_template/tx.wasm --data tx.data
 
 # Watch and on change run a node (the state will be persisted)
 cargo watch -x "run --bin anomad -- run-ledger"
@@ -58,12 +58,12 @@ cargo run --bin anoma -- run-gossip --rpc
 cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
-cargo run --bin anomac -- craft-intent --address alan --token-buy xan --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_data_file_A
-cargo run --bin anomac -- craft-intent --address ada --token-buy btc --amount-buy 20 --token-sell xan --amount-sell 10 --file intent_data_file_B
+cargo run --bin anomac -- craft-intent --address alan --token-buy xan --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_A.data
+cargo run --bin anomac -- craft-intent --address ada --token-buy btc --amount-buy 20 --token-sell xan --amount-sell 10 --file intent_B.data
 
 # Submit the intents (need a rpc server), hardcoded address
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_data_file_A
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_data_file_B
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_A.data
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_B.data
 
 # Format the code
 make fmt
