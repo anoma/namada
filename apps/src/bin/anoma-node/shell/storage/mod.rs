@@ -261,7 +261,7 @@ impl Storage {
         (self.chain_id.clone(), CHAIN_ID_LENGTH as _)
     }
 
-    /// Get the successor block height
+    /// Get the current (yet to be committed) block height
     pub fn get_block_height(&self) -> (BlockHeight, u64) {
         (self.block.height, MIN_STORAGE_GAS)
     }
