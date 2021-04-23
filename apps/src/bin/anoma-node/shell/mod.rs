@@ -5,7 +5,8 @@ mod tendermint;
 use core::fmt;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc;
+use std::vec;
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
@@ -13,7 +14,7 @@ use anoma_shared::types::{Address, BlockHash, BlockHeight, Key};
 use prost::Message;
 use thiserror::Error;
 
-use self::gas::BlockGasMeter;
+use self::gas::{BlockGasMeter, VpGasMeter};
 use self::storage::Storage;
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::vm::host_env::write_log::WriteLog;
@@ -68,7 +69,7 @@ pub struct Shell {
     storage: storage::Storage,
     // The gas meter is sync with mutex to allow VPs sharing it
     // TODO it should be possible to impl a lock-free gas metering for VPs
-    gas_meter: Arc<Mutex<BlockGasMeter>>,
+    gas_meter: BlockGasMeter,
     write_log: WriteLog,
 }
 
@@ -122,7 +123,7 @@ impl Shell {
         Self {
             abci,
             storage,
-            gas_meter: Arc::new(Mutex::new(BlockGasMeter::default())),
+            gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::new(),
         }
     }
@@ -308,14 +309,10 @@ impl Shell {
 
     /// Validate and apply a transaction.
     pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
-        let gas_meter = BlockGasMeter::default();
+        let mut gas_meter = BlockGasMeter::default();
         let mut write_log = self.write_log.clone();
-        let result = run_tx(
-            tx_bytes,
-            Arc::new(Mutex::new(gas_meter)),
-            &mut write_log,
-            &self.storage,
-        )?;
+        let result =
+            run_tx(tx_bytes, &mut gas_meter, &mut write_log, &self.storage)?;
         Ok(result.to_string())
     }
 
@@ -323,7 +320,7 @@ impl Shell {
     pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
         let result = run_tx(
             tx_bytes,
-            self.gas_meter.clone(),
+            &mut self.gas_meter.clone(),
             &mut self.write_log,
             &self.storage,
         )?;
@@ -342,11 +339,7 @@ impl Shell {
 
     /// Begin a new block.
     pub fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
-        let mut gas_meter = self
-            .gas_meter
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        gas_meter.reset();
+        self.gas_meter.reset();
         self.storage.begin_block(hash, height).unwrap();
     }
 
@@ -425,38 +418,25 @@ fn get_verifiers(
 
 fn run_tx(
     tx_bytes: &[u8],
-    gas_meter_mutex: Arc<Mutex<BlockGasMeter>>,
+    block_gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
     storage: &Storage,
 ) -> Result<TxResult> {
-    let mut gas_meter = gas_meter_mutex
-        .lock()
-        .expect("Cannot get lock on the gas meter");
-    gas_meter
+    block_gas_meter
         .add_base_transaction_fee(tx_bytes.len())
         .map_err(Error::GasError)?;
 
     let tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
 
     // Execute the transaction code
-    let verifiers = execute_tx(&tx, storage, &mut gas_meter, write_log)?;
+    let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
 
-    // drop the lock on the gas meter, the VPs will access it via the mutex
-    drop(gas_meter);
+    let vps_result =
+        check_vps(&tx, storage, block_gas_meter, write_log, &verifiers, true);
 
-    let vps_result = check_vps(
-        &tx,
-        storage,
-        gas_meter_mutex.clone(),
-        write_log,
-        &verifiers,
-        true,
-    );
-
-    let mut gas_meter = gas_meter_mutex
-        .lock()
-        .expect("Cannot get lock on the gas meter");
-    let gas = gas_meter.finalize_transaction().map_err(Error::GasError);
+    let gas = block_gas_meter
+        .finalize_transaction()
+        .map_err(Error::GasError);
 
     Ok(TxResult::new(gas, vps_result))
 }
@@ -464,7 +444,7 @@ fn run_tx(
 fn check_vps(
     tx: &Tx,
     storage: &Storage,
-    gas_meter_mutex: Arc<Mutex<BlockGasMeter>>,
+    gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
     verifiers: &HashSet<Address>,
     dry_run: bool,
@@ -478,18 +458,26 @@ fn check_vps(
     let mut accepted_vps = HashSet::new();
     let mut changed_keys: Vec<String> = Vec::new();
 
-    for (addr, keys) in verifiers {
-        let vp = storage
-            .validity_predicate(&addr)
-            .map_err(Error::StorageError)?;
+    let verifiers_vps: Vec<(&Address, &Vec<String>, Vec<u8>)> = verifiers
+        .iter()
+        .map(|(addr, keys)| {
+            let vp = storage
+                .validity_predicate(&addr)
+                .map_err(Error::StorageError)?;
 
-        let mut gas_meter = gas_meter_mutex
-            .lock()
-            .expect("Cannot get lock on the gas meter");
-        gas_meter
-            .add_compiling_fee(vp.len())
-            .map_err(Error::GasError)?;
-        drop(gas_meter);
+            gas_meter
+                .add_compiling_fee(vp.len())
+                .map_err(Error::GasError)?;
+
+            Ok((addr, keys, vp))
+        })
+        .collect::<std::result::Result<_, _>>()?;
+
+    let initial_gas = gas_meter.get_current_transaction_gas();
+    let mut vp_meters: Vec<VpGasMeter> = Vec::new();
+
+    for (addr, keys, vp) in verifiers_vps {
+        let mut vp_gas_meter = VpGasMeter::new(initial_gas);
 
         let vp_runner = VpRunner::new();
         let accept = vp_runner
@@ -499,7 +487,7 @@ fn check_vps(
                 &addr,
                 storage,
                 write_log,
-                gas_meter_mutex.clone(),
+                &mut vp_gas_meter,
                 keys.clone(),
                 addresses.clone(),
             )
@@ -508,14 +496,28 @@ fn check_vps(
                 error,
             })?;
         if !accept {
-            rejected_vps.insert(addr);
+            rejected_vps.insert(addr.clone());
             if !dry_run {
                 break;
             }
         } else {
-            accepted_vps.insert(addr);
+            accepted_vps.insert(addr.clone());
             changed_keys.append(&mut keys.clone());
         }
+        vp_meters.push(vp_gas_meter);
+    }
+
+    let mut consumed_gas =
+        vp_meters.iter().map(|x| x.vp_gas).collect::<Vec<u64>>();
+    // sort decresing order
+    consumed_gas.sort_by(|a, b| b.cmp(a));
+
+    // I'm assuming that at least 1 VP will always be there
+    if let Some((max_gas_used, rest)) = consumed_gas.split_first() {
+        gas_meter.add(*max_gas_used).map_err(Error::GasError)?;
+        gas_meter
+            .add_parallel_fee(&mut rest.to_vec())
+            .map_err(Error::GasError)?;
     }
     Ok(VpResult::new(accepted_vps, rejected_vps, changed_keys))
 }
