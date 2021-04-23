@@ -1,22 +1,23 @@
 # The gossip network
 
-The gossip network runs in parralel to the ledger network and is used to
-propagate information like intents. The network is based on
-[libp2p](https://libp2p.io/) that takes of creating a decentralize network and
-encrypting any messages. On top of it, it uses the network behaviour
-[GossipSub](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) that
+The gossip network runs in parallel to the ledger network and is used to
+propagate off-chain information. The network is based on
+[libp2p](https://libp2p.io/) that takes of creating a decentralized network and
+encrypting any messages. On top of it, it uses the network behavior
+[GossipSub](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub), that
 takes care of gossiping the message to all participant and has a grading system
-to bans node that does not follow the rules.
+to ban node that does not follow the
+rules.
 
-The gossip network is used to propagate message of two differents applications,
-intents for the orderbook application, and message for distributed keys
-generation application.
+The gossip network is used to propagate messages of two different applications,
+intents for the intent broadcaster, and message for distributed keys generation
+application.
 
-- [orderbook](./gossip/orderbook.md)
-- [distributed key generation](./gossip/dkg.md)
+- [intent broadcaster](./intent_broadcaster.md)
+- [distributed key generation](./dkg_broadcaster.md)
 
-## Gossip process
+## High level overview of network interaction
 
-High level overview of the gossip processing
+![gossip process](./intent_broadcaster/gossip_process.svg  "gossip process")
 
-![gossip process](./gossip/gossip_process.svg  "gossip process")
+[exilidraw link](https://excalidraw.com/#room=5d4a2a84ef52cf5f5f96,r4ghl40frJ9putMy-0vyOQ)
