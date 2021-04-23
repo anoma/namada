@@ -9,6 +9,7 @@ use std::str::FromStr;
 use libp2p::multiaddr::Multiaddr;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use serde_regex;
 use thiserror::Error;
 
 use crate::gossiper::Gossiper;
@@ -90,8 +91,12 @@ pub struct Matchmaker {
 }
 
 // TODO maybe add also maxCount for a maximum number of subscription for a
-// filter
+// filter.
+
+// TODO toml failed to serialize without "untagged", this might be a source of
+// confusion in the future ?
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum SubscriptionFilter {
     RegexFilter(#[serde(with = "serde_regex")] Regex),
     WhitelistFilter(Vec<String>),
@@ -103,9 +108,9 @@ pub struct Gossip {
     pub rpc: bool,
     pub peers: HashSet<Multiaddr>,
     pub topics: HashSet<String>,
+    pub subscription_filter: SubscriptionFilter,
     pub gossiper: Gossiper,
     pub matchmaker: Option<Matchmaker>,
-    pub subscription_filter: SubscriptionFilter,
 }
 
 impl Default for Gossip {
@@ -114,7 +119,9 @@ impl Default for Gossip {
             // TODO there must be a better option here
             address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
             rpc: false,
-            subscription_filter: SubscriptionFilter::WhitelistFilter(Vec::new()),
+            subscription_filter: SubscriptionFilter::RegexFilter(
+                Regex::new(".*").unwrap(),
+            ),
             peers: HashSet::new(),
             topics: HashSet::new(),
             gossiper: Gossiper::new(),

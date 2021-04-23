@@ -76,7 +76,6 @@ pub fn anoma_inline_cli() -> App {
         .subcommand(reset_ledger_subcommand())
         .subcommand(client_tx_subcommand())
         .subcommand(client_intent_subcommand())
-        .subcommand(client_subscribe_topic_subcommand())
         // Node sub-commands
         .subcommand(add_node_commands(
             App::new(NODE_COMMAND).about("Node sub-commands"),
@@ -101,6 +100,7 @@ fn add_client_commands(app: App) -> App {
         .subcommand(client_intent_subcommand())
         .subcommand(client_craft_intent_subcommand())
         .subcommand(client_craft_tx_data_subcommand())
+        .subcommand(client_subscribe_topic_subcommand())
 }
 
 pub fn anoma_node_cli() -> App {

@@ -119,7 +119,9 @@ impl P2P {
                 self.swarm
                     .intent_broadcaster
                     .subscribe(&topic)
-                    .unwrap_or_else(|_| panic!("failed to subscribe to topic {:?}", topic));
+                    .unwrap_or_else(|_| {
+                        panic!("failed to subscribe to topic {:?}", topic)
+                    });
             }
         };
     }

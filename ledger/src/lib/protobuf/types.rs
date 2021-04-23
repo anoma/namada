@@ -19,7 +19,10 @@ pub struct SubscribeTopic {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IntentBroadcasterMessage {
-    #[prost(oneof = "intent_broadcaster_message::IntentMessage", tags = "1")]
+    #[prost(
+        oneof = "intent_broadcaster_message::IntentMessage",
+        tags = "1, 2"
+    )]
     pub intent_message:
         ::core::option::Option<intent_broadcaster_message::IntentMessage>,
 }
@@ -29,6 +32,8 @@ pub mod intent_broadcaster_message {
     pub enum IntentMessage {
         #[prost(message, tag = "1")]
         Intent(super::Intent),
+        #[prost(message, tag = "2")]
+        SubscribeTopic(super::SubscribeTopic),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
