@@ -19,17 +19,13 @@ pub struct SubscribeTopic {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IntentBroadcasterMessage {
-    #[prost(
-        oneof = "intent_broadcaster_message::IntentMessage",
-        tags = "1, 2"
-    )]
-    pub intent_message:
-        ::core::option::Option<intent_broadcaster_message::IntentMessage>,
+    #[prost(oneof = "intent_broadcaster_message::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<intent_broadcaster_message::Msg>,
 }
 /// Nested message and enum types in `IntentBroadcasterMessage`.
 pub mod intent_broadcaster_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum IntentMessage {
+    pub enum Msg {
         #[prost(message, tag = "1")]
         Intent(super::Intent),
         #[prost(message, tag = "2")]

@@ -21,7 +21,7 @@ message SubscribeTopic {
 }
 
 message IntentBroadcasterMessage{
-  oneof intent_message {
+  oneof msg {
     Intent intent = 1;
     SubscribeTopic subscribe_topic = 2;
   }

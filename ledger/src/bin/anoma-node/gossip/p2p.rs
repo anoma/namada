@@ -1,7 +1,6 @@
 use anoma::protobuf::services::rpc_message;
-use anoma::protobuf::types;
 use anoma::protobuf::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage, Tx,
+    intent_broadcaster_message, IntentBroadcasterMessage, SubscribeTopic, Tx,
 };
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
@@ -10,7 +9,6 @@ use libp2p::PeerId;
 use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
-use types::SubscribeTopic;
 
 use super::gossip_intent;
 use super::network_behaviour::{Behaviour, IntentBroadcasterEvent};
@@ -23,6 +21,8 @@ pub enum Error {
     TransportError(std::io::Error),
     #[error("Failed initializing the broadcaster intent app: {0}")]
     GossipIntentError(gossip_intent::Error),
+    #[error("Failed to subscribe")]
+    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -60,10 +60,15 @@ impl P2P {
     }
 
     pub fn prepare(&mut self, config: &anoma::config::Gossip) -> Result<()> {
-        for topic in &config.topics {
+        &config.topics.iter().try_for_each(|topic| {
             let topic = IdentTopic::new(topic);
-            self.swarm.intent_broadcaster.subscribe(&topic).unwrap();
-        }
+            self.swarm
+                .intent_broadcaster
+                .subscribe(&topic)
+                .map_err(Error::FailedSubscribtion)
+                // it returns bool of if it were already subscribed
+                .map(|_| ())
+        });
 
         // Listen on given address
         Swarm::listen_on(&mut self.swarm, config.address.clone()).unwrap();
@@ -102,26 +107,36 @@ impl P2P {
                     .await
                     .expect("failed to apply intent")
                 {
-                    let mut tix_bytes = vec![];
-                    intent.encode(&mut tix_bytes).unwrap();
+                    let mut intent_bytes = vec![];
+                    intent.encode(&mut intent_bytes).unwrap();
                     let _message_id = self
                         .swarm
                         .intent_broadcaster
-                        .publish(IdentTopic::new(topic), tix_bytes);
+                        .publish(IdentTopic::new(topic), intent_bytes);
                 }
             }
 
             rpc_message::Message::Dkg(_dkg_msg) => {
                 panic!("not yet implemented")
             }
-            rpc_message::Message::Topic(SubscribeTopic { topic }) => {
-                let topic = IdentTopic::new(topic);
+            rpc_message::Message::Topic(SubscribeTopic {
+                topic: topic_str,
+            }) => {
+                let topic = IdentTopic::new(&topic_str);
                 self.swarm
                     .intent_broadcaster
                     .subscribe(&topic)
                     .unwrap_or_else(|_| {
                         panic!("failed to subscribe to topic {:?}", topic)
                     });
+                let mut subscribe_bytes = vec![];
+                (SubscribeTopic { topic: topic_str })
+                    .encode(&mut subscribe_bytes)
+                    .unwrap();
+                let _message_id = self
+                    .swarm
+                    .intent_broadcaster
+                    .publish(topic, subscribe_bytes);
             }
         };
     }
@@ -153,8 +168,7 @@ impl P2P {
         let intent_process = &mut self.intent_process;
         let validity = match intent_process.parse_raw_msg(data) {
             Ok(IntentBroadcasterMessage {
-                intent_message:
-                    Some(intent_broadcaster_message::IntentMessage::Intent(intent)),
+                msg: Some(intent_broadcaster_message::Msg::Intent(intent)),
             }) => match intent_process.apply_intent(intent).await {
                 Ok(true) => MessageAcceptance::Accept,
                 Ok(false) => MessageAcceptance::Reject,
@@ -164,13 +178,30 @@ impl P2P {
                 }
             },
             Ok(IntentBroadcasterMessage {
-                intent_message: None,
-            })
+                msg:
+                    Some(intent_broadcaster_message::Msg::SubscribeTopic(
+                        SubscribeTopic { topic },
+                    )),
+            }) => {
+                let topic = IdentTopic::new(topic);
+                match self.swarm.intent_broadcaster.subscribe(&topic) {
+                    Ok(true) => MessageAcceptance::Accept,
+                    Ok(false) => MessageAcceptance::Reject,
+                    Err(err) => {
+                        log::error!(
+                            "Error while trying to apply an intent: {:?}",
+                            err
+                        );
+                        MessageAcceptance::Ignore
+                    }
+                }
+            }
+
+            Ok(IntentBroadcasterMessage { msg: None })
             | Err(gossip_intent::Error::DecodeError(..)) => {
                 MessageAcceptance::Reject
             }
-            Ok(IntentBroadcasterMessage { intent_message: _ })
-            | Err(gossip_intent::Error::MatchmakerInit(..))
+            Err(gossip_intent::Error::MatchmakerInit(..))
             | Err(gossip_intent::Error::Matchmaker(..)) => {
                 MessageAcceptance::Ignore
             }
