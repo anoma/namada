@@ -663,6 +663,12 @@ pub mod filter {
     #[macro_export]
     macro_rules! filter {
         (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
+            use wee_alloc;
+
+            // Use `wee_alloc` as the global allocator.
+            #[global_allocator]
+            static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
             fn $fn( $($arg: $type),* ) -> $ret $body
 
             /// The module interface callable by wasm runtime
