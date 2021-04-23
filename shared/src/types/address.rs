@@ -155,9 +155,17 @@ impl Address {
     pub fn is_empty(&self) -> bool {
         self.hash.is_empty()
     }
+
+    /// Parse an address from raw address string. Panics for invalid address.
+    pub fn from_raw(str: impl AsRef<str>) -> Self {
+        RawAddress::from_str(str.as_ref())
+            .expect("expected a valid address")
+            .hash()
+    }
 }
 
 impl From<String> for Address {
+    /// Construct an address from its hash
     fn from(hash: String) -> Self {
         Self { hash }
     }
@@ -282,5 +290,32 @@ impl<'a> FromIterator<&'a Address> for HashSet<Address> {
             set.insert(addr.clone());
         }
         set
+    }
+}
+
+pub fn xan() -> Address {
+    Address::from_raw("xan")
+}
+
+pub fn btc() -> Address {
+    Address::from_raw("btc")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_xan_addr() {
+        let xan_addr = xan();
+        assert_eq!(xan_addr, Address::from("124A9CAF6E788ABD00FF4FF94D01B3A1C8AC2BF81061637128A9C292C00418F6".to_string()));
+        assert_eq!(ToString::to_string(&xan_addr), "a1xyergsfegdq5vdj9xuurss2zgscrq3jxx3ryvwf5gscrzs3ngyc5xwzpgveyy33cxycrvvfkxvmnzv3cgyu5xv3exfpnqvp5xyuyvds0pt2v2");
+    }
+
+    #[test]
+    fn get_btc_addr() {
+        let btc_addr = btc();
+        assert_eq!(btc_addr, Address::from("E40605E6A26268A5EB83C155EA5DD12AEB3314F6BA5D67D4B607DE95156E4E12".to_string()));
+        assert_eq!(ToString::to_string(&btc_addr), "a1g56rqd3sx4znvsfjxcervwzpx4z5ywpngvcn2d29gy65g3p3xfq52s3nxvcng33kgfqn23pkxazrgs3kxqm5g3fex5cn2dj9x3znzvssph8ht");
     }
 }

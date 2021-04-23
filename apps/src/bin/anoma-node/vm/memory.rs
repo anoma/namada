@@ -95,8 +95,9 @@ pub fn write_vp_inputs(
     (addr, tx_data_bytes, keys_changed, verifiers): vm_memory::VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
-    // String utf8 encoding is more space-efficient than Borsh encoding
-    let addr_bytes = addr.as_bytes();
+    let addr_bytes = addr.try_to_vec().expect(
+        "TEMPORARY: failed to serialize address for validity predicate",
+    );
     let addr_len = addr_bytes.len() as _;
 
     let tx_data_ptr = addr_ptr + addr_len;
@@ -115,7 +116,7 @@ pub fn write_vp_inputs(
     let verifiers_len = verifiers_bytes.len() as _;
 
     let bytes = [
-        addr_bytes,
+        &addr_bytes[..],
         &tx_data_bytes[..],
         &keys_changed_bytes[..],
         &verifiers_bytes[..],

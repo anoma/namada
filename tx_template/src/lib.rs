@@ -17,20 +17,20 @@ transaction! {
     }
 }
 
-fn apply_transfer(src: String, dest: String, token: String, amount: u64) -> bool {
-    let src_key = vec![format!("@{}", src), String::from("balance"), token.clone()].join("/");
-    let dest_key = vec![format!("@{}", dest), String::from("balance"), token].join("/");
+fn apply_transfer(src: String, dest: String, token: String, amount: u64) {
+    // TODO use typed data in the crafted tx
+    let src = Address::from_raw(src);
+    let dest = Address::from_raw(dest);
+    let token = Address::from_raw(token);
+    let amount = token::Amount::from(amount);
 
-    let src_bal: Option<u64> = read(&src_key);
-    let dest_bal: Option<u64> = read(&dest_key);
-    match (src_bal, dest_bal) {
-        (Some(src_bal), Some(dest_bal)) => {
-            let src_new_bal = src_bal - amount;
-            let dest_new_bal = dest_bal + amount;
-            write(&src_key, src_new_bal);
-            write(&dest_key, dest_new_bal);
-            true
-        }
-        _ => false,
-    }
+    token::transfer(
+        &src,
+        &dest,
+        &token,
+        amount,
+        log_string,
+        |key| read(key),
+        |key, val| write(key, val),
+    )
 }

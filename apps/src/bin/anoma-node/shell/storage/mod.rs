@@ -31,7 +31,8 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-static VP_WASM: &[u8] = include_bytes!("../../../../../../vp_template/vp.wasm");
+static VP_WASM: &[u8] =
+    include_bytes!("../../../../../../vps/vp_template/vp.wasm");
 
 #[derive(Debug)]
 pub struct Storage {
@@ -89,7 +90,7 @@ impl Storage {
             self.block.height = height;
             self.block.subspaces = subspaces;
             self.current_height = height;
-            log::debug!("Loaded storage from DB: {:#?}", self);
+            log::debug!("Loaded storage from DB");
             return Ok(Some((
                 MerkleRoot(
                     self.block.tree.0.root().as_slice().deref().to_vec(),

@@ -1,6 +1,6 @@
 //! The key and values that may be persisted in a DB.
 
-mod address;
+pub mod address;
 
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
@@ -47,7 +47,17 @@ pub struct BlockHeight(pub u64);
 )]
 pub struct BlockHash([u8; 32]);
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
 pub struct Key {
     segments: Vec<DbKeySeg>,
 }
@@ -139,7 +149,17 @@ pub trait KeySeg {
     fn to_db_key(&self) -> DbKeySeg;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
 pub enum DbKeySeg {
     AddressSeg(Address),
     StringSeg(String),
