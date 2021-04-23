@@ -457,18 +457,6 @@ fn check_vps(
     let mut accepted_vps = HashSet::new();
     let mut changed_keys: Vec<String> = Vec::new();
 
-    // let mut cache_vp_lookup: HashMap<Address, Vec<u8>> = HashMap::new();
-
-    // for addr in verifiers.keys() {
-    //     let vp = storage
-    //         .validity_predicate(&addr)
-    //         .map_err(Error::StorageError)?;
-
-    //     gas_meter
-    //         .add_compiling_fee(vp.len())
-    //         .map_err(Error::GasError)?;
-    //     cache_vp_lookup.insert(addr.clone(), vp);
-    // }
     let verifiers_vps: Vec<(&Address, &Vec<String>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
