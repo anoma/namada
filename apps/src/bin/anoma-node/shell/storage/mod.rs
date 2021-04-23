@@ -266,7 +266,7 @@ impl Storage {
         (self.block.height, MIN_STORAGE_GAS)
     }
 
-    /// Get the successor block hash
+    /// Get the current (yet to be committed) block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
