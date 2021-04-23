@@ -13,8 +13,7 @@ use tokio::sync::mpsc::Receiver;
 use types::SubscribeTopic;
 
 use super::gossip_intent;
-use super::gossip_intent::types::IntentBroadcasterEvent;
-use super::network_behaviour::Behaviour;
+use super::network_behaviour::{Behaviour, IntentBroadcasterEvent};
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -127,51 +126,46 @@ impl P2P {
 
     pub async fn handle_network_event(
         &mut self,
-        event: IntentBroadcasterEvent,
+        IntentBroadcasterEvent {
+            propagation_source,
+            message_id,
+            source: _,
+            data,
+            topic: _,
+        }: IntentBroadcasterEvent,
     ) {
-        let message_id = event.message_id();
-        match event {
-            IntentBroadcasterEvent::Message {
-                topic: _,
-                data,
-                peer,
-            } => {
-                let intent_process = &mut self.intent_process;
-                let validity = match intent_process.parse_raw_msg(data) {
-                    Ok(IntentBroadcasterMessage {
-                        intent_message:
-                            Some(intent_broadcaster_message::IntentMessage::Intent(
-                                intent,
-                            )),
-                    }) => match intent_process.apply_intent(intent).await {
-                        Ok(true) => MessageAcceptance::Accept,
-                        Ok(false) => MessageAcceptance::Reject,
-                        Err(e) => {
-                            log::error!(
-                                "Error while trying to apply an intent: {}",
-                                e
-                            );
-                            MessageAcceptance::Ignore
-                        }
-                    },
-                    Ok(..) => MessageAcceptance::Reject,
-                    Err(gossip_intent::Error::DecodeError(..)) => {
-                        MessageAcceptance::Reject
-                    }
-                    Err(gossip_intent::Error::MatchmakerInit(..))
-                    | Err(gossip_intent::Error::Matchmaker(..)) => {
-                        MessageAcceptance::Ignore
-                    }
-                };
-                self.swarm
-                    .intent_broadcaster
-                    .report_message_validation_result(
-                        &message_id,
-                        &peer,
-                        validity,
-                    )
-                    .expect("Failed to validate the message ");
+        let intent_process = &mut self.intent_process;
+        let validity = match intent_process.parse_raw_msg(data) {
+            Ok(IntentBroadcasterMessage {
+                intent_message:
+                    Some(intent_broadcaster_message::IntentMessage::Intent(intent)),
+            }) => match intent_process.apply_intent(intent).await {
+                Ok(true) => MessageAcceptance::Accept,
+                Ok(false) => MessageAcceptance::Reject,
+                Err(e) => {
+                    log::error!("Error while trying to apply an intent: {}", e);
+                    MessageAcceptance::Ignore
+                }
+            },
+            Ok(IntentBroadcasterMessage {
+                intent_message: None,
+            })
+            | Err(gossip_intent::Error::DecodeError(..)) => {
+                MessageAcceptance::Reject
             }
-        }
+            Ok(IntentBroadcasterMessage { intent_message: _ })
+            | Err(gossip_intent::Error::MatchmakerInit(..))
+            | Err(gossip_intent::Error::Matchmaker(..)) => {
+                MessageAcceptance::Ignore
+            }
+        };
+        self.swarm
+            .intent_broadcaster
+            .report_message_validation_result(
+                &message_id,
+                &propagation_source,
+                validity,
+            )
+            .expect("Failed to validate the message ");
     }
 }

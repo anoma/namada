@@ -1,7 +1,7 @@
 mod filter;
 mod matchmaker;
 mod mempool;
-pub mod types;
+
 use anoma::protobuf::types::{Intent, IntentBroadcasterMessage, Tx};
 use matchmaker::Matchmaker;
 use prost::Message;

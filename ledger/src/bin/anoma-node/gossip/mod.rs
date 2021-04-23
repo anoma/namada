@@ -12,7 +12,7 @@ use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc;
 
-use self::gossip_intent::types::IntentBroadcasterEvent;
+use self::network_behaviour::IntentBroadcasterEvent;
 use self::p2p::P2P;
 use super::rpc;
 

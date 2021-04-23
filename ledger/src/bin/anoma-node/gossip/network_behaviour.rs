@@ -1,3 +1,5 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use libp2p::gossipsub::subscription_filter::{
@@ -9,22 +11,65 @@ use libp2p::gossipsub::{
 };
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviourEventProcess;
-use libp2p::NetworkBehaviour;
+use libp2p::{NetworkBehaviour, PeerId};
 use regex::Regex;
+use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-
-use super::gossip_intent::types::IntentBroadcasterEvent;
 
 pub type Gossipsub = libp2p::gossipsub::Gossipsub<
     IdentityTransform,
     IntentBroadcasterSubscriptionFilter,
 >;
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Failed to send the message through the channel: {0}")]
+    FailedToSend(
+        tokio::sync::mpsc::error::TrySendError<IntentBroadcasterEvent>,
+    ),
+}
+
 pub enum IntentBroadcasterSubscriptionFilter {
     RegexFilter(RegexSubscribtionFilter),
     WhitelistFilter(WhitelistSubscriptionFilter),
 }
 
+#[derive(Debug)]
+pub struct IntentBroadcasterEvent {
+    pub propagation_source: PeerId,
+    pub message_id: MessageId,
+    pub source: Option<PeerId>,
+    pub data: Vec<u8>,
+    pub topic: TopicHash,
+}
+
+impl From<GossipsubEvent> for IntentBroadcasterEvent {
+    // To be used only with Message event
+    fn from(event: GossipsubEvent) -> Self {
+        if let GossipsubEvent::Message {
+            propagation_source,
+            message_id,
+            message:
+                GossipsubMessage {
+                    source,
+                    data,
+                    topic,
+                    sequence_number: _,
+                },
+        } = event
+        {
+            Self {
+                propagation_source,
+                message_id,
+                source,
+                data,
+                topic,
+            }
+        } else {
+            panic!("Expected a GossipsubEvent::Message got {:?}", event)
+        }
+    }
+}
 impl TopicSubscriptionFilter for IntentBroadcasterSubscriptionFilter {
     fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
         match self {
@@ -34,18 +79,6 @@ impl TopicSubscriptionFilter for IntentBroadcasterSubscriptionFilter {
             IntentBroadcasterSubscriptionFilter::WhitelistFilter(filter) => {
                 filter.can_subscribe(topic_hash)
             }
-        }
-    }
-}
-
-impl From<&GossipsubMessage> for IntentBroadcasterEvent {
-    fn from(msg: &GossipsubMessage) -> Self {
-        Self::Message {
-            peer: msg
-                .source
-                .expect("cannot convert message with anonymous message peer"),
-            topic: msg.topic.to_string(),
-            data: msg.data.clone(),
         }
     }
 }
@@ -61,9 +94,10 @@ pub struct Behaviour {
     inject_intent_broadcaster_event: Sender<IntentBroadcasterEvent>,
 }
 
-pub fn message_id(msg: &GossipsubMessage) -> MessageId {
-    let hash = (&IntentBroadcasterEvent::from(msg)).hash();
-    MessageId::from(hash)
+pub fn message_id(message: &GossipsubMessage) -> MessageId {
+    let mut hasher = DefaultHasher::new();
+    message.data.hash(&mut hasher);
+    MessageId::from(hasher.finish().to_string())
 }
 
 impl Behaviour {
@@ -101,18 +135,20 @@ impl Behaviour {
             }
         };
 
-        let gossipsub: Gossipsub = Gossipsub::new_with_subscription_filter(
-            MessageAuthenticity::Signed(key),
-            gossipsub_config,
-            filter,
-        )
-        .expect("Correct configuration");
+        let intent_broadcaster: Gossipsub =
+            Gossipsub::new_with_subscription_filter(
+                MessageAuthenticity::Signed(key),
+                gossipsub_config,
+                filter,
+            )
+            .expect("Correct configuration");
 
-        let (inject_event, rx) = channel::<IntentBroadcasterEvent>(100);
+        let (inject_intent_broadcaster_event, rx) =
+            channel::<IntentBroadcasterEvent>(100);
         (
             Self {
-                intent_broadcaster: gossipsub,
-                inject_intent_broadcaster_event: inject_event,
+                intent_broadcaster,
+                inject_intent_broadcaster_event,
             },
             rx,
         )
@@ -122,10 +158,13 @@ impl Behaviour {
 impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     // Called when `gossipsub` produces an event.
     fn inject_event(&mut self, event: GossipsubEvent) {
-        if let GossipsubEvent::Message { message, .. } = event {
+        if let GossipsubEvent::Message { .. } = event {
             self.inject_intent_broadcaster_event
-                .try_send(IntentBroadcasterEvent::from(&message))
-                .unwrap();
+                .try_send(IntentBroadcasterEvent::from(event))
+                .map_err(Error::FailedToSend)
+                .unwrap_or_else(|e| {
+                    panic!("failed to send to the channel {}", e)
+                })
         }
     }
 }
