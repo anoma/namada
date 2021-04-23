@@ -11,6 +11,7 @@ use std::vec;
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
 use prost::Message;
+use rayon::prelude::*;
 use thiserror::Error;
 
 use self::gas::{BlockGasMeter, VpGasMeter};
@@ -211,23 +212,26 @@ impl Shell {
         }
     }
 }
-
+#[derive(Clone)]
 struct VpResult {
-    pub accepted_vps: HashSet<Address>,
-    pub rejected_vps: HashSet<Address>,
+    pub accepted_vps: Option<Address>,
+    pub rejected_vps: Option<Address>,
     pub changed_keys: Vec<String>,
+    pub gas_used: u64,
 }
 
 impl VpResult {
     pub fn new(
-        accepted_vps: HashSet<Address>,
-        rejected_vps: HashSet<Address>,
+        accepted_vps: Option<Address>,
+        rejected_vps: Option<Address>,
         changed_keys: Vec<String>,
+        gas_used: u64,
     ) -> Self {
         Self {
             accepted_vps,
             rejected_vps,
             changed_keys,
+            gas_used,
         }
     }
 }
@@ -236,8 +240,11 @@ impl fmt::Display for VpResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Vps -> accepted: {:?}. rejected: {:?}, keys: {:?}",
-            self.accepted_vps, self.rejected_vps, self.changed_keys,
+            "Vps -> accepted: {:?}. rejected: {:?}, keys: {:?}, gas_used: {:}",
+            self.accepted_vps,
+            self.rejected_vps,
+            self.changed_keys,
+            self.gas_used
         )
     }
 }
@@ -245,9 +252,10 @@ impl fmt::Display for VpResult {
 impl Default for VpResult {
     fn default() -> Self {
         Self {
-            accepted_vps: HashSet::new(),
-            rejected_vps: HashSet::new(),
+            accepted_vps: None,
+            rejected_vps: None,
             changed_keys: Vec::new(),
+            gas_used: 0,
         }
     }
 }
@@ -255,7 +263,9 @@ impl Default for VpResult {
 struct TxResult {
     // a value of 0 indicates that the transaction overflowed with gas
     gas_used: u64,
-    vps: VpResult,
+    accepted_vps: Vec<Address>,
+    rejected_vps: Vec<Address>,
+    changed_keys: Vec<String>,
     valid: bool,
 }
 
@@ -271,7 +281,7 @@ impl TxResult {
     }
 
     pub fn is_tx_correct(&self) -> bool {
-        self.gas_used > 0 && self.vps.rejected_vps.is_empty()
+        self.gas_used > 0 && self.vps.rejected_vps.is_none()
     }
 }
 
@@ -324,7 +334,7 @@ impl Shell {
             &self.storage,
         )?;
         // Apply the transaction if accepted by all the VPs
-        if result.vps.rejected_vps.is_empty() {
+        if result.vps.rejected_vps.is_none() {
             log::debug!(
                 "all accepted apply_tx storage modification {:#?}",
                 self.storage
@@ -453,11 +463,7 @@ fn check_vps(
 
     let tx_data = tx.data.clone().unwrap_or_default();
 
-    let mut rejected_vps = HashSet::new();
-    let mut accepted_vps = HashSet::new();
-    let mut changed_keys: Vec<String> = Vec::new();
-
-    let verifiers_vps: Vec<(&Address, &Vec<String>, Vec<u8>)> = verifiers
+    let verifiers_vps: Vec<(Address, Vec<String>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
             let vp = storage
@@ -468,57 +474,47 @@ fn check_vps(
                 .add_compiling_fee(vp.len())
                 .map_err(Error::GasError)?;
 
-            Ok((addr, keys, vp))
+            Ok((addr.clone(), keys.clone(), vp.clone()))
         })
         .collect::<std::result::Result<_, _>>()?;
 
     let initial_gas = gas_meter.get_current_transaction_gas();
-    let mut vp_meters: Vec<VpGasMeter> = Vec::new();
 
-    for (addr, keys, vp) in verifiers_vps {
-        let mut vp_gas_meter = VpGasMeter::new(initial_gas);
+    let vps_result: Result<Vec<VpResult>>;
 
-        let vp_runner = VpRunner::new();
-        let accept = vp_runner
-            .run(
-                vp,
-                tx_data.clone(),
-                &addr,
-                storage,
-                write_log,
-                &mut vp_gas_meter,
-                keys.clone(),
-                addresses.clone(),
-            )
-            .map_err(|error| Error::VpRunnerError {
-                addr: addr.clone(),
-                error,
-            })?;
-        if !accept {
-            rejected_vps.insert(addr.clone());
-            if !dry_run {
-                break;
-            }
-        } else {
-            accepted_vps.insert(addr.clone());
-            changed_keys.append(&mut keys.clone());
-        }
-        vp_meters.push(vp_gas_meter);
+    if dry_run {
+        let vps_result = vps_result = run_vps_dry(
+            verifiers_vps,
+            tx_data,
+            storage,
+            gas_meter,
+            write_log,
+            initial_gas,
+        );
+    } else {
+        let vps_result = vps_result = run_vps(
+            verifiers_vps,
+            tx_data,
+            storage,
+            gas_meter,
+            write_log,
+            initial_gas,
+        );
     }
 
-    let mut consumed_gas =
-        vp_meters.iter().map(|x| x.vp_gas).collect::<Vec<u64>>();
-    // sort decresing order
-    consumed_gas.sort_by(|a, b| b.cmp(a));
+    // let mut consumed_gas =
+    //     vp_meters.iter().map(|x| x.vp_gas).collect::<Vec<u64>>();
+    // // sort decresing order
+    // consumed_gas.sort_by(|a, b| b.cmp(a));
 
-    // I'm assuming that at least 1 VP will always be there
-    if let Some((max_gas_used, rest)) = consumed_gas.split_first() {
-        gas_meter.add(*max_gas_used).map_err(Error::GasError)?;
-        gas_meter
-            .add_parallel_fee(&mut rest.to_vec())
-            .map_err(Error::GasError)?;
-    }
-    Ok(VpResult::new(accepted_vps, rejected_vps, changed_keys))
+    // // I'm assuming that at least 1 VP will always be there
+    // if let Some((max_gas_used, rest)) = consumed_gas.split_first() {
+    //     gas_meter.add(*max_gas_used).map_err(Error::GasError)?;
+    //     gas_meter
+    //         .add_parallel_fee(&mut rest.to_vec())
+    //         .map_err(Error::GasError)?;
+    // }
+    Ok(VpResult::new(None, None, Vec::new(), 0))
 }
 
 fn execute_tx(
@@ -548,4 +544,132 @@ fn execute_tx(
         .map_err(Error::TxRunnerError)?;
 
     Ok(verifiers)
+}
+
+fn run_vps_dry(
+    verifiers: Vec<(Address, Vec<String>, Vec<u8>)>,
+    tx_data: Vec<u8>,
+    storage: &Storage,
+    gas_meter: &mut BlockGasMeter,
+    write_log: &mut WriteLog,
+    initial_gas: u64,
+) -> Result<Vec<VpResult>> {
+    let addresses = verifiers
+        .iter()
+        .map(|(addr, keys, vp)| addr)
+        .collect::<HashSet<_>>();
+
+    Ok(verifiers
+        .par_iter()
+        .map(|(addr, keys, vp)| {
+            let mut vp_gas_meter = VpGasMeter::new(initial_gas);
+            let vp_runner = VpRunner::new();
+
+            let accept = vp_runner.run(
+                vp,
+                tx_data.clone(),
+                addr,
+                storage,
+                write_log,
+                &mut vp_gas_meter,
+                keys.clone().to_vec(),
+                addresses.clone(),
+            );
+
+            match accept {
+                Ok(accepted) => {
+                    if !accepted {
+                        VpResult::new(
+                            None,
+                            Some(addr.clone()),
+                            keys.clone(),
+                            vp_gas_meter.vp_gas,
+                        )
+                    } else {
+                        VpResult::new(
+                            Some(addr.clone()),
+                            None,
+                            keys.clone(),
+                            vp_gas_meter.vp_gas,
+                        )
+                    }
+                }
+                Err(err) => VpResult::new(
+                    None,
+                    Some(addr.clone()),
+                    keys.clone(),
+                    vp_gas_meter.vp_gas,
+                ),
+            }
+        })
+        .collect())
+}
+
+fn run_vps(
+    verifiers: Vec<(Address, Vec<String>, Vec<u8>)>,
+    tx_data: Vec<u8>,
+    storage: &Storage,
+    gas_meter: &mut BlockGasMeter,
+    write_log: &mut WriteLog,
+    initial_gas: u64,
+) -> Result<Vec<VpResult>> {
+    let addresses = verifiers
+        .iter()
+        .map(|(addr, keys, vp)| addr)
+        .collect::<HashSet<_>>();
+
+    verifiers
+        .par_iter()
+        .try_fold(
+            || Vec::new(),
+            |accumulator, (addr, keys, vp)| {
+                let mut vp_gas_meter = VpGasMeter::new(initial_gas);
+
+                let vp_runner = VpRunner::new();
+
+                let accept = vp_runner.run(
+                    vp,
+                    tx_data.clone(),
+                    addr,
+                    storage,
+                    write_log,
+                    &mut vp_gas_meter,
+                    keys.clone().to_vec(),
+                    addresses.clone(),
+                );
+
+                match accept {
+                    Ok(accepted) => {
+                        if !accepted {
+                            Ok([
+                                accumulator,
+                                vec![VpResult::new(
+                                    None,
+                                    Some(addr.clone()),
+                                    keys.clone(),
+                                    vp_gas_meter.vp_gas,
+                                )],
+                            ]
+                            .concat())
+                        } else {
+                            Ok([
+                                accumulator,
+                                vec![VpResult::new(
+                                    None,
+                                    Some(addr.clone()),
+                                    keys.clone(),
+                                    vp_gas_meter.vp_gas,
+                                )],
+                            ]
+                            .concat())
+                        }
+                    }
+                    Err(err) => Err(Error::VpRunnerError {
+                        addr: addr.clone(),
+                        error: err,
+                    }),
+                }
+            },
+        )
+        .try_reduce(|| Vec::new(), |v1, v2| Ok([v1, v2].concat()))
 }
