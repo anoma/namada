@@ -202,19 +202,15 @@ pub mod tx {
     }
 
     /// Get a block hash
-    pub fn get_block_hash(height: BlockHeight) -> Option<BlockHash> {
+    pub fn get_block_hash() -> BlockHash {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
-        let found = unsafe { _get_block_hash(height.0, result.as_ptr() as _) };
-        if found == 1 {
-            let slice = unsafe {
-                slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
-            };
-            let hash =
-                BlockHash::try_from(slice).expect("Cannot convert the hash");
-            Some(hash)
-        } else {
-            None
+        unsafe {
+            _get_block_hash(result.as_ptr() as _);
         }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
+        };
+        BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
     /// Log a string. The message will be printed at the [`log::Level::Info`].
@@ -280,11 +276,11 @@ pub mod tx {
         // Get the chain ID
         fn _get_chain_id(result_ptr: u64);
 
-        // Get the committed block height
+        // Get the current block height
         fn _get_block_height() -> u64;
 
-        // Get a block hash
-        fn _get_block_hash(height: u64, result_ptr: u64) -> u64;
+        // Get the current block hash
+        fn _get_block_hash(result_ptr: u64);
 
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);
@@ -560,19 +556,15 @@ pub mod vp {
     }
 
     /// Get a block hash
-    pub fn get_block_hash(height: BlockHeight) -> Option<BlockHash> {
+    pub fn get_block_hash() -> BlockHash {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
-        let found = unsafe { _get_block_hash(height.0, result.as_ptr() as _) };
-        if found == 1 {
-            let slice = unsafe {
-                slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
-            };
-            let hash =
-                BlockHash::try_from(slice).expect("Cannot convert the hash");
-            Some(hash)
-        } else {
-            None
+        unsafe {
+            _get_block_hash(result.as_ptr() as _);
         }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
+        };
+        BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
     /// Log a string. The message will be printed at the [`log::Level::Info`].
@@ -639,11 +631,11 @@ pub mod vp {
         // Get the chain ID
         fn _get_chain_id(result_ptr: u64);
 
-        // Get the committed block height
+        // Get the current block height
         fn _get_block_height() -> u64;
 
-        // Get a block hash
-        fn _get_block_hash(height: u64, result_ptr: u64) -> u64;
+        // Get the current block hash
+        fn _get_block_hash(result_ptr: u64);
 
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);

@@ -33,6 +33,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 static VP_WASM: &[u8] = include_bytes!("../../../../../../vp_template/vp.wasm");
 
+const MIN_STORAGE_GAS: u64 = 1;
+
 #[derive(Debug)]
 pub struct Storage {
     db: db::DB,
@@ -255,25 +257,17 @@ impl Storage {
     }
 
     /// Get the chain ID
-    pub fn get_chain_id(&self) -> String {
-        self.chain_id.clone()
+    pub fn get_chain_id(&self) -> (String, u64) {
+        (self.chain_id.clone(), CHAIN_ID_LENGTH as _)
     }
 
-    /// Get the committed block height
-    pub fn get_block_height(&self) -> BlockHeight {
-        self.current_height
+    /// Get the successor block height
+    pub fn get_block_height(&self) -> (BlockHeight, u64) {
+        (self.block.height, MIN_STORAGE_GAS)
     }
 
-    /// Get a block hash
-    pub fn get_block_hash(
-        &self,
-        height: BlockHeight,
-    ) -> Result<(Option<BlockHash>, u64)> {
-        if height == self.block.height {
-            return Ok((Some(self.block.hash.clone()), BLOCK_HASH_LENGTH as _));
-        }
-
-        let hash = self.db.read_block_hash(height).map_err(Error::DBError)?;
-        Ok((hash, BLOCK_HASH_LENGTH as _))
+    /// Get the successor block hash
+    pub fn get_block_hash(&self) -> (BlockHash, u64) {
+        (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
 }

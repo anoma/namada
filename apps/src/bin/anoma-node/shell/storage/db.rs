@@ -228,19 +228,6 @@ impl DB {
         PrefixIterator::new(iter, db_prefix)
     }
 
-    pub fn read_block_hash(
-        &self,
-        height: BlockHeight,
-    ) -> Result<Option<BlockHash>> {
-        let key = Key::from(height.to_db_key())
-            .push(&"hash".to_owned())
-            .map_err(Error::KeyError)?;
-        match self.0.get(key.to_string()).map_err(Error::RocksDBError)? {
-            Some(bytes) => Ok(Some(BlockHash::decode(bytes.to_vec()))),
-            None => Ok(None),
-        }
-    }
-
     pub fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         let chain_id;
         let height;

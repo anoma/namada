@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
-use anoma_shared::types::{Address, BlockHeight, Key, KeySeg, RawAddress};
+use anoma_shared::types::{Address, Key, KeySeg, RawAddress};
 use anoma_shared::vm_memory::KeyVal;
 use borsh::BorshSerialize;
 use tokio::sync::mpsc::Sender;
@@ -1263,7 +1263,8 @@ fn tx_init_account(
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
 fn tx_get_chain_id(env: &TxEnv, result_ptr: u64) {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let chain_id = storage.get_chain_id();
+    let (chain_id, gas) = storage.get_chain_id();
+    tx_add_gas(env, gas);
     let gas = env
         .memory
         .write_string(result_ptr, chain_id)
@@ -1271,38 +1272,34 @@ fn tx_get_chain_id(env: &TxEnv, result_ptr: u64) {
     tx_add_gas(env, gas);
 }
 
-/// Getting the committed block height function exposed to the wasm VM Tx
-/// environment.
+/// Getting the block height function exposed to the wasm VM Tx
+/// environment. The height is that of the block to which the current
+/// transaction is being applied.
 fn tx_get_block_height(env: &TxEnv) -> u64 {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    storage.get_block_height().0
+    let (height, gas) = storage.get_block_height();
+    tx_add_gas(env, gas);
+    height.0
 }
 
-/// Getting a block hash function exposed to the wasm VM Tx environment.
-fn tx_get_block_hash(env: &TxEnv, height: u64, result_ptr: u64) -> u64 {
+/// Getting the block hash function exposed to the wasm VM Tx environment. The
+/// hash is that of the block to which the current transaction is being applied.
+fn tx_get_block_hash(env: &TxEnv, result_ptr: u64) {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let (hash, gas) = storage
-        .get_block_hash(BlockHeight(height))
-        .expect("failed to get the hash");
+    let (hash, gas) = storage.get_block_hash();
     tx_add_gas(env, gas);
-    match hash {
-        Some(h) => {
-            let gas = env
-                .memory
-                .write_bytes(result_ptr, h.0)
-                .expect("cannot write to memory");
-            tx_add_gas(env, gas);
-            1
-        }
-        // fail, hash not found
-        None => 0,
-    }
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, hash.0)
+        .expect("cannot write to memory");
+    tx_add_gas(env, gas);
 }
 
 /// Getting the chain ID function exposed to the wasm VM VP environment.
 fn vp_get_chain_id(env: &VpEnv, result_ptr: u64) {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let chain_id = storage.get_chain_id();
+    let (chain_id, gas) = storage.get_chain_id();
+    vp_add_gas(env, gas);
     let gas = env
         .memory
         .write_string(result_ptr, chain_id)
@@ -1310,32 +1307,27 @@ fn vp_get_chain_id(env: &VpEnv, result_ptr: u64) {
     vp_add_gas(env, gas);
 }
 
-/// Getting the committed block height function exposed to the wasm VM VP
-/// environment.
+/// Getting the block height function exposed to the wasm VM VP
+/// environment. The height is that of the block to which the current
+/// transaction is being applied.
 fn vp_get_block_height(env: &VpEnv) -> u64 {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    storage.get_block_height().0
+    let (height, gas) = storage.get_block_height();
+    vp_add_gas(env, gas);
+    height.0
 }
 
-/// Getting a block hash function exposed to the wasm VM VP environment.
-fn vp_get_block_hash(env: &VpEnv, height: u64, result_ptr: u64) -> u64 {
+/// Getting the block hash function exposed to the wasm VM VP environment. The
+/// hash is that of the block to which the current transaction is being applied.
+fn vp_get_block_hash(env: &VpEnv, result_ptr: u64) {
     let storage: &Storage = unsafe { &*(env.storage.get()) };
-    let (hash, gas) = storage
-        .get_block_hash(BlockHeight(height))
-        .expect("failed to get the hash");
+    let (hash, gas) = storage.get_block_hash();
     vp_add_gas(env, gas);
-    match hash {
-        Some(h) => {
-            let gas = env
-                .memory
-                .write_bytes(result_ptr, h.0)
-                .expect("cannot write to memory");
-            vp_add_gas(env, gas);
-            1
-        }
-        // fail, hash not found
-        None => 0,
-    }
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, hash.0)
+        .expect("cannot write to memory");
+    vp_add_gas(env, gas);
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
