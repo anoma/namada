@@ -12,6 +12,7 @@ use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
 
 use anoma::genesis::{self, Validator};
+use anoma_shared::types::{BlockHash, BlockHeight};
 use serde_json::json;
 use tendermint_abci::{self, ServerBuilder};
 use tendermint_proto::abci::{
@@ -26,7 +27,6 @@ use tendermint_proto::abci::{
 };
 
 use super::MerkleRoot;
-use crate::shell::storage::{BlockHash, BlockHeight};
 use crate::shell::MempoolTxType;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;

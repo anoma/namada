@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 
 use anoma::protobuf::types::Tx;
+use anoma_shared::types::{Address, Key, KeySeg, RawAddress};
 use anoma_shared::vm_memory::KeyVal;
 use borsh::BorshSerialize;
 use tokio::sync::mpsc::Sender;
@@ -17,7 +18,7 @@ use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::shell::storage::{Address, Key, KeySeg, RawAddress, Storage};
+use crate::shell::storage::Storage;
 
 #[derive(Clone)]
 struct TxEnv<'a> {
@@ -119,6 +120,9 @@ pub fn prepare_tx_imports(
             "_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_insert_verifier),
             "_update_validity_predicate" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_update_validity_predicate),
             "_init_account" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_init_account),
+            "_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_get_chain_id),
+            "_get_block_height" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_get_block_height),
+            "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_get_block_hash),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
@@ -159,6 +163,9 @@ pub fn prepare_vp_imports(
             "_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next),
             "_iter_pre_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next_varlen),
             "_iter_post_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next_varlen),
+            "_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_chain_id),
+            "_get_block_height" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_height),
+            "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_hash),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
         },
     }
@@ -1246,6 +1253,76 @@ fn tx_init_account(
         unsafe { &mut *(env.verifiers.get()) };
     verifiers.insert(parent_addr.hash());
     tx_add_gas(env, gas);
+}
+
+/// Getting the chain ID function exposed to the wasm VM Tx environment.
+fn tx_get_chain_id(env: &TxEnv, result_ptr: u64) {
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (chain_id, gas) = storage.get_chain_id();
+    tx_add_gas(env, gas);
+    let gas = env
+        .memory
+        .write_string(result_ptr, chain_id)
+        .expect("cannot write to memory");
+    tx_add_gas(env, gas);
+}
+
+/// Getting the block height function exposed to the wasm VM Tx
+/// environment. The height is that of the block to which the current
+/// transaction is being applied.
+fn tx_get_block_height(env: &TxEnv) -> u64 {
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (height, gas) = storage.get_block_height();
+    tx_add_gas(env, gas);
+    height.0
+}
+
+/// Getting the block hash function exposed to the wasm VM Tx environment. The
+/// hash is that of the block to which the current transaction is being applied.
+fn tx_get_block_hash(env: &TxEnv, result_ptr: u64) {
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (hash, gas) = storage.get_block_hash();
+    tx_add_gas(env, gas);
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, hash.0)
+        .expect("cannot write to memory");
+    tx_add_gas(env, gas);
+}
+
+/// Getting the chain ID function exposed to the wasm VM VP environment.
+fn vp_get_chain_id(env: &VpEnv, result_ptr: u64) {
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (chain_id, gas) = storage.get_chain_id();
+    vp_add_gas(env, gas);
+    let gas = env
+        .memory
+        .write_string(result_ptr, chain_id)
+        .expect("cannot write to memory");
+    vp_add_gas(env, gas);
+}
+
+/// Getting the block height function exposed to the wasm VM VP
+/// environment. The height is that of the block to which the current
+/// transaction is being applied.
+fn vp_get_block_height(env: &VpEnv) -> u64 {
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (height, gas) = storage.get_block_height();
+    vp_add_gas(env, gas);
+    height.0
+}
+
+/// Getting the block hash function exposed to the wasm VM VP environment. The
+/// hash is that of the block to which the current transaction is being applied.
+fn vp_get_block_hash(env: &VpEnv, result_ptr: u64) {
+    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let (hash, gas) = storage.get_block_hash();
+    vp_add_gas(env, gas);
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, hash.0)
+        .expect("cannot write to memory");
+    vp_add_gas(env, gas);
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be

@@ -8,12 +8,12 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 
-pub use anoma_shared::types::{
-    Address, BlockHash, BlockHeight, Key, KeySeg, RawAddress, CHAIN_ID_LENGTH,
+use anoma_shared::types::{
+    Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
 use sparse_merkle_tree::H256;
 use thiserror::Error;
-pub use types::MerkleTree;
+use types::MerkleTree;
 
 use self::types::Hash256;
 pub use self::types::PrefixIterator;
@@ -32,6 +32,8 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 static VP_WASM: &[u8] = include_bytes!("../../../../../../vp_template/vp.wasm");
+
+const MIN_STORAGE_GAS: u64 = 1;
 
 #[derive(Debug)]
 pub struct Storage {
@@ -252,5 +254,20 @@ impl Storage {
     pub fn exists(&self, addr: &Address) -> Result<(bool, u64)> {
         let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
         self.has_key(&key)
+    }
+
+    /// Get the chain ID
+    pub fn get_chain_id(&self) -> (String, u64) {
+        (self.chain_id.clone(), CHAIN_ID_LENGTH as _)
+    }
+
+    /// Get the current (yet to be committed) block height
+    pub fn get_block_height(&self) -> (BlockHeight, u64) {
+        (self.block.height, MIN_STORAGE_GAS)
+    }
+
+    /// Get the current (yet to be committed) block hash
+    pub fn get_block_hash(&self) -> (BlockHash, u64) {
+        (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
 }
