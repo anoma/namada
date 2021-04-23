@@ -177,6 +177,13 @@ fn client_intent_subcommand() -> App {
                      necessary for the matchmaker.",
                 ),
         )
+        .arg(
+            Arg::new(TOPIC_ARG)
+                .long(TOPIC_ARG)
+                .takes_value(true)
+                .required(true)
+                .about("The subnetwork where the intent should be sent to"),
+        )
 }
 
 fn client_subscribe_topic_subcommand() -> App {

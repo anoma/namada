@@ -33,7 +33,8 @@ pub async fn main() -> Result<()> {
             // here unwrap is safe as the arguments are required
             let node = cli::parse_string_req(args, cli::NODE_INTENT_ARG);
             let data = cli::parse_string_req(args, cli::DATA_INTENT_ARG);
-            gossip_intent(node, data).await;
+            let topic = cli::parse_string_req(args, cli::TOPIC_ARG);
+            gossip_intent(node, data, topic).await;
             Ok(())
         }
         Some((cli::SUBSCRIBE_TOPIC_COMMAND, args)) => {
@@ -112,7 +113,7 @@ async fn exec_tx(code_path: String, data_path: Option<&str>, dry: bool) {
     }
 }
 
-async fn gossip_intent(node_addr: String, data_path: String) {
+async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let data = std::fs::read(data_path).expect("data file IO error");
     let intent = types::Intent {
@@ -120,7 +121,12 @@ async fn gossip_intent(node_addr: String, data_path: String) {
         timestamp: Some(std::time::SystemTime::now().into()),
     };
     let message = RpcMessage {
-        message: Some(rpc_message::Message::Intent(intent)),
+        message: Some(rpc_message::Message::Intent(
+            anoma::protobuf::services::IntentMesage {
+                intent: Some(intent),
+                topic,
+            },
+        )),
     };
     let _response = client
         .send_message(message)

@@ -1,4 +1,11 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IntentMesage {
+    #[prost(message, optional, tag = "1")]
+    pub intent: ::core::option::Option<super::types::Intent>,
+    #[prost(string, tag = "2")]
+    pub topic: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RpcMessage {
     #[prost(oneof = "rpc_message::Message", tags = "1, 2, 3")]
     pub message: ::core::option::Option<rpc_message::Message>,
@@ -8,7 +15,7 @@ pub mod rpc_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Message {
         #[prost(message, tag = "1")]
-        Intent(super::super::types::Intent),
+        Intent(super::IntentMesage),
         #[prost(message, tag = "2")]
         Dkg(super::super::types::Dkg),
         #[prost(message, tag = "3")]

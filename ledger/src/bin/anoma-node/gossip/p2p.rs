@@ -83,7 +83,20 @@ impl P2P {
     pub async fn handle_rpc_event(&mut self, event: rpc_message::Message) {
         let intent_process = &mut self.intent_process;
         match event {
-            rpc_message::Message::Intent(intent) => {
+            rpc_message::Message::Intent(
+                anoma::protobuf::services::IntentMesage {
+                    intent: None,
+                    topic,
+                },
+            ) => {
+                log::error!("rpc intent command for topic {} is empty", topic)
+            }
+            rpc_message::Message::Intent(
+                anoma::protobuf::services::IntentMesage {
+                    intent: Some(intent),
+                    topic,
+                },
+            ) => {
                 if intent_process
                     .apply_intent(intent.clone())
                     .await
@@ -91,12 +104,13 @@ impl P2P {
                 {
                     let mut tix_bytes = vec![];
                     intent.encode(&mut tix_bytes).unwrap();
-                    let _message_id = self.swarm.intent_broadcaster.publish(
-                        IdentTopic::new("intent".to_string()),
-                        tix_bytes,
-                    );
+                    let _message_id = self
+                        .swarm
+                        .intent_broadcaster
+                        .publish(IdentTopic::new(topic), tix_bytes);
                 }
             }
+
             rpc_message::Message::Dkg(_dkg_msg) => {
                 panic!("not yet implemented")
             }
