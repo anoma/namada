@@ -3,7 +3,6 @@ pub mod write_log;
 
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::vm_memory::KeyVal;
@@ -17,7 +16,7 @@ use self::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
-use crate::shell::gas::BlockGasMeter;
+use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::{Address, Key, KeySeg, RawAddress, Storage};
 
 #[derive(Clone)]
@@ -56,7 +55,7 @@ struct VpEnv<'a> {
     write_log: EnvHostWrapper<WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
     // the VPs that we ran.
-    gas_meter: Arc<Mutex<BlockGasMeter>>,
+    gas_meter: MutEnvHostWrapper<VpGasMeter>,
     memory: AnomaMemory,
 }
 
@@ -133,7 +132,7 @@ pub fn prepare_vp_imports(
     storage: EnvHostWrapper<Storage>,
     write_log: EnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
-    gas_meter: Arc<Mutex<BlockGasMeter>>,
+    gas_meter: MutEnvHostWrapper<VpGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject {
     let env = VpEnv {
@@ -215,14 +214,10 @@ fn vp_charge_gas(env: &VpEnv, used_gas: i32) {
 }
 
 fn vp_add_gas(env: &VpEnv, used_gas: u64) {
-    let mut gas_meter = env
-        .gas_meter
-        .lock()
-        .expect("Cannot get lock on the gas meter");
-    // if we run out of gas, we need to stop the execution
+    let gas_meter: &mut VpGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     if let Err(err) = gas_meter.add(used_gas) {
         log::warn!(
-            "Stopping validity predicate execution because of gas error: {}",
+            "Stopping transaction execution because of gas error: {}",
             err
         );
         unreachable!()
