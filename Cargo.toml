@@ -11,5 +11,5 @@ members = [
 exclude = [
   "matchmaker_template",
   "tx_template",
-  "vp_template",
+  "vps",
 ]

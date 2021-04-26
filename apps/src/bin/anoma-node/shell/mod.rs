@@ -10,7 +10,10 @@ use std::vec;
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
-use anoma_shared::types::{Address, BlockHash, BlockHeight, Key};
+use anoma_shared::token;
+use anoma_shared::token::Amount;
+use anoma_shared::types::{address, Address, BlockHash, BlockHeight, Key};
+use borsh::BorshSerialize;
 use prost::Message;
 use thiserror::Error;
 
@@ -19,6 +22,9 @@ use self::storage::Storage;
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::vm::host_env::write_log::WriteLog;
 use crate::vm::{self, TxRunner, VpRunner};
+
+static VP_TOKEN_WASM: &[u8] =
+    include_bytes!("../../../../../vps/vp_token/vp.wasm");
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -88,38 +94,51 @@ impl Shell {
     pub fn new(abci: AbciReceiver, db_path: impl AsRef<Path>) -> Self {
         let mut storage = Storage::new(db_path);
         // TODO load initial accounts from genesis
-        let key11 = Key::parse("@ada/balance/eth".to_owned())
-            .expect("Unable to convert string into a key");
+        let ada = Address::from_raw("ada");
+        let alan = Address::from_raw("alan");
+        let xan = address::xan();
+        let btc = address::btc();
+
+        // default tokens VPs for testing
+        let xan_vp = Key::validity_predicate(&xan).expect("expected VP key");
+        let btc_vp = Key::validity_predicate(&btc).expect("expected VP key");
+        storage
+            .write(&xan_vp, VP_TOKEN_WASM.to_vec())
+            .expect("Unable to write token VP");
+        storage
+            .write(&btc_vp, VP_TOKEN_WASM.to_vec())
+            .expect("Unable to write token VP");
+
+        // default user with some tokens for testing
+        let ada_xan = token::balance_key(&xan, &ada);
+        let ada_btc = token::balance_key(&btc, &ada);
+        let alan_xan = token::balance_key(&xan, &alan);
+
         storage
             .write(
-                &key11,
-                vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+                &ada_xan,
+                Amount::whole(800_000)
+                    .try_to_vec()
+                    .expect("encode token amount"),
             )
-            .expect("Unable to set the initial balance for validator account");
-        let key12 = Key::parse("@ada/balance/xtz".to_owned())
-            .expect("Unable to convert string into a key");
+            .expect("Unable to set genesis balance");
         storage
             .write(
-                &key12,
-                vec![0x10_u8, 0x27_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+                &ada_btc,
+                Amount::whole(100)
+                    .try_to_vec()
+                    .expect("encode token amount"),
             )
-            .expect("Unable to set the initial balance for validator account");
-        let key21 = Key::parse("@alan/balance/eth".to_owned())
-            .expect("Unable to convert string into a key");
+            .expect("Unable to set genesis balance");
         storage
             .write(
-                &key21,
-                vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
+                &alan_xan,
+                Amount::whole(200_000)
+                    .try_to_vec()
+                    .expect("encode token amount"),
             )
-            .expect("Unable to set the initial balance for basic account");
-        let key22 = Key::parse("@alan/balance/xtz".to_owned())
-            .expect("Unable to convert string into a key");
-        storage
-            .write(
-                &key22,
-                vec![0x64_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8],
-            )
-            .expect("Unable to set the initial balance for basic account");
+            .expect("Unable to set genesis balance");
+
         Self {
             abci,
             storage,
@@ -216,14 +235,14 @@ impl Shell {
 struct VpResult {
     pub accepted_vps: HashSet<Address>,
     pub rejected_vps: HashSet<Address>,
-    pub changed_keys: Vec<String>,
+    pub changed_keys: Vec<Key>,
 }
 
 impl VpResult {
     pub fn new(
         accepted_vps: HashSet<Address>,
         rejected_vps: HashSet<Address>,
-        changed_keys: Vec<String>,
+        changed_keys: Vec<Key>,
     ) -> Self {
         Self {
             accepted_vps,
@@ -326,10 +345,7 @@ impl Shell {
         )?;
         // Apply the transaction if accepted by all the VPs
         if result.vps.rejected_vps.is_empty() {
-            log::debug!(
-                "all accepted apply_tx storage modification {:#?}",
-                self.storage
-            );
+            log::debug!("all VPs accepted apply_tx storage modification");
             self.write_log.commit_tx();
         } else {
             self.write_log.drop_tx();
@@ -353,7 +369,8 @@ impl Shell {
         self.write_log
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
-        log::debug!("storage to commit {:#?}", self.storage);
+        // TODO with VPs in storage, this prints out too much spam
+        // log::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {
@@ -396,19 +413,19 @@ impl Shell {
 fn get_verifiers(
     write_log: &WriteLog,
     verifiers: &HashSet<Address>,
-) -> HashMap<Address, Vec<String>> {
+) -> HashMap<Address, Vec<Key>> {
     let mut verifiers =
         verifiers.iter().fold(HashMap::new(), |mut acc, addr| {
             acc.insert(addr.clone(), vec![]);
             acc
         });
     // get changed keys grouped by the address
-    for key in &write_log.get_changed_keys() {
+    for key in write_log.get_changed_keys() {
         for addr in &key.find_addresses() {
             match verifiers.get_mut(&addr) {
-                Some(keys) => keys.push(key.to_string()),
+                Some(keys) => keys.push(key.clone()),
                 None => {
-                    verifiers.insert(addr.clone(), vec![key.to_string()]);
+                    verifiers.insert(addr.clone(), vec![key.clone()]);
                 }
             }
         }
@@ -456,9 +473,9 @@ fn check_vps(
 
     let mut rejected_vps = HashSet::new();
     let mut accepted_vps = HashSet::new();
-    let mut changed_keys: Vec<String> = Vec::new();
+    let mut changed_keys: Vec<Key> = Vec::new();
 
-    let verifiers_vps: Vec<(&Address, &Vec<String>, Vec<u8>)> = verifiers
+    let verifiers_vps: Vec<(&Address, &Vec<Key>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
             let vp = storage

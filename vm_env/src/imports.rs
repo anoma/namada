@@ -303,7 +303,7 @@ pub mod vp {
     /// This macro expects a function with signature:
     ///
     /// ```ignore
-    /// fn validate_tx(tx_data: vm_memory::Data, addr: &str, keys_changed: Vec<String>) -> bool
+    /// fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: HashSet<Address>) -> bool
     /// ```
     #[macro_export]
     macro_rules! validity_predicate {
@@ -330,11 +330,10 @@ pub mod vp {
                 verifiers_ptr: u64,
                 verifiers_len: u64,
             ) -> u64 {
-                // TODO more plumbing here
                 let slice = unsafe {
                     slice::from_raw_parts(addr_ptr as *const u8, addr_len as _)
                 };
-                let addr = core::str::from_utf8(slice).unwrap();
+                let addr = Address::try_from_slice(slice).unwrap();
 
                 let slice = unsafe {
                     slice::from_raw_parts(
@@ -350,7 +349,7 @@ pub mod vp {
                         keys_changed_len as _,
                     )
                 };
-                let keys_changed: Vec<String> = Vec::try_from_slice(slice).unwrap();
+                let keys_changed: Vec<Key> = Vec::try_from_slice(slice).unwrap();
 
                 let slice = unsafe {
                     slice::from_raw_parts(
