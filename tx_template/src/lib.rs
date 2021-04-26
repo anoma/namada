@@ -24,7 +24,7 @@ fn apply_transfer(src: String, dest: String, token: String, amount: u64) {
     let token = Address::from_raw(token);
     let amount = token::Amount::from(amount);
 
-    token::transfer(
+    token_transfer(
         &src,
         &dest,
         &token,
