@@ -16,14 +16,9 @@ message Intent {
   google.protobuf.Timestamp timestamp = 2;
 }
 
-message SubscribeTopic {
-  string topic = 1;
-}
-
 message IntentBroadcasterMessage{
   oneof msg {
     Intent intent = 1;
-    SubscribeTopic subscribe_topic = 2;
   }
 }
 

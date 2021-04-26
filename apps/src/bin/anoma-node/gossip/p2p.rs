@@ -1,6 +1,6 @@
 use anoma::protobuf::services::rpc_message;
 use anoma::protobuf::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage, SubscribeTopic, Tx,
+    intent_broadcaster_message, IntentBroadcasterMessage, Tx,
 };
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
@@ -119,9 +119,11 @@ impl P2P {
             rpc_message::Message::Dkg(_dkg_msg) => {
                 panic!("not yet implemented")
             }
-            rpc_message::Message::Topic(SubscribeTopic {
-                topic: topic_str,
-            }) => {
+            rpc_message::Message::Topic(
+                anoma::protobuf::services::SubscribeTopicMessage {
+                    topic: topic_str,
+                },
+            ) => {
                 let topic = IdentTopic::new(&topic_str);
                 self.swarm
                     .intent_broadcaster
@@ -129,14 +131,6 @@ impl P2P {
                     .unwrap_or_else(|_| {
                         panic!("failed to subscribe to topic {:?}", topic)
                     });
-                let mut subscribe_bytes = vec![];
-                (SubscribeTopic { topic: topic_str })
-                    .encode(&mut subscribe_bytes)
-                    .unwrap();
-                let _message_id = self
-                    .swarm
-                    .intent_broadcaster
-                    .publish(topic, subscribe_bytes);
             }
         };
     }
@@ -177,26 +171,6 @@ impl P2P {
                     MessageAcceptance::Ignore
                 }
             },
-            Ok(IntentBroadcasterMessage {
-                msg:
-                    Some(intent_broadcaster_message::Msg::SubscribeTopic(
-                        SubscribeTopic { topic },
-                    )),
-            }) => {
-                let topic = IdentTopic::new(topic);
-                match self.swarm.intent_broadcaster.subscribe(&topic) {
-                    Ok(true) => MessageAcceptance::Accept,
-                    Ok(false) => MessageAcceptance::Reject,
-                    Err(err) => {
-                        log::error!(
-                            "Error while trying to apply an intent: {:?}",
-                            err
-                        );
-                        MessageAcceptance::Ignore
-                    }
-                }
-            }
-
             Ok(IntentBroadcasterMessage { msg: None })
             | Err(gossip_intent::Error::DecodeError(..)) => {
                 MessageAcceptance::Reject

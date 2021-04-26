@@ -6,8 +6,8 @@ use std::io::Write;
 use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::services::{rpc_message, RpcMessage};
-use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
+use anoma::protobuf::{services, types};
 // use anoma_data_template;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
@@ -121,12 +121,10 @@ async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
         timestamp: Some(std::time::SystemTime::now().into()),
     };
     let message = RpcMessage {
-        message: Some(rpc_message::Message::Intent(
-            anoma::protobuf::services::IntentMesage {
-                intent: Some(intent),
-                topic,
-            },
-        )),
+        message: Some(rpc_message::Message::Intent(services::IntentMesage {
+            intent: Some(intent),
+            topic,
+        })),
     };
     let _response = client
         .send_message(message)
@@ -137,9 +135,9 @@ async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
 async fn subscribe_topic(node_addr: String, topic: String) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let message = RpcMessage {
-        message: Some(rpc_message::Message::Topic(types::SubscribeTopic {
-            topic,
-        })),
+        message: Some(rpc_message::Message::Topic(
+            services::SubscribeTopicMessage { topic },
+        )),
     };
     let _response = client
         .send_message(message)

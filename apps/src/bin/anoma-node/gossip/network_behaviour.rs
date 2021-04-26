@@ -27,6 +27,8 @@ pub enum Error {
     FailedToSend(
         tokio::sync::mpsc::error::TrySendError<IntentBroadcasterEvent>,
     ),
+    #[error("Failed to subscribe")]
+    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
 }
 
 pub enum IntentBroadcasterSubscriptionFilter {
@@ -108,7 +110,7 @@ impl Behaviour {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")
-            .heartbeat_interval(Duration::from_secs(1))
+            .heartbeat_interval(Duration::from_secs(10))
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id)
             .validate_messages()
@@ -158,13 +160,27 @@ impl Behaviour {
 impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     // Called when `gossipsub` produces an event.
     fn inject_event(&mut self, event: GossipsubEvent) {
-        if let GossipsubEvent::Message { .. } = event {
-            self.inject_intent_broadcaster_event
+        match event {
+            GossipsubEvent::Message { .. } => self
+                .inject_intent_broadcaster_event
                 .try_send(IntentBroadcasterEvent::from(event))
                 .map_err(Error::FailedToSend)
                 .unwrap_or_else(|e| {
                     panic!("failed to send to the channel {}", e)
-                })
+                }),
+            GossipsubEvent::Subscribed { peer_id: _, topic } => {
+                self.intent_broadcaster
+                    .subscribe(&IdentTopic::new(topic.into_string()))
+                    .map_err(Error::FailedSubscribtion)
+                    .unwrap_or_else(|e| {
+                        log::error!("failed to subscribe: {:}", e);
+                        false
+                    });
+            }
+            GossipsubEvent::Unsubscribed {
+                peer_id: _,
+                topic: _,
+            } => {}
         }
     }
 }

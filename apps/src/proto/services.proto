@@ -14,11 +14,16 @@ message IntentMesage{
   string topic = 2;
 }
 
+message SubscribeTopicMessage{
+  string topic = 2;
+}
+
 message RpcMessage {
   oneof message {
     IntentMesage intent = 1;
-    types.Dkg dkg = 2;
-    types.SubscribeTopic topic = 3;
+    SubscribeTopicMessage topic = 2;
+    types.Dkg dkg = 3;
+
   }
 }
 

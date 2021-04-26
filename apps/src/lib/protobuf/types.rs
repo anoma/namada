@@ -13,13 +13,8 @@ pub struct Intent {
     pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SubscribeTopic {
-    #[prost(string, tag = "1")]
-    pub topic: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IntentBroadcasterMessage {
-    #[prost(oneof = "intent_broadcaster_message::Msg", tags = "1, 2")]
+    #[prost(oneof = "intent_broadcaster_message::Msg", tags = "1")]
     pub msg: ::core::option::Option<intent_broadcaster_message::Msg>,
 }
 /// Nested message and enum types in `IntentBroadcasterMessage`.
@@ -28,8 +23,6 @@ pub mod intent_broadcaster_message {
     pub enum Msg {
         #[prost(message, tag = "1")]
         Intent(super::Intent),
-        #[prost(message, tag = "2")]
-        SubscribeTopic(super::SubscribeTopic),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -28,5 +28,4 @@ pub mod filter_prelude {
     pub use anoma_shared::vm_memory;
 
     pub use super::imports::filter::*;
-
 }
