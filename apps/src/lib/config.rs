@@ -120,10 +120,10 @@ impl Default for Gossip {
             address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
             rpc: false,
             subscription_filter: SubscriptionFilter::RegexFilter(
-                Regex::new(".*").unwrap(),
+                Regex::new("asset_v\\d{10}").unwrap(),
             ),
             peers: HashSet::new(),
-            topics: HashSet::new(),
+            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
             gossiper: Gossiper::new(),
             matchmaker: None,
         }

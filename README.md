@@ -24,7 +24,8 @@ make -C tx_template deps
 # Build the validity predicate and transaction wasm from templates, at:
 # - vp_template/vp.wasm
 # - tx_template/tx.wasm
-# - matchmaker_template/tx.wasm
+# - matchmaker_template/matchmaker.wasm
+# - filter_template/filter.wasm
 make build-wasm-scripts
 
 # Build Anoma
@@ -34,7 +35,7 @@ make
 make install
 
 # generate default config in .anoma/
-cargo run --bin anomad -- generate-config
+cargo run --bin anomad -- --base-dir .anoma generate-config
 
 # Run Anoma daemon (this will also initialize and run Tendermint node)
 make run-ledger
@@ -54,19 +55,22 @@ cargo watch -x "run --bin anomad -- run-ledger"
 # Watch and on change reset & run a node
 cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 
-# run orderbook daemon with rpc server with default config file (or add --intent)
+# run intent broadcaster daemon with rpc server with default config file
 cargo run --bin anoma -- run-gossip --rpc
 
-# run orderbook daemon with rpc server and matchmaker with default config file (or add --intent)
-cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
+# run orderbook daemon with matchmaker and default config file
+cargo run --bin anomad -- run-gossip --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
 cargo run --bin anomac -- craft-intent --address alan --token-buy xtz --amount-buy 10 --token-sell eth --amount-sell 20 --file intent_data_file_A
 cargo run --bin anomac -- craft-intent --address ada --token-buy eth --amount-buy 20 --token-sell xtz --amount-sell 10 --file intent_data_file_B
 
-# Submit the intents (need a rpc server), hardcoded address
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_data_file_A
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_data_file_B
+# Subscribe to new network
+cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "asset_v1"
+
+# Submit the intents (need a rpc server), hardcoded address rpc node address
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_data_file_A --topic "asset_v0"
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_data_file_B --topic "asset_v0"
 
 # Format the code
 make fmt

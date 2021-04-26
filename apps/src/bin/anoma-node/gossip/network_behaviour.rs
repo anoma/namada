@@ -31,6 +31,7 @@ pub enum Error {
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
 }
 
+// TODO merge type of config and this one ? Maybe not a good idea
 pub enum IntentBroadcasterSubscriptionFilter {
     RegexFilter(RegexSubscribtionFilter),
     WhitelistFilter(WhitelistSubscriptionFilter),
