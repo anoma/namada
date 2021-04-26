@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use anoma_shared::types::Address;
+use anoma_shared::types::{Address, Key};
 use thiserror::Error;
 
-use crate::shell::storage::{self, Key, Storage};
+use crate::shell::storage::{self, Storage};
 
 #[derive(Error, Debug)]
 pub enum Error {

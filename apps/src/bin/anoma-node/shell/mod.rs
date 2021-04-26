@@ -12,13 +12,13 @@ use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::token;
 use anoma_shared::token::Amount;
-use anoma_shared::types::{address, Key};
+use anoma_shared::types::{address, Address, BlockHash, BlockHeight, Key};
 use borsh::BorshSerialize;
 use prost::Message;
 use thiserror::Error;
 
 use self::gas::{BlockGasMeter, VpGasMeter};
-use self::storage::{Address, BlockHash, BlockHeight, Storage};
+use self::storage::Storage;
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::vm::host_env::write_log::WriteLog;
 use crate::vm::{self, TxRunner, VpRunner};

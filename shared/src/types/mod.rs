@@ -27,7 +27,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 // TODO adjust once chain ID scheme is chosen, add `Default` impl that allocates
 // this
 pub const CHAIN_ID_LENGTH: usize = 20;
-const BLOCK_HASH_LENGTH: usize = 32;
+pub const BLOCK_HASH_LENGTH: usize = 32;
 
 #[derive(
     Clone,
@@ -45,7 +45,7 @@ pub struct BlockHeight(pub u64);
 #[derive(
     Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord,
 )]
-pub struct BlockHash([u8; 32]);
+pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 
 #[derive(
     Clone,

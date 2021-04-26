@@ -6,7 +6,7 @@ mod token;
 
 pub mod tx_prelude {
     pub use anoma_shared::types::*;
-    pub use anoma_shared::{vm_memory, *};
+    pub use anoma_shared::{token, vm_memory};
 
     pub use super::imports::tx::*;
     pub use super::token::transfer as token_transfer;
@@ -14,7 +14,7 @@ pub mod tx_prelude {
 
 pub mod vp_prelude {
     pub use anoma_shared::types::*;
-    pub use anoma_shared::{vm_memory, *};
+    pub use anoma_shared::{token, vm_memory};
 
     pub use super::imports::vp::*;
     pub use super::token::validity_predicate as token_vp;
