@@ -59,7 +59,7 @@ pub struct BlockHash([u8; 32]);
     Hash,
 )]
 pub struct Key {
-    segments: Vec<DbKeySeg>,
+    pub segments: Vec<DbKeySeg>,
 }
 
 impl From<DbKeySeg> for Key {

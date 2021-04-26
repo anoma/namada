@@ -2,7 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::types::{Address, Key, KeySeg};
+use crate::types::{Address, DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
@@ -55,11 +55,27 @@ impl From<u64> for Amount {
     }
 }
 
+const BALANCE_KEY: &str = "balance";
+
 /// Obtain a key at which a user's balance is stored
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
     Key::from(token_addr.to_db_key())
-        .push(&"balance".to_owned())
+        .push(&BALANCE_KEY.to_owned())
         .expect("Cannot obtain a balance key")
         .push(&owner.to_db_key())
         .expect("Cannot obtain a balance key")
+}
+
+pub fn is_balance_key<'a>(
+    token_addr: &Address,
+    key: &'a Key,
+) -> Option<&'a Address> {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::AddressSeg(owner)]
+            if key == BALANCE_KEY && addr == token_addr =>
+        {
+            Some(owner)
+        }
+        _ => None,
+    }
 }
