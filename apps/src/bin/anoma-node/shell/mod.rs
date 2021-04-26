@@ -503,7 +503,7 @@ fn check_vps(
                 .add_compiling_fee(vp.len())
                 .map_err(Error::GasError)?;
 
-            Ok((addr.clone(), keys.clone(), vp.clone()))
+            Ok((addr.clone(), keys.clone(), vp))
         })
         .collect::<std::result::Result<_, _>>()?;
 
@@ -540,15 +540,15 @@ fn check_vps(
             }
 
             let accepted_vps = vps
-                .iter()
+                .par_iter()
                 .filter_map(|vp| vp.accepted_vps.clone())
                 .collect::<Vec<Address>>();
             let rejected_vps = vps
-                .iter()
+                .par_iter()
                 .filter_map(|vp| vp.rejected_vps.clone())
                 .collect::<Vec<Address>>();
             let changed_keys = vps
-                .iter()
+                .par_iter()
                 .flat_map(|vp| vp.changed_keys.clone())
                 .collect::<Vec<String>>();
 
@@ -666,58 +666,55 @@ fn run_vps(
 
     verifiers
         .par_iter()
-        .try_fold(
-            || Vec::new(),
-            |accumulator, (addr, keys, vp)| {
-                let mut vp_gas_meter = VpGasMeter::new(initial_gas);
+        .try_fold(Vec::new, |accumulator, (addr, keys, vp)| {
+            let mut vp_gas_meter = VpGasMeter::new(initial_gas);
 
-                let vp_runner = VpRunner::new();
+            let vp_runner = VpRunner::new();
 
-                let accept = vp_runner.run(
-                    vp,
-                    tx_data.clone(),
-                    addr,
-                    storage,
-                    write_log,
-                    &mut vp_gas_meter,
-                    keys.clone().to_vec(),
-                    addresses.clone(),
-                );
+            let accept = vp_runner.run(
+                vp,
+                tx_data.clone(),
+                addr,
+                storage,
+                write_log,
+                &mut vp_gas_meter,
+                keys.clone().to_vec(),
+                addresses.clone(),
+            );
 
-                match accept {
-                    Ok(accepted) => {
-                        if !accepted {
-                            Ok([
-                                accumulator,
-                                vec![VpResult::new(
-                                    None,
-                                    Some(addr.clone()),
-                                    keys.clone(),
-                                    vp_gas_meter.vp_gas,
-                                    false,
-                                )],
-                            ]
-                            .concat())
-                        } else {
-                            Ok([
-                                accumulator,
-                                vec![VpResult::new(
-                                    None,
-                                    Some(addr.clone()),
-                                    keys.clone(),
-                                    vp_gas_meter.vp_gas,
-                                    false,
-                                )],
-                            ]
-                            .concat())
-                        }
+            match accept {
+                Ok(accepted) => {
+                    if !accepted {
+                        Ok([
+                            accumulator,
+                            vec![VpResult::new(
+                                None,
+                                Some(addr.clone()),
+                                keys.clone(),
+                                vp_gas_meter.vp_gas,
+                                false,
+                            )],
+                        ]
+                        .concat())
+                    } else {
+                        Ok([
+                            accumulator,
+                            vec![VpResult::new(
+                                Some(addr.clone()),
+                                None,
+                                keys.clone(),
+                                vp_gas_meter.vp_gas,
+                                false,
+                            )],
+                        ]
+                        .concat())
                     }
-                    Err(err) => Err(Error::VpRunnerError {
-                        addr: addr.clone(),
-                        error: err,
-                    }),
                 }
-            },
-        )
-        .try_reduce(|| Vec::new(), |v1, v2| Ok([v1, v2].concat()))
+                Err(err) => Err(Error::VpRunnerError {
+                    addr: addr.clone(),
+                    error: err,
+                }),
+            }
+        })
+        .try_reduce(Vec::new, |v1, v2| Ok([v1, v2].concat()))
 }
