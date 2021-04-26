@@ -10,6 +10,6 @@ validity_predicate! {
             addr, keys_changed, tx_data, verifiers
         ));
 
-        token_vp(&addr, &keys_changed, &verifiers, |key| read_pre(key), |key| read_post(key))
+        token_vp(&addr, &keys_changed, &verifiers)
     }
 }
