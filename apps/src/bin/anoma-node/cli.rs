@@ -18,7 +18,7 @@ pub fn main() -> Result<()> {
     match matches.subcommand() {
         Some((cli::RUN_GOSSIP_COMMAND, args)) => {
             let config = get_cfg(home);
-            let mut gossip_cfg = config.gossip.unwrap_or_default();
+            let mut gossip_cfg = config.intent_broadcaster.unwrap_or_default();
             cli::update_gossip_config(args, &mut gossip_cfg)
                 .expect("failed to update config with cli option");
             gossip::run(gossip_cfg).wrap_err("Failed to run gossip service")

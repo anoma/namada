@@ -10,7 +10,7 @@ The transaction template calls functions from the host environment. The validity
 
 The validity predicate is currently hard-coded in the shell and used for every account. To experiment with a different validity predicate, build it from the template and restart the shell.
 
-The gossip node needs to toggle the orderbook flag `--orderbook` to relay intents, multiple nodes can be connected with the `--peers` option.
+The gossip node needs to toggle the intent flag `--intent` to activate the intent broadcaster, multiple nodes can be connected with the `--peers` option.
 
 The matchmaker template receives intents with the borsh encoding define in `data_template` and crafts data to be sent with `tx_intent_template` to the ledger. It matches only two intents that are the exact opposite.
 
@@ -55,10 +55,10 @@ cargo watch -x "run --bin anomad -- run-ledger"
 # Watch and on change reset & run a node
 cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 
-# run intent broadcaster daemon with rpc server with default config file
+# run gossip node daemon with intent broadcaster and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc
 
-# run orderbook daemon with matchmaker and default config file
+# run gossip daemon with intent broadcaster and matchmaker (use default config)
 cargo run --bin anomad -- run-gossip --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents

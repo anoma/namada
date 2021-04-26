@@ -103,7 +103,7 @@ pub enum SubscriptionFilter {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Gossip {
+pub struct IntentBroadcaster {
     pub address: Multiaddr,
     pub rpc: bool,
     pub peers: HashSet<Multiaddr>,
@@ -113,7 +113,7 @@ pub struct Gossip {
     pub matchmaker: Option<Matchmaker>,
 }
 
-impl Default for Gossip {
+impl Default for IntentBroadcaster {
     fn default() -> Self {
         Self {
             // TODO there must be a better option here
@@ -133,7 +133,7 @@ impl Default for Gossip {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub ledger: Option<Ledger>,
-    pub gossip: Option<Gossip>,
+    pub intent_broadcaster: Option<IntentBroadcaster>,
 }
 
 impl Default for Config {
@@ -141,7 +141,7 @@ impl Default for Config {
         Self {
             ledger: Some(Ledger::default()),
             // TODO Should it be None by default
-            gossip: Some(Gossip::default()),
+            intent_broadcaster: Some(IntentBroadcaster::default()),
         }
     }
 }

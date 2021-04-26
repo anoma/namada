@@ -33,7 +33,7 @@ pub struct P2P {
 
 impl P2P {
     pub fn new(
-        config: &anoma::config::Gossip,
+        config: &anoma::config::IntentBroadcaster,
     ) -> Result<(Self, Receiver<IntentBroadcasterEvent>, Option<Receiver<Tx>>)>
     {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
@@ -59,7 +59,7 @@ impl P2P {
         Ok((p2p, network_event_receiver, matchmaker_event_receiver))
     }
 
-    pub fn prepare(&mut self, config: &anoma::config::Gossip) -> Result<()> {
+    pub fn prepare(&mut self, config: &anoma::config::IntentBroadcaster) -> Result<()> {
         &config.topics.iter().try_for_each(|topic| {
             let topic = IdentTopic::new(topic);
             self.swarm

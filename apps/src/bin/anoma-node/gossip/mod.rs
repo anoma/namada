@@ -24,7 +24,7 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: anoma::config::Gossip) -> Result<()> {
+pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
     let rpc_event_receiver = if config.rpc {
         let (tx, rx) = mpsc::channel(100);
         thread::spawn(|| rpc::rpc_server(tx).unwrap());

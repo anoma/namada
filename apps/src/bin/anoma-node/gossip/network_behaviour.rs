@@ -106,7 +106,7 @@ pub fn message_id(message: &GossipsubMessage) -> MessageId {
 impl Behaviour {
     pub fn new(
         key: Keypair,
-        config: &anoma::config::Gossip,
+        config: &anoma::config::IntentBroadcaster,
     ) -> (Self, Receiver<IntentBroadcasterEvent>) {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
