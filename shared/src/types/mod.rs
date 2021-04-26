@@ -113,12 +113,12 @@ impl Key {
 
 impl Display for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let segs: Vec<String> = self
+        let key = self
             .segments
             .iter()
             .map(|s| DbKeySeg::to_string(s))
-            .collect();
-        let key = segs.join("/");
+            .collect::<Vec<String>>()
+            .join("/");
         f.write_str(&key)
     }
 }
