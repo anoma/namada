@@ -59,7 +59,10 @@ impl P2P {
         Ok((p2p, network_event_receiver, matchmaker_event_receiver))
     }
 
-    pub fn prepare(&mut self, config: &anoma::config::IntentBroadcaster) -> Result<()> {
+    pub fn prepare(
+        &mut self,
+        config: &anoma::config::IntentBroadcaster,
+    ) -> Result<()> {
         &config.topics.iter().try_for_each(|topic| {
             let topic = IdentTopic::new(topic);
             self.swarm
