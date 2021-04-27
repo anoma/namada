@@ -1,6 +1,6 @@
 # Filter script wasm template
 
-This is just a template of a wasm module for matchmaker script.
+This is just a template of a wasm module for filter script.
 
 ## Quick start
 
