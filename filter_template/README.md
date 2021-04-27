@@ -1,4 +1,4 @@
-# Matchmaker script wasm template
+# Filter script wasm template
 
 This is just a template of a wasm module for matchmaker script.
 
