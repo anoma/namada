@@ -12,5 +12,5 @@ exclude = [
   "matchmaker_template",
   "filter_template",
   "tx_template",
-  "vp_template",
+  "vps",
 ]

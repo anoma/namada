@@ -13,7 +13,7 @@ use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::types::Address;
+use crate::types::{Address, Key};
 
 /// The data type that can be attached to the operation that initiated the
 /// wasm call (tx, VP, matchmaker, filter)
@@ -21,7 +21,7 @@ pub type Data = Vec<u8>;
 
 /// The storage changed keys from the write log of storage updates performed
 /// by the transaction for the account associated with the VP
-pub type KeysChanged = Vec<String>;
+pub type KeysChanged = Vec<Key>;
 
 /// The verifiers to trigger VPs
 pub type Verifiers = HashSet<Address>;
@@ -30,7 +30,7 @@ pub type Verifiers = HashSet<Address>;
 pub type TxInput = Data;
 
 /// Input for validity predicate wasm module call
-pub type VpInput<'a> = (String, Data, KeysChanged, Verifiers);
+pub type VpInput<'a> = (Address, Data, KeysChanged, Verifiers);
 
 /// Input for matchmaker wasm module call
 pub type MatchmakerInput = Data;

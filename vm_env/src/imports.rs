@@ -1,9 +1,13 @@
 /// Transaction environment imports
 pub mod tx {
     pub use core::slice;
+    use std::convert::TryFrom;
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::{
+        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+    };
     use anoma_shared::vm_memory::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -180,6 +184,35 @@ pub mod tx {
         }
     }
 
+    /// Get the chain ID
+    pub fn get_chain_id() -> String {
+        let result = Vec::with_capacity(CHAIN_ID_LENGTH);
+        unsafe {
+            _get_chain_id(result.as_ptr() as _);
+        }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH as _)
+        };
+        String::from_utf8(slice.to_vec()).expect("Cannot convert the ID string")
+    }
+
+    /// Get the committed block height
+    pub fn get_block_height() -> BlockHeight {
+        BlockHeight(unsafe { _get_block_height() })
+    }
+
+    /// Get a block hash
+    pub fn get_block_hash() -> BlockHash {
+        let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
+        unsafe {
+            _get_block_hash(result.as_ptr() as _);
+        }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
+        };
+        BlockHash::try_from(slice).expect("Cannot convert the hash")
+    }
+
     /// Log a string. The message will be printed at the [`log::Level::Info`].
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -240,6 +273,15 @@ pub mod tx {
             code_len: u64,
         );
 
+        // Get the chain ID
+        fn _get_chain_id(result_ptr: u64);
+
+        // Get the current block height
+        fn _get_block_height() -> u64;
+
+        // Get the current block hash
+        fn _get_block_hash(result_ptr: u64);
+
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);
     }
@@ -248,16 +290,20 @@ pub mod tx {
 /// Validity predicate environment imports
 pub mod vp {
     pub use core::slice;
+    use std::convert::TryFrom;
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::{
+        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+    };
     use anoma_shared::vm_memory::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     /// This macro expects a function with signature:
     ///
     /// ```ignore
-    /// fn validate_tx(tx_data: vm_memory::Data, addr: &str, keys_changed: Vec<String>) -> bool
+    /// fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: HashSet<Address>) -> bool
     /// ```
     #[macro_export]
     macro_rules! validity_predicate {
@@ -284,11 +330,10 @@ pub mod vp {
                 verifiers_ptr: u64,
                 verifiers_len: u64,
             ) -> u64 {
-                // TODO more plumbing here
                 let slice = unsafe {
                     slice::from_raw_parts(addr_ptr as *const u8, addr_len as _)
                 };
-                let addr = core::str::from_utf8(slice).unwrap();
+                let addr = Address::try_from_slice(slice).unwrap();
 
                 let slice = unsafe {
                     slice::from_raw_parts(
@@ -304,7 +349,7 @@ pub mod vp {
                         keys_changed_len as _,
                     )
                 };
-                let keys_changed: Vec<String> = Vec::try_from_slice(slice).unwrap();
+                let keys_changed: Vec<Key> = Vec::try_from_slice(slice).unwrap();
 
                 let slice = unsafe {
                     slice::from_raw_parts(
@@ -492,6 +537,35 @@ pub mod vp {
         }
     }
 
+    /// Get the chain ID
+    pub fn get_chain_id() -> String {
+        let result = Vec::with_capacity(CHAIN_ID_LENGTH);
+        unsafe {
+            _get_chain_id(result.as_ptr() as _);
+        }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH as _)
+        };
+        String::from_utf8(slice.to_vec()).expect("Cannot convert the ID string")
+    }
+
+    /// Get the committed block height
+    pub fn get_block_height() -> BlockHeight {
+        BlockHeight(unsafe { _get_block_height() })
+    }
+
+    /// Get a block hash
+    pub fn get_block_hash() -> BlockHash {
+        let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
+        unsafe {
+            _get_block_hash(result.as_ptr() as _);
+        }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
+        };
+        BlockHash::try_from(slice).expect("Cannot convert the hash")
+    }
+
     /// Log a string. The message will be printed at the [`log::Level::Info`].
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -552,6 +626,15 @@ pub mod vp {
         // up-front, returns the size of the value (can be 0), or -1 if the
         // key is not present.
         fn _iter_post_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
+
+        // Get the chain ID
+        fn _get_chain_id(result_ptr: u64);
+
+        // Get the current block height
+        fn _get_block_height() -> u64;
+
+        // Get the current block hash
+        fn _get_block_hash(result_ptr: u64);
 
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);
