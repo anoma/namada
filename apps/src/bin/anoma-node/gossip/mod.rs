@@ -1,4 +1,4 @@
-mod gossip_intent;
+mod intent_broadcaster;
 mod network_behaviour;
 mod p2p;
 

@@ -10,7 +10,7 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::gossip_intent;
+use super::intent_broadcaster;
 use super::network_behaviour::{Behaviour, IntentBroadcasterEvent};
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
@@ -20,7 +20,7 @@ pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),
     #[error("Failed initializing the broadcaster intent app: {0}")]
-    GossipIntentError(gossip_intent::Error),
+    GossipIntentError(intent_broadcaster::Error),
     #[error("Failed to subscribe")]
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
 }
@@ -28,7 +28,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 pub struct P2P {
     pub swarm: Swarm,
-    pub intent_process: gossip_intent::GossipIntent,
+    pub intent_process: intent_broadcaster::GossipIntent,
 }
 
 impl P2P {
@@ -48,7 +48,7 @@ impl P2P {
         let swarm = Swarm::new(transport, gossipsub, local_peer_id);
 
         let (intent_process, matchmaker_event_receiver) =
-            gossip_intent::GossipIntent::new(&config)
+            intent_broadcaster::GossipIntent::new(&config)
                 .map_err(Error::GossipIntentError)?;
         let mut p2p = Self {
             swarm,
@@ -172,11 +172,11 @@ impl P2P {
                 }
             },
             Ok(IntentBroadcasterMessage { msg: None })
-            | Err(gossip_intent::Error::DecodeError(..)) => {
+            | Err(intent_broadcaster::Error::DecodeError(..)) => {
                 MessageAcceptance::Reject
             }
-            Err(gossip_intent::Error::MatchmakerInit(..))
-            | Err(gossip_intent::Error::Matchmaker(..)) => {
+            Err(intent_broadcaster::Error::MatchmakerInit(..))
+            | Err(intent_broadcaster::Error::Matchmaker(..)) => {
                 MessageAcceptance::Ignore
             }
         };

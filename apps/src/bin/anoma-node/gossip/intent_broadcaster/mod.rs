@@ -29,7 +29,7 @@ pub struct GossipIntent {
 
 impl GossipIntent {
     pub fn new(
-        config: &anoma::config::Gossip,
+        config: &anoma::config::IntentBroadcaster,
     ) -> Result<(Self, Option<Receiver<Tx>>)> {
         let (matchmaker, matchmaker_event_receiver) = if let Some(matchmaker) =
             &config.matchmaker
