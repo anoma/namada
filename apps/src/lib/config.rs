@@ -94,8 +94,8 @@ pub struct Matchmaker {
 
 // TODO toml failed to serialize without "untagged" because does not support
 // enum with nested data, unless with the untagged flag. This might be a source
-// of confusion in the future... Another approach would be to have multiple field
-// for each filter possibility but it's less nice.
+// of confusion in the future... Another approach would be to have multiple
+// field for each filter possibility but it's less nice.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SubscriptionFilter {

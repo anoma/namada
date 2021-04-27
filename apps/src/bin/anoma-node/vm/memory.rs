@@ -59,11 +59,8 @@ pub fn prepare_matchmaker_memory(
 
 /// Prepare memory for instantiating a filter module
 pub fn prepare_filter_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
-    let mem_type = wasmer::MemoryType::new(
-        FILTER_MEMORY_INIT_PAGES,
-        None,
-        false,
-    );
+    let mem_type =
+        wasmer::MemoryType::new(FILTER_MEMORY_INIT_PAGES, None, false);
     Memory::new(store, mem_type).map_err(Error::InitMemoryError)
 }
 
