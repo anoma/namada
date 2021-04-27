@@ -1,9 +1,9 @@
 # Matchmaker
 
 The matchmaker is a process that can be activated in any intent broadcaster
-process. It tries to match any number of intents to create fulfilling
-transaction. The matchmaker is define with three wasm element, a filter
-program, a matchmaker program and a transaction template.
+process. It tries to match any number of intents to create a fulfilling
+transaction. The matchmaker is defined with three wasm modules, a filter, a
+matchmaker program and a transaction template.
 
 ![matchmaker process](./matchmaker_process.svg "matchmaker process")
 
