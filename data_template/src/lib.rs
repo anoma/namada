@@ -1,20 +1,21 @@
+use anoma_shared::types::{token, Address};
 use borsh::{BorshDeserialize, BorshSerialize};
 
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct Intent {
-    pub addr: String,
-    pub token_sell: String,
-    pub amount_sell: u64,
-    pub token_buy: String,
-    pub amount_buy: u64,
+    pub addr: Address,
+    pub token_sell: Address,
+    pub amount_sell: token::Amount,
+    pub token_buy: Address,
+    pub amount_buy: token::Amount,
 }
 
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct Transfer {
-    pub source: String,
-    pub target: String,
-    pub token: String,
-    pub amount: u64,
+    pub source: Address,
+    pub target: Address,
+    pub token: Address,
+    pub amount: token::Amount,
 }
 
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]

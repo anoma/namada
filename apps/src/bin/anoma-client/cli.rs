@@ -7,7 +7,7 @@ use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::types;
 use anoma::protobuf::types::Tx;
-// use anoma_data_template;
+use anoma_shared::types::{token, Address};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use eyre::Context;
@@ -128,6 +128,12 @@ fn craft_intent(
     amount_buy: u64,
     file: String,
 ) {
+    let addr = Address::from_raw(addr);
+    let token_sell = Address::from_raw(token_sell);
+    let amount_sell = token::Amount::from(amount_sell);
+    let token_buy = Address::from_raw(token_buy);
+    let amount_buy = token::Amount::from(amount_buy);
+
     let data = anoma_data_template::Intent {
         addr,
         token_sell,
@@ -147,6 +153,11 @@ fn craft_tx_data(
     amount: u64,
     file: String,
 ) {
+    let source = Address::from_raw(source);
+    let target = Address::from_raw(target);
+    let token = Address::from_raw(token);
+    let amount = token::Amount::from(amount);
+
     use anoma_data_template::*;
     let data = TxData {
         transfers: vec![Transfer {

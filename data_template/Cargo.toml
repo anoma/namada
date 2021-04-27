@@ -9,5 +9,6 @@ name = "anoma_data_template"
 path = "src/lib.rs"
 
 [dependencies]
+anoma_shared = { path = "../shared" }
 borsh = "0.8.2"
 bytes = "1.0.1"

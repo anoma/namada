@@ -12,17 +12,7 @@ transaction! {
             amount,
         } in tx.transfers
         {
-            apply_transfer(source, target, token, amount);
+            token_transfer(&source, &target, &token, amount)
         }
     }
-}
-
-fn apply_transfer(src: String, dest: String, token: String, amount: u64) {
-    // TODO use typed data in the crafted tx
-    let src = Address::from_raw(src);
-    let dest = Address::from_raw(dest);
-    let token = Address::from_raw(token);
-    let amount = token::Amount::from(amount);
-
-    token_transfer(&src, &dest, &token, amount)
 }
