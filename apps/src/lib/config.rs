@@ -9,7 +9,6 @@ use std::str::FromStr;
 use libp2p::multiaddr::Multiaddr;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_regex;
 use thiserror::Error;
 
 use crate::gossiper::Gossiper;
