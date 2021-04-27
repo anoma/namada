@@ -467,7 +467,6 @@ impl FilterRunner {
 
         let filter_imports =
             host_env::prepare_filter_imports(&self.wasm_store, initial_memory);
-        // compile and run the matchmaker wasm code
         let filter_code =
             wasmer::Instance::new(&filter_module, &filter_imports)
                 .map_err(Error::InstantiationError)?;
