@@ -4,14 +4,14 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::str::FromStr;
 
+pub use address::{Address, RawAddress};
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
-
-pub use address::{Address, RawAddress};
 
 use crate::bytes::ByteBuf;
 
 pub mod address;
+pub mod key;
 pub mod token;
 
 #[derive(Error, Debug)]
