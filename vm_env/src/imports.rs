@@ -740,7 +740,7 @@ pub mod filter {
 
     /// This macro expects a function with signature:
     ///
-    /// ```
+    /// ```ignore
     /// fn validate_intent(intent: Vec<u8>) -> bool
     /// ```
     #[macro_export]
