@@ -55,25 +55,26 @@ impl From<u64> for Amount {
     }
 }
 
-const BALANCE_KEY: &str = "balance";
+const BALANCE_STORAGE_KEY: &str = "balance";
 
-/// Obtain a key at which a user's balance is stored
+/// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
     Key::from(token_addr.to_db_key())
-        .push(&BALANCE_KEY.to_owned())
-        .expect("Cannot obtain a balance key")
+        .push(&BALANCE_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
         .push(&owner.to_db_key())
-        .expect("Cannot obtain a balance key")
+        .expect("Cannot obtain a storage key")
 }
 
-/// Check if the given key is balance key for the given token.
+/// Check if the given storage key is balance key for the given token. If it is,
+/// returns the owner.
 pub fn is_balance_key<'a>(
     token_addr: &Address,
     key: &'a Key,
 ) -> Option<&'a Address> {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::AddressSeg(owner)]
-            if key == BALANCE_KEY && addr == token_addr =>
+            if key == BALANCE_STORAGE_KEY && addr == token_addr =>
         {
             Some(owner)
         }
@@ -81,11 +82,12 @@ pub fn is_balance_key<'a>(
     }
 }
 
-/// Check if the given key is balance key for unspecified token.
-pub fn is_any_token_balance_key<'a>(key: &'a Key) -> Option<&'a Address> {
+/// Check if the given storage key is balance key for unspecified token. If it
+/// is, returns the owner.
+pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(_), DbKeySeg::StringSeg(key), DbKeySeg::AddressSeg(owner)]
-            if key == BALANCE_KEY =>
+            if key == BALANCE_STORAGE_KEY =>
         {
             Some(owner)
         }
