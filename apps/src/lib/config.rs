@@ -121,7 +121,7 @@ impl Default for IntentBroadcaster {
             address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
             rpc: false,
             subscription_filter: SubscriptionFilter::RegexFilter(
-                Regex::new("asset_v\\d{10}").unwrap(),
+                Regex::new("asset_v\\d{1,2}").unwrap(),
             ),
             peers: HashSet::new(),
             topics: vec!["asset_v0"].into_iter().map(String::from).collect(),

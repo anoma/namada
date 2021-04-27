@@ -445,18 +445,16 @@ pub fn update_gossip_config(
         Some(matchmaker),
         Some(tx_template),
         Some(ledger_address),
-        Some(filter),
     ) = (
         matchmaker_arg.as_ref(),
         tx_template_arg.as_ref(),
         ledger_address_arg,
-        filter_arg.as_ref(),
     ) {
         let matchmaker_cfg = Some(config::Matchmaker {
             matchmaker: matchmaker.clone(),
             tx_template: tx_template.clone(),
             ledger_address,
-            filter: Some(filter.clone()),
+            filter: filter_arg.clone(),
         });
         config.matchmaker = matchmaker_cfg
     } else if matchmaker_arg.is_some()

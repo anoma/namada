@@ -54,8 +54,8 @@ cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 # run gossip node daemon with intent broadcaster and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc
 
-# run gossip daemon with intent broadcaster and matchmaker (use default config)
-cargo run --bin anomad -- run-gossip --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
+# run gossip daemon with intent broadcaster, matchmaker and rpc (use default config)
+cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
 cargo run --bin anomac -- craft-intent --address alan --token-buy xan --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_A.data
