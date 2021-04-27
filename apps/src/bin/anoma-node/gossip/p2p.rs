@@ -63,15 +63,19 @@ impl P2P {
         &mut self,
         config: &anoma::config::IntentBroadcaster,
     ) -> Result<()> {
-        config.topics.iter().try_for_each(|topic| {
-            let topic = IdentTopic::new(topic);
-            self.swarm
-                .intent_broadcaster
-                .subscribe(&topic)
-                .map_err(Error::FailedSubscribtion)
-                // it returns bool of if it were already subscribed
-                .map(|_| ())
-        }).expect("failed to subscribe to topic");
+        config
+            .topics
+            .iter()
+            .try_for_each(|topic| {
+                let topic = IdentTopic::new(topic);
+                self.swarm
+                    .intent_broadcaster
+                    .subscribe(&topic)
+                    .map_err(Error::FailedSubscribtion)
+                    // it returns bool of if it were already subscribed
+                    .map(|_| ())
+            })
+            .expect("failed to subscribe to topic");
 
         // Listen on given address
         Swarm::listen_on(&mut self.swarm, config.address.clone()).unwrap();
