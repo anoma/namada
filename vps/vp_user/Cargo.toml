@@ -1,0 +1,18 @@
+[package]
+authors = ["Heliax <TODO@heliax.dev>"]
+edition = "2018"
+name = "vp_user"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anoma_data_template = {path = "../../data_template"}
+anoma_vm_env = {path = "../../vm_env"}
+borsh = "0.8.2"
+wee_alloc = "0.4.5"
+
+[profile.release]
+# smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto
+lto = true

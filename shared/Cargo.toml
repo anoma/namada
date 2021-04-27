@@ -11,3 +11,4 @@ bech32 = "0.8.0"
 borsh = "0.8.1"
 sha2 = "0.9.3"
 thiserror = "1.0.24"
+ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend"]}

@@ -148,6 +148,7 @@ version = "0.1.0"
 dependencies = [
  "bech32",
  "borsh",
+ "ed25519-dalek",
  "sha2 0.9.3",
  "thiserror",
 ]

@@ -17,7 +17,7 @@ pub mod vp_prelude {
     pub use anoma_shared::{token, vm_memory};
 
     pub use super::imports::vp::*;
-    pub use super::token::validity_predicate as token_vp;
+    pub use super::token::vp as token_vp;
 }
 
 pub mod matchmaker_prelude {

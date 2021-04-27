@@ -66,6 +66,7 @@ pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
         .expect("Cannot obtain a balance key")
 }
 
+/// Check if the given key is balance key for the given token.
 pub fn is_balance_key<'a>(
     token_addr: &Address,
     key: &'a Key,
@@ -73,6 +74,18 @@ pub fn is_balance_key<'a>(
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::AddressSeg(owner)]
             if key == BALANCE_KEY && addr == token_addr =>
+        {
+            Some(owner)
+        }
+        _ => None,
+    }
+}
+
+/// Check if the given key is balance key for unspecified token.
+pub fn is_any_token_balance_key<'a>(key: &'a Key) -> Option<&'a Address> {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(_), DbKeySeg::StringSeg(key), DbKeySeg::AddressSeg(owner)]
+            if key == BALANCE_KEY =>
         {
             Some(owner)
         }
