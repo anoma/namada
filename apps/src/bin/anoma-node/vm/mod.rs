@@ -445,6 +445,7 @@ pub struct FilterRunner {
 
 impl FilterRunner {
     pub fn new() -> Self {
+        // TODO replace to use a better compiler because this program is local
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
         let wasm_store =
             wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
