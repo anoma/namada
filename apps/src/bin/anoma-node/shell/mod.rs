@@ -12,7 +12,7 @@ use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{
-    address, token, Address, BlockHash, BlockHeight, Key,
+    address, key, token, Address, BlockHash, BlockHeight, Key,
 };
 use borsh::BorshSerialize;
 use prost::Message;
@@ -23,6 +23,7 @@ use self::storage::Storage;
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::vm::host_env::write_log::WriteLog;
 use crate::vm::{self, TxRunner, VpRunner};
+use anoma::wallet;
 
 static VP_TOKEN_WASM: &[u8] =
     include_bytes!("../../../../../vps/vp_token/vp.wasm");
@@ -139,6 +140,23 @@ impl Shell {
                     .expect("encode token amount"),
             )
             .expect("Unable to set genesis balance");
+
+        // default user's public keys for testing
+        let ada_pk = key::ed25519::pk_key(&ada);
+        let alan_pk = key::ed25519::pk_key(&alan);
+
+        storage
+            .write(
+                &ada_pk,
+                wallet::ada_pk().try_to_vec().expect("encode public key"),
+            )
+            .expect("Unable to set genesis user public key");
+        storage
+            .write(
+                &alan_pk,
+                wallet::alan_pk().try_to_vec().expect("encode public key"),
+            )
+            .expect("Unable to set genesis user public key");
 
         Self {
             abci,
