@@ -67,10 +67,9 @@ impl P2P {
             .topics
             .iter()
             .try_for_each(|topic| {
-                let topic = IdentTopic::new(topic);
                 self.swarm
                     .intent_broadcaster
-                    .subscribe(&topic)
+                    .subscribe(&IdentTopic::new(topic))
                     .map_err(Error::FailedSubscribtion)
                     // it returns bool of if it were already subscribed
                     .map(|_| ())

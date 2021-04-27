@@ -19,16 +19,6 @@ impl RpcService for Rpc {
     ) -> Result<TonicResponse<RpcResponse>, Status> {
         if let RpcMessage { message: Some(msg) } = request.into_inner() {
             self.tx.send(msg).await.expect("failed to send message")
-            // match msg {
-            //     rpc_message::Message::Intent(intent) => {
-            //         self.tx.send(intent).await.expect("failed to send
-            // intent")     }
-            //     rpc_message::Message::Dkg(dkg_msg) => println!(
-            //         "received dkg msg {:?}, not implemented yet",
-            //         dkg_msg
-            //     ),
-            //     rpc_message::Message::Topic(
-            //     ) => {}
         } else {
             log::error!("Received empty rpc message, nothing can be done");
         }
