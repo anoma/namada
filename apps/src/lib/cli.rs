@@ -441,11 +441,7 @@ pub fn update_gossip_config(
         if let Some(filter) = filter_arg {
             matchmaker_cfg.filter = Some(filter)
         }
-    } else if let (
-        Some(matchmaker),
-        Some(tx_template),
-        Some(ledger_address),
-    ) = (
+    } else if let (Some(matchmaker), Some(tx_template), Some(ledger_address)) = (
         matchmaker_arg.as_ref(),
         tx_template_arg.as_ref(),
         ledger_address_arg,
