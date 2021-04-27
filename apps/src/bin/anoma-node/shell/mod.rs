@@ -10,8 +10,8 @@ use std::vec;
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
-use anoma_shared::token;
-use anoma_shared::token::Amount;
+use anoma_shared::types::token;
+use anoma_shared::types::token::Amount;
 use anoma_shared::types::{address, Address, BlockHash, BlockHeight, Key};
 use borsh::BorshSerialize;
 use prost::Message;

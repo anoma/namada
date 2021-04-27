@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use anoma_shared::token::{self, Amount, Change};
+use anoma_shared::types::token::{self, Amount, Change};
 use anoma_shared::types::{Address, Key};
 
 use super::imports::{tx, vp};
