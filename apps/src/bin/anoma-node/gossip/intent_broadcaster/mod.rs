@@ -47,6 +47,9 @@ impl GossipIntent {
         &mut self,
         intent: Intent,
     ) -> Option<Result<bool>> {
+        // Clippy is not fully aware of async function and async closure is an
+        // unstable feature
+        #[allow(clippy::manual_map)]
         if let Some(matchmaker) = &mut self.matchmaker {
             Some(
                 matchmaker
