@@ -173,16 +173,31 @@ impl P2P {
                 Ok(true) => MessageAcceptance::Accept,
                 Ok(false) => MessageAcceptance::Reject,
                 Err(e) => {
-                    log::error!("Error while trying to apply an intent: {}", e);
+                    log::error!(
+                        "Error while trying to apply an intent: {}, ignoring \
+                         it",
+                        e
+                    );
                     MessageAcceptance::Ignore
                 }
             },
-            Ok(IntentBroadcasterMessage { msg: None })
-            | Err(intent_broadcaster::Error::DecodeError(..)) => {
+            Err(err @ intent_broadcaster::Error::DecodeError(..)) => {
+                log::info!(
+                    "message could not be decoded {:?}, rejecting it",
+                    err
+                );
                 MessageAcceptance::Reject
             }
-            Err(intent_broadcaster::Error::MatchmakerInit(..))
-            | Err(intent_broadcaster::Error::Matchmaker(..)) => {
+            Ok(IntentBroadcasterMessage { msg: None }) => {
+                log::info!("Empty message, rejecting it");
+                MessageAcceptance::Reject
+            }
+            Err(err @ intent_broadcaster::Error::MatchmakerInit(..))
+            | Err(err @ intent_broadcaster::Error::Matchmaker(..)) => {
+                log::info!(
+                    "Error with the matchmaker {}, ignoring the message",
+                    err
+                );
                 MessageAcceptance::Ignore
             }
         };
