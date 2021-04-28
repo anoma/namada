@@ -3,13 +3,11 @@ pub mod storage;
 mod tendermint;
 
 use core::fmt;
+use std::collections::{HashMap, HashSet};
+use std::ops::Add;
 use std::path::Path;
 use std::sync::mpsc;
 use std::vec;
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Add,
-};
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
@@ -599,7 +597,7 @@ fn run_vps(
 
             Ok(vp_result)
         })
-        .try_reduce(VpsResult::default, |a, b| merge_vp_results(a, b))
+        .try_reduce(VpsResult::default, merge_vp_results)
 }
 
 fn merge_vp_results(a: VpsResult, mut b: VpsResult) -> Result<VpsResult> {
