@@ -1,6 +1,6 @@
 //! The key and values that may be persisted in a DB.
 
-mod address;
+pub mod address;
 
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
@@ -27,7 +27,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 // TODO adjust once chain ID scheme is chosen, add `Default` impl that allocates
 // this
 pub const CHAIN_ID_LENGTH: usize = 20;
-const BLOCK_HASH_LENGTH: usize = 32;
+pub const BLOCK_HASH_LENGTH: usize = 32;
 
 #[derive(
     Clone,
@@ -45,11 +45,21 @@ pub struct BlockHeight(pub u64);
 #[derive(
     Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord,
 )]
-pub struct BlockHash([u8; 32]);
+pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
 pub struct Key {
-    segments: Vec<DbKeySeg>,
+    pub segments: Vec<DbKeySeg>,
 }
 
 impl From<DbKeySeg> for Key {
@@ -139,7 +149,17 @@ pub trait KeySeg {
     fn to_db_key(&self) -> DbKeySeg;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
 pub enum DbKeySeg {
     AddressSeg(Address),
     StringSeg(String),

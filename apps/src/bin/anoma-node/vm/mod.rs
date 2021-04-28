@@ -6,6 +6,7 @@ use std::ffi::c_void;
 use std::marker::PhantomData;
 
 use anoma::protobuf::types::Tx;
+use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
@@ -17,7 +18,7 @@ use wasmparser::{Validator, WasmFeatures};
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::shell::storage::{Address, Storage};
+use crate::shell::storage::Storage;
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -256,7 +257,7 @@ impl VpRunner {
         storage: &Storage,
         write_log: &WriteLog,
         vp_gas_meter: &mut VpGasMeter,
-        keys_changed: Vec<String>,
+        keys_changed: Vec<Key>,
         verifiers: HashSet<Address>,
     ) -> Result<bool> {
         validate_wasm(vp_code.as_ref())?;
@@ -287,7 +288,7 @@ impl VpRunner {
             .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let input: VpInput = (addr.encode(), tx_data, keys_changed, verifiers);
+        let input: VpInput = (addr.clone(), tx_data, keys_changed, verifiers);
         let vp_imports = host_env::prepare_vp_imports(
             &self.wasm_store,
             addr.clone(),
@@ -480,10 +481,10 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 mod tests {
     use std::str::FromStr;
 
+    use anoma_shared::types::RawAddress;
     use tempdir::TempDir;
 
     use super::*;
-    use crate::shell::storage::RawAddress;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
