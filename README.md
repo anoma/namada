@@ -10,7 +10,7 @@ The transaction template calls functions from the host environment. The validity
 
 The validity predicate is currently hard-coded in the shell and used for every account. To experiment with a different validity predicate, build it from the template and restart the shell.
 
-The gossip node needs to toggle the orderbook flag `--orderbook` to relay intents, multiple nodes can be connected with the `--peers` option.
+The gossip node needs to toggle the intent flag `--intent` to activate the intent broadcaster, multiple nodes can be connected with the `--peers` option.
 
 The matchmaker template receives intents with the borsh encoding define in `data_template` and crafts data to be sent with `tx_intent_template` to the ledger. It matches only two intents that are the exact opposite.
 
@@ -31,7 +31,7 @@ make
 make install
 
 # generate default config in .anoma/
-cargo run --bin anomad -- generate-config
+cargo run --bin anomad -- --base-dir .anoma generate-config
 
 # Run Anoma daemon (this will also initialize and run Tendermint node)
 make run-ledger
@@ -51,19 +51,22 @@ cargo watch -x "run --bin anomad -- run-ledger"
 # Watch and on change reset & run a node
 cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 
-# run orderbook daemon with rpc server with default config file (or add --intent)
+# run gossip node daemon with intent broadcaster and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc
 
-# run orderbook daemon with rpc server and matchmaker with default config file (or add --intent)
+# run gossip daemon with intent broadcaster, matchmaker and rpc (use default config)
 cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
 cargo run --bin anomac -- craft-intent --address alan --token-buy xan --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_A.data
 cargo run --bin anomac -- craft-intent --address ada --token-buy btc --amount-buy 20 --token-sell xan --amount-sell 10 --file intent_B.data
 
-# Submit the intents (need a rpc server), hardcoded address
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_A.data
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_B.data
+# Subscribe to new network
+cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "asset_v1"
+
+# Submit the intents (need a rpc server), hardcoded address rpc node address
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_A.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_B.data --topic "asset_v1"
 
 # Format the code
 make fmt

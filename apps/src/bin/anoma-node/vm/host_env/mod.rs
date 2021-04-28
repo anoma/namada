@@ -85,6 +85,20 @@ impl WasmerEnv for MatchmakerEnv {
     }
 }
 
+#[derive(Clone)]
+pub struct FilterEnv {
+    pub memory: AnomaMemory,
+}
+
+impl WasmerEnv for FilterEnv {
+    fn init_with_instance(
+        &mut self,
+        instance: &Instance,
+    ) -> std::result::Result<(), HostEnvInitError> {
+        self.memory.init_env_memory(&instance.exports)
+    }
+}
+
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
 pub fn prepare_tx_imports(
@@ -172,7 +186,7 @@ pub fn prepare_vp_imports(
 }
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
-/// transaction code
+/// matchmaker code
 pub fn prepare_matchmaker_imports(
     wasm_store: &Store,
     initial_memory: Memory,
@@ -193,7 +207,27 @@ pub fn prepare_matchmaker_imports(
                                                                   send_match),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env,
-                                                                  matchmaker_log_string),
+                                                                   matchmaker_log_string),
+        },
+    }
+}
+
+/// Prepare imports (memory and host functions) exposed to the vm guest running
+/// filter code
+pub fn prepare_filter_imports(
+    wasm_store: &Store,
+    initial_memory: Memory,
+) -> ImportObject {
+    let env = FilterEnv {
+        memory: AnomaMemory::default(),
+    };
+    wasmer::imports! {
+        // default namespace
+        "env" => {
+            "memory" => initial_memory,
+            "_log_string" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                  env,
+                                                                   filter_log_string),
         },
     }
 }
@@ -1346,6 +1380,16 @@ fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
         .expect("Cannot read the string from memory");
 
     log::info!("WASM Matchmaker log: {}", str);
+}
+
+/// Log a string from exposed to the wasm VM filter environment. The message
+/// will be printed at the [`log::Level::Info`].
+fn filter_log_string(env: &FilterEnv, str_ptr: u64, str_len: u64) {
+    let (str, _gas) = env
+        .memory
+        .read_string(str_ptr, str_len as _)
+        .expect("Cannot read the string from memory");
+    log::info!("WASM Filter log: {}", str);
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be

@@ -28,6 +28,7 @@ pub const RUN_LEDGER_COMMAND: &str = "run-ledger";
 pub const RESET_LEDGER_COMMAND: &str = "reset-ledger";
 pub const GENERATE_CONFIG_COMMAND: &str = "generate-config";
 pub const INTENT_COMMAND: &str = "intent";
+pub const SUBSCRIBE_TOPIC_COMMAND: &str = "subscribe-topic";
 pub const CRAFT_INTENT_COMMAND: &str = "craft-intent";
 pub const TX_COMMAND: &str = "tx";
 pub const CRAFT_DATA_TX_COMMAND: &str = "craft-tx-data";
@@ -36,12 +37,12 @@ pub const CRAFT_DATA_TX_COMMAND: &str = "craft-tx-data";
 pub const BASE_ARG: &str = "base-dir";
 pub const PEERS_ARG: &str = "peers";
 pub const ADDRESS_ARG: &str = "address";
-pub const DKG_ARG: &str = "dkg";
-pub const INTENT_ARG: &str = "intent";
+pub const TOPIC_ARG: &str = "topic";
 pub const RPC_ARG: &str = "rpc";
 pub const MATCHMAKER_ARG: &str = "matchmaker";
 pub const TX_TEMPLATE_ARG: &str = "tx-template";
 pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
+pub const FILTER_ARG: &str = "filter";
 
 // client args
 pub const DATA_TX_ARG: &str = "data";
@@ -98,6 +99,7 @@ fn add_client_commands(app: App) -> App {
         .subcommand(client_intent_subcommand())
         .subcommand(client_craft_intent_subcommand())
         .subcommand(client_craft_tx_data_subcommand())
+        .subcommand(client_subscribe_topic_subcommand())
 }
 
 pub fn anoma_node_cli() -> App {
@@ -173,6 +175,32 @@ fn client_intent_subcommand() -> App {
                     "The data of the intent, that contains all value \
                      necessary for the matchmaker.",
                 ),
+        )
+        .arg(
+            Arg::new(TOPIC_ARG)
+                .long(TOPIC_ARG)
+                .takes_value(true)
+                .required(true)
+                .about("The subnetwork where the intent should be sent to"),
+        )
+}
+
+fn client_subscribe_topic_subcommand() -> App {
+    App::new(SUBSCRIBE_TOPIC_COMMAND)
+        .about("subscribe to a topic.")
+        .arg(
+            Arg::new(NODE_INTENT_ARG)
+                .long(NODE_INTENT_ARG)
+                .takes_value(true)
+                .required(true)
+                .about("The gossip node address."),
+        )
+        .arg(
+            Arg::new(TOPIC_ARG)
+                .long(TOPIC_ARG)
+                .takes_value(true)
+                .required(true)
+                .about("The new topic of interest for that node."),
         )
 }
 
@@ -284,18 +312,11 @@ fn run_gossip_subcommand() -> App {
                 .about("List of peers to connect to."),
         )
         .arg(
-            Arg::new(DKG_ARG)
-                .long(DKG_ARG)
-                .multiple(false)
-                .takes_value(false)
-                .about("Enable DKG gossip topic."),
-        )
-        .arg(
-            Arg::new(INTENT_ARG)
-                .long(INTENT_ARG)
-                .multiple(false)
-                .takes_value(false)
-                .about("Enable intent gossip."),
+            Arg::new(TOPIC_ARG)
+                .long(TOPIC_ARG)
+                .multiple(true)
+                .takes_value(true)
+                .about("Enable a new gossip topic."),
         )
         .arg(
             Arg::new(RPC_ARG)
@@ -327,6 +348,13 @@ fn run_gossip_subcommand() -> App {
                     "The address of the ledger as host:port that the \
                      matchmaker must send transactions to.",
                 ),
+        )
+        .arg(
+            Arg::new(FILTER_ARG)
+                .long(FILTER_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .about("The private filter for the matchmaker"),
         )
 }
 
@@ -383,7 +411,7 @@ pub fn parse_string_req(args: &ArgMatches, field: &str) -> String {
 
 pub fn update_gossip_config(
     args: &ArgMatches,
-    config: &mut config::Gossip,
+    config: &mut config::IntentBroadcaster,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
         config.peers = peers
@@ -396,55 +424,47 @@ pub fn update_gossip_config(
         config.address = addr
     }
 
-    config.enable_dkg(args.is_present(DKG_ARG));
-
-    if args.is_present(INTENT_ARG) && config.intent_gossip.is_none() {
-        config.intent_gossip = Some(config::IntentGossip::default())
-    }
-
-    if let Some(mut intent_gossip_cfg) = config.intent_gossip.as_mut() {
-        let matchmaker_arg = parse_opt(args, MATCHMAKER_ARG);
-        let tx_template_arg = parse_opt(args, TX_TEMPLATE_ARG);
-        let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);
-        if let Some(mut matchmaker_cfg) = intent_gossip_cfg.matchmaker.as_mut()
-        {
-            if let Some(matchmaker) = matchmaker_arg {
-                matchmaker_cfg.matchmaker = matchmaker
-            }
-            if let Some(tx_template) = tx_template_arg {
-                matchmaker_cfg.tx_template = tx_template
-            }
-            if let Some(ledger_address) = ledger_address_arg {
-                matchmaker_cfg.ledger_address = ledger_address
-            }
-        } else if let (
-            Some(matchmaker),
-            Some(tx_template),
-            Some(ledger_address),
-        ) = (
-            matchmaker_arg.as_ref(),
-            tx_template_arg.as_ref(),
-            ledger_address_arg,
-        ) {
-            let matchmaker_cfg = Some(config::Matchmaker {
-                matchmaker: matchmaker.clone(),
-                tx_template: tx_template.clone(),
-                ledger_address,
-            });
-            intent_gossip_cfg.matchmaker = matchmaker_cfg
-        } else if matchmaker_arg.is_some()
-            || tx_template_arg.is_some()
-            || ledger_address_arg.is_some()
-        // if at least one argument is not none then fail
-        {
-            panic!(
-                "No complete matchmaker configuration found (matchmaker \
-                 program path, tx template path, and ledger address). Please \
-                 update the configuration with default value or use all cli \
-                 argument to use the matchmaker"
-            );
+    let matchmaker_arg = parse_opt(args, MATCHMAKER_ARG);
+    let tx_template_arg = parse_opt(args, TX_TEMPLATE_ARG);
+    let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);
+    let filter_arg = parse_opt(args, FILTER_ARG);
+    if let Some(mut matchmaker_cfg) = config.matchmaker.as_mut() {
+        if let Some(matchmaker) = matchmaker_arg {
+            matchmaker_cfg.matchmaker = matchmaker
         }
-    };
+        if let Some(tx_template) = tx_template_arg {
+            matchmaker_cfg.tx_template = tx_template
+        }
+        if let Some(ledger_address) = ledger_address_arg {
+            matchmaker_cfg.ledger_address = ledger_address
+        }
+        if let Some(filter) = filter_arg {
+            matchmaker_cfg.filter = Some(filter)
+        }
+    } else if let (Some(matchmaker), Some(tx_template), Some(ledger_address)) = (
+        matchmaker_arg.as_ref(),
+        tx_template_arg.as_ref(),
+        ledger_address_arg,
+    ) {
+        let matchmaker_cfg = Some(config::Matchmaker {
+            matchmaker: matchmaker.clone(),
+            tx_template: tx_template.clone(),
+            ledger_address,
+            filter: filter_arg.clone(),
+        });
+        config.matchmaker = matchmaker_cfg
+    } else if matchmaker_arg.is_some()
+        || tx_template_arg.is_some()
+        || ledger_address_arg.is_some()
+    // if at least one argument is not none then fail
+    {
+        panic!(
+            "No complete matchmaker configuration found (matchmaker program \
+             path, tx template path, and ledger address). Please update the \
+             configuration with default value or use all cli argument to use \
+             the matchmaker"
+        );
+    }
     config.rpc = args.is_present(RPC_ARG);
     Ok(())
 }

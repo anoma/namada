@@ -2,62 +2,115 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use anoma::types::Topic;
+use libp2p::gossipsub::subscription_filter::{
+    TopicSubscriptionFilter, WhitelistSubscriptionFilter,
+};
 use libp2p::gossipsub::{
-    self, Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic,
+    self, GossipsubEvent, GossipsubMessage, IdentTopic, IdentityTransform,
     MessageAuthenticity, MessageId, TopicHash, ValidationMode,
 };
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviourEventProcess;
-use libp2p::NetworkBehaviour;
+use libp2p::{NetworkBehaviour, PeerId};
+use regex::Regex;
+use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use super::types::{self, NetworkEvent};
+pub type Gossipsub = libp2p::gossipsub::Gossipsub<
+    IdentityTransform,
+    IntentBroadcasterSubscriptionFilter,
+>;
 
-impl From<GossipsubMessage> for types::NetworkEvent {
-    fn from(msg: GossipsubMessage) -> Self {
-        Self::Message(types::InternMessage {
-            peer: msg
-                .source
-                .expect("cannot convert message with anonymous message peer"),
-            topic: topic_of(&msg.topic),
-            message_id: message_id(&msg),
-            data: msg.data,
-        })
-    }
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Failed to send the message through the channel: {0}")]
+    FailedToSend(
+        tokio::sync::mpsc::error::TrySendError<IntentBroadcasterEvent>,
+    ),
+    #[error("Failed to subscribe")]
+    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
 }
 
-pub fn topic_of(topic_hash: &TopicHash) -> Topic {
-    if topic_hash == &IdentTopic::new(Topic::Dkg.to_string()).hash() {
-        Topic::Dkg
-    } else if topic_hash == &IdentTopic::new(Topic::Intent.to_string()).hash() {
-        Topic::Intent
-    } else {
-        panic!("topic_hash does not correspond to any topic of interest")
+// TODO merge type of config and this one ? Maybe not a good idea
+pub enum IntentBroadcasterSubscriptionFilter {
+    RegexFilter(RegexSubscribtionFilter),
+    WhitelistFilter(WhitelistSubscriptionFilter),
+}
+
+#[derive(Debug)]
+pub struct IntentBroadcasterEvent {
+    pub propagation_source: PeerId,
+    pub message_id: MessageId,
+    pub source: Option<PeerId>,
+    pub data: Vec<u8>,
+    pub topic: TopicHash,
+}
+
+impl From<GossipsubEvent> for IntentBroadcasterEvent {
+    // To be used only with Message event
+    fn from(event: GossipsubEvent) -> Self {
+        if let GossipsubEvent::Message {
+            propagation_source,
+            message_id,
+            message:
+                GossipsubMessage {
+                    source,
+                    data,
+                    topic,
+                    sequence_number: _,
+                },
+        } = event
+        {
+            Self {
+                propagation_source,
+                message_id,
+                source,
+                data,
+                topic,
+            }
+        } else {
+            panic!("Expected a GossipsubEvent::Message got {:?}", event)
+        }
+    }
+}
+impl TopicSubscriptionFilter for IntentBroadcasterSubscriptionFilter {
+    fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
+        match self {
+            IntentBroadcasterSubscriptionFilter::RegexFilter(filter) => {
+                filter.can_subscribe(topic_hash)
+            }
+            IntentBroadcasterSubscriptionFilter::WhitelistFilter(filter) => {
+                filter.can_subscribe(topic_hash)
+            }
+        }
     }
 }
 
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
-    pub gossipsub: Gossipsub,
+    pub intent_broadcaster: libp2p::gossipsub::Gossipsub<
+        IdentityTransform,
+        IntentBroadcasterSubscriptionFilter,
+    >,
+    // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
-    inject_event: Sender<NetworkEvent>,
+    inject_intent_broadcaster_event: Sender<IntentBroadcasterEvent>,
 }
 
-fn message_id(message: &GossipsubMessage) -> MessageId {
-    let mut s = DefaultHasher::new();
-    message.data.hash(&mut s);
-    MessageId::from(s.finish().to_string())
+pub fn message_id(message: &GossipsubMessage) -> MessageId {
+    let mut hasher = DefaultHasher::new();
+    message.data.hash(&mut hasher);
+    MessageId::from(hasher.finish().to_string())
 }
 
 impl Behaviour {
-    pub fn new(key: Keypair) -> (Self, Receiver<NetworkEvent>) {
-        // To content-address message, we can take the hash of message and use
-        // it as an ID.
-
+    pub fn new(
+        key: Keypair,
+        config: &anoma::config::IntentBroadcaster,
+    ) -> (Self, Receiver<IntentBroadcasterEvent>) {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
-            .protocol_id_prefix("gossip_intent")
+            .protocol_id_prefix("intent_broadcaster")
             .heartbeat_interval(Duration::from_secs(10))
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id)
@@ -65,15 +118,40 @@ impl Behaviour {
             .build()
             .expect("Valid config");
 
-        let gossipsub: Gossipsub =
-            Gossipsub::new(MessageAuthenticity::Signed(key), gossipsub_config)
-                .expect("Correct configuration");
+        let filter = match &config.subscription_filter {
+            anoma::config::SubscriptionFilter::RegexFilter(regex) => {
+                IntentBroadcasterSubscriptionFilter::RegexFilter(
+                    RegexSubscribtionFilter(regex.clone()),
+                )
+            }
+            anoma::config::SubscriptionFilter::WhitelistFilter(topics) => {
+                IntentBroadcasterSubscriptionFilter::WhitelistFilter(
+                    WhitelistSubscriptionFilter(
+                        topics
+                            .iter()
+                            .map(|topic| {
+                                TopicHash::from(IdentTopic::new(topic))
+                            })
+                            .collect(),
+                    ),
+                )
+            }
+        };
 
-        let (inject_event, rx) = channel::<NetworkEvent>(100);
+        let intent_broadcaster: Gossipsub =
+            Gossipsub::new_with_subscription_filter(
+                MessageAuthenticity::Signed(key),
+                gossipsub_config,
+                filter,
+            )
+            .expect("Correct configuration");
+
+        let (inject_intent_broadcaster_event, rx) =
+            channel::<IntentBroadcasterEvent>(100);
         (
             Self {
-                gossipsub,
-                inject_event,
+                intent_broadcaster,
+                inject_intent_broadcaster_event,
             },
             rx,
         )
@@ -83,10 +161,38 @@ impl Behaviour {
 impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     // Called when `gossipsub` produces an event.
     fn inject_event(&mut self, event: GossipsubEvent) {
-        if let GossipsubEvent::Message { message, .. } = event {
-            self.inject_event
-                .try_send(NetworkEvent::from(message))
-                .unwrap();
+        match event {
+            GossipsubEvent::Message { .. } => self
+                .inject_intent_broadcaster_event
+                .try_send(IntentBroadcasterEvent::from(event))
+                .map_err(Error::FailedToSend)
+                .unwrap_or_else(|e| {
+                    panic!("failed to send to the channel {}", e)
+                }),
+            GossipsubEvent::Subscribed { peer_id: _, topic } => {
+                self.intent_broadcaster
+                    .subscribe(&IdentTopic::new(topic.into_string()))
+                    .map_err(Error::FailedSubscribtion)
+                    .unwrap_or_else(|e| {
+                        log::error!("failed to subscribe: {:}", e);
+                        false
+                    });
+            }
+            GossipsubEvent::Unsubscribed {
+                peer_id: _,
+                topic: _,
+            } => {}
         }
+    }
+}
+
+// TODO this is part of libp2p::gossipsub::subscription_filter but it's cannot
+// be exported because it's part of a feature "regex-filter" that is not
+// exposed. see issue https://github.com/libp2p/rust-libp2p/issues/2055
+pub struct RegexSubscribtionFilter(pub Regex);
+
+impl TopicSubscriptionFilter for RegexSubscribtionFilter {
+    fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
+        self.0.is_match(topic_hash.as_str())
     }
 }
