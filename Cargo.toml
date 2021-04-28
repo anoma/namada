@@ -10,6 +10,7 @@ members = [
 # wasm packages have to be built separately
 exclude = [
   "matchmaker_template",
+  "filter_template",
   "tx_template",
   "vps",
 ]

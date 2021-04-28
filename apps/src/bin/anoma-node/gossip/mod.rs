@@ -1,22 +1,19 @@
-mod dkg;
-mod gossip_intent;
-mod matchmaker;
-mod mempool;
+mod intent_broadcaster;
 mod network_behaviour;
 mod p2p;
-mod types;
 
 use std::thread;
 
-use anoma::protobuf::types::{IntentMessage, Tx};
+use anoma::protobuf::services::rpc_message;
+use anoma::protobuf::types::Tx;
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc;
 
+use self::network_behaviour::IntentBroadcasterEvent;
 use self::p2p::P2P;
-use self::types::NetworkEvent;
 use super::rpc;
 
 #[derive(Error, Debug)]
@@ -27,7 +24,7 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: anoma::config::Gossip) -> Result<()> {
+pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
     let rpc_event_receiver = if config.rpc {
         let (tx, rx) = mpsc::channel(100);
         thread::spawn(|| rpc::rpc_server(tx).unwrap());
@@ -39,7 +36,6 @@ pub fn run(config: anoma::config::Gossip) -> Result<()> {
     let (gossip, network_event_receiver, matchmaker_event_receiver) =
         p2p::P2P::new(&config)
             .expect("TEMPORARY: unable to build gossip layer");
-
     dispatcher(
         gossip,
         network_event_receiver,
@@ -80,8 +76,8 @@ pub async fn matchmaker_dispatcher(
 #[tokio::main]
 pub async fn dispatcher(
     mut gossip: P2P,
-    mut network_event_receiver: Receiver<NetworkEvent>,
-    rpc_event_receiver: Option<Receiver<IntentMessage>>,
+    mut network_event_receiver: Receiver<IntentBroadcasterEvent>,
+    rpc_event_receiver: Option<Receiver<rpc_message::Message>>,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
     if let Some(matchmaker_event_receiver) = matchmaker_event_receiver {

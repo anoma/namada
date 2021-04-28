@@ -7,11 +7,11 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use libp2p::multiaddr::Multiaddr;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::gossiper::Gossiper;
-use crate::types::Topic;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -86,58 +86,47 @@ pub struct Matchmaker {
     pub matchmaker: PathBuf,
     pub tx_template: PathBuf,
     pub ledger_address: SocketAddr,
+    pub filter: Option<PathBuf>,
+}
+
+// TODO maybe add also maxCount for a maximum number of subscription for a
+// filter.
+
+// TODO toml failed to serialize without "untagged" because does not support
+// enum with nested data, unless with the untagged flag. This might be a source
+// of confusion in the future... Another approach would be to have multiple
+// field for each filter possibility but it's less nice.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SubscriptionFilter {
+    RegexFilter(#[serde(with = "serde_regex")] Regex),
+    WhitelistFilter(Vec<String>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct IntentGossip {
-    pub matchmaker: Option<Matchmaker>,
-}
-
-impl Default for IntentGossip {
-    fn default() -> Self {
-        Self { matchmaker: None }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Gossip {
+pub struct IntentBroadcaster {
     pub address: Multiaddr,
     pub rpc: bool,
     pub peers: HashSet<Multiaddr>,
-    pub topics: HashSet<Topic>,
+    pub topics: HashSet<String>,
+    pub subscription_filter: SubscriptionFilter,
     pub gossiper: Gossiper,
-    pub intent_gossip: Option<IntentGossip>,
+    pub matchmaker: Option<Matchmaker>,
 }
 
-impl Default for Gossip {
+impl Default for IntentBroadcaster {
     fn default() -> Self {
         Self {
             // TODO there must be a better option here
             address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
             rpc: false,
+            subscription_filter: SubscriptionFilter::RegexFilter(
+                Regex::new("asset_v\\d{1,2}").unwrap(),
+            ),
             peers: HashSet::new(),
-            topics: [Topic::Intent].iter().cloned().collect(),
+            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
             gossiper: Gossiper::new(),
-            intent_gossip: Some(IntentGossip::default()),
-        }
-    }
-}
-
-impl Gossip {
-    pub fn enable_dkg(&mut self, enable: bool) {
-        if enable {
-            self.topics.insert(Topic::Dkg);
-        } else {
-            self.topics.remove(&Topic::Dkg);
-        }
-    }
-
-    pub fn enable_intent(&mut self, intent_gossip_cfg: Option<IntentGossip>) {
-        self.intent_gossip = intent_gossip_cfg;
-        if self.intent_gossip.is_some() {
-            self.topics.insert(Topic::Intent);
-        } else {
-            self.topics.remove(&Topic::Intent);
+            matchmaker: None,
         }
     }
 }
@@ -145,7 +134,7 @@ impl Gossip {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub ledger: Option<Ledger>,
-    pub gossip: Option<Gossip>,
+    pub intent_broadcaster: Option<IntentBroadcaster>,
 }
 
 impl Default for Config {
@@ -153,7 +142,7 @@ impl Default for Config {
         Self {
             ledger: Some(Ledger::default()),
             // TODO Should it be None by default
-            gossip: Some(Gossip::default()),
+            intent_broadcaster: Some(IntentBroadcaster::default()),
         }
     }
 }

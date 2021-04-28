@@ -11,6 +11,7 @@ dependencies = [
  "blake2b-rs",
  "borsh",
  "byteorder",
+ "bytesize",
  "cargo-watch",
  "clap 3.0.0-beta.2",
  "color-eyre",
@@ -29,10 +30,12 @@ dependencies = [
  "rand 0.7.3",
  "rand_core 0.5.1",
  "rayon",
+ "regex",
  "rocksdb",
  "serde 1.0.125",
  "serde_bytes",
  "serde_json",
+ "serde_regex",
  "sha2 0.9.3",
  "sparse-merkle-tree",
  "tempdir",
@@ -641,6 +644,12 @@ name = "bytes"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
+
+[[package]]
+name = "bytesize"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81a18687293a1546b67c246452202bbbf143d239cb43494cc163da14979082da"
 
 [[package]]
 name = "cache-padded"
@@ -3542,6 +3551,16 @@ checksum = "799e97dc9fdae36a5c8b8f2cae9ce2ee9fdce2058c57a93e6099d919fd982f79"
 dependencies = [
  "itoa",
  "ryu",
+ "serde 1.0.125",
+]
+
+[[package]]
+name = "serde_regex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8136f1a4ea815d7eac4101cfd0b16dc0cb5e1fe1b8609dfd728058656b7badf"
+dependencies = [
+ "regex",
  "serde 1.0.125",
 ]
 
