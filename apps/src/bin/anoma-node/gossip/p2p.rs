@@ -123,7 +123,7 @@ impl P2P {
             }
 
             rpc_message::Message::Dkg(_dkg_msg) => {
-                panic!("not yet implemented")
+                todo!()
             }
             rpc_message::Message::Topic(
                 anoma::protobuf::services::SubscribeTopicMessage {
