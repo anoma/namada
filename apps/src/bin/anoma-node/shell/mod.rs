@@ -3,10 +3,13 @@ pub mod storage;
 mod tendermint;
 
 use core::fmt;
-use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::mpsc;
 use std::vec;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Add,
+};
 
 use anoma::protobuf::types::Tx;
 use anoma_shared::bytes::ByteBuf;
@@ -36,6 +39,10 @@ pub enum Error {
     TxRunnerError(vm::Error),
     #[error("Gas error: {0}")]
     GasError(gas::Error),
+    #[error("Error executing VP for addresses: {0:?}")]
+    VpExecutionError(HashSet<Address>),
+    #[error("Transaction gas overflow")]
+    GasOverflow,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -211,12 +218,48 @@ impl Shell {
     }
 }
 #[derive(Clone)]
+struct VpsGas {
+    max: u64,
+    rest: Vec<u64>,
+}
+
+impl Default for VpsGas {
+    fn default() -> Self {
+        Self {
+            max: 0,
+            rest: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone)]
 struct VpsResult {
     pub accepted_vps: HashSet<Address>,
     pub rejected_vps: HashSet<Address>,
     pub changed_keys: Vec<String>,
-    pub gas_used: Vec<u64>,
+    pub gas_used: VpsGas,
     pub have_error: bool,
+}
+
+impl VpsGas {
+    fn merge(&mut self, other: &mut VpsGas) -> Result<()> {
+        if other.max > self.max {
+            self.rest.push(self.max);
+            self.max = other.max;
+        } else {
+            self.rest.push(other.max);
+            self.rest.append(&mut other.rest);
+        }
+
+        let parallel_gas: u64 = (self.rest.clone().iter().sum::<u64>() as f64
+            * VpGasMeter::parallel_fee())
+            as u64;
+
+        if self.max.add(parallel_gas) > VpGasMeter::transaction_gas_limit() {
+            return Err(Error::GasOverflow);
+        }
+        Ok(())
+    }
 }
 
 impl VpsResult {
@@ -224,7 +267,7 @@ impl VpsResult {
         accepted_vps: HashSet<Address>,
         rejected_vps: HashSet<Address>,
         changed_keys: Vec<String>,
-        gas_used: Vec<u64>,
+        gas_used: VpsGas,
         have_error: bool,
     ) -> Self {
         Self {
@@ -246,7 +289,7 @@ impl fmt::Display for VpsResult {
             self.accepted_vps,
             self.rejected_vps,
             self.changed_keys,
-            self.gas_used,
+            self.gas_used.max, // TODO: change
             self.have_error
         )
     }
@@ -258,7 +301,7 @@ impl Default for VpsResult {
             accepted_vps: HashSet::default(),
             rejected_vps: HashSet::default(),
             changed_keys: Vec::default(),
-            gas_used: Vec::default(),
+            gas_used: VpsGas::default(),
             have_error: false,
         }
     }
@@ -443,7 +486,7 @@ fn run_tx(
     let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
 
     let vps_result =
-        check_vps(&tx, storage, block_gas_meter, write_log, &verifiers, true)?;
+        check_vps(&tx, storage, block_gas_meter, write_log, &verifiers)?;
 
     let gas = block_gas_meter
         .finalize_transaction()
@@ -458,7 +501,6 @@ fn check_vps(
     gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
     verifiers: &HashSet<Address>,
-    dry_run: bool,
 ) -> Result<VpsResult> {
     let verifiers = get_verifiers(write_log, verifiers);
 
@@ -481,31 +523,15 @@ fn check_vps(
 
     let initial_gas = gas_meter.get_current_transaction_gas();
 
-    let mut vps_result;
+    let mut vps_result =
+        run_vps(verifiers_vps, tx_data, storage, write_log, initial_gas)?;
 
-    if dry_run {
-        vps_result = run_vps_dry(
-            verifiers_vps,
-            tx_data,
-            storage,
-            write_log,
-            initial_gas,
-        );
-    } else {
-        vps_result =
-            run_vps(verifiers_vps, tx_data, storage, write_log, initial_gas)?;
-    }
-
-    // sort decreasing order
-    vps_result.gas_used.sort_by(|a, b| b.cmp(a));
-
-    // I'm assuming that at least 1 VP will always be there
-    if let Some((max_gas_used, rest)) = vps_result.gas_used.split_first() {
-        gas_meter.add(*max_gas_used).map_err(Error::GasError)?;
-        gas_meter
-            .add_parallel_fee(&mut rest.to_vec())
-            .map_err(Error::GasError)?;
-    }
+    gas_meter
+        .add(vps_result.gas_used.max)
+        .map_err(Error::GasError)?;
+    gas_meter
+        .add_parallel_fee(&mut vps_result.gas_used.rest)
+        .map_err(Error::GasError)?;
 
     Ok(vps_result)
 }
@@ -539,36 +565,6 @@ fn execute_tx(
     Ok(verifiers)
 }
 
-fn run_vps_dry(
-    verifiers: Vec<(Address, Vec<String>, Vec<u8>)>,
-    tx_data: Vec<u8>,
-    storage: &Storage,
-    write_log: &mut WriteLog,
-    initial_gas: u64,
-) -> VpsResult {
-    let addresses = verifiers
-        .iter()
-        .map(|(addr, _, _)| addr)
-        .collect::<HashSet<_>>();
-
-    verifiers
-        .par_iter()
-        // in dry-run, we don't short-circuit on failure, instead keep running
-        // all VPs until they finish
-        .fold_with(VpsResult::default(), |result, (addr, keys, vp)| {
-            run_vp(
-                result,
-                initial_gas,
-                tx_data.clone(),
-                storage,
-                write_log,
-                addresses.clone(),
-                (addr, keys, vp),
-            )
-        })
-        .collect()
-}
-
 fn run_vps(
     verifiers: Vec<(Address, Vec<String>, Vec<u8>)>,
     tx_data: Vec<u8>,
@@ -584,58 +580,56 @@ fn run_vps(
     verifiers
         .par_iter()
         .try_fold(VpsResult::default, |result, (addr, keys, vp)| {
-            Ok(run_vp(
+            let mut vp_gas_meter = VpGasMeter::new(initial_gas);
+
+            let vp_result = run_vp(
                 result,
-                initial_gas,
                 tx_data.clone(),
                 storage,
                 write_log,
                 addresses.clone(),
+                &mut vp_gas_meter,
                 (addr, keys, vp),
-            ))
+            )
+            .unwrap();
+
+            if vp_gas_meter.gas_overflow() {
+                return Err(Error::VpExecutionError(vp_result.rejected_vps));
+            }
+
+            Ok(vp_result)
         })
-        .try_reduce(VpsResult::default, |a, b| Ok(merge_vp_results(a, b)))
+        .try_reduce(VpsResult::default, |a, b| merge_vp_results(a, b))
 }
 
-impl FromParallelIterator<VpsResult> for VpsResult {
-    fn from_par_iter<I>(par_iter: I) -> Self
-    where
-        I: IntoParallelIterator<Item = VpsResult>,
-    {
-        par_iter
-            .into_par_iter()
-            .fold(VpsResult::default, merge_vp_results)
-            .collect()
-    }
-}
-
-fn merge_vp_results(a: VpsResult, mut b: VpsResult) -> VpsResult {
+fn merge_vp_results(a: VpsResult, mut b: VpsResult) -> Result<VpsResult> {
     let accepted_vps = a.accepted_vps.union(&b.accepted_vps).collect();
     let rejected_vps = a.rejected_vps.union(&b.rejected_vps).collect();
     let mut changed_keys = a.changed_keys;
     changed_keys.append(&mut b.changed_keys);
     let mut gas_used = a.gas_used;
-    gas_used.append(&mut b.gas_used);
-    let have_error = a.have_error || b.have_error;
-    VpsResult::new(
-        accepted_vps,
-        rejected_vps,
-        changed_keys,
-        gas_used,
-        have_error,
-    )
+
+    match gas_used.merge(&mut b.gas_used) {
+        Ok(_) => Ok(VpsResult::new(
+            accepted_vps,
+            rejected_vps,
+            changed_keys,
+            gas_used,
+            a.have_error || b.have_error,
+        )),
+        Err(err) => Err(err),
+    }
 }
 
 fn run_vp(
     mut result: VpsResult,
-    initial_gas: u64,
     tx_data: Vec<u8>,
     storage: &Storage,
     write_log: &WriteLog,
     addresses: HashSet<Address>,
+    vp_gas_meter: &mut VpGasMeter,
     (addr, keys, vp): (&Address, &[String], &[u8]),
-) -> VpsResult {
-    let mut vp_gas_meter = VpGasMeter::new(initial_gas);
+) -> Result<VpsResult> {
     let vp_runner = VpRunner::new();
 
     let accept = vp_runner.run(
@@ -644,11 +638,11 @@ fn run_vp(
         addr,
         storage,
         write_log,
-        &mut vp_gas_meter,
+        vp_gas_meter,
         keys.to_vec(),
         addresses,
     );
-    result.gas_used.push(vp_gas_meter.vp_gas);
+    // result.gas_used.merge(vp_gas_meter.vp_gas);
     result.changed_keys.extend_from_slice(&keys);
 
     match accept {
@@ -664,5 +658,5 @@ fn run_vp(
             result.have_error = true;
         }
     }
-    result
+    Ok(result)
 }
