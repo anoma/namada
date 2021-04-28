@@ -126,10 +126,11 @@ async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
             topic,
         })),
     };
-    let _response = client
+    let response = client
         .send_message(message)
         .await
         .expect("failed to send message and/or receive rpc response");
+    println!("{:#?}", response);
 }
 
 async fn subscribe_topic(node_addr: String, topic: String) {
@@ -139,10 +140,11 @@ async fn subscribe_topic(node_addr: String, topic: String) {
             services::SubscribeTopicMessage { topic },
         )),
     };
-    let _response = client
+    let response = client
         .send_message(message)
         .await
         .expect("failed to send message and/or receive rpc response");
+    println!("{:#?}", response);
 }
 
 fn craft_intent(
