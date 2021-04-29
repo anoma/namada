@@ -253,7 +253,7 @@ impl VpRunner {
         &self,
         vp_code: T,
         tx_data: Vec<u8>,
-        tx_code: Vec<u8>,
+        #[allow(clippy::ptr_arg)] tx_code: &Vec<u8>,
         addr: &Address,
         storage: &Storage,
         write_log: &WriteLog,
@@ -271,6 +271,10 @@ impl VpRunner {
         let write_log = unsafe {
             EnvHostWrapper::new(write_log as *const _ as *const c_void)
         };
+        // Read-only access from parallel Vp runners
+        let tx_code = unsafe {
+            EnvHostWrapper::new(tx_code as *const _ as *const c_void)
+        };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
         let iterators = unsafe {
@@ -278,7 +282,8 @@ impl VpRunner {
                 &mut PrefixIterators::new() as *mut _ as *mut c_void
             )
         };
-
+        // This is not thread-safe, but because each VP has its own instance
+        // there is no shared access
         let gas_meter = unsafe {
             MutEnvHostWrapper::new(vp_gas_meter as *mut _ as *mut c_void)
         };

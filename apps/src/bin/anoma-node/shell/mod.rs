@@ -540,7 +540,7 @@ fn check_vps(
             .run(
                 vp,
                 tx_data.clone(),
-                tx.code.clone(),
+                &tx.code,
                 &addr,
                 storage,
                 write_log,

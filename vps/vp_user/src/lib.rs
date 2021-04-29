@@ -10,6 +10,7 @@ validity_predicate! {
             addr, keys_changed, tx_data, verifiers
         ));
 
+        // TODO memoize?
         let valid_sig = match key::ed25519::SignedTxData::try_from_slice(&tx_data[..]) {
             Ok(tx) => {
                 let pk = key::ed25519::get(&addr);

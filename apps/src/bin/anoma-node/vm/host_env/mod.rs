@@ -23,6 +23,8 @@ use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::Storage;
 
+const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
+
 #[derive(Clone)]
 struct TxEnv<'a> {
     storage: EnvHostWrapper<Storage>,
@@ -61,7 +63,7 @@ struct VpEnv<'a> {
     // the VPs that we ran.
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
     // The transaction code is used for signature verification
-    tx_code: Vec<u8>,
+    tx_code: EnvHostWrapper<Vec<u8>>,
     memory: AnomaMemory,
 }
 
@@ -135,6 +137,7 @@ pub fn prepare_tx_imports(
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_vp_imports(
     wasm_store: &Store,
     addr: Address,
@@ -142,7 +145,7 @@ pub fn prepare_vp_imports(
     write_log: EnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
-    tx_code: Vec<u8>,
+    tx_code: EnvHostWrapper<Vec<u8>>,
     initial_memory: Memory,
 ) -> ImportObject {
     let env = VpEnv {
@@ -1376,8 +1379,11 @@ fn vp_verify_tx_signature(
     let sig: Signature =
         BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
 
-    vp_add_gas(env, (data.len() + env.tx_code.len()) as _);
-    let signature_data = [data.clone(), env.tx_code.clone()].concat();
+    let tx_code = unsafe { &*(env.tx_code.get()) };
+    vp_add_gas(env, (data.len() + tx_code.len()) as _);
+    let signature_data = [&data[..], &tx_code[..]].concat();
+
+    vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
     if verify_signature_raw(&pk, &signature_data, &sig).is_ok() {
         1
     } else {

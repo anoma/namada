@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::io::{ErrorKind, Write};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use ed25519_dalek;
 use ed25519_dalek::Signer;
 pub use ed25519_dalek::{Keypair, SecretKey, SignatureError};
 use thiserror::Error;
