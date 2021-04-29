@@ -4,7 +4,7 @@
 
 The ledger currently requires that [Tendermint version 0.34.x](https://github.com/tendermint/tendermint) is installed and available on path. [The pre-built binaries and the source for 0.34.8 are here](https://github.com/tendermint/tendermint/releases/tag/v0.34.8), also directly available in some package managers.
 
-The transaction code can currently be built from [tx_template](../tx_template) and validity predicates from [vp_template](../vp_template), which is Rust code compiled to wasm.
+The transaction code can currently be built from [tx_template](txs/tx_template) and validity predicates from [vp_template](vps/vp_template), which is Rust code compiled to wasm.
 
 The transaction template calls functions from the host environment. The validity predicate template can validate a transaction and the key changes that is has performed.
 
@@ -19,7 +19,7 @@ The matchmaker template receives intents with the borsh encoding define in `data
 make dev-deps
 
 # Run this first if you don't have Rust wasm target installed:
-make -C tx_template deps
+make -C txs/tx_template deps
 
 # Build the validity predicate, transaction and matchmaker wasm modules:
 make build-wasm-scripts
@@ -39,11 +39,11 @@ make run-ledger
 # Reset the state (resets Tendermint too)
 cargo run --bin anomad -- reset-ledger
 
-# craft a transaction data to file `tx.data`
-cargo run --bin anomac -- craft-tx-data --source alan --target ada --token xan --amount 10 --file tx.data
+# Submit a custom transaction with a wasm code and arbitrary data
+cargo run --bin anoma -- tx --code txs/tx_template/tx.wasm --data tx.data
 
-# Submit a transaction with a wasm code
-cargo run --bin anoma -- tx --path tx_template/tx.wasm --data tx.data
+# Submit a token transfer
+cargo run --bin anomac -- transfer --source alan --target ada --token xan --amount 10.1 --code txs/tx_transfer/tx.wasm
 
 # Watch and on change run a node (the state will be persisted)
 cargo watch -x "run --bin anomad -- run-ledger"
@@ -55,7 +55,7 @@ cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
 cargo run --bin anoma -- run-gossip --rpc
 
 # run orderbook daemon with rpc server and matchmaker with default config file (or add --intent)
-cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
+cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template txs/tx_template/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
 cargo run --bin anomac -- craft-intent --address alan --token-buy xan --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_A.data

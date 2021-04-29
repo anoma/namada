@@ -3,7 +3,7 @@
 use anoma_shared::types::key::ed25519::{Keypair, PublicKey};
 
 pub fn ada_keypair() -> Keypair {
-    // generated from [`temp_gen_keypair`]
+    // generated from [`tests::temp_gen_keypair`]
     let bytes = [
         115, 191, 32, 247, 18, 101, 5, 106, 26, 203, 48, 145, 39, 41, 41, 196,
         252, 190, 245, 222, 96, 209, 34, 36, 40, 214, 169, 156, 235, 78, 188,
@@ -15,7 +15,7 @@ pub fn ada_keypair() -> Keypair {
 }
 
 pub fn alan_keypair() -> Keypair {
-    // generated from [`temp_gen_keypair`]
+    // generated from [`tests::temp_gen_keypair`]
     let bytes = [
         240, 3, 224, 69, 201, 148, 60, 53, 112, 79, 80, 107, 101, 127, 186, 6,
         176, 162, 113, 224, 62, 8, 183, 187, 124, 234, 244, 251, 92, 36, 119,
@@ -31,7 +31,17 @@ pub fn ada_pk() -> PublicKey {
 }
 
 pub fn alan_pk() -> PublicKey {
-    PublicKey::from(ada_keypair().public)
+    PublicKey::from(alan_keypair().public)
+}
+
+pub fn key_of(name: impl AsRef<str>) -> Keypair {
+    match name.as_ref() {
+        "ada" => ada_keypair(),
+        "alan" => alan_keypair(),
+        other => {
+            panic!("Dont' have keys for: {}", other)
+        }
+    }
 }
 
 #[cfg(test)]

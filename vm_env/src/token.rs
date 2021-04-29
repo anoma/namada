@@ -3,14 +3,14 @@ use std::collections::HashSet;
 use anoma_shared::types::token::{self, Amount, Change};
 use anoma_shared::types::{Address, Key};
 
-use super::imports::{tx, vp};
-
 /// A token validity predicate.
 pub fn vp(
     token: &Address,
     keys_changed: &[Key],
     verifiers: &HashSet<Address>,
 ) -> bool {
+    use crate::imports::vp;
+
     let mut change: Change = 0;
     let all_checked = keys_changed.iter().all(|key| {
         match token::is_balance_key(token, key) {
@@ -43,6 +43,8 @@ pub fn transfer(
     token: &Address,
     amount: Amount,
 ) {
+    use crate::imports::tx;
+
     let src_key = token::balance_key(token, src);
     let dest_key = token::balance_key(token, dest);
     let src_bal: Option<Amount> = tx::read(&src_key.to_string());

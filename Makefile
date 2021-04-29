@@ -66,7 +66,8 @@ build-wasm-scripts:
 	make -C vps/vp_template && \
 	make -C vps/vp_token && \
 	make -C vps/vp_user && \
-	make -C tx_template && \
+	make -C txs/tx_template && \
+	make -C txs/tx_transfer && \
 	make -C matchmaker_template
 
 

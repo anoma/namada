@@ -11,6 +11,7 @@ use thiserror::Error;
 use crate::bytes::ByteBuf;
 
 pub mod address;
+pub mod intent;
 pub mod key;
 pub mod token;
 

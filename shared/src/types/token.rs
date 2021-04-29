@@ -2,6 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
+use crate::types::key::ed25519::{Keypair, SignedTxData};
 use crate::types::{Address, DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
@@ -55,6 +56,14 @@ impl From<u64> for Amount {
     }
 }
 
+impl From<f64> for Amount {
+    fn from(decimal: f64) -> Self {
+        Self {
+            micro: (decimal * 1_000_000.0).round() as u64,
+        }
+    }
+}
+
 const BALANCE_STORAGE_KEY: &str = "balance";
 
 /// Obtain a storage key for user's balance.
@@ -92,5 +101,28 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
             Some(owner)
         }
         _ => None,
+    }
+}
+
+/// A simple 2-party token transfer
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+pub struct Transfer {
+    pub source: Address,
+    pub target: Address,
+    pub token: Address,
+    pub amount: Amount,
+}
+
+impl Transfer {
+    /// Sign a transfer with a given keypair.
+    pub fn sign(
+        self,
+        tx_code: impl AsRef<[u8]>,
+        keypair: &Keypair,
+    ) -> SignedTxData {
+        let bytes = self
+            .try_to_vec()
+            .expect("Encoding unsigned transfer shouldn't fail");
+        SignedTxData::new(keypair, bytes, tx_code)
     }
 }

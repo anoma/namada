@@ -30,7 +30,7 @@ pub const GENERATE_CONFIG_COMMAND: &str = "generate-config";
 pub const INTENT_COMMAND: &str = "intent";
 pub const CRAFT_INTENT_COMMAND: &str = "craft-intent";
 pub const TX_COMMAND: &str = "tx";
-pub const CRAFT_DATA_TX_COMMAND: &str = "craft-tx-data";
+pub const TX_TRANSFER_COMMAND: &str = "transfer";
 
 // gossip args
 pub const BASE_ARG: &str = "base-dir";
@@ -44,8 +44,8 @@ pub const TX_TEMPLATE_ARG: &str = "tx-template";
 pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
 
 // client args
-pub const DATA_TX_ARG: &str = "data";
-pub const PATH_TX_ARG: &str = "path";
+pub const DATA_ARG: &str = "data";
+pub const CODE_ARG: &str = "code";
 pub const DATA_INTENT_ARG: &str = "data";
 pub const NODE_INTENT_ARG: &str = "node";
 pub const DRY_RUN_TX_ARG: &str = "dry-run";
@@ -97,7 +97,7 @@ fn add_client_commands(app: App) -> App {
     app.subcommand(client_tx_subcommand())
         .subcommand(client_intent_subcommand())
         .subcommand(client_craft_intent_subcommand())
-        .subcommand(client_craft_tx_data_subcommand())
+        .subcommand(client_tx_transfer_subcommand())
 }
 
 pub fn anoma_node_cli() -> App {
@@ -127,10 +127,10 @@ fn add_node_commands(app: App) -> App {
 
 fn client_tx_subcommand() -> App {
     App::new(TX_COMMAND)
-        .about("Send an transaction.")
+        .about("Send a transaction with arbitrary data and wasm code")
         .arg(
-            Arg::new(DATA_TX_ARG)
-                .long(DATA_TX_ARG)
+            Arg::new(DATA_ARG)
+                .long(DATA_ARG)
                 .takes_value(true)
                 .required(false)
                 .about(
@@ -139,8 +139,8 @@ fn client_tx_subcommand() -> App {
                 ),
         )
         .arg(
-            Arg::new(PATH_TX_ARG)
-                .long(PATH_TX_ARG)
+            Arg::new(CODE_ARG)
+                .long(CODE_ARG)
                 .takes_value(true)
                 .required(true)
                 .about("The path to the wasm code to be executed."),
@@ -215,53 +215,65 @@ fn client_craft_intent_subcommand() -> App {
                 .about("The amount buying."),
         )
         .arg(
-            Arg::new("file")
+            Arg::new(FILE_ARG)
                 .long(FILE_ARG)
                 .takes_value(true)
                 .required(false)
-                .default_value("intent_data")
-                .about("the output file"),
+                .default_value("intent.data")
+                .about("The output file"),
         )
 }
 
-fn client_craft_tx_data_subcommand() -> App {
-    App::new(CRAFT_DATA_TX_COMMAND)
-        .about("Craft a transaction data.")
+fn client_tx_transfer_subcommand() -> App {
+    App::new(TX_TRANSFER_COMMAND)
+        .about("Send a transfer transaction with a signature")
         .arg(
-            Arg::new("source")
+            Arg::new(CODE_ARG)
+                .long(CODE_ARG)
+                .takes_value(true)
+                .required(true)
+                .about(
+                    "The path to the transaction wasm code. It will be signed \
+                     together with the transaction data.",
+                ),
+        )
+        .arg(
+            Arg::new(SOURCE_ARG)
                 .long(SOURCE_ARG)
                 .takes_value(true)
                 .required(true)
-                .about("The source account address."),
+                .about(
+                    "The source account address. The source's key is used to \
+                     produce the signature.",
+                ),
         )
         .arg(
-            Arg::new("target")
+            Arg::new(TARGET_ARG)
                 .long(TARGET_ARG)
                 .takes_value(true)
                 .required(true)
                 .about("The target account address."),
         )
         .arg(
-            Arg::new("token")
+            Arg::new(TOKEN_ARG)
                 .long(TOKEN_ARG)
                 .takes_value(true)
                 .required(true)
                 .about("The transfer token."),
         )
         .arg(
-            Arg::new("amount")
+            Arg::new(AMOUNT_ARG)
                 .long(AMOUNT_ARG)
                 .takes_value(true)
                 .required(true)
-                .about("The amount transfering."),
+                .about("The amount to transfer in decimal."),
         )
         .arg(
-            Arg::new("file")
-                .long(FILE_ARG)
-                .takes_value(true)
+            Arg::new(DRY_RUN_TX_ARG)
+                .long(DRY_RUN_TX_ARG)
+                .takes_value(false)
                 .required(false)
-                .default_value("intent_data")
-                .about("the output file"),
+                .about("Dry run the transaction."),
         )
 }
 

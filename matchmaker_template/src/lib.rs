@@ -1,4 +1,3 @@
-use anoma_data_template::*;
 use anoma_vm_env::{matchmaker, matchmaker_prelude::*};
 
 matchmaker! {
@@ -38,5 +37,5 @@ matchmaker! {
 }
 
 fn decode_intent_data(bytes: Vec<u8>) -> Intent {
-    anoma_data_template::Intent::try_from_slice(&bytes[..]).unwrap()
+    Intent::try_from_slice(&bytes[..]).unwrap()
 }

@@ -1,5 +1,3 @@
-#[allow(unused_imports)]
-use anoma_data_template::*;
 use anoma_vm_env::{validity_predicate, vp_prelude::*};
 use std::collections::HashSet;
 

@@ -292,9 +292,9 @@ checksum = "1e81da0851ada1f3e9d4312c704aa4f8806f0f9d69faaf8df2f3464b4a9437c2"
 
 [[package]]
 name = "syn"
-version = "1.0.62"
+version = "1.0.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "123a78a3596b24fee53a6464ce52d8ecbf62241e6294c7e7fe12086cd161f512"
+checksum = "3fd9d1e9976102a03c542daa2eff1b43f9d72306342f3f8b3ed5fb8908195d6f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -343,6 +343,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tx_transfer"
+version = "0.1.0"
+dependencies = [
+ "anoma_vm_env",
+ "borsh",
+ "wee_alloc",
+]
+
+[[package]]
 name = "typenum"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -359,16 +368,6 @@ name = "version_check"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
-
-[[package]]
-name = "vp_template"
-version = "0.1.0"
-dependencies = [
- "anoma_shared",
- "anoma_vm_env",
- "borsh",
- "wee_alloc",
-]
 
 [[package]]
 name = "wee_alloc"

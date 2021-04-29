@@ -253,6 +253,7 @@ impl VpRunner {
         &self,
         vp_code: T,
         tx_data: Vec<u8>,
+        tx_code: Vec<u8>,
         addr: &Address,
         storage: &Storage,
         write_log: &WriteLog,
@@ -296,6 +297,7 @@ impl VpRunner {
             write_log,
             iterators,
             gas_meter,
+            tx_code,
             initial_memory,
         );
 
@@ -597,6 +599,7 @@ mod tests {
 
         let runner = VpRunner::new();
         let tx_data = vec![];
+        let tx_code = vec![];
         let raw_addr: RawAddress = FromStr::from_str("test").unwrap();
         let addr: Address = raw_addr.hash();
         let db_path = TempDir::new("anoma_test")
@@ -610,6 +613,7 @@ mod tests {
             .run(
                 vp_code,
                 tx_data,
+                tx_code,
                 &addr,
                 &storage,
                 &write_log,

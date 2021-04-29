@@ -1,4 +1,6 @@
 mod cli;
+mod tx;
+
 use color_eyre::eyre::Result;
 
 #[tokio::main]

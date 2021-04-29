@@ -1,5 +1,3 @@
-#[allow(unused_imports)]
-use anoma_data_template::*;
 use anoma_vm_env::{validity_predicate, vp_prelude::*};
 use std::collections::HashSet;
 
@@ -10,6 +8,6 @@ validity_predicate! {
             addr, keys_changed, tx_data, verifiers
         ));
 
-        token_vp(&addr, &keys_changed, &verifiers)
+        token::vp(&addr, &keys_changed, &verifiers)
     }
 }

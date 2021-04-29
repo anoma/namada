@@ -9,6 +9,7 @@ use std::sync::mpsc;
 use std::vec;
 
 use anoma::protobuf::types::Tx;
+use anoma::wallet;
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{
@@ -23,10 +24,6 @@ use self::storage::Storage;
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::vm::host_env::write_log::WriteLog;
 use crate::vm::{self, TxRunner, VpRunner};
-use anoma::wallet;
-
-static VP_TOKEN_WASM: &[u8] =
-    include_bytes!("../../../../../vps/vp_token/vp.wasm");
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -95,8 +92,17 @@ pub struct MerkleRoot(pub Vec<u8>);
 impl Shell {
     pub fn new(abci: AbciReceiver, db_path: impl AsRef<Path>) -> Self {
         let mut storage = Storage::new(db_path);
+
+        let token_vp = std::fs::read("vps/vp_token/vp.wasm")
+            .expect("cannot load token VP");
+        let user_vp =
+            std::fs::read("vps/vp_user/vp.wasm").expect("cannot load user VP");
+
         // TODO load initial accounts from genesis
+
+        // encoded: "a1gezy23f5xvcygdpsgfzr2d6yg4z5zse38qmyx3pexuunqvpnxdzrq33sxerrjvpegyursvpkg5m5x3fkg5mnzd6pggm5xd6yx5crywg8j8uth"
         let ada = Address::from_raw("ada");
+        // encoded: "a1g3prgv3nxgurzvfjxymnwsejgsmyvvjxxep5zd6xxve5xwz98qcnqwp5gguyv33ng5cngv3sxger2dp3xvm52v3jxcmnxsjrg5eyxwq69kz8p"
         let alan = Address::from_raw("alan");
         let xan = address::xan();
         let btc = address::btc();
@@ -105,13 +111,23 @@ impl Shell {
         let xan_vp = Key::validity_predicate(&xan).expect("expected VP key");
         let btc_vp = Key::validity_predicate(&btc).expect("expected VP key");
         storage
-            .write(&xan_vp, VP_TOKEN_WASM.to_vec())
+            .write(&xan_vp, token_vp.to_vec())
             .expect("Unable to write token VP");
         storage
-            .write(&btc_vp, VP_TOKEN_WASM.to_vec())
+            .write(&btc_vp, token_vp.to_vec())
             .expect("Unable to write token VP");
 
-        // default user with some tokens for testing
+        // default user VPs for testing
+        let ada_vp = Key::validity_predicate(&ada).expect("expected VP key");
+        let alan_vp = Key::validity_predicate(&alan).expect("expected VP key");
+        storage
+            .write(&ada_vp, user_vp.to_vec())
+            .expect("Unable to write user VP");
+        storage
+            .write(&alan_vp, user_vp.to_vec())
+            .expect("Unable to write user VP");
+
+        // default user's tokens for testing
         let ada_xan = token::balance_key(&xan, &ada);
         let ada_btc = token::balance_key(&btc, &ada);
         let alan_xan = token::balance_key(&xan, &alan);
@@ -367,6 +383,10 @@ impl Shell {
             log::debug!("all VPs accepted apply_tx storage modification");
             self.write_log.commit_tx();
         } else {
+            log::debug!(
+                "some VPs rejected apply_tx storage modification {:#?}",
+                result.vps.rejected_vps
+            );
             self.write_log.drop_tx();
         }
         Ok(result.gas_used)
@@ -520,6 +540,7 @@ fn check_vps(
             .run(
                 vp,
                 tx_data.clone(),
+                tx.code.clone(),
                 &addr,
                 storage,
                 write_log,
