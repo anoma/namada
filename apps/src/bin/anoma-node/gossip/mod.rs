@@ -12,14 +12,13 @@ use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc;
 
-use self::network_behaviour::IntentBroadcasterEvent;
 use self::p2p::P2P;
 use super::rpc;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Error gossip dispatcher {0}")]
-    P2pDispatcherError(String),
+    #[error("Error initializing p2p {0}")]
+    P2pInit(p2p::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -33,16 +32,16 @@ pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
         None
     };
 
-    let (gossip, network_event_receiver, matchmaker_event_receiver) =
+    let (gossip, matchmaker_event_receiver) =
         p2p::P2P::new(&config)
-            .expect("TEMPORARY: unable to build gossip layer");
+        .map_err(Error::P2pInit)
+        ?;
+
     dispatcher(
         gossip,
-        network_event_receiver,
         rpc_event_receiver,
         matchmaker_event_receiver,
     )
-    .map_err(|e| Error::P2pDispatcherError(e.to_string()))
 }
 
 // TODO The protobuf encoding logic does not play well with asynchronous.
@@ -76,7 +75,6 @@ pub async fn matchmaker_dispatcher(
 #[tokio::main]
 pub async fn dispatcher(
     mut gossip: P2P,
-    mut network_event_receiver: Receiver<IntentBroadcasterEvent>,
     rpc_event_receiver: Option<Receiver<rpc_message::Message>>,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
@@ -97,8 +95,6 @@ pub async fn dispatcher(
                         // terminating.
                         panic!("Unexpected event: {:?}", swarm_event);
                     },
-                    Some(event) = network_event_receiver.recv() =>
-                        gossip.handle_network_event(event).await
                 };
             }
         }
@@ -112,8 +108,6 @@ pub async fn dispatcher(
                         // terminating.
                         panic!("Unexpected event: {:?}", swarm_event);
                     },
-                    Some(event) = network_event_receiver.recv() =>
-                        gossip.handle_network_event(event).await
                 }
             }
         }

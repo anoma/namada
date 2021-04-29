@@ -2,9 +2,10 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use libp2p::gossipsub::subscription_filter::{
+use anoma::protobuf::types::{IntentBroadcasterMessage, Tx, intent_broadcaster_message};
+use libp2p::gossipsub::{MessageAcceptance, subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
-};
+}};
 use libp2p::gossipsub::{
     self, GossipsubEvent, GossipsubMessage, IdentTopic, IdentityTransform,
     MessageAuthenticity, MessageId, TopicHash, ValidationMode,
@@ -14,22 +15,24 @@ use libp2p::swarm::NetworkBehaviourEventProcess;
 use libp2p::{NetworkBehaviour, PeerId};
 use regex::Regex;
 use thiserror::Error;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::Receiver;
+
+use super::intent_broadcaster;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Failed to subscribe")]
+    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
+    #[error("Failed initializing the broadcaster intent app: {0}")]
+    GossipIntentError(intent_broadcaster::Error),
+}
+
+pub type Result<T> = std::result::Result<T,Error>;
 
 pub type Gossipsub = libp2p::gossipsub::Gossipsub<
     IdentityTransform,
     IntentBroadcasterSubscriptionFilter,
 >;
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Failed to send the message through the channel: {0}")]
-    FailedToSend(
-        tokio::sync::mpsc::error::TrySendError<IntentBroadcasterEvent>,
-    ),
-    #[error("Failed to subscribe")]
-    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
-}
 
 // TODO merge type of config and this one ? Maybe not a good idea
 pub enum IntentBroadcasterSubscriptionFilter {
@@ -88,13 +91,13 @@ impl TopicSubscriptionFilter for IntentBroadcasterSubscriptionFilter {
 
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
-    pub intent_broadcaster: libp2p::gossipsub::Gossipsub<
+    pub intent_broadcaster_gossip: libp2p::gossipsub::Gossipsub<
         IdentityTransform,
         IntentBroadcasterSubscriptionFilter,
     >,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
-    inject_intent_broadcaster_event: Sender<IntentBroadcasterEvent>,
+    pub intent_broadcaster_app: intent_broadcaster::GossipIntent,
 }
 
 pub fn message_id(message: &GossipsubMessage) -> MessageId {
@@ -107,7 +110,7 @@ impl Behaviour {
     pub fn new(
         key: Keypair,
         config: &anoma::config::IntentBroadcaster,
-    ) -> (Self, Receiver<IntentBroadcasterEvent>) {
+    ) -> Result<(Self, Option<Receiver<Tx>>)> {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")
@@ -138,7 +141,7 @@ impl Behaviour {
             }
         };
 
-        let intent_broadcaster: Gossipsub =
+        let intent_broadcaster_gossip: Gossipsub =
             Gossipsub::new_with_subscription_filter(
                 MessageAuthenticity::Signed(key),
                 gossipsub_config,
@@ -146,15 +149,17 @@ impl Behaviour {
             )
             .expect("Correct configuration");
 
-        let (inject_intent_broadcaster_event, rx) =
-            channel::<IntentBroadcasterEvent>(100);
-        (
+        let (intent_broadcaster_app, matchmaker_event_receiver) =
+            intent_broadcaster::GossipIntent::new(&config)
+                .map_err(Error::GossipIntentError)?;
+
+        Ok((
             Self {
-                intent_broadcaster,
-                inject_intent_broadcaster_event,
+                intent_broadcaster_gossip,
+                intent_broadcaster_app
             },
-            rx,
-        )
+            matchmaker_event_receiver
+        ))
     }
 }
 
@@ -162,15 +167,53 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     // Called when `gossipsub` produces an event.
     fn inject_event(&mut self, event: GossipsubEvent) {
         match event {
-            GossipsubEvent::Message { .. } => self
-                .inject_intent_broadcaster_event
-                .try_send(IntentBroadcasterEvent::from(event))
-                .map_err(Error::FailedToSend)
-                .unwrap_or_else(|e| {
-                    panic!("failed to send to the channel {}", e)
-                }),
+            GossipsubEvent::Message { message, propagation_source, message_id } =>{
+                let validity = match self.intent_broadcaster_app.parse_raw_msg(message.data) {
+            Ok(IntentBroadcasterMessage {
+                msg: Some(intent_broadcaster_message::Msg::Intent(intent)),
+            }) => match self.intent_broadcaster_app.apply_intent(intent) {
+                Ok(true) => MessageAcceptance::Accept,
+                Ok(false) => MessageAcceptance::Reject,
+                Err(e) => {
+                    log::error!(
+                        "Error while trying to apply an intent: {}, ignoring \
+                         it",
+                        e
+                    );
+                    MessageAcceptance::Ignore
+                }
+            },
+            Err(err @ intent_broadcaster::Error::DecodeError(..)) => {
+                log::info!(
+                    "message could not be decoded {:?}, rejecting it",
+                    err
+                );
+                MessageAcceptance::Reject
+            }
+            Ok(IntentBroadcasterMessage { msg: None }) => {
+                log::info!("Empty message, rejecting it");
+                MessageAcceptance::Reject
+            }
+            Err(err @ intent_broadcaster::Error::MatchmakerInit(..))
+            | Err(err @ intent_broadcaster::Error::Matchmaker(..)) => {
+                log::info!(
+                    "Error with the matchmaker {}, ignoring the message",
+                    err
+                );
+                MessageAcceptance::Ignore
+            }
+        };
+        self.intent_broadcaster_gossip
+            .report_message_validation_result(
+                &message_id,
+                &propagation_source,
+                validity,
+            )
+                .expect("Failed to validate the message ");
+        }
+                ,
             GossipsubEvent::Subscribed { peer_id: _, topic } => {
-                self.intent_broadcaster
+                self.intent_broadcaster_gossip
                     .subscribe(&IdentTopic::new(topic.into_string()))
                     .map_err(Error::FailedSubscribtion)
                     .unwrap_or_else(|e| {

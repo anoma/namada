@@ -59,7 +59,7 @@ impl Matchmaker {
     }
 
     // returns true if no filter is define for that matchmaker
-    async fn apply_filter(&self, intent: &Intent) -> Result<bool> {
+    fn apply_filter(&self, intent: &Intent) -> Result<bool> {
         self.filter
             .as_ref()
             .map(|f| f.validate(intent))
@@ -70,8 +70,8 @@ impl Matchmaker {
 
     // add the intent to the matchmaker mempool and tries to find a match for
     // that intent
-    pub async fn try_match_intent(&mut self, intent: &Intent) -> Result<bool> {
-        if self.apply_filter(intent).await? {
+    pub fn try_match_intent(&mut self, intent: &Intent) -> Result<bool> {
+        if self.apply_filter(intent)? {
             self.mempool
                 .put(intent.clone())
                 .map_err(Error::MempoolFailed)?;

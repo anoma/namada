@@ -43,18 +43,14 @@ impl GossipIntent {
         Ok((Self { matchmaker }, matchmaker_event_receiver))
     }
 
-    async fn apply_matchmaker(
+    fn apply_matchmaker(
         &mut self,
         intent: Intent,
     ) -> Option<Result<bool>> {
-        // Clippy is not fully aware of async function and async closure is an
-        // unstable feature
-        #[allow(clippy::manual_map)]
         if let Some(matchmaker) = &mut self.matchmaker {
             Some(
                 matchmaker
                     .try_match_intent(&intent)
-                    .await
                     .map_err(Error::Matchmaker),
             )
         } else {
@@ -62,8 +58,8 @@ impl GossipIntent {
         }
     }
 
-    pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
-        self.apply_matchmaker(intent).await;
+    pub fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
+        self.apply_matchmaker(intent);
         Ok(true)
     }
 
