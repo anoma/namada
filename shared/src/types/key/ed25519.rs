@@ -109,6 +109,34 @@ impl SignedTxData {
     }
 }
 
+/// A generic signed data wrapper for Borsh encode-able data.
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct Signed<T: BorshSerialize + BorshDeserialize> {
+    data: T,
+    sig: Signature,
+}
+
+impl<T> Signed<T>
+where
+    T: BorshSerialize + BorshDeserialize,
+{
+    pub fn new(keypair: &Keypair, data: T) -> Self {
+        let to_sign = data
+            .try_to_vec()
+            .expect("Encoding data for signing shouldn't fail");
+        let sig = sign(keypair, &to_sign);
+        Self { data, sig }
+    }
+
+    pub fn verify(&self, pk: &PublicKey) -> Result<(), VerifySigError> {
+        let bytes = self
+            .data
+            .try_to_vec()
+            .expect("Encoding data for verifying signature shouldn't fail");
+        verify_signature_raw(pk, &bytes, &self.sig)
+    }
+}
+
 impl BorshDeserialize for PublicKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         ed25519_dalek::PublicKey::from_bytes(buf)

@@ -9,9 +9,9 @@ transaction! {
         // make sure that the matchmaker has to validate this tx
         insert_verifier("matchmaker");
 
-        let token::Transfer {source, target, token, amount} = transfers.transfer_a;
+        let token::Transfer {source, target, token, amount} = transfers.transfer_1;
         token::transfer(&source, &target, &token, amount);
-        let token::Transfer {source, target, token, amount} = transfers.transfer_b;
+        let token::Transfer {source, target, token, amount} = transfers.transfer_2;
         token::transfer(&source, &target, &token, amount)
     }
 }
