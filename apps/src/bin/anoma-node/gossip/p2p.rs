@@ -52,8 +52,9 @@ impl P2P {
                     .intent_broadcaster_gossip
                     .subscribe(&IdentTopic::new(topic))
                     .map_err(Error::FailedSubscribtion)
-                    // it returns bool signifying if it was already subscribed. discard
-                    // because it can't be false as the config.topics is a hash set
+                    // it returns bool signifying if it was already subscribed.
+                    // discard because it can't be false as
+                    // the config.topics is a hash set
                     .map(|_| ())
             })
             .expect("failed to subscribe to topic");
