@@ -1,6 +1,7 @@
 mod intent_broadcaster;
 mod network_behaviour;
 mod p2p;
+mod rpc;
 
 use std::thread;
 
@@ -13,7 +14,6 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 
 use self::p2p::P2P;
-use super::rpc;
 
 #[derive(Error, Debug)]
 pub enum Error {
