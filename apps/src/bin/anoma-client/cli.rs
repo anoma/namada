@@ -1,12 +1,9 @@
 use std::fs::File;
 use std::io::Write;
 
-use crate::tx;
 use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::services::{rpc_message, RpcMessage};
-use anoma::protobuf::types;
-use anoma::protobuf::types::Tx;
 use anoma::protobuf::{services, types};
 use anoma_shared::types::intent::Intent;
 use anoma_shared::types::{token, Address};
@@ -14,6 +11,8 @@ use anoma_shared::types::{token, Address};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use eyre::Context;
+
+use crate::tx;
 
 pub async fn main() -> Result<()> {
     let mut app = cli::anoma_client_cli();
