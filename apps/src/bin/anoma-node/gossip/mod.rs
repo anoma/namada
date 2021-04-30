@@ -33,15 +33,9 @@ pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
     };
 
     let (gossip, matchmaker_event_receiver) =
-        p2p::P2P::new(&config)
-        .map_err(Error::P2pInit)
-        ?;
+        p2p::P2P::new(&config).map_err(Error::P2pInit)?;
 
-    dispatcher(
-        gossip,
-        rpc_event_receiver,
-        matchmaker_event_receiver,
-    )
+    dispatcher(gossip, rpc_event_receiver, matchmaker_event_receiver)
 }
 
 // TODO The protobuf encoding logic does not play well with asynchronous.

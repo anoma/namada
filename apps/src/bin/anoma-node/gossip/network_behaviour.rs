@@ -27,7 +27,7 @@ pub enum Error {
     GossipIntentError(intent_broadcaster::Error),
 }
 
-pub type Result<T> = std::result::Result<T,Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub type Gossipsub = libp2p::gossipsub::Gossipsub<
     IdentityTransform,
@@ -156,9 +156,9 @@ impl Behaviour {
         Ok((
             Self {
                 intent_broadcaster_gossip,
-                intent_broadcaster_app
+                intent_broadcaster_app,
             },
-            matchmaker_event_receiver
+            matchmaker_event_receiver,
         ))
     }
 }

@@ -19,7 +19,7 @@ pub enum Error {
     #[error("Failed to subscribe")]
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
     #[error("Failed to subscribe")]
-    Behavior(super::network_behaviour::Error)
+    Behavior(super::network_behaviour::Error),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -30,8 +30,7 @@ pub struct P2P {
 impl P2P {
     pub fn new(
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<Receiver<Tx>>)>
-    {
+    ) -> Result<(Self, Option<Receiver<Tx>>)> {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
@@ -39,12 +38,11 @@ impl P2P {
         let transport = libp2p::build_development_transport(local_key.clone())
             .map_err(Error::TransportError)?;
 
-        let (gossipsub, matchmaker_event_receiver) = Behaviour::new(local_key, config).map_err(Error::Behavior)?;
+        let (gossipsub, matchmaker_event_receiver) =
+            Behaviour::new(local_key, config).map_err(Error::Behavior)?;
         let swarm = Swarm::new(transport, gossipsub, local_peer_id);
 
-        let mut p2p = Self {
-            swarm,
-        };
+        let mut p2p = Self { swarm };
 
         config
             .topics
@@ -89,13 +87,16 @@ impl P2P {
                     topic,
                 },
             ) => {
-                if self.swarm.intent_broadcaster_app
+                if self
+                    .swarm
+                    .intent_broadcaster_app
                     .apply_intent(intent.clone())
                     .expect("failed to apply intent")
                 {
                     let mut intent_bytes = vec![];
                     intent.encode(&mut intent_bytes).unwrap();
-                    let _message_id = self.swarm
+                    let _message_id = self
+                        .swarm
                         .intent_broadcaster_gossip
                         .publish(IdentTopic::new(topic), intent_bytes);
                 }

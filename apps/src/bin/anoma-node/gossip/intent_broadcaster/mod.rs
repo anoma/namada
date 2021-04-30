@@ -9,7 +9,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 // TODO split Error and Result type in two, one for Result/Error that can only
-// happens localy and the other that can happens locally and in the network
+// happens locally and the other that can happens locally and in the network
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error while decoding intent: {0}")]
@@ -43,10 +43,7 @@ impl GossipIntent {
         Ok((Self { matchmaker }, matchmaker_event_receiver))
     }
 
-    fn apply_matchmaker(
-        &mut self,
-        intent: Intent,
-    ) -> Option<Result<bool>> {
+    fn apply_matchmaker(&mut self, intent: Intent) -> Option<Result<bool>> {
         if let Some(matchmaker) = &mut self.matchmaker {
             Some(
                 matchmaker
