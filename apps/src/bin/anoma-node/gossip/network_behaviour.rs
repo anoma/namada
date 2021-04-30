@@ -2,13 +2,16 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use anoma::protobuf::types::{IntentBroadcasterMessage, Tx, intent_broadcaster_message};
-use libp2p::gossipsub::{MessageAcceptance, subscription_filter::{
+use anoma::protobuf::types::{
+    intent_broadcaster_message, IntentBroadcasterMessage, Tx,
+};
+use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
-}};
+};
 use libp2p::gossipsub::{
     self, GossipsubEvent, GossipsubMessage, IdentTopic, IdentityTransform,
-    MessageAuthenticity, MessageId, TopicHash, ValidationMode,
+    MessageAcceptance, MessageAuthenticity, MessageId, TopicHash,
+    ValidationMode,
 };
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviourEventProcess;
@@ -161,57 +164,76 @@ impl Behaviour {
             matchmaker_event_receiver,
         ))
     }
-}
 
-impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
-    // Called when `gossipsub` produces an event.
-    fn inject_event(&mut self, event: GossipsubEvent) {
-        match event {
-            GossipsubEvent::Message { message, propagation_source, message_id } =>{
-                let validity = match self.intent_broadcaster_app.parse_raw_msg(message.data) {
+    fn handle_intent(
+        &mut self,
+        intent: anoma::protobuf::types::Intent,
+    ) -> MessageAcceptance {
+        match self.intent_broadcaster_app.apply_intent(intent) {
+            Ok(true) => MessageAcceptance::Accept,
+            Ok(false) => MessageAcceptance::Reject,
+            Err(e) => {
+                log::error!("Error while trying to apply an intent: {}", e);
+                match e {
+                    intent_broadcaster::Error::DecodeError(_) => {
+                        panic!("can't happens, because intent already decoded")
+                    }
+                    intent_broadcaster::Error::MatchmakerInit(err)
+                    | intent_broadcaster::Error::Matchmaker(err) => {
+                        log::info!(
+                            "error while running the matchmaker: {:?}",
+                            err
+                        );
+                        MessageAcceptance::Ignore
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_raw_intent(
+        &mut self,
+        data: impl AsRef<[u8]>,
+    ) -> MessageAcceptance {
+        match self.intent_broadcaster_app.parse_raw_msg(data) {
             Ok(IntentBroadcasterMessage {
                 msg: Some(intent_broadcaster_message::Msg::Intent(intent)),
-            }) => match self.intent_broadcaster_app.apply_intent(intent) {
-                Ok(true) => MessageAcceptance::Accept,
-                Ok(false) => MessageAcceptance::Reject,
-                Err(e) => {
-                    log::error!(
-                        "Error while trying to apply an intent: {}, ignoring \
-                         it",
-                        e
-                    );
-                    MessageAcceptance::Ignore
-                }
-            },
-            Err(err @ intent_broadcaster::Error::DecodeError(..)) => {
-                log::info!(
-                    "message could not be decoded {:?}, rejecting it",
-                    err
-                );
-                MessageAcceptance::Reject
-            }
+            }) => self.handle_intent(intent),
             Ok(IntentBroadcasterMessage { msg: None }) => {
                 log::info!("Empty message, rejecting it");
                 MessageAcceptance::Reject
             }
-            Err(err @ intent_broadcaster::Error::MatchmakerInit(..))
-            | Err(err @ intent_broadcaster::Error::Matchmaker(..)) => {
-                log::info!(
-                    "Error with the matchmaker {}, ignoring the message",
-                    err
-                );
-                MessageAcceptance::Ignore
-            }
-        };
-        self.intent_broadcaster_gossip
-            .report_message_validation_result(
-                &message_id,
-                &propagation_source,
-                validity,
-            )
-                .expect("Failed to validate the message ");
+            Err(err) => match err {
+                intent_broadcaster::Error::DecodeError(..) => {
+                    log::info!("error while decoding the intent: {:?}", err);
+                    MessageAcceptance::Reject
+                }
+                intent_broadcaster::Error::MatchmakerInit(..)
+                | intent_broadcaster::Error::Matchmaker(..) => {
+                    panic!("can't happens, because intent already decoded")
+                }
+            },
         }
-                ,
+    }
+}
+
+impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
+    fn inject_event(&mut self, event: GossipsubEvent) {
+        match event {
+            GossipsubEvent::Message {
+                message,
+                propagation_source,
+                message_id,
+            } => {
+                let validity = self.handle_raw_intent(message.data);
+                self.intent_broadcaster_gossip
+                    .report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        validity,
+                    )
+                    .expect("Failed to validate the message ");
+            }
             GossipsubEvent::Subscribed { peer_id: _, topic } => {
                 self.intent_broadcaster_gossip
                     .subscribe(&IdentTopic::new(topic.into_string()))
