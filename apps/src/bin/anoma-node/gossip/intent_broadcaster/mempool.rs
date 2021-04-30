@@ -28,21 +28,15 @@ impl IntentId {
 }
 
 #[derive(Debug)]
-pub struct Mempool {
-    intents: HashMap<IntentId, Intent>,
-}
+pub struct IntentMempool(HashMap<IntentId, Intent>);
 
-impl Mempool {
+impl IntentMempool {
     pub fn new() -> Self {
-        Self {
-            intents: HashMap::default(),
-        }
+        Self(HashMap::default())
     }
 
     pub fn put(&mut self, intent: Intent) -> Result<bool> {
-        let already_exists_intent =
-            self.intents.insert(IntentId::new(&intent), intent);
-        Ok(already_exists_intent.is_none())
+        Ok(self.0.insert(IntentId::new(&intent), intent).is_none())
     }
 
     // TODO This is inefficient.
@@ -52,7 +46,7 @@ impl Mempool {
         f: F,
     ) -> bool {
         let id1: &IntentId = &IntentId::new(intent1);
-        let res = self.intents.iter().find(|(id2, intent2)| {
+        let res = self.0.iter().find(|(id2, intent2)| {
             if &id1 == id2 {
                 false
             } else {

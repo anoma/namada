@@ -1,4 +1,33 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IntentMesage {
+    #[prost(message, optional, tag = "1")]
+    pub intent: ::core::option::Option<super::types::Intent>,
+    #[prost(string, tag = "2")]
+    pub topic: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubscribeTopicMessage {
+    #[prost(string, tag = "2")]
+    pub topic: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RpcMessage {
+    #[prost(oneof = "rpc_message::Message", tags = "1, 2, 3")]
+    pub message: ::core::option::Option<rpc_message::Message>,
+}
+/// Nested message and enum types in `RpcMessage`.
+pub mod rpc_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Message {
+        #[prost(message, tag = "1")]
+        Intent(super::IntentMesage),
+        #[prost(message, tag = "2")]
+        Topic(super::SubscribeTopicMessage),
+        #[prost(message, tag = "3")]
+        Dkg(super::super::types::Dkg),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RpcResponse {
     #[prost(string, tag = "1")]
     pub result: ::prost::alloc::string::String,
@@ -44,7 +73,7 @@ pub mod rpc_service_client {
 
         pub async fn send_message(
             &mut self,
-            request: impl tonic::IntoRequest<super::super::types::Message>,
+            request: impl tonic::IntoRequest<super::RpcMessage>,
         ) -> Result<tonic::Response<super::RpcResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
@@ -83,7 +112,7 @@ pub mod rpc_service_server {
     pub trait RpcService: Send + Sync + 'static {
         async fn send_message(
             &self,
-            request: tonic::Request<super::super::types::Message>,
+            request: tonic::Request<super::RpcMessage>,
         ) -> Result<tonic::Response<super::RpcResponse>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -131,9 +160,8 @@ pub mod rpc_service_server {
                     #[allow(non_camel_case_types)]
                     struct SendMessageSvc<T: RpcService>(pub Arc<T>);
                     impl<T: RpcService>
-                        tonic::server::UnaryService<
-                            super::super::types::Message,
-                        > for SendMessageSvc<T>
+                        tonic::server::UnaryService<super::RpcMessage>
+                        for SendMessageSvc<T>
                     {
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
@@ -143,9 +171,7 @@ pub mod rpc_service_server {
 
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::super::types::Message,
-                            >,
+                            request: tonic::Request<super::RpcMessage>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {

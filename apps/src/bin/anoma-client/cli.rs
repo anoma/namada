@@ -4,9 +4,13 @@ use std::io::Write;
 use crate::tx;
 use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
+use anoma::protobuf::services::{rpc_message, RpcMessage};
 use anoma::protobuf::types;
+use anoma::protobuf::types::Tx;
+use anoma::protobuf::{services, types};
 use anoma_shared::types::intent::Intent;
 use anoma_shared::types::{token, Address};
+// use anoma_data_template;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use eyre::Context;
@@ -38,7 +42,15 @@ pub async fn main() -> Result<()> {
         Some((cli::INTENT_COMMAND, args)) => {
             let node = cli::parse_string_req(args, cli::NODE_INTENT_ARG);
             let data = cli::parse_string_req(args, cli::DATA_INTENT_ARG);
-            gossip_intent(node, data).await;
+            let topic = cli::parse_string_req(args, cli::TOPIC_ARG);
+            gossip_intent(node, data, topic).await;
+            Ok(())
+        }
+        Some((cli::SUBSCRIBE_TOPIC_COMMAND, args)) => {
+            // here unwrap is safe as the arguments are required
+            let node = cli::parse_string_req(args, cli::NODE_INTENT_ARG);
+            let topic = cli::parse_string_req(args, cli::TOPIC_ARG);
+            subscribe_topic(node, topic).await;
             Ok(())
         }
         Some((cli::CRAFT_INTENT_COMMAND, args)) => {
@@ -62,20 +74,38 @@ pub async fn main() -> Result<()> {
     }
 }
 
-async fn gossip_intent(node_addr: String, data_path: String) {
+async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let data = std::fs::read(data_path).expect("data file IO error");
     let intent = types::Intent {
         data,
         timestamp: Some(std::time::SystemTime::now().into()),
     };
-    let intent_message = types::IntentMessage {
-        intent: Some(intent),
+    let message = RpcMessage {
+        message: Some(rpc_message::Message::Intent(services::IntentMesage {
+            intent: Some(intent),
+            topic,
+        })),
     };
-    let message = types::Message {
-        message: Some(types::message::Message::IntentMessage(intent_message)),
+    let response = client
+        .send_message(message)
+        .await
+        .expect("failed to send message and/or receive rpc response");
+    println!("{:#?}", response);
+}
+
+async fn subscribe_topic(node_addr: String, topic: String) {
+    let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
+    let message = RpcMessage {
+        message: Some(rpc_message::Message::Topic(
+            services::SubscribeTopicMessage { topic },
+        )),
     };
-    let _response = client.send_message(message).await.unwrap();
+    let response = client
+        .send_message(message)
+        .await
+        .expect("failed to send message and/or receive rpc response");
+    println!("{:#?}", response);
 }
 
 fn craft_intent(

@@ -24,6 +24,7 @@ const TX_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 const MATCHMAKER_MEMORY_INIT_PAGES: u32 = 400; // 12.8 MiB
+const FILTER_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 
 /// Prepare memory for instantiating a transaction module
 pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
@@ -53,6 +54,13 @@ pub fn prepare_matchmaker_memory(
 ) -> Result<wasmer::Memory> {
     let mem_type =
         wasmer::MemoryType::new(MATCHMAKER_MEMORY_INIT_PAGES, None, false);
+    Memory::new(store, mem_type).map_err(Error::InitMemoryError)
+}
+
+/// Prepare memory for instantiating a filter module
+pub fn prepare_filter_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
+    let mem_type =
+        wasmer::MemoryType::new(FILTER_MEMORY_INIT_PAGES, None, false);
     Memory::new(store, mem_type).map_err(Error::InitMemoryError)
 }
 
@@ -164,6 +172,27 @@ pub fn write_matchmaker_inputs(
         intent_data_1_len,
         intent_data_2_ptr,
         intent_data_2_len,
+    })
+}
+
+pub struct FilterCallInput {
+    pub intent_data_ptr: u64,
+    pub intent_data_len: u64,
+}
+
+pub fn write_filter_inputs(
+    memory: &wasmer::Memory,
+    intent_data: impl AsRef<[u8]>,
+) -> Result<FilterCallInput> {
+    let intent_data_ptr = 0;
+    let intent_data_len = intent_data.as_ref().len() as _;
+
+    log::info!("write_data_inputs of len {}", intent_data_len);
+    write_memory_bytes(memory, intent_data_ptr, intent_data)?;
+
+    Ok(FilterCallInput {
+        intent_data_ptr,
+        intent_data_len,
     })
 }
 

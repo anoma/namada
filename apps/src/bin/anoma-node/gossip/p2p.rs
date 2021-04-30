@@ -1,5 +1,7 @@
-use anoma::protobuf::types::{IntentMessage, Tx};
-use anoma::types::Topic;
+use anoma::protobuf::services::rpc_message;
+use anoma::protobuf::types::{
+    intent_broadcaster_message, IntentBroadcasterMessage, Tx,
+};
 use libp2p::gossipsub::{IdentTopic, MessageAcceptance};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -8,10 +10,8 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::dkg::Dkg as DKG;
-use super::gossip_intent::{self, GossipIntent};
-use super::network_behaviour::Behaviour;
-use super::types::NetworkEvent;
+use super::intent_broadcaster;
+use super::network_behaviour::{Behaviour, IntentBroadcasterEvent};
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -19,19 +19,23 @@ pub type Swarm = libp2p::Swarm<Behaviour>;
 pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),
+    #[error("Failed initializing the broadcaster intent app: {0}")]
+    GossipIntentError(intent_broadcaster::Error),
+    #[error("Failed to subscribe")]
+    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
 }
 type Result<T> = std::result::Result<T, Error>;
 
 pub struct P2P {
     pub swarm: Swarm,
-    pub gossip_intent: Option<GossipIntent>,
-    pub dkg: Option<DKG>,
+    pub intent_process: intent_broadcaster::GossipIntent,
 }
 
 impl P2P {
     pub fn new(
-        config: &anoma::config::Gossip,
-    ) -> Result<(Self, Receiver<NetworkEvent>, Option<Receiver<Tx>>)> {
+        config: &anoma::config::IntentBroadcaster,
+    ) -> Result<(Self, Receiver<IntentBroadcasterEvent>, Option<Receiver<Tx>>)>
+    {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
@@ -39,39 +43,38 @@ impl P2P {
         let transport = libp2p::build_development_transport(local_key.clone())
             .map_err(Error::TransportError)?;
 
-        let (gossipsub, network_event_receiver) = Behaviour::new(local_key);
+        let (gossipsub, network_event_receiver) =
+            Behaviour::new(local_key, config);
         let swarm = Swarm::new(transport, gossipsub, local_peer_id);
 
-        let (gossip_intent, matchmaker_event_receiver) =
-            if let Some(gossip_intent_conf) = &config.intent_gossip {
-                let (gossip_intent, matchmaker_event_receiver) =
-                    GossipIntent::new(&gossip_intent_conf);
-                (Some(gossip_intent), matchmaker_event_receiver)
-            } else {
-                (None, None)
-            };
-
-        let dkg = if config.topics.contains(&Topic::Dkg) {
-            Some(DKG::new())
-        } else {
-            None
-        };
+        let (intent_process, matchmaker_event_receiver) =
+            intent_broadcaster::GossipIntent::new(&config)
+                .map_err(Error::GossipIntentError)?;
         let mut p2p = Self {
             swarm,
-            gossip_intent,
-            dkg,
-            // ledger,
+            intent_process,
         };
         p2p.prepare(&config).expect("gossip prepraration failed");
 
         Ok((p2p, network_event_receiver, matchmaker_event_receiver))
     }
 
-    pub fn prepare(&mut self, config: &anoma::config::Gossip) -> Result<()> {
-        for topic in &config.topics {
-            let topic = IdentTopic::new(topic.to_string());
-            self.swarm.gossipsub.subscribe(&topic).unwrap();
-        }
+    pub fn prepare(
+        &mut self,
+        config: &anoma::config::IntentBroadcaster,
+    ) -> Result<()> {
+        config
+            .topics
+            .iter()
+            .try_for_each(|topic| {
+                self.swarm
+                    .intent_broadcaster
+                    .subscribe(&IdentTopic::new(topic))
+                    .map_err(Error::FailedSubscribtion)
+                    // it returns bool of if it were already subscribed
+                    .map(|_| ())
+            })
+            .expect("failed to subscribe to topic");
 
         // Listen on given address
         Swarm::listen_on(&mut self.swarm, config.address.clone()).unwrap();
@@ -88,27 +91,54 @@ impl P2P {
         Ok(())
     }
 
-    pub async fn handle_rpc_event(&mut self, event: IntentMessage) {
-        if let (
-            IntentMessage {
-                intent: Some(intent),
-            },
-            Some(gossip_intent),
-        ) = (event, &mut self.gossip_intent)
-        {
-            if gossip_intent
-                .apply_intent(intent.clone())
-                .await
-                .expect("failed to apply intent")
-            {
-                let mut tix_bytes = vec![];
-                intent.encode(&mut tix_bytes).unwrap();
-                let _message_id = self.swarm.gossipsub.publish(
-                    IdentTopic::new(Topic::Intent.to_string()),
-                    tix_bytes,
-                );
+    pub async fn handle_rpc_event(&mut self, event: rpc_message::Message) {
+        let intent_process = &mut self.intent_process;
+        match event {
+            rpc_message::Message::Intent(
+                anoma::protobuf::services::IntentMesage {
+                    intent: None,
+                    topic,
+                },
+            ) => {
+                log::error!("rpc intent command for topic {} is empty", topic)
             }
-        }
+            rpc_message::Message::Intent(
+                anoma::protobuf::services::IntentMesage {
+                    intent: Some(intent),
+                    topic,
+                },
+            ) => {
+                if intent_process
+                    .apply_intent(intent.clone())
+                    .await
+                    .expect("failed to apply intent")
+                {
+                    let mut intent_bytes = vec![];
+                    intent.encode(&mut intent_bytes).unwrap();
+                    let _message_id = self
+                        .swarm
+                        .intent_broadcaster
+                        .publish(IdentTopic::new(topic), intent_bytes);
+                }
+            }
+
+            rpc_message::Message::Dkg(_dkg_msg) => {
+                todo!()
+            }
+            rpc_message::Message::Topic(
+                anoma::protobuf::services::SubscribeTopicMessage {
+                    topic: topic_str,
+                },
+            ) => {
+                let topic = IdentTopic::new(&topic_str);
+                self.swarm
+                    .intent_broadcaster
+                    .subscribe(&topic)
+                    .unwrap_or_else(|_| {
+                        panic!("failed to subscribe to topic {:?}", topic)
+                    });
+            }
+        };
     }
 
     // pub async fn handle_matchmaker_event(&mut self, event: Option<Tx>) {
@@ -125,44 +155,59 @@ impl P2P {
     // _response = client.broadcast_tx_commit(tx_bytes.into()).await;     }
     // }
 
-    pub async fn handle_network_event(&mut self, event: NetworkEvent) {
-        match event {
-            NetworkEvent::Message(msg) if msg.topic == Topic::Intent => {
-                if let Some(gossip_intent) = &mut self.gossip_intent {
-                    let validity =
-                        match gossip_intent.apply_raw_intent(&msg.data).await {
-                            gossip_intent::Result::Ok(true) => {
-                                MessageAcceptance::Accept
-                            }
-                            gossip_intent::Result::Ok(false) => {
-                                MessageAcceptance::Ignore
-                            }
-                            gossip_intent::Result::Err(
-                                gossip_intent::Error::DecodeError(..),
-                            ) => MessageAcceptance::Reject,
-                        };
-                    self.swarm
-                        .gossipsub
-                        .report_message_validation_result(
-                            &msg.message_id,
-                            &msg.peer,
-                            validity,
-                        )
-                        .expect("Failed to validate the message ");
-                } else {
-                    self.swarm
-                        .gossipsub
-                        .report_message_validation_result(
-                            &msg.message_id,
-                            &msg.peer,
-                            MessageAcceptance::Ignore,
-                        )
-                        .expect("Failed to validate the message ");
+    pub async fn handle_network_event(
+        &mut self,
+        IntentBroadcasterEvent {
+            propagation_source,
+            message_id,
+            source: _,
+            data,
+            topic: _,
+        }: IntentBroadcasterEvent,
+    ) {
+        let intent_process = &mut self.intent_process;
+        let validity = match intent_process.parse_raw_msg(data) {
+            Ok(IntentBroadcasterMessage {
+                msg: Some(intent_broadcaster_message::Msg::Intent(intent)),
+            }) => match intent_process.apply_intent(intent).await {
+                Ok(true) => MessageAcceptance::Accept,
+                Ok(false) => MessageAcceptance::Reject,
+                Err(e) => {
+                    log::error!(
+                        "Error while trying to apply an intent: {}, ignoring \
+                         it",
+                        e
+                    );
+                    MessageAcceptance::Ignore
                 }
+            },
+            Err(err @ intent_broadcaster::Error::DecodeError(..)) => {
+                log::info!(
+                    "message could not be decoded {:?}, rejecting it",
+                    err
+                );
+                MessageAcceptance::Reject
             }
-            NetworkEvent::Message(msg) => {
-                panic!("{:?} not implemented", msg.topic)
+            Ok(IntentBroadcasterMessage { msg: None }) => {
+                log::info!("Empty message, rejecting it");
+                MessageAcceptance::Reject
             }
-        }
+            Err(err @ intent_broadcaster::Error::MatchmakerInit(..))
+            | Err(err @ intent_broadcaster::Error::Matchmaker(..)) => {
+                log::info!(
+                    "Error with the matchmaker {}, ignoring the message",
+                    err
+                );
+                MessageAcceptance::Ignore
+            }
+        };
+        self.swarm
+            .intent_broadcaster
+            .report_message_validation_result(
+                &message_id,
+                &propagation_source,
+                validity,
+            )
+            .expect("Failed to validate the message ");
     }
 }
