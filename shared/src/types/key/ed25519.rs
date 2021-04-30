@@ -9,7 +9,6 @@ use thiserror::Error;
 
 use crate::types::{Address, DbKeySeg, Key, KeySeg};
 
-const PUBLIC_KEY_LEN: usize = ed25519_dalek::PUBLIC_KEY_LENGTH;
 const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -112,8 +111,8 @@ impl SignedTxData {
 /// A generic signed data wrapper for Borsh encode-able data.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Signed<T: BorshSerialize + BorshDeserialize> {
-    data: T,
-    sig: Signature,
+    pub data: T,
+    pub sig: Signature,
 }
 
 impl<T> Signed<T>
@@ -139,12 +138,16 @@ where
 
 impl BorshDeserialize for PublicKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        ed25519_dalek::PublicKey::from_bytes(buf)
-            .map(|pk| {
-                // we have to clear the consumed bytes
-                *buf = &buf[PUBLIC_KEY_LEN..];
-                PublicKey(pk)
-            })
+        // deserialize the bytes first
+        let bytes: Vec<u8> =
+            BorshDeserialize::deserialize(buf).map_err(|e| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Error decoding ed25519 public key: {}", e),
+                )
+            })?;
+        ed25519_dalek::PublicKey::from_bytes(&bytes)
+            .map(PublicKey)
             .map_err(|e| {
                 std::io::Error::new(
                     ErrorKind::InvalidInput,
@@ -156,27 +159,46 @@ impl BorshDeserialize for PublicKey {
 
 impl BorshSerialize for PublicKey {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        writer.write_all(self.0.as_bytes())
+        // We need to turn the signature to bytes first..
+        let vec = self.0.as_bytes().to_vec();
+        // .. and then encode them with Borsh
+        let bytes = vec
+            .try_to_vec()
+            .expect("Public key bytes encoding shouldn't fail");
+        writer.write_all(&bytes)
     }
 }
 
 impl BorshDeserialize for Signature {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let bytes: [u8; SIGNATURE_LEN] = (*buf).try_into().map_err(|e| {
+        // deserialize the bytes first
+        let bytes: Vec<u8> =
+            BorshDeserialize::deserialize(buf).map_err(|e| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Error decoding ed25519 signature: {}", e),
+                )
+            })?;
+        // convert them to an expected size array
+        let bytes: [u8; SIGNATURE_LEN] = bytes[..].try_into().map_err(|e| {
             std::io::Error::new(
                 ErrorKind::InvalidInput,
                 format!("Error decoding ed25519 signature: {}", e),
             )
         })?;
-        // we have to clear the consumed bytes
-        *buf = &buf[SIGNATURE_LEN..];
         Ok(Signature(ed25519_dalek::Signature::new(bytes)))
     }
 }
 
 impl BorshSerialize for Signature {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        writer.write_all(&self.0.to_bytes())
+        // We need to turn the signature to bytes first..
+        let vec = self.0.to_bytes().to_vec();
+        // .. and then encode them with Borsh
+        let bytes = vec
+            .try_to_vec()
+            .expect("Signature bytes encoding shouldn't fail");
+        writer.write_all(&bytes)
     }
 }
 

@@ -1,11 +1,12 @@
 use std::fs::File;
 use std::io::Write;
 
-use anoma::cli;
 use anoma::protobuf::services::rpc_service_client::RpcServiceClient;
 use anoma::protobuf::services::{rpc_message, RpcMessage};
 use anoma::protobuf::{services, types};
+use anoma::{cli, wallet};
 use anoma_shared::types::intent::Intent;
+use anoma_shared::types::key::ed25519::Signed;
 use anoma_shared::types::{token, Address};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
@@ -114,20 +115,23 @@ fn craft_intent(
     amount_buy: u64,
     file: String,
 ) {
+    let source_keypair = wallet::key_of(&addr);
     let addr = Address::from_raw(addr);
     let token_sell = Address::from_raw(token_sell);
     let amount_sell = token::Amount::from(amount_sell);
     let token_buy = Address::from_raw(token_buy);
     let amount_buy = token::Amount::from(amount_buy);
 
-    let data = Intent {
+    let intent = Intent {
         addr,
         token_sell,
         amount_sell,
         token_buy,
         amount_buy,
     };
-    let data_bytes = data.try_to_vec().unwrap();
+    let signed: Signed<Intent> = Signed::new(&source_keypair, intent);
+    let data_bytes = signed.try_to_vec().unwrap();
+
     let mut file = File::create(file).unwrap();
     file.write_all(&data_bytes).unwrap();
 }

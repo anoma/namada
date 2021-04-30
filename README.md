@@ -58,8 +58,8 @@ cargo run --bin anoma -- run-gossip --rpc
 cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
-cargo run --bin anomac -- craft-intent --address alan --token-buy xan --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_A.data
-cargo run --bin anomac -- craft-intent --address ada --token-buy btc --amount-buy 20 --token-sell xan --amount-sell 10 --file intent_B.data
+cargo run --bin anomac -- craft-intent --address alan --token-buy btc --amount-buy 20 --token-sell xan --amount-sell 10 --file intent_A.data
+cargo run --bin anomac -- craft-intent --address ada --token-buy xan --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_B.data
 
 # Subscribe to new network
 cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "asset_v1"

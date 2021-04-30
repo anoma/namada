@@ -1,7 +1,8 @@
 use anoma_vm_env::{
     matchmaker,
     matchmaker_prelude::{
-        intent::{Intent, IntentTransfers, SignedIntent},
+        intent::{Intent, IntentTransfers},
+        key::ed25519::Signed,
         *,
     },
 };
@@ -20,14 +21,14 @@ matchmaker! {
             let transfer_1 = token::Transfer {
                 source: intent_1.data.addr.clone(),
                 target: intent_2.data.addr.clone(),
-                token: intent_1.data.token_buy,
-                amount: intent_1.data.amount_buy,
+                token: intent_1.data.token_sell.clone(),
+                amount: intent_1.data.amount_sell.clone(),
             };
             let transfer_2 = token::Transfer {
-                source: intent_2.data.addr,
-                target: intent_1.data.addr,
-                token: intent_1.data.token_sell,
-                amount: intent_1.data.amount_sell,
+                source: intent_2.data.addr.clone(),
+                target: intent_1.data.addr.clone(),
+                token: intent_1.data.token_buy.clone(),
+                amount: intent_1.data.amount_buy.clone(),
             };
             let tx_data = IntentTransfers {
                 intent_1,
@@ -45,6 +46,6 @@ matchmaker! {
     }
 }
 
-fn decode_intent_data(bytes: Vec<u8>) -> SignedIntent {
-    SignedIntent::try_from_slice(&bytes[..]).unwrap()
+fn decode_intent_data(bytes: Vec<u8>) -> Signed<Intent> {
+    Signed::<Intent>::try_from_slice(&bytes[..]).unwrap()
 }
