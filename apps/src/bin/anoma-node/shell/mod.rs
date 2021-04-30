@@ -174,6 +174,28 @@ impl Shell {
             )
             .expect("Unable to set genesis user public key");
 
+        // Temporary for testing, we have a fixed matchmaker account.
+        // This account has a public key for signing matchmaker txs and
+        // verifying their signatures in its VP. The VP is the same as
+        // the user's VP, which simply checks the signature.
+        // We could consider using the same key as the intent broadcaster's p2p
+        // key.
+        let matchmaker = Address::from_raw("matchmaker");
+        let matchmaker_pk = key::ed25519::pk_key(&matchmaker);
+        storage
+            .write(
+                &matchmaker_pk,
+                wallet::matchmaker_pk()
+                    .try_to_vec()
+                    .expect("encode public key"),
+            )
+            .expect("Unable to set genesis user public key");
+        let matchmaker_vp =
+            Key::validity_predicate(&matchmaker).expect("expected VP key");
+        storage
+            .write(&matchmaker_vp, user_vp.to_vec())
+            .expect("Unable to write matchmaker VP");
+
         Self {
             abci,
             storage,

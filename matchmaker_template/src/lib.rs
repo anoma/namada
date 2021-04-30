@@ -1,4 +1,10 @@
-use anoma_vm_env::{matchmaker, matchmaker_prelude::*};
+use anoma_vm_env::{
+    matchmaker,
+    matchmaker_prelude::{
+        intent::{Intent, IntentTransfers},
+        *,
+    },
+};
 
 matchmaker! {
     fn match_intent(intent_1: Vec<u8>, intent_2: Vec<u8>) -> bool {
@@ -11,20 +17,21 @@ matchmaker! {
             && intent_1.token_buy == intent_2.token_sell
             && intent_1.amount_buy == intent_2.amount_sell
         {
-            let tx_1 = Transfer {
+            let tx_1 = token::Transfer {
                 source: intent_1.addr.clone(),
                 target: intent_2.addr.clone(),
                 token: intent_1.token_buy,
                 amount: intent_1.amount_buy,
             };
-            let tx_2 = Transfer {
+            let tx_2 = token::Transfer {
                 source: intent_2.addr,
                 target: intent_1.addr,
                 token: intent_1.token_sell,
                 amount: intent_1.amount_sell,
             };
-            let tx_data = TxData {
-                transfers: vec![tx_1, tx_2],
+            let tx_data = IntentTransfers {
+                transfer_a: tx_1,
+                transfer_b: tx_2,
             };
 
             let tx_data_bytes = tx_data.try_to_vec().unwrap();

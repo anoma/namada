@@ -7,7 +7,6 @@ use anoma::protobuf::services::{rpc_message, RpcMessage};
 use anoma::protobuf::{services, types};
 use anoma_shared::types::intent::Intent;
 use anoma_shared::types::{token, Address};
-// use anoma_data_template;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use eyre::Context;

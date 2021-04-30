@@ -685,7 +685,7 @@ mod tests {
             .run(
                 vp_code,
                 tx_data,
-                tx_code,
+                &tx_code,
                 &addr,
                 &storage,
                 &write_log,
