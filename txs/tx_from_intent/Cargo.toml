@@ -1,15 +1,14 @@
 [package]
 authors = ["Heliax <TODO@heliax.dev>"]
 edition = "2018"
-name = "filter"
+name = "tx_from_intent"
 version = "0.1.0"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-anoma_shared = {path = "../shared"}
-anoma_vm_env = {path = "../vm_env"}
+anoma_vm_env = {path = "../../vm_env"}
 borsh = "0.8.2"
 wee_alloc = "0.4.5"
 

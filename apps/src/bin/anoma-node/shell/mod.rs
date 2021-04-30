@@ -180,6 +180,7 @@ impl Shell {
         // the user's VP, which simply checks the signature.
         // We could consider using the same key as the intent broadcaster's p2p
         // key.
+        // hash: "a1xyenyvjyxg6nsd3e8pprjs3kgdprys6pgscny334gsenxsecxgmnqsf5gepnj3jzg3rrwwpnggmrjd3kg5mr2wfexvcnw329gge5v3gawrlay"
         let matchmaker = Address::from_raw("matchmaker");
         let matchmaker_pk = key::ed25519::pk_key(&matchmaker);
         storage
@@ -289,6 +290,7 @@ impl Shell {
     }
 }
 
+#[derive(Clone, Debug)]
 struct VpResult {
     pub accepted_vps: HashSet<Address>,
     pub rejected_vps: HashSet<Address>,
@@ -329,6 +331,7 @@ impl Default for VpResult {
     }
 }
 
+#[derive(Clone, Debug)]
 struct TxResult {
     // a value of 0 indicates that the transaction overflowed with gas
     gas_used: u64,
@@ -402,7 +405,10 @@ impl Shell {
         )?;
         // Apply the transaction if accepted by all the VPs
         if result.vps.rejected_vps.is_empty() {
-            log::debug!("all VPs accepted apply_tx storage modification");
+            log::debug!(
+                "all VPs accepted apply_tx storage modification {:#?}",
+                result
+            );
             self.write_log.commit_tx();
         } else {
             log::debug!(
@@ -574,6 +580,7 @@ fn check_vps(
                 addr: addr.clone(),
                 error,
             })?;
+        log::debug!("VP for {}, accept {}", addr, accept);
         if !accept {
             rejected_vps.insert(addr.clone());
             if !dry_run {

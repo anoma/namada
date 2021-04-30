@@ -3,10 +3,12 @@ pub mod write_log;
 
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::str::FromStr;
 
 use anoma::protobuf::types::Tx;
+use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
-    verify_signature_raw, PublicKey, Signature,
+    verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
 use anoma_shared::types::{Address, Key, KeySeg, RawAddress};
 use anoma_shared::vm_memory::KeyVal;
@@ -1204,8 +1206,8 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
 
     log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
-    let addr =
-        RawAddress::parse(addr).expect("Cannot parse the address string");
+    let addr: RawAddress =
+        FromStr::from_str(&addr).expect("Cannot parse the address string");
 
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
@@ -1464,9 +1466,15 @@ fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
         .memory
         .read_bytes(data_ptr, data_len as _)
         .expect("Cannot read the key from memory");
+    let tx_code = env.tx_code.clone();
+    let keypair = wallet::matchmaker_keypair();
+    let signed = SignedTxData::new(&keypair, tx_data, &tx_code);
+    let signed_bytes = signed
+        .try_to_vec()
+        .expect("Couldn't encoded signed matchmaker tx data");
     let tx = Tx {
-        code: env.tx_code.clone(),
-        data: Some(tx_data),
+        code: tx_code,
+        data: Some(signed_bytes),
     };
     inject_tx.try_send(tx).expect("failed to send tx")
 }
