@@ -134,7 +134,7 @@ impl P2P {
                         }
                     }
                     Ok(false) => RpcResponse {
-                        result: format!("Failed to apply the intent",),
+                        result: String::from("Failed to apply the intent"),
                     },
                     Err(err) => {
                         log::error!(

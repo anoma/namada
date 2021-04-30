@@ -44,15 +44,11 @@ impl GossipIntent {
     }
 
     fn apply_matchmaker(&mut self, intent: Intent) -> Option<Result<bool>> {
-        if let Some(matchmaker) = &mut self.matchmaker {
-            Some(
-                matchmaker
-                    .try_match_intent(&intent)
-                    .map_err(Error::Matchmaker),
-            )
-        } else {
-            None
-        }
+        self.matchmaker.as_mut().map(|matchmaker| {
+            matchmaker
+                .try_match_intent(&intent)
+                .map_err(Error::Matchmaker)
+        })
     }
 
     pub fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
