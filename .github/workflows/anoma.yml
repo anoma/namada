@@ -32,7 +32,7 @@ jobs:
           restore-keys: cache-v5-cargo-
       - name: Run requirements
         run: |
-              make -C tx_template deps
+              make -C txs/tx_template deps
               make build-wasm-scripts
       - name: Run build
         run: make build
