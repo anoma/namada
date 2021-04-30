@@ -26,7 +26,7 @@ use super::intent_broadcaster;
 pub enum Error {
     #[error("Failed to subscribe")]
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
-    #[error("Failed initializing the broadcaster intent app: {0}")]
+    #[error("Failed initializing the intent broadcaster app: {0}")]
     GossipIntentError(intent_broadcaster::Error),
 }
 
