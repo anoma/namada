@@ -124,7 +124,7 @@ fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
     let token_buy_key = token::balance_key(&token_buy, addr).to_string();
     let buy_pre: token::Amount = read_pre(&token_buy_key).unwrap_or_default();
     let buy_post: token::Amount = read_post(token_buy_key).unwrap_or_default();
-    // check that the sold token has been debited
+    // check that the bought token has been credited
     let res = buy_post.change() - buy_pre.change() == amount_buy.change();
     if !res {
         log_string(format!(
