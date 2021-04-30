@@ -9,7 +9,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 // TODO split Error and Result type in two, one for Result/Error that can only
-// happens localy and the other that can happens locally and in the network
+// happens locally and the other that can happens locally and in the network
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error while decoding intent: {0}")]
@@ -43,27 +43,16 @@ impl GossipIntent {
         Ok((Self { matchmaker }, matchmaker_event_receiver))
     }
 
-    async fn apply_matchmaker(
-        &mut self,
-        intent: Intent,
-    ) -> Option<Result<bool>> {
-        // Clippy is not fully aware of async function and async closure is an
-        // unstable feature
-        #[allow(clippy::manual_map)]
-        if let Some(matchmaker) = &mut self.matchmaker {
-            Some(
-                matchmaker
-                    .try_match_intent(&intent)
-                    .await
-                    .map_err(Error::Matchmaker),
-            )
-        } else {
-            None
-        }
+    fn apply_matchmaker(&mut self, intent: Intent) -> Option<Result<bool>> {
+        self.matchmaker.as_mut().map(|matchmaker| {
+            matchmaker
+                .try_match_intent(&intent)
+                .map_err(Error::Matchmaker)
+        })
     }
 
-    pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
-        self.apply_matchmaker(intent).await;
+    pub fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
+        self.apply_matchmaker(intent);
         Ok(true)
     }
 

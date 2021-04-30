@@ -148,7 +148,7 @@ impl Default for Config {
 }
 
 impl Config {
-    // TODO try to check from any "config.*" file instead of only .yaml
+    // TODO try to check from any "config.*" file instead of only .toml
     pub fn read(base_dir_path: &str) -> Result<Self> {
         let file_path = PathBuf::from(base_dir_path).join(FILENAME);
         let mut config = config::Config::new();
