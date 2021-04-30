@@ -1,4 +1,4 @@
-use anoma::protobuf::services::rpc_message;
+use anoma::protobuf::services::{rpc_message, RpcResponse};
 use anoma::protobuf::types::Tx;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
@@ -18,7 +18,7 @@ pub enum Error {
     TransportError(std::io::Error),
     #[error("Failed to subscribe")]
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
-    #[error("Failed to subscribe")]
+    #[error("Error with the network behavior")]
     Behavior(super::network_behaviour::Error),
 }
 type Result<T> = std::result::Result<T, Error>;
@@ -71,15 +71,23 @@ impl P2P {
         Ok((p2p, matchmaker_event_receiver))
     }
 
-    pub async fn handle_rpc_event(&mut self, event: rpc_message::Message) {
+    pub async fn handle_rpc_event(
+        &mut self,
+        event: rpc_message::Message,
+    ) -> RpcResponse {
         match event {
             rpc_message::Message::Intent(
                 anoma::protobuf::services::IntentMesage {
                     intent: None,
-                    topic,
+                    topic: _,
                 },
             ) => {
-                log::error!("rpc intent command for topic {} is empty", topic)
+                let result = format!(
+                    "rpc intent command for topic {:?} is empty",
+                    event
+                );
+                log::error!("{}", result);
+                RpcResponse { result }
             }
             rpc_message::Message::Intent(
                 anoma::protobuf::services::IntentMesage {
@@ -87,23 +95,73 @@ impl P2P {
                     topic,
                 },
             ) => {
-                if self
+                match self
                     .swarm
                     .intent_broadcaster_app
                     .apply_intent(intent.clone())
-                    .expect("failed to apply intent")
                 {
-                    let mut intent_bytes = vec![];
-                    intent.encode(&mut intent_bytes).unwrap();
-                    let _message_id = self
-                        .swarm
-                        .intent_broadcaster_gossip
-                        .publish(IdentTopic::new(topic), intent_bytes);
+                    Ok(true) => {
+                        let mut intent_bytes = vec![];
+                        intent.encode(&mut intent_bytes).unwrap();
+                        match self
+                            .swarm
+                            .intent_broadcaster_gossip
+                            .publish(IdentTopic::new(topic), intent_bytes)
+                        {
+                            Ok(message_id) => {
+                                log::info!(
+                                    "publish intent with message_id {}",
+                                    message_id
+                                );
+                                RpcResponse {
+                                    result: String::from(
+                                        "Intent sent correctly",
+                                    ),
+                                }
+                            }
+                            Err(err) => {
+                                log::error!(
+                                    "error while publishing intent {:?}",
+                                    err
+                                );
+                                RpcResponse {
+                                    result: format!(
+                                        "Failed to publish_intent {:?}",
+                                        err
+                                    ),
+                                }
+                            }
+                        }
+                    }
+                    Ok(false) => RpcResponse {
+                        result: format!("Failed to apply the intent",),
+                    },
+                    Err(err) => {
+                        log::error!(
+                            "error while applying the intent {:?}",
+                            err
+                        );
+                        RpcResponse {
+                            result: format!(
+                                "Failed to apply the intent {:?}",
+                                err
+                            ),
+                        }
+                    }
                 }
             }
-
-            rpc_message::Message::Dkg(_dkg_msg) => {
-                todo!()
+            rpc_message::Message::Dkg(dkg_msg) => {
+                log::debug!(
+                    "dkg not yet
+        implemented {:?}",
+                    dkg_msg
+                );
+                RpcResponse {
+                    result: String::from(
+                        "DKG
+        application not yet implemented",
+                    ),
+                }
             }
             rpc_message::Message::Topic(
                 anoma::protobuf::services::SubscribeTopicMessage {
@@ -111,13 +169,32 @@ impl P2P {
                 },
             ) => {
                 let topic = IdentTopic::new(&topic_str);
-                self.swarm
-                    .intent_broadcaster_gossip
-                    .subscribe(&topic)
-                    .unwrap_or_else(|_| {
-                        panic!("failed to subscribe to topic {:?}", topic)
-                    });
+                match self.swarm.intent_broadcaster_gossip.subscribe(&topic) {
+                    Ok(true) => {
+                        let result = format!("Node subscribed to {}", topic);
+                        log::info!("{}", result);
+                        RpcResponse { result }
+                    }
+                    Ok(false) => {
+                        let result = format!(
+                            "Node
+        already subscribed to {}",
+                            topic
+                        );
+                        log::info!("{}", result);
+                        RpcResponse { result }
+                    }
+                    Err(err) => {
+                        let result = format!(
+                            "failed to subscribe to
+        {}: {:?}",
+                            topic, err
+                        );
+                        log::error!("{}", result);
+                        RpcResponse { result }
+                    }
+                }
             }
-        };
+        }
     }
 }
