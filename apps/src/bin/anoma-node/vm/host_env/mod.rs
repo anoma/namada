@@ -3,11 +3,16 @@ pub mod write_log;
 
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::str::FromStr;
 
 use anoma::protobuf::types::Tx;
+use anoma::wallet;
+use anoma_shared::types::key::ed25519::{
+    verify_signature_raw, PublicKey, Signature, SignedTxData,
+};
 use anoma_shared::types::{Address, Key, KeySeg, RawAddress};
 use anoma_shared::vm_memory::KeyVal;
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use tokio::sync::mpsc::Sender;
 use wasmer::{
     HostEnvInitError, ImportObject, Instance, Memory, Store, WasmerEnv,
@@ -19,6 +24,8 @@ use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::Storage;
+
+const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 
 #[derive(Clone)]
 struct TxEnv<'a> {
@@ -57,6 +64,8 @@ struct VpEnv<'a> {
     // TODO In parallel runs, we can change only the maximum used gas of all
     // the VPs that we ran.
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
+    // The transaction code is used for signature verification
+    tx_code: EnvHostWrapper<Vec<u8>>,
     memory: AnomaMemory,
 }
 
@@ -144,6 +153,7 @@ pub fn prepare_tx_imports(
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_vp_imports(
     wasm_store: &Store,
     addr: Address,
@@ -151,6 +161,7 @@ pub fn prepare_vp_imports(
     write_log: EnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static>>,
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
+    tx_code: EnvHostWrapper<Vec<u8>>,
     initial_memory: Memory,
 ) -> ImportObject {
     let env = VpEnv {
@@ -159,6 +170,7 @@ pub fn prepare_vp_imports(
         write_log,
         iterators,
         gas_meter,
+        tx_code,
         memory: AnomaMemory::default(),
     };
     wasmer::imports! {
@@ -180,6 +192,7 @@ pub fn prepare_vp_imports(
             "_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_chain_id),
             "_get_block_height" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_height),
             "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_hash),
+            "_verify_tx_signature" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_verify_tx_signature),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
         },
     }
@@ -1193,8 +1206,8 @@ fn tx_insert_verifier(env: &TxEnv, addr_ptr: u64, addr_len: u64) {
 
     log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
-    let addr =
-        RawAddress::parse(addr).expect("Cannot parse the address string");
+    let addr: RawAddress =
+        FromStr::from_str(&addr).expect("Cannot parse the address string");
 
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
@@ -1359,6 +1372,49 @@ fn vp_get_block_hash(env: &VpEnv, result_ptr: u64) {
     vp_add_gas(env, gas);
 }
 
+fn vp_verify_tx_signature(
+    env: &VpEnv,
+    pk_ptr: u64,
+    pk_len: u64,
+    data_ptr: u64,
+    data_len: u64,
+    sig_ptr: u64,
+    sig_len: u64,
+) -> u64 {
+    let (pk, gas) = env
+        .memory
+        .read_bytes(pk_ptr, pk_len as _)
+        .expect("Cannot read public key from memory");
+    vp_add_gas(env, gas);
+    let pk: PublicKey =
+        BorshDeserialize::try_from_slice(&pk).expect("Canot decode public key");
+
+    let (data, gas) = env
+        .memory
+        .read_bytes(data_ptr, data_len as _)
+        .expect("Cannot read signature data from memory");
+    vp_add_gas(env, gas);
+
+    let (sig, gas) = env
+        .memory
+        .read_bytes(sig_ptr, sig_len as _)
+        .expect("Cannot read signature from memory");
+    vp_add_gas(env, gas);
+    let sig: Signature =
+        BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
+
+    let tx_code = unsafe { &*(env.tx_code.get()) };
+    vp_add_gas(env, (data.len() + tx_code.len()) as _);
+    let signature_data = [&data[..], &tx_code[..]].concat();
+
+    vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
+    if verify_signature_raw(&pk, &signature_data, &sig).is_ok() {
+        1
+    } else {
+        0
+    }
+}
+
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
 /// printed at the [`log::Level::Info`]. This function is for development only.
 fn tx_log_string(env: &TxEnv, str_ptr: u64, str_len: u64) {
@@ -1410,9 +1466,17 @@ fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
         .memory
         .read_bytes(data_ptr, data_len as _)
         .expect("Cannot read the key from memory");
+    // TODO sign in the matchmaker module instead. use a ref for the tx_code
+    // here to avoid copying
+    let tx_code = env.tx_code.clone();
+    let keypair = wallet::matchmaker_keypair();
+    let signed = SignedTxData::new(&keypair, tx_data, &tx_code);
+    let signed_bytes = signed
+        .try_to_vec()
+        .expect("Couldn't encoded signed matchmaker tx data");
     let tx = Tx {
-        code: env.tx_code.clone(),
-        data: Some(tx_data),
+        code: tx_code,
+        data: Some(signed_bytes),
     };
     inject_tx.try_send(tx).expect("failed to send tx")
 }

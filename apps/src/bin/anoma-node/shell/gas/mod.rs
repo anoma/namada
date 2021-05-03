@@ -17,8 +17,8 @@ const PARALLEL_GAS_MULTIPLER: f64 = 0.1;
 
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
-const BLOCK_GAS_LIMIT: u64 = 10_000_000_000;
-const TRANSACTION_GAS_LIMIT: u64 = 10_000_000;
+const BLOCK_GAS_LIMIT: u64 = 10_000_000_000_000;
+const TRANSACTION_GAS_LIMIT: u64 = 10_000_000_000;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

@@ -1,7 +1,5 @@
 //! The key and values that may be persisted in a DB.
 
-pub mod address;
-
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::str::FromStr;
@@ -11,6 +9,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
+
+pub mod address;
+pub mod intent;
+pub mod key;
+pub mod token;
 
 #[derive(Error, Debug)]
 pub enum Error {

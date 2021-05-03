@@ -4,7 +4,6 @@
 name = "Anoma"
 version = "0.1.0"
 dependencies = [
- "anoma_data_template",
  "anoma_shared",
  "base64 0.13.0",
  "bech32",
@@ -138,19 +137,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma_data_template"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "bytes 1.0.1",
-]
-
-[[package]]
 name = "anoma_shared"
 version = "0.1.0"
 dependencies = [
  "bech32",
  "borsh",
+ "ed25519-dalek",
  "sha2 0.9.3",
  "thiserror",
 ]

@@ -34,7 +34,6 @@ dev = []
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 
 [dependencies]
-anoma_data_template = {path = "../data_template"}
 anoma_shared = {path = "../shared"}
 base64 = "0.13.0"
 bech32 = "0.8.0"
