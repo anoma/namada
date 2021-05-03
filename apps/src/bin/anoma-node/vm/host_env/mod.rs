@@ -1466,6 +1466,8 @@ fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
         .memory
         .read_bytes(data_ptr, data_len as _)
         .expect("Cannot read the key from memory");
+    // TODO sign in the matchmaker module instead. use a ref for the tx_code
+    // here to avoid copying
     let tx_code = env.tx_code.clone();
     let keypair = wallet::matchmaker_keypair();
     let signed = SignedTxData::new(&keypair, tx_data, &tx_code);
