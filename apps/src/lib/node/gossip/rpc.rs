@@ -6,9 +6,9 @@ use tokio::sync::oneshot;
 use tonic::transport::Server;
 use tonic::{Request as TonicRequest, Response as TonicResponse, Status};
 
-use crate::proto::services::rpc_service_server::{
+use crate::{config::RpcServer, proto::services::rpc_service_server::{
     RpcService, RpcServiceServer,
-};
+}};
 use crate::proto::services::{rpc_message, RpcMessage, RpcResponse};
 
 #[derive(Debug)]
@@ -60,7 +60,7 @@ pub async fn rpc_server(
 }
 
 pub fn start_rpc_server(
-    config: &crate::config::RpcServer,
+    config: &RpcServer,
 ) -> mpsc::Receiver<(
     rpc_message::Message,
     tokio::sync::oneshot::Sender<RpcResponse>,
