@@ -82,6 +82,20 @@ impl Default for Ledger {
         }
     }
 }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RpcServer {
+    pub address: SocketAddr,
+}
+impl Default for RpcServer {
+    fn default() -> Self {
+        Self {
+            address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                39111,
+            ),
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Matchmaker {
@@ -108,10 +122,10 @@ pub enum SubscriptionFilter {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IntentBroadcaster {
     pub address: Multiaddr,
-    pub rpc: bool,
     pub peers: HashSet<Multiaddr>,
     pub topics: HashSet<String>,
     pub subscription_filter: SubscriptionFilter,
+    pub rpc: Option<RpcServer>,
     pub gossiper: Gossiper,
     pub matchmaker: Option<Matchmaker>,
 }
@@ -121,7 +135,7 @@ impl Default for IntentBroadcaster {
         Self {
             // TODO there must be a better option here
             address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/20201").unwrap(),
-            rpc: false,
+            rpc: None,
             subscription_filter: SubscriptionFilter::RegexFilter(
                 Regex::new("asset_v\\d{1,2}").unwrap(),
             ),
