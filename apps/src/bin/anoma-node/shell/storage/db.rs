@@ -24,6 +24,8 @@ use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 
 use super::types::{MerkleTree, PrefixIterator, Value};
+use super::{BlockState, Error, Result, DB};
+use crate::shell::storage::db::DBIter;
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -317,6 +319,34 @@ impl DB {
                     .to_string(),
             }),
         }
+    }
+}
+
+impl<'iter> DBIter<'iter> for RocksDB {
+    type PrefixIter = PersistentPrefixIterator<'iter>;
+
+    fn iter_prefix(
+        &'iter self,
+        height: BlockHeight,
+        prefix: &Key,
+    ) -> PersistentPrefixIterator<'iter> {
+        let db_prefix = format!("{}/subspace/", height.to_string());
+        let prefix = format!("{}{}", db_prefix, prefix.to_string());
+
+        let mut read_opts = ReadOptions::default();
+        // don't use the prefix bloom filter
+        read_opts.set_total_order_seek(true);
+        let mut upper_prefix = prefix.clone().into_bytes();
+        if let Some(last) = upper_prefix.pop() {
+            upper_prefix.push(last + 1);
+        }
+        read_opts.set_iterate_upper_bound(upper_prefix);
+
+        let iter = self.0.iterator_opt(
+            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+            read_opts,
+        );
+        PersistentPrefixIterator::new(iter, db_prefix)
     }
 }
 

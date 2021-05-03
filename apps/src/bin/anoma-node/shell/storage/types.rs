@@ -129,18 +129,25 @@ fn new_blake2b() -> Blake2b {
     Blake2bBuilder::new(32).personal(b"anoma storage").build()
 }
 
-pub struct PrefixIterator<'a> {
-    iter: rocksdb::DBIterator<'a>,
-    db_prefix: String,
+pub type KVBytes = (Box<[u8]>, Box<[u8]>);
+
+pub type PersistentPrefixIterator<'a> = PrefixIterator<rocksdb::DBIterator<'a>>;
+
+pub struct PrefixIterator<I> {
+    pub iter: I,
+    pub db_prefix: String,
 }
 
-impl<'a> PrefixIterator<'a> {
-    pub fn new(iter: rocksdb::DBIterator<'a>, db_prefix: String) -> Self {
+impl<I> PrefixIterator<I> {
+    pub fn new(iter: I, db_prefix: String) -> Self
+    where
+        I: Iterator<Item = KVBytes>,
+    {
         PrefixIterator { iter, db_prefix }
     }
 }
 
-impl<'a> Iterator for PrefixIterator<'a> {
+impl<'a> Iterator for PrefixIterator<rocksdb::DBIterator<'a>> {
     type Item = (String, Vec<u8>, u64);
 
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
@@ -159,7 +166,7 @@ impl<'a> Iterator for PrefixIterator<'a> {
     }
 }
 
-impl<'a> std::fmt::Debug for PrefixIterator<'a> {
+impl<I> std::fmt::Debug for PrefixIterator<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("PrefixIterator")
     }

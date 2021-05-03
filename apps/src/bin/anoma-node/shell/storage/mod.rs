@@ -11,12 +11,13 @@ use std::path::Path;
 use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
+pub use db::{DBIter, DB};
 use sparse_merkle_tree::H256;
 use thiserror::Error;
 use types::MerkleTree;
 
 use self::types::Hash256;
-pub use self::types::PrefixIterator;
+pub use self::types::{PersistentPrefixIterator, PrefixIterator};
 use super::MerkleRoot;
 
 #[derive(Error, Debug)]
@@ -37,8 +38,11 @@ static VP_WASM: &[u8] =
 const MIN_STORAGE_GAS: u64 = 1;
 
 #[derive(Debug)]
-pub struct Storage {
-    db: db::DB,
+pub struct Storage<DB>
+where
+    DB: db::DB + for<'iter> DBIter<'iter>,
+{
+    db: DB,
     chain_id: String,
     // TODO Because the transaction may modify and state, we'll probably need
     // to split into read-only last block state and mutable current block state
@@ -74,7 +78,28 @@ impl Storage {
             current_height: BlockHeight(0),
         }
     }
+}
 
+impl<DB> Storage<DB>
+where
+    DB: db::DB + for<'iter> db::DBIter<'iter>,
+{
+    /// Returns a prefix iterator and the gas cost
+    pub fn iter_prefix(
+        &self,
+        prefix: &Key,
+    ) -> (<DB as db::DBIter<'_>>::PrefixIter, u64) {
+        (
+            self.db.iter_prefix(self.current_height, prefix),
+            prefix.len() as _,
+        )
+    }
+}
+
+impl<DB> Storage<DB>
+where
+    DB: db::DB + for<'iter> db::DBIter<'iter>,
+{
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
@@ -174,14 +199,6 @@ impl Storage {
             }
             None => Ok((None, key.len() as _)),
         }
-    }
-
-    /// Returns a prefix iterator and the gas cost
-    pub fn iter_prefix(&self, prefix: &Key) -> (PrefixIterator, u64) {
-        (
-            self.db.iter_prefix(self.current_height, prefix),
-            prefix.len() as _,
-        )
     }
 
     /// Write a value to the specified subspace and returns the gas cost and the

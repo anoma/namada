@@ -153,7 +153,10 @@ impl TxRunner {
         gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
         tx_data: Vec<u8>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    {
         validate_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
@@ -167,10 +170,9 @@ impl TxRunner {
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
+        let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
         let iterators = unsafe {
-            MutEnvHostWrapper::new(
-                &mut PrefixIterators::new() as *mut _ as *mut c_void
-            )
+            MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
@@ -261,7 +263,10 @@ impl VpRunner {
         vp_gas_meter: &mut VpGasMeter,
         keys_changed: Vec<Key>,
         verifiers: HashSet<Address>,
-    ) -> Result<bool> {
+    ) -> Result<bool>
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    {
         validate_wasm(vp_code.as_ref())?;
 
         // Read-only access from parallel Vp runners
@@ -278,10 +283,9 @@ impl VpRunner {
         };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
+        let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
         let iterators = unsafe {
-            MutEnvHostWrapper::new(
-                &mut PrefixIterators::new() as *mut _ as *mut c_void
-            )
+            MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
         };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
