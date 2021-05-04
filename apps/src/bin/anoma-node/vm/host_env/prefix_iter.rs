@@ -7,7 +7,7 @@ where
     DB: DBIter<'iter>,
 {
     index: PrefixIteratorId,
-    iterators: HashMap<PrefixIteratorId, <DB as DBIter<'iter>>::PrefixIter>,
+    iterators: HashMap<PrefixIteratorId, DB::PrefixIter>,
 }
 
 impl<'iter, DB> PrefixIterators<'iter, DB>
@@ -21,10 +21,7 @@ where
         }
     }
 
-    pub fn insert(
-        &mut self,
-        iter: <DB as DBIter<'iter>>::PrefixIter,
-    ) -> PrefixIteratorId {
+    pub fn insert(&mut self, iter: DB::PrefixIter) -> PrefixIteratorId {
         let id = self.index;
         self.iterators.insert(id, iter);
         self.index = id.next_id();
@@ -34,7 +31,7 @@ where
     pub fn next(
         &mut self,
         id: PrefixIteratorId,
-    ) -> Option<<<DB as DBIter<'iter>>::PrefixIter as Iterator>::Item> {
+    ) -> Option<<DB::PrefixIter as Iterator>::Item> {
         match self.iterators.get_mut(&id) {
             Some(iter) => iter.next(),
             None => None,

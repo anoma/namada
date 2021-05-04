@@ -85,22 +85,6 @@ impl<DB> Storage<DB>
 where
     DB: db::DB + for<'iter> db::DBIter<'iter>,
 {
-    /// Returns a prefix iterator and the gas cost
-    pub fn iter_prefix(
-        &self,
-        prefix: &Key,
-    ) -> (<DB as db::DBIter<'_>>::PrefixIter, u64) {
-        (
-            self.db.iter_prefix(self.current_height, prefix),
-            prefix.len() as _,
-        )
-    }
-}
-
-impl<DB> Storage<DB>
-where
-    DB: db::DB + for<'iter> db::DBIter<'iter>,
-{
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
@@ -200,6 +184,17 @@ where
             }
             None => Ok((None, key.len() as _)),
         }
+    }
+
+    /// Returns a prefix iterator and the gas cost
+    pub fn iter_prefix(
+        &self,
+        prefix: &Key,
+    ) -> (<DB as db::DBIter<'_>>::PrefixIter, u64) {
+        (
+            self.db.iter_prefix(self.current_height, prefix),
+            prefix.len() as _,
+        )
     }
 
     /// Write a value to the specified subspace and returns the gas cost and the
