@@ -287,13 +287,16 @@ where
 
 #[cfg(test)]
 mod tests {
+    use tempdir::TempDir;
     use types::Value;
 
     use super::*;
 
     #[test]
     fn test_crud_value() {
-        let mut storage = TestStorage::default();
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::new(db_path.path());
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
@@ -329,7 +332,9 @@ mod tests {
 
     #[test]
     fn test_commit_block() {
-        let mut storage = TestStorage::default();
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::new(db_path.path());
         storage
             .set_chain_id("test_chain_id_000000")
             .expect("setting a chain ID failed");
@@ -356,7 +361,9 @@ mod tests {
 
     #[test]
     fn test_iter() {
-        let mut storage = TestStorage::default();
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::new(db_path.path());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");

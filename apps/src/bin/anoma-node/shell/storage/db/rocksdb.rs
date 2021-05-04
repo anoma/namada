@@ -276,8 +276,6 @@ impl DB for RocksDB {
     }
 }
 
-pub type PersistentPrefixIterator<'a> = PrefixIterator<rocksdb::DBIterator<'a>>;
-
 impl<'iter> DBIter<'iter> for RocksDB {
     type PrefixIter = PersistentPrefixIterator<'iter>;
 
@@ -303,6 +301,30 @@ impl<'iter> DBIter<'iter> for RocksDB {
             read_opts,
         );
         PersistentPrefixIterator::new(iter, db_prefix)
+    }
+}
+
+pub type PersistentPrefixIterator<'a> = PrefixIterator<rocksdb::DBIterator<'a>>;
+
+impl<'a> Iterator for PersistentPrefixIterator<'a> {
+    type Item = (String, Vec<u8>, u64);
+
+    /// Returns the next pair and the gas cost
+    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+        match self.iter.next() {
+            Some((key, val)) => {
+                let key = String::from_utf8(key.to_vec())
+                    .expect("Cannot convert from bytes to key string");
+                match key.strip_prefix(&self.db_prefix) {
+                    Some(k) => {
+                        let gas = k.len() + val.len();
+                        Some((k.to_owned(), val.to_vec(), gas as _))
+                    }
+                    None => self.next(),
+                }
+            }
+            None => None,
+        }
     }
 }
 
