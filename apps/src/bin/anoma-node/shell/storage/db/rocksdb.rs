@@ -1,14 +1,4 @@
-//! The persistent storage, currently in RocksDB.
-//!
-//! The current storage tree is:
-//! - `chain_id`
-//! - `height`: the last committed block height
-//! - `h`: for each block at height `h`:
-//!   - `tree`: merkle tree
-//!     - `root`: root hash
-//!     - `store`: the tree's store
-//!   - `hash`: block hash
-//!   - `balance/address`: balance for each account `address`
+//! The persistent storage in RocksDB.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -21,7 +11,6 @@ use rocksdb::{
 };
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
-use thiserror::Error;
 
 use super::types::{MerkleTree, PrefixIterator, Value};
 use super::{BlockState, Error, Result, DB};
@@ -30,31 +19,10 @@ use crate::shell::storage::db::DBIter;
 // TODO the DB schema will probably need some kind of versioning
 
 #[derive(Debug)]
-pub struct DB(rocksdb::DB);
+pub struct RocksDB(rocksdb::DB);
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
-    #[error("Found an unknown key: {key}")]
-    UnknownKey { key: String },
-    #[error("Key error {0}")]
-    KeyError(anoma_shared::types::Error),
-    #[error("RocksDB error: {0}")]
-    RocksDBError(rocksdb::Error),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-pub struct BlockState {
-    pub chain_id: String,
-    pub tree: MerkleTree,
-    pub hash: BlockHash,
-    pub height: BlockHeight,
-    pub subspaces: HashMap<Key, Vec<u8>>,
-}
-
-pub fn open(path: impl AsRef<Path>) -> Result<DB> {
+/// Open RocksDB for the DB
+pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
     let mut cf_opts = Options::default();
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
     cf_opts.set_level_compaction_dynamic_level_bytes(true);
@@ -79,8 +47,10 @@ pub fn open(path: impl AsRef<Path>) -> Result<DB> {
     cf_opts.set_prefix_extractor(extractor);
     // TODO use column families
     rocksdb::DB::open_cf_descriptors(&cf_opts, path, vec![])
-        .map(DB)
-        .map_err(Error::RocksDBError)
+        .map(RocksDB)
+        .map_err(|e| Error::DBError {
+            error: e.into_string(),
+        })
 }
 
 fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
@@ -107,15 +77,17 @@ fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
     }
 }
 
-impl DB {
+impl DB for RocksDB {
     #[allow(dead_code)]
-    pub fn flush(&self) -> Result<()> {
+    fn flush(&self) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(true);
-        self.0.flush_opt(&flush_opts).map_err(Error::RocksDBError)
+        self.0.flush_opt(&flush_opts).map_err(|e| Error::DBError {
+            error: e.into_string(),
+        })
     }
 
-    pub fn write_block(
+    fn write_block(
         &mut self,
         tree: &MerkleTree,
         hash: &BlockHash,
@@ -171,77 +143,60 @@ impl DB {
         // write_opts.disable_wal(true);
         self.0
             .write_opt(batch, &write_opts)
-            .map_err(Error::RocksDBError)?;
+            .map_err(|e| Error::DBError {
+                error: e.into_string(),
+            })?;
         // Block height - write after everything else is written
         // NOTE for async writes, we need to take care that all previous heights
         // are known when updating this
         self.0
             .put_opt("height", height.encode(), &write_opts)
-            .map_err(Error::RocksDBError)
+            .map_err(|e| Error::DBError {
+                error: e.into_string(),
+            })
     }
 
-    #[allow(clippy::ptr_arg)]
-    pub fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
+    fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
         let mut write_opts = WriteOptions::default();
         // TODO: disable WAL when we can shutdown with flush
         write_opts.set_sync(true);
         // write_opts.disable_wal(true);
         self.0
             .put_opt("chain_id", chain_id.encode(), &write_opts)
-            .map_err(Error::RocksDBError)
+            .map_err(|e| Error::DBError {
+                error: e.into_string(),
+            })
     }
 
-    pub fn read(
-        &self,
-        height: BlockHeight,
-        key: &Key,
-    ) -> Result<Option<Vec<u8>>> {
+    fn read(&self, height: BlockHeight, key: &Key) -> Result<Option<Vec<u8>>> {
         let key = Key::from(height.to_db_key())
             .push(&"subspace".to_owned())
             .map_err(Error::KeyError)?
             .join(key);
-        match self.0.get(key.to_string()).map_err(Error::RocksDBError)? {
+        match self.0.get(key.to_string()).map_err(|e| Error::DBError {
+            error: e.into_string(),
+        })? {
             Some(bytes) => Ok(Some(bytes)),
             None => Ok(None),
         }
     }
 
-    pub fn iter_prefix(
-        &self,
-        height: BlockHeight,
-        prefix: &Key,
-    ) -> PrefixIterator {
-        let db_prefix = format!("{}/subspace/", height.to_string());
-        let prefix = format!("{}{}", db_prefix, prefix.to_string());
-
-        let mut read_opts = ReadOptions::default();
-        // don't use the prefix bloom filter
-        read_opts.set_total_order_seek(true);
-        let mut upper_prefix = prefix.clone().into_bytes();
-        if let Some(last) = upper_prefix.pop() {
-            upper_prefix.push(last + 1);
-        }
-        read_opts.set_iterate_upper_bound(upper_prefix);
-
-        let iter = self.0.iterator_opt(
-            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
-            read_opts,
-        );
-        PrefixIterator::new(iter, db_prefix)
-    }
-
-    pub fn read_last_block(&mut self) -> Result<Option<BlockState>> {
+    fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         let chain_id;
         let height;
         // Chain ID
-        match self.0.get("chain_id").map_err(Error::RocksDBError)? {
+        match self.0.get("chain_id").map_err(|e| Error::DBError {
+            error: e.into_string(),
+        })? {
             Some(bytes) => {
                 chain_id = String::decode(bytes);
             }
             None => return Ok(None),
         }
         // Block height
-        match self.0.get("height").map_err(Error::RocksDBError)? {
+        match self.0.get("height").map_err(|e| Error::DBError {
+            error: e.into_string(),
+        })? {
             Some(bytes) => {
                 // TODO if there's an issue decoding this height, should we try
                 // load its predecessor instead?

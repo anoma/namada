@@ -23,7 +23,7 @@ use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::shell::storage::Storage;
+use crate::shell::storage::{self, Storage};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 
@@ -85,7 +85,7 @@ where
     // is no shared access
     iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
     // thread-safe read-only access from parallel Vp runners
-    storage: EnvHostWrapper<Storage>,
+    storage: EnvHostWrapper<Storage<DB>>,
     // thread-safe read-only access from parallel Vp runners
     write_log: EnvHostWrapper<WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
@@ -111,6 +111,7 @@ where
             storage: self.storage.clone(),
             write_log: self.write_log.clone(),
             gas_meter: self.gas_meter.clone(),
+            tx_code: self.tx_code.clone(),
             memory: self.memory.clone(),
         }
     }
@@ -162,7 +163,7 @@ impl WasmerEnv for FilterEnv {
 /// transaction code
 pub fn prepare_tx_imports<DB>(
     wasm_store: &Store,
-    storage: EnvHostWrapper<Storage>,
+    storage: EnvHostWrapper<Storage<DB>>,
     write_log: MutEnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
     verifiers: MutEnvHostWrapper<HashSet<Address>>,
@@ -210,7 +211,7 @@ where
 pub fn prepare_vp_imports<DB>(
     wasm_store: &Store,
     addr: Address,
-    storage: EnvHostWrapper<Storage>,
+    storage: EnvHostWrapper<Storage<DB>>,
     write_log: EnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
@@ -402,7 +403,7 @@ where
         }
         None => {
             // when not found in write log, try to read from the storage
-            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
             tx_add_gas(env, gas);
             match value {
@@ -452,7 +453,7 @@ where
         Some(&write_log::StorageModification::InitAccount { .. }) => 1,
         None => {
             // when not found in write log, try to check the storage
-            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
@@ -527,7 +528,7 @@ where
         }
         None => {
             // when not found in write log, try to read from the storage
-            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
             tx_add_gas(env, gas);
             match value {
@@ -793,7 +794,7 @@ where
 
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
-    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (value, gas) = storage.read(&key).expect("storage read failed");
     vp_add_gas(env, gas);
     log::debug!(
@@ -874,7 +875,7 @@ where
         }
         None => {
             // when not found in write log, try to read from the storage
-            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
             vp_add_gas(env, gas);
             match value {
@@ -917,7 +918,7 @@ where
 
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
-    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (value, gas) = storage.read(&key).expect("storage read failed");
     vp_add_gas(env, gas);
     log::debug!(
@@ -1006,7 +1007,7 @@ where
         }
         None => {
             // when not found in write log, try to read from the storage
-            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
             vp_add_gas(env, gas);
             match value {
@@ -1049,7 +1050,7 @@ where
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
-    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
     if present {
@@ -1093,7 +1094,7 @@ where
         Some(&write_log::StorageModification::InitAccount { .. }) => 1,
         None => {
             // when not found in write log, try to check the storage
-            let storage: &Storage = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
@@ -1436,7 +1437,7 @@ fn tx_init_account<DB>(
 
     log::debug!("tx_init_account address: {}, parent: {}", addr, parent_addr);
 
-    let storage: &Storage = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (parent_exists, gas) = storage
         .exists(&parent_addr_hash)
         .expect("Cannot read storage");
@@ -1549,15 +1550,18 @@ where
     vp_add_gas(env, gas);
 }
 
-fn vp_verify_tx_signature(
-    env: &VpEnv,
+fn vp_verify_tx_signature<DB>(
+    env: &VpEnv<DB>,
     pk_ptr: u64,
     pk_len: u64,
     data_ptr: u64,
     data_len: u64,
     sig_ptr: u64,
     sig_len: u64,
-) -> u64 {
+) -> u64
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+{
     let (pk, gas) = env
         .memory
         .read_bytes(pk_ptr, pk_len as _)

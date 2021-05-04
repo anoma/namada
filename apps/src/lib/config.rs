@@ -28,6 +28,7 @@ pub enum Error {
     #[error("A config file already exists in {0}")]
     AlreadyExistingConfig(PathBuf),
 }
+
 pub const BASEDIR: &str = ".anoma";
 pub const FILENAME: &str = "config.toml";
 pub const TENDERMINT_DIR: &str = "tendermint";
@@ -60,7 +61,8 @@ And this is correct
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ledger {
     pub tendermint: PathBuf,
-    pub db: PathBuf,
+    pub db_type: String,
+    pub db_path: PathBuf,
     pub address: SocketAddr,
     pub network: String,
 }
@@ -71,7 +73,8 @@ impl Default for Ledger {
             // this two value are override when generating a default config in
             // config::generate(base_dir). There must be a better way ?
             tendermint: PathBuf::from(BASEDIR).join(TENDERMINT_DIR),
-            db: PathBuf::from(BASEDIR).join(DB_DIR),
+            db_type: "rocksdb".to_owned(),
+            db_path: PathBuf::from(BASEDIR).join(DB_DIR),
             address: SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 26658,
@@ -167,7 +170,7 @@ impl Config {
             .ledger
             .as_mut()
             .expect("safe because default has ledger");
-        ledger_cfg.db = base_dir.join(DB_DIR);
+        ledger_cfg.db_path = base_dir.join(DB_DIR);
         ledger_cfg.tendermint = base_dir.join(TENDERMINT_DIR);
         config.write(base_dir, replace)?;
         Ok(config)

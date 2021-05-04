@@ -18,7 +18,7 @@ use wasmparser::{Validator, WasmFeatures};
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::shell::storage::Storage;
+use crate::shell::storage::{self, Storage};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -145,9 +145,9 @@ impl TxRunner {
         Self { wasm_store }
     }
 
-    pub fn run(
+    pub fn run<DB>(
         &self,
-        storage: &Storage,
+        storage: &Storage<DB>,
         write_log: &mut WriteLog,
         verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
@@ -160,7 +160,7 @@ impl TxRunner {
         validate_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage = unsafe {
+        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
@@ -252,13 +252,13 @@ impl VpRunner {
 
     // TODO consider using a wrapper object for all the host env references
     #[allow(clippy::too_many_arguments)]
-    pub fn run<T: AsRef<[u8]>>(
+    pub fn run<DB>(
         &self,
-        vp_code: T,
+        vp_code: impl AsRef<[u8]>,
         tx_data: Vec<u8>,
         #[allow(clippy::ptr_arg)] tx_code: &Vec<u8>,
         addr: &Address,
-        storage: &Storage,
+        storage: &Storage<DB>,
         write_log: &WriteLog,
         vp_gas_meter: &mut VpGasMeter,
         keys_changed: Vec<Key>,
@@ -270,7 +270,7 @@ impl VpRunner {
         validate_wasm(vp_code.as_ref())?;
 
         // Read-only access from parallel Vp runners
-        let storage = unsafe {
+        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
         // Read-only access from parallel Vp runners
@@ -560,9 +560,9 @@ mod tests {
     use std::str::FromStr;
 
     use anoma_shared::types::RawAddress;
-    use tempdir::TempDir;
 
     use super::*;
+    use crate::shell::storage::TestStorage;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
@@ -607,9 +607,7 @@ mod tests {
 
         let runner = TxRunner::new();
         let tx_data = vec![];
-        let db_path = TempDir::new("anoma_test")
-            .expect("Unable to create a temporary DB directory");
-        let mut storage = Storage::new(db_path.path());
+        let mut storage = TestStorage::default();
         let mut write_log = WriteLog::new();
         let mut verifiers = HashSet::new();
         let mut gas_meter = BlockGasMeter::default();
@@ -678,9 +676,7 @@ mod tests {
         let tx_code = vec![];
         let raw_addr: RawAddress = FromStr::from_str("test").unwrap();
         let addr: Address = raw_addr.hash();
-        let db_path = TempDir::new("anoma_test")
-            .expect("Unable to create a temporary DB directory");
-        let storage = Storage::new(db_path.path());
+        let storage = TestStorage::default();
         let write_log = WriteLog::new();
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = vec![];

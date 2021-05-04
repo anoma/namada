@@ -52,6 +52,8 @@ where
     current_height: BlockHeight,
 }
 
+pub type PersistentStorage = Storage<db::rocksdb::RocksDB>;
+
 #[derive(Debug)]
 pub struct BlockStorage {
     tree: MerkleTree,
@@ -60,7 +62,7 @@ pub struct BlockStorage {
     subspaces: HashMap<Key, Vec<u8>>,
 }
 
-impl Storage {
+impl PersistentStorage {
     pub fn new(db_path: impl AsRef<Path>) -> Self {
         let tree = MerkleTree::default();
         let subspaces = HashMap::new();
@@ -71,8 +73,7 @@ impl Storage {
             subspaces,
         };
         Self {
-            // TODO: Error handling
-            db: db::open(db_path).unwrap(),
+            db: db::rocksdb::open(db_path).expect("cannot open the DB"),
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
             current_height: BlockHeight(0),
@@ -287,5 +288,135 @@ where
     /// Get the current (yet to be committed) block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use types::Value;
+
+    use super::*;
+
+    #[test]
+    fn test_crud_value() {
+        let mut storage = TestStorage::default();
+        let key =
+            Key::parse("key".to_owned()).expect("cannot parse the key string");
+        let value: u64 = 1;
+
+        // before insertion
+        let (result, gas) = storage.has_key(&key).expect("has_key failed");
+        assert!(!result);
+        assert_eq!(gas, key.len() as u64);
+        let (result, gas) = storage.read(&key).expect("read failed");
+        assert_eq!(result, None);
+        assert_eq!(gas, key.len() as u64);
+
+        // insert
+        storage.write(&key, value.encode()).expect("write failed");
+
+        // read
+        let (result, gas) = storage.has_key(&key).expect("has_key failed");
+        assert!(result);
+        assert_eq!(gas, key.len() as u64);
+        let (result, gas) = storage.read(&key).expect("read failed");
+        assert_eq!(u64::decode(result.expect("value doesn't exist")), 1);
+        assert_eq!(gas, key.len() as u64 + value.encode().len() as u64);
+
+        // delete
+        storage.delete(&key).expect("delete failed");
+
+        // read again
+        let (result, _) = storage.has_key(&key).expect("has_key failed");
+        assert!(!result);
+        let (result, _) = storage.read(&key).expect("read failed");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_commit_block() {
+        let mut storage = TestStorage::default();
+        storage
+            .set_chain_id("test_chain_id_000000")
+            .expect("setting a chain ID failed");
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(100))
+            .expect("begin_block failed");
+        let key =
+            Key::parse("key".to_owned()).expect("cannot parse the key string");
+        let value: u64 = 1;
+
+        // insert and commit
+        storage.write(&key, value.encode()).expect("write failed");
+        let expected_root = storage.merkle_root().as_slice().deref().to_vec();
+        storage.commit().expect("commit failed");
+
+        // load the last state
+        let (root, height) = storage
+            .load_last_state()
+            .expect("loading the last state failed")
+            .expect("no block exists");
+        assert_eq!(root.0, expected_root);
+        assert_eq!(height, 100);
+    }
+
+    #[test]
+    fn test_iter() {
+        let mut storage = TestStorage::default();
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(100))
+            .expect("begin_block failed");
+
+        let mut expected = Vec::new();
+        let prefix = Key::parse("prefix".to_owned())
+            .expect("cannot parse the key string");
+        for i in 9..0 {
+            let key = prefix
+                .push(&format!("{}", i))
+                .expect("cannot push the key segment");
+            let value = (i as u64).encode();
+            // insert
+            storage.write(&key, value.clone()).expect("write failed");
+            expected.push((key.to_string(), value));
+        }
+        storage.commit().expect("commit failed");
+
+        let (iter, gas) = storage.iter_prefix(&prefix);
+        assert_eq!(gas, prefix.len() as u64);
+        for (k, v, gas) in iter {
+            match expected.pop() {
+                Some((expected_key, expected_val)) => {
+                    assert_eq!(k, expected_key);
+                    assert_eq!(v, expected_val);
+                    let expected_gas = expected_key.len() + expected_val.len();
+                    assert_eq!(gas, expected_gas as u64);
+                }
+                None => panic!("read a pair though no expected pair"),
+            }
+        }
+    }
+}
+
+/// Storage with a mock DB for testing
+#[cfg(test)]
+pub type TestStorage = Storage<db::mock::MockDB>;
+
+#[cfg(test)]
+impl Default for TestStorage {
+    fn default() -> Self {
+        let tree = MerkleTree::default();
+        let subspaces = HashMap::new();
+        let block = BlockStorage {
+            tree,
+            hash: BlockHash::default(),
+            height: BlockHeight(0),
+            subspaces,
+        };
+        Self {
+            db: db::mock::MockDB::default(),
+            chain_id: String::with_capacity(CHAIN_ID_LENGTH),
+            block,
+            current_height: BlockHeight(0),
+        }
     }
 }
