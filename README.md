@@ -42,8 +42,14 @@ cargo run --bin anomad -- reset-ledger
 # Submit a custom transaction with a wasm code and arbitrary data
 cargo run --bin anoma -- tx --code txs/tx_template/tx.wasm --data tx.data
 
+# Setup temporary addresses aliases until we have a better client support
+export ADA=a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx
+export ALAN=a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9
+export XAN=a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3
+export BTC=a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc
+
 # Submit a token transfer
-cargo run --bin anomac -- transfer --source alan --target ada --token xan --amount 10.1 --code txs/tx_transfer/tx.wasm
+cargo run --bin anomac -- transfer --source $ALAN --target $ADA --token $XAN --amount 10.1 --code txs/tx_transfer/tx.wasm
 
 # Watch and on change run a node (the state will be persisted)
 cargo watch -x "run --bin anomad -- run-ledger"
@@ -58,8 +64,8 @@ cargo run --bin anoma -- run-gossip --rpc
 cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
-cargo run --bin anomac -- craft-intent --address alan --token-buy btc --amount-buy 20 --token-sell xan --amount-sell 10 --file intent_A.data
-cargo run --bin anomac -- craft-intent --address ada --token-buy xan --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_B.data
+cargo run --bin anomac -- craft-intent --address $ALAN --token-buy $BTC --amount-buy 20 --token-sell $XAN --amount-sell 10 --file intent_A.data
+cargo run --bin anomac -- craft-intent --address $ADA --token-buy $XAN --amount-buy 10 --token-sell $BTC --amount-sell 20 --file intent_B.data
 
 # Subscribe to new network
 cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "asset_v1"

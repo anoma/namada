@@ -52,9 +52,9 @@ pub fn matchmaker_pk() -> PublicKey {
 
 pub fn key_of(name: impl AsRef<str>) -> Keypair {
     match name.as_ref() {
-        "ada" => ada_keypair(),
-        "alan" => alan_keypair(),
-        "matchmaker" => matchmaker_keypair(),
+        "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx" => ada_keypair(),
+        "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9" => alan_keypair(),
+        "a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td" => matchmaker_keypair(),
         other => {
             panic!("Dont' have keys for: {}", other)
         }
