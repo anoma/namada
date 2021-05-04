@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{BlockHash, BlockHeight, Key, KeySeg};
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
@@ -92,6 +93,7 @@ impl DB for RocksDB {
         hash: &BlockHash,
         height: BlockHeight,
         subspaces: &HashMap<Key, Vec<u8>>,
+        address_gen: &EstablishedAddressGen,
     ) -> Result<()> {
         let mut batch = WriteBatch::default();
 
@@ -135,6 +137,14 @@ impl DB for RocksDB {
                 let key = subspace_prefix.join(key);
                 batch.put(key.to_string(), value);
             });
+        }
+        // Address gen
+        {
+            let key = prefix_key
+                .push(&"address_gen".to_owned())
+                .map_err(Error::KeyError)?;
+            let value = address_gen;
+            batch.put(key.to_string(), value.encode());
         }
         let mut write_opts = WriteOptions::default();
         // TODO: disable WAL when we can shutdown with flush
@@ -183,6 +193,7 @@ impl DB for RocksDB {
     fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         let chain_id;
         let height;
+        let address_gen;
         // Chain ID
         match self.0.get("chain_id").map_err(|e| Error::DBError {
             error: e.into_string(),
@@ -200,6 +211,15 @@ impl DB for RocksDB {
                 // TODO if there's an issue decoding this height, should we try
                 // load its predecessor instead?
                 height = BlockHeight::decode(bytes);
+            }
+            None => return Ok(None),
+        }
+        // Address gen
+        match self.0.get("address_gen").map_err(|e| Error::DBError {
+            error: e.into_string(),
+        })? {
+            Some(bytes) => {
+                address_gen = EstablishedAddressGen::decode(bytes);
             }
             None => return Ok(None),
         }
@@ -266,6 +286,7 @@ impl DB for RocksDB {
                     hash,
                     height,
                     subspaces,
+                    address_gen,
                 }))
             }
             _ => Err(Error::Temporary {

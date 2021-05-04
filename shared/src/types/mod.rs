@@ -2,9 +2,8 @@
 
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use std::str::FromStr;
 
-pub use address::{Address, RawAddress};
+pub use address::{Address, EstablishedAddress, ImplicitAddress};
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
@@ -172,19 +171,10 @@ impl KeySeg for DbKeySeg {
     fn parse(mut string: String) -> Result<Self> {
         match string.chars().next() {
             // TODO reserve non-alphanumerical prefix characters for internal
-            // usage raw addresses are prefixed with `'@'`
+            // addresses are prefixed with `'@'`
             Some(c) if c == '@' => {
                 let _ = string.remove(0);
-                FromStr::from_str(&string)
-                    .map_err(Error::ParseAddress)
-                    .map(|raw: RawAddress| DbKeySeg::AddressSeg(raw.hash()))
-            }
-            // address hashes are prefixed with `'#'`
-            Some(c) if c == '#' => {
-                let _ = string.remove(0);
-                Address::decode(&string)
-                    .map_err(Error::ParseAddress)
-                    .map(DbKeySeg::AddressSeg)
+                Address::parse(string).map(DbKeySeg::AddressSeg)
             }
             _ => Ok(DbKeySeg::StringSeg(string)),
         }
@@ -298,26 +288,6 @@ impl core::fmt::Debug for BlockHash {
     }
 }
 
-impl KeySeg for RawAddress {
-    fn to_string(&self) -> String {
-        format!("@{}", self)
-    }
-
-    fn parse(mut seg: String) -> Result<Self> {
-        match seg.chars().next() {
-            Some(c) if c == '@' => {
-                let _ = seg.remove(0);
-                FromStr::from_str(&seg).map_err(Error::ParseAddress)
-            }
-            _ => Err(Error::ParseAddressFromKey),
-        }
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::AddressSeg(self.hash())
-    }
-}
-
 impl KeySeg for Address {
     fn to_string(&self) -> String {
         format!("#{}", self)
@@ -325,9 +295,9 @@ impl KeySeg for Address {
 
     fn parse(mut seg: String) -> Result<Self> {
         match seg.chars().next() {
-            Some(c) if c == '#' => {
+            Some(c) if c == '@' => {
                 let _ = seg.remove(0);
-                Ok(From::from(seg))
+                Address::decode(seg).map_err(Error::ParseAddress)
             }
             _ => Err(Error::ParseAddressFromKey),
         }

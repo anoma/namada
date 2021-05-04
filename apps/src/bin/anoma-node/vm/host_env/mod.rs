@@ -3,14 +3,13 @@ pub mod write_log;
 
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::str::FromStr;
 
 use anoma::protobuf::types::Tx;
 use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
-use anoma_shared::types::{Address, Key, KeySeg, RawAddress};
+use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::KeyVal;
 use borsh::{BorshDeserialize, BorshSerialize};
 use tokio::sync::mpsc::Sender;
@@ -1350,12 +1349,11 @@ where
 
     log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
-    let addr: RawAddress =
-        FromStr::from_str(&addr).expect("Cannot parse the address string");
+    let addr = Address::decode(&addr).expect("Cannot parse the address string");
 
     let verifiers: &mut HashSet<Address> =
         unsafe { &mut *(env.verifiers.get()) };
-    verifiers.insert(addr.hash());
+    verifiers.insert(addr);
     tx_add_gas(env, addr_len);
 }
 
@@ -1396,58 +1394,37 @@ fn tx_update_validity_predicate<DB>(
     // TODO: charge the size diff
 }
 
-/// Try to initialize a new account with a given address. The action must be
-/// authorized by the parent address.
+/// Initialize a new account established address.
 fn tx_init_account<DB>(
     env: &TxEnv<DB>,
-    addr_ptr: u64,
-    addr_len: u64,
     code_ptr: u64,
     code_len: u64,
-) where
+    result_ptr: u64,
+) -> u64
+where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
-    let (addr, gas) = env
-        .memory
-        .read_string(addr_ptr, addr_len as _)
-        .expect("Cannot read the address from memory");
-    tx_add_gas(env, gas);
     let (code, gas) = env
         .memory
         .read_bytes(code_ptr, code_len as _)
         .expect("Cannot read validity predicate from memory");
     tx_add_gas(env, gas);
 
-    let addr =
-        RawAddress::parse(addr).expect("Cannot parse the address string");
-    let parent_addr = addr.parent();
-    let parent_addr_hash = parent_addr.hash();
-
-    log::debug!("tx_init_account address: {}, parent: {}", addr, parent_addr);
+    log::debug!("tx_init_account");
 
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
-    let (parent_exists, gas) = storage
-        .exists(&parent_addr_hash)
-        .expect("Cannot read storage");
-    tx_add_gas(env, gas);
-    // If the parent address doesn't exist, the tx will be declined
-    if !parent_exists {
-        log::warn!(
-            "Cannot initialize an account address {}, because the parent \
-             address {} doesn't exist",
-            addr,
-            parent_addr
-        );
-        unreachable!()
-    }
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
-    let gas = write_log.init_account(addr.hash(), parent_addr_hash, code);
-
-    // ensure that the parent address verifies the account creation
-    let verifiers: &mut HashSet<Address> =
-        unsafe { &mut *(env.verifiers.get()) };
-    verifiers.insert(parent_addr.hash());
+    let (addr, gas) = write_log.init_account(&storage.address_gen, code);
+    let addr_bytes =
+        addr.try_to_vec().expect("Encoding address shouldn't fail");
+    let result_len = addr_bytes.len() as u64;
     tx_add_gas(env, gas);
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, addr_bytes)
+        .expect("cannot write to memory");
+    tx_add_gas(env, gas);
+    result_len
 }
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.

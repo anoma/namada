@@ -29,9 +29,9 @@ pub async fn submit_transfer(
     dry_run: bool,
 ) {
     let source_key: Keypair = wallet::key_of(&source);
-    let source = Address::from_raw(source);
-    let target = Address::from_raw(target);
-    let token = Address::from_raw(token);
+    let source = Address::decode(source).expect("Source address is not valid");
+    let target = Address::decode(target).expect("Target address is not valid");
+    let token = Address::decode(token).expect("Token address is not valid");
     let amount = token::Amount::from(amount);
     let code = std::fs::read(code_path).unwrap();
 

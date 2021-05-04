@@ -4,6 +4,7 @@ use std::collections::btree_map::Range;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
 
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{BlockHash, BlockHeight, Key, KeySeg};
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
@@ -33,6 +34,7 @@ impl DB for MockDB {
         hash: &BlockHash,
         height: BlockHeight,
         subspaces: &HashMap<Key, Vec<u8>>,
+        address_gen: &EstablishedAddressGen,
     ) -> Result<()> {
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
@@ -75,6 +77,14 @@ impl DB for MockDB {
                 self.0.insert(key.to_string(), value.clone());
             });
         }
+        // Address gen
+        {
+            let key = prefix_key
+                .push(&"address_gen".to_owned())
+                .map_err(Error::KeyError)?;
+            let value = address_gen;
+            self.0.insert(key.to_string(), value.encode());
+        }
         self.0.insert("height".to_owned(), height.encode());
         Ok(())
     }
@@ -98,17 +108,25 @@ impl DB for MockDB {
     fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         let chain_id;
         let height;
+        let address_gen;
         // Chain ID
         match self.0.get("chain_id") {
             Some(bytes) => {
-                chain_id = String::decode(bytes.clone());
+                chain_id = String::decode(bytes);
             }
             None => return Ok(None),
         }
         // Block height
         match self.0.get("height") {
             Some(bytes) => {
-                height = BlockHeight::decode(bytes.clone());
+                height = BlockHeight::decode(bytes);
+            }
+            None => return Ok(None),
+        }
+        // Address gen
+        match self.0.get("address_gen") {
+            Some(bytes) => {
+                address_gen = EstablishedAddressGen::decode(bytes);
             }
             None => return Ok(None),
         }
@@ -162,6 +180,7 @@ impl DB for MockDB {
                     hash,
                     height,
                     subspaces,
+                    address_gen,
                 }))
             }
             _ => Err(Error::Temporary {

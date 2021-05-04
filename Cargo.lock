@@ -143,6 +143,7 @@ dependencies = [
  "bech32",
  "borsh",
  "ed25519-dalek",
+ "rand 0.8.3",
  "sha2 0.9.3",
  "thiserror",
 ]

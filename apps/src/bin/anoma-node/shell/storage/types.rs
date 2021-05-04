@@ -1,6 +1,7 @@
 //! The key and values that may be persisted in a DB.
 
 use anoma_shared::bytes::ByteBuf;
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{Address, BlockHash, BlockHeight, Key};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -20,9 +21,9 @@ pub trait Value: BorshSerialize + BorshDeserialize {
         result
     }
 
-    fn decode(bytes: Vec<u8>) -> Self {
+    fn decode(bytes: impl AsRef<[u8]>) -> Self {
         // TODO error handling
-        Self::try_from_slice(&bytes).unwrap()
+        Self::try_from_slice(bytes.as_ref()).unwrap()
     }
 }
 
@@ -32,6 +33,7 @@ impl Value for u64 {}
 impl Value for i64 {}
 impl Value for BlockHeight {}
 impl Value for BlockHash {}
+impl Value for EstablishedAddressGen {}
 
 impl Value for H256 {}
 impl<T: Value> Value for DefaultStore<T> {}
@@ -153,6 +155,8 @@ impl<I> std::fmt::Debug for PrefixIterator<I> {
 
 impl Hash256 for Address {
     fn hash256(&self) -> H256 {
-        self.hash.hash256()
+        self.try_to_vec()
+            .expect("Encoding address shouldn't fail")
+            .hash256()
     }
 }

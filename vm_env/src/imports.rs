@@ -6,7 +6,7 @@ pub mod tx {
     pub use std::mem::size_of;
 
     use anoma_shared::types::{
-        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+        Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     use anoma_shared::vm_memory::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
@@ -171,17 +171,20 @@ pub mod tx {
     }
 
     // Initialize a new account
-    pub fn init_account(addr: impl AsRef<str>, code: impl AsRef<[u8]>) {
-        let addr = addr.as_ref();
+    pub fn init_account(code: impl AsRef<[u8]>) -> Address {
         let code = code.as_ref();
-        unsafe {
+        let result = Vec::with_capacity(0);
+        let result_len = unsafe {
             _init_account(
-                addr.as_ptr() as _,
-                addr.len() as _,
                 code.as_ptr() as _,
                 code.len() as _,
+                result.as_ptr() as _,
             )
-        }
+        };
+        let slice =
+            unsafe { slice::from_raw_parts(result.as_ptr(), result_len as _) };
+        Address::try_from_slice(slice)
+            .expect("Decoding address created by the ledger shouldn't fail")
     }
 
     /// Get the chain ID
@@ -266,12 +269,7 @@ pub mod tx {
         );
 
         // Initialize a new account
-        fn _init_account(
-            addr_ptr: u64,
-            addr_len: u64,
-            code_ptr: u64,
-            code_len: u64,
-        );
+        fn _init_account(code_ptr: u64, code_len: u64, result_ptr: u64) -> u64;
 
         // Get the chain ID
         fn _get_chain_id(result_ptr: u64);

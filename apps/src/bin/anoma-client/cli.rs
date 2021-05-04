@@ -116,10 +116,12 @@ fn craft_intent(
     file: String,
 ) {
     let source_keypair = wallet::key_of(&addr);
-    let addr = Address::from_raw(addr);
-    let token_sell = Address::from_raw(token_sell);
+    let addr = Address::decode(addr).expect("Source address is not valid");
+    let token_sell = Address::decode(token_sell)
+        .expect("Token to sell address is not valid");
     let amount_sell = token::Amount::from(amount_sell);
-    let token_buy = Address::from_raw(token_buy);
+    let token_buy =
+        Address::decode(token_buy).expect("Token to buy address is not valid");
     let amount_buy = token::Amount::from(amount_buy);
 
     let intent = Intent {

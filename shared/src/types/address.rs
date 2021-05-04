@@ -5,7 +5,6 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::iter::FromIterator;
-use std::str::FromStr;
 use std::string;
 
 use bech32::{self, FromBase32, ToBase32, Variant};
@@ -13,38 +12,15 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-const MAX_RAW_ADDRESS_LEN: usize = 255;
-const MIN_RAW_ADDRESS_LEN: usize = 3;
-const MAX_LABEL_LEN: usize = 64;
+use crate::types::key;
 
-const HASH_LEN: usize = 64;
 /// human-readable part of Bech32m encoded address
 const ADDRESS_HRP: &str = "a";
 const ADDRESS_BECH32_VARIANT: bech32::Variant = Variant::Bech32m;
+pub(crate) const HASH_LEN: usize = 40;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Address must be at least {MIN_RAW_ADDRESS_LEN} characters long")]
-    AddressTooShort,
-    #[error("Address must be at most {MAX_RAW_ADDRESS_LEN} characters long")]
-    AddressTooLong,
-    #[error("Address must not contain non-ASCII characters")]
-    AddressNonAscii,
-    #[error(
-        "Address can only contain ASCII alphanumeric characters, hyphens and \
-         full stops"
-    )]
-    AddressContainsInvalidCharacter,
-    #[error("Address label cannot be be empty")]
-    EmptyLabel,
-    #[error("Address label must be at most {MAX_LABEL_LEN} characters long")]
-    LabelTooLong,
-    #[error("Address label cannot begin with hyphen")]
-    LabelStartsWithHyphen,
-    #[error("Address label cannot end with hyphen")]
-    LabelEndsWithHyphen,
-    #[error("Address label cannot begin with a digit")]
-    LabelStartsWithDigit,
     #[error("Error decoding address from Bech32m: {0}")]
     DecodeBech32(bech32::Error),
     #[error("Error decoding address from base32: {0}")]
@@ -57,71 +33,37 @@ pub enum Error {
         "Unexpected Bech32m variant {0:?}, expected {ADDRESS_BECH32_VARIANT:?}"
     )]
     UnexpectedBech32Variant(bech32::Variant),
-    #[error("Unexpected address hash length {0}, expected {HASH_LEN}")]
-    UnexpectedHashLength(usize),
     #[error("Address must be encoded with utf-8")]
     NonUtf8Address(string::FromUtf8Error),
+    #[error("Invalid address encoding")]
+    InvalidAddressEncoding(std::io::Error),
+    #[error("Unexpected address hash length {0}, expected {HASH_LEN}")]
+    UnexpectedHashLength(usize),
 }
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(
+    Debug,
     Clone,
+    BorshSerialize,
+    BorshDeserialize,
     PartialEq,
     Eq,
     PartialOrd,
     Ord,
-    BorshSerialize,
-    BorshDeserialize,
     Hash,
 )]
-pub struct Address {
-    pub hash: String,
-}
-
-/// invariant, the raw string is equal to labels.join(".").
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-)]
-pub struct RawAddress {
-    pub raw: String,
-    labels: Vec<Label>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-)]
-pub struct Label(String);
-
-fn hash_raw(str: impl AsRef<str>) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(&str.as_ref());
-    format!("{:X}", hasher.finalize())
+pub enum Address {
+    Established(EstablishedAddress),
+    Implicit(ImplicitAddress),
 }
 
 impl Address {
-    pub fn root() -> Self {
-        let hash = hash_raw("");
-        Self { hash }
-    }
-
-    /// Encode the hash of the given address as a Bech32m [`String`].
+    /// Encode an address with Bech32m encoding
     pub fn encode(&self) -> String {
-        let bytes = self.hash.as_bytes();
+        let bytes = self
+            .try_to_vec()
+            .expect("Encoding an address shouldn't fail");
         bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT)
             .unwrap_or_else(|_| {
                 panic!(
@@ -131,7 +73,7 @@ impl Address {
             })
     }
 
-    /// Decode an address from a hexadecimal [`String`] of its hash.
+    /// Decode an address from Bech32m encoding
     pub fn decode(string: impl AsRef<str>) -> Result<Self> {
         let (prefix, hash_base32, variant) =
             bech32::decode(string.as_ref()).map_err(Error::DecodeBech32)?;
@@ -142,145 +84,121 @@ impl Address {
             ADDRESS_BECH32_VARIANT => {}
             _ => return Err(Error::UnexpectedBech32Variant(variant)),
         }
-        let hash: Vec<u8> = FromBase32::from_base32(&hash_base32)
+        let bytes: Vec<u8> = FromBase32::from_base32(&hash_base32)
             .map_err(Error::DecodeBase32)?;
-        let hash = String::from_utf8(hash).map_err(Error::NonUtf8Address)?;
-        Ok(Self { hash })
-    }
-
-    pub fn len(&self) -> usize {
-        self.hash.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.hash.is_empty()
-    }
-
-    /// Parse an address from raw address string. Panics for invalid address.
-    pub fn from_raw(str: impl AsRef<str>) -> Self {
-        RawAddress::from_str(str.as_ref())
-            .expect("expected a valid address")
-            .hash()
-    }
-}
-
-impl From<String> for Address {
-    /// Construct an address from its hash
-    fn from(hash: String) -> Self {
-        Self { hash }
-    }
-}
-
-impl RawAddress {
-    pub fn root() -> Self {
-        Self {
-            raw: "".into(),
-            labels: vec![],
+        let address = BorshDeserialize::try_from_slice(&bytes[..])
+            .map_err(Error::InvalidAddressEncoding)?;
+        match &address {
+            Address::Established(established) => {
+                if established.hash.len() != HASH_LEN {
+                    return Err(Error::UnexpectedHashLength(
+                        established.hash.len(),
+                    ));
+                }
+            }
+            Address::Implicit(ImplicitAddress::Ed25519(pkh)) => {
+                if pkh.0.len() != HASH_LEN {
+                    return Err(Error::UnexpectedHashLength(pkh.0.len()));
+                }
+            }
         }
-    }
-
-    pub fn hash(&self) -> Address {
-        Address {
-            hash: hash_raw(&self.raw),
-        }
-    }
-
-    pub fn parent(&self) -> Self {
-        if self.labels.len() <= 1 {
-            return Self::root();
-        }
-        let mut labels = self.labels.clone();
-        labels.remove(0);
-        let raw = labels_to_str(&labels);
-        Self { raw, labels }
-    }
-
-    #[allow(dead_code)]
-    pub fn parent_hash(&self) -> Address {
-        self.parent().hash()
-    }
-}
-
-fn labels_to_str(labels: &[Label]) -> String {
-    labels
-        .iter()
-        .map(|l| l.0.clone())
-        .collect::<Vec<String>>()
-        .join(".")
-}
-
-impl Debug for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.encode())
+        Ok(address)
     }
 }
 
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.encode())
+        write!(
+            f,
+            "{}: {}",
+            match self {
+                Address::Established(_) => {
+                    "Established"
+                }
+                Address::Implicit(_) => {
+                    "Implicit"
+                }
+            },
+            self.encode(),
+        )
     }
 }
 
-impl FromStr for RawAddress {
-    type Err = Error;
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
+pub struct EstablishedAddress {
+    hash: String,
+}
 
-    fn from_str(s: &str) -> Result<Self> {
-        if s.len() < MIN_RAW_ADDRESS_LEN {
-            return Err(Error::AddressTooShort);
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct EstablishedAddressGen {
+    last_hash: String,
+}
+
+impl EstablishedAddressGen {
+    pub fn new(seed: impl AsRef<str>) -> Self {
+        Self {
+            last_hash: seed.as_ref().to_owned(),
         }
-        if s.len() > MAX_RAW_ADDRESS_LEN {
-            return Err(Error::AddressTooLong);
-        }
-        if !s.is_ascii() {
-            return Err(Error::AddressNonAscii);
-        }
-        if !s
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
-        {
-            return Err(Error::AddressContainsInvalidCharacter);
-        }
-        let raw = s.to_ascii_lowercase();
-        let labels = raw
-            .split('.')
-            .map(|label| Label::from_str(label))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(RawAddress { raw, labels })
+    }
+
+    /// Generate a new established address. Requires a source of randomness as
+    /// arbitrary bytes. In the ledger, this could be some unpredictable value,
+    /// such as hash of the transaction that has initialized the new address.
+    pub fn generate_address(
+        &mut self,
+        rng_source: impl AsRef<[u8]>,
+    ) -> Address {
+        let gen_bytes = self
+            .try_to_vec()
+            .expect("Encoding established addresses generator shouldn't fail");
+        let mut hasher = Sha256::new();
+        let bytes = [&gen_bytes, rng_source.as_ref()].concat();
+        hasher.update(bytes);
+        // hex of the first 40 chars of the hash
+        let hash = format!("{:.width$X}", hasher.finalize(), width = HASH_LEN);
+        self.last_hash = hash.clone();
+        Address::Established(EstablishedAddress { hash })
     }
 }
 
-impl Display for RawAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.raw)
-    }
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
+pub enum ImplicitAddress {
+    Ed25519(key::ed25519::PublicKeyHash),
 }
 
-impl FromStr for Label {
-    type Err = Error;
+/// Temporary helper for testing
+pub fn xan() -> Address {
+    Address::decode("a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3").expect("The token address decoding shouldn't fail")
+}
 
-    /// To validate a string to be parsed properly, a [`Label`] should not be
-    /// parsed directly. Instead parse the whole [`Address`].
-    fn from_str(s: &str) -> Result<Self> {
-        match s.chars().next() {
-            None => Err(Error::EmptyLabel),
-            Some(first_char) => {
-                if s.len() > MAX_LABEL_LEN {
-                    return Err(Error::LabelTooLong);
-                }
-                if '-' == first_char {
-                    return Err(Error::LabelStartsWithHyphen);
-                }
-                if first_char.is_ascii_digit() {
-                    return Err(Error::LabelStartsWithDigit);
-                }
-                if let Some('-') = s.chars().last() {
-                    return Err(Error::LabelEndsWithHyphen);
-                }
-                let inner = s.to_string();
-                Ok(Self(inner))
-            }
-        }
-    }
+/// Temporary helper for testing
+pub fn btc() -> Address {
+    Address::decode("a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc").expect("The token address decoding shouldn't fail")
+}
+
+/// Temporary helper for testing
+pub fn matchmaker() -> Address {
+    Address::decode("a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td").expect("The token address decoding shouldn't fail")
 }
 
 impl<'a> FromIterator<&'a Address> for HashSet<Address> {
@@ -293,29 +211,29 @@ impl<'a> FromIterator<&'a Address> for HashSet<Address> {
     }
 }
 
-pub fn xan() -> Address {
-    Address::from_raw("xan")
-}
-
-pub fn btc() -> Address {
-    Address::from_raw("btc")
-}
-
 #[cfg(test)]
 mod tests {
+    use rand::prelude::ThreadRng;
+    use rand::{thread_rng, RngCore};
+
     use super::*;
 
+    /// Run `cargo test gen_established_address -- --nocapture` to generate a
+    /// new established address.
     #[test]
-    fn get_xan_addr() {
-        let xan_addr = xan();
-        assert_eq!(xan_addr, Address::from("124A9CAF6E788ABD00FF4FF94D01B3A1C8AC2BF81061637128A9C292C00418F6".to_string()));
-        assert_eq!(ToString::to_string(&xan_addr), "a1xyergsfegdq5vdj9xuurss2zgscrq3jxx3ryvwf5gscrzs3ngyc5xwzpgveyy33cxycrvvfkxvmnzv3cgyu5xv3exfpnqvp5xyuyvds0pt2v2");
-    }
+    fn gen_established_address() {
+        let seed = "such randomness, much wow";
+        let mut key_gen = EstablishedAddressGen::new(seed);
 
-    #[test]
-    fn get_btc_addr() {
-        let btc_addr = btc();
-        assert_eq!(btc_addr, Address::from("E40605E6A26268A5EB83C155EA5DD12AEB3314F6BA5D67D4B607DE95156E4E12".to_string()));
-        assert_eq!(ToString::to_string(&btc_addr), "a1g56rqd3sx4znvsfjxcervwzpx4z5ywpngvcn2d29gy65g3p3xfq52s3nxvcng33kgfqn23pkxazrgs3kxqm5g3fex5cn2dj9x3znzvssph8ht");
+        let mut rng: ThreadRng = thread_rng();
+        let mut rng_bytes = vec![0u8; 32];
+        rng.fill_bytes(&mut rng_bytes[..]);
+        let rng_source = rng_bytes
+            .iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<String>>()
+            .join("");
+        let address = key_gen.generate_address(rng_source);
+        println!("address {}", address);
     }
 }
