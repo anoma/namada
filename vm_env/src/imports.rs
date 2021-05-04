@@ -148,8 +148,8 @@ pub mod tx {
     }
 
     /// Insert a verifier
-    pub fn insert_verifier<A: AsRef<str>>(addr: A) {
-        let addr = addr.as_ref();
+    pub fn insert_verifier(addr: Address) {
+        let addr = addr.encode();
         unsafe { _insert_verifier(addr.as_ptr() as _, addr.len() as _) }
     }
 

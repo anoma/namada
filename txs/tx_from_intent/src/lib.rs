@@ -7,7 +7,7 @@ transaction! {
         log_string(format!("apply_tx called with intent transfers: {:#?}", transfers));
 
         // make sure that the matchmaker has to validate this tx
-        insert_verifier("matchmaker");
+        insert_verifier(address::matchmaker());
 
         let token::Transfer {source, target, token, amount} = transfers.transfer_1;
         token::transfer(&source, &target, &token, amount);
