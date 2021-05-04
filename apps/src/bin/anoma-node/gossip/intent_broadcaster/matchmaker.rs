@@ -34,7 +34,7 @@ type Result<T> = std::result::Result<T, Error>;
 impl Matchmaker {
     pub fn new(
         config: &anoma::config::Matchmaker,
-    ) -> Result<(Self, Receiver<Tx>)> {
+    ) -> Result<(Self, (Receiver<Tx>, String))> {
         let (inject_tx, rx) = channel::<Tx>(100);
         let matchmaker_code =
             std::fs::read(&config.matchmaker).map_err(Error::FileFailed)?;
@@ -54,7 +54,7 @@ impl Matchmaker {
                 matchmaker_code,
                 tx_code,
             },
-            rx,
+            (rx, config.ledger_address.to_string()),
         ))
     }
 

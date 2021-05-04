@@ -53,14 +53,14 @@ pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
 #[tokio::main]
 pub async fn matchmaker_dispatcher(
     mut matchmaker_event_receiver: Receiver<Tx>,
+    ledger_address: String,
 ) {
     loop {
         if let Some(tx) = matchmaker_event_receiver.recv().await {
             let mut tx_bytes = vec![];
             tx.encode(&mut tx_bytes).unwrap();
             let client =
-                HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap())
-                    .unwrap();
+                HttpClient::new(ledger_address.parse().unwrap()).unwrap();
             let _response = client.broadcast_tx_commit(tx_bytes.into()).await;
         }
     }
@@ -75,10 +75,14 @@ pub async fn dispatcher(
             tokio::sync::oneshot::Sender<RpcResponse>,
         )>,
     >,
-    matchmaker_event_receiver: Option<Receiver<Tx>>,
+    matchmaker_event_receiver: Option<(Receiver<Tx>, String)>,
 ) -> Result<()> {
-    if let Some(matchmaker_event_receiver) = matchmaker_event_receiver {
-        thread::spawn(|| matchmaker_dispatcher(matchmaker_event_receiver));
+    if let Some((matchmaker_event_receiver, ledger_address)) =
+        matchmaker_event_receiver
+    {
+        thread::spawn(|| {
+            matchmaker_dispatcher(matchmaker_event_receiver, ledger_address)
+        });
     }
     match rpc_event_receiver {
         Some(mut rpc_event_receiver) => {
