@@ -28,6 +28,7 @@ pub enum Error {
     #[error("A config file already exists in {0}")]
     AlreadyExistingConfig(PathBuf),
 }
+
 pub const BASEDIR: &str = ".anoma";
 pub const FILENAME: &str = "config.toml";
 pub const TENDERMINT_DIR: &str = "tendermint";
