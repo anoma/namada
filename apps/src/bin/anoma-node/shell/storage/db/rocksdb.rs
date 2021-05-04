@@ -12,9 +12,8 @@ use rocksdb::{
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
-use super::types::{MerkleTree, PrefixIterator, Value};
-use super::{BlockState, Error, Result, DB};
-use crate::shell::storage::db::DBIter;
+use super::{BlockState, DBIter, Error, Result, DB};
+use crate::shell::storage::types::{MerkleTree, PrefixIterator, Value};
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -276,6 +275,8 @@ impl DB for RocksDB {
         }
     }
 }
+
+pub type PersistentPrefixIterator<'a> = PrefixIterator<rocksdb::DBIterator<'a>>;
 
 impl<'iter> DBIter<'iter> for RocksDB {
     type PrefixIter = PersistentPrefixIterator<'iter>;

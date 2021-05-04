@@ -131,8 +131,6 @@ fn new_blake2b() -> Blake2b {
 
 pub type KVBytes = (Box<[u8]>, Box<[u8]>);
 
-pub type PersistentPrefixIterator<'a> = PrefixIterator<rocksdb::DBIterator<'a>>;
-
 pub struct PrefixIterator<I> {
     pub iter: I,
     pub db_prefix: String,

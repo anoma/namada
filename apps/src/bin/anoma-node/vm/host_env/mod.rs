@@ -457,11 +457,7 @@ where
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
-            if present {
-                1
-            } else {
-                0
-            }
+            if present { 1 } else { 0 }
         }
     }
 }
@@ -1053,11 +1049,7 @@ where
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
-    if present {
-        1
-    } else {
-        0
-    }
+    if present { 1 } else { 0 }
 }
 
 /// Storage `has_key` in posterior state (after tx execution) function exposed
@@ -1098,11 +1090,7 @@ where
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
-            if present {
-                1
-            } else {
-                0
-            }
+            if present { 1 } else { 0 }
         }
     }
 }

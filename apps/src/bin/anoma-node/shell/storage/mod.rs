@@ -17,7 +17,6 @@ use thiserror::Error;
 use types::MerkleTree;
 
 use self::types::Hash256;
-pub use self::types::{PersistentPrefixIterator, PrefixIterator};
 use super::MerkleRoot;
 
 #[derive(Error, Debug)]
