@@ -61,7 +61,9 @@ pub async fn matchmaker_dispatcher(
             tx.encode(&mut tx_bytes).unwrap();
             let client =
                 HttpClient::new(ledger_address.parse().unwrap()).unwrap();
-            let _response = client.broadcast_tx_commit(tx_bytes.into()).await;
+            let response =
+                client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
+            println!("{:#?}", response);
         }
     }
 }
