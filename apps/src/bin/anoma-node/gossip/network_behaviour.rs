@@ -1,4 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
@@ -113,7 +114,8 @@ impl Behaviour {
     pub fn new(
         key: Keypair,
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<Receiver<Tx>>)> {
+    ) -> Result<(Self, Option<(Receiver<(Tx, HashSet<Vec<u8>>)>, String)>)>
+    {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")

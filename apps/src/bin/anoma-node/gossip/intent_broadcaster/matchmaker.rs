@@ -1,4 +1,7 @@
+use std::collections::HashSet;
+
 use anoma::protobuf::types::{Intent, Tx};
+use anoma::protobuf::IntentId;
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -10,7 +13,7 @@ use crate::vm;
 pub struct Matchmaker {
     mempool: IntentMempool,
     filter: Option<Filter>,
-    inject_tx: Sender<Tx>,
+    inject_tx: Sender<(Tx, HashSet<Vec<u8>>)>,
     matchmaker_code: Vec<u8>,
     tx_code: Vec<u8>,
 }
@@ -34,8 +37,8 @@ type Result<T> = std::result::Result<T, Error>;
 impl Matchmaker {
     pub fn new(
         config: &anoma::config::Matchmaker,
-    ) -> Result<(Self, (Receiver<Tx>, String))> {
-        let (inject_tx, rx) = channel::<Tx>(100);
+    ) -> Result<(Self, (Receiver<(Tx, HashSet<Vec<u8>>)>, String))> {
+        let (inject_tx, receiver_tx) = channel(100);
         let matchmaker_code =
             std::fs::read(&config.matchmaker).map_err(Error::FileFailed)?;
         let tx_code =
@@ -54,7 +57,7 @@ impl Matchmaker {
                 matchmaker_code,
                 tx_code,
             },
-            (rx, config.ledger_address.to_string()),
+            (receiver_tx, config.ledger_address.to_string()),
         ))
     }
 
@@ -79,20 +82,31 @@ impl Matchmaker {
             let matchmaker_runner = vm::MatchmakerRunner::new();
             let matchmaker_code = &self.matchmaker_code;
             let inject_tx = &self.inject_tx;
-            Ok(self.mempool.find_map(&intent, &|i1: &Intent, i2: &Intent| {
-                matchmaker_runner
-                    .run(
-                        matchmaker_code.clone(),
-                        &i1.data,
-                        &i2.data,
-                        tx_code,
-                        inject_tx.clone(),
-                    )
-                    .map_err(Error::RunnerFailed)
-                    .unwrap()
-            }))
+            Ok(self.mempool.find_map(
+                &intent,
+                &|id1: &IntentId, i1: &Intent, id2: &IntentId, i2: &Intent| {
+                    matchmaker_runner
+                        .run(
+                            matchmaker_code.clone(),
+                            &id1.0,
+                            &i1.data,
+                            &id2.0,
+                            &i2.data,
+                            tx_code,
+                            inject_tx.clone(),
+                        )
+                        .map_err(Error::RunnerFailed)
+                        .unwrap()
+                },
+            ))
         } else {
             Ok(false)
         }
+    }
+
+    pub fn match_found(&mut self, intents: HashSet<Vec<u8>>) {
+        intents.into_iter().for_each(|intent_id| {
+            self.mempool.remove(&IntentId::from(intent_id));
+        });
     }
 }

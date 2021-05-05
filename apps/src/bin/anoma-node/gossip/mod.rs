@@ -3,15 +3,15 @@ mod network_behaviour;
 mod p2p;
 mod rpc;
 
+use std::collections::HashSet;
 use std::thread;
 
 use anoma::protobuf::services::{rpc_message, RpcResponse};
 use anoma::protobuf::types::Tx;
-use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use self::p2p::P2P;
 
@@ -52,7 +52,7 @@ pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
 // seems to prevent this issue.
 #[tokio::main]
 pub async fn matchmaker_dispatcher(
-    mut matchmaker_event_receiver: Receiver<Tx>,
+    mut matchmaker_event_receiver: mpsc::Receiver<Tx>,
     ledger_address: String,
 ) {
     loop {
@@ -72,22 +72,48 @@ pub async fn matchmaker_dispatcher(
 pub async fn dispatcher(
     mut gossip: P2P,
     rpc_event_receiver: Option<
-        Receiver<(
-            rpc_message::Message,
-            tokio::sync::oneshot::Sender<RpcResponse>,
-        )>,
+        mpsc::Receiver<(rpc_message::Message, oneshot::Sender<RpcResponse>)>,
     >,
-    matchmaker_event_receiver: Option<(Receiver<Tx>, String)>,
+    matchmaker_event_receiver: Option<(
+        mpsc::Receiver<(Tx, HashSet<Vec<u8>>)>,
+        String,
+    )>,
 ) -> Result<()> {
-    if let Some((matchmaker_event_receiver, ledger_address)) =
-        matchmaker_event_receiver
-    {
-        thread::spawn(|| {
-            matchmaker_dispatcher(matchmaker_event_receiver, ledger_address)
-        });
-    }
-    match rpc_event_receiver {
-        Some(mut rpc_event_receiver) => {
+    match (rpc_event_receiver, matchmaker_event_receiver) {
+        (
+            Some(mut rpc_event_receiver),
+            Some((mut matchmaker_event_receiver, ledger_address)),
+        ) => {
+            let (tx_sender, tx_receiver) = mpsc::channel(100);
+            {
+                thread::spawn(|| {
+                    matchmaker_dispatcher(tx_receiver, ledger_address)
+                });
+            }
+
+            loop {
+                tokio::select! {
+                    Some((tx, intents)) = matchmaker_event_receiver.recv() =>
+                    {
+                        gossip.handle_matchmaker_event(intents).await;
+                        tx_sender.send(tx).await.unwrap()
+                    },
+                    Some((event, inject_response)) = rpc_event_receiver.recv() =>
+                    {
+                        let response = gossip.handle_rpc_event(event).await;
+                        inject_response.send(response).expect("failed to send response to rpc server")
+                    },
+                    swarm_event = gossip.swarm.next() => {
+                        // All events are handled by the
+                        // `NetworkBehaviourEventProcess`es.  I.e. the
+                        // `swarm.next()` future drives the `Swarm` without ever
+                        // terminating.
+                        panic!("Unexpected event: {:?}", swarm_event);
+                    },
+                };
+            }
+        }
+        (Some(mut rpc_event_receiver), None) => {
             loop {
                 tokio::select! {
                     Some((event, inject_response)) = rpc_event_receiver.recv() =>
@@ -105,7 +131,31 @@ pub async fn dispatcher(
                 };
             }
         }
-        None => {
+        (None, Some((mut matchmaker_event_receiver, ledger_address))) => {
+            let (tx_sender, tx_receiver) = mpsc::channel(100);
+            {
+                thread::spawn(|| {
+                    matchmaker_dispatcher(tx_receiver, ledger_address)
+                });
+            }
+            loop {
+                tokio::select! {
+                    Some((tx, intents)) = matchmaker_event_receiver.recv() =>
+                    {
+                        gossip.handle_matchmaker_event(intents).await;
+                        tx_sender.send(tx).await.unwrap()
+                    },
+                    swarm_event = gossip.swarm.next() => {
+                        // All events are handled by the
+                        // `NetworkBehaviourEventProcess`es.  I.e. the
+                        // `swarm.next()` future drives the `Swarm` without ever
+                        // terminating.
+                        panic!("Unexpected event: {:?}", swarm_event);
+                    },
+                };
+            }
+        }
+        (None, None) => {
             loop {
                 tokio::select! {
                     swarm_event = gossip.swarm.next() => {

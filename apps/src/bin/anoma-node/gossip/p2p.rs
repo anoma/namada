@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anoma::protobuf::services::{rpc_message, RpcResponse};
 use anoma::protobuf::types::Tx;
 use libp2p::gossipsub::IdentTopic;
@@ -30,7 +32,8 @@ pub struct P2P {
 impl P2P {
     pub fn new(
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<Receiver<Tx>>)> {
+    ) -> Result<(Self, Option<(Receiver<(Tx, HashSet<Vec<u8>>)>, String)>)>
+    {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
@@ -70,6 +73,10 @@ impl P2P {
             }
         }
         Ok((p2p, matchmaker_event_receiver))
+    }
+
+    pub async fn handle_matchmaker_event(&mut self, intents: HashSet<Vec<u8>>) {
+        self.swarm.intent_broadcaster_app.match_found(intents)
     }
 
     pub async fn handle_rpc_event(

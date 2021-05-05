@@ -377,14 +377,17 @@ impl MatchmakerRunner {
     pub fn run(
         &self,
         matchmaker_code: impl AsRef<[u8]>,
+        id1: impl AsRef<[u8]>,
         intent1_data: impl AsRef<[u8]>,
+        id2: impl AsRef<[u8]>,
         intent2_data: impl AsRef<[u8]>,
         tx_code: impl AsRef<[u8]>,
-        inject_tx: Sender<Tx>,
+        inject_tx: Sender<(Tx, HashSet<Vec<u8>>)>,
     ) -> Result<bool> {
         let matchmaker_module: wasmer::Module =
             wasmer::Module::new(&self.wasm_store, &matchmaker_code)
                 .map_err(Error::CompileError)?;
+
         let initial_memory =
             memory::prepare_matchmaker_memory(&self.wasm_store)
                 .map_err(Error::MemoryError)?;
@@ -401,12 +404,20 @@ impl MatchmakerRunner {
             wasmer::Instance::new(&matchmaker_module, &matchmaker_imports)
                 .map_err(Error::InstantiationError)?;
 
-        Self::run_with_input(&matchmaker_code, intent1_data, intent2_data)
+        Self::run_with_input(
+            &matchmaker_code,
+            id1,
+            intent1_data,
+            id2,
+            intent2_data,
+        )
     }
 
     fn run_with_input(
         code: &Instance,
+        id1: impl AsRef<[u8]>,
         intent1_data: impl AsRef<[u8]>,
+        id2: impl AsRef<[u8]>,
         intent2_data: impl AsRef<[u8]>,
     ) -> Result<bool> {
         let memory = code
@@ -414,13 +425,19 @@ impl MatchmakerRunner {
             .get_memory("memory")
             .map_err(Error::MissingModuleMemory)?;
         let memory::MatchmakerCallInput {
+            id1_ptr,
+            id1_len,
             intent_data_1_ptr,
             intent_data_1_len,
+            id2_ptr,
+            id2_len,
             intent_data_2_ptr,
             intent_data_2_len,
         }: memory::MatchmakerCallInput = memory::write_matchmaker_inputs(
             &memory,
+            id1,
             intent1_data,
+            id2,
             intent2_data,
         )
         .map_err(Error::MemoryError)?;
@@ -428,15 +445,19 @@ impl MatchmakerRunner {
             .exports
             .get_function(MATCHMAKER_ENTRYPOINT)
             .map_err(Error::MissingModuleEntrypoint)?
-            .native::<(u64, u64, u64, u64), u64>()
+            .native::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>()
             .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
                 entrypoint: MATCHMAKER_ENTRYPOINT,
                 error,
             })?;
         let found_match = apply_matchmaker
             .call(
+                id1_ptr,
+                id1_len,
                 intent_data_1_ptr,
                 intent_data_1_len,
+                id2_ptr,
+                id2_len,
                 intent_data_2_ptr,
                 intent_data_2_len,
             )
@@ -465,7 +486,6 @@ impl FilterRunner {
         intent_data: impl AsRef<[u8]>,
     ) -> Result<bool> {
         validate_wasm(code.as_ref())?;
-        let code = prepare_wasm_code(code)?;
         let filter_module: wasmer::Module =
             wasmer::Module::new(&self.wasm_store, &code)
                 .map_err(Error::CompileError)?;

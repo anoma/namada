@@ -145,31 +145,51 @@ pub fn write_vp_inputs(
 }
 
 pub struct MatchmakerCallInput {
+    pub id1_ptr: u64,
+    pub id1_len: u64,
     pub intent_data_1_ptr: u64,
     pub intent_data_1_len: u64,
+    pub id2_ptr: u64,
+    pub id2_len: u64,
     pub intent_data_2_ptr: u64,
     pub intent_data_2_len: u64,
 }
 
 pub fn write_matchmaker_inputs(
     memory: &wasmer::Memory,
+    id1: impl AsRef<[u8]>,
     intent_data_1: impl AsRef<[u8]>,
+    id2: impl AsRef<[u8]>,
     intent_data_2: impl AsRef<[u8]>,
 ) -> Result<MatchmakerCallInput> {
-    let intent_data_1_ptr = 0;
+    let id1_ptr = 0;
+    let id1_len = id1.as_ref().len() as _;
+
+    let intent_data_1_ptr = id1_ptr + id1_len;
     let intent_data_1_len = intent_data_1.as_ref().len() as _;
 
-    let intent_data_2_ptr = intent_data_1_ptr + intent_data_1_len;
+    let id2_ptr = intent_data_1_ptr + intent_data_1_len;
+    let id2_len = id2.as_ref().len() as _;
+
+    let intent_data_2_ptr = id2_ptr + id2_len;
     let intent_data_2_len = intent_data_2.as_ref().len() as _;
 
+    log::info!("write_data_inputs {}", id1_len);
+    write_memory_bytes(memory, id1_ptr, id1)?;
     log::info!("write_data_inputs {}", intent_data_1_len);
     write_memory_bytes(memory, intent_data_1_ptr, intent_data_1)?;
+    log::info!("write_data_inputs {}", id2_len);
+    write_memory_bytes(memory, id2_ptr, id2)?;
     log::info!("write_data_inputs {}", intent_data_2_len);
     write_memory_bytes(memory, intent_data_2_ptr, intent_data_2)?;
 
     Ok(MatchmakerCallInput {
+        id1_ptr,
+        id1_len,
         intent_data_1_ptr,
         intent_data_1_len,
+        id2_ptr,
+        id2_len,
         intent_data_2_ptr,
         intent_data_2_len,
     })

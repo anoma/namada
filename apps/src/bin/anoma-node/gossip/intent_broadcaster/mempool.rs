@@ -1,31 +1,13 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 
 use anoma::protobuf::types::Intent;
+use anoma::protobuf::IntentId;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {}
 
 type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct IntentId(pub Vec<u8>);
-
-impl<T: Into<Vec<u8>>> From<T> for IntentId {
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-impl IntentId {
-    pub fn new(intent: &Intent) -> Self {
-        let mut s = DefaultHasher::new();
-        intent.hash(&mut s);
-        IntentId::from(s.finish().to_string())
-    }
-}
 
 #[derive(Debug)]
 pub struct IntentMempool(HashMap<IntentId, Intent>);
@@ -39,8 +21,12 @@ impl IntentMempool {
         Ok(self.0.insert(IntentId::new(&intent), intent).is_none())
     }
 
+    pub fn remove(&mut self, intent_id: &IntentId) -> bool {
+        self.0.remove(intent_id).is_some()
+    }
+
     // TODO This is inefficient.
-    pub fn find_map<F: Fn(&Intent, &Intent) -> bool>(
+    pub fn find_map<F: Fn(&IntentId, &Intent, &IntentId, &Intent) -> bool>(
         &mut self,
         intent1: &Intent,
         f: F,
@@ -50,7 +36,7 @@ impl IntentMempool {
             if &id1 == id2 {
                 false
             } else {
-                f(intent1, &intent2)
+                f(&id1, intent1, &id2, &intent2)
             }
         });
         res.is_some()

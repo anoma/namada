@@ -81,7 +81,7 @@ impl<'a> WasmerEnv for VpEnv<'a> {
 #[derive(Clone)]
 pub struct MatchmakerEnv {
     pub tx_code: Vec<u8>,
-    pub inject_tx: Sender<Tx>,
+    pub inject_tx: Sender<(Tx, HashSet<Vec<u8>>)>,
     pub memory: AnomaMemory,
 }
 
@@ -204,7 +204,7 @@ pub fn prepare_matchmaker_imports(
     wasm_store: &Store,
     initial_memory: Memory,
     tx_code: impl AsRef<[u8]>,
-    inject_tx: Sender<Tx>,
+    inject_tx: Sender<(Tx, HashSet<Vec<u8>>)>,
 ) -> ImportObject {
     let env = MatchmakerEnv {
         memory: AnomaMemory::default(),
@@ -1460,12 +1460,24 @@ fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
 }
 
 /// Inject a transaction from matchmaker's matched intents to the ledger
-fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
-    let inject_tx: &Sender<Tx> = &env.inject_tx;
+fn send_match(
+    env: &MatchmakerEnv,
+    data_ptr: u64,
+    data_len: u64,
+    intent_ptr: u64,
+    intent_len: u64,
+) {
     let (tx_data, _gas) = env
         .memory
         .read_bytes(data_ptr, data_len as _)
         .expect("Cannot read the key from memory");
+    let (intent_data, _gas) = env
+        .memory
+        .read_bytes(intent_ptr, intent_len as _)
+        .expect("Cannot read the key from memory");
+
+    let intents = HashSet::<Vec<u8>>::try_from_slice(&intent_data).unwrap();
+
     // TODO sign in the matchmaker module instead. use a ref for the tx_code
     // here to avoid copying
     let tx_code = env.tx_code.clone();
@@ -1478,5 +1490,7 @@ fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
         code: tx_code,
         data: Some(signed_bytes),
     };
-    inject_tx.try_send(tx).expect("failed to send tx")
+    env.inject_tx
+        .try_send((tx, intents))
+        .expect("failed to send tx")
 }
