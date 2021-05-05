@@ -183,7 +183,7 @@ impl KeySeg for DbKeySeg {
     fn to_string(&self) -> String {
         match self {
             DbKeySeg::AddressSeg(addr) => {
-                format!("#{}", addr.encode())
+                format!("@{}", addr.encode())
             }
             DbKeySeg::StringSeg(seg) => seg.to_owned(),
         }
@@ -290,17 +290,11 @@ impl core::fmt::Debug for BlockHash {
 
 impl KeySeg for Address {
     fn to_string(&self) -> String {
-        format!("#{}", self)
+        format!("@{}", self)
     }
 
-    fn parse(mut seg: String) -> Result<Self> {
-        match seg.chars().next() {
-            Some(c) if c == '@' => {
-                let _ = seg.remove(0);
-                Address::decode(seg).map_err(Error::ParseAddress)
-            }
-            _ => Err(Error::ParseAddressFromKey),
-        }
+    fn parse(seg: String) -> Result<Self> {
+        Address::decode(seg).map_err(Error::ParseAddress)
     }
 
     fn to_db_key(&self) -> DbKeySeg {
