@@ -193,7 +193,6 @@ impl DB for RocksDB {
     fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         let chain_id;
         let height;
-        let address_gen;
         // Chain ID
         match self.0.get("chain_id").map_err(|e| Error::DBError {
             error: e.into_string(),
@@ -214,15 +213,6 @@ impl DB for RocksDB {
             }
             None => return Ok(None),
         }
-        // Address gen
-        match self.0.get("address_gen").map_err(|e| Error::DBError {
-            error: e.into_string(),
-        })? {
-            Some(bytes) => {
-                address_gen = EstablishedAddressGen::decode(bytes);
-            }
-            None => return Ok(None),
-        }
         // Load data at the height
         let prefix = format!("{}/", height.to_string());
         let mut read_opts = ReadOptions::default();
@@ -233,6 +223,7 @@ impl DB for RocksDB {
         let mut root = None;
         let mut store = None;
         let mut hash = None;
+        let mut address_gen = None;
         let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
         for (key, bytes) in self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
@@ -272,13 +263,17 @@ impl DB for RocksDB {
                         })?;
                         subspaces.insert(key, bytes.to_vec());
                     }
+                    "address_gen" => {
+                        address_gen =
+                            Some(EstablishedAddressGen::decode(bytes));
+                    }
                     _ => unknown_key_error(path)?,
                 },
                 None => unknown_key_error(path)?,
             }
         }
-        match (root, store, hash) {
-            (Some(root), Some(store), Some(hash)) => {
+        match (root, store, hash, address_gen) {
+            (Some(root), Some(store), Some(hash), Some(address_gen)) => {
                 let tree = MerkleTree(SparseMerkleTree::new(root, store));
                 Ok(Some(BlockState {
                     chain_id,

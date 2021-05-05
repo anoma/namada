@@ -427,6 +427,9 @@ impl Default for TestStorage {
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
             current_height: BlockHeight(0),
+            address_gen: EstablishedAddressGen::new(
+                "Test address generator seed",
+            ),
         }
     }
 }
