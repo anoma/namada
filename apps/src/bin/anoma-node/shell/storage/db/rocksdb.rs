@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
-use anoma_shared::types::{BlockHash, BlockHeight, Key, KeySeg};
+use anoma_shared::types::{Address, BlockHash, BlockHeight, Key, KeySeg};
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -243,13 +243,28 @@ impl DB for RocksDB {
                     },
                     "hash" => hash = Some(BlockHash::decode(bytes.to_vec())),
                     "subspace" => {
-                        let key = Key::parse(segments.split_off(2).join("/"))
-                            .map_err(|e| Error::Temporary {
-                            error: format!(
-                                "Cannot parse key segments {}: {}",
-                                path, e
-                            ),
-                        })?;
+                        let key = match segments.get(3) {
+                            Some(seg) if *seg == "?" => {
+                                // the path of a validity predicate should be
+                                // height/subspace/address/?
+                                let mut addr_str = (*segments
+                                    .get(2)
+                                    .expect("the address not found"))
+                                .to_owned();
+                                let _ = addr_str.remove(0);
+                                let addr = Address::decode(&addr_str)
+                                    .expect("cannot decode the address");
+                                Key::validity_predicate(&addr)
+                                    .expect("failed to make the VP key")
+                            }
+                            _ => Key::parse(segments.split_off(2).join("/"))
+                                .map_err(|e| Error::Temporary {
+                                    error: format!(
+                                        "Cannot parse key segments {}: {}",
+                                        path, e
+                                    ),
+                                })?,
+                        };
                         subspaces.insert(key, bytes.to_vec());
                     }
                     _ => unknown_key_error(path)?,
