@@ -14,7 +14,8 @@ in with pkgs;
 stdenv.mkDerivation {
   name = "anoma-rust";
 
-  buildInputs = [ rust clang llvmPackages.libclang tendermint protobuf ];
+  buildInputs = [ rust clang llvmPackages.libclang tendermint protobuf ]
+    ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.Security ];
 
   shellHook = ''
     export LIBCLANG_PATH="${pkgs.llvmPackages.libclang}/lib";
