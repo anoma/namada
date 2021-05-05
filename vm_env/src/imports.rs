@@ -154,11 +154,8 @@ pub mod tx {
     }
 
     /// Update a validity predicate
-    pub fn update_validity_predicate(
-        addr: impl AsRef<str>,
-        code: impl AsRef<[u8]>,
-    ) {
-        let addr = addr.as_ref();
+    pub fn update_validity_predicate(addr: Address, code: impl AsRef<[u8]>) {
+        let addr = addr.encode();
         let code = code.as_ref();
         unsafe {
             _update_validity_predicate(

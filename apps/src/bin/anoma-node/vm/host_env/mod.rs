@@ -9,7 +9,7 @@ use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
-use anoma_shared::types::{Address, Key};
+use anoma_shared::types::{Address, Key, KeySeg};
 use anoma_shared::vm_memory::KeyVal;
 use borsh::{BorshDeserialize, BorshSerialize};
 use tokio::sync::mpsc::Sender;
@@ -1371,6 +1371,7 @@ fn tx_update_validity_predicate<DB>(
         .memory
         .read_string(addr_ptr, addr_len as _)
         .expect("Cannot read the address from memory");
+    let addr = Address::decode(addr).expect("Failed to decode the address");
     log::debug!(
         "tx_update_validity_predicate {}, addr_ptr {}",
         addr,
@@ -1378,8 +1379,7 @@ fn tx_update_validity_predicate<DB>(
     );
     tx_add_gas(env, gas);
 
-    let key = Key::parse(addr)
-        .expect("Cannot parse the address")
+    let key = Key::from(addr.to_db_key())
         .push(&"?".to_owned())
         .expect("Cannot make the key for the VP");
     let (code, gas) = env

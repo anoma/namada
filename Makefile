@@ -69,6 +69,7 @@ build-wasm-scripts:
 	make -C txs/tx_template && \
 	make -C txs/tx_transfer && \
 	make -C txs/tx_from_intent && \
+	make -C txs/tx_update_vp && \
 	make -C matchmaker_template && \
 	make -C filter_template
 

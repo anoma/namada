@@ -51,6 +51,9 @@ export BTC=a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6
 # Submit a token transfer
 cargo run --bin anomac -- transfer --source $ALAN --target $ADA --token $XAN --amount 10.1 --code txs/tx_transfer/tx.wasm
 
+# Submit a transaction to update an account's validity predicate
+cargo run --bin anomac -- update --address $ALAN --code vps/vp_user/vp.wasm
+
 # Watch and on change run a node (the state will be persisted)
 cargo watch -x "run --bin anomad -- run-ledger"
 
