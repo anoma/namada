@@ -1,0 +1,83 @@
+---
+kind: pipeline
+type: docker
+name: anoma-ci-build-pr
+
+steps:
+  - name: restore-cache
+    image: meltwater/drone-cache
+    pull: if-not-exists
+    settings:
+      backend: "s3"
+      restore: true
+      bucket: juvix-drone-cache-v2
+      region: eu-west-1
+      cache_key: "{{ checksum \"Cargo.yaml\" }}"
+      archive_format: "gzip"
+      mount:
+        - ~/.cargo/registry
+        - ~/.cargo/git
+        - matchmaker_template/target
+        - txs/*/target
+        - vps/*/target
+        - target
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key_id
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_secret_access_key
+
+  - name: build
+    image: rust:latest
+    pull: if-not-exists
+    commands:
+      - make -C txs/tx_template deps
+      - make build-wasm-scripts
+      - make build
+    depends_on:
+      - restore-cache
+
+  - name: test
+    image: rust:latest
+    pull: if-not-exists
+    commands:
+      - make test
+    depends_on:
+      - build
+
+  - name: rebuild-cache
+    image: meltwater/drone-cache
+    pull: if-not-exists
+    settings:
+      backend: "s3"
+      bucket: juvix-drone-cache-v2
+      region: eu-west-1
+      rebuild: true
+      archive_format: "gzip"
+      override: false
+      cache_key: "{{ checksum \"Cargo.yaml\" }}"
+      mount:
+        - ~/.cargo/registry
+        - ~/.cargo/git
+        - matchmaker_template/target
+        - txs/*/target
+        - vps/*/target
+        - target
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key_id
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_secret_access_key
+    when:
+      status:
+        - success
+        - failure
+    depends_on:
+      - test
+
+trigger:
+  event:
+    - pull_request
+
+node:
+  project: anoma
