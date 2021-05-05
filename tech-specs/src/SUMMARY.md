@@ -1,8 +1,6 @@
 # Summary
 
 - [Introduction](./README.md)
-bcargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_A.data --topic "asset_v1"
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_B.data --topic "asset_v1"
 - [Exploration](./explore/README.md)
   - [Design](./explore/design/README.md)
     - [Overview](./explore/design/overview.md)
