@@ -14,7 +14,7 @@ in with pkgs;
 stdenv.mkDerivation {
   name = "anoma-rust";
 
-  buildInputs = [ rust clang llvmPackages.libclang olm tendermint protobuf ];
+  buildInputs = [ rust clang llvmPackages.libclang tendermint protobuf ];
 
   shellHook = ''
     export LIBCLANG_PATH="${pkgs.llvmPackages.libclang}/lib";
