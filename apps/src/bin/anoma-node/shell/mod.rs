@@ -260,7 +260,7 @@ struct VpsResult {
 }
 
 impl VpsGas {
-    fn merge(&mut self, other: &mut VpsGas) -> Result<()> {
+    fn merge(&mut self, other: &mut VpsGas, initial_gas: u64) -> Result<()> {
         if other.max > self.max {
             self.rest.push(self.max);
             self.max = other.max;
@@ -273,7 +273,9 @@ impl VpsGas {
             * VpGasMeter::parallel_fee())
             as u64;
 
-        if self.max.add(parallel_gas) > VpGasMeter::transaction_gas_limit() {
+        if self.max.add(initial_gas).add(parallel_gas)
+            > VpGasMeter::transaction_gas_limit()
+        {
             return Err(Error::GasOverflow);
         }
         Ok(())
@@ -606,10 +608,16 @@ fn run_vps(
                 (addr, keys, vp),
             )
         })
-        .try_reduce(VpsResult::default, merge_vp_results)
+        .try_reduce(VpsResult::default, |a, b| {
+            merge_vp_results(a, b, initial_gas)
+        })
 }
 
-fn merge_vp_results(a: VpsResult, mut b: VpsResult) -> Result<VpsResult> {
+fn merge_vp_results(
+    a: VpsResult,
+    mut b: VpsResult,
+    initial_gas: u64,
+) -> Result<VpsResult> {
     let accepted_vps = a.accepted_vps.union(&b.accepted_vps).collect();
     let rejected_vps = a.rejected_vps.union(&b.rejected_vps).collect();
     let mut changed_keys = a.changed_keys;
@@ -619,7 +627,7 @@ fn merge_vp_results(a: VpsResult, mut b: VpsResult) -> Result<VpsResult> {
     // Returning error from here will short-circuit the VP parallel execution.
     // It's important that we only short-circuit gas errors to get deterministic gas costs
 
-    gas_used.merge(&mut b.gas_used)?;
+    gas_used.merge(&mut b.gas_used, initial_gas)?;
 
     Ok(VpsResult::new(
         accepted_vps,
