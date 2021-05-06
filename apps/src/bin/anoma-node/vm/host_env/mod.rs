@@ -9,7 +9,7 @@ use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
-use anoma_shared::types::{Address, Key, KeySeg};
+use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::KeyVal;
 use borsh::{BorshDeserialize, BorshSerialize};
 use tokio::sync::mpsc::Sender;
@@ -1379,9 +1379,8 @@ fn tx_update_validity_predicate<DB>(
     );
     tx_add_gas(env, gas);
 
-    let key = Key::from(addr.to_db_key())
-        .push(&"?".to_owned())
-        .expect("Cannot make the key for the VP");
+    let key =
+        Key::validity_predicate(&addr).expect("Cannot make the key for the VP");
     let (code, gas) = env
         .memory
         .read_bytes(code_ptr, code_len as _)
