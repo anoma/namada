@@ -30,9 +30,11 @@ pub struct BlockGasMeter {
 #[derive(Debug, Clone)]
 pub struct VpGasMeter {
     pub vp_gas: u64,
-    /// We store the `error` inside here, because when we run out of gas in VP wasm, 
-    /// the execution is immediately shut down with `unreachable!()` as we cannot simply return `Result` from wasm. 
-    /// So instead, we store the error in this meter, which is accessible from the wasm host environment.
+    /// We store the `error` inside here, because when we run out of gas in VP
+    /// wasm, the execution is immediately shut down with `unreachable!()`
+    /// as we cannot simply return `Result` from wasm. So instead, we store
+    /// the error in this meter, which is accessible from the wasm host
+    /// environment.
     pub error: Option<Error>,
 }
 

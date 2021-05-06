@@ -625,7 +625,8 @@ fn merge_vp_results(
     let mut gas_used = a.gas_used;
 
     // Returning error from here will short-circuit the VP parallel execution.
-    // It's important that we only short-circuit gas errors to get deterministic gas costs
+    // It's important that we only short-circuit gas errors to get deterministic
+    // gas costs
 
     gas_used.merge(&mut b.gas_used, initial_gas)?;
 
@@ -676,8 +677,9 @@ fn run_vp(
     }
 
     if vp_gas_meter.gas_overflow() {
-        // Returning error from here will short-circuit the VP parallel execution.
-        // It's important that we only short-circuit gas errors to get deterministic gas costs
+        // Returning error from here will short-circuit the VP parallel
+        // execution. It's important that we only short-circuit gas
+        // errors to get deterministic gas costs
         Err(Error::VpExecutionError(result.rejected_vps))
     } else {
         Ok(result)
