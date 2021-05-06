@@ -16,7 +16,7 @@ use anoma_shared::token::Amount;
 use anoma_shared::types::{address, Address, BlockHash, BlockHeight, Key};
 use borsh::BorshSerialize;
 use prost::Message;
-use rayon::prelude::*;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use self::gas::{BlockGasMeter, VpGasMeter};
@@ -616,16 +616,18 @@ fn merge_vp_results(a: VpsResult, mut b: VpsResult) -> Result<VpsResult> {
     changed_keys.append(&mut b.changed_keys);
     let mut gas_used = a.gas_used;
 
-    match gas_used.merge(&mut b.gas_used) {
-        Ok(_) => Ok(VpsResult::new(
-            accepted_vps,
-            rejected_vps,
-            changed_keys,
-            gas_used,
-            a.have_error || b.have_error,
-        )),
-        Err(err) => Err(err),
-    }
+    // Returning error from here will short-circuit the VP parallel execution.
+    // It's important that we only short-circuit gas errors to get deterministic gas costs
+
+    gas_used.merge(&mut b.gas_used)?;
+
+    Ok(VpsResult::new(
+        accepted_vps,
+        rejected_vps,
+        changed_keys,
+        gas_used,
+        a.have_error || b.have_error,
+    ))
 }
 
 fn run_vp(
@@ -649,7 +651,6 @@ fn run_vp(
         keys.to_vec(),
         addresses,
     );
-    // result.gas_used.merge(vp_gas_meter.vp_gas);
     result.changed_keys.extend_from_slice(&keys);
 
     match accept {
@@ -667,6 +668,8 @@ fn run_vp(
     }
 
     if vp_gas_meter.gas_overflow() {
+        // Returning error from here will short-circuit the VP parallel execution.
+        // It's important that we only short-circuit gas errors to get deterministic gas costs
         Err(Error::VpExecutionError(result.rejected_vps))
     } else {
         Ok(result)
