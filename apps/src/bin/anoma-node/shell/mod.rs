@@ -714,6 +714,7 @@ fn merge_vp_results(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_vp(
     mut result: VpsResult,
     tx_data: Vec<u8>,
