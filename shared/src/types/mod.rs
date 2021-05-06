@@ -203,7 +203,7 @@ impl KeySeg for DbKeySeg {
     fn to_string(&self) -> String {
         match self {
             DbKeySeg::AddressSeg(addr) => {
-                format!("@{}", addr.encode())
+                format!("{}{}", RESERVED_ADDRESS_PREFIX, addr.encode())
             }
             DbKeySeg::StringSeg(seg) => seg.to_owned(),
         }
@@ -310,7 +310,7 @@ impl core::fmt::Debug for BlockHash {
 
 impl KeySeg for Address {
     fn to_string(&self) -> String {
-        format!("{}{}", RESERVED_ADDRESS_PREFIX, self)
+        format!("{}{}", RESERVED_ADDRESS_PREFIX, self.encode())
     }
 
     fn parse(mut seg: String) -> Result<Self> {
