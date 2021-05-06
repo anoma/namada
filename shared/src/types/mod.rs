@@ -22,6 +22,8 @@ pub enum Error {
     ParseAddress(address::Error),
     #[error("Error parsing address from a storage key")]
     ParseAddressFromKey,
+    #[error("Reserved prefix or string is specified: {0}")]
+    InvalidKeySeg(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -30,6 +32,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 // this
 pub const CHAIN_ID_LENGTH: usize = 20;
 pub const BLOCK_HASH_LENGTH: usize = 32;
+
+pub const KEY_SEGMENT_SEPARATOR: char = '/';
+pub const RESERVED_ADDRESS_PREFIX: char = '#';
+pub const VP_KEY_PREFIX: char = '?';
+pub const RESERVED_VP_KEY: &str = "?";
 
 #[derive(
     Clone,
@@ -76,7 +83,7 @@ impl Key {
     /// Parses string and returns a key
     pub fn parse(string: String) -> Result<Self> {
         let mut segments = Vec::new();
-        for s in string.split('/') {
+        for s in string.split(KEY_SEGMENT_SEPARATOR) {
             segments.push(DbKeySeg::parse(s.to_owned())?);
         }
         Ok(Key { segments })
@@ -118,8 +125,12 @@ impl Key {
         self.len() == 0
     }
 
+    /// Returns a key of the validity predicate of the given address
+    /// Only this function can push "?" segment for validity predicate
     pub fn validity_predicate(addr: &Address) -> Result<Self> {
-        Self::from(addr.to_db_key()).push(&"?".to_owned())
+        let mut segments = Self::from(addr.to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(RESERVED_VP_KEY.to_owned()));
+        Ok(Key { segments })
     }
 }
 
@@ -130,7 +141,7 @@ impl Display for Key {
             .iter()
             .map(|s| DbKeySeg::to_string(s))
             .collect::<Vec<String>>()
-            .join("/");
+            .join(&KEY_SEGMENT_SEPARATOR.to_string());
         f.write_str(&key)
     }
 }
@@ -169,12 +180,21 @@ pub enum DbKeySeg {
 
 impl KeySeg for DbKeySeg {
     fn parse(mut string: String) -> Result<Self> {
+        // a separator should not included
+        if string.contains(KEY_SEGMENT_SEPARATOR) {
+            return Err(Error::InvalidKeySeg(string));
+        }
         match string.chars().next() {
-            // TODO reserve non-alphanumerical prefix characters for internal
-            // addresses are prefixed with `'@'`
-            Some(c) if c == '@' => {
+            // address hashes are prefixed with `'#'`
+            Some(c) if c == RESERVED_ADDRESS_PREFIX => {
                 let _ = string.remove(0);
-                Address::parse(string).map(DbKeySeg::AddressSeg)
+                Address::decode(&string)
+                    .map_err(Error::ParseAddress)
+                    .map(DbKeySeg::AddressSeg)
+            }
+            // reserved for a validity predicate
+            Some(c) if c == VP_KEY_PREFIX && string == RESERVED_VP_KEY => {
+                Err(Error::InvalidKeySeg(string))
             }
             _ => Ok(DbKeySeg::StringSeg(string)),
         }
@@ -290,14 +310,109 @@ impl core::fmt::Debug for BlockHash {
 
 impl KeySeg for Address {
     fn to_string(&self) -> String {
-        format!("@{}", self)
+        format!("{}{}", RESERVED_ADDRESS_PREFIX, self)
     }
 
-    fn parse(seg: String) -> Result<Self> {
-        Address::decode(seg).map_err(Error::ParseAddress)
+    fn parse(mut seg: String) -> Result<Self> {
+        match seg.chars().next() {
+            Some(c) if c == RESERVED_ADDRESS_PREFIX => {
+                let _ = seg.remove(0);
+                Address::decode(seg).map_err(Error::ParseAddress)
+            }
+            _ => Err(Error::ParseAddressFromKey),
+        }
     }
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        /// Tests that any key that doesn't contain reserved prefixes is valid.
+        /// This test excludes key segments starting with `#` or `?`
+        /// because they are reserved for `Address` or a validity predicate.
+        #[test]
+        fn test_key_parse(s in "[^#?/][^/]*/[^#?/][^/]*/[^#?/][^/]*") {
+            let key = Key::parse(s.clone()).expect("cannnot parse the string");
+            assert_eq!(key.to_string(), s);
+        }
+
+        /// Tests that any key that doesn't contain reserved prefixes and
+        /// separators is valid. This test excludes key segments including `/`
+        /// or starting with `#` or `?` because they are reserved for separator,
+        /// `Address` or validity predicate.
+        #[test]
+        fn test_key_push(s in "[^#?/][^/]*") {
+            let addr = Address::from_raw("test");
+            let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
+            assert_eq!(key.segments[1].to_string(), s);
+        }
+    }
+
+    #[test]
+    fn test_key_parse_valid() {
+        let addr = Address::from_raw("test");
+        let target = format!("{}/test", KeySeg::to_string(&addr));
+        let key = Key::parse(target.clone()).expect("cannot parse the string");
+        assert_eq!(key.to_string(), target);
+
+        let target = "?test/test@".to_owned();
+        let key = Key::parse(target.clone()).expect("cannot parse the string");
+        assert_eq!(key.to_string(), target);
+    }
+
+    #[test]
+    fn test_key_parse_invalid() {
+        let target = "?/test".to_owned();
+        match Key::parse(target).expect_err("unexpectedly succeeded") {
+            Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
+            _ => panic!("unexpected error happens"),
+        }
+    }
+
+    #[test]
+    fn test_key_push_valid() {
+        let addr = Address::from_raw("test");
+        let other = Address::from_raw("other");
+        let target = KeySeg::to_string(&other);
+        let key = Key::from(addr.to_db_key())
+            .push(&target)
+            .expect("cannnot push the segment");
+        assert_eq!(key.segments[1].to_string(), target);
+
+        let target = "?test".to_owned();
+        let key = Key::from(addr.to_db_key())
+            .push(&target)
+            .expect("cannnot push the segment");
+        assert_eq!(key.segments[1].to_string(), target);
+    }
+
+    #[test]
+    fn test_key_push_invalid() {
+        let addr = Address::from_raw("test");
+        let target = "/".to_owned();
+        match Key::from(addr.to_db_key())
+            .push(&target)
+            .expect_err("unexpectedly succeeded")
+        {
+            Error::InvalidKeySeg(s) => assert_eq!(s, "/"),
+            _ => panic!("unexpected error happens"),
+        }
+
+        let target = "?".to_owned();
+        match Key::from(addr.to_db_key())
+            .push(&target)
+            .expect_err("unexpectedly succeeded")
+        {
+            Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
+            _ => panic!("unexpected error happens"),
+        }
     }
 }
