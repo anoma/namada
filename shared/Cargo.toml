@@ -14,4 +14,5 @@ thiserror = "1.0.24"
 ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend"]}
 
 [dev-dependencies]
+proptest = "1.0.0"
 rand = "0.8.3"
