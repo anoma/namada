@@ -74,6 +74,22 @@ steps:
         - failure
     depends_on:
       - test
+  
+  - name: Run formatter
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - fmt-check
+    depends_on:
+      - test
+
+  - name: Run clippy
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - make clippy-check
+    depends_on:
+      - test
 
 trigger:
   event:
