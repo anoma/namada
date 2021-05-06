@@ -1,15 +1,16 @@
 use std::collections::HashSet;
 
-use anoma_shared::token::{self, Amount, Change};
+use anoma_shared::types::token::{self, Amount, Change};
 use anoma_shared::types::{Address, Key};
 
-use super::imports::{tx, vp};
-
-pub fn validity_predicate(
+/// A token validity predicate.
+pub fn vp(
     token: &Address,
     keys_changed: &[Key],
     verifiers: &HashSet<Address>,
 ) -> bool {
+    use crate::imports::vp;
+
     let mut change: Change = 0;
     let all_checked = keys_changed.iter().all(|key| {
         match token::is_balance_key(token, key) {
@@ -35,12 +36,15 @@ pub fn validity_predicate(
     all_checked && change == 0
 }
 
+/// A token transfer that can be used in a transaction.
 pub fn transfer(
     src: &Address,
     dest: &Address,
     token: &Address,
     amount: Amount,
 ) {
+    use crate::imports::tx;
+
     let src_key = token::balance_key(token, src);
     let dest_key = token::balance_key(token, dest);
     let src_bal: Option<Amount> = tx::read(&src_key.to_string());

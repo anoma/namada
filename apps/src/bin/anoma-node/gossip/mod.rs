@@ -1,10 +1,11 @@
 mod intent_broadcaster;
 mod network_behaviour;
 mod p2p;
+mod rpc;
 
 use std::thread;
 
-use anoma::protobuf::services::rpc_message;
+use anoma::protobuf::services::{rpc_message, RpcResponse};
 use anoma::protobuf::types::Tx;
 use mpsc::Receiver;
 use prost::Message;
@@ -12,37 +13,29 @@ use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc;
 
-use self::network_behaviour::IntentBroadcasterEvent;
 use self::p2p::P2P;
-use super::rpc;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Error gossip dispatcher {0}")]
-    P2pDispatcherError(String),
+    #[error("Error initializing p2p {0}")]
+    P2pInit(p2p::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
 pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
     let rpc_event_receiver = if config.rpc {
-        let (tx, rx) = mpsc::channel(100);
-        thread::spawn(|| rpc::rpc_server(tx).unwrap());
-        Some(rx)
+        let (sender, receiver) = mpsc::channel(100);
+        thread::spawn(|| rpc::rpc_server(sender).unwrap());
+        Some(receiver)
     } else {
         None
     };
 
-    let (gossip, network_event_receiver, matchmaker_event_receiver) =
-        p2p::P2P::new(&config)
-            .expect("TEMPORARY: unable to build gossip layer");
-    dispatcher(
-        gossip,
-        network_event_receiver,
-        rpc_event_receiver,
-        matchmaker_event_receiver,
-    )
-    .map_err(|e| Error::P2pDispatcherError(e.to_string()))
+    let (gossip, matchmaker_event_receiver) =
+        p2p::P2P::new(&config).map_err(Error::P2pInit)?;
+
+    dispatcher(gossip, rpc_event_receiver, matchmaker_event_receiver)
 }
 
 // TODO The protobuf encoding logic does not play well with asynchronous.
@@ -76,20 +69,26 @@ pub async fn matchmaker_dispatcher(
 #[tokio::main]
 pub async fn dispatcher(
     mut gossip: P2P,
-    mut network_event_receiver: Receiver<IntentBroadcasterEvent>,
-    rpc_event_receiver: Option<Receiver<rpc_message::Message>>,
+    rpc_event_receiver: Option<
+        Receiver<(
+            rpc_message::Message,
+            tokio::sync::oneshot::Sender<RpcResponse>,
+        )>,
+    >,
     matchmaker_event_receiver: Option<Receiver<Tx>>,
 ) -> Result<()> {
     if let Some(matchmaker_event_receiver) = matchmaker_event_receiver {
         thread::spawn(|| matchmaker_dispatcher(matchmaker_event_receiver));
     }
-    // XXX TODO find a way to factorize all that code
     match rpc_event_receiver {
         Some(mut rpc_event_receiver) => {
             loop {
                 tokio::select! {
-                    Some(event) = rpc_event_receiver.recv() =>
-                        gossip.handle_rpc_event(event).await ,
+                    Some((event, inject_response)) = rpc_event_receiver.recv() =>
+                    {
+                        let response = gossip.handle_rpc_event(event).await;
+                        inject_response.send(response).expect("failed to send response to rpc server")
+                    },
                     swarm_event = gossip.swarm.next() => {
                         // All events are handled by the
                         // `NetworkBehaviourEventProcess`es.  I.e. the
@@ -97,8 +96,6 @@ pub async fn dispatcher(
                         // terminating.
                         panic!("Unexpected event: {:?}", swarm_event);
                     },
-                    Some(event) = network_event_receiver.recv() =>
-                        gossip.handle_network_event(event).await
                 };
             }
         }
@@ -112,8 +109,6 @@ pub async fn dispatcher(
                         // terminating.
                         panic!("Unexpected event: {:?}", swarm_event);
                     },
-                    Some(event) = network_event_receiver.recv() =>
-                        gossip.handle_network_event(event).await
                 }
             }
         }

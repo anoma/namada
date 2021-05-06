@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anoma_shared::types::{Address, Key};
 use thiserror::Error;
 
-use crate::shell::storage::{self, Storage};
+use crate::shell::storage::{self, PersistentStorage};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -140,7 +140,10 @@ impl WriteLog {
 
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.
-    pub fn commit_block(&mut self, storage: &mut Storage) -> Result<()> {
+    pub fn commit_block(
+        &mut self,
+        storage: &mut PersistentStorage,
+    ) -> Result<()> {
         for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {

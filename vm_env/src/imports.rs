@@ -294,6 +294,7 @@ pub mod vp {
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::key::ed25519::{PublicKey, Signature};
     use anoma_shared::types::{
         BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
@@ -373,7 +374,9 @@ pub mod vp {
 
     /// Try to read a fixed-length value at the given key from storage before
     /// transaction execution.
-    pub fn read_pre<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+    pub fn read_pre<K: AsRef<str>, T: std::fmt::Debug + BorshDeserialize>(
+        key: K,
+    ) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
@@ -566,6 +569,28 @@ pub mod vp {
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
+    /// Verify a transaction signature. The signature is expected to have been
+    /// produced on the data concatenated with the transaction code.
+    pub fn verify_tx_signature(
+        pk: &PublicKey,
+        data: &[u8],
+        sig: &Signature,
+    ) -> bool {
+        let pk = BorshSerialize::try_to_vec(pk).unwrap();
+        let sig = BorshSerialize::try_to_vec(sig).unwrap();
+        let valid = unsafe {
+            _verify_tx_signature(
+                pk.as_ptr() as _,
+                pk.len() as _,
+                data.as_ptr() as _,
+                data.len() as _,
+                sig.as_ptr() as _,
+                sig.len() as _,
+            )
+        };
+        valid == 1
+    }
+
     /// Log a string. The message will be printed at the [`log::Level::Info`].
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -635,6 +660,16 @@ pub mod vp {
 
         // Get the current block hash
         fn _get_block_hash(result_ptr: u64);
+
+        // Verify a transaction signature
+        fn _verify_tx_signature(
+            pk_ptr: u64,
+            pk_len: u64,
+            data_ptr: u64,
+            data_len: u64,
+            sig_ptr: u64,
+            sig_len: u64,
+        ) -> u64;
 
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);

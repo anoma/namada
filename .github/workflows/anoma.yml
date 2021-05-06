@@ -25,14 +25,14 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/work/anoma-prototype/anoma-prototype/matchmaker_template/target
-            ~/work/anoma-prototype/anoma-prototype/tx_template/target
-            ~/work/anoma-prototype/anoma-prototype/vp_template/target
+            ~/work/anoma-prototype/anoma-prototype/txs/*/target
+            ~/work/anoma-prototype/anoma-prototype/vps/*/target
             ~/work/anoma-prototype/anoma-prototype/target
-          key: cache-v4-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v4-cargo-
+          key: cache-v5-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cache-v5-cargo-
       - name: Run requirements
         run: |
-              make -C tx_template deps
+              make -C txs/tx_template deps
               make build-wasm-scripts
       - name: Run build
         run: make build
@@ -59,13 +59,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/work/anoma-prototype/anoma-prototype/matchmaker_template/target
-            ~/work/anoma-prototype/anoma-prototype/tx_template/target
-            ~/work/anoma-prototype/anoma-prototype/vp_template/target
+            ~/work/anoma-prototype/anoma-prototype/txs/*/target
+            ~/work/anoma-prototype/anoma-prototype/vps/*/target
             ~/work/anoma-prototype/anoma-prototype/target
           # The key has to be different from build as rustfmt and clippy don't 
           # share the same build artifacts 
-          key: cache-v4-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cache-v4-lint- 
+          key: cache-v5-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cache-v5-lint-
       - name: Run fmt
         run: make fmt-check
       - name: Run clippy

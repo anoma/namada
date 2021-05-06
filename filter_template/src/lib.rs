@@ -1,5 +1,7 @@
-use anoma_data_template::*;
-use anoma_vm_env::{filter, filter_prelude::*};
+use anoma_vm_env::{
+    filter,
+    filter_prelude::{intent::Intent, *},
+};
 
 filter! {
     fn validate_intent(intent: Vec<u8>) -> bool {
@@ -13,5 +15,5 @@ filter! {
 }
 
 fn decode_intent_data(bytes: Vec<u8>) -> Option<Intent> {
-    anoma_data_template::Intent::try_from_slice(&bytes[..]).ok()
+    Intent::try_from_slice(&bytes[..]).ok()
 }

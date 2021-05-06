@@ -4,13 +4,12 @@ members = [
   "apps",
   "shared",
   "vm_env",
-  "data_template",
 ]
 
 # wasm packages have to be built separately
 exclude = [
-  "matchmaker_template",
   "filter_template",
-  "tx_template",
+  "matchmaker_template",
+  "txs",
   "vps",
 ]
