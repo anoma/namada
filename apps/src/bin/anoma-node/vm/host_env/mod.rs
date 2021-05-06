@@ -190,10 +190,8 @@ where
             "_has_key" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_has_key),
             "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
             "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
-            "_read_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read_varlen),
             "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_prefix),
             "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
-            "_iter_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next_varlen),
             "_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_insert_verifier),
             "_update_validity_predicate" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_update_validity_predicate),
             "_init_account" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_init_account),
@@ -237,15 +235,11 @@ where
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_charge_gas),
             "_read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
             "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
-            "_read_pre_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre_varlen),
-            "_read_post_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post_varlen),
             "_has_key_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_pre),
             "_has_key_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_post),
             "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_prefix),
             "_iter_pre_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next),
             "_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next),
-            "_iter_pre_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next_varlen),
-            "_iter_post_next_varlen" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next_varlen),
             "_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_chain_id),
             "_get_block_height" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_height),
             "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_hash),
@@ -347,83 +341,6 @@ where
     }
 }
 
-/// Storage read function exposed to the wasm VM Tx environment. It will try to
-/// read from the write log first and if no entry found then from the storage.
-fn tx_storage_read<DB>(
-    env: &TxEnv<DB>,
-    key_ptr: u64,
-    key_len: u64,
-    result_ptr: u64,
-) -> u64
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-{
-    let (key, gas) = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-    tx_add_gas(env, gas);
-
-    log::debug!(
-        "tx_storage_read {}, key {}, result_ptr {}",
-        key,
-        key_ptr,
-        result_ptr,
-    );
-
-    let key = Key::parse(key).expect("Cannot parse the key string");
-
-    // try to read from the write log first
-    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    let (log_val, gas) = write_log.read(&key);
-    tx_add_gas(env, gas);
-    match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
-            let gas = env
-                .memory
-                .write_bytes(result_ptr, value)
-                .expect("cannot write to memory");
-            tx_add_gas(env, gas);
-            1
-        }
-        Some(&write_log::StorageModification::Delete) => {
-            // fail, given key has been deleted
-            0
-        }
-        Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
-        }) => {
-            // read the VP of a new account
-            let gas = env
-                .memory
-                .write_bytes(result_ptr, vp)
-                .expect("cannot write to memory");
-            tx_add_gas(env, gas);
-            1
-        }
-        None => {
-            // when not found in write log, try to read from the storage
-            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
-            let (value, gas) = storage.read(&key).expect("storage read failed");
-            tx_add_gas(env, gas);
-            match value {
-                Some(value) => {
-                    let gas = env
-                        .memory
-                        .write_bytes(result_ptr, value)
-                        .expect("cannot write to memory");
-                    tx_add_gas(env, gas);
-                    1
-                }
-                None => {
-                    // fail, key not found
-                    0
-                }
-            }
-        }
-    }
-}
-
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
 fn tx_storage_has_key<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> u64
@@ -467,7 +384,7 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn tx_storage_read_varlen<DB>(
+fn tx_storage_read<DB>(
     env: &TxEnv<DB>,
     key_ptr: u64,
     key_len: u64,
@@ -577,78 +494,12 @@ where
 }
 
 /// Storage prefix iterator next function exposed to the wasm VM Tx environment.
-/// It will read a key value pair from the write log first and if no entry found
-/// then from the storage.
-fn tx_storage_iter_next<DB>(
-    env: &TxEnv<DB>,
-    iter_id: u64,
-    result_ptr: u64,
-) -> u64
-where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-{
-    log::debug!(
-        "tx_storage_iter_next iter_id {}, result_ptr {}",
-        iter_id,
-        result_ptr,
-    );
-
-    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    let iterators: &mut PrefixIterators<DB> =
-        unsafe { &mut *(env.iterators.get()) };
-    let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
-        let (log_val, log_gas) = write_log.read(
-            &Key::parse(key.clone()).expect("Cannot parse the key string"),
-        );
-        tx_add_gas(env, iter_gas + log_gas);
-        match log_val {
-            Some(&write_log::StorageModification::Write { ref value }) => {
-                let key_val = KeyVal {
-                    key,
-                    val: value.clone(),
-                }
-                .try_to_vec()
-                .expect("cannot serialize the key value pair");
-                let gas = env
-                    .memory
-                    .write_bytes(result_ptr, key_val)
-                    .expect("cannot write to memory");
-                tx_add_gas(env, gas);
-                return 1;
-            }
-            Some(&write_log::StorageModification::Delete) => {
-                // check the next because the key has already deleted
-                continue;
-            }
-            Some(&write_log::StorageModification::InitAccount { .. }) => {
-                // a VP of a new account doesn't need to be iterated
-                continue;
-            }
-            None => {
-                let key_val = KeyVal { key, val }
-                    .try_to_vec()
-                    .expect("cannot serialize the key value pair");
-                let gas = env
-                    .memory
-                    .write_bytes(result_ptr, key_val)
-                    .expect("cannot write to memory");
-                tx_add_gas(env, gas);
-                return 1;
-            }
-        }
-    }
-    // fail, key not found
-    0
-}
-
-/// Storage prefix iterator next function exposed to the wasm VM Tx environment.
 /// It will try to read from the write log first and if no entry found then from
 /// the storage.
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn tx_storage_iter_next_varlen<DB>(
+fn tx_storage_iter_next<DB>(
     env: &TxEnv<DB>,
     iter_id: u64,
     result_ptr: u64,
@@ -773,131 +624,10 @@ where
 
 /// Storage read prior state (before tx execution) function exposed to the wasm
 /// VM VP environment. It will try to read from the storage.
-fn vp_storage_read_pre<DB>(
-    env: &VpEnv<DB>,
-    key_ptr: u64,
-    key_len: u64,
-    result_ptr: u64,
-) -> u64
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-{
-    let (key, gas) = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-    vp_add_gas(env, gas);
-
-    // try to read from the storage
-    let key = Key::parse(key).expect("Cannot parse the key string");
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
-    let (value, gas) = storage.read(&key).expect("storage read failed");
-    vp_add_gas(env, gas);
-    log::debug!(
-        "vp_storage_read_pre addr {}, key {}, value {:#?}",
-        env.addr,
-        key,
-        value,
-    );
-    match value {
-        Some(value) => {
-            let gas = env
-                .memory
-                .write_bytes(result_ptr, value)
-                .expect("cannot write to memory");
-            vp_add_gas(env, gas);
-            1
-        }
-        None => {
-            // fail, key not found
-            0
-        }
-    }
-}
-
-/// Storage read posterior state (after tx execution) function exposed to the
-/// wasm VM VP environment. It will try to read from the write log first and if
-/// no entry found then from the storage.
-fn vp_storage_read_post<DB>(
-    env: &VpEnv<DB>,
-    key_ptr: u64,
-    key_len: u64,
-    result_ptr: u64,
-) -> u64
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-{
-    let (key, gas) = env
-        .memory
-        .read_string(key_ptr, key_len as _)
-        .expect("Cannot read the key from memory");
-    vp_add_gas(env, gas);
-
-    log::debug!(
-        "vp_storage_read_post {}, key {}, result_ptr {}",
-        key,
-        key_ptr,
-        result_ptr,
-    );
-
-    // try to read from the write log first
-    let key = Key::parse(key).expect("Cannot parse the key string");
-    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    let (log_val, gas) = write_log.read(&key);
-    vp_add_gas(env, gas);
-    match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
-            let gas = env
-                .memory
-                .write_bytes(result_ptr, value)
-                .expect("cannot write to memory");
-            vp_add_gas(env, gas);
-            1
-        }
-        Some(&write_log::StorageModification::Delete) => {
-            // fail, given key has been deleted
-            0
-        }
-        Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
-        }) => {
-            // read the VP of a new account
-            let gas = env
-                .memory
-                .write_bytes(result_ptr, vp)
-                .expect("cannot write to memory");
-            vp_add_gas(env, gas);
-            1
-        }
-        None => {
-            // when not found in write log, try to read from the storage
-            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
-            let (value, gas) = storage.read(&key).expect("storage read failed");
-            vp_add_gas(env, gas);
-            match value {
-                Some(value) => {
-                    let gas = env
-                        .memory
-                        .write_bytes(result_ptr, value)
-                        .expect("cannot write to memory");
-                    vp_add_gas(env, gas);
-                    1
-                }
-                None => {
-                    // fail, key not found
-                    0
-                }
-            }
-        }
-    }
-}
-
-/// Storage read prior state (before tx execution) function exposed to the wasm
-/// VM VP environment. It will try to read from the storage.
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_read_pre_varlen<DB>(
+fn vp_storage_read_pre<DB>(
     env: &VpEnv<DB>,
     key_ptr: u64,
     key_len: u64,
@@ -947,7 +677,7 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_read_post_varlen<DB>(
+fn vp_storage_read_post<DB>(
     env: &VpEnv<DB>,
     key_ptr: u64,
     key_len: u64,
@@ -1124,113 +854,12 @@ where
     iterators.insert(iter).id()
 }
 
-/// Storage prefix iterator next (before tx execution) function exposed to the
-/// wasm VM VP environment. It will read a key value pair from the storage.
-fn vp_storage_iter_pre_next<DB>(
-    env: &VpEnv<DB>,
-    iter_id: u64,
-    result_ptr: u64,
-) -> u64
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-{
-    log::debug!(
-        "vp_storage_iter_pre_next iter_id {}, result_ptr {}",
-        iter_id,
-        result_ptr,
-    );
-
-    let iterators: &mut PrefixIterators<DB> =
-        unsafe { &mut *(env.iterators.get()) };
-    let iter_id = PrefixIteratorId::new(iter_id);
-    if let Some((key, val, gas)) = iterators.next(iter_id) {
-        vp_add_gas(env, gas);
-        let key_val = KeyVal { key, val }
-            .try_to_vec()
-            .expect("cannot serialize the key value pair");
-        let gas = env
-            .memory
-            .write_bytes(result_ptr, key_val)
-            .expect("cannot write to memory");
-        vp_add_gas(env, gas);
-        return 1;
-    }
-    // key not found
-    0
-}
-
-/// Storage prefix iterator next (after tx execution) function exposed to the
-/// wasm VM VP environment. It will read a key value pair from the write log
-/// first and if no entry found then from the storage.
-fn vp_storage_iter_post_next<DB>(
-    env: &VpEnv<DB>,
-    iter_id: u64,
-    result_ptr: u64,
-) -> u64
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-{
-    log::debug!(
-        "vp_storage_iter_post_next iter_id {}, result_ptr {}",
-        iter_id,
-        result_ptr,
-    );
-
-    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    let iterators: &mut PrefixIterators<DB> =
-        unsafe { &mut *(env.iterators.get()) };
-    let iter_id = PrefixIteratorId::new(iter_id);
-    while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
-        let (log_val, log_gas) = write_log.read(
-            &Key::parse(key.clone()).expect("Cannot parse the key string"),
-        );
-        vp_add_gas(env, iter_gas + log_gas);
-        match log_val {
-            Some(&write_log::StorageModification::Write { ref value }) => {
-                let key_val = KeyVal {
-                    key,
-                    val: value.clone(),
-                }
-                .try_to_vec()
-                .expect("cannot serialize the key value pair");
-                let gas = env
-                    .memory
-                    .write_bytes(result_ptr, key_val)
-                    .expect("cannot write to memory");
-                vp_add_gas(env, gas);
-                return 1;
-            }
-            Some(&write_log::StorageModification::Delete) => {
-                // check the next because the key has already deleted
-                continue;
-            }
-            Some(&write_log::StorageModification::InitAccount { .. }) => {
-                // a VP of a new account doesn't need to be iterated
-                continue;
-            }
-            None => {
-                let key_val = KeyVal { key, val }
-                    .try_to_vec()
-                    .expect("cannot serialize the key value pair");
-                let gas = env
-                    .memory
-                    .write_bytes(result_ptr, key_val)
-                    .expect("cannot write to memory");
-                vp_add_gas(env, gas);
-                return 1;
-            }
-        }
-    }
-    // key not found
-    0
-}
-
 /// Storage prefix iterator for prior state (before tx execution) function
 /// exposed to the wasm VM VP environment. It will try to read from the storage.
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_iter_pre_next_varlen<DB>(
+fn vp_storage_iter_pre_next<DB>(
     env: &VpEnv<DB>,
     iter_id: u64,
     result_ptr: u64,
@@ -1239,7 +868,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
     log::debug!(
-        "vp_storage_iter_pre_next_varlen iter_id {}, result_ptr {}",
+        "vp_storage_iter_pre_next iter_id {}, result_ptr {}",
         iter_id,
         result_ptr,
     );
@@ -1270,7 +899,7 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_iter_post_next_varlen<DB>(
+fn vp_storage_iter_post_next<DB>(
     env: &VpEnv<DB>,
     iter_id: u64,
     result_ptr: u64,
@@ -1279,7 +908,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
     log::debug!(
-        "vp_storage_iter_post_next_varlen iter_id {}, result_ptr {}",
+        "vp_storage_iter_post_next iter_id {}, result_ptr {}",
         iter_id,
         result_ptr,
     );

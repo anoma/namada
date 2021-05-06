@@ -10,8 +10,8 @@ validity_predicate! {
 
         for key in keys_changed.iter() {
             let key = key.to_string();
-            let pre: Option<u64> = read_pre_varlen(&key);
-            let post: Option<u64> = read_post_varlen(&key);
+            let pre: Option<u64> = read_pre(&key);
+            let post: Option<u64> = read_post(&key);
             log_string(format!(
                 "validate_tx key: {}, pre: {:#?}, post: {:#?}",
                 key, pre, post,
