@@ -139,6 +139,9 @@ impl DB for MockDB {
                     },
                     "hash" => hash = Some(BlockHash::decode(bytes.to_vec())),
                     "subspace" => {
+                        // We need special handling of validity predicate keys,
+                        // which are reserved and so calling `Key::parse` on
+                        // them would fail
                         let key = match segments.get(3) {
                             Some(seg) if *seg == "?" => {
                                 // the path of a validity predicate should be

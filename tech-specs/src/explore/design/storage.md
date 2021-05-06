@@ -94,9 +94,9 @@ The persistent DB implementation (e.g. RocksDB).
 
 ### DB keys
 
-The DB keys are composed of key segments. A key segment can be an `Address` which starts with `#` (there can be multiple addresses involved in a key) or any user defined non-empty utf-8 string (maybe limited to only alphanumerical characters). A key segment starting with `@` is invalid because it is reserved for a raw address and it should not be stored on-chain.
+The DB keys are composed of key segments. A key segment can be an `Address` which starts with `#` (there can be multiple addresses involved in a key) or any user defined non-empty utf-8 string (maybe limited to only alphanumerical characters). Also, `/` and `?` are reserved. `/` is used as a separator for segments. `?` is reserved for a validity predicate and the key segment `?` can be specified only by the specific API.
 
-In the DB storage, the keys would be prefixed by the block height and the space type. This would be hidden from the wasm environment, which only operates at the current block height. For example, when the block height is `123` and the key specified by the storage is `@my_address/balance/token`, the actual key for the persistent DB implementation would be `123/subspace/@my_address/balance/token`.
+In the DB storage, the keys would be prefixed by the block height and the space type. This would be hidden from the wasm environment, which only operates at the current block height. For example, when the block height is `123` and the key specified by the storage is `#my_address_hash/balance/token`, the actual key for the persistent DB implementation would be `123/subspace/#my_address_hash/balance/token`.
 
 This could roughly be implemented as:
 
