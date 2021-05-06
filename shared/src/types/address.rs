@@ -212,7 +212,7 @@ impl<'a> FromIterator<&'a Address> for HashSet<Address> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use rand::prelude::ThreadRng;
     use rand::{thread_rng, RngCore};
 
@@ -235,5 +235,15 @@ mod tests {
             .join("");
         let address = key_gen.generate_address(rng_source);
         println!("address {}", address);
+    }
+
+    /// A sampled established address for tests
+    pub fn established_address_1() -> Address {
+        Address::decode("a1qq5qqqqqgcmyxd35xguy2wp5xsu5vs6pxqcy232pgvm5zs6yggunssfs89znv33h8q6rjde4cjc3dr").expect("The token address decoding shouldn't fail")
+    }
+
+    /// A sampled established address for tests
+    pub fn established_address_2() -> Address {
+        Address::decode("a1qq5qqqqqgcuyxv2pxgcrzdecx4prq3pexccr2vj9xse5gvf3gvmnv3f3xqcyyvjyxv6yvv34e393x7").expect("The token address decoding shouldn't fail")
     }
 }
