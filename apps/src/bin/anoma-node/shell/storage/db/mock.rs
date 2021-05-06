@@ -4,7 +4,10 @@ use std::collections::btree_map::Range;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
 
-use anoma_shared::types::{Address, BlockHash, BlockHeight, Key, KeySeg};
+use anoma_shared::types::{
+    Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+    RESERVED_VP_KEY,
+};
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
@@ -122,7 +125,8 @@ impl DB for MockDB {
         for (path, bytes) in
             self.0.range((Included(prefix), Excluded(upper_prefix)))
         {
-            let mut segments: Vec<&str> = path.split('/').collect();
+            let mut segments: Vec<&str> =
+                path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
                 Some(prefix) => match *prefix {
                     "tree" => match segments.get(2) {
@@ -143,7 +147,7 @@ impl DB for MockDB {
                         // which are reserved and so calling `Key::parse` on
                         // them would fail
                         let key = match segments.get(3) {
-                            Some(seg) if *seg == "?" => {
+                            Some(seg) if *seg == RESERVED_VP_KEY => {
                                 // the path of a validity predicate should be
                                 // height/subspace/address/?
                                 let mut addr_str = (*segments
@@ -156,13 +160,19 @@ impl DB for MockDB {
                                 Key::validity_predicate(&addr)
                                     .expect("failed to make the VP key")
                             }
-                            _ => Key::parse(segments.split_off(2).join("/"))
-                                .map_err(|e| Error::Temporary {
+                            _ => Key::parse(
+                                segments
+                                    .split_off(2)
+                                    .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                            )
+                            .map_err(|e| {
+                                Error::Temporary {
                                     error: format!(
                                         "Cannot parse key segments {}: {}",
                                         path, e
                                     ),
-                                })?,
+                                }
+                            })?,
                         };
                         subspaces.insert(key, bytes.to_vec());
                     }

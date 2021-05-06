@@ -4,7 +4,10 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
-use anoma_shared::types::{Address, BlockHash, BlockHeight, Key, KeySeg};
+use anoma_shared::types::{
+    Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+    RESERVED_VP_KEY,
+};
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -226,7 +229,8 @@ impl DB for RocksDB {
                     ),
                 }
             })?;
-            let mut segments: Vec<&str> = path.split('/').collect();
+            let mut segments: Vec<&str> =
+                path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
                 Some(prefix) => match *prefix {
                     "tree" => match segments.get(2) {
@@ -247,7 +251,7 @@ impl DB for RocksDB {
                         // which are reserved and so calling `Key::parse` on
                         // them would fail
                         let key = match segments.get(3) {
-                            Some(seg) if *seg == "?" => {
+                            Some(seg) if *seg == RESERVED_VP_KEY => {
                                 // the path of a validity predicate should be
                                 // height/subspace/address/?
                                 let mut addr_str = (*segments
@@ -260,13 +264,19 @@ impl DB for RocksDB {
                                 Key::validity_predicate(&addr)
                                     .expect("failed to make the VP key")
                             }
-                            _ => Key::parse(segments.split_off(2).join("/"))
-                                .map_err(|e| Error::Temporary {
+                            _ => Key::parse(
+                                segments
+                                    .split_off(2)
+                                    .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                            )
+                            .map_err(|e| {
+                                Error::Temporary {
                                     error: format!(
                                         "Cannot parse key segments {}: {}",
                                         path, e
                                     ),
-                                })?,
+                                }
+                            })?,
                         };
                         subspaces.insert(key, bytes.to_vec());
                     }
