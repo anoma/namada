@@ -5,6 +5,8 @@ Options to consider:
 - slog
 - tracing
 
+The current preference is for tracing in combination with env_logger, because we have some async and parallelized code.
+
 ## Env_logger
 
 <https://github.com/env-logger-rs/env_logger/>
