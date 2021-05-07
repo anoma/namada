@@ -58,7 +58,7 @@ cargo watch -x "run --bin anoman -- run-ledger"
 # Watch and on change reset & run a node
 cargo watch -x "run --bin anoman -- reset-ledger" -x "run --bin anoman -- run"
 
-# run gossip node node with intent broadcaster and rpc server (use default config)
+# run gossip node with intent broadcaster and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc
 
 # run gossip node with intent broadcaster, matchmaker and rpc (use default config)

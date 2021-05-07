@@ -25,7 +25,7 @@ install:
 	$(cargo) install --path ./ --debug
 
 run-ledger:
-	# runs the node node
+	# runs the node
 	$(cargo) run --bin anoman -- run-ledger
 
 run-gossip:
@@ -33,7 +33,7 @@ run-gossip:
 	$(cargo) run --bin anoman -- run-gossip
 
 reset-ledger:
-	# runs the node node
+	# runs the node
 	$(cargo) run --bin anoman -- reset-ledger
 
 audit:
