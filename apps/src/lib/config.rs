@@ -85,7 +85,7 @@ impl Default for Ledger {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Matchmaker {
     pub matchmaker: PathBuf,
-    pub tx_template: PathBuf,
+    pub tx_code: PathBuf,
     pub ledger_address: SocketAddr,
     pub filter: Option<PathBuf>,
 }

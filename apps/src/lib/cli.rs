@@ -40,22 +40,22 @@ pub const PEERS_ARG: &str = "peers";
 pub const ADDRESS_ARG: &str = "address";
 pub const TOPIC_ARG: &str = "topic";
 pub const RPC_ARG: &str = "rpc";
-pub const MATCHMAKER_ARG: &str = "matchmaker";
-pub const TX_TEMPLATE_ARG: &str = "tx-template";
+pub const MATCHMAKER_ARG: &str = "matchmaker-path";
+pub const TX_CODE_ARG: &str = "tx-code-path";
 pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
 pub const FILTER_ARG: &str = "filter";
 
 // client args
-pub const DATA_ARG: &str = "data";
-pub const CODE_ARG: &str = "code";
-pub const DATA_INTENT_ARG: &str = "data";
+pub const DATA_ARG: &str = "data-path";
+pub const CODE_ARG: &str = "code-path";
+pub const DATA_INTENT_ARG: &str = "data-path";
 pub const NODE_INTENT_ARG: &str = "node";
 pub const DRY_RUN_TX_ARG: &str = "dry-run";
 pub const TOKEN_SELL_ARG: &str = "token-sell";
 pub const TOKEN_BUY_ARG: &str = "token-buy";
 pub const AMOUNT_SELL_ARG: &str = "amount-sell";
 pub const AMOUNT_BUY_ARG: &str = "amount-buy";
-pub const FILE_ARG: &str = "file";
+pub const FILE_ARG: &str = "file-path";
 pub const SOURCE_ARG: &str = "source";
 pub const TARGET_ARG: &str = "target";
 pub const TOKEN_ARG: &str = "token";
@@ -376,11 +376,11 @@ fn run_gossip_subcommand() -> App {
                 .about("The matchmaker."),
         )
         .arg(
-            Arg::new(TX_TEMPLATE_ARG)
-                .long(TX_TEMPLATE_ARG)
+            Arg::new(TX_CODE_ARG)
+                .long(TX_CODE_ARG)
                 .multiple(false)
                 .takes_value(true)
-                .about("The tx template to use with the matchmaker"),
+                .about("The transaction code to use with the matchmaker"),
         )
         .arg(
             Arg::new(LEDGER_ADDRESS_ARG)
@@ -468,15 +468,15 @@ pub fn update_gossip_config(
     }
 
     let matchmaker_arg = parse_opt(args, MATCHMAKER_ARG);
-    let tx_template_arg = parse_opt(args, TX_TEMPLATE_ARG);
+    let tx_code_arg = parse_opt(args, TX_CODE_ARG);
     let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);
     let filter_arg = parse_opt(args, FILTER_ARG);
     if let Some(mut matchmaker_cfg) = config.matchmaker.as_mut() {
         if let Some(matchmaker) = matchmaker_arg {
             matchmaker_cfg.matchmaker = matchmaker
         }
-        if let Some(tx_template) = tx_template_arg {
-            matchmaker_cfg.tx_template = tx_template
+        if let Some(tx_code) = tx_code_arg {
+            matchmaker_cfg.tx_code = tx_code
         }
         if let Some(ledger_address) = ledger_address_arg {
             matchmaker_cfg.ledger_address = ledger_address
@@ -484,26 +484,26 @@ pub fn update_gossip_config(
         if let Some(filter) = filter_arg {
             matchmaker_cfg.filter = Some(filter)
         }
-    } else if let (Some(matchmaker), Some(tx_template), Some(ledger_address)) = (
+    } else if let (Some(matchmaker), Some(tx_code), Some(ledger_address)) = (
         matchmaker_arg.as_ref(),
-        tx_template_arg.as_ref(),
+        tx_code_arg.as_ref(),
         ledger_address_arg,
     ) {
         let matchmaker_cfg = Some(config::Matchmaker {
             matchmaker: matchmaker.clone(),
-            tx_template: tx_template.clone(),
+            tx_code: tx_code.clone(),
             ledger_address,
             filter: filter_arg.clone(),
         });
         config.matchmaker = matchmaker_cfg
     } else if matchmaker_arg.is_some()
-        || tx_template_arg.is_some()
+        || tx_code_arg.is_some()
         || ledger_address_arg.is_some()
     // if at least one argument is not none then fail
     {
         panic!(
-            "No complete matchmaker configuration found (matchmaker program \
-             path, tx template path, and ledger address). Please update the \
+            "No complete matchmaker configuration found (matchmaker code \
+             path, tx code path, and ledger address). Please update the \
              configuration with default value or use all cli argument to use \
              the matchmaker"
         );
