@@ -193,8 +193,7 @@ pub mod tx {
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
-    /// Log a string. The message will be printed at the
-    /// [`tracing::Level::Info`].
+    /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
@@ -510,8 +509,7 @@ pub mod vp {
         valid == 1
     }
 
-    /// Log a string. The message will be printed at the
-    /// [`tracing::Level::Info`].
+    /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
@@ -628,8 +626,7 @@ pub mod matchmaker {
         unsafe { _send_match(tx_data.as_ptr() as _, tx_data.len() as _) };
     }
 
-    /// Log a string. The message will be printed at the
-    /// [`tracing::Level::Info`].
+    /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
@@ -694,8 +691,7 @@ pub mod filter {
         }
     }
 
-    /// Log a string. The message will be printed at the
-    /// [`tracing::Level::Info`].
+    /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
