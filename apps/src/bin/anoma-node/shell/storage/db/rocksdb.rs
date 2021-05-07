@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
     RESERVED_VP_KEY,
@@ -95,6 +96,7 @@ impl DB for RocksDB {
         hash: &BlockHash,
         height: BlockHeight,
         subspaces: &HashMap<Key, Vec<u8>>,
+        address_gen: &EstablishedAddressGen,
     ) -> Result<()> {
         let mut batch = WriteBatch::default();
 
@@ -138,6 +140,14 @@ impl DB for RocksDB {
                 let key = subspace_prefix.join(key);
                 batch.put(key.to_string(), value);
             });
+        }
+        // Address gen
+        {
+            let key = prefix_key
+                .push(&"address_gen".to_owned())
+                .map_err(Error::KeyError)?;
+            let value = address_gen;
+            batch.put(key.to_string(), value.encode());
         }
         let mut write_opts = WriteOptions::default();
         // TODO: disable WAL when we can shutdown with flush
@@ -216,6 +226,7 @@ impl DB for RocksDB {
         let mut root = None;
         let mut store = None;
         let mut hash = None;
+        let mut address_gen = None;
         let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
         for (key, bytes) in self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
@@ -280,13 +291,17 @@ impl DB for RocksDB {
                         };
                         subspaces.insert(key, bytes.to_vec());
                     }
+                    "address_gen" => {
+                        address_gen =
+                            Some(EstablishedAddressGen::decode(bytes));
+                    }
                     _ => unknown_key_error(path)?,
                 },
                 None => unknown_key_error(path)?,
             }
         }
-        match (root, store, hash) {
-            (Some(root), Some(store), Some(hash)) => {
+        match (root, store, hash, address_gen) {
+            (Some(root), Some(store), Some(hash), Some(address_gen)) => {
                 let tree = MerkleTree(SparseMerkleTree::new(root, store));
                 Ok(Some(BlockState {
                     chain_id,
@@ -294,6 +309,7 @@ impl DB for RocksDB {
                     hash,
                     height,
                     subspaces,
+                    address_gen,
                 }))
             }
             _ => Err(Error::Temporary {

@@ -557,10 +557,6 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use anoma_shared::types::RawAddress;
-
     use super::*;
     use crate::shell::storage::TestStorage;
 
@@ -674,9 +670,8 @@ mod tests {
         let runner = VpRunner::new();
         let tx_data = vec![];
         let tx_code = vec![];
-        let raw_addr: RawAddress = FromStr::from_str("test").unwrap();
-        let addr: Address = raw_addr.hash();
-        let storage = TestStorage::default();
+        let mut storage = TestStorage::default();
+        let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::new();
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = vec![];
