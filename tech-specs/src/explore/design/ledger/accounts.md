@@ -29,7 +29,7 @@ The human-readable prefix (as specified for [bech32](https://github.com/bitcoin/
 
 #### Implicit transparent addresses
 
-As implied by their name, implicit addresses exist only as a possibility and not as a matter of fact. These addresses allow users to interact with public keys which may or may not have a registered on-chain account, e.g. allowing to send some fungible token to an address derived from a public key. An implicit address is derived from a hash of a public key, which also helps to protect keys for which the public key has not been revealed publicly.
+As implied by their name, accounts for implicit addresses exist as a possibility and not as a matter of fact. These addresses allow users to interact with public keys which may or may not have a registered on-chain account, e.g. allowing to send some fungible token to an address derived from a public key. An implicit address is derived from a hash of a public key, which also helps to protect keys for which the public key has not been revealed publicly.
 
 #### Established transparent addresses
 
