@@ -31,13 +31,13 @@ make
 make install
 
 # generate default config in .anoma/
-cargo run --bin anomad -- --base-dir .anoma generate-config
+cargo run --bin anoman -- --base-dir .anoma generate-config
 
-# Run Anoma daemon (this will also initialize and run Tendermint node)
+# Run Anoma node (this will also initialize and run Tendermint node)
 make run-ledger
 
 # Reset the state (resets Tendermint too)
-cargo run --bin anomad -- reset-ledger
+cargo run --bin anoman -- reset-ledger
 
 # Submit a custom transaction with a wasm code and arbitrary data in `tx.data` file.
 # Note that you have to have a `tx.data` file for this to work, albeit it can be empty.
@@ -53,16 +53,16 @@ export BTC=a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6
 cargo run --bin anomac -- transfer --source $ALAN --target $ADA --token $XAN --amount 10.1 --code-path txs/tx_transfer/tx.wasm
 
 # Watch and on change run a node (the state will be persisted)
-cargo watch -x "run --bin anomad -- run-ledger"
+cargo watch -x "run --bin anoman -- run-ledger"
 
 # Watch and on change reset & run a node
-cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
+cargo watch -x "run --bin anoman -- reset-ledger" -x "run --bin anoman -- run"
 
-# run gossip node daemon with intent broadcaster and rpc server (use default config)
+# run gossip node node with intent broadcaster and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc
 
-# run gossip daemon with intent broadcaster, matchmaker and rpc (use default config)
-cargo run --bin anomad -- run-gossip --rpc --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26658"
+# run gossip node with intent broadcaster, matchmaker and rpc (use default config)
+cargo run --bin anoman -- run-gossip --rpc --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26658"
 
 # craft two opposite intents
 cargo run --bin anomac -- craft-intent --address $ALAN --token-buy $BTC --amount-buy 20 --token-sell $XAN --amount-sell 10 --file-path intent_A.data

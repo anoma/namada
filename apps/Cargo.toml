@@ -17,9 +17,9 @@ path = "src/lib/mod.rs"
 name = "anoma"
 path = "src/bin/anoma/main.rs"
 
-# Anoma node daemon
+# Anoma node
 [[bin]]
-name = "anomad"
+name = "anoman"
 path = "src/bin/anoma-node/main.rs"
 
 # Anoma client
