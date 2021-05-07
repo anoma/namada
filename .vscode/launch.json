@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(OSX) Launch",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceRoot}/target/debug/anomad",
+            "args": [
+                "run-ledger"
+            ],
+            "cwd": "${workspaceRoot}",
+        }
+    ]
+}

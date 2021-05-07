@@ -4,6 +4,7 @@ mod tendermint;
 
 use core::fmt;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::ops::Add;
 use std::path::Path;
 use std::sync::mpsc;
@@ -249,9 +250,9 @@ impl Shell {
                     })?
                 }
                 AbciMsg::ApplyTx { reply, tx } => {
-                    let result =
-                        self.apply_tx(&tx).map_err(|e| format!("{}", e));
-                    reply.send(result).map_err(|e| {
+                    let (gas, result) = self.apply_tx(&tx);
+                    let result = result.map_err(|e| e.to_string());
+                    reply.send((gas, result)).map_err(|e| {
                         Error::AbciChannelSendError(format!("ApplyTx {}", e))
                     })?
                 }
@@ -282,17 +283,12 @@ impl Shell {
                             .dry_run_tx(&data)
                             .map_err(|e| format!("{}", e));
 
-                        match result {
-                            Ok(res) => reply.send(Ok(res)).map_err(|e| {
-                                Error::AbciChannelSendError(format!(
-                                    "ApplyTx {}",
-                                    e
-                                ))
-                            })?,
-                            Err(e) => {
-                                println!("{}", e)
-                            }
-                        }
+                        reply.send(result).map_err(|e| {
+                            Error::AbciChannelSendError(format!(
+                                "ApplyTx {}",
+                                e
+                            ))
+                        })?
                     }
                 }
             }
@@ -300,7 +296,7 @@ impl Shell {
     }
 }
 #[derive(Clone, Debug)]
-struct VpsGas {
+pub struct VpsGas {
     max: u64,
     rest: Vec<u64>,
 }
@@ -315,7 +311,7 @@ impl Default for VpsGas {
 }
 
 #[derive(Clone, Debug)]
-struct VpsResult {
+pub struct VpsResult {
     pub accepted_vps: HashSet<Address>,
     pub rejected_vps: HashSet<Address>,
     pub changed_keys: Vec<Key>,
@@ -390,7 +386,7 @@ impl Default for VpsResult {
 }
 
 #[derive(Clone, Debug)]
-struct TxResult {
+pub struct TxResult {
     // a value of 0 indicates that the transaction overflowed with gas
     gas_used: u64,
     vps: VpsResult,
@@ -417,8 +413,8 @@ impl fmt::Display for TxResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Transaction is valid: {}. Gas used: {}, vps: {}",
-            self.valid,
+            "Transaction is {}. Gas used: {}, vps: {}",
+            if self.valid { "valid" } else { "invalid" },
             self.gas_used,
             self.vps.to_string(),
         )
@@ -454,30 +450,40 @@ impl Shell {
     }
 
     /// Validate and apply a transaction.
-    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> Result<u64> {
+    pub fn apply_tx(&mut self, tx_bytes: &[u8]) -> (i64, Result<TxResult>) {
         let result = run_tx(
             tx_bytes,
             &mut self.gas_meter.clone(),
             &mut self.write_log,
             &self.storage,
-        )?;
+        );
 
-        match result.is_tx_correct() {
-            true => {
-                log::debug!(
-                    "all VPs accepted apply_tx storage modification {:#?}",
-                    result
-                );
-                self.write_log.commit_tx();
-                Ok(result.gas_used)
+        match result {
+            Ok(result) => {
+                if result.is_tx_correct() {
+                    log::debug!(
+                        "all VPs accepted apply_tx storage modification {:#?}",
+                        result
+                    );
+                    self.write_log.commit_tx();
+                } else {
+                    log::debug!(
+                        "some VPs rejected apply_tx storage modification {:#?}",
+                        result.vps.rejected_vps
+                    );
+                    self.write_log.drop_tx();
+                }
+
+                let gas = i64::try_from(result.gas_used)
+                    .expect("Gas should never overflow i64");
+
+                (gas, Ok(result))
             }
-            false => {
-                log::debug!(
-                    "some VPs rejected apply_tx storage modification {:#?}",
-                    result.vps.rejected_vps
-                );
-                self.write_log.drop_tx();
-                Err(Error::GasOverflow)
+            err @ Err(_) => {
+                let gas =
+                    i64::try_from(self.gas_meter.get_current_transaction_gas())
+                        .expect("Gas should never overflow i64");
+                (gas, err)
             }
         }
     }
@@ -741,7 +747,7 @@ fn run_vp(
 ) -> Result<VpsResult> {
     let vp_runner = VpRunner::new();
 
-    let accept = vp_runner.run(
+    let mut accept = vp_runner.run(
         vp,
         tx_data,
         &tx_code,
@@ -753,6 +759,8 @@ fn run_vp(
         addresses,
     );
     result.changed_keys.extend_from_slice(&keys);
+
+    accept = Ok(false);
 
     match accept {
         Ok(accepted) => {

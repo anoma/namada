@@ -26,7 +26,7 @@ use tendermint_proto::abci::{
     ResponseOfferSnapshot, ResponseQuery, ResponseSetOption,
 };
 
-use super::MerkleRoot;
+use super::{MerkleRoot, TxResult};
 use crate::shell::MempoolTxType;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
@@ -55,7 +55,7 @@ pub enum AbciMsg {
     },
     /// Apply a transaction in a block
     ApplyTx {
-        reply: Sender<Result<u64, String>>,
+        reply: Sender<(i64, Result<TxResult, String>)>,
         tx: Vec<u8>,
     },
     /// End a block
@@ -302,30 +302,24 @@ impl tendermint_abci::Application for AbciWrapper {
         self.sender
             .send(AbciMsg::ApplyTx { reply, tx: req.tx })
             .expect("TEMPORARY: failed to send ApplyTx request");
-        let result = reply_receiver
+        let (gas, result) = reply_receiver
             .recv()
             .expect("TEMPORARY: failed to recv ApplyTx response");
 
+        resp.gas_used = gas;
+        resp.gas_wanted = gas;
+
         match result {
-            Ok(gas) => match i64::try_from(gas) {
-                Ok(number) => {
-                    resp.gas_used = number;
-                    resp.info = format!(
-                        "Transaction successfully applied with gas {}",
-                        gas
-                    );
-                }
-                Err(err) => {
+            Ok(tx_result) => {
+                // change function name
+                resp.info = format!("{}", tx_result);
+                if !tx_result.is_tx_correct() {
                     resp.code = 1;
-                    resp.log = format!(
-                        "Transaction failed, gas overflow: {}",
-                        err.to_string()
-                    );
                 }
-            },
+            }
             Err(msg) => {
                 resp.code = 1;
-                resp.log = msg;
+                resp.info = msg;
             }
         }
         resp
