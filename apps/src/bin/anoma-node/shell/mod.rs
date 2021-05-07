@@ -281,12 +281,17 @@ impl Shell {
                             .dry_run_tx(&data)
                             .map_err(|e| format!("{}", e));
 
-                        reply.send(result).map_err(|e| {
-                            Error::AbciChannelSendError(format!(
-                                "ApplyTx {}",
-                                e
-                            ))
-                        })?
+                        match result {
+                            Ok(res) => reply.send(Ok(res)).map_err(|e| {
+                                Error::AbciChannelSendError(format!(
+                                    "ApplyTx {}",
+                                    e
+                                ))
+                            })?,
+                            Err(e) => {
+                                println!("{}", e)
+                            }
+                        }
                     }
                 }
             }
@@ -362,12 +367,10 @@ impl fmt::Display for VpsResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Vps -> accepted: {:?}. rejected: {:?}, keys: {:?}, gas_used: \
-             {:?}, error: {:}",
+            "Vps -> accepted: {:?}. rejected: {:?}, keys: {:?}, error: {:}",
             self.accepted_vps,
             self.rejected_vps,
             self.changed_keys,
-            self.gas_used.max, // TODO: change
             self.have_error
         )
     }
@@ -457,21 +460,25 @@ impl Shell {
             &mut self.write_log,
             &self.storage,
         )?;
-        // Apply the transaction if accepted by all the VPs
-        if result.vps.rejected_vps.is_empty() {
-            log::debug!(
-                "all VPs accepted apply_tx storage modification {:#?}",
-                result
-            );
-            self.write_log.commit_tx();
-        } else {
-            log::debug!(
-                "some VPs rejected apply_tx storage modification {:#?}",
-                result.vps.rejected_vps
-            );
-            self.write_log.drop_tx();
+
+        match result.is_tx_correct() {
+            true => {
+                log::debug!(
+                    "all VPs accepted apply_tx storage modification {:#?}",
+                    result
+                );
+                self.write_log.commit_tx();
+                Ok(result.gas_used)
+            }
+            false => {
+                log::debug!(
+                    "some VPs rejected apply_tx storage modification {:#?}",
+                    result.vps.rejected_vps
+                );
+                self.write_log.drop_tx();
+                Err(Error::GasOverflow)
+            }
         }
-        Ok(result.gas_used)
     }
 
     /// Begin a new block.
