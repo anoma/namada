@@ -310,7 +310,7 @@ where
     let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     // if we run out of gas, we need to stop the execution
     if let Err(err) = gas_meter.add(used_gas) {
-        log::warn!(
+        tracing::warn!(
             "Stopping transaction execution because of gas error: {}",
             err
         );
@@ -332,7 +332,7 @@ where
 {
     let gas_meter: &mut VpGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     if let Err(err) = gas_meter.add(used_gas) {
-        log::warn!(
+        tracing::warn!(
             "Stopping transaction execution because of gas error: {}",
             err
         );
@@ -352,7 +352,7 @@ where
         .expect("Cannot read the key from memory");
     tx_add_gas(env, gas);
 
-    log::debug!("tx_storage_has_key {}, key {}", key, key_ptr,);
+    tracing::debug!("tx_storage_has_key {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -398,7 +398,7 @@ where
         .expect("Cannot read the key from memory");
     tx_add_gas(env, gas);
 
-    log::debug!(
+    tracing::debug!(
         "tx_storage_read {}, key {}, result_ptr {}",
         key,
         key_ptr,
@@ -480,7 +480,7 @@ where
         .expect("Cannot read the prefix from memory");
     tx_add_gas(env, gas);
 
-    log::debug!("tx_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+    tracing::debug!("tx_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
@@ -506,7 +506,7 @@ fn tx_storage_iter_next<DB>(
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
-    log::debug!(
+    tracing::debug!(
         "tx_storage_iter_next iter_id {}, result_ptr {}",
         iter_id,
         result_ptr,
@@ -587,7 +587,7 @@ fn tx_storage_write<DB>(
         .expect("Cannot read the value from memory");
     tx_add_gas(env, gas);
 
-    log::debug!("tx_storage_update {}, {:#?}", key, value);
+    tracing::debug!("tx_storage_update {}, {:#?}", key, value);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -609,7 +609,7 @@ where
         .expect("Cannot read the key from memory");
     tx_add_gas(env, gas);
 
-    log::debug!("tx_storage_delete {}", key);
+    tracing::debug!("tx_storage_delete {}", key);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -646,7 +646,7 @@ where
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (value, gas) = storage.read(&key).expect("storage read failed");
     vp_add_gas(env, gas);
-    log::debug!(
+    tracing::debug!(
         "vp_storage_read_pre addr {}, key {}, value {:#?}",
         env.addr,
         key,
@@ -691,7 +691,7 @@ where
         .expect("Cannot read the key from memory");
     vp_add_gas(env, gas);
 
-    log::debug!(
+    tracing::debug!(
         "vp_storage_read_post {}, key {}, result_ptr {}",
         key,
         key_ptr,
@@ -771,7 +771,7 @@ where
         .expect("Cannot read the key from memory");
     vp_add_gas(env, gas);
 
-    log::debug!("vp_storage_has_key_pre {}, key {}", key, key_ptr,);
+    tracing::debug!("vp_storage_has_key_pre {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -798,7 +798,7 @@ where
         .expect("Cannot read the key from memory");
     vp_add_gas(env, gas);
 
-    log::debug!("vp_storage_has_key_post {}, key {}", key, key_ptr,);
+    tracing::debug!("vp_storage_has_key_post {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -841,7 +841,7 @@ where
         .expect("Cannot read the prefix from memory");
     vp_add_gas(env, gas);
 
-    log::debug!("vp_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+    tracing::debug!("vp_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
@@ -866,7 +866,7 @@ fn vp_storage_iter_pre_next<DB>(
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
-    log::debug!(
+    tracing::debug!(
         "vp_storage_iter_pre_next iter_id {}, result_ptr {}",
         iter_id,
         result_ptr,
@@ -906,7 +906,7 @@ fn vp_storage_iter_post_next<DB>(
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
-    log::debug!(
+    tracing::debug!(
         "vp_storage_iter_post_next iter_id {}, result_ptr {}",
         iter_id,
         result_ptr,
@@ -976,7 +976,7 @@ where
         .expect("Cannot read the key from memory");
     tx_add_gas(env, gas);
 
-    log::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
+    tracing::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
     let addr = Address::decode(&addr).expect("Cannot parse the address string");
 
@@ -1000,7 +1000,7 @@ fn tx_update_validity_predicate<DB>(
         .memory
         .read_string(addr_ptr, addr_len as _)
         .expect("Cannot read the address from memory");
-    log::debug!(
+    tracing::debug!(
         "tx_update_validity_predicate {}, addr_ptr {}",
         addr,
         addr_ptr
@@ -1039,7 +1039,7 @@ where
         .expect("Cannot read validity predicate from memory");
     tx_add_gas(env, gas);
 
-    log::debug!("tx_init_account");
+    tracing::debug!("tx_init_account");
 
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
@@ -1191,7 +1191,8 @@ where
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
-/// printed at the [`log::Level::Info`]. This function is for development only.
+/// printed at the [`tracing::Level::Info`]. This function is for development
+/// only.
 fn tx_log_string<DB>(env: &TxEnv<DB>, str_ptr: u64, str_len: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1201,11 +1202,12 @@ where
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
 
-    log::info!("WASM Transaction log: {}", str);
+    tracing::info!("WASM Transaction log: {}", str);
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be
-/// printed at the [`log::Level::Info`]. This function is for development only.
+/// printed at the [`tracing::Level::Info`]. This function is for development
+/// only.
 fn vp_log_string<DB>(env: &VpEnv<DB>, str_ptr: u64, str_len: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1215,11 +1217,11 @@ where
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
 
-    log::info!("WASM Validity predicate log: {}", str);
+    tracing::info!("WASM Validity predicate log: {}", str);
 }
 
 /// Log a string from exposed to the wasm VM matchmaker environment. The message
-/// will be printed at the [`log::Level::Info`]. This function is for
+/// will be printed at the [`tracing::Level::Info`]. This function is for
 /// development only.
 fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
     let (str, _gas) = env
@@ -1227,17 +1229,17 @@ fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
 
-    log::info!("WASM Matchmaker log: {}", str);
+    tracing::info!("WASM Matchmaker log: {}", str);
 }
 
 /// Log a string from exposed to the wasm VM filter environment. The message
-/// will be printed at the [`log::Level::Info`].
+/// will be printed at the [`tracing::Level::Info`].
 fn filter_log_string(env: &FilterEnv, str_ptr: u64, str_len: u64) {
     let (str, _gas) = env
         .memory
         .read_string(str_ptr, str_len as _)
         .expect("Cannot read the string from memory");
-    log::info!("WASM Filter log: {}", str);
+    tracing::info!("WASM Filter log: {}", str);
 }
 
 /// Inject a transaction from matchmaker's matched intents to the ledger
