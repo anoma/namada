@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     #[error("Transaction gas limit exceeded")]
     TransactionGasExceedededError,
@@ -30,22 +30,52 @@ pub struct BlockGasMeter {
 #[derive(Debug, Clone)]
 pub struct VpGasMeter {
     pub vp_gas: u64,
+    /// We store the `error` inside here, because when we run out of gas in VP
+    /// wasm, the execution is immediately shut down with `unreachable!()`
+    /// as we cannot simply return `Result` from wasm. So instead, we store
+    /// the error in this meter, which is accessible from the wasm host
+    /// environment.
+    pub error: Option<Error>,
 }
 
 impl VpGasMeter {
     pub fn add(&mut self, gas: u64) -> Result<()> {
-        self.vp_gas = self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow)?;
+        match self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow) {
+            Ok(gas) => {
+                self.vp_gas = gas;
+            }
+            Err(err) => {
+                self.error = Some(err.clone());
+                return Err(err);
+            }
+        }
 
         if self.vp_gas > TRANSACTION_GAS_LIMIT {
+            self.error = Some(Error::TransactionGasExceedededError);
             return Err(Error::TransactionGasExceedededError);
         }
         Ok(())
+    }
+
+    pub fn gas_overflow(&self) -> bool {
+        self.error.is_some()
+    }
+
+    pub fn parallel_fee() -> f64 {
+        PARALLEL_GAS_MULTIPLER
+    }
+
+    pub fn transaction_gas_limit() -> u64 {
+        TRANSACTION_GAS_LIMIT
     }
 }
 
 impl VpGasMeter {
     pub fn new(vp_gas: u64) -> Self {
-        Self { vp_gas }
+        Self {
+            vp_gas,
+            error: None,
+        }
     }
 }
 
