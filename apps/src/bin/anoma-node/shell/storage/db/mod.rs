@@ -8,7 +8,8 @@
 //!     - `root`: root hash
 //!     - `store`: the tree's store
 //!   - `hash`: block hash
-//!   - `subspace`: any byte data
+//!   - `subspace`: any byte data associated with accounts
+//!   - `address_gen`: established address generator
 
 #[cfg(test)]
 pub mod mock;
@@ -16,6 +17,7 @@ pub mod rocksdb;
 
 use std::collections::HashMap;
 
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{BlockHash, BlockHeight, Key};
 use thiserror::Error;
 
@@ -43,6 +45,7 @@ pub struct BlockState {
     pub hash: BlockHash,
     pub height: BlockHeight,
     pub subspaces: HashMap<Key, Vec<u8>>,
+    pub address_gen: EstablishedAddressGen,
 }
 
 pub trait DB: std::fmt::Debug {
@@ -56,6 +59,7 @@ pub trait DB: std::fmt::Debug {
         hash: &BlockHash,
         height: BlockHeight,
         subspaces: &HashMap<Key, Vec<u8>>,
+        address_gen: &EstablishedAddressGen,
     ) -> Result<()>;
 
     /// Write the chain ID

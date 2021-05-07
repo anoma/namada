@@ -5,9 +5,10 @@ use std::io::{ErrorKind, Write};
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::Signer;
 pub use ed25519_dalek::{Keypair, SecretKey, SignatureError};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::types::{Address, DbKeySeg, Key, KeySeg};
+use crate::types::{address, Address, DbKeySeg, Key, KeySeg};
 
 const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
 
@@ -16,6 +17,19 @@ pub struct PublicKey(ed25519_dalek::PublicKey);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Signature(ed25519_dalek::Signature);
+
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
+pub struct PublicKeyHash(pub(crate) String);
 
 const PK_STORAGE_KEY: &str = "ed25519_pk";
 
@@ -205,5 +219,20 @@ impl BorshSerialize for Signature {
 impl From<ed25519_dalek::PublicKey> for PublicKey {
     fn from(pk: ed25519_dalek::PublicKey) -> Self {
         Self(pk)
+    }
+}
+
+impl From<PublicKey> for PublicKeyHash {
+    fn from(pk: PublicKey) -> Self {
+        let pk_bytes =
+            pk.try_to_vec().expect("Public key encoding shouldn't fail");
+        let mut hasher = Sha256::new();
+        hasher.update(pk_bytes);
+        // hex of the first 40 chars of the hash
+        Self(format!(
+            "{:.width$X}",
+            hasher.finalize(),
+            width = address::HASH_LEN
+        ))
     }
 }

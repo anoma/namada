@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
@@ -49,6 +50,7 @@ where
     // to the state of the latter
     block: BlockStorage,
     current_height: BlockHeight,
+    pub(crate) address_gen: EstablishedAddressGen,
 }
 
 pub type PersistentStorage = Storage<db::rocksdb::RocksDB>;
@@ -76,6 +78,9 @@ impl PersistentStorage {
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
             current_height: BlockHeight(0),
+            address_gen: EstablishedAddressGen::new(
+                "Privacy is a function of liberty.",
+            ),
         }
     }
 }
@@ -93,6 +98,7 @@ where
             hash,
             height,
             subspaces,
+            address_gen,
         }) = self.db.read_last_block().map_err(Error::DBError)?
         {
             self.chain_id = chain_id;
@@ -101,6 +107,7 @@ where
             self.block.height = height;
             self.block.subspaces = subspaces;
             self.current_height = height;
+            self.address_gen = address_gen;
             log::debug!("Loaded storage from DB");
             return Ok(Some((
                 MerkleRoot(
@@ -121,6 +128,7 @@ where
                 &self.block.hash,
                 self.block.height,
                 &self.block.subspaces,
+                &self.address_gen,
             )
             .map_err(Error::DBError)?;
         self.current_height = self.block.height;
@@ -263,6 +271,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     /// Check if the given address exists on chain and return the gas cost.
     pub fn exists(&self, addr: &Address) -> Result<(bool, u64)> {
         let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
@@ -418,6 +427,9 @@ impl Default for TestStorage {
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
             current_height: BlockHeight(0),
+            address_gen: EstablishedAddressGen::new(
+                "Test address generator seed",
+            ),
         }
     }
 }
