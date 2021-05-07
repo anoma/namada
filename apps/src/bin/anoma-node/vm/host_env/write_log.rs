@@ -111,7 +111,8 @@ impl WriteLog {
         storage_address_gen: &EstablishedAddressGen,
         vp: Vec<u8>,
     ) -> (Address, u64) {
-        // If we've previously generated a new account, we use the local copy of the generator. Otherwise, we create a new copy from the storage
+        // If we've previously generated a new account, we use the local copy of
+        // the generator. Otherwise, we create a new copy from the storage
         let address_gen =
             self.address_gen.get_or_insert(storage_address_gen.clone());
         let addr =
