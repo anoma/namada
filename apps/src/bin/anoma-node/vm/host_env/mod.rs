@@ -25,6 +25,7 @@ use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::{self, Storage};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
+const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
 struct TxEnv<DB>
 where
@@ -1017,6 +1018,16 @@ fn tx_update_validity_predicate<DB>(
         .expect("Cannot read the VP code");
     tx_add_gas(env, gas);
 
+    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE);
+    if let Err(err) = super::validate_untrusted_wasm(&code) {
+        log::info!(
+            "Trying to update an account with an invalid validity predicate \
+             code, error: {:#?}",
+            err
+        );
+        unreachable!()
+    }
+
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
     let (gas, _size_diff) = write_log.write(&key, code);
     tx_add_gas(env, gas);
@@ -1038,6 +1049,16 @@ where
         .read_bytes(code_ptr, code_len as _)
         .expect("Cannot read validity predicate from memory");
     tx_add_gas(env, gas);
+
+    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE);
+    if let Err(err) = super::validate_untrusted_wasm(&code) {
+        log::info!(
+            "Trying to initialize an account with an invalid validity \
+             predicate code, error: {:#?}",
+            err
+        );
+        unreachable!()
+    }
 
     log::debug!("tx_init_account");
 
