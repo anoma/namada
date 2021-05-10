@@ -22,7 +22,7 @@ clippy-check:
 
 install:
 	# Warning: built in debug mode for now
-	$(cargo) install --path ./ --debug
+	$(cargo) install --path ./apps --debug
 
 run-ledger:
 	# runs the node daemon
