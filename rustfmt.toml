@@ -25,9 +25,7 @@ format_strings = true
 group_imports = "StdExternalCrate"
 hard_tabs = false
 hide_parse_errors = false
-ignore = [
-  "apps/src/lib/proto/generated",
-]
+ignore = []
 imports_granularity = "Module"
 imports_indent = "Block"
 imports_layout = "Mixed"
