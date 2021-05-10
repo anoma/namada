@@ -24,21 +24,4 @@ impl IntentMempool {
     pub fn remove(&mut self, intent_id: &IntentId) -> bool {
         self.0.remove(intent_id).is_some()
     }
-
-    // TODO This is inefficient.
-    pub fn find_map<F: Fn(&IntentId, &Intent, &IntentId, &Intent) -> bool>(
-        &mut self,
-        intent1: &Intent,
-        f: F,
-    ) -> bool {
-        let id1: &IntentId = &IntentId::new(intent1);
-        let res = self.0.iter().find(|(id2, intent2)| {
-            if &id1 == id2 {
-                false
-            } else {
-                f(&id1, intent1, &id2, &intent2)
-            }
-        });
-        res.is_some()
-    }
 }

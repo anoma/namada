@@ -20,6 +20,7 @@ pub struct Matchmaker {
     inject_mm_message: Sender<MatchmakerMessage>,
     matchmaker_code: Vec<u8>,
     tx_code: Vec<u8>,
+    data: Vec<u8>,
     ledger_address: SocketAddr,
 }
 
@@ -61,6 +62,7 @@ impl Matchmaker {
                 inject_mm_message,
                 matchmaker_code,
                 tx_code,
+                data: Vec::new(),
                 ledger_address: config.ledger_address,
             },
             receiver_mm_message,
@@ -87,32 +89,45 @@ impl Matchmaker {
             let tx_code = &self.tx_code;
             let matchmaker_runner = vm::MatchmakerRunner::new();
             let matchmaker_code = &self.matchmaker_code;
-            let inject_tx = &self.inject_tx;
-            Ok(self.mempool.find_map(
-                &intent,
-                &|id1: &IntentId, i1: &Intent, id2: &IntentId, i2: &Intent| {
-                    matchmaker_runner
-                        .run(
-                            matchmaker_code.clone(),
-                            &id1.0,
-                            &i1.data,
-                            &id2.0,
-                            &i2.data,
-                            tx_code,
-                            inject_tx.clone(),
-                        )
-                        .map_err(Error::RunnerFailed)
-                        .unwrap()
-                },
-            ))
+            let inject_mm_message = &self.inject_mm_message;
+            let data = &self.data;
+            Ok(matchmaker_runner
+                .run(
+                    matchmaker_code.clone(),
+                    data,
+                    &IntentId::new(&intent).0,
+                    &intent.data,
+                    tx_code,
+                    inject_mm_message.clone(),
+                )
+                .map_err(Error::RunnerFailed)
+                .unwrap())
         } else {
             Ok(false)
         }
     }
 
-    pub fn match_found(&mut self, intents: HashSet<Vec<u8>>) {
-        intents.into_iter().for_each(|intent_id| {
-            self.mempool.remove(&IntentId::from(intent_id));
-        });
+    pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
+        match mm_message {
+            MatchmakerMessage::InjectTx(tx) => {
+                let mut tx_bytes = vec![];
+                tx.encode(&mut tx_bytes).unwrap();
+                let client = HttpClient::new(
+                    self.ledger_address.to_string().parse().unwrap(),
+                )
+                .unwrap();
+                let response =
+                    client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
+                println!("{:#?}", response);
+            }
+            MatchmakerMessage::RemoveIntents(intents_id) => {
+                intents_id.into_iter().for_each(|intent_id| {
+                    self.mempool.remove(&IntentId::from(intent_id));
+                });
+            }
+            MatchmakerMessage::UpdateData(mm_data) => {
+                self.data = mm_data;
+            }
+        }
     }
 }
