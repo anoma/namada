@@ -592,6 +592,31 @@ fn tx_storage_write<DB>(
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
+    // check address existence
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    for addr in key.find_addresses() {
+        let vp_key = Key::validity_predicate(&addr)
+            .expect("Unable to create a validity predicate key");
+        let (vp, gas) = write_log.read(&vp_key);
+        tx_add_gas(env, gas);
+        // just check the existence because the write log should not have the
+        // delete log of the VP
+        if vp.is_none() {
+            let (is_present, gas) =
+                storage.has_key(&vp_key).expect("checking existence failed");
+            tx_add_gas(env, gas);
+            if !is_present {
+                log::info!(
+                    "Trying to write into storage with a key containing an \
+                     address that doesn't exist: {}",
+                    addr
+                );
+                unreachable!();
+            }
+        }
+    }
+
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
     let (gas, _size_diff) = write_log.write(&key, value);
     tx_add_gas(env, gas);
