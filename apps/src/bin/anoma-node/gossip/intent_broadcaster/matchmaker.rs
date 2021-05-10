@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
-use anoma::protobuf::types::{Intent, Tx};
-use anoma::protobuf::IntentId;
+use anoma::config;
+use anoma::protobuf::types::Intent;
+use anoma::protobuf::{IntentId, MatchmakerMessage};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -13,7 +14,7 @@ use crate::vm;
 pub struct Matchmaker {
     mempool: IntentMempool,
     filter: Option<Filter>,
-    inject_tx: Sender<(Tx, HashSet<Vec<u8>>)>,
+    inject_mm_message: Sender<MatchmakerMessage>,
     matchmaker_code: Vec<u8>,
     tx_code: Vec<u8>,
 }
@@ -36,9 +37,9 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl Matchmaker {
     pub fn new(
-        config: &anoma::config::Matchmaker,
-    ) -> Result<(Self, (Receiver<(Tx, HashSet<Vec<u8>>)>, String))> {
-        let (inject_tx, receiver_tx) = channel(100);
+        config: &config::Matchmaker,
+    ) -> Result<(Self, (Receiver<MatchmakerMessage>, String))> {
+        let (inject_mm_message, receiver_mm_message) = channel(100);
         let matchmaker_code =
             std::fs::read(&config.matchmaker).map_err(Error::FileFailed)?;
         let tx_code =
@@ -53,11 +54,11 @@ impl Matchmaker {
             Self {
                 mempool: IntentMempool::new(),
                 filter,
-                inject_tx,
+                inject_mm_message,
                 matchmaker_code,
                 tx_code,
             },
-            (receiver_tx, config.ledger_address.to_string()),
+            (receiver_mm_message, config.ledger_address.to_string()),
         ))
     }
 

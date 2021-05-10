@@ -1,11 +1,11 @@
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use anoma::protobuf::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage, Tx,
+    intent_broadcaster_message, IntentBroadcasterMessage,
 };
+use anoma::protobuf::MatchmakerMessage;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
 };
@@ -114,8 +114,7 @@ impl Behaviour {
     pub fn new(
         key: Keypair,
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<(Receiver<(Tx, HashSet<Vec<u8>>)>, String)>)>
-    {
+    ) -> Result<(Self, Option<(Receiver<MatchmakerMessage>, String)>)> {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")

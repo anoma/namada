@@ -3,11 +3,11 @@ mod network_behaviour;
 mod p2p;
 mod rpc;
 
-use std::collections::HashSet;
 use std::thread;
 
 use anoma::protobuf::services::{rpc_message, RpcResponse};
 use anoma::protobuf::types::Tx;
+use anoma::protobuf::MatchmakerMessage;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
@@ -75,7 +75,7 @@ pub async fn dispatcher(
         mpsc::Receiver<(rpc_message::Message, oneshot::Sender<RpcResponse>)>,
     >,
     matchmaker_event_receiver: Option<(
-        mpsc::Receiver<(Tx, HashSet<Vec<u8>>)>,
+        mpsc::Receiver<MatchmakerMessage>,
         String,
     )>,
 ) -> Result<()> {
@@ -93,10 +93,13 @@ pub async fn dispatcher(
 
             loop {
                 tokio::select! {
-                    Some((tx, intents)) = matchmaker_event_receiver.recv() =>
+                    Some(message) = matchmaker_event_receiver.recv() =>
                     {
-                        gossip.handle_matchmaker_event(intents).await;
-                        tx_sender.send(tx).await.unwrap()
+                        match message {
+                            MatchmakerMessage::InjectTx(tx) => tx_sender.send(tx).await.unwrap(),
+                            MatchmakerMessage::RemoveIntents(..) => gossip.handle_matchmaker_event(message).await,
+                            MatchmakerMessage::UpdateData(..) => gossip.handle_matchmaker_event(message).await
+                        }
                     },
                     Some((event, inject_response)) = rpc_event_receiver.recv() =>
                     {
@@ -140,10 +143,13 @@ pub async fn dispatcher(
             }
             loop {
                 tokio::select! {
-                    Some((tx, intents)) = matchmaker_event_receiver.recv() =>
+                    Some(message) = matchmaker_event_receiver.recv() =>
                     {
-                        gossip.handle_matchmaker_event(intents).await;
-                        tx_sender.send(tx).await.unwrap()
+                        match message {
+                            MatchmakerMessage::InjectTx(tx) => tx_sender.send(tx).await.unwrap(),
+                            MatchmakerMessage::RemoveIntents(..) => gossip.handle_matchmaker_event(message).await,
+                            MatchmakerMessage::UpdateData(..) => gossip.handle_matchmaker_event(message).await
+                        }
                     },
                     swarm_event = gossip.swarm.next() => {
                         // All events are handled by the
