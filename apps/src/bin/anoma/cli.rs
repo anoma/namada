@@ -44,7 +44,7 @@ fn handle_command(app: App, cmd: &str) -> Result<()> {
         vec![cli::TX_COMMAND, cli::INTENT_COMMAND].contains(&cmd);
 
     if is_node_command {
-        handle_subcommand("anomad", sub_args)
+        handle_subcommand("anoman", sub_args)
     } else if is_client_command {
         handle_subcommand("anomac", sub_args)
     } else {
