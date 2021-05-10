@@ -104,33 +104,47 @@ impl Shell {
         let ada = Address::from_raw("ada");
         // encoded: "a1g3prgv3nxgurzvfjxymnwsejgsmyvvjxxep5zd6xxve5xwz98qcnqwp5gguyv33ng5cngv3sxger2dp3xvm52v3jxcmnxsjrg5eyxwq69kz8p"
         let alan = Address::from_raw("alan");
+        // encoded: "a1gfrrzs6yxaq52wpjgcer2wphgv6rssfjg4z5xve3xcuygdfhx9zrxd2xgg6yv329x4zyydfsx9zyxvp58pryg3p3x5crw3jyxarrj3s6rvetk"
+        let alonzo = Address::from_raw("alonzo");
         let xan = address::xan();
         let btc = address::btc();
+        let xtz = address::xtz();
 
         // default tokens VPs for testing
         let xan_vp = Key::validity_predicate(&xan).expect("expected VP key");
         let btc_vp = Key::validity_predicate(&btc).expect("expected VP key");
+        let xtz_vp = Key::validity_predicate(&xtz).expect("expected VP key");
         storage
             .write(&xan_vp, token_vp.to_vec())
             .expect("Unable to write token VP");
         storage
             .write(&btc_vp, token_vp.to_vec())
             .expect("Unable to write token VP");
+        storage
+            .write(&xtz_vp, token_vp.to_vec())
+            .expect("Unable to write token VP");
 
         // default user VPs for testing
         let ada_vp = Key::validity_predicate(&ada).expect("expected VP key");
         let alan_vp = Key::validity_predicate(&alan).expect("expected VP key");
+        let alonzo_vp =
+            Key::validity_predicate(&alonzo).expect("expected VP key");
         storage
             .write(&ada_vp, user_vp.to_vec())
             .expect("Unable to write user VP");
         storage
             .write(&alan_vp, user_vp.to_vec())
             .expect("Unable to write user VP");
+        storage
+            .write(&alonzo_vp, user_vp.to_vec())
+            .expect("Unable to write user VP");
 
         // default user's tokens for testing
         let ada_xan = token::balance_key(&xan, &ada);
         let ada_btc = token::balance_key(&btc, &ada);
         let alan_xan = token::balance_key(&xan, &alan);
+        let alonzo_xan = token::balance_key(&xan, &alonzo);
+        let alonzo_xtz = token::balance_key(&xtz, &alonzo);
 
         storage
             .write(
@@ -156,10 +170,27 @@ impl Shell {
                     .expect("encode token amount"),
             )
             .expect("Unable to set genesis balance");
+        storage
+            .write(
+                &alonzo_xan,
+                Amount::whole(1_000_000)
+                    .try_to_vec()
+                    .expect("encode token amount"),
+            )
+            .expect("Unable to set genesis balance");
+        storage
+            .write(
+                &alonzo_xtz,
+                Amount::whole(50_000)
+                    .try_to_vec()
+                    .expect("encode token amount"),
+            )
+            .expect("Unable to set genesis balance");
 
         // default user's public keys for testing
         let ada_pk = key::ed25519::pk_key(&ada);
         let alan_pk = key::ed25519::pk_key(&alan);
+        let alonzo_pk = key::ed25519::pk_key(&alonzo);
 
         storage
             .write(
@@ -171,6 +202,12 @@ impl Shell {
             .write(
                 &alan_pk,
                 wallet::alan_pk().try_to_vec().expect("encode public key"),
+            )
+            .expect("Unable to set genesis user public key");
+        storage
+            .write(
+                &alonzo_pk,
+                wallet::alonzo_pk().try_to_vec().expect("encode public key"),
             )
             .expect("Unable to set genesis user public key");
 

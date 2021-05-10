@@ -301,6 +301,10 @@ pub fn btc() -> Address {
     Address::from_raw("btc")
 }
 
+pub fn xtz() -> Address {
+    Address::from_raw("xtz")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

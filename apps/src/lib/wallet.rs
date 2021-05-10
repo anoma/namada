@@ -26,6 +26,18 @@ pub fn alan_keypair() -> Keypair {
     Keypair::from_bytes(&bytes).unwrap()
 }
 
+pub fn alonzo_keypair() -> Keypair {
+    // generated from [`tests::temp_gen_keypair`]
+    let bytes = [
+        65, 198, 96, 145, 237, 227, 84, 182, 107, 55, 209, 235, 115, 105, 71,
+        190, 234, 137, 176, 188, 181, 174, 183, 49, 131, 230, 46, 39, 70, 20,
+        130, 253, 208, 111, 141, 79, 137, 127, 50, 154, 80, 253, 35, 186, 93,
+        37, 3, 187, 226, 47, 171, 47, 20, 213, 246, 37, 224, 122, 101, 246, 23,
+        235, 39, 120,
+    ];
+    Keypair::from_bytes(&bytes).unwrap()
+}
+
 pub fn matchmaker_keypair() -> Keypair {
     // generated from [`tests::temp_gen_keypair`]
     let bytes = [
@@ -46,6 +58,10 @@ pub fn alan_pk() -> PublicKey {
     PublicKey::from(alan_keypair().public)
 }
 
+pub fn alonzo_pk() -> PublicKey {
+    PublicKey::from(alonzo_keypair().public)
+}
+
 pub fn matchmaker_pk() -> PublicKey {
     PublicKey::from(matchmaker_keypair().public)
 }
@@ -54,6 +70,7 @@ pub fn key_of(name: impl AsRef<str>) -> Keypair {
     match name.as_ref() {
         "ada" => ada_keypair(),
         "alan" => alan_keypair(),
+        "alonzo" => alonzo_keypair(),
         "matchmaker" => matchmaker_keypair(),
         other => {
             panic!("Dont' have keys for: {}", other)
