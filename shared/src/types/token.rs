@@ -17,6 +17,7 @@ use crate::types::{Address, DbKeySeg, Key, KeySeg};
     PartialOrd,
     Ord,
     Debug,
+    Hash,
 )]
 pub struct Amount {
     micro: u64,
@@ -105,7 +106,16 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
 }
 
 /// A simple 2-party token transfer
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Hash,
+    Eq,
+    PartialOrd,
+)]
 pub struct Transfer {
     pub source: Address,
     pub target: Address,
