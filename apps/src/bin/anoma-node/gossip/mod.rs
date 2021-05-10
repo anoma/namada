@@ -14,7 +14,7 @@ use self::p2p::P2P;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Error initializing p2p {0}")]
+    #[error("Error initializing p2p: {0}")]
     P2pInit(p2p::Error),
 }
 

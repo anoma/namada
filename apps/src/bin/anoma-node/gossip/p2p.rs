@@ -18,7 +18,7 @@ pub enum Error {
     TransportError(std::io::Error),
     #[error("Failed to subscribe")]
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
-    #[error("Error with the network behavior")]
+    #[error("Error with the network behavior: {0}")]
     Behavior(super::network_behaviour::Error),
 }
 type Result<T> = std::result::Result<T, Error>;

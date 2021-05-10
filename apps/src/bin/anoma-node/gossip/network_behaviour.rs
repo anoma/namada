@@ -29,6 +29,10 @@ pub enum Error {
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
     #[error("Failed initializing the intent broadcaster app: {0}")]
     GossipIntentError(intent_broadcaster::Error),
+    #[error("Failed initializing the topic filter: {0}")]
+    Filter(String),
+    #[error("Failed initializing the gossip network: {0}")]
+    GossipConfig(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -123,7 +127,7 @@ impl Behaviour {
             .message_id_fn(message_id)
             .validate_messages()
             .build()
-            .expect("Valid config");
+            .map_err(|s| Error::GossipConfig(s.to_string()))?;
 
         let filter = match &config.subscription_filter {
             anoma::config::SubscriptionFilter::RegexFilter(regex) => {
@@ -151,7 +155,7 @@ impl Behaviour {
                 gossipsub_config,
                 filter,
             )
-            .expect("Correct configuration");
+            .map_err(|s| Error::Filter(s.to_string()))?;
 
         let (intent_broadcaster_app, matchmaker_event_receiver) =
             intent_broadcaster::GossipIntent::new(&config)
