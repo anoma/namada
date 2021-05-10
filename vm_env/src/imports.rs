@@ -687,40 +687,29 @@ pub mod matchmaker {
     /// This macro expects a function with signature:
     ///
     /// ```ignore
-    /// fn match_intent(id1: Vec<u8>, intent_1: Intent, id2: Vec<u8>, intent_2: Intent) -> bool
+    /// fn match_intent(matchmaker_data:Vec<u8>, intent_id: Vec<u8>, intent: Intent) -> bool
+    /// ```
     /// ```
     #[macro_export]
     macro_rules! matchmaker {
-        (fn $fn:ident(
-            $arg_id1:ident : $type_id1:ty,
-            $arg1:ident : $type1:ty,
-            $arg_id2:ident : $type_id2:ty,
-            $arg2:ident : $type2:ty
-        ) -> $ret:ty $body:block ) => {
+        (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
             use wee_alloc;
 
             // Use `wee_alloc` as the global allocator.
             #[global_allocator]
             static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-            fn $fn(
-                $arg_id1: $type_id1,
-                $arg1: $type1,
-                $arg_id2: $type_id2,
-                $arg2: $type2
-            ) -> $ret $body
+            fn $fn( $($arg: $type),* ) -> $ret $body
 
             /// The module interface callable by wasm runtime
             #[no_mangle]
             extern "C" fn _match_intent(
-                id1_ptr: u64,
-                id1_len: u64,
-                intent_data_1_ptr: u64,
-                intent_data_1_len: u64,
-                id2_ptr: u64,
-                id2_len: u64,
-                intent_data_2_ptr: u64,
-                intent_data_2_len: u64,
+                data_ptr: u64,
+                data_len: u64,
+                intent_id_ptr: u64,
+                intent_id_len: u64,
+                intent_data_ptr: u64,
+                intent_data_len: u64,
             ) -> u64 {
                 let get_data = |ptr, len| {
                     let slice = unsafe {
@@ -730,10 +719,9 @@ pub mod matchmaker {
                 };
 
                 if $fn(
-                    get_data(id1_ptr, id1_len),
-                    get_data(intent_data_1_ptr, intent_data_1_len),
-                    get_data(id2_ptr, id2_len),
-                    get_data(intent_data_2_ptr, intent_data_2_len),
+                    get_data(data_ptr, data_len),
+                    get_data(intent_id_ptr, intent_id_len),
+                    get_data(intent_data_ptr, intent_data_len),
                 ) {
                     0
                 } else {
@@ -759,14 +747,20 @@ pub mod matchmaker {
         }
     }
 
-    pub fn send_match(tx_data: Vec<u8>, intents: HashSet<Vec<u8>>) {
-        let intents_bytes = intents.try_to_vec().unwrap();
+    pub fn send_match(tx_data: Vec<u8>) {
+        unsafe { _send_match(tx_data.as_ptr() as _, tx_data.len() as _) };
+    }
+
+    pub fn update_data(data: Vec<u8>) {
+        unsafe { _update_data(data.as_ptr() as _, data.len() as _) };
+    }
+
+    pub fn remove_intents(intents_id: HashSet<Vec<u8>>) {
+        let intents_id_bytes = intents_id.try_to_vec().unwrap();
         unsafe {
-            _send_match(
-                tx_data.as_ptr() as _,
-                tx_data.len() as _,
-                intents_bytes.as_ptr() as _,
-                intents_bytes.len() as _,
+            _remove_intents(
+                intents_id_bytes.as_ptr() as _,
+                intents_id_bytes.len() as _,
             )
         };
     }
@@ -785,12 +779,11 @@ pub mod matchmaker {
         // Read fixed-length data, returns 1 if the key is present, 0 otherwise.
         pub fn _read(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
 
-        pub fn _send_match(
-            data_ptr: u64,
-            data_len: u64,
-            intents_ptr: u64,
-            intents_len: u64,
-        );
+        pub fn _send_match(data_ptr: u64, data_len: u64);
+
+        pub fn _update_data(data_ptr: u64, data_len: u64);
+
+        pub fn _remove_intents(intents_id_ptr: u64, intents_id_len: u64);
 
         // Requires a node running with "Info" log level
         pub fn _log_string(str_ptr: u64, str_len: u64);
