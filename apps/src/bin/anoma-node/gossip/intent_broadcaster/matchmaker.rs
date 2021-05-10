@@ -86,19 +86,15 @@ impl Matchmaker {
             self.mempool
                 .put(intent.clone())
                 .map_err(Error::MempoolFailed)?;
-            let tx_code = &self.tx_code;
             let matchmaker_runner = vm::MatchmakerRunner::new();
-            let matchmaker_code = &self.matchmaker_code;
-            let inject_mm_message = &self.inject_mm_message;
-            let data = &self.data;
             Ok(matchmaker_runner
                 .run(
-                    matchmaker_code.clone(),
-                    data,
+                    &self.matchmaker_code.clone(),
+                    &self.data,
                     &IntentId::new(&intent).0,
                     &intent.data,
-                    tx_code,
-                    inject_mm_message.clone(),
+                    &self.tx_code,
+                    self.inject_mm_message.clone(),
                 )
                 .map_err(Error::RunnerFailed)
                 .unwrap())
