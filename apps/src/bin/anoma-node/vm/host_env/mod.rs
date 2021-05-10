@@ -603,10 +603,14 @@ fn tx_storage_write<DB>(
         // delete log of the VP
         if vp.is_none() {
             let (is_present, gas) =
-                storage.exists(&addr).expect("checking existence failed");
+                storage.has_key(&vp_key).expect("checking existence failed");
             tx_add_gas(env, gas);
             if !is_present {
-                log::info!("The address doesn't exist: {}", addr);
+                log::info!(
+                    "Trying to write into storage with a key containing an \
+                     address that doesn't exist: {}",
+                    addr
+                );
                 unreachable!();
             }
         }
