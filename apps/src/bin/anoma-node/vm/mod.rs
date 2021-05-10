@@ -377,10 +377,9 @@ impl MatchmakerRunner {
     pub fn run(
         &self,
         matchmaker_code: impl AsRef<[u8]>,
-        id1: impl AsRef<[u8]>,
-        intent1_data: impl AsRef<[u8]>,
-        id2: impl AsRef<[u8]>,
-        intent2_data: impl AsRef<[u8]>,
+        data: impl AsRef<[u8]>,
+        intent_id: impl AsRef<[u8]>,
+        intent_data: impl AsRef<[u8]>,
         tx_code: impl AsRef<[u8]>,
         inject_mm_message: Sender<MatchmakerMessage>,
     ) -> Result<bool> {
@@ -404,62 +403,50 @@ impl MatchmakerRunner {
             wasmer::Instance::new(&matchmaker_module, &matchmaker_imports)
                 .map_err(Error::InstantiationError)?;
 
-        Self::run_with_input(
-            &matchmaker_code,
-            id1,
-            intent1_data,
-            id2,
-            intent2_data,
-        )
+        Self::run_with_input(&matchmaker_code, data, intent_id, intent_data)
     }
 
     fn run_with_input(
         code: &Instance,
-        id1: impl AsRef<[u8]>,
-        intent1_data: impl AsRef<[u8]>,
-        id2: impl AsRef<[u8]>,
-        intent2_data: impl AsRef<[u8]>,
+        data: impl AsRef<[u8]>,
+        intent_id: impl AsRef<[u8]>,
+        intent_data: impl AsRef<[u8]>,
     ) -> Result<bool> {
         let memory = code
             .exports
             .get_memory("memory")
             .map_err(Error::MissingModuleMemory)?;
         let memory::MatchmakerCallInput {
-            id1_ptr,
-            id1_len,
-            intent_data_1_ptr,
-            intent_data_1_len,
-            id2_ptr,
-            id2_len,
-            intent_data_2_ptr,
-            intent_data_2_len,
+            data_ptr,
+            data_len,
+            intent_id_ptr,
+            intent_id_len,
+            intent_data_ptr,
+            intent_data_len,
         }: memory::MatchmakerCallInput = memory::write_matchmaker_inputs(
             &memory,
-            id1,
-            intent1_data,
-            id2,
-            intent2_data,
+            data,
+            intent_id,
+            intent_data,
         )
         .map_err(Error::MemoryError)?;
         let apply_matchmaker = code
             .exports
             .get_function(MATCHMAKER_ENTRYPOINT)
             .map_err(Error::MissingModuleEntrypoint)?
-            .native::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>()
+            .native::<(u64, u64, u64, u64, u64, u64), u64>()
             .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
                 entrypoint: MATCHMAKER_ENTRYPOINT,
                 error,
             })?;
         let found_match = apply_matchmaker
             .call(
-                id1_ptr,
-                id1_len,
-                intent_data_1_ptr,
-                intent_data_1_len,
-                id2_ptr,
-                id2_len,
-                intent_data_2_ptr,
-                intent_data_2_len,
+                data_ptr,
+                data_len,
+                intent_id_ptr,
+                intent_id_len,
+                intent_data_ptr,
+                intent_data_len,
             )
             .map_err(Error::RuntimeError)?;
         Ok(found_match == 0)

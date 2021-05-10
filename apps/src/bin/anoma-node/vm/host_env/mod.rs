@@ -218,7 +218,13 @@ pub fn prepare_matchmaker_imports(
             "memory" => initial_memory,
             "_send_match" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env.clone(),
-                                                                  send_match),
+                                                                   send_match),
+            "_update_data" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                    env.clone(),
+                                                                    update_data),
+            "_remove_intents" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                       env.clone(),
+                                                                       remove_intents),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env,
                                                                    matchmaker_log_string),
@@ -1460,25 +1466,30 @@ fn vp_log_string(env: &VpEnv, str_ptr: u64, str_len: u64) {
     log::info!("WASM Validity predicate log: {}", str);
 }
 
-/// Inject a transaction from matchmaker's matched intents to the ledger
-fn send_match(
+fn remove_intents(
     env: &MatchmakerEnv,
-    data_ptr: u64,
-    data_len: u64,
-    intent_ptr: u64,
-    intent_len: u64,
+    intents_id_ptr: u64,
+    intents_id_len: u64,
 ) {
+    let (intents_id_bytes, _gas) = env
+        .memory
+        .read_bytes(intents_id_ptr, intents_id_len as _)
+        .expect("Cannot read the key from memory");
+
+    let intents_id =
+        HashSet::<Vec<u8>>::try_from_slice(&intents_id_bytes).unwrap();
+
+    env.inject_mm_message
+        .try_send(MatchmakerMessage::RemoveIntents(intents_id))
+        .expect("failed to send intents_id")
+}
+
+/// Inject a transaction from matchmaker's matched intents to the ledger
+fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
     let (tx_data, _gas) = env
         .memory
         .read_bytes(data_ptr, data_len as _)
         .expect("Cannot read the key from memory");
-    let (intent_data, _gas) = env
-        .memory
-        .read_bytes(intent_ptr, intent_len as _)
-        .expect("Cannot read the key from memory");
-
-    let intents = HashSet::<Vec<u8>>::try_from_slice(&intent_data).unwrap();
-
     // TODO sign in the matchmaker module instead. use a ref for the tx_code
     // here to avoid copying
     let tx_code = env.tx_code.clone();
@@ -1494,4 +1505,15 @@ fn send_match(
     env.inject_mm_message
         .try_send(MatchmakerMessage::InjectTx(tx))
         .expect("failed to send tx")
+}
+
+fn update_data(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
+    let (data, _gas) = env
+        .memory
+        .read_bytes(data_ptr, data_len as _)
+        .expect("Cannot read the key from memory");
+
+    env.inject_mm_message
+        .try_send(MatchmakerMessage::UpdateData(data))
+        .expect("failed to send updated data")
 }
