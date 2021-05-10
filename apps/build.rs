@@ -1,17 +1,18 @@
-use std::path::PathBuf;
+/// Path to the .proto source files, relative to `apps` directory
+const PROTO_SRC: &str = "../proto";
 
 fn main() {
-    // XXX TODO add header to file with "auto-generated"
     // Tell Cargo that if the given file changes, to rerun this build script.
-    println!("cargo:rerun-if-changed=src/proto/");
-    // XXX TODO instead it could be nice to separate the file, the types.rs into
-    // lib/ and the client|server into bin/anoma-node/rpc & bin/anoma-client/rpc
+    println!("cargo:rerun-if-changed={}", PROTO_SRC);
     tonic_build::configure()
-        .out_dir(PathBuf::from("src/lib/protobuf"))
+        .out_dir("src/lib/proto/generated")
         .format(true)
-        // XXX TODO try to add json encoding to simplify use for user
+        // TODO try to add json encoding to simplify use for user
         // .type_attribute("types.Intent", "#[derive(serde::Serialize,
         // serde::Deserialize)]")
-        .compile(&["src/proto/services.proto"], &["src/proto"])
+        .compile(
+            &[format!("{}/services.proto", PROTO_SRC)],
+            &[PROTO_SRC.into()],
+        )
         .unwrap();
 }

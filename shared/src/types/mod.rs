@@ -8,6 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
+use crate::types::key::ed25519::{Keypair, SignedTxData};
 
 pub mod address;
 pub mod intent;
@@ -325,6 +326,28 @@ impl KeySeg for Address {
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.clone())
+    }
+}
+
+/// A tx data type to update an account's validity predicate
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+pub struct UpdateVp {
+    pub addr: Address,
+    pub vp_code: Vec<u8>,
+}
+
+impl UpdateVp {
+    /// Sign data for transaction with a given keypair.
+    pub fn sign(
+        self,
+        tx_code: impl AsRef<[u8]>,
+        keypair: &Keypair,
+    ) -> SignedTxData {
+        let bytes = self.try_to_vec().expect(
+            "Encoding transfer data to update a validity predicate shouldn't \
+             fail",
+        );
+        SignedTxData::new(keypair, bytes, tx_code)
     }
 }
 

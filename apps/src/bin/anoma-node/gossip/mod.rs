@@ -5,8 +5,8 @@ mod rpc;
 
 use std::thread;
 
-use anoma::protobuf::services::{rpc_message, RpcResponse};
-use anoma::protobuf::types::Tx;
+use anoma::proto::services::{rpc_message, RpcResponse};
+use anoma::proto::types::Tx;
 use mpsc::Receiver;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};

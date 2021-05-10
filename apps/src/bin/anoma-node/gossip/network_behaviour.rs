@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use anoma::protobuf::types::{
+use anoma::proto::types::{
     intent_broadcaster_message, IntentBroadcasterMessage, Tx,
 };
 use libp2p::gossipsub::subscription_filter::{
@@ -167,7 +167,7 @@ impl Behaviour {
 
     fn handle_intent(
         &mut self,
-        intent: anoma::protobuf::types::Intent,
+        intent: anoma::proto::types::Intent,
     ) -> MessageAcceptance {
         match self.intent_broadcaster_app.apply_intent(intent) {
             Ok(true) => MessageAcceptance::Accept,

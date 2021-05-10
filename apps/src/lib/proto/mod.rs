@@ -1,12 +1,11 @@
 use std::hash::Hash;
 
-use self::types::Intent;
-pub mod services;
-pub mod types;
+mod generated;
+pub use generated::*;
 
 // TODO change timestamp type to chrono (support for serde) or std::time
 #[allow(clippy::derive_hash_xor_eq)]
-impl Hash for Intent {
+impl Hash for types::Intent {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.data.hash(state);
     }

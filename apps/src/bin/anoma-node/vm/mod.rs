@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
-use anoma::protobuf::types::Tx;
+use anoma::proto::types::Tx;
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
@@ -157,7 +157,7 @@ impl TxRunner {
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     {
-        validate_wasm(&tx_code)?;
+        validate_untrusted_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
         let storage: EnvHostWrapper<Storage<DB>> = unsafe {
@@ -267,7 +267,7 @@ impl VpRunner {
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     {
-        validate_wasm(vp_code.as_ref())?;
+        validate_untrusted_wasm(vp_code.as_ref())?;
 
         // Read-only access from parallel Vp runners
         let storage: EnvHostWrapper<Storage<DB>> = unsafe {
@@ -468,7 +468,7 @@ impl FilterRunner {
         code: impl AsRef<[u8]>,
         intent_data: impl AsRef<[u8]>,
     ) -> Result<bool> {
-        validate_wasm(code.as_ref())?;
+        validate_untrusted_wasm(code.as_ref())?;
         let code = prepare_wasm_code(code)?;
         let filter_module: wasmer::Module =
             wasmer::Module::new(&self.wasm_store, &code)
@@ -533,7 +533,9 @@ fn get_gas_rules() -> rules::Set {
     rules::Set::default().with_grow_cost(1)
 }
 
-fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
+/// Validate an untrusted wasm code with restrictions that we place such code
+/// (e.g. transaction and validity predicates)
+pub fn validate_untrusted_wasm(wasm_code: impl AsRef<[u8]>) -> Result<()> {
     let mut validator = Validator::new();
 
     let features = WasmFeatures {
@@ -552,7 +554,7 @@ fn validate_wasm(wasm_code: &[u8]) -> Result<()> {
     validator.wasm_features(features);
 
     validator
-        .validate_all(wasm_code)
+        .validate_all(wasm_code.as_ref())
         .map_err(Error::ValidationError)
 }
 

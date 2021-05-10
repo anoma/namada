@@ -4,7 +4,7 @@ pub mod write_log;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
-use anoma::protobuf::types::Tx;
+use anoma::proto::types::Tx;
 use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
@@ -25,6 +25,7 @@ use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::{self, Storage};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
+const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
 struct TxEnv<DB>
 where
@@ -591,6 +592,31 @@ fn tx_storage_write<DB>(
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
+    // check address existence
+    let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
+    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    for addr in key.find_addresses() {
+        let vp_key = Key::validity_predicate(&addr)
+            .expect("Unable to create a validity predicate key");
+        let (vp, gas) = write_log.read(&vp_key);
+        tx_add_gas(env, gas);
+        // just check the existence because the write log should not have the
+        // delete log of the VP
+        if vp.is_none() {
+            let (is_present, gas) =
+                storage.has_key(&vp_key).expect("checking existence failed");
+            tx_add_gas(env, gas);
+            if !is_present {
+                tracing::info!(
+                    "Trying to write into storage with a key containing an \
+                     address that doesn't exist: {}",
+                    addr
+                );
+                unreachable!();
+            }
+        }
+    }
+
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
     let (gas, _size_diff) = write_log.write(&key, value);
     tx_add_gas(env, gas);
@@ -1000,22 +1026,28 @@ fn tx_update_validity_predicate<DB>(
         .memory
         .read_string(addr_ptr, addr_len as _)
         .expect("Cannot read the address from memory");
-    tracing::debug!(
-        "tx_update_validity_predicate {}, addr_ptr {}",
-        addr,
-        addr_ptr
-    );
     tx_add_gas(env, gas);
 
-    let key = Key::parse(addr)
-        .expect("Cannot parse the address")
-        .push(&"?".to_owned())
-        .expect("Cannot make the key for the VP");
+    let addr = Address::decode(addr).expect("Failed to decode the address");
+    tracing::debug!("tx_update_validity_predicate for addr {}", addr);
+
+    let key =
+        Key::validity_predicate(&addr).expect("Cannot make the key for the VP");
     let (code, gas) = env
         .memory
         .read_bytes(code_ptr, code_len as _)
         .expect("Cannot read the VP code");
     tx_add_gas(env, gas);
+
+    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE);
+    if let Err(err) = super::validate_untrusted_wasm(&code) {
+        tracing::info!(
+            "Trying to update an account with an invalid validity predicate \
+             code, error: {:#?}",
+            err
+        );
+        unreachable!()
+    }
 
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
     let (gas, _size_diff) = write_log.write(&key, code);
@@ -1038,6 +1070,16 @@ where
         .read_bytes(code_ptr, code_len as _)
         .expect("Cannot read validity predicate from memory");
     tx_add_gas(env, gas);
+
+    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE);
+    if let Err(err) = super::validate_untrusted_wasm(&code) {
+        tracing::info!(
+            "Trying to initialize an account with an invalid validity \
+             predicate code, error: {:#?}",
+            err
+        );
+        unreachable!()
+    }
 
     tracing::debug!("tx_init_account");
 

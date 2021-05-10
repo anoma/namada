@@ -32,6 +32,7 @@ pub const SUBSCRIBE_TOPIC_COMMAND: &str = "subscribe-topic";
 pub const CRAFT_INTENT_COMMAND: &str = "craft-intent";
 pub const TX_COMMAND: &str = "tx";
 pub const TX_TRANSFER_COMMAND: &str = "transfer";
+pub const TX_UPDATE_COMMAND: &str = "update";
 
 // gossip args
 pub const BASE_ARG: &str = "base-dir";
@@ -96,9 +97,10 @@ pub fn anoma_client_cli() -> App {
 
 fn add_client_commands(app: App) -> App {
     app.subcommand(client_tx_subcommand())
+        .subcommand(client_tx_transfer_subcommand())
+        .subcommand(client_tx_update_subcommand())
         .subcommand(client_intent_subcommand())
         .subcommand(client_craft_intent_subcommand())
-        .subcommand(client_tx_transfer_subcommand())
         .subcommand(client_subscribe_topic_subcommand())
 }
 
@@ -295,6 +297,35 @@ fn client_tx_transfer_subcommand() -> App {
                 .takes_value(true)
                 .required(true)
                 .about("The amount to transfer in decimal."),
+        )
+        .arg(
+            Arg::new(DRY_RUN_TX_ARG)
+                .long(DRY_RUN_TX_ARG)
+                .takes_value(false)
+                .required(false)
+                .about("Dry run the transaction."),
+        )
+}
+
+fn client_tx_update_subcommand() -> App {
+    App::new(TX_UPDATE_COMMAND)
+        .about("Send a transaction to update account's validity predicate")
+        .arg(
+            Arg::new(ADDRESS_ARG)
+                .long(ADDRESS_ARG)
+                .takes_value(true)
+                .required(true)
+                .about(
+                    "The account's address. It's key is used to produce the \
+                     signature.",
+                ),
+        )
+        .arg(
+            Arg::new(CODE_ARG)
+                .long(CODE_ARG)
+                .takes_value(true)
+                .required(true)
+                .about("The path to the validity predicate wasm code."),
         )
         .arg(
             Arg::new(DRY_RUN_TX_ARG)
