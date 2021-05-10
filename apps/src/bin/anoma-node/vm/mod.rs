@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
-use anoma::protobuf::types::Tx;
+use anoma::proto::types::Tx;
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;

@@ -1,4 +1,4 @@
-use anoma::protobuf::types::{Intent, Tx};
+use anoma::proto::types::{Intent, Tx};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 

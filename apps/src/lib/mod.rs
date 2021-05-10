@@ -4,7 +4,7 @@ pub mod cli;
 pub mod config;
 pub mod genesis;
 pub mod gossiper;
-pub mod protobuf;
+pub mod proto;
 pub mod wallet;
 
 // This is here only to include the std's docs in our docs.
