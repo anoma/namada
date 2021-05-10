@@ -66,8 +66,14 @@ impl GossipIntent {
     }
 
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
-        self.matchmaker
-            .as_mut()
-            .map(|mm| mm.handle_mm_message(mm_message));
+        match self.matchmaker.as_mut() {
+            Some(mm) => mm.handle_mm_message(mm_message).await,
+            None => {
+                log::error!(
+                    "cannot handle mesage {:?} because no matchmaker started",
+                    mm_message
+                )
+            }
+        }
     }
 }
