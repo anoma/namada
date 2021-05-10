@@ -1,5 +1,5 @@
-use anoma::protobuf::services::{rpc_message, RpcResponse};
-use anoma::protobuf::types::Tx;
+use anoma::proto::services::{rpc_message, RpcResponse};
+use anoma::proto::types::Tx;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -78,7 +78,7 @@ impl P2P {
     ) -> RpcResponse {
         match event {
             rpc_message::Message::Intent(
-                anoma::protobuf::services::IntentMesage {
+                anoma::proto::services::IntentMesage {
                     intent: None,
                     topic: _,
                 },
@@ -91,7 +91,7 @@ impl P2P {
                 RpcResponse { result }
             }
             rpc_message::Message::Intent(
-                anoma::protobuf::services::IntentMesage {
+                anoma::proto::services::IntentMesage {
                     intent: Some(intent),
                     topic,
                 },
@@ -165,7 +165,7 @@ impl P2P {
                 }
             }
             rpc_message::Message::Topic(
-                anoma::protobuf::services::SubscribeTopicMessage {
+                anoma::proto::services::SubscribeTopicMessage {
                     topic: topic_str,
                 },
             ) => {

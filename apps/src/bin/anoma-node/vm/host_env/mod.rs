@@ -4,7 +4,7 @@ pub mod write_log;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
-use anoma::protobuf::types::Tx;
+use anoma::proto::types::Tx;
 use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,

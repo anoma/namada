@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::mpsc;
 use std::vec;
 
-use anoma::protobuf::types::Tx;
+use anoma::proto::types::Tx;
 use anoma::wallet;
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::types::token::Amount;

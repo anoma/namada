@@ -2,7 +2,7 @@ mod filter;
 mod matchmaker;
 mod mempool;
 
-use anoma::protobuf::types::{Intent, IntentBroadcasterMessage, Tx};
+use anoma::proto::types::{Intent, IntentBroadcasterMessage, Tx};
 use matchmaker::Matchmaker;
 use prost::Message;
 use thiserror::Error;

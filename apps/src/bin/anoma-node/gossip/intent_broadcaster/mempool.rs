@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
-use anoma::protobuf::types::Intent;
+use anoma::proto::types::Intent;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
