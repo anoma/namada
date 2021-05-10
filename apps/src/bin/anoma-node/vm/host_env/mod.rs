@@ -23,6 +23,7 @@ use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::{self, Storage};
+use crate::vm::{VpRunner};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -75,7 +76,8 @@ where
     }
 }
 
-struct VpEnv<DB>
+// VpEnv is parameterized over DB to allow testing
+pub struct VpEnv<DB>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -185,6 +187,9 @@ where
         // default namespace
         "env" => {
             "memory" => initial_memory,
+
+            // These functions must still be compatible with the wasm interface
+            // They must match exactly the C fn, except we prepend the env arg
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_charge_gas),
             "_read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read),
             "_has_key" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_has_key),
@@ -203,10 +208,9 @@ where
     }
 }
 
-/// Prepare imports (memory and host functions) exposed to the vm guest running
-/// validity predicate code
+/// Construct environment and then prepare imports
 #[allow(clippy::too_many_arguments)]
-pub fn prepare_vp_imports<DB>(
+pub fn prepare_vp_env<DB>(
     wasm_store: &Store,
     addr: Address,
     storage: EnvHostWrapper<Storage<DB>>,
@@ -228,10 +232,25 @@ where
         tx_code,
         memory: AnomaMemory::default(),
     };
+    prepare_vp_imports(wasm_store, initial_memory, env)
+}
+
+
+/// Prepare imports (memory and host functions) exposed to the vm guest running
+/// validity predicate code
+pub fn prepare_vp_imports<DB>(
+    wasm_store: &Store,
+    initial_memory: Memory,
+    env: VpEnv<DB>
+) -> ImportObject
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+{
     wasmer::imports! {
         // default namespace
         "env" => {
             "memory" => initial_memory,
+            // Each function takes ownership of the environment (wrappers around references, cheap to clone), so we need to clone it
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_charge_gas),
             "_read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
             "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
@@ -244,11 +263,11 @@ where
             "_get_block_height" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_height),
             "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_hash),
             "_verify_tx_signature" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_verify_tx_signature),
-            "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, vp_log_string),
+            "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_log_string),
+            "_eval" => wasmer::Function::new_native_with_env(wasm_store, env, vp_eval),
         },
     }
 }
-
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// matchmaker code
 pub fn prepare_matchmaker_imports(
@@ -1261,6 +1280,32 @@ where
         .expect("Cannot read the string from memory");
 
     log::info!("WASM Validity predicate log: {}", str);
+}
+
+
+fn vp_eval<DB>(env: &VpEnv<DB>, vp_code_ptr: u64, vp_code_len: u64) -> u64 
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>, // Generic over a lifetime
+{
+    let (bytes, gas) = env.memory
+        .read_bytes(vp_code_ptr, vp_code_len as _)
+        .expect("Cannot read bytes from memory");
+
+    vp_add_gas(env, gas);
+
+    let vp_runner = VpRunner::new();
+    let result = vp_runner.run_eval(bytes, env.clone());
+
+    match result {
+        Ok(b) => { if b {
+                1
+            } else {
+                0
+            }
+        },
+        Err(_e) => 0 
+    }
+
 }
 
 /// Log a string from exposed to the wasm VM matchmaker environment. The message

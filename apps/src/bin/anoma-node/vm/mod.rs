@@ -6,7 +6,7 @@ use std::ffi::c_void;
 use std::marker::PhantomData;
 
 use anoma::proto::types::Tx;
-use anoma_shared::types::{Address, Key};
+use anoma_shared::types::{address, Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
@@ -17,6 +17,7 @@ use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
+use self::host_env::VpEnv;
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::{self, Storage};
 
@@ -245,6 +246,7 @@ impl VpRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        // TODO: Maybe refactor wasm_store: not necessary to do in two steps
         let wasm_store =
             wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
         Self { wasm_store }
@@ -300,7 +302,7 @@ impl VpRunner {
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let input: VpInput = (addr.clone(), tx_data, keys_changed, verifiers);
-        let vp_imports = host_env::prepare_vp_imports(
+        let vp_imports = host_env::prepare_vp_env(
             &self.wasm_store,
             addr.clone(),
             storage,
@@ -312,11 +314,40 @@ impl VpRunner {
         );
 
         // compile and run the transaction wasm code
-        let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
+        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::InstantiationError)?;
-        VpRunner::run_with_input(vp_code, input)
+        VpRunner::run_with_input(vp_instance, input)
     }
 
+    
+    fn run_eval<DB>(
+        &self,
+        vp_code: Vec<u8>, // Vec<u8> is how we read the validity predicate from wasm memory
+        vp_env: VpEnv<DB>) -> Result<bool> 
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    {
+        let vp_code = prepare_wasm_code(&vp_code)?;
+        let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
+            .map_err(Error::CompileError)?;
+        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
+            .map_err(Error::MemoryError)?;
+
+        // TODO: Pass valid data
+        let input: VpInput = (address::xan(), vec![], vec![], HashSet::new());
+
+        let vp_imports = host_env::prepare_vp_imports(
+            &self.wasm_store,
+            initial_memory,
+            vp_env
+        );
+
+        // compile and run the transaction wasm code
+        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
+            .map_err(Error::InstantiationError)?;
+        VpRunner::run_with_input(vp_instance, input)
+
+    }
     fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
         // We need to write the inputs in the memory exported from the wasm
         // module
@@ -516,6 +547,7 @@ impl FilterRunner {
 }
 
 /// Inject gas counter and stack-height limiter into the given wasm code
+/// AsRef is a generic interface to pass a reference to a slice or a reference to vector
 fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
     let module: elements::Module = elements::deserialize_buffer(code.as_ref())
         .map_err(Error::DeserializationError)?;

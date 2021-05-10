@@ -253,6 +253,9 @@ pub mod tx {
 }
 
 /// Validity predicate environment imports
+/// TODO: Add C interface for calling the host env
+/// Transactions are not limited to smart contracts?
+/// We don't have smart contracts
 pub mod vp {
     pub use core::slice;
     use std::convert::TryFrom;
@@ -514,6 +517,13 @@ pub mod vp {
         }
     }
 
+    pub fn eval(vp_code: Vec<u8>) -> bool {
+        let result = unsafe {
+            _eval(vp_code.as_ptr() as _, vp_code.len() as _)
+        };
+        result == 1
+    }
+
     /// These host functions are implemented in the Anoma's [`host_env`]
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
@@ -567,6 +577,8 @@ pub mod vp {
 
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);
+
+        fn _eval(vp_code_ptr: u64, vp_code_len: u64) -> u64; // wasm doesn't have bool, so we return u64 
     }
 }
 
