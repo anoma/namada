@@ -19,8 +19,10 @@ fn main() {
             // Set the command to be used by tonic_build below to format the
             // generated files
             let rustfmt = rustfmt.trim();
-            println!("using rustfmt from path \"{}\"", rustfmt);
-            env::set_var("RUSTFMT", rustfmt);
+            if !rustfmt.is_empty() {
+                println!("using rustfmt from path \"{}\"", rustfmt);
+                env::set_var("RUSTFMT", rustfmt);
+            }
         }
     }
 
