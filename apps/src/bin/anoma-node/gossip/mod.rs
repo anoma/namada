@@ -6,10 +6,7 @@ mod rpc;
 use std::thread;
 
 use anoma::protobuf::services::{rpc_message, RpcResponse};
-use anoma::protobuf::types::Tx;
-use anoma::protobuf::MatchmakerMessage;
-use prost::Message;
-use tendermint_rpc::{Client, HttpClient};
+use anoma::types::MatchmakerMessage;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
@@ -38,68 +35,21 @@ pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
     dispatcher(gossip, rpc_event_receiver, matchmaker_event_receiver)
 }
 
-// TODO The protobuf encoding logic does not play well with asynchronous.
-// see https://github.com/danburkert/prost/issues/108
-// When this event handler is merged into the main handler of the dispatcher
-// then it does not send the correct data to the ledger and it fails to
-// correctly decode the Tx.
-//
-// The problem comes from the line :
-// https://github.com/informalsystems/tendermint-rs/blob/a0a59b3a3f8a50abdaa618ff00394eeeeb8b9a0f/abci/src/codec.rs#L151
-// Ok(Some(M::decode(&mut result_bytes)?))
-//
-// As a work-around, we spawn a thread that sends [`Tx`]s to the ledger, which
-// seems to prevent this issue.
-#[tokio::main]
-pub async fn matchmaker_dispatcher(
-    mut matchmaker_event_receiver: mpsc::Receiver<Tx>,
-    ledger_address: String,
-) {
-    loop {
-        if let Some(tx) = matchmaker_event_receiver.recv().await {
-            let mut tx_bytes = vec![];
-            tx.encode(&mut tx_bytes).unwrap();
-            let client =
-                HttpClient::new(ledger_address.parse().unwrap()).unwrap();
-            let response =
-                client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
-            println!("{:#?}", response);
-        }
-    }
-}
-
 #[tokio::main]
 pub async fn dispatcher(
     mut gossip: P2P,
     rpc_event_receiver: Option<
         mpsc::Receiver<(rpc_message::Message, oneshot::Sender<RpcResponse>)>,
     >,
-    matchmaker_event_receiver: Option<(
-        mpsc::Receiver<MatchmakerMessage>,
-        String,
-    )>,
+    matchmaker_event_receiver: Option<mpsc::Receiver<MatchmakerMessage>>,
 ) -> Result<()> {
     match (rpc_event_receiver, matchmaker_event_receiver) {
-        (
-            Some(mut rpc_event_receiver),
-            Some((mut matchmaker_event_receiver, ledger_address)),
-        ) => {
-            let (tx_sender, tx_receiver) = mpsc::channel(100);
-            {
-                thread::spawn(|| {
-                    matchmaker_dispatcher(tx_receiver, ledger_address)
-                });
-            }
-
+        (Some(mut rpc_event_receiver), Some(mut matchmaker_event_receiver)) => {
             loop {
                 tokio::select! {
                     Some(message) = matchmaker_event_receiver.recv() =>
                     {
-                        match message {
-                            MatchmakerMessage::InjectTx(tx) => tx_sender.send(tx).await.unwrap(),
-                            MatchmakerMessage::RemoveIntents(..) => gossip.handle_matchmaker_event(message).await,
-                            MatchmakerMessage::UpdateData(..) => gossip.handle_matchmaker_event(message).await
-                        }
+                        gossip.handle_mm_message(message).await
                     },
                     Some((event, inject_response)) = rpc_event_receiver.recv() =>
                     {
@@ -134,22 +84,12 @@ pub async fn dispatcher(
                 };
             }
         }
-        (None, Some((mut matchmaker_event_receiver, ledger_address))) => {
-            let (tx_sender, tx_receiver) = mpsc::channel(100);
-            {
-                thread::spawn(|| {
-                    matchmaker_dispatcher(tx_receiver, ledger_address)
-                });
-            }
+        (None, Some(mut matchmaker_event_receiver)) => {
             loop {
                 tokio::select! {
                     Some(message) = matchmaker_event_receiver.recv() =>
                     {
-                        match message {
-                            MatchmakerMessage::InjectTx(tx) => tx_sender.send(tx).await.unwrap(),
-                            MatchmakerMessage::RemoveIntents(..) => gossip.handle_matchmaker_event(message).await,
-                            MatchmakerMessage::UpdateData(..) => gossip.handle_matchmaker_event(message).await
-                        }
+                        gossip.handle_mm_message(message).await
                     },
                     swarm_event = gossip.swarm.next() => {
                         // All events are handled by the

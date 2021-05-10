@@ -2,10 +2,8 @@ mod filter;
 mod matchmaker;
 mod mempool;
 
-use std::collections::HashSet;
-
 use anoma::protobuf::types::{Intent, IntentBroadcasterMessage};
-use anoma::protobuf::MatchmakerMessage;
+use anoma::types::MatchmakerMessage;
 use matchmaker::Matchmaker;
 use prost::Message;
 use thiserror::Error;
@@ -33,7 +31,7 @@ pub struct GossipIntent {
 impl GossipIntent {
     pub fn new(
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<(Receiver<MatchmakerMessage>, String)>)> {
+    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let (matchmaker, matchmaker_event_receiver) = if let Some(matchmaker) =
             &config.matchmaker
         {
@@ -67,7 +65,9 @@ impl GossipIntent {
             .map_err(Error::DecodeError)
     }
 
-    pub fn match_found(&mut self, intents: HashSet<Vec<u8>>) {
-        self.matchmaker.as_mut().map(|mm| mm.match_found(intents));
+    pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
+        self.matchmaker
+            .as_mut()
+            .map(|mm| mm.handle_mm_message(mm_message));
     }
 }

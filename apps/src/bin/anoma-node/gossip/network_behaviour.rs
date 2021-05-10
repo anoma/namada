@@ -5,7 +5,7 @@ use std::time::Duration;
 use anoma::protobuf::types::{
     intent_broadcaster_message, IntentBroadcasterMessage,
 };
-use anoma::protobuf::MatchmakerMessage;
+use anoma::types::MatchmakerMessage;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
 };
@@ -114,7 +114,7 @@ impl Behaviour {
     pub fn new(
         key: Keypair,
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<(Receiver<MatchmakerMessage>, String)>)> {
+    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")

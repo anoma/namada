@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
-use anoma::protobuf::types::Tx;
+use anoma::types::MatchmakerMessage;
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
@@ -382,7 +382,7 @@ impl MatchmakerRunner {
         id2: impl AsRef<[u8]>,
         intent2_data: impl AsRef<[u8]>,
         tx_code: impl AsRef<[u8]>,
-        inject_tx: Sender<(Tx, HashSet<Vec<u8>>)>,
+        inject_mm_message: Sender<MatchmakerMessage>,
     ) -> Result<bool> {
         let matchmaker_module: wasmer::Module =
             wasmer::Module::new(&self.wasm_store, &matchmaker_code)
@@ -396,7 +396,7 @@ impl MatchmakerRunner {
             &self.wasm_store,
             initial_memory,
             tx_code,
-            inject_tx,
+            inject_mm_message,
         );
 
         // compile and run the matchmaker wasm code

@@ -1,8 +1,11 @@
-use std::collections::HashSet;
+use std::net::SocketAddr;
 
 use anoma::config;
 use anoma::protobuf::types::Intent;
-use anoma::protobuf::{IntentId, MatchmakerMessage};
+use anoma::protobuf::IntentId;
+use anoma::types::MatchmakerMessage;
+use prost::Message;
+use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -17,6 +20,7 @@ pub struct Matchmaker {
     inject_mm_message: Sender<MatchmakerMessage>,
     matchmaker_code: Vec<u8>,
     tx_code: Vec<u8>,
+    ledger_address: SocketAddr,
 }
 
 #[derive(Error, Debug)]
@@ -38,7 +42,7 @@ type Result<T> = std::result::Result<T, Error>;
 impl Matchmaker {
     pub fn new(
         config: &config::Matchmaker,
-    ) -> Result<(Self, (Receiver<MatchmakerMessage>, String))> {
+    ) -> Result<(Self, Receiver<MatchmakerMessage>)> {
         let (inject_mm_message, receiver_mm_message) = channel(100);
         let matchmaker_code =
             std::fs::read(&config.matchmaker).map_err(Error::FileFailed)?;
@@ -57,8 +61,9 @@ impl Matchmaker {
                 inject_mm_message,
                 matchmaker_code,
                 tx_code,
+                ledger_address: config.ledger_address,
             },
-            (receiver_mm_message, config.ledger_address.to_string()),
+            receiver_mm_message,
         ))
     }
 

@@ -6,6 +6,7 @@ use std::convert::TryInto;
 use std::str::FromStr;
 
 use anoma::protobuf::types::Tx;
+use anoma::types::MatchmakerMessage;
 use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
@@ -81,7 +82,7 @@ impl<'a> WasmerEnv for VpEnv<'a> {
 #[derive(Clone)]
 pub struct MatchmakerEnv {
     pub tx_code: Vec<u8>,
-    pub inject_tx: Sender<(Tx, HashSet<Vec<u8>>)>,
+    pub inject_mm_message: Sender<MatchmakerMessage>,
     pub memory: AnomaMemory,
 }
 
@@ -204,11 +205,11 @@ pub fn prepare_matchmaker_imports(
     wasm_store: &Store,
     initial_memory: Memory,
     tx_code: impl AsRef<[u8]>,
-    inject_tx: Sender<(Tx, HashSet<Vec<u8>>)>,
+    inject_mm_message: Sender<MatchmakerMessage>,
 ) -> ImportObject {
     let env = MatchmakerEnv {
         memory: AnomaMemory::default(),
-        inject_tx,
+        inject_mm_message,
         tx_code: tx_code.as_ref().to_vec(),
     };
     wasmer::imports! {
@@ -1490,7 +1491,7 @@ fn send_match(
         code: tx_code,
         data: Some(signed_bytes),
     };
-    env.inject_tx
-        .try_send((tx, intents))
+    env.inject_mm_message
+        .try_send(MatchmakerMessage::InjectTx(tx))
         .expect("failed to send tx")
 }
