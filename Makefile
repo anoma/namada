@@ -22,19 +22,19 @@ clippy-check:
 
 install:
 	# Warning: built in debug mode for now
-	$(cargo) install --path ./ --debug
+	$(cargo) install --path ./apps --debug
 
 run-ledger:
-	# runs the node daemon
-	$(cargo) run --bin anomad -- run-ledger
+	# runs the node
+	$(cargo) run --bin anoman -- run-ledger
 
 run-gossip:
-	# runs the node gossip daemon
-	$(cargo) run --bin anomad -- run-gossip
+	# runs the node gossip node
+	$(cargo) run --bin anoman -- run-gossip
 
 reset-ledger:
-	# runs the node daemon
-	$(cargo) run --bin anomad -- reset-ledger
+	# runs the node
+	$(cargo) run --bin anoman -- reset-ledger
 
 audit:
 	$(cargo) audit
@@ -69,6 +69,7 @@ build-wasm-scripts:
 	make -C txs/tx_template && \
 	make -C txs/tx_transfer && \
 	make -C txs/tx_from_intent && \
+	make -C txs/tx_update_vp && \
 	make -C matchmaker_template && \
 	make -C filter_template
 

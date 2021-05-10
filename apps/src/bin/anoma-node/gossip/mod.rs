@@ -5,7 +5,7 @@ mod rpc;
 
 use std::thread;
 
-use anoma::protobuf::services::{rpc_message, RpcResponse};
+use anoma::proto::services::{rpc_message, RpcResponse};
 use anoma::types::MatchmakerMessage;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};

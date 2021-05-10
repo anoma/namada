@@ -6,7 +6,7 @@ pub mod tx {
     pub use std::mem::size_of;
 
     use anoma_shared::types::{
-        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+        Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     use anoma_shared::vm_memory::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
@@ -51,8 +51,7 @@ pub mod tx {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size =
-                unsafe { _iter_next_varlen(self.0, result.as_ptr() as _) };
+            let size = unsafe { _iter_next(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
@@ -70,41 +69,19 @@ pub mod tx {
         }
     }
 
-    /// Try to read a fixed-length value at the given key from storage.
+    /// Try to read a variable-length value at the given key from storage.
     pub fn read<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found = unsafe {
+        let size = unsafe {
             _read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
         };
-        if found == 0 {
-            None
-        } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size) };
-            T::try_from_slice(slice).ok()
-        }
-    }
-
-    /// Try to read a variable-length value at the given key from storage.
-    pub fn read_varlen<K: AsRef<str>, T: BorshDeserialize>(
-        key: K,
-    ) -> Option<T> {
-        let key = key.as_ref();
-        let size = size_of::<T>();
-        let result = Vec::with_capacity(size);
-        let found = unsafe {
-            _read_varlen(
-                key.as_ptr() as _,
-                key.len() as _,
-                result.as_ptr() as _,
-            )
-        };
-        if found == -1 {
+        if size == -1 {
             None
         } else {
             let slice =
-                unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
+                unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
             T::try_from_slice(slice).ok()
         }
     }
@@ -148,17 +125,14 @@ pub mod tx {
     }
 
     /// Insert a verifier
-    pub fn insert_verifier<A: AsRef<str>>(addr: A) {
-        let addr = addr.as_ref();
+    pub fn insert_verifier(addr: Address) {
+        let addr = addr.encode();
         unsafe { _insert_verifier(addr.as_ptr() as _, addr.len() as _) }
     }
 
     /// Update a validity predicate
-    pub fn update_validity_predicate(
-        addr: impl AsRef<str>,
-        code: impl AsRef<[u8]>,
-    ) {
-        let addr = addr.as_ref();
+    pub fn update_validity_predicate(addr: Address, code: impl AsRef<[u8]>) {
+        let addr = addr.encode();
         let code = code.as_ref();
         unsafe {
             _update_validity_predicate(
@@ -171,17 +145,20 @@ pub mod tx {
     }
 
     // Initialize a new account
-    pub fn init_account(addr: impl AsRef<str>, code: impl AsRef<[u8]>) {
-        let addr = addr.as_ref();
+    pub fn init_account(code: impl AsRef<[u8]>) -> Address {
         let code = code.as_ref();
-        unsafe {
+        let result = Vec::with_capacity(0);
+        let result_len = unsafe {
             _init_account(
-                addr.as_ptr() as _,
-                addr.len() as _,
                 code.as_ptr() as _,
                 code.len() as _,
+                result.as_ptr() as _,
             )
-        }
+        };
+        let slice =
+            unsafe { slice::from_raw_parts(result.as_ptr(), result_len as _) };
+        Address::try_from_slice(slice)
+            .expect("Decoding address created by the ledger shouldn't fail")
     }
 
     /// Get the chain ID
@@ -224,13 +201,10 @@ pub mod tx {
     /// These host functions are implemented in the Anoma's [`host_env`]
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
-        // Read fixed-length data, returns 1 if the key is present, 0 otherwise.
-        fn _read(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
-
         // Read variable-length data when we don't know the size up-front,
         // returns the size of the value (can be 0), or -1 if the key is
         // not present.
-        fn _read_varlen(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
+        fn _read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
         // Returns 1 if the key is present, 0 otherwise.
         fn _has_key(key_ptr: u64, key_len: u64) -> u64;
@@ -245,14 +219,10 @@ pub mod tx {
         // Get an ID of a data iterator with key prefix
         fn _iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
-        // Read data from the specified iterator, returns 1 if it exists,
-        // 0 otherwise.
-        fn _iter_next(iter_id: u64, result_ptr: u64) -> u64;
-
         // Read variable-length data when we don't know the size up-front,
         // returns the size of the value (can be 0), or -1 if the key is not
         // present.
-        fn _iter_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
+        fn _iter_next(iter_id: u64, result_ptr: u64) -> i64;
 
         // Insert a verifier
         fn _insert_verifier(addr_ptr: u64, addr_len: u64);
@@ -266,12 +236,7 @@ pub mod tx {
         );
 
         // Initialize a new account
-        fn _init_account(
-            addr_ptr: u64,
-            addr_len: u64,
-            code_ptr: u64,
-            code_len: u64,
-        );
+        fn _init_account(code_ptr: u64, code_len: u64, result_ptr: u64) -> u64;
 
         // Get the chain ID
         fn _get_chain_id(result_ptr: u64);
@@ -372,86 +337,38 @@ pub mod vp {
     pub struct PreKeyValIterator<T>(pub u64, pub PhantomData<T>);
     pub struct PostKeyValIterator<T>(pub u64, pub PhantomData<T>);
 
-    /// Try to read a fixed-length value at the given key from storage before
-    /// transaction execution.
-    pub fn read_pre<K: AsRef<str>, T: std::fmt::Debug + BorshDeserialize>(
-        key: K,
-    ) -> Option<T> {
-        let key = key.as_ref();
-        let size = size_of::<T>();
-        let result = Vec::with_capacity(size);
-        let found = unsafe {
-            _read_pre(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
-        };
-        if found == 0 {
-            None
-        } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size) };
-            T::try_from_slice(slice).ok()
-        }
-    }
-
-    /// Try to read a fixed-length value at the given key from storage after
-    /// transaction execution.
-    pub fn read_post<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
-        let key = key.as_ref();
-        let size = size_of::<T>();
-        let result = Vec::with_capacity(size);
-        let found = unsafe {
-            _read_post(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
-        };
-        if found == 0 {
-            None
-        } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size) };
-            T::try_from_slice(slice).ok()
-        }
-    }
-
     /// Try to read a variable-length value at the given key from storage before
     /// transaction execution.
-    pub fn read_pre_varlen<K: AsRef<str>, T: BorshDeserialize>(
-        key: K,
-    ) -> Option<T> {
+    pub fn read_pre<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found = unsafe {
-            _read_pre_varlen(
-                key.as_ptr() as _,
-                key.len() as _,
-                result.as_ptr() as _,
-            )
+        let size = unsafe {
+            _read_pre(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
         };
-        if found == -1 {
+        if size == -1 {
             None
         } else {
             let slice =
-                unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
+                unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
             T::try_from_slice(slice).ok()
         }
     }
 
     /// Try to read a variable-length value at the given key from storage after
     /// transaction execution.
-    pub fn read_post_varlen<K: AsRef<str>, T: BorshDeserialize>(
-        key: K,
-    ) -> Option<T> {
+    pub fn read_post<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
-        let found = unsafe {
-            _read_post_varlen(
-                key.as_ptr() as _,
-                key.len() as _,
-                result.as_ptr() as _,
-            )
+        let size = unsafe {
+            _read_post(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
         };
-        if found == -1 {
+        if size == -1 {
             None
         } else {
             let slice =
-                unsafe { slice::from_raw_parts(result.as_ptr(), found as _) };
+                unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
             T::try_from_slice(slice).ok()
         }
     }
@@ -487,8 +404,7 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size =
-                unsafe { _iter_pre_next_varlen(self.0, result.as_ptr() as _) };
+            let size = unsafe { _iter_pre_next(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
@@ -521,8 +437,7 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size =
-                unsafe { _iter_post_next_varlen(self.0, result.as_ptr() as _) };
+            let size = unsafe { _iter_post_next(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
@@ -602,28 +517,15 @@ pub mod vp {
     /// These host functions are implemented in the Anoma's [`host_env`]
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
-        // Read fixed-length prior state, returns 1 if the key is present, 0
-        // otherwise.
-        fn _read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
-
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        fn _read_pre_varlen(key_ptr: u64, key_len: u64, result_ptr: u64)
-        -> i64;
-
-        // Read fixed-length posterior state, returns 1 if the key is present, 0
-        // otherwise.
-        fn _read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
+        fn _read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        fn _read_post_varlen(
-            key_ptr: u64,
-            key_len: u64,
-            result_ptr: u64,
-        ) -> i64;
+        fn _read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
         // Returns 1 if the key is present in prior state, 0 otherwise.
         fn _has_key_pre(key_ptr: u64, key_len: u64) -> u64;
@@ -634,23 +536,15 @@ pub mod vp {
         // Get an ID of a data iterator with key prefix
         fn _iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
-        // Read data from the specified iterator, returns 1 if it exists,
-        // 0 otherwise.
-        fn _iter_pre_next(iter_id: u64, result_ptr: u64) -> u64;
-
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        fn _iter_pre_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
-
-        // Read data from the specified iterator, returns 1 if it exists,
-        // 0 otherwise.
-        fn _iter_post_next(iter_id: u64, result_ptr: u64) -> u64;
+        fn _iter_pre_next(iter_id: u64, result_ptr: u64) -> i64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if the
         // key is not present.
-        fn _iter_post_next_varlen(iter_id: u64, result_ptr: u64) -> i64;
+        fn _iter_post_next(iter_id: u64, result_ptr: u64) -> i64;
 
         // Get the chain ID
         fn _get_chain_id(result_ptr: u64);
@@ -680,7 +574,6 @@ pub mod vp {
 pub mod matchmaker {
     pub use core::slice;
     use std::collections::HashSet;
-    use std::mem::size_of;
 
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -731,22 +624,6 @@ pub mod matchmaker {
         }
     }
 
-    /// Try to read a fixed-length value at the given key from the ledger.
-    pub fn read<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
-        let key = key.as_ref();
-        let size = size_of::<T>();
-        let result = Vec::with_capacity(size);
-        let found = unsafe {
-            _read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
-        };
-        if found == 0 {
-            None
-        } else {
-            let slice = unsafe { slice::from_raw_parts(result.as_ptr(), size) };
-            T::try_from_slice(slice).ok()
-        }
-    }
-
     pub fn send_match(tx_data: Vec<u8>) {
         unsafe { _send_match(tx_data.as_ptr() as _, tx_data.len() as _) };
     }
@@ -776,9 +653,7 @@ pub mod matchmaker {
     /// These host functions are implemented in the Anoma's [`host_env`]
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
-        // Read fixed-length data, returns 1 if the key is present, 0 otherwise.
-        pub fn _read(key_ptr: u64, key_len: u64, result_ptr: u64) -> u64;
-
+        // Inject a transaction from matchmaker's matched intents to the ledger
         pub fn _send_match(data_ptr: u64, data_len: u64);
 
         pub fn _update_data(data_ptr: u64, data_len: u64);

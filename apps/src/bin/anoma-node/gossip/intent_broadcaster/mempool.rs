@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use anoma::protobuf::types::Intent;
-use anoma::protobuf::IntentId;
+use anoma::proto::types::Intent;
+use anoma::proto::IntentId;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

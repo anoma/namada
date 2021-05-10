@@ -17,9 +17,9 @@ path = "src/lib/mod.rs"
 name = "anoma"
 path = "src/bin/anoma/main.rs"
 
-# Anoma node daemon
+# Anoma node
 [[bin]]
-name = "anomad"
+name = "anoman"
 path = "src/bin/anoma-node/main.rs"
 
 # Anoma client
@@ -77,6 +77,7 @@ wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
 wasmer-engine-jit = "1.0.2"
 wasmparser = "0.77.0"
+rayon = "1.5.0"
 bytesize = "1.0.1"
 regex = "1.4.5"
 serde_regex = "1.1.0"
@@ -88,4 +89,4 @@ tempdir = "0.3.7"
 wasmer-vm = "1.0.2"
 
 [build-dependencies]
-tonic-build = {version = "0.4.0", features = ["prost"]}
+tonic-build = "0.4.0"

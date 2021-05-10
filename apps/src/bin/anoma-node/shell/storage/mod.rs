@@ -8,15 +8,16 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
+pub use db::{DBIter, DB};
 use sparse_merkle_tree::H256;
 use thiserror::Error;
 use types::MerkleTree;
 
 use self::types::Hash256;
-pub use self::types::PrefixIterator;
 use super::MerkleRoot;
 
 #[derive(Error, Debug)]
@@ -37,8 +38,11 @@ static VP_WASM: &[u8] =
 const MIN_STORAGE_GAS: u64 = 1;
 
 #[derive(Debug)]
-pub struct Storage {
-    db: db::DB,
+pub struct Storage<DB>
+where
+    DB: db::DB + for<'iter> DBIter<'iter>,
+{
+    db: DB,
     chain_id: String,
     // TODO Because the transaction may modify and state, we'll probably need
     // to split into read-only last block state and mutable current block state
@@ -46,7 +50,10 @@ pub struct Storage {
     // to the state of the latter
     block: BlockStorage,
     current_height: BlockHeight,
+    pub(crate) address_gen: EstablishedAddressGen,
 }
+
+pub type PersistentStorage = Storage<db::rocksdb::RocksDB>;
 
 #[derive(Debug)]
 pub struct BlockStorage {
@@ -56,7 +63,7 @@ pub struct BlockStorage {
     subspaces: HashMap<Key, Vec<u8>>,
 }
 
-impl Storage {
+impl PersistentStorage {
     pub fn new(db_path: impl AsRef<Path>) -> Self {
         let tree = MerkleTree::default();
         let subspaces = HashMap::new();
@@ -67,14 +74,21 @@ impl Storage {
             subspaces,
         };
         Self {
-            // TODO: Error handling
-            db: db::open(db_path).unwrap(),
+            db: db::rocksdb::open(db_path).expect("cannot open the DB"),
             chain_id: String::with_capacity(CHAIN_ID_LENGTH),
             block,
             current_height: BlockHeight(0),
+            address_gen: EstablishedAddressGen::new(
+                "Privacy is a function of liberty.",
+            ),
         }
     }
+}
 
+impl<DB> Storage<DB>
+where
+    DB: db::DB + for<'iter> db::DBIter<'iter>,
+{
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
@@ -84,6 +98,7 @@ impl Storage {
             hash,
             height,
             subspaces,
+            address_gen,
         }) = self.db.read_last_block().map_err(Error::DBError)?
         {
             self.chain_id = chain_id;
@@ -92,6 +107,7 @@ impl Storage {
             self.block.height = height;
             self.block.subspaces = subspaces;
             self.current_height = height;
+            self.address_gen = address_gen;
             log::debug!("Loaded storage from DB");
             return Ok(Some((
                 MerkleRoot(
@@ -112,6 +128,7 @@ impl Storage {
                 &self.block.hash,
                 self.block.height,
                 &self.block.subspaces,
+                &self.address_gen,
             )
             .map_err(Error::DBError)?;
         self.current_height = self.block.height;
@@ -177,7 +194,10 @@ impl Storage {
     }
 
     /// Returns a prefix iterator and the gas cost
-    pub fn iter_prefix(&self, prefix: &Key) -> (PrefixIterator, u64) {
+    pub fn iter_prefix(
+        &self,
+        prefix: &Key,
+    ) -> (<DB as db::DBIter<'_>>::PrefixIter, u64) {
         (
             self.db.iter_prefix(self.current_height, prefix),
             prefix.len() as _,
@@ -251,6 +271,7 @@ impl Storage {
         }
     }
 
+    #[allow(dead_code)]
     /// Check if the given address exists on chain and return the gas cost.
     pub fn exists(&self, addr: &Address) -> Result<(bool, u64)> {
         let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
@@ -270,5 +291,145 @@ impl Storage {
     /// Get the current (yet to be committed) block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempdir::TempDir;
+    use types::Value;
+
+    use super::*;
+
+    #[test]
+    fn test_crud_value() {
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::new(db_path.path());
+        let key =
+            Key::parse("key".to_owned()).expect("cannot parse the key string");
+        let value: u64 = 1;
+
+        // before insertion
+        let (result, gas) = storage.has_key(&key).expect("has_key failed");
+        assert!(!result);
+        assert_eq!(gas, key.len() as u64);
+        let (result, gas) = storage.read(&key).expect("read failed");
+        assert_eq!(result, None);
+        assert_eq!(gas, key.len() as u64);
+
+        // insert
+        storage.write(&key, value.encode()).expect("write failed");
+
+        // read
+        let (result, gas) = storage.has_key(&key).expect("has_key failed");
+        assert!(result);
+        assert_eq!(gas, key.len() as u64);
+        let (result, gas) = storage.read(&key).expect("read failed");
+        assert_eq!(u64::decode(result.expect("value doesn't exist")), 1);
+        assert_eq!(gas, key.len() as u64 + value.encode().len() as u64);
+
+        // delete
+        storage.delete(&key).expect("delete failed");
+
+        // read again
+        let (result, _) = storage.has_key(&key).expect("has_key failed");
+        assert!(!result);
+        let (result, _) = storage.read(&key).expect("read failed");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_commit_block() {
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::new(db_path.path());
+        storage
+            .set_chain_id("test_chain_id_000000")
+            .expect("setting a chain ID failed");
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(100))
+            .expect("begin_block failed");
+        let key =
+            Key::parse("key".to_owned()).expect("cannot parse the key string");
+        let value: u64 = 1;
+
+        // insert and commit
+        storage.write(&key, value.encode()).expect("write failed");
+        let expected_root = storage.merkle_root().as_slice().deref().to_vec();
+        storage.commit().expect("commit failed");
+
+        // load the last state
+        let (root, height) = storage
+            .load_last_state()
+            .expect("loading the last state failed")
+            .expect("no block exists");
+        assert_eq!(root.0, expected_root);
+        assert_eq!(height, 100);
+    }
+
+    #[test]
+    fn test_iter() {
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::new(db_path.path());
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(100))
+            .expect("begin_block failed");
+
+        let mut expected = Vec::new();
+        let prefix = Key::parse("prefix".to_owned())
+            .expect("cannot parse the key string");
+        for i in 9..0 {
+            let key = prefix
+                .push(&format!("{}", i))
+                .expect("cannot push the key segment");
+            let value = (i as u64).encode();
+            // insert
+            storage.write(&key, value.clone()).expect("write failed");
+            expected.push((key.to_string(), value));
+        }
+        storage.commit().expect("commit failed");
+
+        let (iter, gas) = storage.iter_prefix(&prefix);
+        assert_eq!(gas, prefix.len() as u64);
+        for (k, v, gas) in iter {
+            match expected.pop() {
+                Some((expected_key, expected_val)) => {
+                    assert_eq!(k, expected_key);
+                    assert_eq!(v, expected_val);
+                    let expected_gas = expected_key.len() + expected_val.len();
+                    assert_eq!(gas, expected_gas as u64);
+                }
+                None => panic!("read a pair though no expected pair"),
+            }
+        }
+    }
+}
+
+/// Storage with a mock DB for testing
+#[cfg(test)]
+pub type TestStorage = Storage<db::mock::MockDB>;
+
+#[cfg(test)]
+impl Default for TestStorage {
+    fn default() -> Self {
+        let tree = MerkleTree::default();
+        let subspaces = HashMap::new();
+        let block = BlockStorage {
+            tree,
+            hash: BlockHash::default(),
+            height: BlockHeight(0),
+            subspaces,
+        };
+        Self {
+            db: db::mock::MockDB::default(),
+            chain_id: String::with_capacity(CHAIN_ID_LENGTH),
+            block,
+            current_height: BlockHeight(0),
+            address_gen: EstablishedAddressGen::new(
+                "Test address generator seed",
+            ),
+        }
     }
 }

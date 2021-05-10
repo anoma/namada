@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
 use anoma::config;
-use anoma::protobuf::types::Intent;
-use anoma::protobuf::IntentId;
+use anoma::proto::types::Intent;
+use anoma::proto::IntentId;
 use anoma::types::MatchmakerMessage;
 use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
@@ -48,7 +48,7 @@ impl Matchmaker {
         let matchmaker_code =
             std::fs::read(&config.matchmaker).map_err(Error::FileFailed)?;
         let tx_code =
-            std::fs::read(&config.tx_template).map_err(Error::FileFailed)?;
+            std::fs::read(&config.tx_code).map_err(Error::FileFailed)?;
         let filter = config
             .filter
             .as_ref()

@@ -17,7 +17,7 @@ The orderbook is build conjointly to the ledger and share the same binary.
 
 ### Node
 
-The node is built into `anomad`, it runs all the necesarry part, rpc server,
+The node is built into `anoman`, it runs all the necesarry part, rpc server,
 libp2p, orderbook app.
 
 #### Orderbook

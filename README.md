@@ -31,43 +31,55 @@ make
 make install
 
 # generate default config in .anoma/
-cargo run --bin anomad -- --base-dir .anoma generate-config
+cargo run --bin anoman -- --base-dir .anoma generate-config
 
-# Run Anoma daemon (this will also initialize and run Tendermint node)
+# Run Anoma node (this will also initialize and run Tendermint node)
 make run-ledger
 
 # Reset the state (resets Tendermint too)
-cargo run --bin anomad -- reset-ledger
+cargo run --bin anoman -- reset-ledger
 
-# Submit a custom transaction with a wasm code and arbitrary data
-cargo run --bin anoma -- tx --code txs/tx_template/tx.wasm --data tx.data
+# Submit a custom transaction with a wasm code and arbitrary data in `tx.data` file.
+# Note that you have to have a `tx.data` file for this to work, albeit it can be empty.
+cargo run --bin anoma -- tx --code-path txs/tx_template/tx.wasm --data-path tx.data
+
+# Setup temporary addresses aliases until we have a better client support
+export ADA=a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx
+export ALAN=a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9
+export ALONZO=a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s
+export XAN=a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3
+export BTC=a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc
+export XTZ=a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9
 
 # Submit a token transfer
-cargo run --bin anomac -- transfer --source alan --target ada --token xan --amount 10.1 --code txs/tx_transfer/tx.wasm
+cargo run --bin anomac -- transfer --source $ALAN --target $ADA --token $XAN --amount 10.1 --code-path txs/tx_transfer/tx.wasm
+
+# Submit a transaction to update an account's validity predicate
+cargo run --bin anomac -- update --address $ALAN --code-path vps/vp_user/vp.wasm
 
 # Watch and on change run a node (the state will be persisted)
-cargo watch -x "run --bin anomad -- run-ledger"
+cargo watch -x "run --bin anoman -- run-ledger"
 
 # Watch and on change reset & run a node
-cargo watch -x "run --bin anomad -- reset-ledger" -x "run --bin anomad -- run"
+cargo watch -x "run --bin anoman -- reset-ledger" -x "run --bin anoman -- run"
 
-# run gossip node daemon with intent broadcaster and rpc server (use default config)
+# run gossip node with intent broadcaster and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc
 
-# run gossip daemon with intent broadcaster, matchmaker and rpc (use default config)
-cargo run --bin anomad -- run-gossip --rpc --matchmaker matchmaker_template/matchmaker.wasm --tx-template txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
+# run gossip node with intent broadcaster, matchmaker and rpc (use default config)
+cargo run --bin anoman -- run-gossip --rpc --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
 
-# craft two opposite intents
-cargo run --bin anomac -- craft-intent --address ada    --token-buy xtz --amount-buy 10 --token-sell btc --amount-sell 20 --file intent_A.data
-cargo run --bin anomac -- craft-intent --address alan   --token-buy btc --amount-buy 20 --token-sell xan --amount-sell 30 --file intent_B.data
-cargo run --bin anomac -- craft-intent --address alonzo --token-buy xan --amount-buy 30 --token-sell xtz --amount-sell 10 --file intent_C.data
+# craft intents
+cargo run --bin anomac -- craft-intent --address $ADA    --token-buy $XTZ --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_A.data
+cargo run --bin anomac -- craft-intent --address $ALAN   --token-buy $BTC --amount-buy 20 --token-sell $XAN --amount-sell 30 --file-path intent_B.data
+cargo run --bin anomac -- craft-intent --address $ALONZO --token-buy $XAN --amount-buy 30 --token-sell $XTZ --amount-sell 10 --file-path intent_C.data
 
 # Subscribe to new network
 cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "asset_v1"
 
 # Submit the intents (need a rpc server), hardcoded address rpc node address
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_A.data --topic "asset_v1"
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data intent_B.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data-path intent_A.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data-path intent_B.data --topic "asset_v1"
 
 # Format the code
 make fmt

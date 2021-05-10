@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::protobuf::types;
+use crate::proto::types;
 
 #[derive(Debug)]
 pub enum MatchmakerMessage {

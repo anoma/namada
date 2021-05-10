@@ -1,6 +1,7 @@
 //! The key and values that may be persisted in a DB.
 
 use anoma_shared::bytes::ByteBuf;
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{Address, BlockHash, BlockHeight, Key};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -20,9 +21,9 @@ pub trait Value: BorshSerialize + BorshDeserialize {
         result
     }
 
-    fn decode(bytes: Vec<u8>) -> Self {
+    fn decode(bytes: impl AsRef<[u8]>) -> Self {
         // TODO error handling
-        Self::try_from_slice(&bytes).unwrap()
+        Self::try_from_slice(bytes.as_ref()).unwrap()
     }
 }
 
@@ -32,6 +33,7 @@ impl Value for u64 {}
 impl Value for i64 {}
 impl Value for BlockHeight {}
 impl Value for BlockHash {}
+impl Value for EstablishedAddressGen {}
 
 impl Value for H256 {}
 impl<T: Value> Value for DefaultStore<T> {}
@@ -129,37 +131,23 @@ fn new_blake2b() -> Blake2b {
     Blake2bBuilder::new(32).personal(b"anoma storage").build()
 }
 
-pub struct PrefixIterator<'a> {
-    iter: rocksdb::DBIterator<'a>,
-    db_prefix: String,
+pub type KVBytes = (Box<[u8]>, Box<[u8]>);
+
+pub struct PrefixIterator<I> {
+    pub iter: I,
+    pub db_prefix: String,
 }
 
-impl<'a> PrefixIterator<'a> {
-    pub fn new(iter: rocksdb::DBIterator<'a>, db_prefix: String) -> Self {
+impl<I> PrefixIterator<I> {
+    pub fn new(iter: I, db_prefix: String) -> Self
+    where
+        I: Iterator<Item = KVBytes>,
+    {
         PrefixIterator { iter, db_prefix }
     }
 }
 
-impl<'a> Iterator for PrefixIterator<'a> {
-    type Item = (String, Vec<u8>, u64);
-
-    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
-        match self.iter.next() {
-            Some((key, val)) => {
-                let len = val.len();
-                let key = String::from_utf8(key.to_vec())
-                    .expect("Cannot convert from bytes to key string");
-                match key.strip_prefix(&self.db_prefix) {
-                    Some(k) => Some((k.to_owned(), val.to_vec(), len as _)),
-                    None => self.next(),
-                }
-            }
-            None => None,
-        }
-    }
-}
-
-impl<'a> std::fmt::Debug for PrefixIterator<'a> {
+impl<I> std::fmt::Debug for PrefixIterator<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("PrefixIterator")
     }
@@ -167,6 +155,8 @@ impl<'a> std::fmt::Debug for PrefixIterator<'a> {
 
 impl Hash256 for Address {
     fn hash256(&self) -> H256 {
-        self.hash.hash256()
+        self.try_to_vec()
+            .expect("Encoding address shouldn't fail")
+            .hash256()
     }
 }

@@ -28,6 +28,7 @@ pub enum Error {
     #[error("A config file already exists in {0}")]
     AlreadyExistingConfig(PathBuf),
 }
+
 pub const BASEDIR: &str = ".anoma";
 pub const FILENAME: &str = "config.toml";
 pub const TENDERMINT_DIR: &str = "tendermint";
@@ -84,7 +85,7 @@ impl Default for Ledger {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Matchmaker {
     pub matchmaker: PathBuf,
-    pub tx_template: PathBuf,
+    pub tx_code: PathBuf,
     pub ledger_address: SocketAddr,
     pub filter: Option<PathBuf>,
 }

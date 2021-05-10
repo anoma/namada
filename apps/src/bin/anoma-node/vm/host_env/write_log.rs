@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{Address, Key};
 use thiserror::Error;
 
-use crate::shell::storage::{self, Storage};
+use crate::shell::storage::{self, PersistentStorage};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -17,11 +18,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum StorageModification {
     Write { value: Vec<u8> },
     Delete,
-    InitAccount { parent: Address, vp: Vec<u8> },
+    InitAccount { vp: Vec<u8> },
 }
 
 #[derive(Debug, Clone)]
 pub struct WriteLog {
+    address_gen: Option<EstablishedAddressGen>,
     block_write_log: HashMap<Key, StorageModification>,
     tx_write_log: HashMap<Key, StorageModification>,
 }
@@ -29,6 +31,7 @@ pub struct WriteLog {
 impl WriteLog {
     pub fn new() -> Self {
         Self {
+            address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
         }
@@ -50,8 +53,8 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                     StorageModification::Delete => key.len(),
-                    StorageModification::InitAccount { ref parent, ref vp } => {
-                        key.len() + parent.len() + vp.len()
+                    StorageModification::InitAccount { ref vp } => {
+                        key.len() + vp.len()
                     }
                 };
                 (Some(v), gas as _)
@@ -105,20 +108,44 @@ impl WriteLog {
     /// Initialize a new account and return the gas cost.
     pub fn init_account(
         &mut self,
-        addr: Address,
-        parent: Address,
+        storage_address_gen: &EstablishedAddressGen,
         vp: Vec<u8>,
-    ) -> u64 {
+    ) -> (Address, u64) {
+        // If we've previously generated a new account, we use the local copy of
+        // the generator. Otherwise, we create a new copy from the storage
+        let address_gen =
+            self.address_gen.get_or_insert(storage_address_gen.clone());
+        let addr =
+            address_gen.generate_address("TODO more randomness".as_bytes());
         let key = Key::validity_predicate(&addr)
             .expect("Unable to create a validity predicate key");
-        let gas = (key.len() + parent.len() + vp.len()) as _;
+        let gas = (key.len() + vp.len()) as _;
         self.tx_write_log
-            .insert(key, StorageModification::InitAccount { parent, vp });
-        gas
+            .insert(key, StorageModification::InitAccount { vp });
+        (addr, gas)
     }
 
+    /// Get the storage keys changed in the current transaction
     pub fn get_changed_keys(&self) -> Vec<&Key> {
-        self.tx_write_log.keys().collect()
+        self.tx_write_log
+            .iter()
+            .filter_map(|(key, value)| match value {
+                StorageModification::InitAccount { .. } => None,
+                _ => Some(key),
+            })
+            .collect()
+    }
+
+    /// Get the keys to the accounts initialized in the current transaction.
+    /// The keys point to the validity predicates of the newly created accounts.
+    pub fn get_initialized_accounts(&self) -> Vec<&Key> {
+        self.tx_write_log
+            .iter()
+            .filter_map(|(key, value)| match value {
+                StorageModification::InitAccount { .. } => Some(key),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Commit the current transaction's write log to the block when it's
@@ -140,7 +167,10 @@ impl WriteLog {
 
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.
-    pub fn commit_block(&mut self, storage: &mut Storage) -> Result<()> {
+    pub fn commit_block(
+        &mut self,
+        storage: &mut PersistentStorage,
+    ) -> Result<()> {
         for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {
@@ -151,12 +181,15 @@ impl WriteLog {
                 StorageModification::Delete => {
                     storage.delete(key).map_err(Error::StorageError)?;
                 }
-                StorageModification::InitAccount { vp, .. } => {
+                StorageModification::InitAccount { vp } => {
                     storage
                         .write(key, vp.clone())
                         .map_err(Error::StorageError)?;
                 }
             }
+        }
+        if let Some(address_gen) = self.address_gen.take() {
+            storage.address_gen = address_gen
         }
         self.block_write_log.clear();
         Ok(())

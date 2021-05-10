@@ -10,8 +10,8 @@ use anoma_vm_env::vp_prelude::{
 validity_predicate! {
     fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: Vec<Key>, verifiers: HashSet<Address>) -> bool {
         log_string(format!(
-            "validate_tx called with user addr: {}, key_changed: {:#?}, tx_data: {:#?}, verifiers: {:?}",
-            addr, keys_changed, tx_data, verifiers
+            "validate_tx called with user addr: {}, key_changed: {:#?}, verifiers: {:?}",
+            addr, keys_changed, verifiers
         ));
 
         // TODO memoize?

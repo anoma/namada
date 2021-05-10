@@ -1,7 +1,7 @@
-use anoma::protobuf::services::rpc_service_server::{
+use anoma::proto::services::rpc_service_server::{
     RpcService, RpcServiceServer,
 };
-use anoma::protobuf::services::{rpc_message, RpcMessage, RpcResponse};
+use anoma::proto::services::{rpc_message, RpcMessage, RpcResponse};
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::oneshot;
 use tonic::transport::Server;
