@@ -3,6 +3,7 @@ mod network_behaviour;
 mod p2p;
 mod rpc;
 
+use std::str::FromStr;
 use std::thread;
 
 use anoma::proto::services::{rpc_message, RpcResponse};
@@ -58,9 +59,9 @@ pub async fn matchmaker_dispatcher(
         if let Some(tx) = matchmaker_event_receiver.recv().await {
             let mut tx_bytes = vec![];
             tx.encode(&mut tx_bytes).unwrap();
-            let client =
-                HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap())
-                    .unwrap();
+            let address: tendermint::net::Address =
+                FromStr::from_str("tcp://127.0.0.1:26657").unwrap();
+            let client = HttpClient::new(address).unwrap();
             let _response = client.broadcast_tx_commit(tx_bytes.into()).await;
         }
     }
