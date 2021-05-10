@@ -216,7 +216,6 @@ impl<'a> FromIterator<&'a Address> for HashSet<Address> {
     }
 }
 
-
 #[cfg(test)]
 pub mod tests {
     use rand::prelude::ThreadRng;
