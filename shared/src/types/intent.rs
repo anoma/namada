@@ -1,9 +1,20 @@
+use std::collections::{HashMap, HashSet};
+
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 
 use crate::types::key::ed25519::Signed;
 use crate::types::{token, Address};
 
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct Intent {
     pub addr: Address,
     pub token_sell: Address,
@@ -12,11 +23,21 @@ pub struct Intent {
     pub amount_buy: token::Amount,
 }
 
-/// These are two transfers crafted from two matched [`Intent`]s.
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+/// These are transfers crafted from matched [`Intent`]s.
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
 pub struct IntentTransfers {
-    pub intent_1: Signed<Intent>,
-    pub transfer_1: token::Transfer,
-    pub intent_2: Signed<Intent>,
-    pub transfer_2: token::Transfer,
+    pub transfers: HashSet<token::Transfer>,
+    // TODO benchmark between an map or a set, see which is less costly
+    pub intents: HashMap<Address, Signed<Intent>>,
+}
+
+impl IntentTransfers {
+    pub fn empty() -> Self {
+        Self {
+            transfers: HashSet::new(),
+            intents: HashMap::new(),
+        }
+    }
 }
