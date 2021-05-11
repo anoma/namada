@@ -3,8 +3,9 @@ use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use anoma::proto::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage, Tx,
+    intent_broadcaster_message, IntentBroadcasterMessage,
 };
+use anoma::types::MatchmakerMessage;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
 };
@@ -28,6 +29,10 @@ pub enum Error {
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
     #[error("Failed initializing the intent broadcaster app: {0}")]
     GossipIntentError(intent_broadcaster::Error),
+    #[error("Failed initializing the topic filter: {0}")]
+    Filter(String),
+    #[error("Failed initializing the gossip network: {0}")]
+    GossipConfig(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -113,7 +118,7 @@ impl Behaviour {
     pub fn new(
         key: Keypair,
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<Receiver<Tx>>)> {
+    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")
@@ -122,7 +127,7 @@ impl Behaviour {
             .message_id_fn(message_id)
             .validate_messages()
             .build()
-            .expect("Valid config");
+            .map_err(|s| Error::GossipConfig(s.to_string()))?;
 
         let filter = match &config.subscription_filter {
             anoma::config::SubscriptionFilter::RegexFilter(regex) => {
@@ -150,7 +155,7 @@ impl Behaviour {
                 gossipsub_config,
                 filter,
             )
-            .expect("Correct configuration");
+            .map_err(|s| Error::Filter(s.to_string()))?;
 
         let (intent_broadcaster_app, matchmaker_event_receiver) =
             intent_broadcaster::GossipIntent::new(&config)

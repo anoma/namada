@@ -63,21 +63,18 @@ validity_predicate! {
 fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
     match SignedTxData::try_from_slice(&tx_data[..]) {
         Ok(tx) => match IntentTransfers::try_from_slice(&tx.data[..]) {
-            Err(_) => false,
-            Ok(transfers) => {
-                if &transfers.intent_1.data.addr == addr {
-                    log_string(format!("check intent 1"));
-                    check_intent(addr, &transfers.intent_1)
-                } else if &transfers.intent_2.data.addr == addr {
-                    log_string(format!("check intent 2"));
-                    check_intent(addr, &transfers.intent_2)
+            Ok(tx_data) => {
+                if let Some(intent) = &tx_data.intents.get(addr) {
+                    log_string("check intent".to_string());
+                    check_intent(addr, intent)
                 } else {
-                    log_string(format!("no intent with a matching address"));
+                    log_string("no intent with a matching address".to_string());
                     false
                 }
             }
+            Err(_) => false,
         },
-        _ => false,
+        Err(_) => false,
     }
 }
 

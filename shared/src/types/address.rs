@@ -9,6 +9,7 @@ use std::string;
 
 use bech32::{self, FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -52,6 +53,8 @@ pub type Result<T> = std::result::Result<T, Error>;
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub enum Address {
     Established(EstablishedAddress),
@@ -134,6 +137,8 @@ impl Display for Address {
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub struct EstablishedAddress {
     hash: String,
@@ -181,6 +186,8 @@ impl EstablishedAddressGen {
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub enum ImplicitAddress {
     Ed25519(key::ed25519::PublicKeyHash),
@@ -194,6 +201,11 @@ pub fn xan() -> Address {
 /// Temporary helper for testing
 pub fn btc() -> Address {
     Address::decode("a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc").expect("The token address decoding shouldn't fail")
+}
+
+/// Temporary helper for testing
+pub fn xtz() -> Address {
+    Address::decode("a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9").expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing

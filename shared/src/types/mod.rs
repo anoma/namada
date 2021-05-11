@@ -5,6 +5,7 @@ use std::fmt::Display;
 
 pub use address::{Address, EstablishedAddress, ImplicitAddress};
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
@@ -49,11 +50,21 @@ pub const RESERVED_VP_KEY: &str = "?";
     PartialOrd,
     Ord,
     Debug,
+    Serialize,
+    Deserialize,
 )]
 pub struct BlockHeight(pub u64);
 
 #[derive(
-    Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
 )]
 pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 
@@ -67,6 +78,8 @@ pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
     Ord,
     PartialOrd,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub struct Key {
     pub segments: Vec<DbKeySeg>,
@@ -173,6 +186,8 @@ pub trait KeySeg {
     Ord,
     PartialOrd,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub enum DbKeySeg {
     AddressSeg(Address),
@@ -330,7 +345,15 @@ impl KeySeg for Address {
 }
 
 /// A tx data type to update an account's validity predicate
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct UpdateVp {
     pub addr: Address,
     pub vp_code: Vec<u8>,

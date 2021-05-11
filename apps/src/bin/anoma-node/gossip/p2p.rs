@@ -1,5 +1,5 @@
 use anoma::proto::services::{rpc_message, RpcResponse};
-use anoma::proto::types::Tx;
+use anoma::types::MatchmakerMessage;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -18,7 +18,7 @@ pub enum Error {
     TransportError(std::io::Error),
     #[error("Failed to subscribe")]
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
-    #[error("Error with the network behavior")]
+    #[error("Error with the network behavior: {0}")]
     Behavior(super::network_behaviour::Error),
 }
 type Result<T> = std::result::Result<T, Error>;
@@ -30,7 +30,7 @@ pub struct P2P {
 impl P2P {
     pub fn new(
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<Receiver<Tx>>)> {
+    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
@@ -74,6 +74,13 @@ impl P2P {
             }
         }
         Ok((p2p, matchmaker_event_receiver))
+    }
+
+    pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
+        self.swarm
+            .intent_broadcaster_app
+            .handle_mm_message(mm_message)
+            .await
     }
 
     pub async fn handle_rpc_event(
@@ -181,18 +188,15 @@ impl P2P {
                         RpcResponse { result }
                     }
                     Ok(false) => {
-                        let result = format!(
-                            "Node
-        already subscribed to {}",
-                            topic
-                        );
+                        let result =
+                            format!("Node already subscribed to {}", topic);
+                        log::info!("{}", result);
                         tracing::info!("{}", result);
                         RpcResponse { result }
                     }
                     Err(err) => {
                         let result = format!(
-                            "failed to subscribe to
-        {}: {:?}",
+                            "failed to subscribe to {}: {:?}",
                             topic, err
                         );
                         tracing::error!("{}", result);

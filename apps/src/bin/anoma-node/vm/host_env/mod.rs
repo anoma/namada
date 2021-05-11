@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 
 use anoma::proto::types::Tx;
+use anoma::types::MatchmakerMessage;
 use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
@@ -132,7 +133,7 @@ where
 #[derive(Clone)]
 pub struct MatchmakerEnv {
     pub tx_code: Vec<u8>,
-    pub inject_tx: Sender<Tx>,
+    pub inject_mm_message: Sender<MatchmakerMessage>,
     pub memory: AnomaMemory,
 }
 
@@ -255,11 +256,11 @@ pub fn prepare_matchmaker_imports(
     wasm_store: &Store,
     initial_memory: Memory,
     tx_code: impl AsRef<[u8]>,
-    inject_tx: Sender<Tx>,
+    inject_mm_message: Sender<MatchmakerMessage>,
 ) -> ImportObject {
     let env = MatchmakerEnv {
         memory: AnomaMemory::default(),
-        inject_tx,
+        inject_mm_message,
         tx_code: tx_code.as_ref().to_vec(),
     };
     wasmer::imports! {
@@ -268,7 +269,13 @@ pub fn prepare_matchmaker_imports(
             "memory" => initial_memory,
             "_send_match" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env.clone(),
-                                                                  send_match),
+                                                                   send_match),
+            "_update_data" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                    env.clone(),
+                                                                    update_data),
+            "_remove_intents" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                       env.clone(),
+                                                                       remove_intents),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store,
                                                                   env,
                                                                    matchmaker_log_string),
@@ -1284,9 +1291,26 @@ fn filter_log_string(env: &FilterEnv, str_ptr: u64, str_len: u64) {
     tracing::info!("WASM Filter log: {}", str);
 }
 
+fn remove_intents(
+    env: &MatchmakerEnv,
+    intents_id_ptr: u64,
+    intents_id_len: u64,
+) {
+    let (intents_id_bytes, _gas) = env
+        .memory
+        .read_bytes(intents_id_ptr, intents_id_len as _)
+        .expect("Cannot read the intents from memory");
+
+    let intents_id =
+        HashSet::<Vec<u8>>::try_from_slice(&intents_id_bytes).unwrap();
+
+    env.inject_mm_message
+        .try_send(MatchmakerMessage::RemoveIntents(intents_id))
+        .expect("failed to send intents_id")
+}
+
 /// Inject a transaction from matchmaker's matched intents to the ledger
 fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
-    let inject_tx: &Sender<Tx> = &env.inject_tx;
     let (tx_data, _gas) = env
         .memory
         .read_bytes(data_ptr, data_len as _)
@@ -1303,5 +1327,18 @@ fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
         code: tx_code,
         data: Some(signed_bytes),
     };
-    inject_tx.try_send(tx).expect("failed to send tx")
+    env.inject_mm_message
+        .try_send(MatchmakerMessage::InjectTx(tx))
+        .expect("failed to send tx")
+}
+
+fn update_data(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
+    let (data, _gas) = env
+        .memory
+        .read_bytes(data_ptr, data_len as _)
+        .expect("Cannot read the data from memory");
+
+    env.inject_mm_message
+        .try_send(MatchmakerMessage::UpdateData(data))
+        .expect("failed to send updated data")
 }
