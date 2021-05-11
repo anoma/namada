@@ -1,4 +1,4 @@
-use anoma_shared::vm_memory;
+use anoma_shared::vm_memory::{self, VpInput};
 use borsh::BorshSerialize;
 use thiserror::Error;
 use wasmer::{HostEnvInitError, LazyInit, Memory};
@@ -89,8 +89,8 @@ pub fn write_tx_inputs(
 pub struct VpCallInput {
     pub addr_ptr: u64,
     pub addr_len: u64,
-    pub tx_data_ptr: u64,
-    pub tx_data_len: u64,
+    pub data_ptr: u64,
+    pub data_len: u64,
     pub keys_changed_ptr: u64,
     pub keys_changed_len: u64,
     pub verifiers_ptr: u64,
@@ -100,7 +100,12 @@ pub struct VpCallInput {
 /// Write validity predicate inputs into wasm memory
 pub fn write_vp_inputs(
     memory: &wasmer::Memory,
-    (addr, tx_data_bytes, keys_changed, verifiers): vm_memory::VpInput,
+    VpInput {
+        addr,
+        data,
+        keys_changed,
+        verifiers,
+    }: VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
     let addr_bytes = addr.try_to_vec().expect(
@@ -108,13 +113,13 @@ pub fn write_vp_inputs(
     );
     let addr_len = addr_bytes.len() as _;
 
-    let tx_data_ptr = addr_ptr + addr_len;
-    let tx_data_len = tx_data_bytes.len() as _;
+    let data_ptr = addr_ptr + addr_len;
+    let data_len = data.len() as _;
 
     let keys_changed_bytes = keys_changed.try_to_vec().expect(
         "TEMPORARY: failed to serialize keys_changed for validity predicate",
     );
-    let keys_changed_ptr = tx_data_ptr + tx_data_len;
+    let keys_changed_ptr = data_ptr + data_len;
     let keys_changed_len = keys_changed_bytes.len() as _;
 
     let verifiers_bytes = verifiers.try_to_vec().expect(
@@ -125,7 +130,7 @@ pub fn write_vp_inputs(
 
     let bytes = [
         &addr_bytes[..],
-        &tx_data_bytes[..],
+        data,
         &keys_changed_bytes[..],
         &verifiers_bytes[..],
     ]
@@ -135,8 +140,8 @@ pub fn write_vp_inputs(
     Ok(VpCallInput {
         addr_ptr,
         addr_len,
-        tx_data_ptr,
-        tx_data_len,
+        data_ptr,
+        data_len,
         keys_changed_ptr,
         keys_changed_len,
         verifiers_ptr,

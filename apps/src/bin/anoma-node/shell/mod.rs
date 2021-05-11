@@ -681,11 +681,11 @@ fn run_vps(
         .try_fold(VpsResult::default, |result, (addr, keys, vp)| {
             run_vp(
                 result,
-                tx_data.clone(),
+                &tx_data,
                 tx_code.clone(),
                 storage,
                 write_log,
-                addresses.clone(),
+                &addresses,
                 &mut VpGasMeter::new(initial_gas),
                 (addr, keys, vp),
             )
@@ -724,11 +724,11 @@ fn merge_vp_results(
 #[allow(clippy::too_many_arguments)]
 fn run_vp(
     mut result: VpsResult,
-    tx_data: Vec<u8>,
+    tx_data: impl AsRef<[u8]>,
     tx_code: Vec<u8>,
     storage: &PersistentStorage,
     write_log: &WriteLog,
-    addresses: HashSet<Address>,
+    addresses: &HashSet<Address>,
     vp_gas_meter: &mut VpGasMeter,
     (addr, keys, vp): (&Address, &[Key], &[u8]),
 ) -> Result<VpsResult> {
@@ -742,7 +742,7 @@ fn run_vp(
         storage,
         write_log,
         vp_gas_meter,
-        keys.to_vec(),
+        keys,
         addresses,
     );
     result.changed_keys.extend_from_slice(&keys);

@@ -23,7 +23,7 @@ use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::shell::storage::{self, Storage};
-use crate::vm::{VpRunner};
+use crate::vm::VpRunner;
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -82,19 +82,23 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
     /// The address of the account that owns the VP
-    addr: Address,
-    // this is not thread-safe, but because each VP has its own instance there
-    // is no shared access
+    pub addr: Address,
+    /// this is not thread-safe, but because each VP has its own instance there
+    /// is no shared access
     iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
-    // thread-safe read-only access from parallel Vp runners
+    /// thread-safe read-only access from parallel Vp runners
     storage: EnvHostWrapper<Storage<DB>>,
-    // thread-safe read-only access from parallel Vp runners
+    /// thread-safe read-only access from parallel Vp runners
     write_log: EnvHostWrapper<WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
-    // the VPs that we ran.
+    /// the VPs that we ran.
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
-    // The transaction code is used for signature verification
+    /// The transaction code is used for signature verification
     tx_code: EnvHostWrapper<Vec<u8>>,
+    /// Change storage keys, we use these for `eval` invocations
+    pub keys_changed: EnvHostWrapper<Vec<Key>>,
+    /// Addresses of transaction verifiers, we use these for `eval` invocations
+    pub verifiers: EnvHostWrapper<HashSet<Address>>,
     memory: AnomaMemory,
 }
 
@@ -114,6 +118,8 @@ where
             write_log: self.write_log.clone(),
             gas_meter: self.gas_meter.clone(),
             tx_code: self.tx_code.clone(),
+            keys_changed: self.keys_changed.clone(),
+            verifiers: self.verifiers.clone(),
             memory: self.memory.clone(),
         }
     }
@@ -219,6 +225,8 @@ pub fn prepare_vp_env<DB>(
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
     tx_code: EnvHostWrapper<Vec<u8>>,
     initial_memory: Memory,
+    keys_changed: EnvHostWrapper<Vec<Key>>,
+    verifiers: EnvHostWrapper<HashSet<Address>>,
 ) -> ImportObject
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -230,18 +238,19 @@ where
         iterators,
         gas_meter,
         tx_code,
+        keys_changed,
+        verifiers,
         memory: AnomaMemory::default(),
     };
-    prepare_vp_imports(wasm_store, initial_memory, env)
+    prepare_vp_imports(wasm_store, initial_memory, &env)
 }
-
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
 pub fn prepare_vp_imports<DB>(
     wasm_store: &Store,
     initial_memory: Memory,
-    env: VpEnv<DB>
+    env: &VpEnv<DB>,
 ) -> ImportObject
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -264,7 +273,7 @@ where
             "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_hash),
             "_verify_tx_signature" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_verify_tx_signature),
             "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_log_string),
-            "_eval" => wasmer::Function::new_native_with_env(wasm_store, env, vp_eval),
+            "_eval" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_eval),
         },
     }
 }
@@ -1282,30 +1291,41 @@ where
     log::info!("WASM Validity predicate log: {}", str);
 }
 
-
-fn vp_eval<DB>(env: &VpEnv<DB>, vp_code_ptr: u64, vp_code_len: u64) -> u64 
+fn vp_eval<DB>(
+    env: &VpEnv<DB>,
+    vp_code_ptr: u64,
+    vp_code_len: u64,
+    input_data_ptr: u64,
+    input_data_len: u64,
+) -> u64
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>, // Generic over a lifetime
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>, /* Generic over a lifetime */
 {
-    let (bytes, gas) = env.memory
+    let (vp_code, gas) = env
+        .memory
         .read_bytes(vp_code_ptr, vp_code_len as _)
         .expect("Cannot read bytes from memory");
+    vp_add_gas(env, gas);
 
+    let (input_data, gas) = env
+        .memory
+        .read_bytes(input_data_ptr, input_data_len as _)
+        .expect("Cannot read bytes from memory");
     vp_add_gas(env, gas);
 
     let vp_runner = VpRunner::new();
-    let result = vp_runner.run_eval(bytes, env.clone());
+    let result = vp_runner.run_eval(vp_code, &input_data, env.clone());
 
     match result {
-        Ok(b) => { if b {
+        Ok(b) => {
+            if b {
                 1
             } else {
                 0
             }
-        },
-        Err(_e) => 0 
+        }
+        Err(_e) => 0,
     }
-
 }
 
 /// Log a string from exposed to the wasm VM matchmaker environment. The message

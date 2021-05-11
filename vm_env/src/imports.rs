@@ -517,9 +517,14 @@ pub mod vp {
         }
     }
 
-    pub fn eval(vp_code: Vec<u8>) -> bool {
+    pub fn eval(vp_code: Vec<u8>, input_data: Vec<u8>) -> bool {
         let result = unsafe {
-            _eval(vp_code.as_ptr() as _, vp_code.len() as _)
+            _eval(
+                vp_code.as_ptr() as _,
+                vp_code.len() as _,
+                input_data.as_ptr() as _,
+                input_data.len() as _,
+            )
         };
         result == 1
     }
@@ -578,7 +583,12 @@ pub mod vp {
         // Requires a node running with "Info" log level
         fn _log_string(str_ptr: u64, str_len: u64);
 
-        fn _eval(vp_code_ptr: u64, vp_code_len: u64) -> u64; // wasm doesn't have bool, so we return u64 
+        fn _eval(
+            vp_code_ptr: u64,
+            vp_code_len: u64,
+            input_data_ptr: u64,
+            input_data_len: u64,
+        ) -> u64; // wasm doesn't have bool, so we return u64 
     }
 }
 
