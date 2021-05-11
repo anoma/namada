@@ -1,7 +1,7 @@
-use anoma::protobuf::services::rpc_service_server::{
+use anoma::proto::services::rpc_service_server::{
     RpcService, RpcServiceServer,
 };
-use anoma::protobuf::services::{rpc_message, RpcMessage, RpcResponse};
+use anoma::proto::services::{rpc_message, RpcMessage, RpcResponse};
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::oneshot;
 use tonic::transport::Server;
@@ -32,7 +32,7 @@ impl RpcService for Rpc {
                 Status::data_loss(format!{"failed to receive response from gossip app: {:?}", err}))?;
             Ok(TonicResponse::new(response))
         } else {
-            log::error!("Received empty rpc message, nothing can be done");
+            tracing::error!("Received empty rpc message, nothing can be done");
             Ok(TonicResponse::new(RpcResponse::default()))
         }
     }

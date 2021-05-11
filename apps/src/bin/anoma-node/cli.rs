@@ -36,7 +36,7 @@ pub fn main() -> Result<()> {
         Some((cli::GENERATE_CONFIG_COMMAND, _args)) => {
             let gen_config = config::Config::generate(&home, false)
                 .wrap_err("failed to generate default config")?;
-            log::debug!("generated config {:?}", gen_config);
+            tracing::debug!("generated config {:?}", gen_config);
             Ok(())
         }
         _ => app.print_help().wrap_err("Can't display help."),
@@ -50,7 +50,7 @@ fn get_cfg(home: String) -> Config {
     match Config::read(&home) {
         Ok(config) => config,
         Err(err) => {
-            log::error!(
+            tracing::error!(
                 "Tried to read config in {} but failed with: {}",
                 home,
                 err
@@ -58,11 +58,11 @@ fn get_cfg(home: String) -> Config {
             // generate(home,true) replace current config if it exists
             match config::Config::generate(&home, true) {
                 Ok(config) => {
-                    log::warn!("Generated default config in {}", home,);
+                    tracing::warn!("Generated default config in {}", home,);
                     config
                 }
                 Err(err) => {
-                    log::error!(
+                    tracing::error!(
                         "Tried to generate config in {} but failed with: {}. \
                          Using default config (with new generated key)",
                         home,

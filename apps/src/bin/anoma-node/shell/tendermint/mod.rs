@@ -263,7 +263,7 @@ impl tendermint_abci::Application for AbciWrapper {
         let raw_hash = req.hash;
         match BlockHash::try_from(raw_hash) {
             Err(err) => {
-                log::error!("{:#?}", err);
+                tracing::error!("{:#?}", err);
             }
             Ok(hash) => {
                 let raw_height = req
@@ -272,7 +272,10 @@ impl tendermint_abci::Application for AbciWrapper {
                     .height;
                 match raw_height.try_into() {
                     Err(_) => {
-                        log::error!("Unexpected block height {}", raw_height)
+                        tracing::error!(
+                            "Unexpected block height {}",
+                            raw_height
+                        )
                     }
                     Ok(height) => {
                         let (reply, reply_receiver) = channel();
@@ -331,7 +334,7 @@ impl tendermint_abci::Application for AbciWrapper {
         let raw_height = req.height;
         match BlockHeight::try_from(raw_height) {
             Err(_) => {
-                log::error!("Unexpected block height {}", raw_height)
+                tracing::error!("Unexpected block height {}", raw_height)
             }
             Ok(height) => {
                 let (reply, reply_receiver) = channel();

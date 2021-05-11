@@ -2,7 +2,8 @@ mod filter;
 mod matchmaker;
 mod mempool;
 
-use anoma::protobuf::types::{Intent, IntentBroadcasterMessage, Tx};
+use anoma::proto::types::{Intent, IntentBroadcasterMessage};
+use anoma::types::MatchmakerMessage;
 use matchmaker::Matchmaker;
 use prost::Message;
 use thiserror::Error;
@@ -30,7 +31,7 @@ pub struct GossipIntent {
 impl GossipIntent {
     pub fn new(
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<Receiver<Tx>>)> {
+    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let (matchmaker, matchmaker_event_receiver) = if let Some(matchmaker) =
             &config.matchmaker
         {
@@ -62,5 +63,17 @@ impl GossipIntent {
     ) -> Result<IntentBroadcasterMessage> {
         IntentBroadcasterMessage::decode(data.as_ref())
             .map_err(Error::DecodeError)
+    }
+
+    pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
+        match self.matchmaker.as_mut() {
+            Some(mm) => mm.handle_mm_message(mm_message).await,
+            None => {
+                log::error!(
+                    "cannot handle mesage {:?} because no matchmaker started",
+                    mm_message
+                )
+            }
+        }
     }
 }

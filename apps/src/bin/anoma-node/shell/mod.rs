@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::mpsc;
 use std::vec;
 
-use anoma::protobuf::types::Tx;
+use anoma::proto::types::Tx;
 use anoma::wallet;
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::types::token::Amount;
@@ -110,34 +110,48 @@ impl Shell {
         let ada = Address::decode("a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx")
             .expect("The genesis address shouldn't fail decoding");
         let alan = Address::decode("a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9")
+        .expect("The genesis address shouldn't fail decoding");
+        let alonzo = Address::decode("a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s")
             .expect("The genesis address shouldn't fail decoding");
         let xan = address::xan();
         let btc = address::btc();
+        let xtz = address::xtz();
 
         // default tokens VPs for testing
         let xan_vp = Key::validity_predicate(&xan).expect("expected VP key");
         let btc_vp = Key::validity_predicate(&btc).expect("expected VP key");
+        let xtz_vp = Key::validity_predicate(&xtz).expect("expected VP key");
         storage
             .write(&xan_vp, token_vp.to_vec())
             .expect("Unable to write token VP");
         storage
             .write(&btc_vp, token_vp.to_vec())
             .expect("Unable to write token VP");
+        storage
+            .write(&xtz_vp, token_vp.to_vec())
+            .expect("Unable to write token VP");
 
         // default user VPs for testing
         let ada_vp = Key::validity_predicate(&ada).expect("expected VP key");
         let alan_vp = Key::validity_predicate(&alan).expect("expected VP key");
+        let alonzo_vp =
+            Key::validity_predicate(&alonzo).expect("expected VP key");
         storage
             .write(&ada_vp, user_vp.to_vec())
             .expect("Unable to write user VP");
         storage
             .write(&alan_vp, user_vp.to_vec())
             .expect("Unable to write user VP");
+        storage
+            .write(&alonzo_vp, user_vp.to_vec())
+            .expect("Unable to write user VP");
 
         // default user's tokens for testing
         let ada_xan = token::balance_key(&xan, &ada);
         let ada_btc = token::balance_key(&btc, &ada);
         let alan_xan = token::balance_key(&xan, &alan);
+        let alonzo_xan = token::balance_key(&xan, &alonzo);
+        let alonzo_xtz = token::balance_key(&xtz, &alonzo);
 
         storage
             .write(
@@ -163,10 +177,27 @@ impl Shell {
                     .expect("encode token amount"),
             )
             .expect("Unable to set genesis balance");
+        storage
+            .write(
+                &alonzo_xan,
+                Amount::whole(1_000_000)
+                    .try_to_vec()
+                    .expect("encode token amount"),
+            )
+            .expect("Unable to set genesis balance");
+        storage
+            .write(
+                &alonzo_xtz,
+                Amount::whole(50_000)
+                    .try_to_vec()
+                    .expect("encode token amount"),
+            )
+            .expect("Unable to set genesis balance");
 
         // default user's public keys for testing
         let ada_pk = key::ed25519::pk_key(&ada);
         let alan_pk = key::ed25519::pk_key(&alan);
+        let alonzo_pk = key::ed25519::pk_key(&alonzo);
 
         storage
             .write(
@@ -178,6 +209,12 @@ impl Shell {
             .write(
                 &alan_pk,
                 wallet::alan_pk().try_to_vec().expect("encode public key"),
+            )
+            .expect("Unable to set genesis user public key");
+        storage
+            .write(
+                &alonzo_pk,
+                wallet::alonzo_pk().try_to_vec().expect("encode public key"),
             )
             .expect("Unable to set genesis user public key");
 
@@ -461,13 +498,13 @@ impl Shell {
         match result {
             Ok(result) => {
                 if result.is_tx_correct() {
-                    log::debug!(
+                    tracing::debug!(
                         "all VPs accepted apply_tx storage modification {:#?}",
                         result
                     );
                     self.write_log.commit_tx();
                 } else {
-                    log::debug!(
+                    tracing::debug!(
                         "some VPs rejected apply_tx storage modification {:#?}",
                         result.vps.rejected_vps
                     );
@@ -505,11 +542,11 @@ impl Shell {
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
         // TODO with VPs in storage, this prints out too much spam
-        // log::debug!("storage to commit {:#?}", self.storage);
+        // tracing::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {
-            log::error!(
+            tracing::error!(
                 "Encountered a storage error while committing a block {:?}",
                 e
             )
@@ -522,7 +559,7 @@ impl Shell {
     /// any.
     pub fn last_state(&mut self) -> Option<(MerkleRoot, u64)> {
         let result = self.storage.load_last_state().unwrap_or_else(|e| {
-            log::error!(
+            tracing::error!(
                 "Encountered an error while reading last state from
         storage {}",
                 e
@@ -531,14 +568,14 @@ impl Shell {
         });
         match &result {
             Some((root, height)) => {
-                log::info!(
+                tracing::info!(
                     "Last state root hash: {}, height: {}",
                     ByteBuf(&root.0),
                     height
                 )
             }
             None => {
-                log::info!("No state could be found")
+                tracing::info!("No state could be found")
             }
         }
         result
@@ -760,6 +797,7 @@ fn run_vp(
     );
     result.changed_keys.extend_from_slice(&keys);
 
+    // TODO for testing, undo
     accept = Ok(false);
 
     match accept {

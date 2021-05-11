@@ -2,9 +2,10 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use anoma::protobuf::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage, Tx,
+use anoma::proto::types::{
+    intent_broadcaster_message, IntentBroadcasterMessage,
 };
+use anoma::types::MatchmakerMessage;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
 };
@@ -28,6 +29,10 @@ pub enum Error {
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
     #[error("Failed initializing the intent broadcaster app: {0}")]
     GossipIntentError(intent_broadcaster::Error),
+    #[error("Failed initializing the topic filter: {0}")]
+    Filter(String),
+    #[error("Failed initializing the gossip network: {0}")]
+    GossipConfig(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -113,7 +118,7 @@ impl Behaviour {
     pub fn new(
         key: Keypair,
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<Receiver<Tx>>)> {
+    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")
@@ -122,7 +127,7 @@ impl Behaviour {
             .message_id_fn(message_id)
             .validate_messages()
             .build()
-            .expect("Valid config");
+            .map_err(|s| Error::GossipConfig(s.to_string()))?;
 
         let filter = match &config.subscription_filter {
             anoma::config::SubscriptionFilter::RegexFilter(regex) => {
@@ -150,7 +155,7 @@ impl Behaviour {
                 gossipsub_config,
                 filter,
             )
-            .expect("Correct configuration");
+            .map_err(|s| Error::Filter(s.to_string()))?;
 
         let (intent_broadcaster_app, matchmaker_event_receiver) =
             intent_broadcaster::GossipIntent::new(&config)
@@ -167,20 +172,20 @@ impl Behaviour {
 
     fn handle_intent(
         &mut self,
-        intent: anoma::protobuf::types::Intent,
+        intent: anoma::proto::types::Intent,
     ) -> MessageAcceptance {
         match self.intent_broadcaster_app.apply_intent(intent) {
             Ok(true) => MessageAcceptance::Accept,
             Ok(false) => MessageAcceptance::Reject,
             Err(e) => {
-                log::error!("Error while trying to apply an intent: {}", e);
+                tracing::error!("Error while trying to apply an intent: {}", e);
                 match e {
                     intent_broadcaster::Error::DecodeError(_) => {
                         panic!("can't happens, because intent already decoded")
                     }
                     intent_broadcaster::Error::MatchmakerInit(err)
                     | intent_broadcaster::Error::Matchmaker(err) => {
-                        log::info!(
+                        tracing::info!(
                             "error while running the matchmaker: {:?}",
                             err
                         );
@@ -200,12 +205,15 @@ impl Behaviour {
                 msg: Some(intent_broadcaster_message::Msg::Intent(intent)),
             }) => self.handle_intent(intent),
             Ok(IntentBroadcasterMessage { msg: None }) => {
-                log::info!("Empty message, rejecting it");
+                tracing::info!("Empty message, rejecting it");
                 MessageAcceptance::Reject
             }
             Err(err) => match err {
                 intent_broadcaster::Error::DecodeError(..) => {
-                    log::info!("error while decoding the intent: {:?}", err);
+                    tracing::info!(
+                        "error while decoding the intent: {:?}",
+                        err
+                    );
                     MessageAcceptance::Reject
                 }
                 intent_broadcaster::Error::MatchmakerInit(..)
@@ -239,7 +247,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                     .subscribe(&IdentTopic::new(topic.into_string()))
                     .map_err(Error::FailedSubscribtion)
                     .unwrap_or_else(|e| {
-                        log::error!("failed to subscribe: {:}", e);
+                        tracing::error!("failed to subscribe: {:}", e);
                         false
                     });
             }

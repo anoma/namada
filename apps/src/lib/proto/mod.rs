@@ -1,14 +1,31 @@
-use std::hash::Hash;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
-use self::types::Intent;
-pub mod services;
-pub mod types;
+mod generated;
+pub use generated::*;
 
 // TODO change timestamp type to chrono (support for serde) or std::time
 #[allow(clippy::derive_hash_xor_eq)]
-impl Hash for Intent {
+impl Hash for types::Intent {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.data.hash(state);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IntentId(pub Vec<u8>);
+
+impl<T: Into<Vec<u8>>> From<T> for IntentId {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+impl IntentId {
+    pub fn new(intent: &types::Intent) -> Self {
+        let mut hasher = DefaultHasher::new();
+        intent.data.hash(&mut hasher);
+        IntentId::from(hasher.finish().to_string())
     }
 }
 

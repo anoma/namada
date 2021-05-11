@@ -5,6 +5,8 @@ Options to consider:
 - slog
 - tracing
 
+The current preference is for tracing in combination with tracing-subscriber (to log collected events and traces), because we have some async and parallelized code. In future, we should also add tracing-appender for rolling file logging.
+
 ## Env_logger
 
 <https://github.com/env-logger-rs/env_logger/>

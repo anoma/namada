@@ -131,11 +131,8 @@ pub mod tx {
     }
 
     /// Update a validity predicate
-    pub fn update_validity_predicate(
-        addr: impl AsRef<str>,
-        code: impl AsRef<[u8]>,
-    ) {
-        let addr = addr.as_ref();
+    pub fn update_validity_predicate(addr: Address, code: impl AsRef<[u8]>) {
+        let addr = addr.encode();
         let code = code.as_ref();
         unsafe {
             _update_validity_predicate(
@@ -193,7 +190,7 @@ pub mod tx {
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
-    /// Log a string. The message will be printed at the [`log::Level::Info`].
+    /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
@@ -509,7 +506,7 @@ pub mod vp {
         valid == 1
     }
 
-    /// Log a string. The message will be printed at the [`log::Level::Info`].
+    /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
@@ -576,13 +573,14 @@ pub mod vp {
 /// Matchmaker environment imports
 pub mod matchmaker {
     pub use core::slice;
+    use std::collections::HashSet;
 
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     /// This macro expects a function with signature:
     ///
     /// ```ignore
-    /// fn match_intent(intent_1: Intent, intent_2: Intent) -> bool
+    /// fn match_intent(matchmaker_data:Vec<u8>, intent_id: Vec<u8>, intent: Vec<u8>) -> bool
     /// ```
     #[macro_export]
     macro_rules! matchmaker {
@@ -598,12 +596,14 @@ pub mod matchmaker {
             /// The module interface callable by wasm runtime
             #[no_mangle]
             extern "C" fn _match_intent(
-                intent_data_1_ptr: u64,
-                intent_data_1_len: u64,
-                intent_data_2_ptr: u64,
-                intent_data_2_len: u64,
+                data_ptr: u64,
+                data_len: u64,
+                intent_id_ptr: u64,
+                intent_id_len: u64,
+                intent_data_ptr: u64,
+                intent_data_len: u64,
             ) -> u64 {
-                let get_intent_data = |ptr, len| {
+                let get_data = |ptr, len| {
                     let slice = unsafe {
                         slice::from_raw_parts(ptr as *const u8, len as _)
                     };
@@ -611,8 +611,9 @@ pub mod matchmaker {
                 };
 
                 if $fn(
-                    get_intent_data(intent_data_1_ptr, intent_data_1_len),
-                    get_intent_data(intent_data_2_ptr, intent_data_2_len),
+                    get_data(data_ptr, data_len),
+                    get_data(intent_id_ptr, intent_id_len),
+                    get_data(intent_data_ptr, intent_data_len),
                 ) {
                     0
                 } else {
@@ -622,11 +623,32 @@ pub mod matchmaker {
         }
     }
 
+    /// Send a transaction with the `tx_data` and the `tx_code` to the ledger
+    /// given in matchmaker parameters (`--tx-code-path` and
+    /// `--ledger-address`).
     pub fn send_match(tx_data: Vec<u8>) {
         unsafe { _send_match(tx_data.as_ptr() as _, tx_data.len() as _) };
     }
 
-    /// Log a string. The message will be printed at the [`log::Level::Info`].
+    /// Update the matchmaker state. This state will be pass on the next run of
+    /// the matchmaker.
+    pub fn update_data(data: Vec<u8>) {
+        unsafe { _update_data(data.as_ptr() as _, data.len() as _) };
+    }
+
+    /// Remove the intents from the matchmaker intent mempool, to call when they
+    /// are fulfilled or outdated.
+    pub fn remove_intents(intents_id: HashSet<Vec<u8>>) {
+        let intents_id_bytes = intents_id.try_to_vec().unwrap();
+        unsafe {
+            _remove_intents(
+                intents_id_bytes.as_ptr() as _,
+                intents_id_bytes.len() as _,
+            )
+        };
+    }
+
+    /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
@@ -639,6 +661,10 @@ pub mod matchmaker {
     extern "C" {
         // Inject a transaction from matchmaker's matched intents to the ledger
         pub fn _send_match(data_ptr: u64, data_len: u64);
+
+        pub fn _update_data(data_ptr: u64, data_len: u64);
+
+        pub fn _remove_intents(intents_id_ptr: u64, intents_id_len: u64);
 
         // Requires a node running with "Info" log level
         pub fn _log_string(str_ptr: u64, str_len: u64);
@@ -673,7 +699,7 @@ pub mod filter {
                 intent_data_ptr: u64,
                 intent_data_len: u64,
             ) -> u64 {
-                let get_intent_data = |ptr, len| {
+                let get_data = |ptr, len| {
                     let slice = unsafe {
                         slice::from_raw_parts(ptr as *const u8, len as _)
                     };
@@ -681,7 +707,7 @@ pub mod filter {
                 };
 
                 if $fn(
-                    get_intent_data(intent_data_ptr, intent_data_len),
+                    get_data(intent_data_ptr, intent_data_len),
                 ) {
                     0
                 } else {
@@ -691,7 +717,7 @@ pub mod filter {
         }
     }
 
-    /// Log a string. The message will be printed at the [`log::Level::Info`].
+    /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {

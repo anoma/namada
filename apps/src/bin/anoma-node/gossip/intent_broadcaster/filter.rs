@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anoma::protobuf::types::Intent;
+use anoma::proto::types::Intent;
 use thiserror::Error;
 
 use crate::vm;

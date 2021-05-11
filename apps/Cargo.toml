@@ -17,9 +17,9 @@ path = "src/lib/mod.rs"
 name = "anoma"
 path = "src/bin/anoma/main.rs"
 
-# Anoma node daemon
+# Anoma node
 [[bin]]
-name = "anomad"
+name = "anoman"
 path = "src/bin/anoma-node/main.rs"
 
 # Anoma client
@@ -40,13 +40,13 @@ bech32 = "0.8.0"
 blake2b-rs = "0.2.0"
 borsh = "0.8.1"
 byteorder = "1.4.2"
+bytesize = "1.0.1"
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2"}
 color-eyre = "0.5.10"
 config = "0.9"
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
-ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend"]}
-env_logger = "0.8.2"
+ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend", "serde"]}
 eyre = "0.6.5"
 futures = "0.3"
 hex = "0.4.2"
@@ -58,10 +58,13 @@ prost-types = "0.7.0"
 pwasm-utils = "0.17.0"
 rand = {version = "0.7", default-features = false}
 rand_core = {version = "0.5", default-features = false}
+rayon = "1.5.0"
+regex = "1.4.5"
 rocksdb = "0.15"
-serde = {version = "1.0.123", features = ["derive"]}
+serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"
+serde_regex = "1.1.0"
 sha2 = "0.9.3"
 sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding", features = ["with_borsh"]}
 # TODO Not yet released on crates
@@ -73,15 +76,12 @@ thiserror = "1.0.24"
 tokio = {version = "1.2.0", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.4.0"
+tracing = "0.1.26"
+tracing-subscriber = "0.2.18"
 wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
 wasmer-engine-jit = "1.0.2"
 wasmparser = "0.77.0"
-rayon = "1.5.0"
-bytesize = "1.0.1"
-regex = "1.4.5"
-serde_regex = "1.1.0"
-
 
 [dev-dependencies]
 cargo-watch = "7.5.0"
@@ -89,4 +89,4 @@ tempdir = "0.3.7"
 wasmer-vm = "1.0.2"
 
 [build-dependencies]
-tonic-build = {version = "0.4.0", features = ["prost"]}
+tonic-build = "0.4.0"

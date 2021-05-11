@@ -5,9 +5,11 @@ use std::fmt::Display;
 
 pub use address::{Address, EstablishedAddress, ImplicitAddress};
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
+use crate::types::key::ed25519::{Keypair, SignedTxData};
 
 pub mod address;
 pub mod intent;
@@ -48,11 +50,21 @@ pub const RESERVED_VP_KEY: &str = "?";
     PartialOrd,
     Ord,
     Debug,
+    Serialize,
+    Deserialize,
 )]
 pub struct BlockHeight(pub u64);
 
 #[derive(
-    Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq, PartialOrd, Ord,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
 )]
 pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 
@@ -66,6 +78,8 @@ pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
     Ord,
     PartialOrd,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub struct Key {
     pub segments: Vec<DbKeySeg>,
@@ -172,6 +186,8 @@ pub trait KeySeg {
     Ord,
     PartialOrd,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub enum DbKeySeg {
     AddressSeg(Address),
@@ -325,6 +341,36 @@ impl KeySeg for Address {
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.clone())
+    }
+}
+
+/// A tx data type to update an account's validity predicate
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct UpdateVp {
+    pub addr: Address,
+    pub vp_code: Vec<u8>,
+}
+
+impl UpdateVp {
+    /// Sign data for transaction with a given keypair.
+    pub fn sign(
+        self,
+        tx_code: impl AsRef<[u8]>,
+        keypair: &Keypair,
+    ) -> SignedTxData {
+        let bytes = self.try_to_vec().expect(
+            "Encoding transfer data to update a validity predicate shouldn't \
+             fail",
+        );
+        SignedTxData::new(keypair, bytes, tx_code)
     }
 }
 
