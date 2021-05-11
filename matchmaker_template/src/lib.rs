@@ -124,18 +124,15 @@ fn add_node(
 ) {
     let new_node = IntentNode { id, intent };
     let new_node_index = graph.add_node(new_node.clone());
-    // need at least one node to be able to add edge
-    if graph.capacity().0 >= 1 {
-        let (connect_sell, connect_buy) =
-            find_to_update_node(&graph, &new_node);
-        let sell_edge = new_node.intent.data.token_sell;
-        let buy_edge = new_node.intent.data.token_buy;
-        for node_index in connect_sell {
-            graph.update_edge(new_node_index, node_index, sell_edge.clone());
-        }
-        for node_index in connect_buy {
-            graph.update_edge(node_index, new_node_index, buy_edge.clone());
-        }
+    let (connect_sell, connect_buy) =
+        find_to_update_node(&graph, &new_node);
+    let sell_edge = new_node.intent.data.token_sell;
+    let buy_edge = new_node.intent.data.token_buy;
+    for node_index in connect_sell {
+        graph.update_edge(new_node_index, node_index, sell_edge.clone());
+    }
+    for node_index in connect_buy {
+        graph.update_edge(node_index, new_node_index, buy_edge.clone());
     }
 }
 
