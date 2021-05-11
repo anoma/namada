@@ -146,6 +146,7 @@ dependencies = [
  "ed25519-dalek",
  "proptest",
  "rand 0.8.3",
+ "serde 1.0.125",
  "sha2 0.9.3",
  "thiserror",
 ]

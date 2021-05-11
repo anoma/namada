@@ -5,6 +5,7 @@ use std::io::{ErrorKind, Write};
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::Signer;
 pub use ed25519_dalek::{Keypair, SecretKey, SignatureError};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -12,10 +13,10 @@ use crate::types::{address, Address, DbKeySeg, Key, KeySeg};
 
 const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PublicKey(ed25519_dalek::PublicKey);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Signature(ed25519_dalek::Signature);
 
 #[derive(
@@ -28,6 +29,8 @@ pub struct Signature(ed25519_dalek::Signature);
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub struct PublicKeyHash(pub(crate) String);
 
@@ -123,7 +126,9 @@ impl SignedTxData {
 }
 
 /// A generic signed data wrapper for Borsh encode-able data.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
 pub struct Signed<T: BorshSerialize + BorshDeserialize> {
     pub data: T,
     pub sig: Signature,
