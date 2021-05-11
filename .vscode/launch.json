@@ -1,15 +1,195 @@
 {
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(OSX) Launch",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceRoot}/target/debug/anomad",
+            "name": "Debug 'anoman run-ledger'",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=anoman",
+                ],
+                "filter": {
+                    "name": "anoman",
+                    "kind": "bin"
+                }
+            },
             "args": [
                 "run-ledger"
             ],
-            "cwd": "${workspaceRoot}",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'anoma'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=Anoma"
+                ],
+                "filter": {
+                    "name": "anoma",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'anoma'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=anoma",
+                    "--package=Anoma"
+                ],
+                "filter": {
+                    "name": "anoma",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'anoma'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=anoma",
+                    "--package=Anoma"
+                ],
+                "filter": {
+                    "name": "anoma",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'anoman'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=anoman",
+                    "--package=Anoma"
+                ],
+                "filter": {
+                    "name": "anoman",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'anoman'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=anoman",
+                    "--package=Anoma"
+                ],
+                "filter": {
+                    "name": "anoman",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'anomac'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=anomac",
+                    "--package=Anoma"
+                ],
+                "filter": {
+                    "name": "anomac",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'anomac'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=anomac",
+                    "--package=Anoma"
+                ],
+                "filter": {
+                    "name": "anomac",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'anoma_shared'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=anoma_shared"
+                ],
+                "filter": {
+                    "name": "anoma_shared",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'anoma_vm_env'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=anoma_vm_env"
+                ],
+                "filter": {
+                    "name": "anoma_vm_env",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
         }
     ]
 }
