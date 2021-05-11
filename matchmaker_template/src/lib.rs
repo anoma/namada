@@ -1,11 +1,3 @@
-use petgraph::graph::{node_index, NodeIndex};
-use petgraph::visit::depth_first_search;
-use petgraph::visit::{Control, DfsEvent};
-use petgraph::{graph::DiGraph, Graph};
-use serde_json;
-use std::collections::HashSet;
-use std::collections::VecDeque;
-
 use anoma_vm_env::{
     matchmaker,
     matchmaker_prelude::{
@@ -14,8 +6,16 @@ use anoma_vm_env::{
         *,
     },
 };
+use petgraph::graph::{node_index, NodeIndex};
+use petgraph::visit::depth_first_search;
+use petgraph::visit::{Control, DfsEvent};
+use petgraph::{graph::DiGraph, Graph};
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::collections::HashSet;
+use std::collections::VecDeque;
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct IntentNode {
     id: Vec<u8>,
     intent: Signed<Intent>,
@@ -47,7 +47,6 @@ fn create_transfer(
 
 fn send_tx(tx_data: IntentTransfers) {
     let tx_data_bytes = tx_data.try_to_vec().unwrap();
-    // remove_intents(matched_intents);
     send_match(tx_data_bytes);
 }
 
@@ -55,35 +54,15 @@ fn decode_intent_data(bytes: &[u8]) -> Signed<Intent> {
     Signed::<Intent>::try_from_slice(&bytes[..]).unwrap()
 }
 
-fn decode_intent_node_data(bytes: &[u8]) -> IntentNode {
-    IntentNode::try_from_slice(&bytes[..]).unwrap()
-}
-
-fn encode_intent_node_data(intent: &IntentNode) -> Vec<u8> {
-    intent.try_to_vec().expect("failed encoding intent")
-}
-
 fn decode_graph(bytes: Vec<u8>) -> DiGraph<IntentNode, Address> {
     if bytes.is_empty() {
         Graph::new()
     } else {
-        let graph: DiGraph<Vec<u8>, String> =
-            serde_json::from_slice(&bytes[..]).expect("error in json format");
-        let g = graph.map(
-            |_index, node_bytes| decode_intent_node_data(node_bytes),
-            |_index, edge_bytes| {
-                Address::decode(edge_bytes).expect("wrong address")
-            },
-        );
-        g
+        serde_json::from_slice(&bytes[..]).expect("error in json format")
     }
 }
 
 fn update_graph_data(graph: DiGraph<IntentNode, Address>) {
-    let graph = graph.map(
-        |_index, node| encode_intent_node_data(node),
-        |_index, edge| edge.encode(),
-    );
     update_data(serde_json::to_vec(&graph).unwrap());
 }
 
@@ -124,8 +103,7 @@ fn add_node(
 ) {
     let new_node = IntentNode { id, intent };
     let new_node_index = graph.add_node(new_node.clone());
-    let (connect_sell, connect_buy) =
-        find_to_update_node(&graph, &new_node);
+    let (connect_sell, connect_buy) = find_to_update_node(&graph, &new_node);
     let sell_edge = new_node.intent.data.token_sell;
     let buy_edge = new_node.intent.data.token_buy;
     for node_index in connect_sell {
