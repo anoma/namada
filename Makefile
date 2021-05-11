@@ -5,7 +5,8 @@ cargo = $(env) cargo
 rustup = $(env) rustup
 debug-env = RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
 debug-cargo = $(env) $(debug-env) cargo
-# nightly build is currently used for rustfmt
+# Nightly build is currently used for rustfmt and clippy.
+# NOTE On change also update `RUSTFMT_TOOLCHAIN` in `apps/build.rs`.
 nightly = nightly-2021-03-09
 
 build:
