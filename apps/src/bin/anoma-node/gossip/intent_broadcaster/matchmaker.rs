@@ -1,4 +1,10 @@
-use anoma::proto::types::{Intent, Tx};
+use anoma::config;
+use anoma::proto::types::Intent;
+use anoma::proto::IntentId;
+use anoma::types::MatchmakerMessage;
+use prost::Message;
+use tendermint::net;
+use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -10,9 +16,12 @@ use crate::vm;
 pub struct Matchmaker {
     mempool: IntentMempool,
     filter: Option<Filter>,
-    inject_tx: Sender<Tx>,
+    inject_mm_message: Sender<MatchmakerMessage>,
     matchmaker_code: Vec<u8>,
     tx_code: Vec<u8>,
+    // the matchmaker's state as arbitrary bytes
+    data: Vec<u8>,
+    ledger_address: net::Address,
 }
 
 #[derive(Error, Debug)]
@@ -33,9 +42,9 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl Matchmaker {
     pub fn new(
-        config: &anoma::config::Matchmaker,
-    ) -> Result<(Self, Receiver<Tx>)> {
-        let (inject_tx, rx) = channel::<Tx>(100);
+        config: &config::Matchmaker,
+    ) -> Result<(Self, Receiver<MatchmakerMessage>)> {
+        let (inject_mm_message, receiver_mm_message) = channel(100);
         let matchmaker_code =
             std::fs::read(&config.matchmaker).map_err(Error::FileFailed)?;
         let tx_code =
@@ -46,15 +55,18 @@ impl Matchmaker {
             .map(Filter::from_file)
             .transpose()
             .map_err(Error::FilterInit)?;
+
         Ok((
             Self {
                 mempool: IntentMempool::new(),
                 filter,
-                inject_tx,
+                inject_mm_message,
                 matchmaker_code,
                 tx_code,
+                data: Vec::new(),
+                ledger_address: config.ledger_address.clone(),
             },
-            rx,
+            receiver_mm_message,
         ))
     }
 
@@ -75,24 +87,42 @@ impl Matchmaker {
             self.mempool
                 .put(intent.clone())
                 .map_err(Error::MempoolFailed)?;
-            let tx_code = &self.tx_code;
             let matchmaker_runner = vm::MatchmakerRunner::new();
-            let matchmaker_code = &self.matchmaker_code;
-            let inject_tx = &self.inject_tx;
-            Ok(self.mempool.find_map(&intent, &|i1: &Intent, i2: &Intent| {
-                matchmaker_runner
-                    .run(
-                        matchmaker_code.clone(),
-                        &i1.data,
-                        &i2.data,
-                        tx_code,
-                        inject_tx.clone(),
-                    )
-                    .map_err(Error::RunnerFailed)
-                    .unwrap()
-            }))
+            Ok(matchmaker_runner
+                .run(
+                    &self.matchmaker_code.clone(),
+                    &self.data,
+                    &IntentId::new(&intent).0,
+                    &intent.data,
+                    &self.tx_code,
+                    self.inject_mm_message.clone(),
+                )
+                .map_err(Error::RunnerFailed)
+                .unwrap())
         } else {
             Ok(false)
+        }
+    }
+
+    pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
+        match mm_message {
+            MatchmakerMessage::InjectTx(tx) => {
+                let mut tx_bytes = vec![];
+                tx.encode(&mut tx_bytes).unwrap();
+                let client =
+                    HttpClient::new(self.ledger_address.clone()).unwrap();
+                let response =
+                    client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
+                println!("{:#?}", response);
+            }
+            MatchmakerMessage::RemoveIntents(intents_id) => {
+                intents_id.into_iter().for_each(|intent_id| {
+                    self.mempool.remove(&IntentId::from(intent_id));
+                });
+            }
+            MatchmakerMessage::UpdateData(mm_data) => {
+                self.data = mm_data;
+            }
         }
     }
 }

@@ -46,8 +46,10 @@ cargo run --bin anoma -- tx --code-path txs/tx_template/tx.wasm --data-path tx.d
 # Setup temporary addresses aliases until we have a better client support
 export ADA=a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx
 export ALAN=a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9
+export ALONZO=a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s
 export XAN=a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3
 export BTC=a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc
+export XTZ=a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9
 
 # Submit a token transfer
 cargo run --bin anomac -- transfer --source $ALAN --target $ADA --token $XAN --amount 10.1 --code-path txs/tx_transfer/tx.wasm
@@ -65,11 +67,12 @@ cargo watch -x "run --bin anoman -- reset-ledger" -x "run --bin anoman -- run"
 cargo run --bin anoma -- run-gossip --rpc
 
 # run gossip node with intent broadcaster, matchmaker and rpc (use default config)
-cargo run --bin anoman -- run-gossip --rpc --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26658"
+cargo run --bin anoman -- run-gossip --rpc --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
 
-# craft two opposite intents
-cargo run --bin anomac -- craft-intent --address $ALAN --token-buy $BTC --amount-buy 20 --token-sell $XAN --amount-sell 10 --file-path intent_A.data
-cargo run --bin anomac -- craft-intent --address $ADA --token-buy $XAN --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_B.data
+# craft intents
+cargo run --bin anomac -- craft-intent --address $ADA    --token-buy $XTZ --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_A.data
+cargo run --bin anomac -- craft-intent --address $ALAN   --token-buy $BTC --amount-buy 20 --token-sell $XAN --amount-sell 30 --file-path intent_B.data
+cargo run --bin anomac -- craft-intent --address $ALONZO --token-buy $XAN --amount-buy 30 --token-sell $XTZ --amount-sell 10 --file-path intent_C.data
 
 # Subscribe to new network
 cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "asset_v1"
@@ -91,4 +94,6 @@ To change the log level, set `ANOMA_LOG` environment variable to one of:
 - `debug`
 - `trace`
 
-To reduce amount of logging from Tendermint ABCI, which has a lot of `debug` logging, use e.g. `ANOMA_LOG=debug,tendermint_abci=warn`.
+The default is set to `info` for all the modules, expect for Tendermint ABCI, which has a lot of `debug` logging.
+
+For more fine-grained logging levels settings, please refer to the [tracing subscriber docs](https://docs.rs/tracing-subscriber/0.2.18/tracing_subscriber/struct.EnvFilter.html#directives) for more information.

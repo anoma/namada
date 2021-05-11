@@ -1,6 +1,7 @@
 //! A basic fungible token
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 
 use crate::types::key::ed25519::{Keypair, SignedTxData};
 use crate::types::{Address, DbKeySeg, Key, KeySeg};
@@ -17,6 +18,9 @@ use crate::types::{Address, DbKeySeg, Key, KeySeg};
     PartialOrd,
     Ord,
     Debug,
+    Hash,
+    Serialize,
+    Deserialize,
 )]
 pub struct Amount {
     micro: u64,
@@ -105,7 +109,18 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
 }
 
 /// A simple 2-party token transfer
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
 pub struct Transfer {
     pub source: Address,
     pub target: Address,

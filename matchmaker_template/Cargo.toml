@@ -11,6 +11,9 @@ crate-type = ["cdylib"]
 anoma_shared = {path = "../shared"}
 anoma_vm_env = {path = "../vm_env"}
 borsh = "0.8.2"
+petgraph = {version = "0.5.1", features = [ "serde-1" ]}
+serde = "1.0.125"
+serde_json = "1.0.64"
 wee_alloc = "0.4.5"
 
 [profile.release]

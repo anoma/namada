@@ -9,6 +9,7 @@ use std::str::FromStr;
 use libp2p::multiaddr::Multiaddr;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tendermint::net;
 use thiserror::Error;
 
 use crate::gossiper::Gossiper;
@@ -86,7 +87,7 @@ impl Default for Ledger {
 pub struct Matchmaker {
     pub matchmaker: PathBuf,
     pub tx_code: PathBuf,
-    pub ledger_address: SocketAddr,
+    pub ledger_address: net::Address,
     pub filter: Option<PathBuf>,
 }
 
@@ -184,7 +185,7 @@ impl Config {
             let mut file = File::create(file_path).map_err(Error::FileError)?;
             let toml = toml::ser::to_string(&self).map_err(|err| {
                 if let toml::ser::Error::ValueAfterTable = err {
-                    log::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
+                    tracing::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
                 }
                 Error::TomlError(err)
             })?;
