@@ -73,7 +73,7 @@ anomac transfer --source $ALICE --target $BOB --token $XAN --amount 10.1 --code-
 
 This client command will take care of signing the transaction using your key.
 
-### Update an account's validity predicate
+### ♼ Update an account's validity predicate
 
 To update an account's validity predicate, you can customize the default user's VP at `vps/vp_user/src/lib.rs`, or built your own from scratch using `vps/vp_template/src/lib.rs`. To deploy to, use e.g.:
 
