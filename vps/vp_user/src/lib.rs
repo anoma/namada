@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
 use anoma_vm_env::validity_predicate;
-use anoma_vm_env::vp_prelude::{
-    intent::{Intent, IntentTransfers},
-    key::ed25519::{Signed, SignedTxData},
-    *,
-};
+use anoma_vm_env::vp_prelude::intent::{Intent, IntentTransfers};
+use anoma_vm_env::vp_prelude::key::ed25519::{Signed, SignedTxData};
+use anoma_vm_env::vp_prelude::*;
+
+const VP: &[u8] = include_bytes!("../../vp_template/vp.wasm");
 
 validity_predicate! {
     fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: Vec<Key>, verifiers: HashSet<Address>) -> bool {
@@ -14,49 +14,55 @@ validity_predicate! {
             addr, keys_changed, verifiers
         ));
 
-        // TODO memoize?
-        let valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
-            Ok(tx) => {
-                let pk = key::ed25519::get(&addr);
-                match pk {
-                    None => false,
-                    Some(pk) => {
-                        verify_tx_signature(&pk, &tx.data, &tx.sig)
-                    }
-                }
-            },
-            _ => false,
-        };
+        let result = eval(VP.to_vec(), vec![1_u8, 0_u8]);
+        log_string(format!("eval result {}", result));
 
-        // TODO memoize?
-        // TODO this is not needed for matchmaker, maybe we should have a different VP?
-        let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
 
-        for key in keys_changed.iter() {
-            match token::is_any_token_balance_key(key) {
-                Some(owner) if owner == &addr => {
-                    let key = key.to_string();
-                    let pre: token::Amount = read_pre(&key).unwrap_or_default();
-                    let post: token::Amount = read_post(&key).unwrap_or_default();
-                    let change = post.change() - pre.change();
-                    log_string(format!(
-                        "token key: {}, change: {}, valid_sig: {}, valid_intent: {}",
-                        key, change, valid_sig, valid_intent,
-                    ));
-                    // debit has to signed, credit doesn't
-                    if change < 0 && !valid_sig && !valid_intent {
-                        return false;
-                    }
-                },
-                _ => {
-                    // decline any other changes unless the signature is valid
-                    if !valid_sig {
-                        return false;
-                    }
-                }
-            }
-        }
         true
+
+        // // TODO memoize?
+        // let valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
+        //     Ok(tx) => {
+        //         let pk = key::ed25519::get(&addr);
+        //         match pk {
+        //             None => false,
+        //             Some(pk) => {
+        //                 verify_tx_signature(&pk, &tx.data, &tx.sig)
+        //             }
+        //         }
+        //     },
+        //     _ => false,
+        // };
+
+        // // TODO memoize?
+        // // TODO this is not needed for matchmaker, maybe we should have a different VP?
+        // let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
+
+        // for key in keys_changed.iter() {
+        //     match token::is_any_token_balance_key(key) {
+        //         Some(owner) if owner == &addr => {
+        //             let key = key.to_string();
+        //             let pre: token::Amount = read_pre(&key).unwrap_or_default();
+        //             let post: token::Amount = read_post(&key).unwrap_or_default();
+        //             let change = post.change() - pre.change();
+        //             log_string(format!(
+        //                 "token key: {}, change: {}, valid_sig: {}, valid_intent: {}",
+        //                 key, change, valid_sig, valid_intent,
+        //             ));
+        //             // debit has to signed, credit doesn't
+        //             if change < 0 && !valid_sig && !valid_intent {
+        //                 return false;
+        //             }
+        //         },
+        //         _ => {
+        //             // decline any other changes unless the signature is valid
+        //             if !valid_sig {
+        //                 return false;
+        //             }
+        //         }
+        //     }
+        // }
+        // true
     }
 }
 
@@ -135,5 +141,6 @@ fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
         ));
     }
     res
-    // TODO once an intent is fulfilled, it should be invalidated somehow to prevent replay
+    // TODO once an intent is fulfilled, it should be invalidated somehow to
+    // prevent replay
 }
