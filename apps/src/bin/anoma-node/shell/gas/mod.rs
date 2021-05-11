@@ -96,7 +96,7 @@ impl BlockGasMeter {
     /// Add the base transaction fee and the fee per transaction byte that's
     /// charged the moment we try to apply the transaction.
     pub fn add_base_transaction_fee(&mut self, bytes_len: usize) -> Result<()> {
-        log::info!("add_base_transaction_fee {}", bytes_len);
+        tracing::info!("add_base_transaction_fee {}", bytes_len);
         self.add(BASE_TRANSACTION_FEE)?;
         self.add(bytes_len as u64 * TX_GAS_PER_BYTE)
     }

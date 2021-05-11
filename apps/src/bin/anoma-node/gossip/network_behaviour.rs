@@ -173,14 +173,14 @@ impl Behaviour {
             Ok(true) => MessageAcceptance::Accept,
             Ok(false) => MessageAcceptance::Reject,
             Err(e) => {
-                log::error!("Error while trying to apply an intent: {}", e);
+                tracing::error!("Error while trying to apply an intent: {}", e);
                 match e {
                     intent_broadcaster::Error::DecodeError(_) => {
                         panic!("can't happens, because intent already decoded")
                     }
                     intent_broadcaster::Error::MatchmakerInit(err)
                     | intent_broadcaster::Error::Matchmaker(err) => {
-                        log::info!(
+                        tracing::info!(
                             "error while running the matchmaker: {:?}",
                             err
                         );
@@ -200,12 +200,15 @@ impl Behaviour {
                 msg: Some(intent_broadcaster_message::Msg::Intent(intent)),
             }) => self.handle_intent(intent),
             Ok(IntentBroadcasterMessage { msg: None }) => {
-                log::info!("Empty message, rejecting it");
+                tracing::info!("Empty message, rejecting it");
                 MessageAcceptance::Reject
             }
             Err(err) => match err {
                 intent_broadcaster::Error::DecodeError(..) => {
-                    log::info!("error while decoding the intent: {:?}", err);
+                    tracing::info!(
+                        "error while decoding the intent: {:?}",
+                        err
+                    );
                     MessageAcceptance::Reject
                 }
                 intent_broadcaster::Error::MatchmakerInit(..)
@@ -239,7 +242,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                     .subscribe(&IdentTopic::new(topic.into_string()))
                     .map_err(Error::FailedSubscribtion)
                     .unwrap_or_else(|e| {
-                        log::error!("failed to subscribe: {:}", e);
+                        tracing::error!("failed to subscribe: {:}", e);
                         false
                     });
             }

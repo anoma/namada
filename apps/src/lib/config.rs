@@ -184,7 +184,7 @@ impl Config {
             let mut file = File::create(file_path).map_err(Error::FileError)?;
             let toml = toml::ser::to_string(&self).map_err(|err| {
                 if let toml::ser::Error::ValueAfterTable = err {
-                    log::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
+                    tracing::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
                 }
                 Error::TomlError(err)
             })?;
