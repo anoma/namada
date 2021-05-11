@@ -73,8 +73,7 @@ fn find_to_update_node(
     let start = node_index(0);
     let mut connect_sell = Vec::new();
     let mut connect_buy = Vec::new();
-    let graph_immut = graph;
-    depth_first_search(graph_immut, Some(start), |event| {
+    depth_first_search(graph, Some(start), |event| {
         if let DfsEvent::Discover(index, _time) = event {
             let current_node = &graph[index];
             if new_node.intent.data.token_sell

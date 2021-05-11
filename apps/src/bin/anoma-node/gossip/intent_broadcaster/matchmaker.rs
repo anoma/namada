@@ -20,6 +20,7 @@ pub struct Matchmaker {
     inject_mm_message: Sender<MatchmakerMessage>,
     matchmaker_code: Vec<u8>,
     tx_code: Vec<u8>,
+    // the matchmaker's state as arbitrary bytes
     data: Vec<u8>,
     ledger_address: SocketAddr,
 }

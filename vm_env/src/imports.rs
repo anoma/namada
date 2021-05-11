@@ -580,7 +580,7 @@ pub mod matchmaker {
     /// This macro expects a function with signature:
     ///
     /// ```ignore
-    /// fn match_intent(matchmaker_data:Vec<u8>, intent_id: Vec<u8>, intent: Intent) -> bool
+    /// fn match_intent(matchmaker_data:Vec<u8>, intent_id: Vec<u8>, intent: Vec<u8>) -> bool
     /// ```
     #[macro_export]
     macro_rules! matchmaker {

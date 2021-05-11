@@ -1299,7 +1299,7 @@ fn remove_intents(
     let (intents_id_bytes, _gas) = env
         .memory
         .read_bytes(intents_id_ptr, intents_id_len as _)
-        .expect("Cannot read the key from memory");
+        .expect("Cannot read the intents from memory");
 
     let intents_id =
         HashSet::<Vec<u8>>::try_from_slice(&intents_id_bytes).unwrap();
@@ -1336,7 +1336,7 @@ fn update_data(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
     let (data, _gas) = env
         .memory
         .read_bytes(data_ptr, data_len as _)
-        .expect("Cannot read the key from memory");
+        .expect("Cannot read the data from memory");
 
     env.inject_mm_message
         .try_send(MatchmakerMessage::UpdateData(data))
