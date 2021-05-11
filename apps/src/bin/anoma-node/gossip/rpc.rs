@@ -32,7 +32,7 @@ impl RpcService for Rpc {
                 Status::data_loss(format!{"failed to receive response from gossip app: {:?}", err}))?;
             Ok(TonicResponse::new(response))
         } else {
-            log::error!("Received empty rpc message, nothing can be done");
+            tracing::error!("Received empty rpc message, nothing can be done");
             Ok(TonicResponse::new(RpcResponse::default()))
         }
     }

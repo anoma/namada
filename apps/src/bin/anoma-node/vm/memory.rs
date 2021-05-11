@@ -168,11 +168,8 @@ pub fn write_matchmaker_inputs(
     let intent_data_ptr = intent_id_ptr + intent_id_len;
     let intent_data_len = intent_data.as_ref().len() as _;
 
-    log::info!("write_data_inputs {}", data_len);
     write_memory_bytes(memory, data_ptr, data)?;
-    log::info!("write_data_inputs {}", intent_id_len);
     write_memory_bytes(memory, intent_id_ptr, intent_id)?;
-    log::info!("write_data_inputs {}", intent_data_len);
     write_memory_bytes(memory, intent_data_ptr, intent_data)?;
 
     Ok(MatchmakerCallInput {
@@ -197,7 +194,7 @@ pub fn write_filter_inputs(
     let intent_data_ptr = 0;
     let intent_data_len = intent_data.as_ref().len() as _;
 
-    log::info!("write_data_inputs of len {}", intent_data_len);
+    tracing::info!("write_data_inputs of len {}", intent_data_len);
     write_memory_bytes(memory, intent_data_ptr, intent_data)?;
 
     Ok(FilterCallInput {
@@ -209,7 +206,7 @@ pub fn write_filter_inputs(
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
 fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
-    log::debug!(
+    tracing::debug!(
         "check_bounds pages {}, data_size {}, offset + len {}",
         memory.size().0,
         memory.data_size(),
@@ -222,7 +219,7 @@ fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
         // Ceiling division
         let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
             / wasmer::WASM_PAGE_SIZE) as u32;
-        log::info!("trying to grow memory by {} pages", req_pages);
+        tracing::info!("trying to grow memory by {} pages", req_pages);
         memory
             .grow(req_pages)
             .map(|_pages| ())
@@ -276,7 +273,7 @@ impl AnomaMemory {
     ) -> std::result::Result<(), HostEnvInitError> {
         let memory = exports.get_memory("memory")?;
         if !self.inner.initialize(memory.clone()) {
-            log::error!("wasm memory is already initialized");
+            tracing::error!("wasm memory is already initialized");
         }
         Ok(())
     }

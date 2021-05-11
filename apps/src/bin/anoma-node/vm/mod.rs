@@ -358,7 +358,7 @@ impl VpRunner {
                 verifiers_len,
             )
             .map_err(Error::RuntimeError)?;
-        log::debug!("is_valid {}", is_valid);
+        tracing::debug!("is_valid {}", is_valid);
         Ok(is_valid == 1)
     }
 }
@@ -545,6 +545,7 @@ fn get_gas_rules() -> rules::Set {
 /// (e.g. transaction and validity predicates)
 pub fn validate_untrusted_wasm(wasm_code: impl AsRef<[u8]>) -> Result<()> {
     let mut validator = Validator::new();
+
     let features = WasmFeatures {
         reference_types: false,
         multi_value: false,

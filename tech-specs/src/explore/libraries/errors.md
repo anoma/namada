@@ -15,6 +15,8 @@ The considered DBs:
 - anyhow
 - eyre
 
+The current preference is to use eyre at the outermost modules to print any encountered errors nicely back to the user and thiserror elsewhere.
+
 ## Thiserror
 
 - <https://crates.io/crates/thiserror>
