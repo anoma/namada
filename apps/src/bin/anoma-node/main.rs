@@ -1,5 +1,6 @@
 mod cli;
 mod gossip;
+mod protocol;
 mod shell;
 mod vm;
 use color_eyre::eyre::Result;

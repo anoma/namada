@@ -26,7 +26,8 @@ use tendermint_proto::abci::{
     ResponseOfferSnapshot, ResponseQuery, ResponseSetOption,
 };
 
-use super::{MerkleRoot, TxResult};
+use super::MerkleRoot;
+use crate::protocol::TxResult;
 use crate::shell::MempoolTxType;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
