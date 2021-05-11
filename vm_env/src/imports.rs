@@ -582,7 +582,6 @@ pub mod matchmaker {
     /// ```ignore
     /// fn match_intent(matchmaker_data:Vec<u8>, intent_id: Vec<u8>, intent: Intent) -> bool
     /// ```
-    /// ```
     #[macro_export]
     macro_rules! matchmaker {
         (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
@@ -624,14 +623,21 @@ pub mod matchmaker {
         }
     }
 
+    /// Send a transaction with the `tx_data` and the `tx_code` to the ledger
+    /// given in matchmaker parameters (`--tx-code-path` and
+    /// `--ledger-address`).
     pub fn send_match(tx_data: Vec<u8>) {
         unsafe { _send_match(tx_data.as_ptr() as _, tx_data.len() as _) };
     }
 
+    /// Update the matchmaker state. This state will be pass on the next run of
+    /// the matchmaker.
     pub fn update_data(data: Vec<u8>) {
         unsafe { _update_data(data.as_ptr() as _, data.len() as _) };
     }
 
+    /// Remove the intents from the matchmaker intent mempool, to call when they
+    /// are fulfilled or outdated.
     pub fn remove_intents(intents_id: HashSet<Vec<u8>>) {
         let intents_id_bytes = intents_id.try_to_vec().unwrap();
         unsafe {
