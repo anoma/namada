@@ -80,6 +80,7 @@ cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "a
 # Submit the intents (need a rpc server), hardcoded address rpc node address
 cargo run --bin anomac -- intent --node "http://[::1]:39111" --data-path intent_A.data --topic "asset_v1"
 cargo run --bin anomac -- intent --node "http://[::1]:39111" --data-path intent_B.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://[::1]:39111" --data-path intent_C.data --topic "asset_v1"
 
 # Format the code
 make fmt

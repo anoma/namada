@@ -487,12 +487,12 @@ pub fn update_gossip_config(
     } else if let (Some(matchmaker), Some(tx_code), Some(ledger_address)) = (
         matchmaker_arg.as_ref(),
         tx_code_arg.as_ref(),
-        ledger_address_arg,
+        &ledger_address_arg,
     ) {
         let matchmaker_cfg = Some(config::Matchmaker {
             matchmaker: matchmaker.clone(),
             tx_code: tx_code.clone(),
-            ledger_address,
+            ledger_address: ledger_address.clone(),
             filter: filter_arg.clone(),
         });
         config.matchmaker = matchmaker_cfg
