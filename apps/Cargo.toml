@@ -86,6 +86,7 @@ wasmparser = "0.77.0"
 
 [dev-dependencies]
 cargo-watch = "7.5.0"
+proptest = "1.0.0"
 tempdir = "0.3.7"
 wasmer-vm = "1.0.2"
 
