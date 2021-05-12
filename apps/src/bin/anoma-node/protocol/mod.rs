@@ -28,35 +28,46 @@ pub enum Error {
     #[error("Gas error: {0}")]
     GasError(gas::Error),
     #[error("Error executing VP for addresses: {0:?}")]
-    VpExecutionError(HashSet<Address>),
+    VpRunnerError(vm::Error),
     #[error("Transaction gas overflow")]
     GasOverflow,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Transaction application result
 #[derive(Clone, Debug)]
-pub struct VpsGas {
-    max: u64,
-    rest: Vec<u64>,
+pub struct TxResult {
+    pub gas_used: u64,
+    pub vps_result: VpsResult,
 }
 
-impl Default for VpsGas {
-    fn default() -> Self {
-        Self {
-            max: 0,
-            rest: Vec::new(),
-        }
+impl TxResult {
+    pub fn is_accepted(&self) -> bool {
+        self.vps_result.rejected_vps.is_empty()
     }
 }
 
+/// Result of checking a transaction with validity predicates
 #[derive(Clone, Debug)]
 pub struct VpsResult {
     pub accepted_vps: HashSet<Address>,
     pub rejected_vps: HashSet<Address>,
     pub changed_keys: Vec<Key>,
     pub gas_used: VpsGas,
-    pub have_error: bool,
+    pub errors: Vec<(Address, String)>,
+}
+
+impl Default for VpsResult {
+    fn default() -> Self {
+        Self {
+            accepted_vps: HashSet::default(),
+            rejected_vps: HashSet::default(),
+            changed_keys: Vec::default(),
+            gas_used: VpsGas::default(),
+            errors: Vec::default(),
+        }
+    }
 }
 
 impl VpsGas {
@@ -82,93 +93,131 @@ impl VpsGas {
     }
 }
 
-impl VpsResult {
-    pub fn new(
-        accepted_vps: HashSet<Address>,
-        rejected_vps: HashSet<Address>,
-        changed_keys: Vec<Key>,
-        gas_used: VpsGas,
-        have_error: bool,
-    ) -> Self {
-        Self {
-            accepted_vps,
-            rejected_vps,
-            changed_keys,
-            gas_used,
-            have_error,
-        }
-    }
+/// Gas meter for VPs parallel runs
+#[derive(Clone, Debug)]
+pub struct VpsGas {
+    max: u64,
+    rest: Vec<u64>,
 }
 
-impl fmt::Display for VpsResult {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Vps -> accepted: {:?}. rejected: {:?}, keys: {:?}, error: {:}",
-            self.accepted_vps,
-            self.rejected_vps,
-            self.changed_keys,
-            self.have_error
-        )
-    }
-}
-
-impl Default for VpsResult {
+impl Default for VpsGas {
     fn default() -> Self {
         Self {
-            accepted_vps: HashSet::default(),
-            rejected_vps: HashSet::default(),
-            changed_keys: Vec::default(),
-            gas_used: VpsGas::default(),
-            have_error: false,
+            max: 0,
+            rest: Vec::new(),
         }
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct TxResult {
-    pub gas_used: u64,
-    pub vps: VpsResult,
-    pub valid: bool,
+/// Apply a given transaction
+pub fn apply_tx(
+    tx_bytes: &[u8],
+    block_gas_meter: &mut BlockGasMeter,
+    write_log: &mut WriteLog,
+    storage: &PersistentStorage,
+) -> Result<TxResult> {
+    block_gas_meter
+        .add_base_transaction_fee(tx_bytes.len())
+        .map_err(Error::GasError)?;
+
+    let tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
+
+    let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
+
+    let vps_result =
+        check_vps(&tx, storage, block_gas_meter, write_log, &verifiers)?;
+
+    let gas_used = block_gas_meter
+        .finalize_transaction()
+        .map_err(Error::GasError)?;
+
+    Ok(TxResult {
+        gas_used,
+        vps_result,
+    })
 }
 
-impl TxResult {
-    pub fn new(gas: Result<u64>, vps: VpsResult) -> Self {
-        let mut tx_result = TxResult {
-            gas_used: gas.unwrap_or(0),
-            vps,
-            valid: false,
-        };
-        tx_result.valid = tx_result.is_tx_correct();
-        tx_result
-    }
+/// Execute a transaction code. Returns verifiers requested by the transaction.
+fn execute_tx(
+    tx: &Tx,
+    storage: &PersistentStorage,
+    gas_meter: &mut BlockGasMeter,
+    write_log: &mut WriteLog,
+) -> Result<HashSet<Address>> {
+    let tx_code = tx.code.clone();
+    gas_meter
+        .add_compiling_fee(tx_code.len())
+        .map_err(Error::GasError)?;
+    let tx_data = tx.data.clone().unwrap_or_default();
+    let tx_runner = TxRunner::new();
 
-    pub fn is_tx_correct(&self) -> bool {
-        self.vps.rejected_vps.is_empty()
-    }
+    tx_runner
+        .run(storage, write_log, gas_meter, tx_code, tx_data)
+        .map_err(Error::TxRunnerError)
 }
 
-impl fmt::Display for TxResult {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Transaction is {}. Gas used: {}, vps: {}",
-            if self.valid { "valid" } else { "invalid" },
-            self.gas_used,
-            self.vps.to_string(),
-        )
-    }
+/// Check the acceptance of a transaction by validity predicates
+fn check_vps(
+    tx: &Tx,
+    storage: &PersistentStorage,
+    gas_meter: &mut BlockGasMeter,
+    write_log: &mut WriteLog,
+    verifiers_from_tx: &HashSet<Address>,
+) -> Result<VpsResult> {
+    let verifiers = get_verifiers(write_log, verifiers_from_tx);
+
+    let tx_data = tx.data.clone().unwrap_or_default();
+    let tx_code = tx.code.clone();
+
+    // collect the changed storage keys and VPs for the verifiers
+    let verifiers: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers
+        .iter()
+        .map(|(addr, keys)| {
+            let vp = storage
+                .validity_predicate(&addr)
+                .map_err(Error::StorageError)?;
+
+            gas_meter
+                .add_compiling_fee(vp.len())
+                .map_err(Error::GasError)?;
+
+            Ok((addr.clone(), keys.clone(), vp))
+        })
+        .collect::<std::result::Result<_, _>>()?;
+
+    let initial_gas = gas_meter.get_current_transaction_gas();
+
+    let mut vps_result = execute_vps(
+        verifiers,
+        tx_data,
+        tx_code,
+        storage,
+        write_log,
+        initial_gas,
+    )?;
+
+    gas_meter
+        .add(vps_result.gas_used.max)
+        .map_err(Error::GasError)?;
+    gas_meter
+        .add_parallel_fee(&mut vps_result.gas_used.rest)
+        .map_err(Error::GasError)?;
+
+    Ok(vps_result)
 }
 
+/// Get verifiers from storage changes written to a write log
 fn get_verifiers(
     write_log: &WriteLog,
-    verifiers: &HashSet<Address>,
+    verifiers_from_tx: &HashSet<Address>,
 ) -> HashMap<Address, Vec<Key>> {
     let mut verifiers =
-        verifiers.iter().fold(HashMap::new(), |mut acc, addr| {
-            acc.insert(addr.clone(), vec![]);
-            acc
-        });
+        verifiers_from_tx
+            .iter()
+            .fold(HashMap::new(), |mut acc, addr| {
+                acc.insert(addr.clone(), vec![]);
+                acc
+            });
     // get changed keys grouped by the address
     for key in write_log.get_changed_keys() {
         for addr in &key.find_addresses() {
@@ -189,109 +238,8 @@ fn get_verifiers(
     verifiers
 }
 
-pub fn run_tx(
-    tx_bytes: &[u8],
-    block_gas_meter: &mut BlockGasMeter,
-    write_log: &mut WriteLog,
-    storage: &PersistentStorage,
-) -> Result<TxResult> {
-    block_gas_meter
-        .add_base_transaction_fee(tx_bytes.len())
-        .map_err(Error::GasError)?;
-
-    let tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
-
-    // Execute the transaction code
-    let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
-
-    let vps_result =
-        check_vps(&tx, storage, block_gas_meter, write_log, &verifiers)?;
-
-    let gas = block_gas_meter
-        .finalize_transaction()
-        .map_err(Error::GasError);
-
-    Ok(TxResult::new(gas, vps_result))
-}
-
-fn check_vps(
-    tx: &Tx,
-    storage: &PersistentStorage,
-    gas_meter: &mut BlockGasMeter,
-    write_log: &mut WriteLog,
-    verifiers: &HashSet<Address>,
-) -> Result<VpsResult> {
-    let verifiers = get_verifiers(write_log, verifiers);
-
-    let tx_data = tx.data.clone().unwrap_or_default();
-    let tx_code = tx.code.clone();
-
-    let verifiers_vps: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers
-        .iter()
-        .map(|(addr, keys)| {
-            let vp = storage
-                .validity_predicate(&addr)
-                .map_err(Error::StorageError)?;
-
-            gas_meter
-                .add_compiling_fee(vp.len())
-                .map_err(Error::GasError)?;
-
-            Ok((addr.clone(), keys.clone(), vp))
-        })
-        .collect::<std::result::Result<_, _>>()?;
-
-    let initial_gas = gas_meter.get_current_transaction_gas();
-
-    let mut vps_result = run_vps(
-        verifiers_vps,
-        tx_data,
-        tx_code,
-        storage,
-        write_log,
-        initial_gas,
-    )?;
-
-    gas_meter
-        .add(vps_result.gas_used.max)
-        .map_err(Error::GasError)?;
-    gas_meter
-        .add_parallel_fee(&mut vps_result.gas_used.rest)
-        .map_err(Error::GasError)?;
-
-    Ok(vps_result)
-}
-
-fn execute_tx(
-    tx: &Tx,
-    storage: &PersistentStorage,
-    gas_meter: &mut BlockGasMeter,
-    write_log: &mut WriteLog,
-) -> Result<HashSet<Address>> {
-    let tx_code = tx.code.clone();
-    gas_meter
-        .add_compiling_fee(tx_code.len())
-        .map_err(Error::GasError)?;
-    let tx_data = tx.data.clone().unwrap_or_default();
-    let mut verifiers = HashSet::new();
-
-    let tx_runner = TxRunner::new();
-
-    tx_runner
-        .run(
-            storage,
-            write_log,
-            &mut verifiers,
-            gas_meter,
-            tx_code,
-            tx_data,
-        )
-        .map_err(Error::TxRunnerError)?;
-
-    Ok(verifiers)
-}
-
-fn run_vps(
+/// Execute verifiers' validity predicates
+fn execute_vps(
     verifiers: Vec<(Address, Vec<Key>, Vec<u8>)>,
     tx_data: Vec<u8>,
     tx_code: Vec<u8>,
@@ -307,7 +255,7 @@ fn run_vps(
     verifiers
         .par_iter()
         .try_fold(VpsResult::default, |result, (addr, keys, vp)| {
-            run_vp(
+            execute_vp(
                 result,
                 tx_data.clone(),
                 tx_code.clone(),
@@ -323,6 +271,7 @@ fn run_vps(
         })
 }
 
+/// Merge VP results from parallel runs
 fn merge_vp_results(
     a: VpsResult,
     mut b: VpsResult,
@@ -332,6 +281,8 @@ fn merge_vp_results(
     let rejected_vps = a.rejected_vps.union(&b.rejected_vps).collect();
     let mut changed_keys = a.changed_keys;
     changed_keys.append(&mut b.changed_keys);
+    let mut errors = a.errors;
+    errors.append(&mut b.errors);
     let mut gas_used = a.gas_used;
 
     // Returning error from here will short-circuit the VP parallel execution.
@@ -340,17 +291,18 @@ fn merge_vp_results(
 
     gas_used.merge(&mut b.gas_used, initial_gas)?;
 
-    Ok(VpsResult::new(
+    Ok(VpsResult {
         accepted_vps,
         rejected_vps,
         changed_keys,
         gas_used,
-        a.have_error || b.have_error,
-    ))
+        errors,
+    })
 }
 
+/// Execute a validity predicates
 #[allow(clippy::too_many_arguments)]
-fn run_vp(
+fn execute_vp(
     mut result: VpsResult,
     tx_data: Vec<u8>,
     tx_code: Vec<u8>,
@@ -362,21 +314,20 @@ fn run_vp(
 ) -> Result<VpsResult> {
     let vp_runner = VpRunner::new();
 
-    let mut accept = vp_runner.run(
-        vp,
-        tx_data,
-        &tx_code,
-        addr,
-        storage,
-        write_log,
-        vp_gas_meter,
-        keys.to_vec(),
-        addresses,
-    );
+    let accept = vp_runner
+        .run(
+            vp,
+            tx_data,
+            &tx_code,
+            addr,
+            storage,
+            write_log,
+            vp_gas_meter,
+            keys.to_vec(),
+            addresses,
+        )
+        .map_err(Error::VpRunnerError);
     result.changed_keys.extend_from_slice(&keys);
-
-    // TODO for testing, undo
-    accept = Ok(false);
 
     match accept {
         Ok(accepted) => {
@@ -386,9 +337,9 @@ fn run_vp(
                 result.accepted_vps.insert(addr.clone());
             }
         }
-        Err(_) => {
+        Err(err) => {
             result.rejected_vps.insert(addr.clone());
-            result.have_error = true;
+            result.errors.push((addr.clone(), err.to_string()));
         }
     }
 
@@ -396,8 +347,60 @@ fn run_vp(
         // Returning error from here will short-circuit the VP parallel
         // execution. It's important that we only short-circuit gas
         // errors to get deterministic gas costs
-        Err(Error::VpExecutionError(result.rejected_vps))
+        Err(Error::GasOverflow)
     } else {
         Ok(result)
+    }
+}
+
+impl fmt::Display for TxResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Transaction is {}. Gas used: {}, VPs result: {}",
+            if self.is_accepted() {
+                "valid"
+            } else {
+                "invalid"
+            },
+            self.gas_used,
+            self.vps_result,
+        )
+    }
+}
+
+impl fmt::Display for VpsResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}{}{}{}",
+            iterable_to_string("Accepted", self.accepted_vps.iter()),
+            iterable_to_string("Rejected", self.rejected_vps.iter()),
+            iterable_to_string("Changed keys", self.changed_keys.iter()),
+            iterable_to_string(
+                "Errors",
+                self.errors
+                    .iter()
+                    .map(|(addr, err)| format!("{} in {}", err, addr))
+            ),
+        )
+    }
+}
+
+fn iterable_to_string<T: fmt::Display>(
+    label: &str,
+    iter: impl Iterator<Item = T>,
+) -> String {
+    let mut iter = iter.peekable();
+    if iter.peek().is_none() {
+        "".into()
+    } else {
+        format!(
+            " {}: {};",
+            label,
+            iter.map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
     }
 }

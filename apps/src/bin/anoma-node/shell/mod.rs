@@ -2,7 +2,6 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
-use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
 
@@ -35,8 +34,8 @@ pub enum Error {
     AbciChannelSendError(String),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
-    #[error("Error occurred in the protocol: {0}")]
-    ProtocolError(protocol::Error),
+    #[error("Error trying to apply a transaction: {0}")]
+    TxError(protocol::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -342,35 +341,21 @@ impl Shell {
     }
 
     /// Validate and apply a transaction.
-    pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
-        let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = self.write_log.clone();
-        let result = protocol::run_tx(
-            tx_bytes,
-            &mut gas_meter,
-            &mut write_log,
-            &self.storage,
-        )
-        .map_err(Error::ProtocolError)?;
-        Ok(result.to_string())
-    }
-
-    /// Validate and apply a transaction.
     pub fn apply_tx(
         &mut self,
         tx_bytes: &[u8],
     ) -> (i64, Result<protocol::TxResult>) {
-        let result = protocol::run_tx(
+        let result = protocol::apply_tx(
             tx_bytes,
-            &mut self.gas_meter.clone(),
+            &mut self.gas_meter,
             &mut self.write_log,
             &self.storage,
         )
-        .map_err(Error::ProtocolError);
+        .map_err(Error::TxError);
 
         match result {
             Ok(result) => {
-                if result.is_tx_correct() {
+                if result.is_accepted() {
                     tracing::debug!(
                         "all VPs accepted apply_tx storage modification {:#?}",
                         result
@@ -379,23 +364,34 @@ impl Shell {
                 } else {
                     tracing::debug!(
                         "some VPs rejected apply_tx storage modification {:#?}",
-                        result.vps.rejected_vps
+                        result.vps_result.rejected_vps
                     );
                     self.write_log.drop_tx();
                 }
 
-                let gas = i64::try_from(result.gas_used)
-                    .expect("Gas should never overflow i64");
-
+                let gas = gas::as_i64(result.gas_used);
                 (gas, Ok(result))
             }
             err @ Err(_) => {
                 let gas =
-                    i64::try_from(self.gas_meter.get_current_transaction_gas())
-                        .expect("Gas should never overflow i64");
+                    gas::as_i64(self.gas_meter.get_current_transaction_gas());
                 (gas, err)
             }
         }
+    }
+
+    /// Simulate validation and application of a transaction.
+    pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
+        let mut gas_meter = BlockGasMeter::default();
+        let mut write_log = self.write_log.clone();
+        let result = protocol::apply_tx(
+            tx_bytes,
+            &mut gas_meter,
+            &mut write_log,
+            &self.storage,
+        )
+        .map_err(Error::TxError)?;
+        Ok(result.to_string())
     }
 
     /// Begin a new block.

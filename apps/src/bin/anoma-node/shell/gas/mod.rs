@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone)]
@@ -145,5 +147,23 @@ impl Default for BlockGasMeter {
             block_gas: 0,
             transaction_gas: 0,
         }
+    }
+}
+
+pub fn as_i64(gas: u64) -> i64 {
+    i64::try_from(gas).expect("Gas should never overflow i64")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that the function [`as_i64`] cannot fail for transaction and block
+    /// gas limit + some "tolerance" for gas exhaustion.
+    #[test]
+    fn gas_limits_cannot_overflow_i64() {
+        let tolerance = 10_000;
+        as_i64(BLOCK_GAS_LIMIT + tolerance);
+        as_i64(TRANSACTION_GAS_LIMIT + tolerance);
     }
 }

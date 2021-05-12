@@ -311,13 +311,11 @@ impl tendermint_abci::Application for AbciWrapper {
             .expect("TEMPORARY: failed to recv ApplyTx response");
 
         resp.gas_used = gas;
-        resp.gas_wanted = gas;
 
         match result {
             Ok(tx_result) => {
-                // change function name
                 resp.info = format!("{}", tx_result);
-                if !tx_result.is_tx_correct() {
+                if !tx_result.is_accepted() {
                     resp.code = 1;
                 }
             }
