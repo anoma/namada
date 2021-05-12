@@ -314,7 +314,7 @@ impl tendermint_abci::Application for AbciWrapper {
 
         match result {
             Ok(tx_result) => {
-                resp.info = format!("{}", tx_result);
+                resp.info = tx_result.to_string();
                 if !tx_result.is_accepted() {
                     resp.code = 1;
                 }
