@@ -24,6 +24,7 @@ dependencies = [
  "libp2p",
  "log",
  "parity-wasm",
+ "proptest",
  "prost",
  "prost-types",
  "pwasm-utils",

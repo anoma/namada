@@ -147,3 +147,98 @@ impl Default for BlockGasMeter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn test_vp_gas_meter_add(gas in 0..TRANSACTION_GAS_LIMIT) {
+            let mut meter = VpGasMeter::new(0);
+            meter.add(gas).expect("cannot add the gas");
+            assert!(!meter.gas_overflow());
+        }
+
+        #[test]
+        fn test_block_gas_meter_add(gas in 0..TRANSACTION_GAS_LIMIT) {
+            let mut meter = BlockGasMeter::default();
+            meter.add(gas).expect("cannot add the gas");
+            let result = meter.finalize_transaction().expect("cannot finalize the tx");
+            assert_eq!(result, gas);
+        }
+    }
+
+    #[test]
+    fn test_vp_gas_overflow() {
+        let mut meter = VpGasMeter::new(1);
+        match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
+            Error::GasOverflow => assert!(meter.gas_overflow()),
+            _ => panic!("unexpected error happened"),
+        }
+    }
+
+    #[test]
+    fn test_vp_gas_limit() {
+        let mut meter = VpGasMeter::new(1);
+        match meter
+            .add(TRANSACTION_GAS_LIMIT)
+            .expect_err("unexpectedly succeeded")
+        {
+            Error::TransactionGasExceedededError => {
+                assert!(meter.gas_overflow())
+            }
+            _ => panic!("unexpected error happened"),
+        }
+    }
+
+    #[test]
+    fn test_tx_gas_overflow() {
+        let mut meter = BlockGasMeter::default();
+        meter.add(1).expect("cannot add the gas");
+        match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
+            Error::GasOverflow => {}
+            _ => panic!("unexpected error happened"),
+        }
+    }
+
+    #[test]
+    fn test_tx_gas_limit() {
+        let mut meter = BlockGasMeter::default();
+        match meter
+            .add(TRANSACTION_GAS_LIMIT + 1)
+            .expect_err("unexpectedly succeeded")
+        {
+            Error::TransactionGasExceedededError => {}
+            _ => panic!("unexpected error happened"),
+        }
+    }
+
+    #[test]
+    fn test_block_gas_limit() {
+        let mut meter = BlockGasMeter::default();
+
+        // add the maximum tx gas
+        for _ in 0..(BLOCK_GAS_LIMIT / TRANSACTION_GAS_LIMIT) {
+            meter
+                .add(TRANSACTION_GAS_LIMIT)
+                .expect("over the tx gas limit");
+            meter
+                .finalize_transaction()
+                .expect("over the block gas limit");
+        }
+
+        meter
+            .add(TRANSACTION_GAS_LIMIT)
+            .expect("over the tx gas limit");
+        match meter
+            .finalize_transaction()
+            .expect_err("unexpectedly succeeded")
+        {
+            Error::BlockGasExceeded => {}
+            _ => panic!("unexpected error happened"),
+        }
+    }
+}
