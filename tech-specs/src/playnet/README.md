@@ -32,7 +32,10 @@ To run the intent broadcaster with the matchmaker that can submit transactions t
 ```shell
 # TODO specify peers' addresses and ledger's address if not local
 
-anoma run-gossip --rpc --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
+anoma run-gossip --rpc \
+  --matchmaker-path matchmaker_template/matchmaker.wasm \
+  --tx-code-path txs/tx_from_intent/tx.wasm \
+  --ledger-address "127.0.0.1:26657"
 ```
 
 ## 🧮 WASM
@@ -68,7 +71,11 @@ Any of the following commands can optionally be submitted with `--dry-run` argum
 To make a transfer of e.g. `10.1` of a fungible token `$XAN` from `$ALICE` to `$BOB`:
 
 ```shell
-anomac transfer --source $ALICE --target $BOB --token $XAN --amount 10.1 --code-path txs/tx_transfer/tx.wasm
+anoma client transfer --source $ALICE \
+  --target $BOB \
+  --token $XAN \
+  --amount 10.1 \
+  --code-path txs/tx_transfer/tx.wasm
 ```
 
 This client command will take care of signing the transaction using your key.
@@ -82,7 +89,7 @@ To update an account's validity predicate, you can customize the default user's 
 make -C vps/vp_user
 
 # Submit a transaction with the updated VP to the ledger
-anomac update --address $ALICE --code-path vps/vp_user/vp.wasm
+anoma client update --address $ALICE --code-path vps/vp_user/vp.wasm
 ```
 
 ### 🦄 A custom transaction
@@ -96,7 +103,7 @@ For example:
 make -C txs/tx_template
 
 # Submit the transaction to the ledger
-anomac tx --code-path txs/tx_template/tx.wasm --data-path tx.data
+anoma client tx --code-path txs/tx_template/tx.wasm --data-path tx.data
 ```
 
 This transaction is by default not signed by any key, so if you try to use it make changes to your account's storage, it will be rejected by your validity predicate.
@@ -108,14 +115,21 @@ In general, intents are some data that describe what you'd like to do with your 
 To create a file `intent.data` with the intent's data, use e.g.:
 
 ```shell
-anomac craft-intent --address $ALICE --token-buy $XTZ --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent.data
+anoma client craft-intent --address $ALICE \
+  --token-buy $XTZ \
+  --amount-buy 10 \
+  --token-sell $BTC \
+  --amount-sell 20 \
+  --file-path intent.data
 ```
 
 To submit the intent from the file to the intent broadcaster (which will propagate to matchmakers):
 ```shell
 # TODO specify a public intent broadcaster address
 
-anomac intent --node "http://[::1]:39111" --data-path intent.data --topic "asset_v0"
+anoma client intent --node "http://[::1]:39111" \
+  --data-path intent.data \
+  --topic "asset_v0"
 ```
 
 Once a matchmaker finds suitable matches of intents that it decides are likely to be accepted, it will try to submit a transaction to a connected ledger.
