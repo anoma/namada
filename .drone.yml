@@ -10,7 +10,7 @@ steps:
     settings:
       backend: "s3"
       restore: true
-      bucket: juvix-drone-cache-v2
+      bucket: heliax-drone-cache-v2
       region: eu-west-1
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
@@ -55,7 +55,7 @@ steps:
     pull: if-not-exists
     settings:
       backend: "s3"
-      bucket: juvix-drone-cache-v2
+      bucket: heliax-drone-cache-v2
       region: eu-west-1
       rebuild: true
       archive_format: "gzip"
