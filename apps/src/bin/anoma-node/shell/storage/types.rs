@@ -1,46 +1,46 @@
 //! The key and values that may be persisted in a DB.
 
 use anoma_shared::bytes::ByteBuf;
-use anoma_shared::types::address::EstablishedAddressGen;
-use anoma_shared::types::{Address, BlockHash, BlockHeight, Key};
+use anoma_shared::types::{Address, Key};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+use thiserror::Error;
 
-// TODO customize for different types (derive from `size_of`?)
-const DEFAULT_SERIALIZER_CAPACITY: usize = 1024;
-
-/// Represents a value that can be written and read from the database
-pub trait Value: BorshSerialize + BorshDeserialize {
-    fn encode(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(DEFAULT_SERIALIZER_CAPACITY);
-        // TODO error handling
-        self.serialize(&mut result).unwrap();
-        result
-    }
-
-    fn decode(bytes: impl AsRef<[u8]>) -> Self {
-        // TODO error handling
-        Self::try_from_slice(bytes.as_ref()).unwrap()
-    }
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Serialization error {0}")]
+    SerializationError(std::io::Error),
+    #[error("Deserialization error: {0}")]
+    DeserializationError(std::io::Error),
 }
 
-// TODO is there a better way to do this?
-impl Value for String {}
-impl Value for u64 {}
-impl Value for i64 {}
-impl Value for BlockHeight {}
-impl Value for BlockHash {}
-impl Value for EstablishedAddressGen {}
+type Result<T> = std::result::Result<T, Error>;
 
-impl Value for H256 {}
-impl<T: Value> Value for DefaultStore<T> {}
+pub fn encode<T>(value: &T) -> Result<Vec<u8>>
+where
+    T: BorshSerialize,
+{
+    let size = std::mem::size_of::<T>();
+    let mut result = Vec::with_capacity(size);
+    value
+        .serialize(&mut result)
+        .map_err(Error::SerializationError)?;
+    Ok(result)
+}
+
+pub fn decode<T>(bytes: impl AsRef<[u8]>) -> Result<T>
+where
+    T: BorshDeserialize,
+{
+    T::try_from_slice(bytes.as_ref()).map_err(Error::DeserializationError)
+}
 
 // TODO make a derive macro for Hash256 https://doc.rust-lang.org/book/ch19-06-macros.html#how-to-write-a-custom-derive-macro
 pub trait Hash256 {
-    fn hash256(&self) -> H256;
+    fn hash256(&self) -> Result<H256>;
 }
 
 pub struct MerkleTree(
@@ -63,66 +63,66 @@ impl core::fmt::Debug for MerkleTree {
 }
 
 impl Hash256 for &str {
-    fn hash256(&self) -> H256 {
+    fn hash256(&self) -> Result<H256> {
         if self.is_empty() {
-            return H256::zero();
+            return Ok(H256::zero());
         }
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&self.to_string().encode());
+        hasher.update(&encode(&self.to_string())?);
         hasher.finalize(&mut buf);
-        buf.into()
+        Ok(buf.into())
     }
 }
 
 impl Hash256 for String {
-    fn hash256(&self) -> H256 {
+    fn hash256(&self) -> Result<H256> {
         if self.is_empty() {
-            return H256::zero();
+            return Ok(H256::zero());
         }
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&self.encode());
+        hasher.update(&encode(self)?);
         hasher.finalize(&mut buf);
-        buf.into()
+        Ok(buf.into())
     }
 }
 
 impl Hash256 for [u8; 32] {
-    fn hash256(&self) -> H256 {
+    fn hash256(&self) -> Result<H256> {
         if self.is_empty() {
-            return H256::zero();
+            return Ok(H256::zero());
         }
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
         hasher.update(self);
         hasher.finalize(&mut buf);
-        buf.into()
+        Ok(buf.into())
     }
 }
 
 impl Hash256 for u64 {
-    fn hash256(&self) -> H256 {
+    fn hash256(&self) -> Result<H256> {
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&self.encode());
+        hasher.update(&encode(self)?);
         hasher.finalize(&mut buf);
-        buf.into()
+        Ok(buf.into())
     }
 }
 
 impl Hash256 for Vec<u8> {
-    fn hash256(&self) -> H256 {
+    fn hash256(&self) -> Result<H256> {
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
         hasher.update(&self.as_slice());
         hasher.finalize(&mut buf);
-        buf.into()
+        Ok(buf.into())
     }
 }
 
 impl Hash256 for Key {
-    fn hash256(&self) -> H256 {
+    fn hash256(&self) -> Result<H256> {
         self.to_string().hash256()
     }
 }
@@ -154,7 +154,7 @@ impl<I> std::fmt::Debug for PrefixIterator<I> {
 }
 
 impl Hash256 for Address {
-    fn hash256(&self) -> H256 {
+    fn hash256(&self) -> Result<H256> {
         self.try_to_vec()
             .expect("Encoding address shouldn't fail")
             .hash256()

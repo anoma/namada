@@ -24,6 +24,8 @@ use super::MerkleRoot;
 pub enum Error {
     #[error("Key error {0}")]
     KeyError(anoma_shared::types::Error),
+    #[error("Coding error: {0}")]
+    CodingError(types::Error),
     #[error("Database error: {0}")]
     DBError(db::Error),
     #[error("Merkle tree error: {0}")]
@@ -161,7 +163,7 @@ where
                 .block
                 .tree
                 .0
-                .get(&key.hash256())
+                .get(&key.hash256().map_err(Error::CodingError)?)
                 .map_err(Error::MerkleTreeError)?
                 .is_zero(),
             gas as _,
@@ -207,7 +209,10 @@ where
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
     pub fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(u64, i64)> {
-        self.update_tree(key.hash256(), value.hash256())?;
+        self.update_tree(
+            key.hash256().map_err(Error::CodingError)?,
+            value.hash256().map_err(Error::CodingError)?,
+        )?;
 
         let len = value.len();
         let gas = key.len() + len;
@@ -224,7 +229,10 @@ where
         let mut size_diff = 0;
         if self.has_key(key)?.0 {
             // update the merkle tree with a zero as a tombstone
-            self.update_tree(key.hash256(), H256::zero())?;
+            self.update_tree(
+                key.hash256().map_err(Error::CodingError)?,
+                H256::zero(),
+            )?;
 
             size_diff -= match self.block.subspaces.remove(key) {
                 Some(prev) => prev.len() as i64,
@@ -297,9 +305,8 @@ where
 #[cfg(test)]
 mod tests {
     use tempdir::TempDir;
-    use types::Value;
 
-    use super::*;
+    use super::{types, *};
 
     #[test]
     fn test_crud_value() {
@@ -309,6 +316,8 @@ mod tests {
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
+        let value_bytes = types::encode(&value).expect("encoding failed");
+        let value_bytes_len = value_bytes.len();
 
         // before insertion
         let (result, gas) = storage.has_key(&key).expect("has_key failed");
@@ -319,15 +328,18 @@ mod tests {
         assert_eq!(gas, key.len() as u64);
 
         // insert
-        storage.write(&key, value.encode()).expect("write failed");
+        storage.write(&key, value_bytes).expect("write failed");
 
         // read
         let (result, gas) = storage.has_key(&key).expect("has_key failed");
         assert!(result);
         assert_eq!(gas, key.len() as u64);
         let (result, gas) = storage.read(&key).expect("read failed");
-        assert_eq!(u64::decode(result.expect("value doesn't exist")), 1);
-        assert_eq!(gas, key.len() as u64 + value.encode().len() as u64);
+        let read_value: u64 =
+            types::decode(&result.expect("value doesn't exist"))
+                .expect("decoding failed");
+        assert_eq!(read_value, value);
+        assert_eq!(gas, key.len() as u64 + value_bytes_len as u64);
 
         // delete
         storage.delete(&key).expect("delete failed");
@@ -353,9 +365,10 @@ mod tests {
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
+        let value_bytes = types::encode(&value).expect("encoding failed");
 
         // insert and commit
-        storage.write(&key, value.encode()).expect("write failed");
+        storage.write(&key, value_bytes).expect("write failed");
         let expected_root = storage.merkle_root().as_slice().deref().to_vec();
         storage.commit().expect("commit failed");
 
@@ -384,10 +397,13 @@ mod tests {
             let key = prefix
                 .push(&format!("{}", i))
                 .expect("cannot push the key segment");
-            let value = (i as u64).encode();
+            let value_bytes =
+                types::encode(&(i as u64)).expect("encoding failed");
             // insert
-            storage.write(&key, value.clone()).expect("write failed");
-            expected.push((key.to_string(), value));
+            storage
+                .write(&key, value_bytes.clone())
+                .expect("write failed");
+            expected.push((key.to_string(), value_bytes));
         }
         storage.commit().expect("commit failed");
 

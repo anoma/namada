@@ -13,11 +13,10 @@ use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
 };
-use sparse_merkle_tree::default_store::DefaultStore;
-use sparse_merkle_tree::{SparseMerkleTree, H256};
+use sparse_merkle_tree::SparseMerkleTree;
 
 use super::{BlockState, DBIter, Error, Result, DB};
-use crate::shell::storage::types::{MerkleTree, PrefixIterator, Value};
+use crate::shell::storage::types::{self, MerkleTree, PrefixIterator};
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -120,7 +119,10 @@ impl DB for RocksDB {
                     .push(&"store".to_owned())
                     .map_err(Error::KeyError)?;
                 let value = tree.0.store();
-                batch.put(key.to_string(), value.encode());
+                batch.put(
+                    key.to_string(),
+                    types::encode(value).map_err(Error::CodingError)?,
+                );
             }
         }
         // Block hash
@@ -129,7 +131,10 @@ impl DB for RocksDB {
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
             let value = hash;
-            batch.put(key.to_string(), value.encode());
+            batch.put(
+                key.to_string(),
+                types::encode(value).map_err(Error::CodingError)?,
+            );
         }
         // SubSpace
         {
@@ -147,7 +152,10 @@ impl DB for RocksDB {
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
             let value = address_gen;
-            batch.put(key.to_string(), value.encode());
+            batch.put(
+                key.to_string(),
+                types::encode(value).map_err(Error::CodingError)?,
+            );
         }
         let mut write_opts = WriteOptions::default();
         // TODO: disable WAL when we can shutdown with flush
@@ -162,7 +170,11 @@ impl DB for RocksDB {
         // NOTE for async writes, we need to take care that all previous heights
         // are known when updating this
         self.0
-            .put_opt("height", height.encode(), &write_opts)
+            .put_opt(
+                "height",
+                types::encode(&height).map_err(Error::CodingError)?,
+                &write_opts,
+            )
             .map_err(|e| Error::DBError {
                 error: e.into_string(),
             })
@@ -174,7 +186,11 @@ impl DB for RocksDB {
         write_opts.set_sync(true);
         // write_opts.disable_wal(true);
         self.0
-            .put_opt("chain_id", chain_id.encode(), &write_opts)
+            .put_opt(
+                "chain_id",
+                types::encode(chain_id).map_err(Error::CodingError)?,
+                &write_opts,
+            )
             .map_err(|e| Error::DBError {
                 error: e.into_string(),
             })
@@ -195,13 +211,13 @@ impl DB for RocksDB {
 
     fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         let chain_id;
-        let height;
+        let height: BlockHeight;
         // Chain ID
         match self.0.get("chain_id").map_err(|e| Error::DBError {
             error: e.into_string(),
         })? {
             Some(bytes) => {
-                chain_id = String::decode(bytes);
+                chain_id = types::decode(bytes).map_err(Error::CodingError)?;
             }
             None => return Ok(None),
         }
@@ -212,7 +228,7 @@ impl DB for RocksDB {
             Some(bytes) => {
                 // TODO if there's an issue decoding this height, should we try
                 // load its predecessor instead?
-                height = BlockHeight::decode(bytes);
+                height = types::decode(bytes).map_err(Error::CodingError)?;
             }
             None => return Ok(None),
         }
@@ -243,60 +259,73 @@ impl DB for RocksDB {
             let mut segments: Vec<&str> =
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
-                Some(prefix) => match *prefix {
-                    "tree" => match segments.get(2) {
-                        Some(smt) => match *smt {
-                            "root" => root = Some(H256::decode(bytes.to_vec())),
-                            "store" => {
-                                store = Some(DefaultStore::<H256>::decode(
-                                    bytes.to_vec(),
-                                ))
-                            }
-                            _ => unknown_key_error(path)?,
-                        },
-                        None => unknown_key_error(path)?,
-                    },
-                    "hash" => hash = Some(BlockHash::decode(bytes.to_vec())),
-                    "subspace" => {
-                        // We need special handling of validity predicate keys,
-                        // which are reserved and so calling `Key::parse` on
-                        // them would fail
-                        let key = match segments.get(3) {
-                            Some(seg) if *seg == RESERVED_VP_KEY => {
-                                // the path of a validity predicate should be
-                                // height/subspace/address/?
-                                let mut addr_str = (*segments
-                                    .get(2)
-                                    .expect("the address not found"))
-                                .to_owned();
-                                let _ = addr_str.remove(0);
-                                let addr = Address::decode(&addr_str)
-                                    .expect("cannot decode the address");
-                                Key::validity_predicate(&addr)
-                                    .expect("failed to make the VP key")
-                            }
-                            _ => Key::parse(
-                                segments
-                                    .split_off(2)
-                                    .join(&KEY_SEGMENT_SEPARATOR.to_string()),
-                            )
-                            .map_err(|e| {
-                                Error::Temporary {
-                                    error: format!(
-                                        "Cannot parse key segments {}: {}",
-                                        path, e
-                                    ),
+                Some(prefix) => {
+                    match *prefix {
+                        "tree" => match segments.get(2) {
+                            Some(smt) => match *smt {
+                                "root" => {
+                                    root = Some(
+                                        types::decode(bytes)
+                                            .map_err(Error::CodingError)?,
+                                    )
                                 }
-                            })?,
-                        };
-                        subspaces.insert(key, bytes.to_vec());
+                                "store" => {
+                                    store = Some(
+                                        types::decode(bytes)
+                                            .map_err(Error::CodingError)?,
+                                    )
+                                }
+                                _ => unknown_key_error(path)?,
+                            },
+                            None => unknown_key_error(path)?,
+                        },
+                        "hash" => {
+                            hash = Some(
+                                types::decode(bytes)
+                                    .map_err(Error::CodingError)?,
+                            )
+                        }
+                        "subspace" => {
+                            // We need special handling of validity predicate
+                            // keys, which are reserved and so calling
+                            // `Key::parse` on them would fail
+                            let key = match segments.get(3) {
+                                Some(seg) if *seg == RESERVED_VP_KEY => {
+                                    // the path of a validity predicate should
+                                    // be height/subspace/address/?
+                                    let mut addr_str = (*segments
+                                        .get(2)
+                                        .expect("the address not found"))
+                                    .to_owned();
+                                    let _ = addr_str.remove(0);
+                                    let addr = Address::decode(&addr_str)
+                                        .expect("cannot decode the address");
+                                    Key::validity_predicate(&addr)
+                                        .expect("failed to make the VP key")
+                                }
+                                _ => {
+                                    Key::parse(segments.split_off(2).join(
+                                        &KEY_SEGMENT_SEPARATOR.to_string(),
+                                    ))
+                                    .map_err(|e| Error::Temporary {
+                                        error: format!(
+                                            "Cannot parse key segments {}: {}",
+                                            path, e
+                                        ),
+                                    })?
+                                }
+                            };
+                            subspaces.insert(key, bytes.to_vec());
+                        }
+                        "address_gen" => {
+                            address_gen = Some(
+                                types::decode(bytes)
+                                    .map_err(Error::CodingError)?,
+                            );
+                        }
+                        _ => unknown_key_error(path)?,
                     }
-                    "address_gen" => {
-                        address_gen =
-                            Some(EstablishedAddressGen::decode(bytes));
-                    }
-                    _ => unknown_key_error(path)?,
-                },
+                }
                 None => unknown_key_error(path)?,
             }
         }
