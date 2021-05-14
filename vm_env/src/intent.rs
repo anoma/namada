@@ -17,11 +17,10 @@ pub fn vp(intent: &Signed<Intent>) -> bool {
     use crate::imports::vp;
     let key = intent::invalid_intent_key(&intent.data.addr);
 
-    let invalid_intent_pre: Vec<Signature> = vp::read_pre(&key.to_string())
-        .unwrap_or_default();
-    let invalid_intent_post: Vec<Signature> = vp::read_post(&key.to_string())
-        .unwrap_or_default();
+    let invalid_intent_pre: Vec<Signature> =
+        vp::read_pre(&key.to_string()).unwrap_or_default();
+    let invalid_intent_post: Vec<Signature> =
+        vp::read_post(&key.to_string()).unwrap_or_default();
     !invalid_intent_pre.iter().any(|sig| sig == &intent.sig)
         && invalid_intent_post.iter().any(|sig| sig == &intent.sig)
-
 }
