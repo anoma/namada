@@ -30,6 +30,12 @@ pub struct WriteLog {
 
 impl WriteLog {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for WriteLog {
+    fn default() -> Self {
         Self {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
