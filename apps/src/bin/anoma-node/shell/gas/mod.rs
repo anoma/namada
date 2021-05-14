@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use thiserror::Error;
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     #[error("Transaction gas limit exceeded")]
     TransactionGasExceedededError,
@@ -211,7 +211,7 @@ mod tests {
         fn test_vp_gas_meter_add(gas in 0..TRANSACTION_GAS_LIMIT) {
             let mut meter = VpGasMeter::new(0);
             meter.add(gas).expect("cannot add the gas");
-            assert!(!meter.gas_overflow());
+            assert_eq!(meter.error, None);
         }
 
         #[test]
@@ -227,7 +227,7 @@ mod tests {
     fn test_vp_gas_overflow() {
         let mut meter = VpGasMeter::new(1);
         match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
-            Error::GasOverflow => assert!(meter.gas_overflow()),
+            err @ Error::GasOverflow => assert_eq!(meter.error, Some(err)),
             _ => panic!("unexpected error happened"),
         }
     }
@@ -239,8 +239,8 @@ mod tests {
             .add(TRANSACTION_GAS_LIMIT)
             .expect_err("unexpectedly succeeded")
         {
-            Error::TransactionGasExceedededError => {
-                assert!(meter.gas_overflow())
+            err @ Error::TransactionGasExceedededError => {
+                assert_eq!(meter.error, Some(err))
             }
             _ => panic!("unexpected error happened"),
         }
