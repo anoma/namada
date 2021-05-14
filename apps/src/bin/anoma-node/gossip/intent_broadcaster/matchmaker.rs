@@ -1,10 +1,9 @@
-use std::net::SocketAddr;
-
 use anoma::config;
 use anoma::proto::types::Intent;
 use anoma::proto::IntentId;
 use anoma::types::MatchmakerMessage;
 use prost::Message;
+use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -22,7 +21,7 @@ pub struct Matchmaker {
     tx_code: Vec<u8>,
     // the matchmaker's state as arbitrary bytes
     data: Vec<u8>,
-    ledger_address: SocketAddr,
+    ledger_address: net::Address,
 }
 
 #[derive(Error, Debug)]
@@ -56,6 +55,7 @@ impl Matchmaker {
             .map(Filter::from_file)
             .transpose()
             .map_err(Error::FilterInit)?;
+
         Ok((
             Self {
                 mempool: IntentMempool::new(),
@@ -64,7 +64,7 @@ impl Matchmaker {
                 matchmaker_code,
                 tx_code,
                 data: Vec::new(),
-                ledger_address: config.ledger_address,
+                ledger_address: config.ledger_address.clone(),
             },
             receiver_mm_message,
         ))
@@ -109,10 +109,8 @@ impl Matchmaker {
             MatchmakerMessage::InjectTx(tx) => {
                 let mut tx_bytes = vec![];
                 tx.encode(&mut tx_bytes).unwrap();
-                let client = HttpClient::new(
-                    self.ledger_address.to_string().parse().unwrap(),
-                )
-                .unwrap();
+                let client =
+                    HttpClient::new(self.ledger_address.clone()).unwrap();
                 let response =
                     client.broadcast_tx_commit(tx_bytes.into()).await;
                 println!("{:#?}", response);
