@@ -1,5 +1,5 @@
 pub mod host_env;
-mod memory;
+pub mod memory;
 
 use std::collections::HashSet;
 use std::ffi::c_void;
@@ -593,7 +593,7 @@ pub fn validate_untrusted_wasm(wasm_code: impl AsRef<[u8]>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::shell::storage::TestStorage;
+    use crate::node::shell::storage::testing::TestStorage;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.

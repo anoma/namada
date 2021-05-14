@@ -17,10 +17,11 @@ use wasmer::{
 
 use self::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use self::write_log::WriteLog;
-use super::memory::AnomaMemory;
+use super::memory::WasmMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
 use crate::node::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::node::shell::storage::{self, Storage};
+use crate::node::vm::memory::VmMemory;
 use crate::proto::types::Tx;
 use crate::types::MatchmakerMessage;
 use crate::wallet;
@@ -28,9 +29,10 @@ use crate::wallet;
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
-struct TxEnv<DB>
+pub struct TxEnv<DB, MEM>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     storage: EnvHostWrapper<Storage<DB>>,
     // not thread-safe, assuming single-threaded Tx runner
@@ -41,16 +43,22 @@ where
     verifiers: MutEnvHostWrapper<HashSet<Address>>,
     // not thread-safe, assuming single-threaded Tx runner
     gas_meter: MutEnvHostWrapper<BlockGasMeter>,
-    memory: AnomaMemory,
+    memory: MEM,
 }
+
+// pub trait TxEnvT {
+//     type DB: storage::DB;
+//     type Memory: VmMemory;
+// }
 
 // We have to implement the `Clone` instance manually, because we cannot
 // implement `DB: Clone` which is required by `WasmerEnv`, but we don't store
 // the `DB` directly here, so we don't need to. Instead, we store the reference
 // to `DB` inside the `EnvHostWrapper` which is safe to clone.
-impl<DB> Clone for TxEnv<DB>
+impl<DB, MEM> Clone for TxEnv<DB, MEM>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     fn clone(&self) -> Self {
         Self {
@@ -64,7 +72,7 @@ where
     }
 }
 
-impl<DB> WasmerEnv for TxEnv<DB>
+impl<DB> WasmerEnv for TxEnv<DB, WasmMemory>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -94,7 +102,7 @@ where
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
     // The transaction code is used for signature verification
     tx_code: EnvHostWrapper<Vec<u8>>,
-    memory: AnomaMemory,
+    memory: WasmMemory,
 }
 
 // We have to implement the `Clone` instance manually, because we cannot
@@ -134,7 +142,7 @@ where
 pub struct MatchmakerEnv {
     pub tx_code: Vec<u8>,
     pub inject_mm_message: Sender<MatchmakerMessage>,
-    pub memory: AnomaMemory,
+    pub memory: WasmMemory,
 }
 
 impl WasmerEnv for MatchmakerEnv {
@@ -148,7 +156,7 @@ impl WasmerEnv for MatchmakerEnv {
 
 #[derive(Clone)]
 pub struct FilterEnv {
-    pub memory: AnomaMemory,
+    pub memory: WasmMemory,
 }
 
 impl WasmerEnv for FilterEnv {
@@ -180,19 +188,19 @@ where
         iterators,
         verifiers,
         gas_meter,
-        memory: AnomaMemory::default(),
+        memory: WasmMemory::default(),
     };
     wasmer::imports! {
         // default namespace
         "env" => {
             "memory" => initial_memory,
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_charge_gas),
-            "_read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read),
-            "_has_key" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_has_key),
-            "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
-            "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
-            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_prefix),
-            "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
+            "_read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_read),
+            "_has_key" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_has_key),
+            "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_write),
+            "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_delete),
+            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_iter_prefix),
+            "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_iter_next),
             "_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_insert_verifier),
             "_update_validity_predicate" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_update_validity_predicate),
             "_init_account" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_init_account),
@@ -227,7 +235,7 @@ where
         iterators,
         gas_meter,
         tx_code,
-        memory: AnomaMemory::default(),
+        memory: WasmMemory::default(),
     };
     wasmer::imports! {
         // default namespace
@@ -259,7 +267,7 @@ pub fn prepare_matchmaker_imports(
     inject_mm_message: Sender<MatchmakerMessage>,
 ) -> ImportObject {
     let env = MatchmakerEnv {
-        memory: AnomaMemory::default(),
+        memory: WasmMemory::default(),
         inject_mm_message,
         tx_code: tx_code.as_ref().to_vec(),
     };
@@ -290,7 +298,7 @@ pub fn prepare_filter_imports(
     initial_memory: Memory,
 ) -> ImportObject {
     let env = FilterEnv {
-        memory: AnomaMemory::default(),
+        memory: WasmMemory::default(),
     };
     wasmer::imports! {
         // default namespace
@@ -304,16 +312,18 @@ pub fn prepare_filter_imports(
 }
 
 /// Called from tx wasm to request to use the given gas amount
-fn tx_charge_gas<DB>(env: &TxEnv<DB>, used_gas: i32)
+pub fn tx_charge_gas<DB, MEM>(env: &TxEnv<DB, MEM>, used_gas: i32)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     tx_add_gas(env, used_gas as _)
 }
 
-fn tx_add_gas<DB>(env: &TxEnv<DB>, used_gas: u64)
+pub fn tx_add_gas<DB, MEM>(env: &TxEnv<DB, MEM>, used_gas: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     // if we run out of gas, we need to stop the execution
@@ -350,9 +360,14 @@ where
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
-fn tx_storage_has_key<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> u64
+pub fn tx_has_key<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
+    key_ptr: u64,
+    key_len: u64,
+) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (key, gas) = env
         .memory
@@ -391,14 +406,15 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn tx_storage_read<DB>(
-    env: &TxEnv<DB>,
+pub fn tx_read<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (key, gas) = env
         .memory
@@ -474,13 +490,14 @@ where
 /// Storage prefix iterator function exposed to the wasm VM Tx environment.
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator.
-fn tx_storage_iter_prefix<DB>(
-    env: &TxEnv<DB>,
+pub fn tx_iter_prefix<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> u64
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (prefix, gas) = env
         .memory
@@ -506,13 +523,14 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn tx_storage_iter_next<DB>(
-    env: &TxEnv<DB>,
+pub fn tx_iter_next<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     tracing::debug!(
         "tx_storage_iter_next iter_id {}, result_ptr {}",
@@ -575,14 +593,15 @@ where
 
 /// Storage write function exposed to the wasm VM Tx environment. The given
 /// key/value will be written to the write log.
-fn tx_storage_write<DB>(
-    env: &TxEnv<DB>,
+pub fn tx_write<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
     key_ptr: u64,
     key_len: u64,
     val_ptr: u64,
     val_len: u64,
 ) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (key, gas) = env
         .memory
@@ -632,9 +651,14 @@ fn tx_storage_write<DB>(
 
 /// Storage delete function exposed to the wasm VM Tx environment. The given
 /// key/value will be written as deleted to the write log.
-fn tx_storage_delete<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> u64
+pub fn tx_delete<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
+    key_ptr: u64,
+    key_len: u64,
+) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (key, gas) = env
         .memory
@@ -999,9 +1023,13 @@ where
 }
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
-fn tx_insert_verifier<DB>(env: &TxEnv<DB>, addr_ptr: u64, addr_len: u64)
-where
+pub fn tx_insert_verifier<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
+    addr_ptr: u64,
+    addr_len: u64,
+) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (addr, gas) = env
         .memory
@@ -1020,14 +1048,15 @@ where
 }
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
-fn tx_update_validity_predicate<DB>(
-    env: &TxEnv<DB>,
+pub fn tx_update_validity_predicate<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
     addr_ptr: u64,
     addr_len: u64,
     code_ptr: u64,
     code_len: u64,
 ) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (addr, gas) = env
         .memory
@@ -1063,14 +1092,15 @@ fn tx_update_validity_predicate<DB>(
 }
 
 /// Initialize a new account established address.
-fn tx_init_account<DB>(
-    env: &TxEnv<DB>,
+pub fn tx_init_account<DB, MEM>(
+    env: &TxEnv<DB, MEM>,
     code_ptr: u64,
     code_len: u64,
     result_ptr: u64,
 ) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (code, gas) = env
         .memory
@@ -1106,9 +1136,10 @@ where
 }
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
-fn tx_get_chain_id<DB>(env: &TxEnv<DB>, result_ptr: u64)
+pub fn tx_get_chain_id<DB, MEM>(env: &TxEnv<DB, MEM>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (chain_id, gas) = storage.get_chain_id();
@@ -1123,9 +1154,10 @@ where
 /// Getting the block height function exposed to the wasm VM Tx
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
-fn tx_get_block_height<DB>(env: &TxEnv<DB>) -> u64
+pub fn tx_get_block_height<DB, MEM>(env: &TxEnv<DB, MEM>) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (height, gas) = storage.get_block_height();
@@ -1135,9 +1167,10 @@ where
 
 /// Getting the block hash function exposed to the wasm VM Tx environment. The
 /// hash is that of the block to which the current transaction is being applied.
-fn tx_get_block_hash<DB>(env: &TxEnv<DB>, result_ptr: u64)
+pub fn tx_get_block_hash<DB, MEM>(env: &TxEnv<DB, MEM>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (hash, gas) = storage.get_block_hash();
@@ -1242,9 +1275,10 @@ where
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
 /// printed at the [`tracing::Level::Info`]. This function is for development
 /// only.
-fn tx_log_string<DB>(env: &TxEnv<DB>, str_ptr: u64, str_len: u64)
+pub fn tx_log_string<DB, MEM>(env: &TxEnv<DB, MEM>, str_ptr: u64, str_len: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (str, _gas) = env
         .memory
@@ -1342,4 +1376,46 @@ fn update_data(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
     env.inject_mm_message
         .try_send(MatchmakerMessage::UpdateData(data))
         .expect("failed to send updated data")
+}
+
+#[cfg(feature = "testing")]
+pub mod testing {
+    use core::ffi::c_void;
+
+    use super::*;
+    use crate::node::shell::storage::db::mock::MockDB;
+    use crate::node::shell::storage::testing::TestStorage;
+    use crate::node::vm::memory::testing::MockMemory;
+
+    pub fn mock_tx_env(
+        storage: &TestStorage,
+        write_log: &mut WriteLog,
+        iterators: &mut PrefixIterators<'static, MockDB>,
+        verifiers: &mut HashSet<Address>,
+        gas_meter: &mut BlockGasMeter,
+    ) -> TxEnv<MockDB, MockMemory> {
+        let storage: EnvHostWrapper<TestStorage> = unsafe {
+            EnvHostWrapper::new(storage as *const _ as *const c_void)
+        };
+        let write_log = unsafe {
+            MutEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
+        };
+        let iterators = unsafe {
+            MutEnvHostWrapper::new(iterators as *mut _ as *mut c_void)
+        };
+        let verifiers = unsafe {
+            MutEnvHostWrapper::new(verifiers as *mut _ as *mut c_void)
+        };
+        let gas_meter = unsafe {
+            MutEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
+        };
+        TxEnv {
+            storage,
+            write_log,
+            iterators,
+            verifiers,
+            gas_meter,
+            memory: MockMemory,
+        }
+    }
 }

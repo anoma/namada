@@ -261,10 +261,23 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct AnomaMemory {
+pub struct WasmMemory {
     inner: LazyInit<wasmer::Memory>,
 }
-impl AnomaMemory {
+
+pub trait VmMemory: Clone + Send + Sync {
+    fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)>;
+
+    fn write_bytes<T>(&self, offset: u64, bytes: T) -> Result<u64>
+    where
+        T: AsRef<[u8]>;
+
+    fn read_string(&self, offset: u64, len: usize) -> Result<(String, u64)>;
+
+    fn write_string(&self, offset: u64, string: String) -> Result<u64>;
+}
+
+impl WasmMemory {
     /// Initialize the memory from the given exports, used to implement
     /// [`wasmer::WasmerEnv`].
     pub fn init_env_memory(
@@ -277,14 +290,12 @@ impl AnomaMemory {
         }
         Ok(())
     }
+}
 
+impl VmMemory for WasmMemory {
     /// Read bytes from memory at the given offset and length, return the bytes
     /// and the gas cost
-    pub fn read_bytes(
-        &self,
-        offset: u64,
-        len: usize,
-    ) -> Result<(Vec<u8>, u64)> {
+    fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         let bytes = read_memory_bytes(memory, offset, len)?;
         let gas = bytes.len();
@@ -292,7 +303,7 @@ impl AnomaMemory {
     }
 
     /// Write bytes into memory at the given offset and return the gas cost
-    pub fn write_bytes<T>(&self, offset: u64, bytes: T) -> Result<u64>
+    fn write_bytes<T>(&self, offset: u64, bytes: T) -> Result<u64>
     where
         T: AsRef<[u8]>,
     {
@@ -304,11 +315,7 @@ impl AnomaMemory {
 
     /// Read string from memory at the given offset and bytes length, and return
     /// the gas cost
-    pub fn read_string(
-        &self,
-        offset: u64,
-        len: usize,
-    ) -> Result<(String, u64)> {
+    fn read_string(&self, offset: u64, len: usize) -> Result<(String, u64)> {
         let (bytes, gas) = self.read_bytes(offset, len)?;
         let string = std::str::from_utf8(&bytes)
             .expect("unable to decode string from memory")
@@ -318,15 +325,54 @@ impl AnomaMemory {
 
     /// Write string into memory at the given offset and return the gas cost
     #[allow(dead_code)]
-    pub fn write_string(&self, offset: u64, string: String) -> Result<u64> {
+    fn write_string(&self, offset: u64, string: String) -> Result<u64> {
         self.write_bytes(offset, string.as_bytes())
     }
 }
 
-impl Default for AnomaMemory {
+impl Default for WasmMemory {
     fn default() -> Self {
         Self {
             inner: LazyInit::default(),
+        }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    pub use core::slice;
+
+    use super::*;
+
+    #[derive(Clone)]
+    pub struct MockMemory;
+
+    impl VmMemory for MockMemory {
+        fn read_bytes(
+            &self,
+            offset: u64,
+            len: usize,
+        ) -> Result<(Vec<u8>, u64)> {
+            todo!()
+        }
+
+        fn write_bytes<T>(&self, offset: u64, bytes: T) -> Result<u64>
+        where
+            T: AsRef<[u8]>,
+        {
+            todo!()
+        }
+
+        fn read_string(
+            &self,
+            offset: u64,
+            len: usize,
+        ) -> Result<(String, u64)> {
+            todo!()
+        }
+
+        fn write_string(&self, offset: u64, string: String) -> Result<u64> {
+            todo!()
         }
     }
 }

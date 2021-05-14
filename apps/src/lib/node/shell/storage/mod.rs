@@ -1,8 +1,8 @@
 //! The storage module handles both the current state in-memory and the stored
 //! state in DB.
 
-mod db;
-mod types;
+pub mod db;
+pub mod types;
 
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -404,29 +404,32 @@ mod tests {
     }
 }
 
-/// Storage with a mock DB for testing
-#[cfg(test)]
-pub type TestStorage = Storage<db::mock::MockDB>;
+#[cfg(feature = "testing")]
+pub mod testing {
+    use super::*;
 
-#[cfg(test)]
-impl Default for TestStorage {
-    fn default() -> Self {
-        let tree = MerkleTree::default();
-        let subspaces = HashMap::new();
-        let block = BlockStorage {
-            tree,
-            hash: BlockHash::default(),
-            height: BlockHeight(0),
-            subspaces,
-        };
-        Self {
-            db: db::mock::MockDB::default(),
-            chain_id: String::with_capacity(CHAIN_ID_LENGTH),
-            block,
-            current_height: BlockHeight(0),
-            address_gen: EstablishedAddressGen::new(
-                "Test address generator seed",
-            ),
+    /// Storage with a mock DB for testing
+    pub type TestStorage = Storage<db::mock::MockDB>;
+
+    impl Default for TestStorage {
+        fn default() -> Self {
+            let tree = MerkleTree::default();
+            let subspaces = HashMap::new();
+            let block = BlockStorage {
+                tree,
+                hash: BlockHash::default(),
+                height: BlockHeight(0),
+                subspaces,
+            };
+            Self {
+                db: db::mock::MockDB::default(),
+                chain_id: String::with_capacity(CHAIN_ID_LENGTH),
+                block,
+                current_height: BlockHeight(0),
+                address_gen: EstablishedAddressGen::new(
+                    "Test address generator seed",
+                ),
+            }
         }
     }
 }

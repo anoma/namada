@@ -1,7 +1,7 @@
 //! This crate contains library code for wasm. Some of the code is re-exported
 //! from the `shared` crate.
 
-mod imports;
+pub mod imports;
 mod intent;
 pub mod key;
 mod token;

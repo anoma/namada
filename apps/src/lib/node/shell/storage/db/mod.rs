@@ -11,7 +11,7 @@
 //!   - `subspace`: any byte data associated with accounts
 //!   - `address_gen`: established address generator
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub mod mock;
 pub mod rocksdb;
 

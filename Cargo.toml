@@ -4,6 +4,7 @@ members = [
   "apps",
   "shared",
   "vm_env",
+  "tests",
 ]
 
 # wasm packages have to be built separately

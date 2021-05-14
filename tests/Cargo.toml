@@ -1,0 +1,13 @@
+[package]
+authors = ["Heliax <TODO@heliax.dev>"]
+description = "Anoma intergration tests"
+edition = "2018"
+name = "tests"
+version = "0.1.0"
+
+[dev-dependencies]
+Anoma = {path = "../apps", features = ["testing"]}
+anoma_shared = { path = "../shared" }
+anoma_vm_env = {path = "../vm_env"}
+concat-idents = "1.1.2"
+lazy_static = "1.4.0"

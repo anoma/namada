@@ -340,7 +340,8 @@ mod tests {
 
     #[test]
     fn test_commit() {
-        let mut storage = crate::node::shell::storage::TestStorage::default();
+        let mut storage =
+            crate::node::shell::storage::testing::TestStorage::default();
         let mut write_log = WriteLog::new();
         let address_gen = EstablishedAddressGen::new("test");
 
