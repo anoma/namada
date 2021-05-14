@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::ops::Add;
 
 use anoma::proto::types::Tx;
 use anoma_shared::types::{Address, Key};
@@ -10,7 +9,7 @@ use prost::Message;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::shell::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::shell::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use crate::shell::storage;
 use crate::shell::storage::PersistentStorage;
 use crate::vm;
@@ -29,8 +28,6 @@ pub enum Error {
     GasError(gas::Error),
     #[error("Error executing VP for addresses: {0:?}")]
     VpRunnerError(vm::Error),
-    #[error("Transaction gas overflow")]
-    GasOverflow,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -65,45 +62,6 @@ impl Default for VpsResult {
             rejected_vps: HashSet::default(),
             gas_used: VpsGas::default(),
             errors: Vec::default(),
-        }
-    }
-}
-
-impl VpsGas {
-    fn merge(&mut self, other: &mut VpsGas, initial_gas: u64) -> Result<()> {
-        if other.max > self.max {
-            self.rest.push(self.max);
-            self.max = other.max;
-        } else {
-            self.rest.push(other.max);
-            self.rest.append(&mut other.rest);
-        }
-
-        let parallel_gas: u64 = (self.rest.clone().iter().sum::<u64>() as f64
-            * VpGasMeter::parallel_fee())
-            as u64;
-
-        if self.max.add(initial_gas).add(parallel_gas)
-            > VpGasMeter::transaction_gas_limit()
-        {
-            return Err(Error::GasOverflow);
-        }
-        Ok(())
-    }
-}
-
-/// Gas meter for VPs parallel runs
-#[derive(Clone, Debug)]
-pub struct VpsGas {
-    max: u64,
-    rest: Vec<u64>,
-}
-
-impl Default for VpsGas {
-    fn default() -> Self {
-        Self {
-            max: 0,
-            rest: Vec::new(),
         }
     }
 }
@@ -188,7 +146,7 @@ fn check_vps(
 
     let initial_gas = gas_meter.get_current_transaction_gas();
 
-    let mut vps_result = execute_vps(
+    let vps_result = execute_vps(
         verifiers,
         tx_data,
         tx_code,
@@ -198,10 +156,7 @@ fn check_vps(
     )?;
 
     gas_meter
-        .add(vps_result.gas_used.max)
-        .map_err(Error::GasError)?;
-    gas_meter
-        .add_parallel_fee(&mut vps_result.gas_used.rest)
+        .add_vps_gas(&vps_result.gas_used)
         .map_err(Error::GasError)?;
 
     Ok(vps_result)
@@ -288,7 +243,9 @@ fn merge_vp_results(
     // It's important that we only short-circuit gas errors to get deterministic
     // gas costs
 
-    gas_used.merge(&mut b.gas_used, initial_gas)?;
+    gas_used
+        .merge(&mut b.gas_used, initial_gas)
+        .map_err(Error::GasError)?;
 
     Ok(VpsResult {
         accepted_vps,
@@ -340,13 +297,12 @@ fn execute_vp(
         }
     }
 
-    if vp_gas_meter.gas_overflow() {
+    match &vp_gas_meter.error {
         // Returning error from here will short-circuit the VP parallel
         // execution. It's important that we only short-circuit gas
         // errors to get deterministic gas costs
-        Err(Error::GasOverflow)
-    } else {
-        Ok(result)
+        Some(err) => Err(Error::GasError(err.clone())),
+        None => Ok(result),
     }
 }
 
