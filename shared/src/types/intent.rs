@@ -44,7 +44,7 @@ impl IntentTransfers {
 
 const INVALID_INTENT_STORAGE_KEY: &str = "invalid_intent";
 
-/// Obtain a storage key for user's balance.
+/// Obtain a storage key for user's invalid intent set.
 pub fn invalid_intent_key(owner: &Address) -> Key {
     Key::from(owner.to_db_key())
         .push(&INVALID_INTENT_STORAGE_KEY.to_owned())

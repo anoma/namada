@@ -182,7 +182,8 @@ fn find_match_and_send_tx(
 
 fn find_match_and_remove_node(graph: &mut DiGraph<IntentNode, Address>) {
     let mut to_remove_nodes = find_match_and_send_tx(&graph);
-    // Must be order in reverse order because we remove the node by index
+    // Must be sorted in reverse order because it removes the node by index
+    // otherwise it would not remove the correct node
     to_remove_nodes.sort_by(
         |a, b| b.cmp(a)
     );

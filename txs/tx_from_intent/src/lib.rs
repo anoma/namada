@@ -15,6 +15,6 @@ transaction! {
 
         tx_data.intents.values()
             .into_iter()
-            .for_each(|i| intent::invalidate_intent(i));
+            .for_each(intent::invalidate_intent);
     }
 }

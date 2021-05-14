@@ -2,6 +2,8 @@ use anoma_shared::types::intent;
 use anoma_shared::types::intent::Intent;
 use anoma_shared::types::key::ed25519::{Signature, Signed};
 
+// TODO It would be nicer to use a Set<Sig> but Signature does not imply Hash.
+// TODO if we don't use a set, only push if sig not already part ?
 pub fn invalidate_intent(intent: &Signed<Intent>) {
     use crate::imports::tx;
     let key = intent::invalid_intent_key(&intent.data.addr);
