@@ -108,7 +108,7 @@ where
             self.block.subspaces = subspaces;
             self.current_height = height;
             self.address_gen = address_gen;
-            log::debug!("Loaded storage from DB");
+            tracing::debug!("Loaded storage from DB");
             return Ok(Some((
                 MerkleRoot(
                     self.block.tree.0.root().as_slice().deref().to_vec(),

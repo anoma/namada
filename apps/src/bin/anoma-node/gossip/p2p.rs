@@ -1,5 +1,5 @@
 use anoma::proto::services::{rpc_message, RpcResponse};
-use anoma::proto::types::Tx;
+use anoma::types::MatchmakerMessage;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -18,7 +18,7 @@ pub enum Error {
     TransportError(std::io::Error),
     #[error("Failed to subscribe")]
     FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
-    #[error("Error with the network behavior")]
+    #[error("Error with the network behavior: {0}")]
     Behavior(super::network_behaviour::Error),
 }
 type Result<T> = std::result::Result<T, Error>;
@@ -30,7 +30,7 @@ pub struct P2P {
 impl P2P {
     pub fn new(
         config: &anoma::config::IntentBroadcaster,
-    ) -> Result<(Self, Option<Receiver<Tx>>)> {
+    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
@@ -63,13 +63,24 @@ impl P2P {
 
         for to_dial in &config.peers {
             match Swarm::dial_addr(&mut p2p.swarm, to_dial.clone()) {
-                Ok(_) => log::info!("Dialed {:?}", to_dial.clone()),
+                Ok(_) => tracing::info!("Dialed {:?}", to_dial.clone()),
                 Err(e) => {
-                    log::debug!("Dial {:?} failed: {:?}", to_dial.clone(), e)
+                    tracing::debug!(
+                        "Dial {:?} failed: {:?}",
+                        to_dial.clone(),
+                        e
+                    )
                 }
             }
         }
         Ok((p2p, matchmaker_event_receiver))
+    }
+
+    pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
+        self.swarm
+            .intent_broadcaster_app
+            .handle_mm_message(mm_message)
+            .await
     }
 
     pub async fn handle_rpc_event(
@@ -87,7 +98,7 @@ impl P2P {
                     "rpc intent command for topic {:?} is empty",
                     event
                 );
-                log::error!("{}", result);
+                tracing::error!("{}", result);
                 RpcResponse { result }
             }
             rpc_message::Message::Intent(
@@ -110,7 +121,7 @@ impl P2P {
                             .publish(IdentTopic::new(topic), intent_bytes)
                         {
                             Ok(message_id) => {
-                                log::info!(
+                                tracing::info!(
                                     "publish intent with message_id {}",
                                     message_id
                                 );
@@ -121,7 +132,7 @@ impl P2P {
                                 }
                             }
                             Err(err) => {
-                                log::error!(
+                                tracing::error!(
                                     "error while publishing intent {:?}",
                                     err
                                 );
@@ -138,7 +149,7 @@ impl P2P {
                         result: String::from("Failed to apply the intent"),
                     },
                     Err(err) => {
-                        log::error!(
+                        tracing::error!(
                             "error while applying the intent {:?}",
                             err
                         );
@@ -152,7 +163,7 @@ impl P2P {
                 }
             }
             rpc_message::Message::Dkg(dkg_msg) => {
-                log::debug!(
+                tracing::debug!(
                     "dkg not yet
         implemented {:?}",
                     dkg_msg
@@ -173,25 +184,22 @@ impl P2P {
                 match self.swarm.intent_broadcaster_gossip.subscribe(&topic) {
                     Ok(true) => {
                         let result = format!("Node subscribed to {}", topic);
-                        log::info!("{}", result);
+                        tracing::info!("{}", result);
                         RpcResponse { result }
                     }
                     Ok(false) => {
-                        let result = format!(
-                            "Node
-        already subscribed to {}",
-                            topic
-                        );
+                        let result =
+                            format!("Node already subscribed to {}", topic);
                         log::info!("{}", result);
+                        tracing::info!("{}", result);
                         RpcResponse { result }
                     }
                     Err(err) => {
                         let result = format!(
-                            "failed to subscribe to
-        {}: {:?}",
+                            "failed to subscribe to {}: {:?}",
                             topic, err
                         );
-                        log::error!("{}", result);
+                        tracing::error!("{}", result);
                         RpcResponse { result }
                     }
                 }

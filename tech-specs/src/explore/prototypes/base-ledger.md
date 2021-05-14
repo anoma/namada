@@ -29,12 +29,12 @@ tracking issue <https://github.com/heliaxdev/rd-pm/issues/5>
 
 The main components are built in a single Cargo project with [shared library code](#shared) and multiple binaries:
 - `anoma` - main executable with commands for both the node and the client (`anoma node` and `anoma client`)
-- `anomad` - the [node](#node)
+- `anoman` - the [node](#node)
 - `anomac` - the [client](#client)
 
 #### Node
 
-The node is built into `anomad`.
+The node is built into `anoman`.
 
 ##### Shell
 

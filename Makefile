@@ -5,7 +5,8 @@ cargo = $(env) cargo
 rustup = $(env) rustup
 debug-env = RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
 debug-cargo = $(env) $(debug-env) cargo
-# nightly build is currently used for rustfmt
+# Nightly build is currently used for rustfmt and clippy.
+# NOTE On change also update `RUSTFMT_TOOLCHAIN` in `apps/build.rs`.
 nightly = nightly-2021-03-09
 
 build:
@@ -25,16 +26,16 @@ install:
 	$(cargo) install --path ./apps --debug
 
 run-ledger:
-	# runs the node daemon
-	$(cargo) run --bin anomad -- run-ledger
+	# runs the node
+	$(cargo) run --bin anoman -- run-ledger
 
 run-gossip:
-	# runs the node gossip daemon
-	$(cargo) run --bin anomad -- run-gossip
+	# runs the node gossip node
+	$(cargo) run --bin anoman -- run-gossip
 
 reset-ledger:
-	# runs the node daemon
-	$(cargo) run --bin anomad -- reset-ledger
+	# runs the node
+	$(cargo) run --bin anoman -- reset-ledger
 
 audit:
 	$(cargo) audit
@@ -77,5 +78,6 @@ build-wasm-scripts:
 dev-deps:
 	$(rustup) toolchain install $(nightly)
 	$(rustup) component add rustfmt clippy --toolchain $(nightly)
+	$(cargo) install cargo-watch
 
 .PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps

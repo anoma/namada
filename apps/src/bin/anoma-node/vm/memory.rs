@@ -150,33 +150,40 @@ pub fn write_vp_inputs(
 }
 
 pub struct MatchmakerCallInput {
-    pub intent_data_1_ptr: u64,
-    pub intent_data_1_len: u64,
-    pub intent_data_2_ptr: u64,
-    pub intent_data_2_len: u64,
+    pub data_ptr: u64,
+    pub data_len: u64,
+    pub intent_id_ptr: u64,
+    pub intent_id_len: u64,
+    pub intent_data_ptr: u64,
+    pub intent_data_len: u64,
 }
 
 pub fn write_matchmaker_inputs(
     memory: &wasmer::Memory,
-    intent_data_1: impl AsRef<[u8]>,
-    intent_data_2: impl AsRef<[u8]>,
+    data: impl AsRef<[u8]>,
+    intent_id: impl AsRef<[u8]>,
+    intent_data: impl AsRef<[u8]>,
 ) -> Result<MatchmakerCallInput> {
-    let intent_data_1_ptr = 0;
-    let intent_data_1_len = intent_data_1.as_ref().len() as _;
+    let data_ptr = 0;
+    let data_len = data.as_ref().len() as _;
 
-    let intent_data_2_ptr = intent_data_1_ptr + intent_data_1_len;
-    let intent_data_2_len = intent_data_2.as_ref().len() as _;
+    let intent_id_ptr = data_ptr + data_len;
+    let intent_id_len = intent_id.as_ref().len() as _;
 
-    log::info!("write_data_inputs {}", intent_data_1_len);
-    write_memory_bytes(memory, intent_data_1_ptr, intent_data_1)?;
-    log::info!("write_data_inputs {}", intent_data_2_len);
-    write_memory_bytes(memory, intent_data_2_ptr, intent_data_2)?;
+    let intent_data_ptr = intent_id_ptr + intent_id_len;
+    let intent_data_len = intent_data.as_ref().len() as _;
+
+    write_memory_bytes(memory, data_ptr, data)?;
+    write_memory_bytes(memory, intent_id_ptr, intent_id)?;
+    write_memory_bytes(memory, intent_data_ptr, intent_data)?;
 
     Ok(MatchmakerCallInput {
-        intent_data_1_ptr,
-        intent_data_1_len,
-        intent_data_2_ptr,
-        intent_data_2_len,
+        data_ptr,
+        data_len,
+        intent_id_ptr,
+        intent_id_len,
+        intent_data_ptr,
+        intent_data_len,
     })
 }
 
@@ -192,7 +199,7 @@ pub fn write_filter_inputs(
     let intent_data_ptr = 0;
     let intent_data_len = intent_data.as_ref().len() as _;
 
-    log::info!("write_data_inputs of len {}", intent_data_len);
+    tracing::info!("write_data_inputs of len {}", intent_data_len);
     write_memory_bytes(memory, intent_data_ptr, intent_data)?;
 
     Ok(FilterCallInput {
@@ -204,7 +211,7 @@ pub fn write_filter_inputs(
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
 fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
-    log::debug!(
+    tracing::debug!(
         "check_bounds pages {}, data_size {}, offset + len {}",
         memory.size().0,
         memory.data_size(),
@@ -217,7 +224,7 @@ fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
         // Ceiling division
         let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
             / wasmer::WASM_PAGE_SIZE) as u32;
-        log::info!("trying to grow memory by {} pages", req_pages);
+        tracing::info!("trying to grow memory by {} pages", req_pages);
         memory
             .grow(req_pages)
             .map(|_pages| ())
@@ -271,7 +278,7 @@ impl AnomaMemory {
     ) -> std::result::Result<(), HostEnvInitError> {
         let memory = exports.get_memory("memory")?;
         if !self.inner.initialize(memory.clone()) {
-            log::error!("wasm memory is already initialized");
+            tracing::error!("wasm memory is already initialized");
         }
         Ok(())
     }
