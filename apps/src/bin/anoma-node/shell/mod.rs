@@ -47,6 +47,8 @@ pub enum Error {
     VpExecutionError(HashSet<Address>),
     #[error("Transaction gas overflow")]
     GasOverflow,
+    #[error("The address {0} doesn't exist")]
+    MissingAddress(Address),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -636,9 +638,11 @@ fn check_vps(
     let verifiers_vps: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
-            let vp = storage
+            let (vp, gas) = storage
                 .validity_predicate(&addr)
                 .map_err(Error::StorageError)?;
+            gas_meter.add(gas).map_err(Error::GasError)?;
+            let vp = vp.ok_or_else(|| Error::MissingAddress(addr.clone()))?;
 
             gas_meter
                 .add_compiling_fee(vp.len())
