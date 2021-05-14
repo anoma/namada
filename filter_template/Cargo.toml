@@ -16,3 +16,5 @@ wee_alloc = "0.4.5"
 [profile.release]
 # smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto
 lto = true
+# simply terminate on panics, no unwinding
+panic = "abort"
