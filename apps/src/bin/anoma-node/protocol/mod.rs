@@ -39,6 +39,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Debug)]
 pub struct TxResult {
     pub gas_used: u64,
+    pub changed_keys: Vec<Key>,
     pub vps_result: VpsResult,
 }
 
@@ -53,7 +54,6 @@ impl TxResult {
 pub struct VpsResult {
     pub accepted_vps: HashSet<Address>,
     pub rejected_vps: HashSet<Address>,
-    pub changed_keys: Vec<Key>,
     pub gas_used: VpsGas,
     pub errors: Vec<(Address, String)>,
 }
@@ -63,7 +63,6 @@ impl Default for VpsResult {
         Self {
             accepted_vps: HashSet::default(),
             rejected_vps: HashSet::default(),
-            changed_keys: Vec::default(),
             gas_used: VpsGas::default(),
             errors: Vec::default(),
         }
@@ -123,6 +122,7 @@ pub fn apply_tx(
     let tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
 
     let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
+    let changed_keys = write_log.get_all_keys();
 
     let vps_result =
         check_vps(&tx, storage, block_gas_meter, write_log, &verifiers)?;
@@ -133,6 +133,7 @@ pub fn apply_tx(
 
     Ok(TxResult {
         gas_used,
+        changed_keys,
         vps_result,
     })
 }
@@ -161,7 +162,7 @@ fn check_vps(
     tx: &Tx,
     storage: &PersistentStorage,
     gas_meter: &mut BlockGasMeter,
-    write_log: &mut WriteLog,
+    write_log: &WriteLog,
     verifiers_from_tx: &HashSet<Address>,
 ) -> Result<VpsResult> {
     let verifiers = get_verifiers(write_log, verifiers_from_tx);
@@ -244,7 +245,7 @@ fn execute_vps(
     tx_data: Vec<u8>,
     tx_code: Vec<u8>,
     storage: &PersistentStorage,
-    write_log: &mut WriteLog,
+    write_log: &WriteLog,
     initial_gas: u64,
 ) -> Result<VpsResult> {
     let addresses = verifiers
@@ -279,8 +280,6 @@ fn merge_vp_results(
 ) -> Result<VpsResult> {
     let accepted_vps = a.accepted_vps.union(&b.accepted_vps).collect();
     let rejected_vps = a.rejected_vps.union(&b.rejected_vps).collect();
-    let mut changed_keys = a.changed_keys;
-    changed_keys.append(&mut b.changed_keys);
     let mut errors = a.errors;
     errors.append(&mut b.errors);
     let mut gas_used = a.gas_used;
@@ -294,7 +293,6 @@ fn merge_vp_results(
     Ok(VpsResult {
         accepted_vps,
         rejected_vps,
-        changed_keys,
         gas_used,
         errors,
     })
@@ -327,7 +325,6 @@ fn execute_vp(
             addresses,
         )
         .map_err(Error::VpRunnerError);
-    result.changed_keys.extend_from_slice(&keys);
 
     match accept {
         Ok(accepted) => {
@@ -357,13 +354,14 @@ impl fmt::Display for TxResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Transaction is {}. Gas used: {}, VPs result: {}",
+            "Transaction is {}. Gas used: {};{} VPs result: {}",
             if self.is_accepted() {
                 "valid"
             } else {
                 "invalid"
             },
             self.gas_used,
+            iterable_to_string("Changed keys", self.changed_keys.iter()),
             self.vps_result,
         )
     }
@@ -373,10 +371,9 @@ impl fmt::Display for VpsResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{}{}{}{}",
+            "{}{}{}",
             iterable_to_string("Accepted", self.accepted_vps.iter()),
             iterable_to_string("Rejected", self.rejected_vps.iter()),
-            iterable_to_string("Changed keys", self.changed_keys.iter()),
             iterable_to_string(
                 "Errors",
                 self.errors
