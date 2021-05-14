@@ -410,8 +410,6 @@ impl Shell {
         self.write_log
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
-        // TODO with VPs in storage, this prints out too much spam
-        // tracing::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {

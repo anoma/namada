@@ -382,8 +382,9 @@ mod tests {
         // commit a block
         write_log.commit_block(&mut storage).expect("commit failed");
 
-        let vp = storage.validity_predicate(&addr1).expect("vp read failed");
-        assert_eq!(vp, vp1);
+        let (vp, _gas) =
+            storage.validity_predicate(&addr1).expect("vp read failed");
+        assert_eq!(vp, Some(vp1));
         let (value, _) = storage.read(&key1).expect("read failed");
         assert_eq!(value.expect("no read value"), val1);
         let (value, _) = storage.read(&key2).expect("read failed");

@@ -69,7 +69,7 @@ impl GossipIntent {
         match self.matchmaker.as_mut() {
             Some(mm) => mm.handle_mm_message(mm_message).await,
             None => {
-                log::error!(
+                tracing::error!(
                     "cannot handle mesage {:?} because no matchmaker started",
                     mm_message
                 )

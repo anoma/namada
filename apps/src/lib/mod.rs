@@ -4,6 +4,7 @@ pub mod cli;
 pub mod config;
 pub mod genesis;
 pub mod gossiper;
+pub mod logging;
 pub mod proto;
 pub mod types;
 pub mod wallet;

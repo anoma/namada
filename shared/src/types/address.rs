@@ -44,7 +44,6 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(
-    Debug,
     Clone,
     BorshSerialize,
     BorshDeserialize,
@@ -107,10 +106,8 @@ impl Address {
         }
         Ok(address)
     }
-}
 
-impl Display for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn pretty_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}: {}",
@@ -124,6 +121,18 @@ impl Display for Address {
             },
             self.encode(),
         )
+    }
+}
+
+impl Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.pretty_fmt(f)
+    }
+}
+
+impl Debug for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.pretty_fmt(f)
     }
 }
 

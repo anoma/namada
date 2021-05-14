@@ -22,7 +22,6 @@ dependencies = [
  "futures",
  "hex",
  "libp2p",
- "log",
  "parity-wasm",
  "proptest",
  "prost",
