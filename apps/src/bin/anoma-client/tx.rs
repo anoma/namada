@@ -79,10 +79,11 @@ pub async fn submit_transfer(
 }
 
 async fn submit_tx(code: Vec<u8>, data: Option<Vec<u8>>, dry_run: bool) {
-    // TODO tendermint cache blocks the same transaction sent more than once,
-    // add a counter or timestamp?
-
-    let tx = Tx { code, data };
+    let tx = Tx {
+        code,
+        data,
+        timestamp: Some(std::time::SystemTime::now().into()),
+    };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();
 

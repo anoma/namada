@@ -499,13 +499,13 @@ impl Shell {
         )?;
         // Apply the transaction if accepted by all the VPs
         if result.vps.rejected_vps.is_empty() {
-            tracing::debug!(
+            tracing::info!(
                 "all VPs accepted apply_tx storage modification {:#?}",
                 result
             );
             self.write_log.commit_tx();
         } else {
-            tracing::debug!(
+            tracing::info!(
                 "some VPs rejected apply_tx storage modification {:#?}",
                 result.vps.rejected_vps
             );
@@ -530,8 +530,6 @@ impl Shell {
         self.write_log
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
-        // TODO with VPs in storage, this prints out too much spam
-        // tracing::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {

@@ -9,6 +9,7 @@ package types;
 message Tx {
   bytes code = 1;
   optional bytes data = 2;
+  google.protobuf.Timestamp timestamp = 3;
 }
 
 message Intent {
