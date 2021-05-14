@@ -2,12 +2,13 @@ mod filter;
 mod matchmaker;
 mod mempool;
 
-use crate::proto::types::{Intent, IntentBroadcasterMessage};
-use crate::types::MatchmakerMessage;
 use matchmaker::Matchmaker;
 use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
+
+use crate::proto::types::{Intent, IntentBroadcasterMessage};
+use crate::types::MatchmakerMessage;
 
 // TODO split Error and Result type in two, one for Result/Error that can only
 // happens locally and the other that can happens locally and in the network

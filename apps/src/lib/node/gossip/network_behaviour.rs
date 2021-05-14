@@ -2,10 +2,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use crate::proto::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage,
-};
-use crate::types::MatchmakerMessage;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
 };
@@ -22,6 +18,10 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::intent_broadcaster;
+use crate::proto::types::{
+    intent_broadcaster_message, IntentBroadcasterMessage,
+};
+use crate::types::MatchmakerMessage;
 
 #[derive(Error, Debug)]
 pub enum Error {

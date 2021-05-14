@@ -1,8 +1,8 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 use anoma::config::Config;
+use anoma::node::{gossip, shell};
 use anoma::{cli, config};
-use anoma::node::{ gossip, shell};
 use eyre::{Context, Result};
 
 pub fn main() -> Result<()> {

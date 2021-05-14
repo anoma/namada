@@ -25,8 +25,7 @@ use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::node::vm::host_env::write_log::WriteLog;
 use crate::node::vm::{self, TxRunner, VpRunner};
 use crate::proto::types::Tx;
-use crate::wallet;
-use crate::config;
+use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {

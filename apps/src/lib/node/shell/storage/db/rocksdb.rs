@@ -4,7 +4,6 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::node::shell::storage::types::{MerkleTree, PrefixIterator, Value};
 use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
@@ -18,6 +17,7 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
 use super::{BlockState, DBIter, Error, Result, DB};
+use crate::node::shell::storage::types::{MerkleTree, PrefixIterator, Value};
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -261,33 +261,34 @@ impl DB for RocksDB {
                         // We need special handling of validity predicate keys,
                         // which are reserved and so calling `Key::parse` on
                         // them would fail
-                        let key =
-                            match segments.get(3) {
-                                Some(seg) if *seg == RESERVED_VP_KEY => {
-                                    // the path of a validity predicate should be
-                                    // height/subspace/address/?
-                                    let mut addr_str = (*segments
-                                        .get(2)
-                                        .expect("the address not found"))
-                                    .to_owned();
-                                    let _ = addr_str.remove(0);
-                                    let addr = Address::decode(&addr_str)
-                                        .expect("cannot decode the address");
-                                    Key::validity_predicate(&addr)
-                                        .expect("failed to make the VP key")
+                        let key = match segments.get(3) {
+                            Some(seg) if *seg == RESERVED_VP_KEY => {
+                                // the path of a validity predicate should be
+                                // height/subspace/address/?
+                                let mut addr_str = (*segments
+                                    .get(2)
+                                    .expect("the address not found"))
+                                .to_owned();
+                                let _ = addr_str.remove(0);
+                                let addr = Address::decode(&addr_str)
+                                    .expect("cannot decode the address");
+                                Key::validity_predicate(&addr)
+                                    .expect("failed to make the VP key")
+                            }
+                            _ => Key::parse(
+                                segments
+                                    .split_off(2)
+                                    .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                            )
+                            .map_err(|e| {
+                                Error::Temporary {
+                                    error: format!(
+                                        "Cannot parse key segments {}: {}",
+                                        path, e
+                                    ),
                                 }
-                                _ => {
-                                    Key::parse(segments.split_off(2).join(
-                                        &KEY_SEGMENT_SEPARATOR.to_string(),
-                                    ))
-                                    .map_err(|e| Error::Temporary {
-                                        error: format!(
-                                            "Cannot parse key segments {}: {}",
-                                            path, e
-                                        ),
-                                    })?
-                                }
-                            };
+                            })?,
+                        };
                         subspaces.insert(key, bytes.to_vec());
                     }
                     "address_gen" => {
