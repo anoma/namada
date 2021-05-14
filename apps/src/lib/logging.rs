@@ -16,11 +16,9 @@ pub fn init_from_env_or(default: impl Into<Directive>) -> Result<()> {
 }
 
 pub fn filter_from_env_or(default: impl Into<Directive>) -> EnvFilter {
-    match env::var(ENV_KEY) {
-        Ok(log_env_var) => EnvFilter::new(log_env_var),
-        Err(_) => EnvFilter::default().add_directive(default.into()),
-    }
-}
+        env::var(ENV_KEY)
+        .map(EnvFilter::new)
+        .unwrap_or_else(|_| EnvFilter::default().add_directive(default.into()))
 
 pub fn set_subscriber(filter: EnvFilter) -> Result<()> {
     let my_collector = Subscriber::builder().with_env_filter(filter).finish();
