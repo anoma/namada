@@ -644,12 +644,7 @@ fn check_vps(
                 .validity_predicate(&addr)
                 .map_err(Error::StorageError)?;
             gas_meter.add(gas).map_err(Error::GasError)?;
-            let vp = match vp {
-                Some(vp) => vp,
-                None => {
-                    return Err(Error::MissingAddress(addr.clone()));
-                }
-            };
+            let vp = vp.ok_or_else(|| Error::MissingAddress(addr.clone()))?;
 
             gas_meter
                 .add_compiling_fee(vp.len())
