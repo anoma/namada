@@ -1326,6 +1326,7 @@ fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
     let tx = Tx {
         code: tx_code,
         data: Some(signed_bytes),
+        timestamp: Some(std::time::SystemTime::now().into()),
     };
     env.inject_mm_message
         .try_send(MatchmakerMessage::InjectTx(tx))
