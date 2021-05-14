@@ -5,7 +5,6 @@ use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
-use anoma::types::MatchmakerMessage;
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
@@ -17,8 +16,9 @@ use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
-use crate::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::shell::storage::{self, Storage};
+use crate::node::shell::gas::{BlockGasMeter, VpGasMeter};
+use crate::node::shell::storage::{self, Storage};
+use crate::types::MatchmakerMessage;
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -569,7 +569,7 @@ pub fn validate_untrusted_wasm(wasm_code: impl AsRef<[u8]>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shell::storage::TestStorage;
+    use crate::node::shell::storage::TestStorage;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.

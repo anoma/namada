@@ -1,7 +1,4 @@
 mod cli;
-mod gossip;
-mod shell;
-mod vm;
 
 use std::env;
 

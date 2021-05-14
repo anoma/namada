@@ -2,9 +2,8 @@
 //! in the CLI `--help`.
 use anoma::config::Config;
 use anoma::{cli, config};
+use anoma::node::{ gossip, shell};
 use eyre::{Context, Result};
-
-use crate::{gossip, shell};
 
 pub fn main() -> Result<()> {
     let mut app = cli::anoma_node_cli();

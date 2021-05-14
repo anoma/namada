@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
+use crate::node::shell::storage::{self, Storage};
 use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{Address, Key};
 use thiserror::Error;
-
-use crate::shell::storage::{self, Storage};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -334,7 +333,7 @@ mod tests {
 
     #[test]
     fn test_commit() {
-        let mut storage = crate::shell::storage::TestStorage::default();
+        let mut storage = crate::node::shell::storage::TestStorage::default();
         let mut write_log = WriteLog::new();
         let address_gen = EstablishedAddressGen::new("test");
 

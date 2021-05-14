@@ -2,8 +2,8 @@ mod filter;
 mod matchmaker;
 mod mempool;
 
-use anoma::proto::types::{Intent, IntentBroadcasterMessage};
-use anoma::types::MatchmakerMessage;
+use crate::proto::types::{Intent, IntentBroadcasterMessage};
+use crate::types::MatchmakerMessage;
 use matchmaker::Matchmaker;
 use prost::Message;
 use thiserror::Error;
@@ -30,7 +30,7 @@ pub struct GossipIntent {
 
 impl GossipIntent {
     pub fn new(
-        config: &anoma::config::IntentBroadcaster,
+        config: &crate::config::IntentBroadcaster,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let (matchmaker, matchmaker_event_receiver) = if let Some(matchmaker) =
             &config.matchmaker

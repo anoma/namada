@@ -1,7 +1,3 @@
-use anoma::config;
-use anoma::proto::types::Intent;
-use anoma::proto::IntentId;
-use anoma::types::MatchmakerMessage;
 use prost::Message;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
@@ -10,7 +6,11 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
-use crate::vm;
+use crate::config;
+use crate::node::vm;
+use crate::proto::types::Intent;
+use crate::proto::IntentId;
+use crate::types::MatchmakerMessage;
 
 #[derive(Debug)]
 pub struct Matchmaker {

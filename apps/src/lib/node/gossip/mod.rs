@@ -5,12 +5,12 @@ mod rpc;
 
 use std::thread;
 
-use anoma::proto::services::{rpc_message, RpcResponse};
-use anoma::types::MatchmakerMessage;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
 use self::p2p::P2P;
+use crate::proto::services::{rpc_message, RpcResponse};
+use crate::types::MatchmakerMessage;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -20,7 +20,7 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: anoma::config::IntentBroadcaster) -> Result<()> {
+pub fn run(config: crate::config::IntentBroadcaster) -> Result<()> {
     let rpc_event_receiver = if config.rpc {
         let (sender, receiver) = mpsc::channel(100);
         thread::spawn(|| rpc::rpc_server(sender).unwrap());
