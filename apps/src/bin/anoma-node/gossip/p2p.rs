@@ -190,7 +190,6 @@ impl P2P {
                     Ok(false) => {
                         let result =
                             format!("Node already subscribed to {}", topic);
-                        log::info!("{}", result);
                         tracing::info!("{}", result);
                         RpcResponse { result }
                     }
