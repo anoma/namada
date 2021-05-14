@@ -4,7 +4,7 @@ use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{Address, Key};
 use thiserror::Error;
 
-use crate::shell::storage::{self, PersistentStorage};
+use crate::shell::storage::{self, Storage};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -76,7 +76,13 @@ impl WriteLog {
                     len as i64 - value.len() as i64
                 }
                 StorageModification::Delete => len as i64,
-                StorageModification::InitAccount { .. } => 0,
+                StorageModification::InitAccount { .. } => {
+                    tracing::info!(
+                        "Trying to update the validity predicate that is just \
+                         initialized"
+                    );
+                    unreachable!()
+                }
             },
             // set just the length of the value because we don't know if
             // the previous value exists on the storage
@@ -95,14 +101,20 @@ impl WriteLog {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => value.len() as i64,
                 StorageModification::Delete => 0,
-                StorageModification::InitAccount { .. } => 0,
+                StorageModification::InitAccount { .. } => {
+                    tracing::info!(
+                        "Trying to delete the validity predicate that is just \
+                         initialized"
+                    );
+                    unreachable!()
+                }
             },
             // set 0 because we don't know if the previous value exists on the
             // storage
             None => 0,
         };
-        let gas = key.len() + (-size_diff as usize);
-        (gas as _, size_diff)
+        let gas = key.len() + size_diff as usize;
+        (gas as _, -size_diff)
     }
 
     /// Initialize a new account and return the gas cost.
@@ -167,10 +179,10 @@ impl WriteLog {
 
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.
-    pub fn commit_block(
-        &mut self,
-        storage: &mut PersistentStorage,
-    ) -> Result<()> {
+    pub fn commit_block<DB>(&mut self, storage: &mut Storage<DB>) -> Result<()>
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    {
         for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {
@@ -193,5 +205,182 @@ impl WriteLog {
         }
         self.block_write_log.clear();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_crud_value() {
+        let mut write_log = WriteLog::new();
+        let key =
+            Key::parse("key".to_owned()).expect("cannot parse the key string");
+
+        // read a non-existing key
+        let (value, gas) = write_log.read(&key);
+        assert!(value.is_none());
+        assert_eq!(gas, key.len() as u64);
+
+        // delete a non-existing key
+        let (gas, diff) = write_log.delete(&key);
+        assert_eq!(gas, key.len() as u64);
+        assert_eq!(diff, 0);
+
+        // insert a value
+        let inserted = "inserted".as_bytes().to_vec();
+        let (gas, diff) = write_log.write(&key, inserted.clone());
+        assert_eq!(gas, (key.len() + inserted.len()) as u64);
+        assert_eq!(diff, inserted.len() as i64);
+
+        // read the value
+        let (value, gas) = write_log.read(&key);
+        match value.expect("no read value") {
+            StorageModification::Write { value } => {
+                assert_eq!(*value, inserted)
+            }
+            _ => panic!("unexpected read result"),
+        }
+        assert_eq!(gas, (key.len() + inserted.len()) as u64);
+
+        // update the value
+        let updated = "updated".as_bytes().to_vec();
+        let (gas, diff) = write_log.write(&key, updated.clone());
+        assert_eq!(gas, (key.len() + updated.len()) as u64);
+        assert_eq!(diff, updated.len() as i64 - inserted.len() as i64);
+
+        // delete the key
+        let (gas, diff) = write_log.delete(&key);
+        assert_eq!(gas, (key.len() + updated.len()) as u64);
+        assert_eq!(diff, -(updated.len() as i64));
+
+        // delete the deleted key again
+        let (gas, diff) = write_log.delete(&key);
+        assert_eq!(gas, key.len() as u64);
+        assert_eq!(diff, 0);
+
+        // read the deleted key
+        let (value, gas) = write_log.read(&key);
+        match value.expect("no read value") {
+            &StorageModification::Delete => {}
+            _ => panic!("unexpected result"),
+        }
+        assert_eq!(gas, key.len() as u64);
+
+        // insert again
+        let reinserted = "reinserted".as_bytes().to_vec();
+        let (gas, diff) = write_log.write(&key, reinserted.clone());
+        assert_eq!(gas, (key.len() + reinserted.len()) as u64);
+        assert_eq!(diff, reinserted.len() as i64);
+    }
+
+    #[test]
+    fn test_crud_account() {
+        let mut write_log = WriteLog::new();
+        let address_gen = EstablishedAddressGen::new("test");
+
+        // init
+        let init_vp = "initialized".as_bytes().to_vec();
+        let (addr, gas) = write_log.init_account(&address_gen, init_vp.clone());
+        let vp_key =
+            Key::validity_predicate(&addr).expect("cannot create the vp key");
+        assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
+
+        // read
+        let (value, gas) = write_log.read(&vp_key);
+        match value.expect("no read value") {
+            StorageModification::InitAccount { vp } => assert_eq!(*vp, init_vp),
+            _ => panic!("unexpected result"),
+        }
+        assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
+
+        // get all
+        let accounts = write_log.get_initialized_accounts();
+        assert!(accounts.contains(&&vp_key));
+        assert_eq!(accounts.len(), 1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_update_initialized_account() {
+        let mut write_log = WriteLog::new();
+        let address_gen = EstablishedAddressGen::new("test");
+
+        let init_vp = "initialized".as_bytes().to_vec();
+        let (addr, _) = write_log.init_account(&address_gen, init_vp.clone());
+        let vp_key =
+            Key::validity_predicate(&addr).expect("cannot create the vp key");
+
+        // update should fail
+        let updated_vp = "updated".as_bytes().to_vec();
+        write_log.write(&vp_key, updated_vp.clone());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_delete_initialized_account() {
+        let mut write_log = WriteLog::new();
+        let address_gen = EstablishedAddressGen::new("test");
+
+        let init_vp = "initialized".as_bytes().to_vec();
+        let (addr, _) = write_log.init_account(&address_gen, init_vp.clone());
+        let vp_key =
+            Key::validity_predicate(&addr).expect("cannot create the vp key");
+
+        // delete should fail
+        write_log.delete(&vp_key);
+    }
+
+    #[test]
+    fn test_commit() {
+        let mut storage = crate::shell::storage::TestStorage::default();
+        let mut write_log = WriteLog::new();
+        let address_gen = EstablishedAddressGen::new("test");
+
+        let key1 =
+            Key::parse("key1".to_owned()).expect("cannot parse the key string");
+        let key2 =
+            Key::parse("key2".to_owned()).expect("cannot parse the key string");
+        let key3 =
+            Key::parse("key3".to_owned()).expect("cannot parse the key string");
+
+        // initialize an account
+        let vp1 = "vp1".as_bytes().to_vec();
+        let (addr1, _) = write_log.init_account(&address_gen, vp1.clone());
+        write_log.commit_tx();
+
+        // write values
+        let val1 = "val1".as_bytes().to_vec();
+        write_log.write(&key1, val1.clone());
+        write_log.write(&key2, val1.clone());
+        write_log.write(&key3, val1.clone());
+        write_log.commit_tx();
+
+        // these values are not written due to drop_tx
+        let val2 = "val2".as_bytes().to_vec();
+        write_log.write(&key1, val2.clone());
+        write_log.write(&key2, val2.clone());
+        write_log.write(&key3, val2.clone());
+        write_log.drop_tx();
+
+        // deletes and updates values
+        let val3 = "val3".as_bytes().to_vec();
+        write_log.delete(&key2);
+        write_log.write(&key3, val3.clone());
+        write_log.commit_tx();
+
+        // commit a block
+        write_log.commit_block(&mut storage).expect("commit failed");
+
+        let (vp, _gas) =
+            storage.validity_predicate(&addr1).expect("vp read failed");
+        assert_eq!(vp, Some(vp1));
+        let (value, _) = storage.read(&key1).expect("read failed");
+        assert_eq!(value.expect("no read value"), val1);
+        let (value, _) = storage.read(&key2).expect("read failed");
+        assert!(value.is_none());
+        let (value, _) = storage.read(&key3).expect("read failed");
+        assert_eq!(value.expect("no read value"), val3);
     }
 }

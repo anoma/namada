@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anoma::proto::types::Tx;
 use anoma::wallet;
 use anoma_shared::types::key::ed25519::Keypair;
@@ -77,10 +79,11 @@ pub async fn submit_transfer(
 }
 
 async fn submit_tx(code: Vec<u8>, data: Option<Vec<u8>>, dry_run: bool) {
-    // TODO tendermint cache blocks the same transaction sent more than once,
-    // add a counter or timestamp?
-
-    let tx = Tx { code, data };
+    let tx = Tx {
+        code,
+        data,
+        timestamp: Some(std::time::SystemTime::now().into()),
+    };
     let mut tx_bytes = vec![];
     tx.encode(&mut tx_bytes).unwrap();
 
@@ -94,11 +97,12 @@ async fn submit_tx(code: Vec<u8>, data: Option<Vec<u8>>, dry_run: bool) {
     // let request_body = request.into_json();
     // println!("HTTP request body: {}", request_body);
 
-    let client =
-        HttpClient::new("tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
+    let address: tendermint::net::Address =
+        FromStr::from_str("tcp://127.0.0.1:26657").unwrap();
+    let client = HttpClient::new(address).unwrap();
     // TODO broadcast_tx_commit shouldn't be used live;
     if dry_run {
-        let path = std::str::FromStr::from_str("dry_run_tx").unwrap();
+        let path = FromStr::from_str("dry_run_tx").unwrap();
 
         let response = client
             .abci_query(Some(path), tx_bytes, None, false)

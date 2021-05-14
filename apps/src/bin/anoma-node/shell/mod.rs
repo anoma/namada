@@ -47,6 +47,8 @@ pub enum Error {
     VpExecutionError(HashSet<Address>),
     #[error("Transaction gas overflow")]
     GasOverflow,
+    #[error("The address {0} doesn't exist")]
+    MissingAddress(Address),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -497,13 +499,13 @@ impl Shell {
         )?;
         // Apply the transaction if accepted by all the VPs
         if result.vps.rejected_vps.is_empty() {
-            tracing::debug!(
+            tracing::info!(
                 "all VPs accepted apply_tx storage modification {:#?}",
                 result
             );
             self.write_log.commit_tx();
         } else {
-            tracing::debug!(
+            tracing::info!(
                 "some VPs rejected apply_tx storage modification {:#?}",
                 result.vps.rejected_vps
             );
@@ -528,8 +530,6 @@ impl Shell {
         self.write_log
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
-        // TODO with VPs in storage, this prints out too much spam
-        // tracing::debug!("storage to commit {:#?}", self.storage);
         // store the block's data in DB
         // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {
@@ -638,9 +638,11 @@ fn check_vps(
     let verifiers_vps: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
-            let vp = storage
+            let (vp, gas) = storage
                 .validity_predicate(&addr)
                 .map_err(Error::StorageError)?;
+            gas_meter.add(gas).map_err(Error::GasError)?;
+            let vp = vp.ok_or_else(|| Error::MissingAddress(addr.clone()))?;
 
             gas_meter
                 .add_compiling_fee(vp.len())

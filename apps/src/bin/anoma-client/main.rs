@@ -1,9 +1,9 @@
 mod cli;
 mod tx;
 
+use anoma::logging;
 use color_eyre::eyre::Result;
-use tracing_subscriber::filter::{EnvFilter, LevelFilter};
-use tracing_subscriber::fmt::Subscriber;
+use tracing_subscriber::filter::LevelFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -11,10 +11,7 @@ async fn main() -> Result<()> {
     color_eyre::install()?;
 
     // init logging
-    let filter = EnvFilter::from_env("ANOMA_LOG")
-        .add_directive(LevelFilter::INFO.into());
-    let my_collector = Subscriber::builder().with_env_filter(filter).finish();
-    tracing::subscriber::set_global_default(my_collector)?;
+    logging::init_from_env_or(LevelFilter::INFO)?;
 
     // run the CLI
     cli::main().await
