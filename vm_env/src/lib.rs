@@ -2,6 +2,7 @@
 //! from the `shared` crate.
 
 mod imports;
+mod intent;
 pub mod key;
 mod token;
 
@@ -15,6 +16,12 @@ pub mod tx_prelude {
         pub use anoma_shared::types::token::*;
 
         pub use crate::token::transfer;
+    }
+
+    pub mod intent {
+        pub use anoma_shared::types::intent::*;
+
+        pub use crate::intent::invalidate_intent;
     }
 }
 
@@ -37,11 +44,17 @@ pub mod vp_prelude {
 
         pub use crate::token::vp;
     }
+
+    pub mod intent {
+        pub use anoma_shared::types::intent::*;
+
+        pub use crate::intent::vp;
+    }
 }
 
 pub mod matchmaker_prelude {
     pub use anoma_shared::types::*;
-    pub use anoma_shared::*;
+    pub use anoma_shared::vm_memory;
 
     pub use crate::imports::matchmaker::*;
 }

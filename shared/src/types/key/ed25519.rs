@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::io::{ErrorKind, Write};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -218,6 +219,48 @@ impl BorshSerialize for Signature {
             .try_to_vec()
             .expect("Signature bytes encoding shouldn't fail");
         writer.write_all(&bytes)
+    }
+}
+
+#[allow(clippy::derive_hash_xor_eq)]
+impl Hash for PublicKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.try_to_vec()
+            .expect("Encoding public key shouldn't fail")
+            .hash(state);
+    }
+}
+
+impl PartialOrd for PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.try_to_vec()
+            .expect("Encoding public key shouldn't fail")
+            .partial_cmp(
+                &other
+                    .try_to_vec()
+                    .expect("Encoding public key shouldn't fail"),
+            )
+    }
+}
+
+#[allow(clippy::derive_hash_xor_eq)]
+impl Hash for Signature {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.try_to_vec()
+            .expect("Encoding signature for hash shouldn't fail")
+            .hash(state);
+    }
+}
+
+impl PartialOrd for Signature {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.try_to_vec()
+            .expect("Encoding signature shouldn't fail")
+            .partial_cmp(
+                &other
+                    .try_to_vec()
+                    .expect("Encoding signature shouldn't fail"),
+            )
     }
 }
 

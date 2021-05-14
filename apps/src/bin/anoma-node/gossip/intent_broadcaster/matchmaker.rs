@@ -112,7 +112,7 @@ impl Matchmaker {
                 let client =
                     HttpClient::new(self.ledger_address.clone()).unwrap();
                 let response =
-                    client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
+                    client.broadcast_tx_commit(tx_bytes.into()).await;
                 println!("{:#?}", response);
             }
             MatchmakerMessage::RemoveIntents(intents_id) => {
