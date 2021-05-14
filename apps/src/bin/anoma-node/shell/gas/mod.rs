@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use std::ops::Add;
 
 use thiserror::Error;
 
@@ -166,9 +165,13 @@ impl VpsGas {
             * VpGasMeter::parallel_fee())
             as u64;
 
-        if self.max.add(initial_gas).add(parallel_gas)
-            > VpGasMeter::transaction_gas_limit()
-        {
+        let total = self
+            .max
+            .checked_add(initial_gas)
+            .ok_or(Error::GasOverflow)?
+            .checked_add(parallel_gas)
+            .ok_or(Error::GasOverflow)?;
+        if total > VpGasMeter::transaction_gas_limit() {
             return Err(Error::GasOverflow);
         }
         Ok(())
