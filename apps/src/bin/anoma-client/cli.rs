@@ -124,9 +124,9 @@ async fn subscribe_topic(node_addr: String, topic: String) {
 fn craft_intent(
     addr: String,
     token_sell: String,
-    amount_sell: u64,
+    amount_sell: f64,
     token_buy: String,
-    amount_buy: u64,
+    amount_buy: f64,
     file: String,
 ) {
     let source_keypair = wallet::key_of(&addr);
