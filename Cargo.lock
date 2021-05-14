@@ -49,6 +49,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tracing",
+ "tracing-log",
  "tracing-subscriber",
  "wasmer",
  "wasmer-compiler-singlepass",

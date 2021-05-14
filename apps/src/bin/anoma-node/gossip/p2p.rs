@@ -1,4 +1,5 @@
-use anoma::proto::{services::{rpc_message, RpcResponse}, types};
+use anoma::proto::services::{rpc_message, RpcResponse};
+use anoma::proto::types;
 use anoma::types::MatchmakerMessage;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
@@ -7,7 +8,7 @@ use libp2p::PeerId;
 use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
-use types::{IntentBroadcasterMessage, intent_broadcaster_message};
+use types::{intent_broadcaster_message, IntentBroadcasterMessage};
 
 use super::network_behaviour::Behaviour;
 
@@ -115,8 +116,10 @@ impl P2P {
                 {
                     Ok(true) => {
                         let mut intent_bytes = vec![];
-                        let intent = IntentBroadcasterMessage{
-                            msg: Some(intent_broadcaster_message::Msg::Intent(intent))
+                        let intent = IntentBroadcasterMessage {
+                            msg: Some(intent_broadcaster_message::Msg::Intent(
+                                intent,
+                            )),
                         };
                         intent.encode(&mut intent_bytes).unwrap();
                         match self
