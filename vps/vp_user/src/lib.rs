@@ -1,24 +1,22 @@
 use std::collections::HashSet;
 
 use anoma_vm_env::validity_predicate;
-use anoma_vm_env::vp_prelude::{
-    intent::{Intent, IntentTransfers},
-    key::ed25519::{Signed, SignedTxData},
-    *,
-};
+use anoma_vm_env::vp_prelude::intent::{Intent, IntentTransfers};
+use anoma_vm_env::vp_prelude::key::ed25519::{Signed, SignedTxData};
+use anoma_vm_env::vp_prelude::*;
 
-enum KeyType {
-    Token(Address),
-    InvalidIntentSet(Address),
+enum KeyType<'a> {
+    Token(&'a Address),
+    InvalidIntentSet(&'a Address),
     Unknown,
 }
 
-impl From<&Key> for KeyType {
-    fn from(key: &Key) -> Self {
+impl<'a> From<&'a Key> for KeyType<'a> {
+    fn from(key: &'a Key) -> KeyType<'a> {
         if let Some(address) = token::is_any_token_balance_key(key) {
-            Self::Token(address.clone())
+            Self::Token(address)
         } else if let Some(address) = intent::is_invalid_intent_key(key) {
-            Self::InvalidIntentSet(address.clone())
+            Self::InvalidIntentSet(address)
         } else {
             Self::Unknown
         }
@@ -57,7 +55,7 @@ validity_predicate! {
         for key in keys_changed.iter() {
             let is_valid = match KeyType::from(key){
                 KeyType::Token(owner)
-                    if owner == addr => {
+                    if owner == &addr => {
                         let key = key.to_string();
                         let pre: token::Amount = read_pre(&key).unwrap_or_default();
                         let post: token::Amount = read_post(&key).unwrap_or_default();
@@ -70,7 +68,7 @@ validity_predicate! {
                         // debit has to signed, credit doesn't
                         (change < 0 && (valid_sig || valid_intent)) || change > 0
                     },
-                KeyType::InvalidIntentSet(owner) if owner == addr => {
+                KeyType::InvalidIntentSet(owner) if owner == &addr => {
                     let key = key.to_string();
                     let pre: Vec<Vec<u8>> = read_pre(&key).unwrap_or_default();
                     let post: Vec<Vec<u8>> = read_post(&key).unwrap_or_default();
@@ -104,7 +102,7 @@ validity_predicate! {
 }
 
 fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
-    match SignedTxData::try_from_slice(&tx_data[..]) {
+    match SignedTxData::try_from_slice(tx_data) {
         Ok(tx) => match IntentTransfers::try_from_slice(&tx.data[..]) {
             Ok(tx_data) => {
                 if let Some(intent) = &tx_data.intents.get(addr) {
@@ -115,9 +113,9 @@ fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
                     false
                 }
             }
-            Err(_) => false
+            Err(_) => false,
         },
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
@@ -177,5 +175,6 @@ fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
         ));
     }
     res
-    // TODO once an intent is fulfilled, it should be invalidated somehow to prevent replay
+    // TODO once an intent is fulfilled, it should be invalidated somehow to
+    // prevent replay
 }
