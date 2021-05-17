@@ -126,10 +126,14 @@ impl Behaviour {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")
-            .heartbeat_interval(Duration::from_secs(10))
+            .heartbeat_interval(Duration::from_secs(1))
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id)
             .validate_messages()
+            .mesh_outbound_min(1)
+            .mesh_n_low(2)
+            .mesh_n(3)
+            .mesh_n_high(6)
             .build()
             .map_err(|s| Error::GossipConfig(s.to_string()))?;
 
@@ -275,10 +279,8 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
         match event {
             MdnsEvent::Discovered(list) => {
                 for (peer, addr) in list {
-                    if !self.local_discovery.has_node(&peer) {
-                        tracing::info!("discovering peer {} : {} ", peer, addr);
-                        self.intent_broadcaster_gossip.add_explicit_peer(&peer);
-                    }
+                    tracing::info!("discovering peer {} : {} ", peer, addr);
+                    self.intent_broadcaster_gossip.add_explicit_peer(&peer);
                 }
             }
             MdnsEvent::Expired(list) => {
