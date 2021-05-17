@@ -353,7 +353,8 @@ pub mod testing {
             offset: u64,
             len: usize,
         ) -> Result<(Vec<u8>, u64)> {
-            todo!()
+            let slice = unsafe { slice::from_raw_parts(offset as _, len as _) };
+            Ok((slice.to_vec(), 0))
         }
 
         fn write_bytes<T>(&self, offset: u64, bytes: T) -> Result<u64>
@@ -368,7 +369,11 @@ pub mod testing {
             offset: u64,
             len: usize,
         ) -> Result<(String, u64)> {
-            todo!()
+            let slice = unsafe { slice::from_raw_parts(offset as _, len as _) };
+            let string = std::str::from_utf8(slice)
+                .expect("unable to decode string from memory")
+                .to_string();
+            Ok((string, 0))
         }
 
         fn write_string(&self, offset: u64, string: String) -> Result<u64> {
