@@ -242,6 +242,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                 propagation_source,
                 message_id,
             } => {
+                tracing::info!("received Message: {:}", event);
                 let validity = self.handle_raw_intent(message.data);
                 self.intent_broadcaster_gossip
                     .report_message_validation_result(
@@ -252,6 +253,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                     .expect("Failed to validate the message ");
             }
             GossipsubEvent::Subscribed { peer_id: _, topic } => {
+                tracing::info!("received Subscribed: {:}", event);
                 self.intent_broadcaster_gossip
                     .subscribe(&IdentTopic::new(topic.into_string()))
                     .map_err(Error::FailedSubscribtion)
@@ -263,7 +265,9 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
             GossipsubEvent::Unsubscribed {
                 peer_id: _,
                 topic: _,
-            } => {}
+            } => {
+                tracing::info!("received Unsubscribed: {:}", event);
+            }
         }
     }
 }
@@ -273,13 +277,15 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
     fn inject_event(&mut self, event: MdnsEvent) {
         match event {
             MdnsEvent::Discovered(list) => {
-                for (peer, _) in list {
+                for (peer, addr) in list {
+                    tracing::info!("discovering peer {} : {} ", peer, addr);
                     self.intent_broadcaster_gossip.add_explicit_peer(&peer);
                 }
             }
             MdnsEvent::Expired(list) => {
-                for (peer, _) in list {
+                for (peer, addr) in list {
                     if !self.local_discovery.has_node(&peer) {
+                        tracing::info!("expired peer {} : {} ", peer, addr);
                         self.intent_broadcaster_gossip
                             .remove_explicit_peer(&peer);
                     }
