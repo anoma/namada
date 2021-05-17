@@ -75,7 +75,7 @@ impl Default for Ledger {
             tendermint: PathBuf::from(BASEDIR).join(TENDERMINT_DIR),
             db: PathBuf::from(BASEDIR).join(DB_DIR),
             address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                 26658,
             ),
             network: String::from("mainnet"),
@@ -120,7 +120,7 @@ impl Default for IntentBroadcaster {
     fn default() -> Self {
         Self {
             // TODO there must be a better option here
-            address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
+            address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/20201").unwrap(),
             rpc: false,
             subscription_filter: SubscriptionFilter::RegexFilter(
                 Regex::new("asset_v\\d{1,2}").unwrap(),
