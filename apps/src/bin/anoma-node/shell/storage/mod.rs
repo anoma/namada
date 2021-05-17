@@ -24,8 +24,6 @@ use super::MerkleRoot;
 pub enum Error {
     #[error("Key error {0}")]
     KeyError(anoma_shared::types::Error),
-    #[error("Coding error: {0}")]
-    CodingError(types::Error),
     #[error("Database error: {0}")]
     DBError(db::Error),
     #[error("Merkle tree error: {0}")]
@@ -163,7 +161,7 @@ where
                 .block
                 .tree
                 .0
-                .get(&key.hash256().map_err(Error::CodingError)?)
+                .get(&key.hash256())
                 .map_err(Error::MerkleTreeError)?
                 .is_zero(),
             gas as _,
@@ -209,10 +207,7 @@ where
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
     pub fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(u64, i64)> {
-        self.update_tree(
-            key.hash256().map_err(Error::CodingError)?,
-            value.hash256().map_err(Error::CodingError)?,
-        )?;
+        self.update_tree(key.hash256(), value.hash256())?;
 
         let len = value.len();
         let gas = key.len() + len;
@@ -229,10 +224,7 @@ where
         let mut size_diff = 0;
         if self.has_key(key)?.0 {
             // update the merkle tree with a zero as a tombstone
-            self.update_tree(
-                key.hash256().map_err(Error::CodingError)?,
-                H256::zero(),
-            )?;
+            self.update_tree(key.hash256(), H256::zero())?;
 
             size_diff -= match self.block.subspaces.remove(key) {
                 Some(prev) => prev.len() as i64,

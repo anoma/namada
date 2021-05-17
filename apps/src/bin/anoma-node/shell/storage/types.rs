@@ -1,7 +1,6 @@
 //! The key and values that may be persisted in a DB.
 
 use anoma_shared::bytes::ByteBuf;
-use anoma_shared::types::{Address, Key};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
@@ -34,11 +33,6 @@ where
     T::try_from_slice(bytes.as_ref()).map_err(Error::DeserializationError)
 }
 
-// TODO make a derive macro for Hash256 https://doc.rust-lang.org/book/ch19-06-macros.html#how-to-write-a-custom-derive-macro
-pub trait Hash256 {
-    fn hash256(&self) -> Result<H256>;
-}
-
 pub struct MerkleTree(
     pub SparseMerkleTree<Blake2bHasher, H256, DefaultStore<H256>>,
 );
@@ -58,68 +52,20 @@ impl core::fmt::Debug for MerkleTree {
     }
 }
 
-impl Hash256 for &str {
-    fn hash256(&self) -> Result<H256> {
-        if self.is_empty() {
-            return Ok(H256::zero());
-        }
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(&encode(&self.to_string()));
-        hasher.finalize(&mut buf);
-        Ok(buf.into())
-    }
+pub trait Hash256 {
+    fn hash256(&self) -> H256;
 }
 
-impl Hash256 for String {
-    fn hash256(&self) -> Result<H256> {
-        if self.is_empty() {
-            return Ok(H256::zero());
-        }
+impl<T> Hash256 for T
+where
+    T: BorshSerialize,
+{
+    fn hash256(&self) -> H256 {
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&encode(self));
+        hasher.update(&encode(&self));
         hasher.finalize(&mut buf);
-        Ok(buf.into())
-    }
-}
-
-impl Hash256 for [u8; 32] {
-    fn hash256(&self) -> Result<H256> {
-        if self.is_empty() {
-            return Ok(H256::zero());
-        }
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(self);
-        hasher.finalize(&mut buf);
-        Ok(buf.into())
-    }
-}
-
-impl Hash256 for u64 {
-    fn hash256(&self) -> Result<H256> {
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(&encode(self));
-        hasher.finalize(&mut buf);
-        Ok(buf.into())
-    }
-}
-
-impl Hash256 for Vec<u8> {
-    fn hash256(&self) -> Result<H256> {
-        let mut buf = [0u8; 32];
-        let mut hasher = new_blake2b();
-        hasher.update(&self.as_slice());
-        hasher.finalize(&mut buf);
-        Ok(buf.into())
-    }
-}
-
-impl Hash256 for Key {
-    fn hash256(&self) -> Result<H256> {
-        self.to_string().hash256()
+        buf.into()
     }
 }
 
@@ -146,13 +92,5 @@ impl<I> PrefixIterator<I> {
 impl<I> std::fmt::Debug for PrefixIterator<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("PrefixIterator")
-    }
-}
-
-impl Hash256 for Address {
-    fn hash256(&self) -> Result<H256> {
-        self.try_to_vec()
-            .expect("Encoding address shouldn't fail")
-            .hash256()
     }
 }
