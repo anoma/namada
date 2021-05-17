@@ -15,6 +15,7 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::identity::Keypair;
+use libp2p::mdns::{Mdns, MdnsEvent};
 use libp2p::swarm::NetworkBehaviourEventProcess;
 use libp2p::{NetworkBehaviour, PeerId};
 use regex::Regex;
@@ -33,6 +34,8 @@ pub enum Error {
     Filter(String),
     #[error("Failed initializing the gossip network: {0}")]
     GossipConfig(String),
+    #[error("Failed initializing mdns: {0}")]
+    Mdns(std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -103,6 +106,7 @@ pub struct Behaviour {
         IdentityTransform,
         IntentBroadcasterSubscriptionFilter,
     >,
+    local_discovery: Mdns,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
     pub intent_broadcaster_app: intent_broadcaster::GossipIntent,
@@ -161,9 +165,14 @@ impl Behaviour {
             intent_broadcaster::GossipIntent::new(&config)
                 .map_err(Error::GossipIntentError)?;
 
+        let local_discovery = {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(Mdns::new()).map_err(Error::Mdns)?
+        };
         Ok((
             Self {
                 intent_broadcaster_gossip,
+                local_discovery,
                 intent_broadcaster_app,
             },
             matchmaker_event_receiver,
@@ -259,6 +268,26 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     }
 }
 
+impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
+    // Called when `mdns` produces an event.
+    fn inject_event(&mut self, event: MdnsEvent) {
+        match event {
+            MdnsEvent::Discovered(list) => {
+                for (peer, _) in list {
+                    self.intent_broadcaster_gossip.add_explicit_peer(&peer);
+                }
+            }
+            MdnsEvent::Expired(list) => {
+                for (peer, _) in list {
+                    if !self.local_discovery.has_node(&peer) {
+                        self.intent_broadcaster_gossip
+                            .remove_explicit_peer(&peer);
+                    }
+                }
+            }
+        }
+    }
+}
 // TODO this is part of libp2p::gossipsub::subscription_filter but it's cannot
 // be exported because it's part of a feature "regex-filter" that is not
 // exposed. see issue https://github.com/libp2p/rust-libp2p/issues/2055
