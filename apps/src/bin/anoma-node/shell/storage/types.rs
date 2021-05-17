@@ -11,24 +11,20 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Serialization error {0}")]
-    SerializationError(std::io::Error),
     #[error("Deserialization error: {0}")]
     DeserializationError(std::io::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub fn encode<T>(value: &T) -> Result<Vec<u8>>
+pub fn encode<T>(value: &T) -> Vec<u8>
 where
     T: BorshSerialize,
 {
     let size = std::mem::size_of::<T>();
     let mut result = Vec::with_capacity(size);
-    value
-        .serialize(&mut result)
-        .map_err(Error::SerializationError)?;
-    Ok(result)
+    value.serialize(&mut result).expect("serialization failed");
+    result
 }
 
 pub fn decode<T>(bytes: impl AsRef<[u8]>) -> Result<T>
@@ -69,7 +65,7 @@ impl Hash256 for &str {
         }
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&encode(&self.to_string())?);
+        hasher.update(&encode(&self.to_string()));
         hasher.finalize(&mut buf);
         Ok(buf.into())
     }
@@ -82,7 +78,7 @@ impl Hash256 for String {
         }
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&encode(self)?);
+        hasher.update(&encode(self));
         hasher.finalize(&mut buf);
         Ok(buf.into())
     }
@@ -105,7 +101,7 @@ impl Hash256 for u64 {
     fn hash256(&self) -> Result<H256> {
         let mut buf = [0u8; 32];
         let mut hasher = new_blake2b();
-        hasher.update(&encode(self)?);
+        hasher.update(&encode(self));
         hasher.finalize(&mut buf);
         Ok(buf.into())
     }

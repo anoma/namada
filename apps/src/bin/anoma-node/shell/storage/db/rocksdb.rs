@@ -119,10 +119,7 @@ impl DB for RocksDB {
                     .push(&"store".to_owned())
                     .map_err(Error::KeyError)?;
                 let value = tree.0.store();
-                batch.put(
-                    key.to_string(),
-                    types::encode(value).map_err(Error::CodingError)?,
-                );
+                batch.put(key.to_string(), types::encode(value));
             }
         }
         // Block hash
@@ -131,10 +128,7 @@ impl DB for RocksDB {
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
             let value = hash;
-            batch.put(
-                key.to_string(),
-                types::encode(value).map_err(Error::CodingError)?,
-            );
+            batch.put(key.to_string(), types::encode(value));
         }
         // SubSpace
         {
@@ -152,10 +146,7 @@ impl DB for RocksDB {
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
             let value = address_gen;
-            batch.put(
-                key.to_string(),
-                types::encode(value).map_err(Error::CodingError)?,
-            );
+            batch.put(key.to_string(), types::encode(value));
         }
         let mut write_opts = WriteOptions::default();
         // TODO: disable WAL when we can shutdown with flush
@@ -170,11 +161,7 @@ impl DB for RocksDB {
         // NOTE for async writes, we need to take care that all previous heights
         // are known when updating this
         self.0
-            .put_opt(
-                "height",
-                types::encode(&height).map_err(Error::CodingError)?,
-                &write_opts,
-            )
+            .put_opt("height", types::encode(&height), &write_opts)
             .map_err(|e| Error::DBError {
                 error: e.into_string(),
             })
@@ -186,11 +173,7 @@ impl DB for RocksDB {
         write_opts.set_sync(true);
         // write_opts.disable_wal(true);
         self.0
-            .put_opt(
-                "chain_id",
-                types::encode(chain_id).map_err(Error::CodingError)?,
-                &write_opts,
-            )
+            .put_opt("chain_id", types::encode(chain_id), &write_opts)
             .map_err(|e| Error::DBError {
                 error: e.into_string(),
             })

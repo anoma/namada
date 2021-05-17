@@ -316,7 +316,7 @@ mod tests {
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
-        let value_bytes = types::encode(&value).expect("encoding failed");
+        let value_bytes = types::encode(&value);
         let value_bytes_len = value_bytes.len();
 
         // before insertion
@@ -365,7 +365,7 @@ mod tests {
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
-        let value_bytes = types::encode(&value).expect("encoding failed");
+        let value_bytes = types::encode(&value);
 
         // insert and commit
         storage.write(&key, value_bytes).expect("write failed");
@@ -397,8 +397,7 @@ mod tests {
             let key = prefix
                 .push(&format!("{}", i))
                 .expect("cannot push the key segment");
-            let value_bytes =
-                types::encode(&(i as u64)).expect("encoding failed");
+            let value_bytes = types::encode(&(i as u64));
             // insert
             storage
                 .write(&key, value_bytes.clone())

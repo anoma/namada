@@ -50,10 +50,7 @@ impl DB for MockDB {
                     .push(&"root".to_owned())
                     .map_err(Error::KeyError)?;
                 let value = tree.0.root();
-                self.0.insert(
-                    key.to_string(),
-                    types::encode(value).map_err(Error::CodingError)?,
-                );
+                self.0.insert(key.to_string(), types::encode(value));
             }
             // Tree's store
             {
@@ -61,10 +58,7 @@ impl DB for MockDB {
                     .push(&"store".to_owned())
                     .map_err(Error::KeyError)?;
                 let value = tree.0.store();
-                self.0.insert(
-                    key.to_string(),
-                    types::encode(value).map_err(Error::CodingError)?,
-                );
+                self.0.insert(key.to_string(), types::encode(value));
             }
         }
         // Block hash
@@ -73,10 +67,7 @@ impl DB for MockDB {
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
             let value = hash;
-            self.0.insert(
-                key.to_string(),
-                types::encode(value).map_err(Error::CodingError)?,
-            );
+            self.0.insert(key.to_string(), types::encode(value));
         }
         // SubSpace
         {
@@ -94,23 +85,15 @@ impl DB for MockDB {
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
             let value = address_gen;
-            self.0.insert(
-                key.to_string(),
-                types::encode(value).map_err(Error::CodingError)?,
-            );
+            self.0.insert(key.to_string(), types::encode(value));
         }
-        self.0.insert(
-            "height".to_owned(),
-            types::encode(&height).map_err(Error::CodingError)?,
-        );
+        self.0.insert("height".to_owned(), types::encode(&height));
         Ok(())
     }
 
     fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
-        self.0.insert(
-            "chain_id".to_owned(),
-            types::encode(chain_id).map_err(Error::CodingError)?,
-        );
+        self.0
+            .insert("chain_id".to_owned(), types::encode(chain_id));
         Ok(())
     }
 
