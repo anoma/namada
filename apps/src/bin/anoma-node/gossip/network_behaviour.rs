@@ -275,13 +275,15 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
         match event {
             MdnsEvent::Discovered(list) => {
                 for (peer, addr) in list {
-                    tracing::info!("discovering peer {} : {} ", peer, addr);
-                    self.intent_broadcaster_gossip.add_explicit_peer(&peer);
+                    if !self.local_discovery.has_node(&peer) {
+                        tracing::info!("discovering peer {} : {} ", peer, addr);
+                        self.intent_broadcaster_gossip.add_explicit_peer(&peer);
+                    }
                 }
             }
             MdnsEvent::Expired(list) => {
                 for (peer, addr) in list {
-                    if !self.local_discovery.has_node(&peer) {
+                    if self.local_discovery.has_node(&peer) {
                         tracing::info!("expired peer {} : {} ", peer, addr);
                         self.intent_broadcaster_gossip
                             .remove_explicit_peer(&peer);
