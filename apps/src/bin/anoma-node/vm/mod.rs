@@ -145,15 +145,16 @@ impl TxRunner {
         Self { wasm_store }
     }
 
+    /// Execute a transaction code. Returns verifiers requested by the
+    /// transaction.
     pub fn run<DB>(
         &self,
         storage: &Storage<DB>,
         write_log: &mut WriteLog,
-        verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
         tx_data: Vec<u8>,
-    ) -> Result<()>
+    ) -> Result<HashSet<Address>>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     {
@@ -174,10 +175,11 @@ impl TxRunner {
         let iterators = unsafe {
             MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
         };
+        let mut verifiers = HashSet::new();
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let verifiers = unsafe {
-            MutEnvHostWrapper::new(verifiers as *mut _ as *mut c_void)
+        let env_verifiers = unsafe {
+            MutEnvHostWrapper::new(&mut verifiers as *mut _ as *mut c_void)
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
@@ -196,7 +198,7 @@ impl TxRunner {
             storage,
             write_log,
             iterators,
-            verifiers,
+            env_verifiers,
             gas_meter,
             initial_memory,
         );
@@ -204,7 +206,8 @@ impl TxRunner {
         // compile and run the transaction wasm code
         let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
             .map_err(Error::InstantiationError)?;
-        Self::run_with_input(tx_code, tx_data)
+        Self::run_with_input(tx_code, tx_data)?;
+        Ok(verifiers)
     }
 
     fn run_with_input(tx_code: Instance, tx_data: TxInput) -> Result<()> {
@@ -616,13 +619,11 @@ mod tests {
         let tx_data = vec![];
         let mut storage = TestStorage::default();
         let mut write_log = WriteLog::new();
-        let mut verifiers = HashSet::new();
         let mut gas_meter = BlockGasMeter::default();
         let error = runner
             .run(
                 &mut storage,
                 &mut write_log,
-                &mut verifiers,
                 &mut gas_meter,
                 tx_code,
                 tx_data,
