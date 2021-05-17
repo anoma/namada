@@ -236,13 +236,13 @@ impl Behaviour {
 
 impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     fn inject_event(&mut self, event: GossipsubEvent) {
+        tracing::info!("received : {:?}", event);
         match event {
             GossipsubEvent::Message {
                 message,
                 propagation_source,
                 message_id,
             } => {
-                tracing::info!("received Message: {:}", event);
                 let validity = self.handle_raw_intent(message.data);
                 self.intent_broadcaster_gossip
                     .report_message_validation_result(
@@ -253,21 +253,18 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                     .expect("Failed to validate the message ");
             }
             GossipsubEvent::Subscribed { peer_id: _, topic } => {
-                tracing::info!("received Subscribed: {:}", event);
                 self.intent_broadcaster_gossip
                     .subscribe(&IdentTopic::new(topic.into_string()))
                     .map_err(Error::FailedSubscribtion)
                     .unwrap_or_else(|e| {
-                        tracing::error!("failed to subscribe: {:}", e);
+                        tracing::error!("failed to subscribe: {:?}", e);
                         false
                     });
             }
             GossipsubEvent::Unsubscribed {
                 peer_id: _,
                 topic: _,
-            } => {
-                tracing::info!("received Unsubscribed: {:}", event);
-            }
+            } => {}
         }
     }
 }
