@@ -20,6 +20,8 @@ pub enum Error {
     TransportError(std::io::Error),
     #[error("Error with the network behavior: {0}")]
     Behavior(super::network_behaviour::Error),
+    #[error("Error while dialing: {0}")]
+    Dialing(libp2p::core::connection::ConnectionLimit),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -34,26 +36,19 @@ impl P2P {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
-        let transport =
-            libp2p::build_tcp_ws_noise_mplex_yamux(local_key.clone())
-                .map_err(Error::TransportError)?;
+        let transport = libp2p::build_development_transport(local_key.clone())
+            .map_err(Error::TransportError)?;
 
         let (gossipsub, matchmaker_event_receiver) =
             Behaviour::new(local_key, config).map_err(Error::Behavior)?;
         let mut swarm = Swarm::new(transport, gossipsub, local_peer_id);
-        Swarm::listen_on(&mut swarm, config.address.clone()).unwrap();
+        Swarm::listen_on(&mut swarm, config.address.clone())
+            .expect("failed to start listening");
 
         for to_dial in &config.peers {
-            match Swarm::dial_addr(&mut swarm, to_dial.clone()) {
-                Ok(_) => tracing::info!("Dialed {:?}", to_dial.clone()),
-                Err(e) => {
-                    tracing::debug!(
-                        "Dial {:?} failed: {:?}",
-                        to_dial.clone(),
-                        e
-                    )
-                }
-            }
+            Swarm::dial_addr(&mut swarm, to_dial.clone())
+                .map_err(Error::Dialing)?;
+            tracing::info!("Dialed {:?}", to_dial.clone());
         }
         tracing::info!("network info {:?}", Swarm::network_info(&swarm));
         Ok((Self { swarm }, matchmaker_event_receiver))
