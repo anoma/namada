@@ -14,6 +14,7 @@ pub async fn submit_custom(
     tx_code_path: String,
     data_path: Option<&str>,
     dry_run: bool,
+    ledger_address: String,
 ) {
     let tx_code = std::fs::read(tx_code_path)
         .expect("Expected a file at given code path");
@@ -21,13 +22,14 @@ pub async fn submit_custom(
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
 
-    submit_tx(tx_code, data, dry_run).await
+    submit_tx(tx_code, data, dry_run, ledger_address).await
 }
 
 pub async fn submit_update_vp(
     addr: String,
     vp_code_path: String,
     dry_run: bool,
+    ledger_address: String,
 ) {
     let source_key: Keypair = wallet::key_of(&addr);
     let addr = Address::decode(addr).expect("The address is not valid");
@@ -44,7 +46,7 @@ pub async fn submit_update_vp(
             .expect("Encoding transaction data shouldn't fail"),
     );
 
-    submit_tx(tx_code, data, dry_run).await
+    submit_tx(tx_code, data, dry_run, ledger_address).await
 }
 
 pub async fn submit_transfer(
@@ -54,6 +56,7 @@ pub async fn submit_transfer(
     amount: f64,
     tx_code_path: String,
     dry_run: bool,
+    ledger_address: String,
 ) {
     let source_key: Keypair = wallet::key_of(&source);
     let source = Address::decode(source).expect("Source address is not valid");
@@ -75,10 +78,15 @@ pub async fn submit_transfer(
             .expect("Encoding transaction data shouldn't fail"),
     );
 
-    submit_tx(tx_code, data, dry_run).await
+    submit_tx(tx_code, data, dry_run, ledger_address).await
 }
 
-async fn submit_tx(code: Vec<u8>, data: Option<Vec<u8>>, dry_run: bool) {
+async fn submit_tx(
+    code: Vec<u8>,
+    data: Option<Vec<u8>>,
+    dry_run: bool,
+    ledger_address: String,
+) {
     let tx = Tx {
         code,
         data,
@@ -98,7 +106,7 @@ async fn submit_tx(code: Vec<u8>, data: Option<Vec<u8>>, dry_run: bool) {
     // println!("HTTP request body: {}", request_body);
 
     let address: tendermint::net::Address =
-        FromStr::from_str("tcp://127.0.0.1:26657").unwrap();
+        FromStr::from_str(&format!("tcp://{}", ledger_address)).unwrap();
     let client = HttpClient::new(address).unwrap();
     // TODO broadcast_tx_commit shouldn't be used live;
     if dry_run {

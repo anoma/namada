@@ -24,7 +24,10 @@ pub async fn main() -> Result<()> {
             let tx_code_path = cli::parse_string_req(args, cli::CODE_ARG);
             let data = args.value_of(cli::DATA_ARG);
             let dry_run = args.is_present(cli::DRY_RUN_TX_ARG);
-            tx::submit_custom(tx_code_path, data, dry_run).await;
+            let ledger_address =
+                cli::parse_string_req(args, cli::LEDGER_ADDRESS_ARG);
+            tx::submit_custom(tx_code_path, data, dry_run, ledger_address)
+                .await;
             Ok(())
         }
         Some((cli::TX_TRANSFER_COMMAND, args)) => {
@@ -34,6 +37,8 @@ pub async fn main() -> Result<()> {
             let amount: f64 = cli::parse_req(args, cli::AMOUNT_ARG);
             let tx_code_path = cli::parse_string_req(args, cli::CODE_ARG);
             let dry_run = args.is_present(cli::DRY_RUN_TX_ARG);
+            let ledger_address =
+                cli::parse_string_req(args, cli::LEDGER_ADDRESS_ARG);
             tx::submit_transfer(
                 source,
                 target,
@@ -41,6 +46,7 @@ pub async fn main() -> Result<()> {
                 amount,
                 tx_code_path,
                 dry_run,
+                ledger_address,
             )
             .await;
             Ok(())
@@ -49,7 +55,10 @@ pub async fn main() -> Result<()> {
             let addr = cli::parse_string_req(args, cli::ADDRESS_ARG);
             let vp_code_path = cli::parse_string_req(args, cli::CODE_ARG);
             let dry_run = args.is_present(cli::DRY_RUN_TX_ARG);
-            tx::submit_update_vp(addr, vp_code_path, dry_run).await;
+            let ledger_address =
+                cli::parse_string_req(args, cli::LEDGER_ADDRESS_ARG);
+            tx::submit_update_vp(addr, vp_code_path, dry_run, ledger_address)
+                .await;
             Ok(())
         }
         Some((cli::INTENT_COMMAND, args)) => {

@@ -156,6 +156,15 @@ fn client_tx_subcommand() -> App {
                 .required(false)
                 .about("Dry run the transaction."),
         )
+        .arg(
+            Arg::new(LEDGER_ADDRESS_ARG)
+                .long(LEDGER_ADDRESS_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .required(false)
+                .default_value("127.0.0.1:26657")
+                .about("Address of a ledger node as host:port"),
+        )
 }
 
 fn client_intent_subcommand() -> App {
@@ -305,6 +314,15 @@ fn client_tx_transfer_subcommand() -> App {
                 .required(false)
                 .about("Dry run the transaction."),
         )
+        .arg(
+            Arg::new(LEDGER_ADDRESS_ARG)
+                .long(LEDGER_ADDRESS_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .required(false)
+                .default_value("127.0.0.1:26657")
+                .about("Address of a ledger node as host:port"),
+        )
 }
 
 fn client_tx_update_subcommand() -> App {
@@ -333,6 +351,15 @@ fn client_tx_update_subcommand() -> App {
                 .takes_value(false)
                 .required(false)
                 .about("Dry run the transaction."),
+        )
+        .arg(
+            Arg::new(LEDGER_ADDRESS_ARG)
+                .long(LEDGER_ADDRESS_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .required(false)
+                .default_value("127.0.0.1:26657")
+                .about("Address of a ledger node as host:port"),
         )
 }
 
