@@ -18,8 +18,6 @@ pub type Swarm = libp2p::Swarm<Behaviour>;
 pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),
-    #[error("Failed to subscribe")]
-    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
     #[error("Error with the network behavior: {0}")]
     Behavior(super::network_behaviour::Error),
 }
@@ -36,35 +34,17 @@ impl P2P {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
-        // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-        let transport = libp2p::build_development_transport(local_key.clone())
-            .map_err(Error::TransportError)?;
+        let transport =
+            libp2p::build_tcp_ws_noise_mplex_yamux(local_key.clone())
+                .map_err(Error::TransportError)?;
 
         let (gossipsub, matchmaker_event_receiver) =
             Behaviour::new(local_key, config).map_err(Error::Behavior)?;
-        let swarm = Swarm::new(transport, gossipsub, local_peer_id);
-
-        let mut p2p = Self { swarm };
-
-        config
-            .topics
-            .iter()
-            .try_for_each(|topic| {
-                p2p.swarm
-                    .intent_broadcaster_gossip
-                    .subscribe(&IdentTopic::new(topic))
-                    .map_err(Error::FailedSubscribtion)
-                    // it returns bool signifying if it was already subscribed.
-                    // discard because it can't be false as
-                    // the config.topics is a hash set
-                    .map(|_| ())
-            })
-            .expect("failed to subscribe to topic");
-
-        Swarm::listen_on(&mut p2p.swarm, config.address.clone()).unwrap();
+        let mut swarm = Swarm::new(transport, gossipsub, local_peer_id);
+        Swarm::listen_on(&mut swarm, config.address.clone()).unwrap();
 
         for to_dial in &config.peers {
-            match Swarm::dial_addr(&mut p2p.swarm, to_dial.clone()) {
+            match Swarm::dial_addr(&mut swarm, to_dial.clone()) {
                 Ok(_) => tracing::info!("Dialed {:?}", to_dial.clone()),
                 Err(e) => {
                     tracing::debug!(
@@ -75,7 +55,8 @@ impl P2P {
                 }
             }
         }
-        Ok((p2p, matchmaker_event_receiver))
+        tracing::info!("network info {:?}", Swarm::network_info(&swarm));
+        Ok((Self { swarm }, matchmaker_event_receiver))
     }
 
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
@@ -89,6 +70,7 @@ impl P2P {
         &mut self,
         event: rpc_message::Message,
     ) -> RpcResponse {
+        tracing::info!("network info {:?}", Swarm::network_info(&self.swarm));
         match event {
             rpc_message::Message::Intent(
                 anoma::proto::services::IntentMesage {

@@ -16,7 +16,7 @@ use libp2p::gossipsub::{
 };
 use libp2p::identity::Keypair;
 use libp2p::mdns::{Mdns, MdnsEvent};
-use libp2p::swarm::NetworkBehaviourEventProcess;
+use libp2p::swarm::{NetworkBehaviour, NetworkBehaviourEventProcess};
 use libp2p::{NetworkBehaviour, PeerId};
 use regex::Regex;
 use thiserror::Error;
@@ -157,7 +157,7 @@ impl Behaviour {
             }
         };
 
-        let intent_broadcaster_gossip: Gossipsub =
+        let mut intent_broadcaster_gossip: Gossipsub =
             Gossipsub::new_with_subscription_filter(
                 MessageAuthenticity::Signed(key),
                 gossipsub_config,
@@ -168,6 +168,20 @@ impl Behaviour {
         let (intent_broadcaster_app, matchmaker_event_receiver) =
             intent_broadcaster::GossipIntent::new(&config)
                 .map_err(Error::GossipIntentError)?;
+
+        config
+            .topics
+            .iter()
+            .try_for_each(|topic| {
+                intent_broadcaster_gossip
+                    .subscribe(&IdentTopic::new(topic))
+                    .map_err(Error::FailedSubscribtion)
+                    // it returns bool signifying if it was already subscribed.
+                    // discard because it can't be false as
+                    // the config.topics is a hash set
+                    .map(|_| ())
+            })
+            .expect("failed to subscribe to topic");
 
         let local_discovery = {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -278,17 +292,20 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
     fn inject_event(&mut self, event: MdnsEvent) {
         match event {
             MdnsEvent::Discovered(list) => {
-                for (peer, addr) in list {
-                    tracing::info!("discovering peer {} : {} ", peer, addr);
-                    self.intent_broadcaster_gossip.add_explicit_peer(&peer);
+                for (peer, _addr) in list {
+                    // tracing::info!("discovering peer {} : {} ", peer, addr);
+                    self.intent_broadcaster_gossip.inject_connected(&peer);
+                    // self.intent_broadcaster_gossip.add_explicit_peer(&peer);
                 }
             }
             MdnsEvent::Expired(list) => {
-                for (peer, addr) in list {
+                for (peer, _addr) in list {
                     if self.local_discovery.has_node(&peer) {
-                        tracing::info!("expired peer {} : {} ", peer, addr);
+                        // tracing::info!("expired peer {} : {} ", peer, addr);
                         self.intent_broadcaster_gossip
-                            .remove_explicit_peer(&peer);
+                            .inject_disconnected(&peer);
+                        // self.intent_broadcaster_gossip
+                        //     .remove_explicit_peer(&peer);
                     }
                 }
             }
