@@ -1,5 +1,4 @@
 mod cli;
-mod tx;
 
 use anoma::logging;
 use color_eyre::eyre::Result;
