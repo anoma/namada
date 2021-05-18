@@ -142,6 +142,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma_integration_tests"
+version = "0.1.0"
+dependencies = [
+ "Anoma",
+ "anoma_shared",
+ "anoma_vm_env",
+ "concat-idents",
+ "lazy_static 1.4.0",
+]
+
+[[package]]
 name = "anoma_shared"
 version = "0.1.0"
 dependencies = [
@@ -4298,17 +4309,6 @@ dependencies = [
  "numtoa",
  "redox_syscall",
  "redox_termios",
-]
-
-[[package]]
-name = "tests"
-version = "0.1.0"
-dependencies = [
- "Anoma",
- "anoma_shared",
- "anoma_vm_env",
- "concat-idents",
- "lazy_static 1.4.0",
 ]
 
 [[package]]
