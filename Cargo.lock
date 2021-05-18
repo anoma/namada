@@ -32,6 +32,7 @@ dependencies = [
  "rayon",
  "regex",
  "rocksdb",
+ "rustc_version",
  "serde 1.0.125",
  "serde_bytes",
  "serde_json",
