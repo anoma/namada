@@ -6,9 +6,9 @@ use anoma::proto::types::{
     intent_broadcaster_message, IntentBroadcasterMessage,
 };
 use anoma::types::MatchmakerMessage;
-use libp2p::gossipsub::subscription_filter::{
+use libp2p::{gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
-};
+}, mdns::MdnsConfig};
 use libp2p::gossipsub::{
     self, GossipsubEvent, GossipsubMessage, IdentTopic, IdentityTransform,
     MessageAcceptance, MessageAuthenticity, MessageId, TopicHash,
@@ -177,15 +177,15 @@ impl Behaviour {
                     .subscribe(&IdentTopic::new(topic))
                     .map_err(Error::FailedSubscribtion)
                     // it returns bool signifying if it was already subscribed.
-                    // discard because it can't be false as
-                    // the config.topics is a hash set
+                    // discard because it can't be false as the config.topics is
+                    // a hash set
                     .map(|_| ())
             })
             .expect("failed to subscribe to topic");
 
         let local_discovery = {
             let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(Mdns::new()).map_err(Error::Mdns)?
+            rt.block_on(Mdns::new(MdnsConfig::default())).map_err(Error::Mdns)?
         };
         Ok((
             Self {
@@ -295,23 +295,19 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
                 for (peer, _addr) in list {
                     // tracing::info!("discovering peer {} : {} ", peer, addr);
                     self.intent_broadcaster_gossip.inject_connected(&peer);
-                    // self.intent_broadcaster_gossip.add_explicit_peer(&peer);
                 }
-            }
+        }
             MdnsEvent::Expired(list) => {
                 for (peer, _addr) in list {
                     if self.local_discovery.has_node(&peer) {
-                        // tracing::info!("expired peer {} : {} ", peer, addr);
-                        self.intent_broadcaster_gossip
-                            .inject_disconnected(&peer);
-                        // self.intent_broadcaster_gossip
-                        //     .remove_explicit_peer(&peer);
+                        self.intent_broadcaster_gossip.inject_disconnected(&peer);
                     }
                 }
             }
         }
     }
 }
+
 // TODO this is part of libp2p::gossipsub::subscription_filter but it's cannot
 // be exported because it's part of a feature "regex-filter" that is not
 // exposed. see issue https://github.com/libp2p/rust-libp2p/issues/2055

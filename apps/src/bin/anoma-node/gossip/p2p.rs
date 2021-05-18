@@ -1,7 +1,7 @@
 use anoma::proto::services::{rpc_message, RpcResponse};
 use anoma::proto::types;
 use anoma::types::MatchmakerMessage;
-use libp2p::gossipsub::IdentTopic;
+use libp2p::{TransportError, gossipsub::IdentTopic};
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
 use libp2p::PeerId;
@@ -21,7 +21,9 @@ pub enum Error {
     #[error("Error with the network behavior: {0}")]
     Behavior(super::network_behaviour::Error),
     #[error("Error while dialing: {0}")]
-    Dialing(libp2p::core::connection::ConnectionLimit),
+    Dialing(libp2p::swarm::DialError),
+    #[error("Error while starting to listing: {0}")]
+    Listening(TransportError<std::io::Error>),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -36,14 +38,20 @@ impl P2P {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
-        let transport = libp2p::build_development_transport(local_key.clone())
-            .map_err(Error::TransportError)?;
+        let transport =
+        {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(libp2p::development_transport(local_key.clone()))
+                .map_err(Error::TransportError)?
+        };
 
         let (gossipsub, matchmaker_event_receiver) =
             Behaviour::new(local_key, config).map_err(Error::Behavior)?;
-        let mut swarm = Swarm::new(transport, gossipsub, local_peer_id);
+
+        let mut swarm = libp2p::Swarm::new(transport, gossipsub, local_peer_id);
+
         Swarm::listen_on(&mut swarm, config.address.clone())
-            .expect("failed to start listening");
+            .map_err(Error::Listening)?;
 
         for to_dial in &config.peers {
             Swarm::dial_addr(&mut swarm, to_dial.clone())
@@ -56,7 +64,7 @@ impl P2P {
 
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
         self.swarm
-            .intent_broadcaster_app
+            .behaviour_mut().intent_broadcaster_app
             .handle_mm_message(mm_message)
             .await
     }
@@ -88,7 +96,7 @@ impl P2P {
             ) => {
                 match self
                     .swarm
-                    .intent_broadcaster_app
+                    .behaviour_mut().intent_broadcaster_app
                     .apply_intent(intent.clone())
                 {
                     Ok(true) => {
@@ -101,7 +109,7 @@ impl P2P {
                         intent.encode(&mut intent_bytes).unwrap();
                         match self
                             .swarm
-                            .intent_broadcaster_gossip
+                            .behaviour_mut().intent_broadcaster_gossip
                             .publish(IdentTopic::new(topic), intent_bytes)
                         {
                             Ok(message_id) => {
@@ -165,7 +173,7 @@ impl P2P {
                 },
             ) => {
                 let topic = IdentTopic::new(&topic_str);
-                match self.swarm.intent_broadcaster_gossip.subscribe(&topic) {
+                match self.swarm.behaviour_mut().intent_broadcaster_gossip.subscribe(&topic) {
                     Ok(true) => {
                         let result = format!("Node subscribed to {}", topic);
                         tracing::info!("{}", result);
