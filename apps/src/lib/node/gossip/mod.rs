@@ -7,7 +7,8 @@ use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
 use self::p2p::P2P;
-use crate::{config::IntentBroadcaster, proto::services::{rpc_message, RpcResponse}};
+use crate::config::IntentBroadcaster;
+use crate::proto::services::{rpc_message, RpcResponse};
 use crate::types::MatchmakerMessage;
 
 #[derive(Error, Debug)]

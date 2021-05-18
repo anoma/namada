@@ -7,7 +7,10 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::network_behaviour::Behaviour;
-use crate::proto::{services::{rpc_message, RpcResponse}, types::{IntentBroadcasterMessage, intent_broadcaster_message}};
+use crate::proto::services::{rpc_message, RpcResponse};
+use crate::proto::types::{
+    intent_broadcaster_message, IntentBroadcasterMessage,
+};
 use crate::types::MatchmakerMessage;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
