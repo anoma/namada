@@ -293,14 +293,19 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
     fn inject_event(&mut self, event: MdnsEvent) {
         match event {
             MdnsEvent::Discovered(list) => {
-                for (peer, _addr) in list {
-                    // tracing::info!("discovering peer {} : {} ", peer, addr);
+                for (peer, addr) in list {
+                    tracing::debug!("discovering peer {} : {} ", peer, addr);
                     self.intent_broadcaster_gossip.inject_connected(&peer);
                 }
             }
             MdnsEvent::Expired(list) => {
-                for (peer, _addr) in list {
+                for (peer, addr) in list {
                     if self.local_discovery.has_node(&peer) {
+                        tracing::debug!(
+                            "disconnecting peer {} : {} ",
+                            peer,
+                            addr
+                        );
                         self.intent_broadcaster_gossip
                             .inject_disconnected(&peer);
                     }
