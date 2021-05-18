@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
+    regex::RegexSubscriptionFilter
 };
 use libp2p::gossipsub::{
     self, GossipsubEvent, GossipsubMessage, IdentTopic, IdentityTransform,
@@ -14,7 +15,6 @@ use libp2p::identity::Keypair;
 use libp2p::mdns::{Mdns, MdnsConfig, MdnsEvent};
 use libp2p::swarm::{NetworkBehaviour, NetworkBehaviourEventProcess};
 use libp2p::{NetworkBehaviour, PeerId};
-use regex::Regex;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
@@ -27,7 +27,7 @@ use crate::types::MatchmakerMessage;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed to subscribe")]
-    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
+    FailedSubscription(libp2p::gossipsub::error::SubscriptionError),
     #[error("Failed initializing the intent broadcaster app: {0}")]
     GossipIntentError(intent_broadcaster::Error),
     #[error("Failed initializing the topic filter: {0}")]
@@ -47,7 +47,7 @@ pub type Gossipsub = libp2p::gossipsub::Gossipsub<
 
 // TODO merge type of config and this one ? Maybe not a good idea
 pub enum IntentBroadcasterSubscriptionFilter {
-    RegexFilter(RegexSubscribtionFilter),
+    RegexFilter(RegexSubscriptionFilter),
     WhitelistFilter(WhitelistSubscriptionFilter),
 }
 
@@ -140,7 +140,7 @@ impl Behaviour {
         let filter = match &config.subscription_filter {
             crate::config::SubscriptionFilter::RegexFilter(regex) => {
                 IntentBroadcasterSubscriptionFilter::RegexFilter(
-                    RegexSubscribtionFilter(regex.clone()),
+                    RegexSubscriptionFilter(regex.clone()),
                 )
             }
             crate::config::SubscriptionFilter::WhitelistFilter(topics) => {
@@ -175,7 +175,7 @@ impl Behaviour {
             .try_for_each(|topic| {
                 intent_broadcaster_gossip
                     .subscribe(&IdentTopic::new(topic))
-                    .map_err(Error::FailedSubscribtion)
+                    .map_err(Error::FailedSubscription)
                     // it returns bool signifying if it was already subscribed.
                     // discard because it can't be false as the config.topics is
                     // a hash set
@@ -274,7 +274,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
             GossipsubEvent::Subscribed { peer_id: _, topic } => {
                 self.intent_broadcaster_gossip
                     .subscribe(&IdentTopic::new(topic.into_string()))
-                    .map_err(Error::FailedSubscribtion)
+                    .map_err(Error::FailedSubscription)
                     .unwrap_or_else(|e| {
                         tracing::error!("failed to subscribe: {:?}", e);
                         false
@@ -312,16 +312,5 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
                 }
             }
         }
-    }
-}
-
-// TODO this is part of libp2p::gossipsub::subscription_filter but it's cannot
-// be exported because it's part of a feature "regex-filter" that is not
-// exposed. see issue https://github.com/libp2p/rust-libp2p/issues/2055
-pub struct RegexSubscribtionFilter(pub Regex);
-
-impl TopicSubscriptionFilter for RegexSubscribtionFilter {
-    fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
-        self.0.is_match(topic_hash.as_str())
     }
 }
