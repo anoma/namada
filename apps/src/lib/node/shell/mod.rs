@@ -5,8 +5,6 @@ mod tendermint;
 use std::path::Path;
 use std::sync::mpsc;
 
-use anoma::proto::types::Tx;
-use anoma::wallet;
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{
@@ -19,8 +17,10 @@ use thiserror::Error;
 use self::gas::BlockGasMeter;
 use self::storage::PersistentStorage;
 use self::tendermint::{AbciMsg, AbciReceiver};
-use crate::protocol;
-use crate::vm::host_env::write_log::WriteLog;
+use crate::node::protocol;
+use crate::node::vm::host_env::write_log::WriteLog;
+use crate::proto::types::Tx;
+use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -40,7 +40,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: anoma::config::Ledger) -> Result<()> {
+pub fn run(config: config::Ledger) -> Result<()> {
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, &config.db);
@@ -49,7 +49,7 @@ pub fn run(config: anoma::config::Ledger) -> Result<()> {
     shell.run()
 }
 
-pub fn reset(config: anoma::config::Ledger) -> Result<()> {
+pub fn reset(config: config::Ledger) -> Result<()> {
     // simply nuke the DB files
     let db_path = &config.db;
     match std::fs::remove_dir_all(&db_path) {

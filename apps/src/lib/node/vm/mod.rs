@@ -5,7 +5,6 @@ use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
-use anoma::types::MatchmakerMessage;
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
@@ -17,8 +16,9 @@ use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
-use crate::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::shell::storage::{self, Storage};
+use crate::node::shell::gas::{BlockGasMeter, VpGasMeter};
+use crate::node::shell::storage::{self, Storage};
+use crate::types::MatchmakerMessage;
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -44,12 +44,20 @@ impl<T> Clone for EnvHostWrapper<T> {
 }
 
 impl<T> EnvHostWrapper<T> {
+    /// Wrap a reference for VM environment.
+    ///
+    /// # Safety
+    ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
     unsafe fn new(host_structure: *const c_void) -> Self {
         Self(host_structure, PhantomData)
     }
 
+    /// Get a reference from VM environment.
+    ///
+    /// # Safety
+    ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
     #[allow(dead_code)]
@@ -76,6 +84,10 @@ impl<T> Clone for MutEnvHostWrapper<T> {
 }
 
 impl<T> MutEnvHostWrapper<T> {
+    /// Wrap a mutable reference for VM environment.
+    ///
+    /// # Safety
+    ///
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
@@ -83,6 +95,10 @@ impl<T> MutEnvHostWrapper<T> {
         Self(host_structure, PhantomData)
     }
 
+    /// Get a mutable reference from VM environment.
+    ///
+    /// # Safety
+    ///
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
@@ -134,6 +150,8 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl TxRunner {
+    /// TODO remove the `new`, it's not very useful
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
@@ -245,6 +263,8 @@ pub struct VpRunner {
 }
 
 impl VpRunner {
+    /// TODO remove the `new`, it's not very useful
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
@@ -372,6 +392,8 @@ pub struct MatchmakerRunner {
 }
 
 impl MatchmakerRunner {
+    /// TODO remove the `new`, it's not very useful
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         // TODO for the matchmaker we could use a compiler that does more
         // optimisation.
@@ -466,6 +488,8 @@ pub struct FilterRunner {
 }
 
 impl FilterRunner {
+    /// TODO remove the `new`, it's not very useful
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         // TODO replace to use a better compiler because this program is local
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
@@ -572,7 +596,7 @@ pub fn validate_untrusted_wasm(wasm_code: impl AsRef<[u8]>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shell::storage::TestStorage;
+    use crate::node::shell::storage::TestStorage;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.

@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use anoma::proto::types::Intent;
 use thiserror::Error;
 
-use crate::vm;
+use crate::node::vm;
+use crate::proto::types::Intent;
 
 #[derive(Error, Debug)]
 pub enum Error {

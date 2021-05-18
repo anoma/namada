@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use anoma::proto::types::Intent;
-use anoma::proto::IntentId;
 use thiserror::Error;
+
+use crate::proto::types::Intent;
+use crate::proto::IntentId;
 
 #[derive(Error, Debug)]
 pub enum Error {}

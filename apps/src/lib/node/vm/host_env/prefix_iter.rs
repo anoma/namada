@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::shell::storage::DBIter;
+use crate::node::shell::storage::DBIter;
 
 pub struct PrefixIterators<'iter, DB>
 where
@@ -15,10 +15,7 @@ where
     DB: DBIter<'iter>,
 {
     pub fn new() -> Self {
-        PrefixIterators {
-            index: PrefixIteratorId::new(0),
-            iterators: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn insert(&mut self, iter: DB::PrefixIter) -> PrefixIteratorId {
@@ -35,6 +32,18 @@ where
         match self.iterators.get_mut(&id) {
             Some(iter) => iter.next(),
             None => None,
+        }
+    }
+}
+
+impl<'iter, DB> Default for PrefixIterators<'iter, DB>
+where
+    DB: DBIter<'iter>,
+{
+    fn default() -> Self {
+        Self {
+            index: PrefixIteratorId::new(0),
+            iterators: HashMap::new(),
         }
     }
 }

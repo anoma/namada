@@ -3,18 +3,18 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use anoma::proto::types::Tx;
 use anoma_shared::types::{Address, Key};
 use prost::Message;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::shell::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
-use crate::shell::storage;
-use crate::shell::storage::PersistentStorage;
-use crate::vm;
-use crate::vm::host_env::write_log::WriteLog;
-use crate::vm::{TxRunner, VpRunner};
+use crate::node::shell::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
+use crate::node::shell::storage;
+use crate::node::shell::storage::PersistentStorage;
+use crate::node::vm;
+use crate::node::vm::host_env::write_log::WriteLog;
+use crate::node::vm::{TxRunner, VpRunner};
+use crate::proto::types::Tx;
 
 #[derive(Error, Debug)]
 pub enum Error {

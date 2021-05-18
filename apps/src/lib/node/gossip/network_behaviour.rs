@@ -2,10 +2,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use anoma::proto::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage,
-};
-use anoma::types::MatchmakerMessage;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
 };
@@ -22,6 +18,10 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::intent_broadcaster;
+use crate::proto::types::{
+    intent_broadcaster_message, IntentBroadcasterMessage,
+};
+use crate::types::MatchmakerMessage;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -117,7 +117,7 @@ pub fn message_id(message: &GossipsubMessage) -> MessageId {
 impl Behaviour {
     pub fn new(
         key: Keypair,
-        config: &anoma::config::IntentBroadcaster,
+        config: &crate::config::IntentBroadcaster,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
@@ -130,12 +130,12 @@ impl Behaviour {
             .map_err(|s| Error::GossipConfig(s.to_string()))?;
 
         let filter = match &config.subscription_filter {
-            anoma::config::SubscriptionFilter::RegexFilter(regex) => {
+            crate::config::SubscriptionFilter::RegexFilter(regex) => {
                 IntentBroadcasterSubscriptionFilter::RegexFilter(
                     RegexSubscribtionFilter(regex.clone()),
                 )
             }
-            anoma::config::SubscriptionFilter::WhitelistFilter(topics) => {
+            crate::config::SubscriptionFilter::WhitelistFilter(topics) => {
                 IntentBroadcasterSubscriptionFilter::WhitelistFilter(
                     WhitelistSubscriptionFilter(
                         topics
@@ -172,7 +172,7 @@ impl Behaviour {
 
     fn handle_intent(
         &mut self,
-        intent: anoma::proto::types::Intent,
+        intent: crate::proto::types::Intent,
     ) -> MessageAcceptance {
         match self.intent_broadcaster_app.apply_intent(intent) {
             Ok(true) => MessageAcceptance::Accept,

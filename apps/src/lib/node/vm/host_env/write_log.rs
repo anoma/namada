@@ -4,7 +4,7 @@ use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{Address, Key};
 use thiserror::Error;
 
-use crate::shell::storage::{self, Storage};
+use crate::node::shell::storage::{self, Storage};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -30,6 +30,12 @@ pub struct WriteLog {
 
 impl WriteLog {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for WriteLog {
+    fn default() -> Self {
         Self {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
@@ -343,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_commit() {
-        let mut storage = crate::shell::storage::TestStorage::default();
+        let mut storage = crate::node::shell::storage::TestStorage::default();
         let mut write_log = WriteLog::new();
         let address_gen = EstablishedAddressGen::new("test");
 

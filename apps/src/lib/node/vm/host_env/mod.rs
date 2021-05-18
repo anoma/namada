@@ -4,9 +4,6 @@ pub mod write_log;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
-use anoma::proto::types::Tx;
-use anoma::types::MatchmakerMessage;
-use anoma::wallet;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
@@ -22,8 +19,11 @@ use self::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use self::write_log::WriteLog;
 use super::memory::AnomaMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
-use crate::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::shell::storage::{self, Storage};
+use crate::node::shell::gas::{BlockGasMeter, VpGasMeter};
+use crate::node::shell::storage::{self, Storage};
+use crate::proto::types::Tx;
+use crate::types::MatchmakerMessage;
+use crate::wallet;
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;

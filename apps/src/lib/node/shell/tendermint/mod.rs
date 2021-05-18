@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
 
-use anoma::genesis::{self, Validator};
 use anoma_shared::types::{BlockHash, BlockHeight};
 use serde_json::json;
 use tendermint_abci::{self, ServerBuilder};
@@ -27,8 +26,10 @@ use tendermint_proto::abci::{
 };
 
 use super::MerkleRoot;
-use crate::protocol::TxResult;
-use crate::shell::MempoolTxType;
+use crate::config;
+use crate::genesis::{self, Validator};
+use crate::node::protocol::TxResult;
+use crate::node::shell::MempoolTxType;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
 pub type AbciSender = mpsc::Sender<AbciMsg>;
@@ -77,7 +78,7 @@ pub enum AbciMsg {
 }
 
 /// Run the ABCI server in the current thread (blocking).
-pub fn run(sender: AbciSender, config: anoma::config::Ledger) {
+pub fn run(sender: AbciSender, config: config::Ledger) {
     let home_dir = config.tendermint;
     let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
@@ -111,7 +112,7 @@ pub fn run(sender: AbciSender, config: anoma::config::Ledger) {
         .expect("TEMPORARY: failed to start up ABCI server")
 }
 
-pub fn reset(config: anoma::config::Ledger) {
+pub fn reset(config: config::Ledger) {
     // reset all the Tendermint state, if any
     Command::new("tendermint")
         .args(&[

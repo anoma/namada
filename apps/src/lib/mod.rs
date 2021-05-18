@@ -1,10 +1,12 @@
 //! Shared code for the node, client etc.
 
 pub mod cli;
+pub mod client;
 pub mod config;
 pub mod genesis;
 pub mod gossiper;
 pub mod logging;
+pub mod node;
 pub mod proto;
 pub mod types;
 pub mod wallet;

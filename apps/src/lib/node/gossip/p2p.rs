@@ -1,5 +1,3 @@
-use anoma::proto::services::{rpc_message, RpcResponse};
-use anoma::types::MatchmakerMessage;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -9,6 +7,8 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::network_behaviour::Behaviour;
+use crate::proto::services::{rpc_message, RpcResponse};
+use crate::types::MatchmakerMessage;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -29,7 +29,7 @@ pub struct P2P {
 
 impl P2P {
     pub fn new(
-        config: &anoma::config::IntentBroadcaster,
+        config: &crate::config::IntentBroadcaster,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
@@ -89,7 +89,7 @@ impl P2P {
     ) -> RpcResponse {
         match event {
             rpc_message::Message::Intent(
-                anoma::proto::services::IntentMesage {
+                crate::proto::services::IntentMesage {
                     intent: None,
                     topic: _,
                 },
@@ -102,7 +102,7 @@ impl P2P {
                 RpcResponse { result }
             }
             rpc_message::Message::Intent(
-                anoma::proto::services::IntentMesage {
+                crate::proto::services::IntentMesage {
                     intent: Some(intent),
                     topic,
                 },
@@ -176,7 +176,7 @@ impl P2P {
                 }
             }
             rpc_message::Message::Topic(
-                anoma::proto::services::SubscribeTopicMessage {
+                crate::proto::services::SubscribeTopicMessage {
                     topic: topic_str,
                 },
             ) => {

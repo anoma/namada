@@ -382,7 +382,7 @@ mod tests {
         let mut expected = Vec::new();
         let prefix = Key::parse("prefix".to_owned())
             .expect("cannot parse the key string");
-        for i in 9..0 {
+        for i in (0..9).rev() {
             let key = prefix
                 .push(&format!("{}", i))
                 .expect("cannot push the key segment");
