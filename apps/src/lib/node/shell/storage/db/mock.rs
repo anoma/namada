@@ -9,12 +9,11 @@ use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
     RESERVED_VP_KEY,
 };
-use sparse_merkle_tree::default_store::DefaultStore;
-use sparse_merkle_tree::{SparseMerkleTree, H256};
+use sparse_merkle_tree::SparseMerkleTree;
 
-use super::super::types::{KVBytes, MerkleTree, Value};
+use super::super::types::{KVBytes, MerkleTree};
 use super::{BlockState, Error, Result, DB};
-use crate::node::shell::storage::types::PrefixIterator;
+use crate::node::shell::storage::types::{self, PrefixIterator};
 use crate::node::shell::storage::DBIter;
 
 #[derive(Debug)]
@@ -51,7 +50,7 @@ impl DB for MockDB {
                     .push(&"root".to_owned())
                     .map_err(Error::KeyError)?;
                 let value = tree.0.root();
-                self.0.insert(key.to_string(), value.encode());
+                self.0.insert(key.to_string(), types::encode(value));
             }
             // Tree's store
             {
@@ -59,7 +58,7 @@ impl DB for MockDB {
                     .push(&"store".to_owned())
                     .map_err(Error::KeyError)?;
                 let value = tree.0.store();
-                self.0.insert(key.to_string(), value.encode());
+                self.0.insert(key.to_string(), types::encode(value));
             }
         }
         // Block hash
@@ -68,7 +67,7 @@ impl DB for MockDB {
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
             let value = hash;
-            self.0.insert(key.to_string(), value.encode());
+            self.0.insert(key.to_string(), types::encode(value));
         }
         // SubSpace
         {
@@ -86,14 +85,15 @@ impl DB for MockDB {
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
             let value = address_gen;
-            self.0.insert(key.to_string(), value.encode());
+            self.0.insert(key.to_string(), types::encode(value));
         }
-        self.0.insert("height".to_owned(), height.encode());
+        self.0.insert("height".to_owned(), types::encode(&height));
         Ok(())
     }
 
     fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
-        self.0.insert("chain_id".to_owned(), chain_id.encode());
+        self.0
+            .insert("chain_id".to_owned(), types::encode(chain_id));
         Ok(())
     }
 
@@ -110,26 +110,18 @@ impl DB for MockDB {
 
     fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         let chain_id;
-        let height;
-        let address_gen;
+        let height: BlockHeight;
         // Chain ID
         match self.0.get("chain_id") {
             Some(bytes) => {
-                chain_id = String::decode(bytes);
+                chain_id = types::decode(bytes).map_err(Error::CodingError)?;
             }
             None => return Ok(None),
         }
         // Block height
         match self.0.get("height") {
             Some(bytes) => {
-                height = BlockHeight::decode(bytes);
-            }
-            None => return Ok(None),
-        }
-        // Address gen
-        match self.0.get("address_gen") {
-            Some(bytes) => {
-                address_gen = EstablishedAddressGen::decode(bytes);
+                height = types::decode(bytes).map_err(Error::CodingError)?;
             }
             None => return Ok(None),
         }
@@ -139,6 +131,7 @@ impl DB for MockDB {
         let mut root = None;
         let mut store = None;
         let mut hash = None;
+        let mut address_gen = None;
         let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
         for (path, bytes) in
             self.0.range((Included(prefix), Excluded(upper_prefix)))
@@ -146,61 +139,78 @@ impl DB for MockDB {
             let mut segments: Vec<&str> =
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
-                Some(prefix) => match *prefix {
-                    "tree" => match segments.get(2) {
-                        Some(smt) => match *smt {
-                            "root" => root = Some(H256::decode(bytes.to_vec())),
-                            "store" => {
-                                store = Some(DefaultStore::<H256>::decode(
-                                    bytes.to_vec(),
-                                ))
-                            }
-                            _ => unknown_key_error(path)?,
-                        },
-                        None => unknown_key_error(path)?,
-                    },
-                    "hash" => hash = Some(BlockHash::decode(bytes.to_vec())),
-                    "subspace" => {
-                        // We need special handling of validity predicate keys,
-                        // which are reserved and so calling `Key::parse` on
-                        // them would fail
-                        let key = match segments.get(3) {
-                            Some(seg) if *seg == RESERVED_VP_KEY => {
-                                // the path of a validity predicate should be
-                                // height/subspace/address/?
-                                let mut addr_str = (*segments
-                                    .get(2)
-                                    .expect("the address not found"))
-                                .to_owned();
-                                let _ = addr_str.remove(0);
-                                let addr = Address::decode(&addr_str)
-                                    .expect("cannot decode the address");
-                                Key::validity_predicate(&addr)
-                                    .expect("failed to make the VP key")
-                            }
-                            _ => Key::parse(
-                                segments
-                                    .split_off(2)
-                                    .join(&KEY_SEGMENT_SEPARATOR.to_string()),
-                            )
-                            .map_err(|e| {
-                                Error::Temporary {
-                                    error: format!(
-                                        "Cannot parse key segments {}: {}",
-                                        path, e
-                                    ),
+                Some(prefix) => {
+                    match *prefix {
+                        "tree" => match segments.get(2) {
+                            Some(smt) => match *smt {
+                                "root" => {
+                                    root = Some(
+                                        types::decode(bytes)
+                                            .map_err(Error::CodingError)?,
+                                    )
                                 }
-                            })?,
-                        };
-                        subspaces.insert(key, bytes.to_vec());
+                                "store" => {
+                                    store = Some(
+                                        types::decode(bytes)
+                                            .map_err(Error::CodingError)?,
+                                    )
+                                }
+                                _ => unknown_key_error(path)?,
+                            },
+                            None => unknown_key_error(path)?,
+                        },
+                        "hash" => {
+                            hash = Some(
+                                types::decode(bytes)
+                                    .map_err(Error::CodingError)?,
+                            )
+                        }
+                        "subspace" => {
+                            // We need special handling of validity predicate
+                            // keys, which are reserved and so calling
+                            // `Key::parse` on them would fail
+                            let key = match segments.get(3) {
+                                Some(seg) if *seg == RESERVED_VP_KEY => {
+                                    // the path of a validity predicate should
+                                    // be height/subspace/address/?
+                                    let mut addr_str = (*segments
+                                        .get(2)
+                                        .expect("the address not found"))
+                                    .to_owned();
+                                    let _ = addr_str.remove(0);
+                                    let addr = Address::decode(&addr_str)
+                                        .expect("cannot decode the address");
+                                    Key::validity_predicate(&addr)
+                                        .expect("failed to make the VP key")
+                                }
+                                _ => {
+                                    Key::parse(segments.split_off(2).join(
+                                        &KEY_SEGMENT_SEPARATOR.to_string(),
+                                    ))
+                                    .map_err(|e| Error::Temporary {
+                                        error: format!(
+                                            "Cannot parse key segments {}: {}",
+                                            path, e
+                                        ),
+                                    })?
+                                }
+                            };
+                            subspaces.insert(key, bytes.to_vec());
+                        }
+                        "address_gen" => {
+                            address_gen = Some(
+                                types::decode(bytes)
+                                    .map_err(Error::CodingError)?,
+                            );
+                        }
+                        _ => unknown_key_error(path)?,
                     }
-                    _ => unknown_key_error(path)?,
-                },
+                }
                 None => unknown_key_error(path)?,
             }
         }
-        match (root, store, hash) {
-            (Some(root), Some(store), Some(hash)) => {
+        match (root, store, hash, address_gen) {
+            (Some(root), Some(store), Some(hash), Some(address_gen)) => {
                 let tree = MerkleTree(SparseMerkleTree::new(root, store));
                 Ok(Some(BlockState {
                     chain_id,

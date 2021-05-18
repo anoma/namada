@@ -143,7 +143,9 @@ impl WriteLog {
         (addr, gas)
     }
 
-    /// Get the storage keys changed in the current transaction
+    /// Get the storage keys changed in the current transaction. This excludes
+    /// keys of validity predicates of newly initialized accounts, but may
+    /// include keys of other data written into newly initialized accounts.
     pub fn get_changed_keys(&self) -> Vec<&Key> {
         self.tx_write_log
             .iter()
@@ -164,6 +166,13 @@ impl WriteLog {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Get the storage keys changed and accounts keys initialized in the
+    /// current transaction. The account keys point to the validity predicates
+    /// of the newly created accounts.
+    pub fn get_all_keys(&self) -> Vec<Key> {
+        self.tx_write_log.keys().cloned().collect()
     }
 
     /// Commit the current transaction's write log to the block when it's

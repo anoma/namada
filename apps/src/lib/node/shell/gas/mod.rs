@@ -1,6 +1,8 @@
+use std::convert::TryFrom;
+
 use thiserror::Error;
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     #[error("Transaction gas limit exceeded")]
     TransactionGasExceedededError,
@@ -38,45 +40,11 @@ pub struct VpGasMeter {
     pub error: Option<Error>,
 }
 
-impl VpGasMeter {
-    pub fn add(&mut self, gas: u64) -> Result<()> {
-        match self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow) {
-            Ok(gas) => {
-                self.vp_gas = gas;
-            }
-            Err(err) => {
-                self.error = Some(err.clone());
-                return Err(err);
-            }
-        }
-
-        if self.vp_gas > TRANSACTION_GAS_LIMIT {
-            self.error = Some(Error::TransactionGasExceedededError);
-            return Err(Error::TransactionGasExceedededError);
-        }
-        Ok(())
-    }
-
-    pub fn gas_overflow(&self) -> bool {
-        self.error.is_some()
-    }
-
-    pub fn parallel_fee() -> f64 {
-        PARALLEL_GAS_MULTIPLER
-    }
-
-    pub fn transaction_gas_limit() -> u64 {
-        TRANSACTION_GAS_LIMIT
-    }
-}
-
-impl VpGasMeter {
-    pub fn new(vp_gas: u64) -> Self {
-        Self {
-            vp_gas,
-            error: None,
-        }
-    }
+/// Gas meter for VPs parallel runs
+#[derive(Clone, Debug)]
+pub struct VpsGas {
+    max: u64,
+    rest: Vec<u64>,
 }
 
 impl BlockGasMeter {
@@ -128,7 +96,7 @@ impl BlockGasMeter {
         self.block_gas = 0;
     }
 
-    pub fn add_parallel_fee(&mut self, vps_gases: &mut Vec<u64>) -> Result<()> {
+    pub fn add_parallel_fee(&mut self, vps_gases: &[u64]) -> Result<()> {
         let gas_used =
             vps_gases.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLER;
         self.add(gas_used as u64)
@@ -136,6 +104,77 @@ impl BlockGasMeter {
 
     pub fn get_current_transaction_gas(&mut self) -> u64 {
         self.transaction_gas
+    }
+
+    pub fn add_vps_gas(&mut self, VpsGas { max, rest }: &VpsGas) -> Result<()> {
+        self.add(*max)?;
+        self.add_parallel_fee(rest)
+    }
+}
+
+impl VpGasMeter {
+    pub fn new(vp_gas: u64) -> Self {
+        Self {
+            vp_gas,
+            error: None,
+        }
+    }
+
+    pub fn add(&mut self, gas: u64) -> Result<()> {
+        match self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow) {
+            Ok(gas) => {
+                self.vp_gas = gas;
+            }
+            Err(err) => {
+                self.error = Some(err.clone());
+                return Err(err);
+            }
+        }
+
+        if self.vp_gas > TRANSACTION_GAS_LIMIT {
+            self.error = Some(Error::TransactionGasExceedededError);
+            return Err(Error::TransactionGasExceedededError);
+        }
+        Ok(())
+    }
+
+    pub fn parallel_fee() -> f64 {
+        PARALLEL_GAS_MULTIPLER
+    }
+
+    pub fn transaction_gas_limit() -> u64 {
+        TRANSACTION_GAS_LIMIT
+    }
+}
+
+impl VpsGas {
+    pub fn merge(
+        &mut self,
+        other: &mut VpsGas,
+        initial_gas: u64,
+    ) -> Result<()> {
+        if other.max > self.max {
+            self.rest.push(self.max);
+            self.max = other.max;
+        } else {
+            self.rest.push(other.max);
+            self.rest.append(&mut other.rest);
+        }
+
+        let parallel_gas: u64 = (self.rest.clone().iter().sum::<u64>() as f64
+            * VpGasMeter::parallel_fee())
+            as u64;
+
+        let total = self
+            .max
+            .checked_add(initial_gas)
+            .ok_or(Error::GasOverflow)?
+            .checked_add(parallel_gas)
+            .ok_or(Error::GasOverflow)?;
+        if total > VpGasMeter::transaction_gas_limit() {
+            return Err(Error::GasOverflow);
+        }
+        Ok(())
     }
 }
 
@@ -146,6 +185,19 @@ impl Default for BlockGasMeter {
             transaction_gas: 0,
         }
     }
+}
+
+impl Default for VpsGas {
+    fn default() -> Self {
+        Self {
+            max: 0,
+            rest: Vec::new(),
+        }
+    }
+}
+
+pub fn as_i64(gas: u64) -> i64 {
+    i64::try_from(gas).expect("Gas should never overflow i64")
 }
 
 #[cfg(test)]
@@ -159,7 +211,7 @@ mod tests {
         fn test_vp_gas_meter_add(gas in 0..TRANSACTION_GAS_LIMIT) {
             let mut meter = VpGasMeter::new(0);
             meter.add(gas).expect("cannot add the gas");
-            assert!(!meter.gas_overflow());
+            assert_eq!(meter.error, None);
         }
 
         #[test]
@@ -175,7 +227,7 @@ mod tests {
     fn test_vp_gas_overflow() {
         let mut meter = VpGasMeter::new(1);
         match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
-            Error::GasOverflow => assert!(meter.gas_overflow()),
+            err @ Error::GasOverflow => assert_eq!(meter.error, Some(err)),
             _ => panic!("unexpected error happened"),
         }
     }
@@ -187,8 +239,8 @@ mod tests {
             .add(TRANSACTION_GAS_LIMIT)
             .expect_err("unexpectedly succeeded")
         {
-            Error::TransactionGasExceedededError => {
-                assert!(meter.gas_overflow())
+            err @ Error::TransactionGasExceedededError => {
+                assert_eq!(meter.error, Some(err))
             }
             _ => panic!("unexpected error happened"),
         }
@@ -240,5 +292,14 @@ mod tests {
             Error::BlockGasExceeded => {}
             _ => panic!("unexpected error happened"),
         }
+    }
+
+    /// Test that the function [`as_i64`] cannot fail for transaction and block
+    /// gas limit + some "tolerance" for gas exhaustion.
+    #[test]
+    fn gas_limits_cannot_overflow_i64() {
+        let tolerance = 10_000;
+        as_i64(BLOCK_GAS_LIMIT + tolerance);
+        as_i64(TRANSACTION_GAS_LIMIT + tolerance);
     }
 }

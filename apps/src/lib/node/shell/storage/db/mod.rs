@@ -21,7 +21,7 @@ use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{BlockHash, BlockHeight, Key};
 use thiserror::Error;
 
-use super::types::MerkleTree;
+use super::types::{self, MerkleTree};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -35,6 +35,8 @@ pub enum Error {
     UnknownKey { key: String },
     #[error("Key error {0}")]
     KeyError(anoma_shared::types::Error),
+    #[error("Coding error: {0}")]
+    CodingError(types::Error),
     #[error("DB error: {error}")]
     DBError { error: String },
 }
