@@ -6,16 +6,16 @@ use anoma::proto::types::{
     intent_broadcaster_message, IntentBroadcasterMessage,
 };
 use anoma::types::MatchmakerMessage;
-use libp2p::{gossipsub::subscription_filter::{
+use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
-}, mdns::MdnsConfig};
+};
 use libp2p::gossipsub::{
     self, GossipsubEvent, GossipsubMessage, IdentTopic, IdentityTransform,
     MessageAcceptance, MessageAuthenticity, MessageId, TopicHash,
     ValidationMode,
 };
 use libp2p::identity::Keypair;
-use libp2p::mdns::{Mdns, MdnsEvent};
+use libp2p::mdns::{Mdns, MdnsConfig, MdnsEvent};
 use libp2p::swarm::{NetworkBehaviour, NetworkBehaviourEventProcess};
 use libp2p::{NetworkBehaviour, PeerId};
 use regex::Regex;
@@ -185,7 +185,8 @@ impl Behaviour {
 
         let local_discovery = {
             let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(Mdns::new(MdnsConfig::default())).map_err(Error::Mdns)?
+            rt.block_on(Mdns::new(MdnsConfig::default()))
+                .map_err(Error::Mdns)?
         };
         Ok((
             Self {
@@ -296,11 +297,12 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
                     // tracing::info!("discovering peer {} : {} ", peer, addr);
                     self.intent_broadcaster_gossip.inject_connected(&peer);
                 }
-        }
+            }
             MdnsEvent::Expired(list) => {
                 for (peer, _addr) in list {
                     if self.local_discovery.has_node(&peer) {
-                        self.intent_broadcaster_gossip.inject_disconnected(&peer);
+                        self.intent_broadcaster_gossip
+                            .inject_disconnected(&peer);
                     }
                 }
             }
