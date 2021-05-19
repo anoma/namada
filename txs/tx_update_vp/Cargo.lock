@@ -27,6 +27,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma_vm_macro"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bech32"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -374,6 +382,7 @@ name = "tx_update_vp"
 version = "0.1.0"
 dependencies = [
  "anoma_vm_env",
+ "anoma_vm_macro",
  "borsh",
  "wee_alloc",
 ]

@@ -11,39 +11,6 @@ pub mod tx {
     use anoma_shared::vm_memory::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
-    /// This macro expects a function with signature:
-    ///
-    /// ```ignore
-    /// fn apply_tx(tx_data: vm_memory::Data)
-    /// ```
-    /// TODO try to switch to procedural macros instead
-    #[macro_export]
-    macro_rules! transaction {
-        (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) $body:block ) => {
-            use wee_alloc;
-
-            // Use `wee_alloc` as the global allocator.
-            #[global_allocator]
-            static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
-            fn $fn( $($arg: $type),* ) $body
-
-            // The module entrypoint callable by wasm runtime
-            #[no_mangle]
-            extern "C" fn _apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
-                let slice = unsafe {
-                    slice::from_raw_parts(
-                        tx_data_ptr as *const u8,
-                        tx_data_len as _,
-                    )
-                };
-                let tx_data = slice.to_vec() as vm_memory::Data;
-
-                $fn(tx_data);
-            }
-        }
-    }
-
     pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
     impl<T: BorshDeserialize> Iterator for KeyValIterator<T> {
@@ -266,74 +233,6 @@ pub mod vp {
     use anoma_shared::vm_memory::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
-    /// This macro expects a function with signature:
-    ///
-    /// ```ignore
-    /// fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: HashSet<Address>) -> bool
-    /// ```
-    #[macro_export]
-    macro_rules! validity_predicate {
-        (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
-            use wee_alloc;
-
-            // Use `wee_alloc` as the global allocator.
-            #[global_allocator]
-            static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
-            fn $fn( $($arg: $type),* ) -> $ret $body
-
-            // The module entrypoint callable by wasm runtime
-            #[no_mangle]
-            extern "C" fn _validate_tx(
-                // VP's account's address
-                // TODO Should the address be on demand (a call to host function?)
-                addr_ptr: u64,
-                addr_len: u64,
-                tx_data_ptr: u64,
-                tx_data_len: u64,
-                keys_changed_ptr: u64,
-                keys_changed_len: u64,
-                verifiers_ptr: u64,
-                verifiers_len: u64,
-            ) -> u64 {
-                let slice = unsafe {
-                    slice::from_raw_parts(addr_ptr as *const u8, addr_len as _)
-                };
-                let addr = Address::try_from_slice(slice).unwrap();
-
-                let slice = unsafe {
-                    slice::from_raw_parts(
-                        tx_data_ptr as *const u8,
-                        tx_data_len as _,
-                    )
-                };
-                let tx_data = slice.to_vec() as vm_memory::Data;
-
-                let slice = unsafe {
-                    slice::from_raw_parts(
-                        keys_changed_ptr as *const u8,
-                        keys_changed_len as _,
-                    )
-                };
-                let keys_changed: Vec<Key> = Vec::try_from_slice(slice).unwrap();
-
-                let slice = unsafe {
-                    slice::from_raw_parts(
-                        verifiers_ptr as *const u8,
-                        verifiers_len as _,
-                    )
-                };
-                let verifiers: HashSet<Address> = HashSet::try_from_slice(slice).unwrap();
-
-                // run validation with the concrete type(s)
-                if $fn(tx_data, addr, keys_changed, verifiers) {
-                    1
-                } else {
-                    0
-                }
-            }
-        }
-    }
     pub struct PreKeyValIterator<T>(pub u64, pub PhantomData<T>);
     pub struct PostKeyValIterator<T>(pub u64, pub PhantomData<T>);
 
@@ -577,52 +476,6 @@ pub mod matchmaker {
 
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
-    /// This macro expects a function with signature:
-    ///
-    /// ```ignore
-    /// fn match_intent(matchmaker_data:Vec<u8>, intent_id: Vec<u8>, intent: Vec<u8>) -> bool
-    /// ```
-    #[macro_export]
-    macro_rules! matchmaker {
-        (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
-            use wee_alloc;
-
-            // Use `wee_alloc` as the global allocator.
-            #[global_allocator]
-            static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
-            fn $fn( $($arg: $type),* ) -> $ret $body
-
-            /// The module interface callable by wasm runtime
-            #[no_mangle]
-            extern "C" fn _match_intent(
-                data_ptr: u64,
-                data_len: u64,
-                intent_id_ptr: u64,
-                intent_id_len: u64,
-                intent_data_ptr: u64,
-                intent_data_len: u64,
-            ) -> u64 {
-                let get_data = |ptr, len| {
-                    let slice = unsafe {
-                        slice::from_raw_parts(ptr as *const u8, len as _)
-                    };
-                    slice.to_vec()
-                };
-
-                if $fn(
-                    get_data(data_ptr, data_len),
-                    get_data(intent_id_ptr, intent_id_len),
-                    get_data(intent_data_ptr, intent_data_len),
-                ) {
-                    0
-                } else {
-                    1
-                }
-            }
-        }
-    }
-
     /// Send a transaction with the `tx_data` and the `tx_code` to the ledger
     /// given in matchmaker parameters (`--tx-code-path` and
     /// `--ledger-address`).
@@ -676,46 +529,6 @@ pub mod filter {
     pub use core::slice;
 
     pub use borsh::{BorshDeserialize, BorshSerialize};
-
-    /// This macro expects a function with signature:
-    ///
-    /// ```ignore
-    /// fn validate_intent(intent: Vec<u8>) -> bool
-    /// ```
-    #[macro_export]
-    macro_rules! filter {
-        (fn $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty $body:block ) => {
-            use wee_alloc;
-
-            // Use `wee_alloc` as the global allocator.
-            #[global_allocator]
-            static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
-            fn $fn( $($arg: $type),* ) -> $ret $body
-
-            /// The module interface callable by wasm runtime
-            #[no_mangle]
-            extern "C" fn _validate_intent(
-                intent_data_ptr: u64,
-                intent_data_len: u64,
-            ) -> u64 {
-                let get_data = |ptr, len| {
-                    let slice = unsafe {
-                        slice::from_raw_parts(ptr as *const u8, len as _)
-                    };
-                    slice.to_vec()
-                };
-
-                if $fn(
-                    get_data(intent_data_ptr, intent_data_len),
-                ) {
-                    0
-                } else {
-                    1
-                }
-            }
-        }
-    }
 
     /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {

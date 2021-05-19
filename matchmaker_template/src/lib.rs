@@ -1,11 +1,9 @@
-use anoma_vm_env::{
-    matchmaker,
-    matchmaker_prelude::{
+use anoma_vm_env::matchmaker_prelude::{
         intent::{Intent, IntentTransfers},
         key::ed25519::Signed,
         *,
-    },
-};
+    };
+use anoma_vm_macro::matchmaker;
 use petgraph::graph::{node_index, NodeIndex};
 use petgraph::visit::depth_first_search;
 use petgraph::visit::{Control, DfsEvent};
@@ -20,16 +18,15 @@ struct IntentNode {
     intent: Signed<Intent>,
 }
 
-matchmaker! {
-    fn add_intent(graph_bytes:Vec<u8>, id: Vec<u8>, data: Vec<u8>) -> bool {
-        let intent = decode_intent_data(&data);
-        let mut graph = decode_graph(graph_bytes);
-        log_string(format!("trying to match intent: {:#?}", intent));
-        add_node(&mut graph, id, intent);
-        find_match_and_remove_node(&mut graph);
-        update_graph_data(&graph);
-        true
-    }
+#[matchmaker]
+fn add_intent(graph_bytes:Vec<u8>, id: Vec<u8>, data: Vec<u8>) -> bool {
+    let intent = decode_intent_data(&data);
+    let mut graph = decode_graph(graph_bytes);
+    log_string(format!("trying to match intent: {:#?}", intent));
+    add_node(&mut graph, id, intent);
+    find_match_and_remove_node(&mut graph);
+    update_graph_data(&graph);
+    true
 }
 
 fn create_transfer(
