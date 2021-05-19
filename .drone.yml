@@ -23,12 +23,13 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo
+        - .cargo/bin
+        - .cargo/git
+        - .cargo/registry
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
         - txs/tx_transfer/target
-        - vp_template/target
         - vps/vp_template/target
         - vps/vp_token/target
         - vps/vp_user/target
@@ -69,12 +70,13 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo
+        - .cargo/bin
+        - .cargo/git
+        - .cargo/registry
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
         - txs/tx_transfer/target
-        - vp_template/target
         - vps/vp_template/target
         - vps/vp_token/target
         - vps/vp_user/target
@@ -120,10 +122,12 @@ steps:
       restore: true
       bucket: heliax-drone-cache-v2
       region: eu-west-1
-      cache_key: "nightly-{{ checksum \"Cargo.lock\" }}"
+      cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo
+        - .cargo/bin
+        - .cargo/git
+        - .cargo/registry
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -153,9 +157,11 @@ steps:
       rebuild: true
       archive_format: "gzip"
       override: false
-      cache_key: "nightly-{{ checksum \"Cargo.lock\" }}"
+      cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo
+        - .cargo/bin
+        - .cargo/git
+        - .cargo/registry
         - .rustup
         - target
     environment:
@@ -199,10 +205,12 @@ steps:
       restore: true
       bucket: heliax-drone-cache-v2
       region: eu-west-1
-      cache_key: "audit-{{ checksum \"Cargo.lock\" }}"
+      cache_key: "audit/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo
+        - .cargo/bin
+        - .cargo/git
+        - .cargo/registry
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -228,9 +236,11 @@ steps:
       rebuild: true
       archive_format: "gzip"
       override: false
-      cache_key: "audit-{{ checksum \"Cargo.lock\" }}"
+      cache_key: "audit/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo
+        - .cargo/bin
+        - .cargo/git
+        - .cargo/registry
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -275,7 +285,9 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo
+        - .cargo/bin
+        - .cargo/git
+        - .cargo/registry
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -320,12 +332,13 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo
+        - .cargo/bin
+        - .cargo/git
+        - .cargo/registry
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
         - txs/tx_transfer/target
-        - vp_template/target
         - vps/vp_template/target
         - vps/vp_token/target
         - vps/vp_user/target
