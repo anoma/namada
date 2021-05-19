@@ -58,6 +58,17 @@ steps:
     depends_on:
       - build
 
+  - name: debug-cache
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    commands:
+      - pwd
+      - ls
+      - ls .cargo
+      - ls /drone/workspace/.cargo
+      - ls /drone/workspace/.rustup
+    depends_on:
+      - restore-cache
+
   - name: rebuild-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -147,7 +158,7 @@ steps:
     depends_on:
       - restore-cache
 
-  - name: test
+  - name: debug-cache
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     commands:
       - pwd
