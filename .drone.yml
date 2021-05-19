@@ -98,12 +98,6 @@ type: docker
 name: anoma-ci-checks-pr
 
 steps:
-  - name: install-dev-deps
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - make dev-deps
-
   - name: restore-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -131,8 +125,14 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+
+  - name: install-dev-deps
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - make dev-deps
     depends_on:
-      - install-dev-deps
+      - restore-cache
 
   - name: rebuild-cache
     image: meltwater/drone-cache
