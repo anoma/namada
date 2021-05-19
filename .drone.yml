@@ -23,8 +23,7 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/registry
-        - .cargo/git
+        - .cargo
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -58,18 +57,6 @@ steps:
     depends_on:
       - build
 
-  - name: debug-cache
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - pwd
-      - ls
-      - ls .cargo
-      - ls /drone/workspace/.cargo
-      - ls /drone/workspace/.rustup
-    depends_on:
-      - test
-
   - name: rebuild-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -82,8 +69,7 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/registry
-        - .cargo/git
+        - .cargo
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -137,9 +123,7 @@ steps:
       cache_key: "nightly-{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/registry
-        - .cargo/git
-        - .cargo/rustup
+        - .cargo
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -159,18 +143,6 @@ steps:
     depends_on:
       - restore-cache
 
-  - name: debug-cache
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - pwd
-      - ls
-      - ls .cargo
-      - ls /drone/workspace/.cargo
-      - ls /drone/workspace/.rustup
-    depends_on:
-      - install-dev-deps
-
   - name: rebuild-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -183,9 +155,8 @@ steps:
       override: false
       cache_key: "nightly-{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/registry
-        - .cargo/git
-        - .cargo/rustup
+        - .cargo
+        - .rustup
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -231,8 +202,7 @@ steps:
       cache_key: "audit-{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/registry
-        - .cargo/git
+        - .cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -260,8 +230,7 @@ steps:
       override: false
       cache_key: "audit-{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/registry
-        - .cargo/git
+        - .cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
