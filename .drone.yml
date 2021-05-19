@@ -67,7 +67,7 @@ steps:
       - ls /drone/workspace/.cargo
       - ls /drone/workspace/.rustup
     depends_on:
-      - restore-cache
+      - test
 
   - name: rebuild-cache
     image: meltwater/drone-cache
@@ -167,7 +167,7 @@ steps:
       - ls /drone/workspace/.cargo
       - ls /drone/workspace/.rustup
     depends_on:
-      - restore-cache
+      - install-dev-deps
 
   - name: rebuild-cache
     image: meltwater/drone-cache
