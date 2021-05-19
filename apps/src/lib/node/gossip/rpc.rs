@@ -1,3 +1,6 @@
+use std::net::SocketAddr;
+use std::thread;
+
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::oneshot;
 use tonic::transport::Server;
@@ -41,13 +44,12 @@ impl RpcService for Rpc {
 
 #[tokio::main]
 pub async fn rpc_server(
+    addr: SocketAddr,
     inject_message: Sender<(
         rpc_message::Message,
         oneshot::Sender<RpcResponse>,
     )>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:39111".parse().unwrap();
-
     let rpc = Rpc { inject_message };
 
     let svc = RpcServiceServer::new(rpc);
@@ -55,4 +57,16 @@ pub async fn rpc_server(
     Server::builder().add_service(svc).serve(addr).await?;
 
     Ok(())
+}
+
+pub fn start_rpc_server(
+    config: &crate::config::RpcServer,
+) -> mpsc::Receiver<(
+    rpc_message::Message,
+    tokio::sync::oneshot::Sender<RpcResponse>,
+)> {
+    let addr = config.address;
+    let (sender, receiver) = mpsc::channel(100);
+    thread::spawn(move || rpc_server(addr, sender).unwrap());
+    receiver
 }

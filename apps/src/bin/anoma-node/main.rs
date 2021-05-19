@@ -20,6 +20,7 @@ fn main() -> Result<()> {
         _ => filter.add_directive(abci_level),
     };
     logging::set_subscriber(filter)?;
+    logging::init_log_tracer()?;
 
     // run the CLI
     cli::main()

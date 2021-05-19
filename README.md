@@ -64,10 +64,10 @@ cargo watch -x "run --bin anoman -- run-ledger"
 cargo watch -x "run --bin anoman -- reset-ledger" -x "run --bin anoman -- run"
 
 # run gossip node with intent broadcaster and rpc server (use default config)
-cargo run --bin anoma -- run-gossip --rpc
+cargo run --bin anoma -- run-gossip --rpc "127.0.0.1:39111"
 
 # run gossip node with intent broadcaster, matchmaker and rpc (use default config)
-cargo run --bin anoman -- run-gossip --rpc --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
+cargo run --bin anoman -- run-gossip --rpc "127.0.0.1:39111" --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
 
 # craft intents
 cargo run --bin anomac -- craft-intent --address $ADA    --token-buy $XTZ --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_A.data
@@ -75,12 +75,12 @@ cargo run --bin anomac -- craft-intent --address $ALAN   --token-buy $BTC --amou
 cargo run --bin anomac -- craft-intent --address $ALONZO --token-buy $XAN --amount-buy 30 --token-sell $XTZ --amount-sell 10 --file-path intent_C.data
 
 # Subscribe to new network
-cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "asset_v1"
+cargo run --bin anomac -- subscribe-topic --node "http://127.0.0.1:39111" --topic "asset_v1"
 
 # Submit the intents (need a rpc server), hardcoded address rpc node address
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data-path intent_A.data --topic "asset_v1"
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data-path intent_B.data --topic "asset_v1"
-cargo run --bin anomac -- intent --node "http://[::1]:39111" --data-path intent_C.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_A.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_B.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_C.data --topic "asset_v1"
 
 # Format the code
 make fmt
