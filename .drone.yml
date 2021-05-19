@@ -62,6 +62,7 @@ steps:
     pull: if-not-exists
     settings:
       backend: "s3"
+      stopt: "8m"
       bucket: heliax-drone-cache-v2
       region: eu-west-1
       rebuild: true
