@@ -73,10 +73,9 @@ Currently, Anoma only supports wasm built from Rust code. This is used for valid
 Because wasm doesn't have any built-in logging facilities nor access to stdout, trying to print from wasm has no effect. Instead, we provide `log_string` function in the wasm environment preludes. When the wasm is being executed, this will be printed from the node's log (search for `WASM Transaction log`, `WASM Validity predicate log` or `WASM Matchmaker log`). You can use the Rust's `format!` macro for the string that you want to print. Because we don't yet have an RPC client, this in combination with transactions' `--dry-run` flag is the best way to query the ledger's state.
 
 To view the full list of functions available in wasm, please refer to:
-- TODO host the built docs on github pages and update the links here
-- [Transaction prelude](TODO)
-- [Validity predicate prelude](TODO)
-- [Matchmaker prelude](TODO)
+- [Transaction prelude](https://heliaxdev.github.io/anoma-playnet/doc/anoma_vm_env/tx_prelude/index.html)
+- [Validity predicate prelude](https://heliaxdev.github.io/anoma-playnet/doc/anoma_vm_env/vp_prelude/index.html)
+- [Matchmaker prelude](https://heliaxdev.github.io/anoma-playnet/doc/anoma_vm_env/matchmaker_prelude/index.html)
 
 ## ☑️ Validity predicates
 
@@ -107,6 +106,12 @@ To make a transfer of e.g. `10.1` of a fungible token `$XAN` from `$awa` to `$jo
 ```
 
 This client command will take care of signing the transaction using your key.
+
+To check balances of fungible token, run e.g.:
+
+```shell
+./anoma client -- balances --address $adrian
+```
 
 ### ♼ Update an account's validity predicate
 
