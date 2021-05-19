@@ -160,7 +160,6 @@ steps:
         - .cargo/bin
         - .cargo/git
         - .cargo/registry
-        - .rustup
         - target
     environment:
       AWS_ACCESS_KEY_ID:
