@@ -23,7 +23,6 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/bin
         - .cargo/git
         - .cargo/registry
         - matchmaker_template/target
@@ -70,7 +69,6 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/bin
         - .cargo/git
         - .cargo/registry
         - matchmaker_template/target
@@ -208,9 +206,7 @@ steps:
       cache_key: "audit/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/bin
-        - .cargo/git
-        - .cargo/registry
+        - .cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -238,9 +234,7 @@ steps:
       override: false
       cache_key: "audit/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/bin
-        - .cargo/git
-        - .cargo/registry
+        - .cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
