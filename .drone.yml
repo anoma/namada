@@ -23,8 +23,8 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - ~/.cargo/registry
-        - ~/.cargo/git
+        - .cargo/registry
+        - .cargo/git
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -82,8 +82,8 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - ~/.cargo/registry
-        - ~/.cargo/git
+        - .cargo/registry
+        - .cargo/git
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -137,9 +137,9 @@ steps:
       cache_key: "nightly-{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - ~/.cargo/registry
-        - ~/.cargo/git
-        - ~/.cargo/rustup
+        - .cargo/registry
+        - .cargo/git
+        - .cargo/rustup
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -183,9 +183,9 @@ steps:
       override: false
       cache_key: "nightly-{{ checksum \"Cargo.lock\" }}"
       mount:
-        - ~/.cargo/registry
-        - ~/.cargo/git
-        - ~/.cargo/rustup
+        - .cargo/registry
+        - .cargo/git
+        - .cargo/rustup
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -231,8 +231,8 @@ steps:
       cache_key: "audit-{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - ~/.cargo/registry
-        - ~/.cargo/git
+        - .cargo/registry
+        - .cargo/git
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -260,8 +260,8 @@ steps:
       override: false
       cache_key: "audit-{{ checksum \"Cargo.lock\" }}"
       mount:
-        - ~/.cargo/registry
-        - ~/.cargo/git
+        - .cargo/registry
+        - .cargo/git
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
