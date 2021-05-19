@@ -84,14 +84,98 @@ steps:
         - failure
     depends_on:
       - test
+
+trigger:
+  event:
+    - pull_request
+
+node:
+  project: anoma
+
+---
+kind: pipeline
+type: docker
+name: anoma-ci-checks-pr
+
+steps:
+  - name: install-dev-deps
+    image: alpine/git:v2.30.1
+    pull: if-not-exists
+    commands:
+      - make dev-deps
+
+  - name: restore-cache
+    image: meltwater/drone-cache
+    pull: if-not-exists
+    settings:
+      backend: "s3"
+      restore: true
+      bucket: heliax-drone-cache-v2
+      region: eu-west-1
+      cache_key: "nightly-{{ checksum \"Cargo.lock\" }}"
+      archive_format: "gzip"
+      mount:
+        - ~/.cargo/registry
+        - ~/.cargo/git
+        - matchmaker_template/target
+        - txs/tx_from_intent/target
+        - txs/tx_template/target
+        - txs/tx_transfer/target
+        - vp_template/target
+        - vps/vp_template/target
+        - vps/vp_token/target
+        - vps/vp_user/target
+        - target
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key_id
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_secret_access_key
+    depends_on:
+      - install-dev-deps
+
+  - name: rebuild-cache
+    image: meltwater/drone-cache
+    pull: if-not-exists
+    settings:
+      backend: "s3"
+      bucket: heliax-drone-cache-v2
+      region: eu-west-1
+      rebuild: true
+      archive_format: "gzip"
+      override: false
+      cache_key: "nightly-{{ checksum \"Cargo.lock\" }}"
+      mount:
+        - ~/.cargo/registry
+        - ~/.cargo/git
+        - matchmaker_template/target
+        - txs/tx_from_intent/target
+        - txs/tx_template/target
+        - txs/tx_transfer/target
+        - vp_template/target
+        - vps/vp_template/target
+        - vps/vp_token/target
+        - vps/vp_user/target
+        - target
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key_id
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_secret_access_key
+    when:
+      status:
+        - success
+        - failure
+    depends_on:
+      - restore-cache
   
   - name: Run formatter
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - fmt-check
+      - make fmt-check
     depends_on:
-      - test
+      - restore-cache
 
   - name: Run clippy
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -99,7 +183,7 @@ steps:
     commands:
       - make clippy-check
     depends_on:
-      - test
+      - restore-cache
 
 trigger:
   event:
