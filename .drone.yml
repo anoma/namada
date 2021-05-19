@@ -62,7 +62,6 @@ steps:
     pull: if-not-exists
     settings:
       backend: "s3"
-      stopt: "8m"
       bucket: heliax-drone-cache-v2
       region: eu-west-1
       rebuild: true
@@ -85,6 +84,7 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+      BACKEND_OPERATION_TIMEOUT: "8m"
     when:
       status:
         - success
@@ -124,7 +124,6 @@ steps:
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/bin
         - .cargo/git
         - .cargo/registry
         - target
@@ -158,7 +157,6 @@ steps:
       override: false
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/bin
         - .cargo/git
         - .cargo/registry
         - target
