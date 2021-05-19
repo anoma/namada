@@ -3,6 +3,13 @@ kind: pipeline
 type: docker
 name: anoma-ci-build-pr
 
+workspace:
+  path: /drone/workspace
+
+environment:
+  CARGO_HOME: /drone/workspace/.cargo
+  GIT_LFS_SKIP_SMUDGE: "1"
+
 steps:
   - name: restore-cache
     image: meltwater/drone-cache
@@ -96,6 +103,13 @@ node:
 kind: pipeline
 type: docker
 name: anoma-ci-checks-pr
+
+workspace:
+  path: /drone/workspace
+
+environment:
+  CARGO_HOME: /drone/workspace/.cargo
+  GIT_LFS_SKIP_SMUDGE: "1"
 
 steps:
   - name: restore-cache
