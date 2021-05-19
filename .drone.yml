@@ -140,9 +140,21 @@ steps:
     pull: if-not-exists
     commands:
       - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - source /drone/workspace/.cargo/env
       - make dev-deps
       - make clippy-check
       - make fmt-check
+    depends_on:
+      - restore-cache
+
+  - name: test
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    commands:
+      - pwd
+      - ls
+      - ls .cargo
+      - ls /drone/workspace/.cargo
+      - ls /drone/workspace/.rustup
     depends_on:
       - restore-cache
 
@@ -173,6 +185,33 @@ steps:
         - failure
     depends_on:
       - install-dev-deps
+  
+trigger:
+  event:
+    - pull_request
+
+node:
+  project: anoma
+
+---
+kind: pipeline
+type: docker
+name: anoma-ci-audit-pr
+
+workspace:
+  path: /drone/workspace
+
+environment:
+  CARGO_HOME: /drone/workspace/.cargo
+  RUSTUP_HOME: /drone/workspace/.rustup
+  GIT_LFS_SKIP_SMUDGE: "1"
+
+steps:
+  - name: audit
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - make audit
   
 trigger:
   event:
