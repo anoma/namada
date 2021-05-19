@@ -75,7 +75,7 @@ cargo run --bin anomac -- craft-intent --address $ALAN   --token-buy $BTC --amou
 cargo run --bin anomac -- craft-intent --address $ALONZO --token-buy $XAN --amount-buy 30 --token-sell $XTZ --amount-sell 10 --file-path intent_C.data
 
 # Subscribe to new network
-cargo run --bin anomac -- subscribe-topic --node "http://[::1]:39111" --topic "asset_v1"
+cargo run --bin anomac -- subscribe-topic --node "http://127.0.0.1:39111" --topic "asset_v1"
 
 # Submit the intents (need a rpc server), hardcoded address rpc node address
 cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_A.data --topic "asset_v1"
