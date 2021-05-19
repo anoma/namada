@@ -99,7 +99,7 @@ name: anoma-ci-checks-pr
 
 steps:
   - name: install-dev-deps
-    image: alpine/git:v2.30.1
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
       - make dev-deps
