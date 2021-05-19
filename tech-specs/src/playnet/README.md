@@ -11,31 +11,59 @@ You can interact with Anoma via transactions, validity predicates and intents tu
 The following are the addresses that we have included in the genesis block. You can add them to your shell to use them in commands. You should be able to find your own address among them:
 
 ```shell
-TODO add user addresses once we have participants and their accounts prepared
+# User addresses
+export adrian=a1qq5qqqqqxgeyzdeng4zrw33sxez5y3p3xqerz3psx5e5x32rg3rryw2ygc6yy3p4xpq5gvfnw3nwp8
+export alberto=a1qq5qqqqq8yerw3jxx565y333gfpnjwzygcc5zd6xxarr2dzzgcm5xv3kxazrjve589p5vv34vl0yy3
+export ash=a1qq5qqqqqxue5vs69xc6nwvfcgdpyy3pnxv6rxw2zx3zryv33gyc5xdekxaryydehgvunsvzz2hjedu
+export awa=a1qq5qqqqqg565zv34gcc52v3nxumr23z9gezrj3pnx56rwse4xc6yg3phgcun2d33xyenqv2x4xyw62
+export celso=a1qq5qqqqq8qmrwsjyxcerqwzpx9pnzve3gvc5xw29gdqnvv2yx5mrvsjpxgcrxv6pg5engvf5hgjscj
+export chris=a1qq5qqqqqgye5xwpcxqu5z3p4g5ens3zr8qm5xv69xfznvwzzx4p5xwpkxc6n2v6x8yc5gdpeezdqc4
+export gabriella=a1qq5qqqqq8ycn2djrxqmnyd3sxcunsv2zgyeyvwzpgceyxdf3xyu5gv2pgeprxdfe8ycrzwzzkezpcp
+export gianmarco=a1qq5qqqqq89prqsf38qcrzd6zxym5xdfjg4pyg3pjg3pyx32zg5u5y3jpgc65zdej8pznwwf3jqzsws
+export joe=a1qq5qqqqqgvuyv335g9z5v32xgdz523zxgsuy23fjxazrjve5g4pnydphxyu5v33cxarrzd692045xh
+export nat=a1qq5qqqqq89rygsejx9q5yd6pxpp5x3f38ymyydp3xcu523zzx4prw3fc8qu5vvjpxyeyydpnfha6qt
+export simon=a1qq5qqqqqgfqnqdecxcurq33hxcey2sf4g5mygdjyxfrrjse4xyc52vpjxyenwve4gv6njsecz4tzen
+export sylvain=a1qq5qqqqqgccnyvp3gyergvp5xgmr2s3s8yung3f4gdq52wzpxvurysfhgycnwd29xfryxvekfwc00t
+export tomas=a1qq5qqqqqggcrzsfj8ym5g3psxuurxv2yxseyxwpsxdpy2s35gsc5zdzpx9pyxde48ppnqd3cnzlava
+export yuji=a1qq5qqqqqgvcrz3f5x4prssj9x5enydecxfznzdj9g5cnj3fcxarrxdjpx5cnwv69xye5vvfeva4z85
 
-# token addresses
+# Token Addresses
 export XAN=a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3
 export BTC=a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc
+export ETH=a1qq5qqqqqxeryzvjxxsmrj3jpxapygve58qerwsfjxaznvd3n8qenyv2ygsc52335xue5vve5m66gfm
 export XTZ=a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9
+export DOGE=a1qq5qqqqqx9rrq3zrg5myzv3eg9zyxvf3gery2dfhgg6nsdjrxscrgv6rgsunx33sxg6nvdjrkujezz
 ```
 
 ## ፨ The nodes
 
-To run the ledger:
-```shell
-# TODO specify peers' addresses
+There are 4 ledger validator and intent broadcaster nodes running in cloud at:
+- `52.210.23.30`
+- `63.34.55.152`
+- `54.195.72.213`
+- `79.125.112.218`
 
-anoma run-ledger
+The ledger is pre-configured to connect to them.
+
+To run a local ledger node:
+```shell
+./anoma run-ledger
 ```
 
-To run the intent broadcaster with the matchmaker that can submit transactions to the ledger:
+To run the intent broadcaster with the matchmaker that can submit transactions to the local ledger:
 ```shell
-# TODO specify peers' addresses and ledger's address if not local
-
-anoma run-gossip --rpc \
+./anoma run-gossip --rpc "127.0.0.1:20202" \
   --matchmaker-path matchmaker_template/matchmaker.wasm \
   --tx-code-path txs/tx_from_intent/tx.wasm \
   --ledger-address "127.0.0.1:26657"
+```
+
+If you don't have a local ledger running, the matchmaker can also submit transactions to a remote validator ledger, with e.g.:
+```shell
+./anoma run-gossip --rpc "127.0.0.1:20202" \
+  --matchmaker-path matchmaker_template/matchmaker.wasm \
+  --tx-code-path txs/tx_from_intent/tx.wasm \
+  --ledger-address "52.210.23.30:26657"
 ```
 
 ## 🧮 WASM
@@ -68,11 +96,11 @@ Any of the following commands can optionally be submitted with `--dry-run` argum
 
 ### 💸 A simple token transfer
 
-To make a transfer of e.g. `10.1` of a fungible token `$XAN` from `$ALICE` to `$BOB`:
+To make a transfer of e.g. `10.1` of a fungible token `$XAN` from `$awa` to `$joe`:
 
 ```shell
-anoma client transfer --source $ALICE \
-  --target $BOB \
+./anoma client transfer --source $awa \
+  --target $joe \
   --token $XAN \
   --amount 10.1 \
   --code-path txs/tx_transfer/tx.wasm
@@ -89,7 +117,7 @@ To update an account's validity predicate, you can customize the default user's 
 make -C vps/vp_user
 
 # Submit a transaction with the updated VP to the ledger
-anoma client update --address $ALICE --code-path vps/vp_user/vp.wasm
+./anoma client update --address $awa --code-path vps/vp_user/vp.wasm
 ```
 
 ### 🦄 A custom transaction
@@ -103,7 +131,7 @@ For example:
 make -C txs/tx_template
 
 # Submit the transaction to the ledger
-anoma client tx --code-path txs/tx_template/tx.wasm --data-path tx.data
+./anoma client tx --code-path txs/tx_template/tx.wasm --data-path tx.data
 ```
 
 This transaction is by default not signed by any key, so if you try to use it make changes to your account's storage, it will be rejected by your validity predicate.
@@ -115,7 +143,7 @@ In general, intents are some data that describe what you'd like to do with your 
 To create a file `intent.data` with the intent's data, use e.g.:
 
 ```shell
-anoma client craft-intent --address $ALICE \
+./anoma client craft-intent --address $awa \
   --token-buy $XTZ \
   --amount-buy 10 \
   --token-sell $BTC \
@@ -125,14 +153,20 @@ anoma client craft-intent --address $ALICE \
 
 To submit the intent from the file to the intent broadcaster (which will propagate to matchmakers):
 ```shell
-# TODO specify a public intent broadcaster address
+# Without a local intent broadcaster node, using one of the cloud nodes
+./anoma client intent --node "http://52.210.23.30:20202" \
+  --data-path intent.data \
+  --topic "asset_v0"
 
-anoma client intent --node "http://[::1]:39111" \
+# With a local intent broadcaster node
+./anoma client intent --node "http://127.0.0.1:20202" \
   --data-path intent.data \
   --topic "asset_v0"
 ```
 
 Once a matchmaker finds suitable matches of intents that it decides are likely to be accepted, it will try to submit a transaction to a connected ledger.
+
+For now, to match intents, their amounts have to match exactly. In future, there will more options on how intents can be specified and matched.
 
 ## 🤝 Matchmaker
 
@@ -146,4 +180,4 @@ make -C matchmaker_template
 make -C txs/tx_from_intent
 ```
 
-And then restart the matchmaker.
+And then restart the intent broadcaster with the matchmaker.
