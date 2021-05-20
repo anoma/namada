@@ -374,6 +374,16 @@ impl UpdateVp {
     }
 }
 
+pub enum KeyExistence {
+    Found = 1,
+    NotFound = -1,
+}
+
+pub enum SignatureValidation {
+    Valid = 1,
+    Invalid = -1,
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;

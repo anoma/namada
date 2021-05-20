@@ -7,7 +7,7 @@ use std::convert::TryInto;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
-use anoma_shared::types::{Address, Key};
+use anoma_shared::types::{Address, Key, KeyExistence, SignatureValidation};
 use anoma_shared::vm_memory::KeyVal;
 use borsh::{BorshDeserialize, BorshSerialize};
 use tokio::sync::mpsc::Sender;
@@ -396,7 +396,7 @@ where
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
-fn tx_storage_has_key<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> u64
+fn tx_storage_has_key<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -415,19 +415,27 @@ where
     let (log_val, gas) = write_log.read(&key);
     tx_add_gas(env, gas);
     match log_val {
-        Some(&write_log::StorageModification::Write { .. }) => 1,
+        Some(&write_log::StorageModification::Write { .. }) => {
+            KeyExistence::Found as _
+        }
         Some(&write_log::StorageModification::Delete) => {
             // the given key has been deleted
-            0
+            KeyExistence::NotFound as _
         }
-        Some(&write_log::StorageModification::InitAccount { .. }) => 1,
+        Some(&write_log::StorageModification::InitAccount { .. }) => {
+            KeyExistence::Found as _
+        }
         None => {
             // when not found in write log, try to check the storage
             let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
-            if present { 1 } else { 0 }
+            if present {
+                KeyExistence::Found as _
+            } else {
+                KeyExistence::NotFound as _
+            }
         }
     }
 }
@@ -478,7 +486,7 @@ where
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            -1
+            KeyExistence::NotFound as _
         }
         Some(&write_log::StorageModification::InitAccount {
             ref vp, ..
@@ -508,10 +516,7 @@ where
                     tx_add_gas(env, gas);
                     len
                 }
-                None => {
-                    // fail, key not found
-                    -1
-                }
+                None => KeyExistence::NotFound as _,
             }
         }
     }
@@ -615,8 +620,7 @@ where
             }
         }
     }
-    // key not found
-    -1
+    KeyExistence::NotFound as _
 }
 
 /// Storage write function exposed to the wasm VM Tx environment. The given
@@ -678,7 +682,7 @@ fn tx_storage_write<DB>(
 
 /// Storage delete function exposed to the wasm VM Tx environment. The given
 /// key/value will be written as deleted to the write log.
-fn tx_storage_delete<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> u64
+fn tx_storage_delete<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -696,8 +700,6 @@ where
     let (gas, _size_diff) = write_log.delete(&key);
     tx_add_gas(env, gas);
     // TODO: charge the size diff
-
-    1
 }
 
 /// Storage read prior state (before tx execution) function exposed to the wasm
@@ -742,10 +744,7 @@ where
             vp_add_gas(env, gas);
             len
         }
-        None => {
-            // fail, key not found
-            -1
-        }
+        None => KeyExistence::NotFound as _,
     }
 }
 
@@ -795,7 +794,7 @@ where
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            -1
+            KeyExistence::NotFound as _
         }
         Some(&write_log::StorageModification::InitAccount {
             ref vp, ..
@@ -825,10 +824,7 @@ where
                     vp_add_gas(env, gas);
                     len
                 }
-                None => {
-                    // fail, key not found
-                    -1
-                }
+                None => KeyExistence::NotFound as _,
             }
         }
     }
@@ -840,7 +836,7 @@ fn vp_storage_has_key_pre<DB>(
     env: &VpEnv<DB>,
     key_ptr: u64,
     key_len: u64,
-) -> u64
+) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -857,7 +853,11 @@ where
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
-    if present { 1 } else { 0 }
+    if present {
+        KeyExistence::Found as _
+    } else {
+        KeyExistence::NotFound as _
+    }
 }
 
 /// Storage `has_key` in posterior state (after tx execution) function exposed
@@ -867,7 +867,7 @@ fn vp_storage_has_key_post<DB>(
     env: &VpEnv<DB>,
     key_ptr: u64,
     key_len: u64,
-) -> u64
+) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -886,19 +886,27 @@ where
     let (log_val, gas) = write_log.read(&key);
     vp_add_gas(env, gas);
     match log_val {
-        Some(&write_log::StorageModification::Write { .. }) => 1,
+        Some(&write_log::StorageModification::Write { .. }) => {
+            KeyExistence::Found as _
+        }
         Some(&write_log::StorageModification::Delete) => {
             // the given key has been deleted
-            0
+            KeyExistence::NotFound as _
         }
-        Some(&write_log::StorageModification::InitAccount { .. }) => 1,
+        Some(&write_log::StorageModification::InitAccount { .. }) => {
+            KeyExistence::Found as _
+        }
         None => {
             // when not found in write log, try to check the storage
             let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
-            if present { 1 } else { 0 }
+            if present {
+                KeyExistence::Found as _
+            } else {
+                KeyExistence::NotFound as _
+            }
         }
     }
 }
@@ -967,8 +975,7 @@ where
         vp_add_gas(env, gas);
         return len;
     }
-    // key not found
-    -1
+    KeyExistence::NotFound as _
 }
 
 /// Storage prefix iterator next for posterior state (after tx execution)
@@ -1040,8 +1047,7 @@ where
             }
         }
     }
-    // key not found
-    -1
+    KeyExistence::NotFound as _
 }
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
@@ -1247,7 +1253,7 @@ fn vp_verify_tx_signature<DB>(
     data_len: u64,
     sig_ptr: u64,
     sig_len: u64,
-) -> u64
+) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -1279,9 +1285,9 @@ where
 
     vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
     if verify_signature_raw(&pk, &signature_data, &sig).is_ok() {
-        1
+        SignatureValidation::Valid as _
     } else {
-        0
+        SignatureValidation::Invalid as _
     }
 }
 
