@@ -50,7 +50,6 @@ You'll also need to install Tendermint v0.34.* and have it available on your $PA
 
 ```shell
 apt install tendermint
-brew install tendermint
 nix-env -i tendermint
 ```
 
