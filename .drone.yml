@@ -31,6 +31,8 @@ steps:
         - vps/vp_template/target
         - vps/vp_token/target
         - vps/vp_user/target
+        - txs/tx_update_vp
+        - filter_template
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -76,6 +78,8 @@ steps:
         - vps/vp_template/target
         - vps/vp_token/target
         - vps/vp_user/target
+        - txs/tx_update_vp
+        - filter_template
         - target
     environment:
       AWS_ACCESS_KEY_ID:
