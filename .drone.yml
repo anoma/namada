@@ -39,6 +39,15 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+    
+  - name: debug
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - pwd
+      - ls -a
+    depends_on:
+      - restore-cache
 
   - name: build
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -49,6 +58,7 @@ steps:
       - make build
     depends_on:
       - restore-cache
+      - debug
 
   - name: test
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -361,6 +371,6 @@ node:
   project: anoma
 ---
 kind: signature
-hmac: 18cd80d987584836b9c89656d94b5df379251d8ef5501bf982a3b014037b4a90
+hmac: 8a4c748a90541523479b7dd9b68bd10eef28d6df97d89f213907b5ad163413f8
 
 ...
