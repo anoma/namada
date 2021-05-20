@@ -359,3 +359,8 @@ trigger:
 
 node:
   project: anoma
+---
+kind: signature
+hmac: 9d6cfb1ad004ffc28aa80e630385746abb53a25804f6570a9ffb04d9a06be32e
+
+...
