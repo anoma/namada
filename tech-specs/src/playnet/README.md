@@ -168,7 +168,7 @@ This client command will take care of signing the transaction using your key.
 To check balances of fungible token, run e.g.:
 
 ```shell
-anoma client -- balances --address $adrian
+anoma client balances --address $adrian
 ```
 
 ### ♼ Update an account's validity predicate
