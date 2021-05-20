@@ -1,6 +1,5 @@
 use anoma_vm_env::vp_prelude::*;
 use std::collections::HashSet;
-use anoma_vm_macro::validity_predicate;
 
 #[validity_predicate]
 fn validate_tx(

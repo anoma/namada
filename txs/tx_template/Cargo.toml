@@ -9,7 +9,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anoma_vm_env = {path = "../../vm_env"}
-anoma_vm_macro = {path = "../../vm_macro"}
 borsh = "0.8.2"
 wee_alloc = "0.4.5"
 

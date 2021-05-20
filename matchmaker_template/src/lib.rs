@@ -3,7 +3,6 @@ use anoma_vm_env::matchmaker_prelude::{
         key::ed25519::Signed,
         *,
     };
-use anoma_vm_macro::matchmaker;
 use petgraph::graph::{node_index, NodeIndex};
 use petgraph::visit::depth_first_search;
 use petgraph::visit::{Control, DfsEvent};

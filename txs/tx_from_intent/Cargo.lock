@@ -23,6 +23,7 @@ name = "anoma_vm_env"
 version = "0.1.0"
 dependencies = [
  "anoma_shared",
+ "anoma_vm_macro",
  "borsh",
 ]
 
@@ -382,7 +383,6 @@ name = "tx_from_intent"
 version = "0.1.0"
 dependencies = [
  "anoma_vm_env",
- "anoma_vm_macro",
  "borsh",
  "wee_alloc",
 ]

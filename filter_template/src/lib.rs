@@ -1,5 +1,4 @@
 use anoma_vm_env::filter_prelude::{intent::Intent, *};
-use anoma_vm_macro::filter;
 
 #[filter]
 fn validate_intent(intent: Vec<u8>) -> bool {

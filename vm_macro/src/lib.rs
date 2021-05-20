@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
-use syn::{ItemFn, parse_macro_input};
 use quote::quote;
+use syn::{parse_macro_input, ItemFn};
 
 /// This macro expects a function with signature:
 ///
@@ -40,7 +40,10 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: Vec<Key>, verifiers: HashSet<Address>) -> bool
 /// ```
 #[proc_macro_attribute]
-pub fn validity_predicate(_attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn validity_predicate(
+    _attr: TokenStream,
+    input: TokenStream,
+) -> TokenStream {
     let ast = parse_macro_input!(input as ItemFn);
     let ident = &ast.sig.ident;
     let gen = quote! {

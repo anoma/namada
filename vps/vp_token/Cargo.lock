@@ -23,6 +23,7 @@ name = "anoma_vm_env"
 version = "0.1.0"
 dependencies = [
  "anoma_shared",
+ "anoma_vm_macro",
  "borsh",
 ]
 
@@ -399,9 +400,7 @@ checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
 name = "vp_token"
 version = "0.1.0"
 dependencies = [
- "anoma_shared",
  "anoma_vm_env",
- "anoma_vm_macro",
  "borsh",
  "wee_alloc",
 ]

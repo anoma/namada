@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use anoma_vm_env::vp_prelude::intent::{Intent, IntentTransfers};
 use anoma_vm_env::vp_prelude::key::ed25519::{Signed, SignedTxData};
 use anoma_vm_env::vp_prelude::*;
-use anoma_vm_macro::validity_predicate;
 
 enum KeyType<'a> {
     Token(&'a Address),

@@ -6,4 +6,5 @@ version = "0.1.0"
 
 [dependencies]
 anoma_shared = {path = "../shared"}
+anoma_vm_macro = {path = "../vm_macro"}
 borsh = "0.8.2"
