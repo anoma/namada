@@ -6,6 +6,65 @@ The main goals of this testnet is to try out some of the functionality of the le
 
 You can interact with Anoma via transactions, validity predicates and intents turned into transactions by the matchmaker. Because we don't have a proper wallet yet, each of us will have a pre-generated account address and a wallet key on the genesis block. Because all the keys are public, please respect others' keys and do not use them to sign stuff :)
 
+## 💾 Install
+
+You can either use the pre-built binaries we've released on Github or build from source. If you'll want to customize any of the wasm code (transactions, validity predicates and/or matchmaker), we recommend that you build from source to have the source available.
+
+### Pre-built binaries
+
+We have built for Mac (darwin_amd64) and Linux (linux_amd64). If you're not on one of these, you'll have to build from the source.
+
+Download the release for your platform from <https://github.com/heliaxdev/anoma-prototype/releases>. They are packaged with Tendermint, which will be used by the Anoma node.
+
+```shell
+# Extract the archive
+tar -xf anoma_0.1_darwin_amd64.tar.gz
+
+cd anoma
+
+# Add the executables to your $PATH
+export PATH="$(pwd):$PATH"
+```
+
+And you're ready to go!
+
+
+### Build from the source
+
+```shell
+# Clone the repo
+git clone https://github.com/heliaxdev/anoma-prototype.git
+# or
+git clone git@github.com:heliaxdev/anoma-prototype.git
+
+cd anoma-prototype
+
+# Checkout the release branch
+git checkout v0.1-playnet
+
+# Build and link the executables
+make install
+```
+
+You'll also need to install Tendermint v0.34.* and have it available on your $PATH, e.g.:
+
+```shell
+apt install tendermint
+brew install tendermint
+nix-env -i tendermint
+```
+
+Or you can get it from <https://github.com/tendermint/tendermint/releases>.
+
+To modify and build any of the wasm source codes:
+```
+# Run this first if you don't have Rust wasm target installed:
+make -C txs/tx_template deps
+
+# If you modify e.g. the transaction template (txs/template/src/lib.rs), you can build it with
+make -C txs/tx_template
+```
+
 ## 📇 Addresses
 
 The following are the addresses that we have included in the genesis block. You can add them to your shell to use them in commands. You should be able to find your own address among them:
@@ -47,12 +106,12 @@ The ledger is pre-configured to connect to them.
 
 To run a local ledger node:
 ```shell
-./anoma run-ledger
+anoma run-ledger
 ```
 
 To run the intent broadcaster with the matchmaker that can submit transactions to the local ledger:
 ```shell
-./anoma run-gossip --rpc "127.0.0.1:20202" \
+anoma run-gossip --rpc "127.0.0.1:20202" \
   --matchmaker-path matchmaker_template/matchmaker.wasm \
   --tx-code-path txs/tx_from_intent/tx.wasm \
   --ledger-address "127.0.0.1:26657"
@@ -60,7 +119,7 @@ To run the intent broadcaster with the matchmaker that can submit transactions t
 
 If you don't have a local ledger running, the matchmaker can also submit transactions to a remote validator ledger, with e.g.:
 ```shell
-./anoma run-gossip --rpc "127.0.0.1:20202" \
+anoma run-gossip --rpc "127.0.0.1:20202" \
   --matchmaker-path matchmaker_template/matchmaker.wasm \
   --tx-code-path txs/tx_from_intent/tx.wasm \
   --ledger-address "52.210.23.30:26657"
@@ -98,7 +157,7 @@ Any of the following commands can optionally be submitted with `--dry-run` argum
 To make a transfer of e.g. `10.1` of a fungible token `$XAN` from `$awa` to `$joe`:
 
 ```shell
-./anoma client transfer --source $awa \
+anoma client transfer --source $awa \
   --target $joe \
   --token $XAN \
   --amount 10.1 \
@@ -110,7 +169,7 @@ This client command will take care of signing the transaction using your key.
 To check balances of fungible token, run e.g.:
 
 ```shell
-./anoma client -- balances --address $adrian
+anoma client -- balances --address $adrian
 ```
 
 ### ♼ Update an account's validity predicate
@@ -122,7 +181,7 @@ To update an account's validity predicate, you can customize the default user's 
 make -C vps/vp_user
 
 # Submit a transaction with the updated VP to the ledger
-./anoma client update --address $awa --code-path vps/vp_user/vp.wasm
+anoma client update --address $awa --code-path vps/vp_user/vp.wasm
 ```
 
 ### 🦄 A custom transaction
@@ -136,7 +195,7 @@ For example:
 make -C txs/tx_template
 
 # Submit the transaction to the ledger
-./anoma client tx --code-path txs/tx_template/tx.wasm --data-path tx.data
+anoma client tx --code-path txs/tx_template/tx.wasm --data-path tx.data
 ```
 
 This transaction is by default not signed by any key, so if you try to use it make changes to your account's storage, it will be rejected by your validity predicate.
@@ -148,7 +207,7 @@ In general, intents are some data that describe what you'd like to do with your 
 To create a file `intent.data` with the intent's data, use e.g.:
 
 ```shell
-./anoma client craft-intent --address $awa \
+anoma client craft-intent --address $awa \
   --token-buy $XTZ \
   --amount-buy 10 \
   --token-sell $BTC \
@@ -159,12 +218,12 @@ To create a file `intent.data` with the intent's data, use e.g.:
 To submit the intent from the file to the intent broadcaster (which will propagate to matchmakers):
 ```shell
 # Without a local intent broadcaster node, using one of the cloud nodes
-./anoma client intent --node "http://52.210.23.30:20202" \
+anoma client intent --node "http://52.210.23.30:20202" \
   --data-path intent.data \
   --topic "asset_v0"
 
 # With a local intent broadcaster node
-./anoma client intent --node "http://127.0.0.1:20202" \
+anoma client intent --node "http://127.0.0.1:20202" \
   --data-path intent.data \
   --topic "asset_v0"
 ```
