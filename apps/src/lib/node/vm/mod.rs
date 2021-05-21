@@ -4,6 +4,7 @@ mod memory;
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
+use std::slice;
 
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
@@ -32,27 +33,36 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 /// reference, so the access is thread-safe, but because of the unsafe
 /// reference conversion, care must be taken that while this reference is
 /// borrowed, no other process can modify it.
-pub struct EnvHostWrapper<T>(*const c_void, PhantomData<T>);
-unsafe impl<T> Send for EnvHostWrapper<T> {}
-unsafe impl<T> Sync for EnvHostWrapper<T> {}
+pub struct EnvHostWrapper<'a, T: 'a> {
+    data: *const c_void,
+    phantom: PhantomData<&'a T>,
+}
+unsafe impl<T> Send for EnvHostWrapper<'_, T> {}
+unsafe impl<T> Sync for EnvHostWrapper<'_, T> {}
 
 // Have to manually implement [`Clone`], because the derived [`Clone`] for
 // [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
-impl<T> Clone for EnvHostWrapper<T> {
+impl<T> Clone for EnvHostWrapper<'_, T> {
     fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
+        Self {
+            data: self.data,
+            phantom: PhantomData,
+        }
     }
 }
 
-impl<T> EnvHostWrapper<T> {
+impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
     /// Wrap a reference for VM environment.
     ///
     /// # Safety
     ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
-    unsafe fn new(host_structure: *const c_void) -> Self {
-        Self(host_structure, PhantomData)
+    unsafe fn new(host_structure: &T) -> Self {
+        Self {
+            data: host_structure as *const T as *const c_void,
+            phantom: PhantomData,
+        }
     }
 
     /// Get a reference from VM environment.
@@ -61,9 +71,59 @@ impl<T> EnvHostWrapper<T> {
     ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
-    #[allow(dead_code)]
-    pub unsafe fn get(&self) -> *const T {
-        self.0 as *const T
+    unsafe fn get(&self) -> &'a T {
+        &*(self.data as *const T)
+    }
+}
+
+/// This is used to attach the Ledger's host structures to wasm environment,
+/// which is used for implementing some host calls. It wraps an immutable
+/// slice, so the access is thread-safe, but because of the unsafe slice
+/// conversion, care must be taken that while this slice is borrowed, no other
+/// process can modify it.
+pub struct EnvHostSliceWrapper<'a, T: 'a> {
+    data: *const c_void,
+    len: usize,
+    phantom: PhantomData<&'a T>,
+}
+unsafe impl<T> Send for EnvHostSliceWrapper<'_, T> {}
+unsafe impl<T> Sync for EnvHostSliceWrapper<'_, T> {}
+
+// Have to manually implement [`Clone`], because the derived [`Clone`] for
+// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
+impl<T> Clone for EnvHostSliceWrapper<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            data: self.data,
+            len: self.len,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
+    /// Wrap a slice for VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    unsafe fn new(host_structure: &[T]) -> Self {
+        Self {
+            data: host_structure as *const [T] as *const c_void,
+            len: host_structure.len(),
+            phantom: PhantomData,
+        }
+    }
+
+    /// Get a slice from VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    pub unsafe fn get(&self) -> &'a [T] {
+        slice::from_raw_parts(self.data as *const T, self.len)
     }
 }
 
@@ -180,9 +240,8 @@ impl TxRunner {
         validate_untrusted_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
-            EnvHostWrapper::new(storage as *const _ as *const c_void)
-        };
+        let storage: EnvHostWrapper<'_, &Storage<DB>> =
+            unsafe { EnvHostWrapper::new(storage) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let write_log = unsafe {
@@ -295,17 +354,12 @@ impl VpRunner {
         validate_untrusted_wasm(vp_code.as_ref())?;
 
         // Read-only access from parallel Vp runners
-        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
-            EnvHostWrapper::new(storage as *const _ as *const c_void)
-        };
+        let storage: EnvHostWrapper<&Storage<DB>> =
+            unsafe { EnvHostWrapper::new(storage) };
         // Read-only access from parallel Vp runners
-        let write_log = unsafe {
-            EnvHostWrapper::new(write_log as *const _ as *const c_void)
-        };
+        let write_log = unsafe { EnvHostWrapper::new(write_log) };
         // Read-only access from parallel Vp runners
-        let tx_code = unsafe {
-            EnvHostWrapper::new(tx_code as *const _ as *const c_void)
-        };
+        let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code.as_ref()) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
@@ -318,13 +372,10 @@ impl VpRunner {
             MutEnvHostWrapper::new(vp_gas_meter as *mut _ as *mut c_void)
         };
         // Read-only access from parallel Vp runners
-        let env_storage_keys = unsafe {
-            EnvHostWrapper::new(storage_keys as *const _ as *const c_void)
-        };
+        let env_storage_keys =
+            unsafe { EnvHostSliceWrapper::new(storage_keys) };
         // Read-only access from parallel Vp runners
-        let env_verifiers = unsafe {
-            EnvHostWrapper::new(verifiers as *const _ as *const c_void)
-        };
+        let env_verifiers = unsafe { EnvHostWrapper::new(verifiers) };
 
         let vp_code = prepare_wasm_code(vp_code)?;
 
@@ -373,13 +424,12 @@ impl VpRunner {
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
 
-
         let keys_changed = unsafe { &*(vp_env.keys_changed.get()) };
         let verifiers = unsafe { &*(vp_env.verifiers.get()) };
         let input: VpInput = VpInput {
             addr: &vp_env.addr,
             data: input_data,
-            keys_changed: &keys_changed[..],
+            keys_changed,
             verifiers,
         };
 
