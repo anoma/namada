@@ -7,7 +7,7 @@ workspace:
   path: /root
 
 environment:
-  CARGO_HOME: /root/.cargo/
+  # CARGO_HOME: /root/.cargo/
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -140,7 +140,7 @@ workspace:
   path: /root
 
 environment:
-  CARGO_HOME: /root/.cargo/
+  # CARGO_HOME: /root/.cargo/
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -237,10 +237,10 @@ workspace:
   path: /root
 
 environment:
-  CARGO_HOME: /drone/workspace/.cargo
-  RUSTUP_HOME: /drone/workspace/.rustup
+  # CARGO_HOME: /drone/workspace/.cargo
+  # RUSTUP_HOME: /drone/workspace/.rustup
   GIT_LFS_SKIP_SMUDGE: "1"
-  CARGO_TARGET_DIR: $CARGO_HOME/target
+  # CARGO_TARGET_DIR: $CARGO_HOME/target
   CARGO_INCREMENTAL: 0
 
 steps:
@@ -313,9 +313,9 @@ workspace:
   path: /root
 
 environment:
-  CARGO_HOME: /drone/workspace/.cargo
-  RUSTUP_HOME: /drone/workspace/.rustup
-  CARGO_TARGET_DIR: $CARGO_HOME/target
+  # CARGO_HOME: /drone/workspace/.cargo
+  # RUSTUP_HOME: /drone/workspace/.rustup
+  # CARGO_TARGET_DIR: $CARGO_HOME/target
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
