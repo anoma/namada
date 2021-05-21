@@ -18,7 +18,7 @@ pub mod tx {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe { _iter_next(self.0, result.as_ptr() as _) };
+            let size = unsafe { anoma_iter_next(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
@@ -42,7 +42,7 @@ pub mod tx {
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
         let size = unsafe {
-            _read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+            anoma_read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
         };
         if size == -1 {
             None
@@ -56,7 +56,7 @@ pub mod tx {
     /// Check if the given key is present in storage.
     pub fn has_key(key: impl AsRef<str>) -> bool {
         let key = key.as_ref();
-        let found = unsafe { _has_key(key.as_ptr() as _, key.len() as _) };
+        let found = unsafe { anoma_has_key(key.as_ptr() as _, key.len() as _) };
         found == 1
     }
 
@@ -66,7 +66,7 @@ pub mod tx {
         let mut buf: Vec<u8> = Vec::with_capacity(size_of::<T>());
         val.serialize(&mut buf).unwrap();
         unsafe {
-            _write(
+            anoma_write(
                 key.as_ptr() as _,
                 key.len() as _,
                 buf.as_ptr() as _,
@@ -78,7 +78,7 @@ pub mod tx {
     /// Delete a value at the given key from storage.
     pub fn delete<K: AsRef<str>, T: BorshSerialize>(key: K) {
         let key = key.as_ref();
-        unsafe { _delete(key.as_ptr() as _, key.len() as _) };
+        unsafe { anoma_delete(key.as_ptr() as _, key.len() as _) };
     }
 
     /// Get an iterator with the given prefix
@@ -86,15 +86,16 @@ pub mod tx {
         prefix: K,
     ) -> KeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id =
-            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
+        let iter_id = unsafe {
+            anoma_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        };
         KeyValIterator(iter_id, PhantomData)
     }
 
     /// Insert a verifier
     pub fn insert_verifier(addr: Address) {
         let addr = addr.encode();
-        unsafe { _insert_verifier(addr.as_ptr() as _, addr.len() as _) }
+        unsafe { anoma_insert_verifier(addr.as_ptr() as _, addr.len() as _) }
     }
 
     /// Update a validity predicate
@@ -102,7 +103,7 @@ pub mod tx {
         let addr = addr.encode();
         let code = code.as_ref();
         unsafe {
-            _update_validity_predicate(
+            anoma_update_validity_predicate(
                 addr.as_ptr() as _,
                 addr.len() as _,
                 code.as_ptr() as _,
@@ -116,7 +117,7 @@ pub mod tx {
         let code = code.as_ref();
         let result = Vec::with_capacity(0);
         let result_len = unsafe {
-            _init_account(
+            anoma_init_account(
                 code.as_ptr() as _,
                 code.len() as _,
                 result.as_ptr() as _,
@@ -132,7 +133,7 @@ pub mod tx {
     pub fn get_chain_id() -> String {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
         unsafe {
-            _get_chain_id(result.as_ptr() as _);
+            anoma_get_chain_id(result.as_ptr() as _);
         }
         let slice = unsafe {
             slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH as _)
@@ -142,14 +143,14 @@ pub mod tx {
 
     /// Get the committed block height
     pub fn get_block_height() -> BlockHeight {
-        BlockHeight(unsafe { _get_block_height() })
+        BlockHeight(unsafe { anoma_get_block_height() })
     }
 
     /// Get a block hash
     pub fn get_block_hash() -> BlockHash {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
-            _get_block_hash(result.as_ptr() as _);
+            anoma_get_block_hash(result.as_ptr() as _);
         }
         let slice = unsafe {
             slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
@@ -161,7 +162,7 @@ pub mod tx {
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
-            _log_string(msg.as_ptr() as _, msg.len() as _);
+            anoma_log_string(msg.as_ptr() as _, msg.len() as _);
         }
     }
 
@@ -171,31 +172,31 @@ pub mod tx {
         // Read variable-length data when we don't know the size up-front,
         // returns the size of the value (can be 0), or -1 if the key is
         // not present.
-        fn _read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
+        fn anoma_read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
         // Returns 1 if the key is present, 0 otherwise.
-        fn _has_key(key_ptr: u64, key_len: u64) -> u64;
+        fn anoma_has_key(key_ptr: u64, key_len: u64) -> u64;
 
         // Write key/value, returns 1 on success, 0 otherwise.
-        fn _write(key_ptr: u64, key_len: u64, val_ptr: u64, val_len: u64);
+        fn anoma_write(key_ptr: u64, key_len: u64, val_ptr: u64, val_len: u64);
 
         // Delete the given key and its value, returns 1 on success, 0
         // otherwise.
-        fn _delete(key_ptr: u64, key_len: u64) -> u64;
+        fn anoma_delete(key_ptr: u64, key_len: u64) -> u64;
 
         // Get an ID of a data iterator with key prefix
-        fn _iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
+        fn anoma_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
         // Read variable-length data when we don't know the size up-front,
         // returns the size of the value (can be 0), or -1 if the key is not
         // present.
-        fn _iter_next(iter_id: u64, result_ptr: u64) -> i64;
+        fn anoma_iter_next(iter_id: u64, result_ptr: u64) -> i64;
 
         // Insert a verifier
-        fn _insert_verifier(addr_ptr: u64, addr_len: u64);
+        fn anoma_insert_verifier(addr_ptr: u64, addr_len: u64);
 
         // Update a validity predicate
-        fn _update_validity_predicate(
+        fn anoma_update_validity_predicate(
             addr_ptr: u64,
             addr_len: u64,
             code_ptr: u64,
@@ -203,19 +204,23 @@ pub mod tx {
         );
 
         // Initialize a new account
-        fn _init_account(code_ptr: u64, code_len: u64, result_ptr: u64) -> u64;
+        fn anoma_init_account(
+            code_ptr: u64,
+            code_len: u64,
+            result_ptr: u64,
+        ) -> u64;
 
         // Get the chain ID
-        fn _get_chain_id(result_ptr: u64);
+        fn anoma_get_chain_id(result_ptr: u64);
 
         // Get the current block height
-        fn _get_block_height() -> u64;
+        fn anoma_get_block_height() -> u64;
 
         // Get the current block hash
-        fn _get_block_hash(result_ptr: u64);
+        fn anoma_get_block_hash(result_ptr: u64);
 
         // Requires a node running with "Info" log level
-        fn _log_string(str_ptr: u64, str_len: u64);
+        fn anoma_log_string(str_ptr: u64, str_len: u64);
     }
 }
 
@@ -243,7 +248,11 @@ pub mod vp {
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
         let size = unsafe {
-            _read_pre(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+            anoma_read_pre(
+                key.as_ptr() as _,
+                key.len() as _,
+                result.as_ptr() as _,
+            )
         };
         if size == -1 {
             None
@@ -261,7 +270,11 @@ pub mod vp {
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
         let size = unsafe {
-            _read_post(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
+            anoma_read_post(
+                key.as_ptr() as _,
+                key.len() as _,
+                result.as_ptr() as _,
+            )
         };
         if size == -1 {
             None
@@ -276,7 +289,8 @@ pub mod vp {
     /// execution.
     pub fn has_key_pre(key: impl AsRef<str>) -> bool {
         let key = key.as_ref();
-        let found = unsafe { _has_key_pre(key.as_ptr() as _, key.len() as _) };
+        let found =
+            unsafe { anoma_has_key_pre(key.as_ptr() as _, key.len() as _) };
         found == 1
     }
 
@@ -284,7 +298,8 @@ pub mod vp {
     /// execution.
     pub fn has_key_post(key: impl AsRef<str>) -> bool {
         let key = key.as_ref();
-        let found = unsafe { _has_key_post(key.as_ptr() as _, key.len() as _) };
+        let found =
+            unsafe { anoma_has_key_post(key.as_ptr() as _, key.len() as _) };
         found == 1
     }
 
@@ -293,8 +308,9 @@ pub mod vp {
         prefix: K,
     ) -> PreKeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id =
-            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
+        let iter_id = unsafe {
+            anoma_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        };
         PreKeyValIterator(iter_id, PhantomData)
     }
 
@@ -303,7 +319,8 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe { _iter_pre_next(self.0, result.as_ptr() as _) };
+            let size =
+                unsafe { anoma_iter_pre_next(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
@@ -326,8 +343,9 @@ pub mod vp {
         prefix: K,
     ) -> PostKeyValIterator<T> {
         let prefix = prefix.as_ref();
-        let iter_id =
-            unsafe { _iter_prefix(prefix.as_ptr() as _, prefix.len() as _) };
+        let iter_id = unsafe {
+            anoma_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        };
         PostKeyValIterator(iter_id, PhantomData)
     }
 
@@ -336,7 +354,8 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe { _iter_post_next(self.0, result.as_ptr() as _) };
+            let size =
+                unsafe { anoma_iter_post_next(self.0, result.as_ptr() as _) };
             if size == -1 {
                 None
             } else {
@@ -358,7 +377,7 @@ pub mod vp {
     pub fn get_chain_id() -> String {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
         unsafe {
-            _get_chain_id(result.as_ptr() as _);
+            anoma_get_chain_id(result.as_ptr() as _);
         }
         let slice = unsafe {
             slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH as _)
@@ -368,14 +387,14 @@ pub mod vp {
 
     /// Get the committed block height
     pub fn get_block_height() -> BlockHeight {
-        BlockHeight(unsafe { _get_block_height() })
+        BlockHeight(unsafe { anoma_get_block_height() })
     }
 
     /// Get a block hash
     pub fn get_block_hash() -> BlockHash {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
-            _get_block_hash(result.as_ptr() as _);
+            anoma_get_block_hash(result.as_ptr() as _);
         }
         let slice = unsafe {
             slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
@@ -393,7 +412,7 @@ pub mod vp {
         let pk = BorshSerialize::try_to_vec(pk).unwrap();
         let sig = BorshSerialize::try_to_vec(sig).unwrap();
         let valid = unsafe {
-            _verify_tx_signature(
+            anoma_verify_tx_signature(
                 pk.as_ptr() as _,
                 pk.len() as _,
                 data.as_ptr() as _,
@@ -409,7 +428,7 @@ pub mod vp {
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
-            _log_string(msg.as_ptr() as _, msg.len() as _);
+            anoma_log_string(msg.as_ptr() as _, msg.len() as _);
         }
     }
 
@@ -419,43 +438,43 @@ pub mod vp {
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        fn _read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
+        fn anoma_read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        fn _read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
+        fn anoma_read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
         // Returns 1 if the key is present in prior state, 0 otherwise.
-        fn _has_key_pre(key_ptr: u64, key_len: u64) -> u64;
+        fn anoma_has_key_pre(key_ptr: u64, key_len: u64) -> u64;
 
         // Returns 1 if the key is present in posterior state, 0 otherwise.
-        fn _has_key_post(key_ptr: u64, key_len: u64) -> u64;
+        fn anoma_has_key_post(key_ptr: u64, key_len: u64) -> u64;
 
         // Get an ID of a data iterator with key prefix
-        fn _iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
+        fn anoma_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present.
-        fn _iter_pre_next(iter_id: u64, result_ptr: u64) -> i64;
+        fn anoma_iter_pre_next(iter_id: u64, result_ptr: u64) -> i64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if the
         // key is not present.
-        fn _iter_post_next(iter_id: u64, result_ptr: u64) -> i64;
+        fn anoma_iter_post_next(iter_id: u64, result_ptr: u64) -> i64;
 
         // Get the chain ID
-        fn _get_chain_id(result_ptr: u64);
+        fn anoma_get_chain_id(result_ptr: u64);
 
         // Get the current block height
-        fn _get_block_height() -> u64;
+        fn anoma_get_block_height() -> u64;
 
         // Get the current block hash
-        fn _get_block_hash(result_ptr: u64);
+        fn anoma_get_block_hash(result_ptr: u64);
 
         // Verify a transaction signature
-        fn _verify_tx_signature(
+        fn anoma_verify_tx_signature(
             pk_ptr: u64,
             pk_len: u64,
             data_ptr: u64,
@@ -465,7 +484,7 @@ pub mod vp {
         ) -> u64;
 
         // Requires a node running with "Info" log level
-        fn _log_string(str_ptr: u64, str_len: u64);
+        fn anoma_log_string(str_ptr: u64, str_len: u64);
     }
 }
 
@@ -480,13 +499,13 @@ pub mod matchmaker {
     /// given in matchmaker parameters (`--tx-code-path` and
     /// `--ledger-address`).
     pub fn send_match(tx_data: Vec<u8>) {
-        unsafe { _send_match(tx_data.as_ptr() as _, tx_data.len() as _) };
+        unsafe { anoma_send_match(tx_data.as_ptr() as _, tx_data.len() as _) };
     }
 
     /// Update the matchmaker state. This state will be pass on the next run of
     /// the matchmaker.
     pub fn update_data(data: Vec<u8>) {
-        unsafe { _update_data(data.as_ptr() as _, data.len() as _) };
+        unsafe { anoma_update_data(data.as_ptr() as _, data.len() as _) };
     }
 
     /// Remove the intents from the matchmaker intent mempool, to call when they
@@ -494,7 +513,7 @@ pub mod matchmaker {
     pub fn remove_intents(intents_id: HashSet<Vec<u8>>) {
         let intents_id_bytes = intents_id.try_to_vec().unwrap();
         unsafe {
-            _remove_intents(
+            anoma_remove_intents(
                 intents_id_bytes.as_ptr() as _,
                 intents_id_bytes.len() as _,
             )
@@ -505,7 +524,7 @@ pub mod matchmaker {
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
-            _log_string(msg.as_ptr() as _, msg.len() as _);
+            anoma_log_string(msg.as_ptr() as _, msg.len() as _);
         }
     }
 
@@ -513,14 +532,14 @@ pub mod matchmaker {
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
         // Inject a transaction from matchmaker's matched intents to the ledger
-        fn _send_match(data_ptr: u64, data_len: u64);
+        fn anoma_send_match(data_ptr: u64, data_len: u64);
 
-        fn _update_data(data_ptr: u64, data_len: u64);
+        fn anoma_update_data(data_ptr: u64, data_len: u64);
 
-        fn _remove_intents(intents_id_ptr: u64, intents_id_len: u64);
+        fn anoma_remove_intents(intents_id_ptr: u64, intents_id_len: u64);
 
         // Requires a node running with "Info" log level
-        fn _log_string(str_ptr: u64, str_len: u64);
+        fn anoma_log_string(str_ptr: u64, str_len: u64);
     }
 }
 
@@ -534,7 +553,7 @@ pub mod filter {
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
         unsafe {
-            _log_string(msg.as_ptr() as _, msg.len() as _);
+            anoma_log_string(msg.as_ptr() as _, msg.len() as _);
         }
     }
 
@@ -542,6 +561,6 @@ pub mod filter {
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
         // Requires a node running with "Info" log level
-        fn _log_string(str_ptr: u64, str_len: u64);
+        fn anoma_log_string(str_ptr: u64, str_len: u64);
     }
 }
