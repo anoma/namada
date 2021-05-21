@@ -48,6 +48,7 @@ steps:
     commands:
       - which rustc
       - which rustup
+      - ls /root/.cargo
       - pwd
       - ls -a
       - du -hs ./.cargo
