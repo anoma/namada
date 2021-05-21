@@ -78,7 +78,7 @@ where
 }
 
 // VpEnv is parameterized over DB to allow testing
-pub struct VpEnv<DB>
+pub struct VpEnv<'a, DB>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -97,7 +97,7 @@ where
     /// The transaction code is used for signature verification
     tx_code: EnvHostWrapper<Vec<u8>>,
     /// Change storage keys, we use these for `eval` invocations
-    pub keys_changed: EnvHostWrapper<Vec<Key>>,
+    pub keys_changed: EnvHostWrapper<&'a[Key]>, // EnvHostWrapper<Vec<Key>>,
     /// Addresses of transaction verifiers, we use these for `eval` invocations
     pub verifiers: EnvHostWrapper<HashSet<Address>>,
     memory: AnomaMemory,
@@ -107,7 +107,7 @@ where
 // implement `DB: Clone` which is required by `WasmerEnv`, but we don't store
 // the `DB` directly here, so we don't need to. Instead, we store the reference
 // to `DB` inside the `EnvHostWrapper` which is safe to clone.
-impl<DB> Clone for VpEnv<DB>
+impl<'a, DB> Clone for VpEnv<'a, DB>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -126,7 +126,7 @@ where
     }
 }
 
-impl<DB> WasmerEnv for VpEnv<DB>
+impl<'a, DB> WasmerEnv for VpEnv<'a, DB>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -226,7 +226,7 @@ pub fn prepare_vp_env<DB>(
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
     tx_code: EnvHostWrapper<Vec<u8>>,
     initial_memory: Memory,
-    keys_changed: EnvHostWrapper<Vec<Key>>,
+    keys_changed: EnvHostWrapper<&'static [Key]>,
     verifiers: EnvHostWrapper<HashSet<Address>>,
 ) -> ImportObject
 where
@@ -251,7 +251,7 @@ where
 pub fn prepare_vp_imports<DB>(
     wasm_store: &Store,
     initial_memory: Memory,
-    env: &VpEnv<DB>,
+    env: &VpEnv<'static, DB>,
 ) -> ImportObject
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -355,14 +355,14 @@ where
 }
 
 /// Called from VP wasm to request to use the given gas amount
-fn vp_charge_gas<DB>(env: &VpEnv<DB>, used_gas: i32)
+fn vp_charge_gas<'a, DB>(env: &VpEnv<'a, DB>, used_gas: i32)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
     vp_add_gas(env, used_gas as _)
 }
 
-fn vp_add_gas<DB>(env: &VpEnv<DB>, used_gas: u64)
+fn vp_add_gas<'a, DB>(env: &VpEnv<'a, DB>, used_gas: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -687,8 +687,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_read_pre<DB>(
-    env: &VpEnv<DB>,
+fn vp_storage_read_pre<'a, DB>(
+    env: &VpEnv<'a, DB>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
@@ -737,8 +737,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_read_post<DB>(
-    env: &VpEnv<DB>,
+fn vp_storage_read_post<'a, DB>(
+    env: &VpEnv<'a, DB>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
@@ -818,8 +818,8 @@ where
 
 /// Storage `has_key` in prior state (before tx execution) function exposed to
 /// the wasm VM VP environment. It will try to read from the storage.
-fn vp_storage_has_key_pre<DB>(
-    env: &VpEnv<DB>,
+fn vp_storage_has_key_pre<'a, DB>(
+    env: &VpEnv<'a, DB>,
     key_ptr: u64,
     key_len: u64,
 ) -> u64
@@ -845,8 +845,8 @@ where
 /// Storage `has_key` in posterior state (after tx execution) function exposed
 /// to the wasm VM VP environment. It will
 /// try to check the write log first and if no entry found then the storage.
-fn vp_storage_has_key_post<DB>(
-    env: &VpEnv<DB>,
+fn vp_storage_has_key_post<'a, DB>(
+    env: &VpEnv<'a, DB>,
     key_ptr: u64,
     key_len: u64,
 ) -> u64
@@ -888,8 +888,8 @@ where
 /// Storage prefix iterator function exposed to the wasm VM VP environment.
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator.
-fn vp_storage_iter_prefix<DB>(
-    env: &VpEnv<DB>,
+fn vp_storage_iter_prefix<'a, DB>(
+    env: &VpEnv<'a, DB>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> u64
@@ -919,8 +919,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_iter_pre_next<DB>(
-    env: &VpEnv<DB>,
+fn vp_storage_iter_pre_next<'a, DB>(
+    env: &VpEnv<'a, DB>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
@@ -959,8 +959,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_iter_post_next<DB>(
-    env: &VpEnv<DB>,
+fn vp_storage_iter_post_next<'a, DB>(
+    env: &VpEnv<'a, DB>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
@@ -1178,7 +1178,7 @@ where
 }
 
 /// Getting the chain ID function exposed to the wasm VM VP environment.
-fn vp_get_chain_id<DB>(env: &VpEnv<DB>, result_ptr: u64)
+fn vp_get_chain_id<'a, DB>(env: &VpEnv<'a, DB>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -1195,7 +1195,7 @@ where
 /// Getting the block height function exposed to the wasm VM VP
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
-fn vp_get_block_height<DB>(env: &VpEnv<DB>) -> u64
+fn vp_get_block_height<'a, DB>(env: &VpEnv<'a,DB>) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -1207,7 +1207,7 @@ where
 
 /// Getting the block hash function exposed to the wasm VM VP environment. The
 /// hash is that of the block to which the current transaction is being applied.
-fn vp_get_block_hash<DB>(env: &VpEnv<DB>, result_ptr: u64)
+fn vp_get_block_hash<'a, DB>(env: &VpEnv<'a, DB>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -1221,8 +1221,8 @@ where
     vp_add_gas(env, gas);
 }
 
-fn vp_verify_tx_signature<DB>(
-    env: &VpEnv<DB>,
+fn vp_verify_tx_signature<'a, DB>(
+    env: &VpEnv<'a, DB>,
     pk_ptr: u64,
     pk_len: u64,
     data_ptr: u64,
@@ -1285,7 +1285,7 @@ where
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`tracing::Level::Info`]. This function is for development
 /// only.
-fn vp_log_string<DB>(env: &VpEnv<DB>, str_ptr: u64, str_len: u64)
+fn vp_log_string<'a, DB>(env: &VpEnv<'a, DB>, str_ptr: u64, str_len: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -1298,7 +1298,7 @@ where
 }
 
 fn vp_eval<DB>(
-    env: &VpEnv<DB>,
+    env: &VpEnv<'static, DB>,
     vp_code_ptr: u64,
     vp_code_len: u64,
     input_data_ptr: u64,

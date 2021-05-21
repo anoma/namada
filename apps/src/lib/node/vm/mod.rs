@@ -362,7 +362,7 @@ impl VpRunner {
         vp_code: Vec<u8>, /* Vec<u8> is how we read the validity predicate
                            * from wasm memory */
         input_data: &[u8],
-        vp_env: VpEnv<DB>,
+        vp_env: VpEnv<'static, DB>,
     ) -> Result<bool>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
