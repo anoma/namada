@@ -3,13 +3,11 @@ kind: pipeline
 type: docker
 name: anoma-ci-build-pr
 
-# workspace:
-#   path: /drone/workspace
+workspace:
+  path: /drone/workspace
 
 environment:
-  # CARGO_HOME: /drone/workspace/.cargo
-  # RUSTUP_HOME: /drone/workspace/.rustup
-  # CARGO_TARGET_DIR: $CARGO_HOME/target
+  CARGO_HOME: /root/.cargo/
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -25,7 +23,8 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - ./.cargo
+        - /root/.cargo/registry
+        - /root/.cargo/git
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -88,7 +87,8 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - ./.cargo
+        - /root/.cargo/registry
+        - /root/.cargo/git
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -128,8 +128,7 @@ workspace:
   path: /drone/workspace
 
 environment:
-  CARGO_HOME: /drone/workspace/.cargo
-  RUSTUP_HOME: /drone/workspace/.rustup
+  CARGO_HOME: /root/.cargo/
   CARGO_TARGET_DIR: $CARGO_HOME/target
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
@@ -146,7 +145,8 @@ steps:
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - ./.cargo
+        - /root/.cargo/registry
+        - /root/.cargo/git
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -178,7 +178,8 @@ steps:
       override: false
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - ./.cargo
+        - /root/.cargo/registry
+        - /root/.cargo/git
         - target
     environment:
       AWS_ACCESS_KEY_ID:
