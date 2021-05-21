@@ -331,7 +331,6 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - ./.cargo
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -378,7 +377,6 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - ./.cargo
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
