@@ -3,8 +3,8 @@ kind: pipeline
 type: docker
 name: anoma-ci-build-pr
 
-# workspace:
-#   path: /root
+workspace:
+  path: /drone/src
 
 environment:
   # CARGO_HOME: /root/.cargo/
@@ -23,8 +23,8 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - /root/.cargo/registry
-        - /root/.cargo/git
+        # - /root/.cargo/registry
+        # - /root/.cargo/git
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -99,8 +99,8 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - /root/.cargo/registry
-        - /root/.cargo/git
+        # - /root/.cargo/registry
+        # - /root/.cargo/git
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -137,7 +137,7 @@ type: docker
 name: anoma-ci-checks-pr
 
 workspace:
-  path: /root
+  path: /drone/src
 
 environment:
   # CARGO_HOME: /root/.cargo/
@@ -156,8 +156,8 @@ steps:
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - /root/.cargo/registry
-        - /root/.cargo/git
+        # - /root/.cargo/registry
+        # - /root/.cargo/git
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -204,8 +204,8 @@ steps:
       override: false
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - /root/.cargo/registry
-        - /root/.cargo/git
+        # - /root/.cargo/registry
+        # - /root/.cargo/git
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -234,7 +234,7 @@ type: docker
 name: anoma-ci-audit-pr
 
 workspace:
-  path: /root
+  path: /drone/src
 
 environment:
   # CARGO_HOME: /drone/workspace/.cargo
@@ -310,7 +310,7 @@ type: docker
 name: anoma-ci-build-master-develop
 
 workspace:
-  path: /root
+  path: /drone/src
 
 environment:
   # CARGO_HOME: /drone/workspace/.cargo
