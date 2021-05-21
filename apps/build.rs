@@ -1,26 +1,12 @@
-use std::process::{exit, Command};
+use std::process::Command;
 use std::{env, str};
-
-use rustc_version::{version, Version};
 
 /// Path to the .proto source files, relative to `apps` directory
 const PROTO_SRC: &str = "../proto";
 /// The version should match the one we use in the `Makefile`
 const RUSTFMT_TOOLCHAIN: &str = "nightly-2021-03-09";
-/// The minimum required rustc version
-const RUSTC_MIN_VERSION: &str = "1.51.0";
 
 fn main() {
-    // Check the rustc version
-    // TODO Replace with https://github.com/rust-lang/rust/issues/65262 once stabilized.
-    if version().unwrap() < Version::parse(RUSTC_MIN_VERSION).unwrap() {
-        eprintln!(
-            "This crate requires rustc version >= {}.",
-            RUSTC_MIN_VERSION
-        );
-        exit(1);
-    }
-
     // Tell Cargo that if the given file changes, to rerun this build script.
     println!("cargo:rerun-if-changed={}", PROTO_SRC);
 
