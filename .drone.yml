@@ -8,6 +8,7 @@ workspace:
 
 environment:
   CARGO_HOME: /drone/workspace/.cargo
+  RUSTUP_HOME: /drone/workspace/.cargo/bin
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -125,6 +126,7 @@ workspace:
 
 environment:
   CARGO_HOME: /drone/workspace/.cargo
+  RUSTUP_HOME: /drone/workspace/.cargo/bin
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -213,6 +215,7 @@ workspace:
 
 environment:
   CARGO_HOME: /drone/workspace/.cargo
+  RUSTUP_HOME: /drone/workspace/.cargo/bin
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -296,6 +299,7 @@ workspace:
 
 environment:
   CARGO_HOME: /drone/workspace/.cargo
+  RUSTUP_HOME: /drone/workspace/.cargo/bin
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
