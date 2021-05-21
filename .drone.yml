@@ -4,7 +4,7 @@ type: docker
 name: anoma-ci-build-pr
 
 workspace:
-  path: /drone/workspace
+  path: /root
 
 environment:
   CARGO_HOME: /root/.cargo/
@@ -137,7 +137,7 @@ type: docker
 name: anoma-ci-checks-pr
 
 workspace:
-  path: /drone/workspace
+  path: /root
 
 environment:
   CARGO_HOME: /root/.cargo/
@@ -234,7 +234,7 @@ type: docker
 name: anoma-ci-audit-pr
 
 workspace:
-  path: /drone/workspace
+  path: /root
 
 environment:
   CARGO_HOME: /drone/workspace/.cargo
@@ -310,7 +310,7 @@ type: docker
 name: anoma-ci-build-master-develop
 
 workspace:
-  path: /drone/workspace
+  path: /root
 
 environment:
   CARGO_HOME: /drone/workspace/.cargo
