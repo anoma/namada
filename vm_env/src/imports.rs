@@ -5,6 +5,7 @@ pub mod tx {
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::{
         Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
@@ -19,7 +20,7 @@ pub mod tx {
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
             let size = unsafe { anoma_iter_next(self.0, result.as_ptr() as _) };
-            if size == -1 {
+            if HostEnvResult::is_fail(size) {
                 None
             } else {
                 let slice = unsafe {
@@ -44,7 +45,7 @@ pub mod tx {
         let size = unsafe {
             anoma_read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
         };
-        if size == -1 {
+        if HostEnvResult::is_fail(size) {
             None
         } else {
             let slice =
@@ -57,7 +58,7 @@ pub mod tx {
     pub fn has_key(key: impl AsRef<str>) -> bool {
         let key = key.as_ref();
         let found = unsafe { anoma_has_key(key.as_ptr() as _, key.len() as _) };
-        found == 1
+        HostEnvResult::is_success(found)
     }
 
     /// Write a value at the given key to storage.
@@ -174,15 +175,14 @@ pub mod tx {
         // not present.
         fn anoma_read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
-        // Returns 1 if the key is present, 0 otherwise.
-        fn anoma_has_key(key_ptr: u64, key_len: u64) -> u64;
+        // Returns 1 if the key is present, -1 otherwise.
+        fn anoma_has_key(key_ptr: u64, key_len: u64) -> i64;
 
-        // Write key/value, returns 1 on success, 0 otherwise.
+        // Write key/value
         fn anoma_write(key_ptr: u64, key_len: u64, val_ptr: u64, val_len: u64);
 
-        // Delete the given key and its value, returns 1 on success, 0
-        // otherwise.
-        fn anoma_delete(key_ptr: u64, key_len: u64) -> u64;
+        // Delete the given key and its value
+        fn anoma_delete(key_ptr: u64, key_len: u64);
 
         // Get an ID of a data iterator with key prefix
         fn anoma_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
@@ -231,6 +231,7 @@ pub mod vp {
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::key::ed25519::{PublicKey, Signature};
     use anoma_shared::types::{
         BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
@@ -254,7 +255,7 @@ pub mod vp {
                 result.as_ptr() as _,
             )
         };
-        if size == -1 {
+        if HostEnvResult::is_fail(size) {
             None
         } else {
             let slice =
@@ -276,7 +277,7 @@ pub mod vp {
                 result.as_ptr() as _,
             )
         };
-        if size == -1 {
+        if HostEnvResult::is_fail(size) {
             None
         } else {
             let slice =
@@ -291,7 +292,7 @@ pub mod vp {
         let key = key.as_ref();
         let found =
             unsafe { anoma_has_key_pre(key.as_ptr() as _, key.len() as _) };
-        found == 1
+        HostEnvResult::is_success(found)
     }
 
     /// Check if the given key is present in storage after transaction
@@ -300,7 +301,7 @@ pub mod vp {
         let key = key.as_ref();
         let found =
             unsafe { anoma_has_key_post(key.as_ptr() as _, key.len() as _) };
-        found == 1
+        HostEnvResult::is_success(found)
     }
 
     /// Get an iterator with the given prefix before transaction execution
@@ -321,7 +322,7 @@ pub mod vp {
             let result: Vec<u8> = Vec::with_capacity(0);
             let size =
                 unsafe { anoma_iter_pre_next(self.0, result.as_ptr() as _) };
-            if size == -1 {
+            if HostEnvResult::is_fail(size) {
                 None
             } else {
                 let slice = unsafe {
@@ -356,7 +357,7 @@ pub mod vp {
             let result: Vec<u8> = Vec::with_capacity(0);
             let size =
                 unsafe { anoma_iter_post_next(self.0, result.as_ptr() as _) };
-            if size == -1 {
+            if HostEnvResult::is_fail(size) {
                 None
             } else {
                 let slice = unsafe {
@@ -421,7 +422,7 @@ pub mod vp {
                 sig.len() as _,
             )
         };
-        valid == 1
+        HostEnvResult::is_success(valid)
     }
 
     /// Log a string. The message will be printed at the `tracing::Level::Info`.
@@ -445,11 +446,11 @@ pub mod vp {
         // the key is not present.
         fn anoma_read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
 
-        // Returns 1 if the key is present in prior state, 0 otherwise.
-        fn anoma_has_key_pre(key_ptr: u64, key_len: u64) -> u64;
+        // Returns 1 if the key is present in prior state, -1 otherwise.
+        fn anoma_has_key_pre(key_ptr: u64, key_len: u64) -> i64;
 
-        // Returns 1 if the key is present in posterior state, 0 otherwise.
-        fn anoma_has_key_post(key_ptr: u64, key_len: u64) -> u64;
+        // Returns 1 if the key is present in posterior state, -1 otherwise.
+        fn anoma_has_key_post(key_ptr: u64, key_len: u64) -> i64;
 
         // Get an ID of a data iterator with key prefix
         fn anoma_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
@@ -481,7 +482,7 @@ pub mod vp {
             data_len: u64,
             sig_ptr: u64,
             sig_len: u64,
-        ) -> u64;
+        ) -> i64;
 
         // Requires a node running with "Info" log level
         fn anoma_log_string(str_ptr: u64, str_len: u64);
