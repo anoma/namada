@@ -3,13 +3,13 @@ kind: pipeline
 type: docker
 name: anoma-ci-build-pr
 
-workspace:
-  path: /drone/workspace
+# workspace:
+#   path: /drone/workspace
 
 environment:
-  CARGO_HOME: /drone/workspace/.cargo
-  RUSTUP_HOME: /drone/workspace/.rustup
-  CARGO_TARGET_DIR: $CARGO_HOME/target
+  # CARGO_HOME: /drone/workspace/.cargo
+  # RUSTUP_HOME: /drone/workspace/.rustup
+  # CARGO_TARGET_DIR: $CARGO_HOME/target
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -46,8 +46,13 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
+      - which rustc
+      - which rustup
       - pwd
       - ls -a
+      - du -hs ./.cargo
+      - du -hs vps/vp_user/target
+      - du -hs target
     depends_on:
       - restore-cache
 
