@@ -682,14 +682,14 @@ pub mod matchmaker {
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
         // Inject a transaction from matchmaker's matched intents to the ledger
-        pub fn _send_match(data_ptr: u64, data_len: u64);
+        fn _send_match(data_ptr: u64, data_len: u64);
 
-        pub fn _update_data(data_ptr: u64, data_len: u64);
+        fn _update_data(data_ptr: u64, data_len: u64);
 
-        pub fn _remove_intents(intents_id_ptr: u64, intents_id_len: u64);
+        fn _remove_intents(intents_id_ptr: u64, intents_id_len: u64);
 
         // Requires a node running with "Info" log level
-        pub fn _log_string(str_ptr: u64, str_len: u64);
+        fn _log_string(str_ptr: u64, str_len: u64);
     }
 }
 
@@ -751,6 +751,6 @@ pub mod filter {
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
         // Requires a node running with "Info" log level
-        pub fn _log_string(str_ptr: u64, str_len: u64);
+        fn _log_string(str_ptr: u64, str_len: u64);
     }
 }

@@ -12,5 +12,9 @@ transaction! {
         for token::Transfer {source, target, token, amount} in tx_data.transfers{
             token::transfer(&source, &target, &token, amount);
         }
+
+        tx_data.intents.values()
+            .into_iter()
+            .for_each(intent::invalidate_intent);
     }
 }

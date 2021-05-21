@@ -6,6 +6,23 @@ use anoma_vm_env::vp_prelude::key::ed25519::{Signed, SignedTxData};
 use anoma_vm_env::vp_prelude::*;
 
 const VP: &[u8] = include_bytes!("../../vp_template/vp.wasm");
+enum KeyType<'a> {
+    Token(&'a Address),
+    InvalidIntentSet(&'a Address),
+    Unknown,
+}
+
+impl<'a> From<&'a Key> for KeyType<'a> {
+    fn from(key: &'a Key) -> KeyType<'a> {
+        if let Some(address) = token::is_any_token_balance_key(key) {
+            Self::Token(address)
+        } else if let Some(address) = intent::is_invalid_intent_key(key) {
+            Self::InvalidIntentSet(address)
+        } else {
+            Self::Unknown
+        }
+    }
+}
 
 validity_predicate! {
     fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: Vec<Key>, verifiers: HashSet<Address>) -> bool {
@@ -16,58 +33,82 @@ validity_predicate! {
 
         let result = eval(VP.to_vec(), vec![1_u8, 0_u8]);
         log_string(format!("eval result {}", result));
-
-
-        true
-
-        // // TODO memoize?
+        // TODO memoize?
         // let valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
         //     Ok(tx) => {
         //         let pk = key::ed25519::get(&addr);
         //         match pk {
-        //             None => false,
+        //             None => {
+        //                 false
+        //             },
         //             Some(pk) => {
         //                 verify_tx_signature(&pk, &tx.data, &tx.sig)
         //             }
         //         }
         //     },
-        //     _ => false,
+        //     _ => {
+        //         false
+        //     },
         // };
 
         // // TODO memoize?
         // // TODO this is not needed for matchmaker, maybe we should have a different VP?
         // let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
 
+
         // for key in keys_changed.iter() {
-        //     match token::is_any_token_balance_key(key) {
-        //         Some(owner) if owner == &addr => {
+        //     let is_valid = match KeyType::from(key){
+        //         KeyType::Token(owner)
+        //             if owner == &addr => {
+        //                 let key = key.to_string();
+        //                 let pre: token::Amount = read_pre(&key).unwrap_or_default();
+        //                 let post: token::Amount = read_post(&key).unwrap_or_default();
+        //                 let change = post.change() - pre.change();
+        //                 log_string(format!(
+        //                     "token key: {}, change: {}, valid_sig: {}, valid_intent: {}, valid modification: {}",
+        //                     key, change, valid_sig, valid_intent,
+        //                     (change < 0 && (valid_sig || valid_intent)) || change > 0
+        //                 ));
+        //                 // debit has to signed, credit doesn't
+        //                 (change < 0 && (valid_sig || valid_intent)) || change > 0
+        //             },
+        //         KeyType::InvalidIntentSet(owner) if owner == &addr => {
         //             let key = key.to_string();
-        //             let pre: token::Amount = read_pre(&key).unwrap_or_default();
-        //             let post: token::Amount = read_post(&key).unwrap_or_default();
-        //             let change = post.change() - pre.change();
+        //             let pre: Vec<Vec<u8>> = read_pre(&key).unwrap_or_default();
+        //             let post: Vec<Vec<u8>> = read_post(&key).unwrap_or_default();
+        //             // only one sig is added, intent is already checked
         //             log_string(format!(
-        //                 "token key: {}, change: {}, valid_sig: {}, valid_intent: {}",
-        //                 key, change, valid_sig, valid_intent,
+        //                 "intent sig set key: {}, valid modification: {}",
+        //                 key, pre.len() +1 != post.len()
         //             ));
-        //             // debit has to signed, credit doesn't
-        //             if change < 0 && !valid_sig && !valid_intent {
-        //                 return false;
-        //             }
+        //             pre.len() +1 == post.len()
         //         },
-        //         _ => {
-        //             // decline any other changes unless the signature is valid
-        //             if !valid_sig {
-        //                 return false;
-        //             }
+        //         KeyType::Token(_owner) | KeyType::InvalidIntentSet(_owner)
+        //             => {
+        //                 log_string(format!(
+        //                     "key {} is not of owner, valid_sig {}",
+        //                     key, valid_sig
+        //                 ));
+        //                 valid_sig
+        //             },
+        //         KeyType::Unknown => {
+        //             log_string("Unknown key modified");
+        //             false
         //         }
+        //     };
+        //     if !is_valid{
+        //         log_string(format!("key {} modification failed vp", key));
+        //         return false;
         //     }
         // }
-        // true
+        true
+
+
     }
 }
 
 fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
-    match SignedTxData::try_from_slice(&tx_data[..]) {
+    match SignedTxData::try_from_slice(tx_data) {
         Ok(tx) => match IntentTransfers::try_from_slice(&tx.data[..]) {
             Ok(tx_data) => {
                 if let Some(intent) = &tx_data.intents.get(addr) {
@@ -87,16 +128,18 @@ fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
 fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
     // verify signature
     let pk = key::ed25519::get(addr);
-    match pk {
-        None => {
+    if let Some(pk) = pk {
+        if intent.verify(&pk).is_err() {
+            log_string("invalid sig".to_string());
             return false;
         }
-        Some(pk) => {
-            if !intent.verify(&pk).is_ok() {
-                log_string(format!("invalid sig"));
-                return false;
-            }
-        }
+    } else {
+        return false;
+    }
+
+    // verify the intent have not been already used
+    if !intent::vp(intent) {
+        return false;
     }
 
     // verify the intent is fulfilled

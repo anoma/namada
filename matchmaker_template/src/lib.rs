@@ -12,7 +12,6 @@ use petgraph::visit::{Control, DfsEvent};
 use petgraph::{graph::DiGraph, Graph};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::collections::HashSet;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,7 +27,7 @@ matchmaker! {
         log_string(format!("trying to match intent: {:#?}", intent));
         add_node(&mut graph, id, intent);
         find_match_and_remove_node(&mut graph);
-        update_graph_data(graph);
+        update_graph_data(&graph);
         true
     }
 }
@@ -62,8 +61,8 @@ fn decode_graph(bytes: Vec<u8>) -> DiGraph<IntentNode, Address> {
     }
 }
 
-fn update_graph_data(graph: DiGraph<IntentNode, Address>) {
-    update_data(serde_json::to_vec(&graph).unwrap());
+fn update_graph_data(graph: &DiGraph<IntentNode, Address>) {
+    update_data(serde_json::to_vec(graph).unwrap());
 }
 
 fn find_to_update_node(
@@ -121,7 +120,7 @@ fn create_and_send_tx_data(
         "found match; creating tx with {:?} nodes",
         cycle_intents.len()
     ));
-    let cycle_intents = order_cycle(graph, cycle_intents);
+    let cycle_intents = sort_cycle(graph, cycle_intents);
     let mut cycle_intents_iter = cycle_intents.into_iter();
     let first_node = cycle_intents_iter.next().map(|i| &graph[i]).unwrap();
     let mut tx_data = IntentTransfers::empty();
@@ -146,7 +145,7 @@ fn create_and_send_tx_data(
 
 // The cycle returned by tarjan_scc only contains the node_index in an arbitrary
 // order without edges. we must reorder them to craft the transfer
-fn order_cycle(
+fn sort_cycle(
     graph: &DiGraph<IntentNode, Address>,
     cycle_intents: Vec<NodeIndex>,
 ) -> Vec<NodeIndex> {
@@ -169,9 +168,10 @@ fn order_cycle(
 
 fn find_match_and_send_tx(
     graph: &DiGraph<IntentNode, Address>,
-) -> HashSet<NodeIndex> {
-    let mut to_remove_nodes = HashSet::new();
+) -> Vec<NodeIndex> {
+    let mut to_remove_nodes = Vec::new();
     for cycle_intents in petgraph::algo::tarjan_scc(&graph) {
+        // a node is a cycle with itself
         if cycle_intents.len() > 1 {
             to_remove_nodes.extend(&cycle_intents);
             create_and_send_tx_data(graph, cycle_intents);
@@ -181,7 +181,12 @@ fn find_match_and_send_tx(
 }
 
 fn find_match_and_remove_node(graph: &mut DiGraph<IntentNode, Address>) {
-    let to_remove_nodes = find_match_and_send_tx(&graph);
+    let mut to_remove_nodes = find_match_and_send_tx(&graph);
+    // Must be sorted in reverse order because it removes the node by index
+    // otherwise it would not remove the correct node
+    to_remove_nodes.sort_by(
+        |a, b| b.cmp(a)
+    );
     to_remove_nodes.into_iter().for_each(|i| {
         graph.remove_node(i);
     });

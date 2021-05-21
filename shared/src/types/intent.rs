@@ -3,9 +3,9 @@ use std::collections::{HashMap, HashSet};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
+use super::DbKeySeg;
 use crate::types::key::ed25519::Signed;
-use crate::types::{token, Address};
-
+use crate::types::{token, Address, Key, KeySeg};
 #[derive(
     Debug,
     Clone,
@@ -39,5 +39,27 @@ impl IntentTransfers {
             transfers: HashSet::new(),
             intents: HashMap::new(),
         }
+    }
+}
+
+const INVALID_INTENT_STORAGE_KEY: &str = "invalid_intent";
+
+/// Obtain a storage key for user's invalid intent set.
+pub fn invalid_intent_key(owner: &Address) -> Key {
+    Key::from(owner.to_db_key())
+        .push(&INVALID_INTENT_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Check if the given storage key is a key for a set of intent sig. If it is,
+/// returns the owner.
+pub fn is_invalid_intent_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(key)]
+            if key == INVALID_INTENT_STORAGE_KEY =>
+        {
+            Some(owner)
+        }
+        _ => None,
     }
 }

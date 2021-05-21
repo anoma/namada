@@ -4,6 +4,8 @@ pub struct Tx {
     pub code: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", optional, tag = "2")]
     pub data: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "3")]
+    pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Intent {
