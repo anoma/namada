@@ -4,10 +4,11 @@ pub mod write_log;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
+use anoma_shared::types::internal::HostEnvResult;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
-use anoma_shared::types::{Address, Key, KeyExistence, SignatureValidation};
+use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::KeyVal;
 use borsh::{BorshDeserialize, BorshSerialize};
 use tokio::sync::mpsc::Sender;
@@ -416,14 +417,14 @@ where
     tx_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => {
-            KeyExistence::Found as _
+            HostEnvResult::Success.to_i64()
         }
         Some(&write_log::StorageModification::Delete) => {
             // the given key has been deleted
-            KeyExistence::NotFound as _
+            HostEnvResult::Fail.to_i64()
         }
         Some(&write_log::StorageModification::InitAccount { .. }) => {
-            KeyExistence::Found as _
+            HostEnvResult::Success.to_i64()
         }
         None => {
             // when not found in write log, try to check the storage
@@ -431,11 +432,7 @@ where
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
-            if present {
-                KeyExistence::Found as _
-            } else {
-                KeyExistence::NotFound as _
-            }
+            HostEnvResult::from(present).to_i64()
         }
     }
 }
@@ -486,7 +483,7 @@ where
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            KeyExistence::NotFound as _
+            HostEnvResult::Fail.to_i64()
         }
         Some(&write_log::StorageModification::InitAccount {
             ref vp, ..
@@ -516,7 +513,7 @@ where
                     tx_add_gas(env, gas);
                     len
                 }
-                None => KeyExistence::NotFound as _,
+                None => HostEnvResult::Fail.to_i64(),
             }
         }
     }
@@ -620,7 +617,7 @@ where
             }
         }
     }
-    KeyExistence::NotFound as _
+    HostEnvResult::Fail.to_i64()
 }
 
 /// Storage write function exposed to the wasm VM Tx environment. The given
@@ -744,7 +741,7 @@ where
             vp_add_gas(env, gas);
             len
         }
-        None => KeyExistence::NotFound as _,
+        None => HostEnvResult::Fail.to_i64(),
     }
 }
 
@@ -794,7 +791,7 @@ where
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            KeyExistence::NotFound as _
+            HostEnvResult::Fail.to_i64()
         }
         Some(&write_log::StorageModification::InitAccount {
             ref vp, ..
@@ -824,7 +821,7 @@ where
                     vp_add_gas(env, gas);
                     len
                 }
-                None => KeyExistence::NotFound as _,
+                None => HostEnvResult::Fail.to_i64(),
             }
         }
     }
@@ -853,11 +850,7 @@ where
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
-    if present {
-        KeyExistence::Found as _
-    } else {
-        KeyExistence::NotFound as _
-    }
+    HostEnvResult::from(present).to_i64()
 }
 
 /// Storage `has_key` in posterior state (after tx execution) function exposed
@@ -887,14 +880,14 @@ where
     vp_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => {
-            KeyExistence::Found as _
+            HostEnvResult::Success.to_i64()
         }
         Some(&write_log::StorageModification::Delete) => {
             // the given key has been deleted
-            KeyExistence::NotFound as _
+            HostEnvResult::Fail.to_i64()
         }
         Some(&write_log::StorageModification::InitAccount { .. }) => {
-            KeyExistence::Found as _
+            HostEnvResult::Success.to_i64()
         }
         None => {
             // when not found in write log, try to check the storage
@@ -902,11 +895,7 @@ where
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
-            if present {
-                KeyExistence::Found as _
-            } else {
-                KeyExistence::NotFound as _
-            }
+            HostEnvResult::from(present).to_i64()
         }
     }
 }
@@ -975,7 +964,7 @@ where
         vp_add_gas(env, gas);
         return len;
     }
-    KeyExistence::NotFound as _
+    HostEnvResult::Fail.to_i64()
 }
 
 /// Storage prefix iterator next for posterior state (after tx execution)
@@ -1047,7 +1036,7 @@ where
             }
         }
     }
-    KeyExistence::NotFound as _
+    HostEnvResult::Fail.to_i64()
 }
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
@@ -1284,11 +1273,10 @@ where
     let signature_data = [&data[..], &tx_code[..]].concat();
 
     vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
-    if verify_signature_raw(&pk, &signature_data, &sig).is_ok() {
-        SignatureValidation::Valid as _
-    } else {
-        SignatureValidation::Invalid as _
-    }
+    HostEnvResult::from(
+        verify_signature_raw(&pk, &signature_data, &sig).is_ok(),
+    )
+    .to_i64()
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be

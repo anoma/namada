@@ -13,6 +13,7 @@ use crate::types::key::ed25519::{Keypair, SignedTxData};
 
 pub mod address;
 pub mod intent;
+pub mod internal;
 pub mod key;
 pub mod token;
 
@@ -372,16 +373,6 @@ impl UpdateVp {
         );
         SignedTxData::new(keypair, bytes, tx_code)
     }
-}
-
-pub enum KeyExistence {
-    Found = 1,
-    NotFound = -1,
-}
-
-pub enum SignatureValidation {
-    Valid = 1,
-    Invalid = -1,
 }
 
 #[cfg(test)]

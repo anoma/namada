@@ -5,9 +5,9 @@ pub mod tx {
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::{
-        Address, BlockHash, BlockHeight, KeyExistence, BLOCK_HASH_LENGTH,
-        CHAIN_ID_LENGTH,
+        Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     use anoma_shared::vm_memory::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
@@ -20,7 +20,7 @@ pub mod tx {
         fn next(&mut self) -> Option<(String, T)> {
             let result: Vec<u8> = Vec::with_capacity(0);
             let size = unsafe { anoma_iter_next(self.0, result.as_ptr() as _) };
-            if size == KeyExistence::NotFound as i64 {
+            if HostEnvResult::is_fail(size) {
                 None
             } else {
                 let slice = unsafe {
@@ -45,7 +45,7 @@ pub mod tx {
         let size = unsafe {
             anoma_read(key.as_ptr() as _, key.len() as _, result.as_ptr() as _)
         };
-        if size == KeyExistence::NotFound as i64 {
+        if HostEnvResult::is_fail(size) {
             None
         } else {
             let slice =
@@ -58,7 +58,7 @@ pub mod tx {
     pub fn has_key(key: impl AsRef<str>) -> bool {
         let key = key.as_ref();
         let found = unsafe { anoma_has_key(key.as_ptr() as _, key.len() as _) };
-        found == KeyExistence::Found as i64
+        HostEnvResult::is_success(found)
     }
 
     /// Write a value at the given key to storage.
@@ -231,10 +231,10 @@ pub mod vp {
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::key::ed25519::{PublicKey, Signature};
     use anoma_shared::types::{
-        BlockHash, BlockHeight, KeyExistence, SignatureValidation,
-        BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     use anoma_shared::vm_memory::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
@@ -255,7 +255,7 @@ pub mod vp {
                 result.as_ptr() as _,
             )
         };
-        if size == KeyExistence::NotFound as i64 {
+        if HostEnvResult::is_fail(size) {
             None
         } else {
             let slice =
@@ -277,7 +277,7 @@ pub mod vp {
                 result.as_ptr() as _,
             )
         };
-        if size == KeyExistence::NotFound as i64 {
+        if HostEnvResult::is_fail(size) {
             None
         } else {
             let slice =
@@ -292,7 +292,7 @@ pub mod vp {
         let key = key.as_ref();
         let found =
             unsafe { anoma_has_key_pre(key.as_ptr() as _, key.len() as _) };
-        found == KeyExistence::Found as i64
+        HostEnvResult::is_success(found)
     }
 
     /// Check if the given key is present in storage after transaction
@@ -301,7 +301,7 @@ pub mod vp {
         let key = key.as_ref();
         let found =
             unsafe { anoma_has_key_post(key.as_ptr() as _, key.len() as _) };
-        found == KeyExistence::Found as i64
+        HostEnvResult::is_success(found)
     }
 
     /// Get an iterator with the given prefix before transaction execution
@@ -322,7 +322,7 @@ pub mod vp {
             let result: Vec<u8> = Vec::with_capacity(0);
             let size =
                 unsafe { anoma_iter_pre_next(self.0, result.as_ptr() as _) };
-            if size == KeyExistence::NotFound as i64 {
+            if HostEnvResult::is_fail(size) {
                 None
             } else {
                 let slice = unsafe {
@@ -357,7 +357,7 @@ pub mod vp {
             let result: Vec<u8> = Vec::with_capacity(0);
             let size =
                 unsafe { anoma_iter_post_next(self.0, result.as_ptr() as _) };
-            if size == KeyExistence::NotFound as i64 {
+            if HostEnvResult::is_fail(size) {
                 None
             } else {
                 let slice = unsafe {
@@ -422,7 +422,7 @@ pub mod vp {
                 sig.len() as _,
             )
         };
-        valid == SignatureValidation::Valid as i64
+        HostEnvResult::is_success(valid)
     }
 
     /// Log a string. The message will be printed at the `tracing::Level::Info`.
