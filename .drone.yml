@@ -72,6 +72,18 @@ steps:
     depends_on:
       - build
 
+  - name: debug-2
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - which rustc
+      - which rustup
+      - ls /root/.cargo
+      - pwd
+      - ls -a
+    depends_on:
+      - test
+
   - name: rebuild-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -162,6 +174,18 @@ steps:
     depends_on:
       - restore-cache
 
+  - name: debug
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - which rustc
+      - which rustup
+      - ls /root/.cargo
+      - pwd
+      - ls -a
+    depends_on:
+      - clippy-fmt-checks
+
   - name: rebuild-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -189,6 +213,7 @@ steps:
         - failure
     depends_on:
       - clippy-fmt-checks
+      - name
   
 trigger:
   event:
