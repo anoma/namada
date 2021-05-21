@@ -373,6 +373,7 @@ impl VpRunner {
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
 
+
         let keys_changed = unsafe { &*(vp_env.keys_changed.get()) };
         let verifiers = unsafe { &*(vp_env.verifiers.get()) };
         let input: VpInput = VpInput {
@@ -777,8 +778,8 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                keys_changed,
-                verifiers,
+                &keys_changed[..],
+                &verifiers,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \

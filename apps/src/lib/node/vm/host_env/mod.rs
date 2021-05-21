@@ -24,7 +24,7 @@ use crate::node::shell::storage::{self, Storage};
 use crate::proto::types::Tx;
 use crate::types::MatchmakerMessage;
 use crate::wallet;
-use crate::vm::VpRunner;
+use crate::node::vm::VpRunner;
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -1320,7 +1320,17 @@ where
     vp_add_gas(env, gas);
 
     let vp_runner = VpRunner::new();
-    let result = vp_runner.run_eval(vp_code, &input_data, env.clone());
+    // TODO: Clone everything except for the memory
+    // TODO: Refactor?
+    let mut new_env = env.clone();
+    new_env.memory = AnomaMemory::default();
+
+
+    let keys_changed = unsafe { &*(env.keys_changed.get()) };
+    let keys_changed_tmp = unsafe { &*(new_env.keys_changed.get()) };
+
+    
+    let result = vp_runner.run_eval(vp_code, &input_data, new_env);
 
     match result {
         Ok(b) => {
