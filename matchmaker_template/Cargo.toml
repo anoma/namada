@@ -8,7 +8,6 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-anoma_shared = {path = "../shared"}
 anoma_vm_env = {path = "../vm_env"}
 borsh = "0.8.2"
 petgraph = {version = "0.5.1", features = [ "serde-1" ]}

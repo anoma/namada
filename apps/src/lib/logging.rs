@@ -3,6 +3,7 @@ use std::env;
 
 use color_eyre::eyre::Result;
 use eyre::WrapErr;
+use tracing_log::LogTracer;
 use tracing_subscriber::filter::{Directive, EnvFilter};
 use tracing_subscriber::fmt::Subscriber;
 
@@ -10,9 +11,8 @@ pub const ENV_KEY: &str = "ANOMA_LOG";
 
 pub fn init_from_env_or(default: impl Into<Directive>) -> Result<()> {
     let filter = filter_from_env_or(default);
-    let my_collector = Subscriber::builder().with_env_filter(filter).finish();
-    tracing::subscriber::set_global_default(my_collector)
-        .wrap_err("Failed to set log subscriber")
+    set_subscriber(filter)?;
+    init_log_tracer()
 }
 
 pub fn filter_from_env_or(default: impl Into<Directive>) -> EnvFilter {
@@ -25,4 +25,8 @@ pub fn set_subscriber(filter: EnvFilter) -> Result<()> {
     let my_collector = Subscriber::builder().with_env_filter(filter).finish();
     tracing::subscriber::set_global_default(my_collector)
         .wrap_err("Failed to set log subscriber")
+}
+
+pub fn init_log_tracer() -> Result<()> {
+    LogTracer::init().wrap_err("Failed to initialize log adapter")
 }

@@ -1,10 +1,9 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 use anoma::config::Config;
+use anoma::node::{gossip, shell};
 use anoma::{cli, config};
 use eyre::{Context, Result};
-
-use crate::{gossip, shell};
 
 pub fn main() -> Result<()> {
     let mut app = cli::anoma_node_cli();
