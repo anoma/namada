@@ -160,8 +160,8 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - du -hs target
       - . /drone/workspace/.cargo/env
+      - du -hs target
       - make dev-deps
       - make clippy-check
       - make fmt-check
@@ -343,8 +343,8 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - du -hs target
       - . /drone/workspace/.cargo/env
+      - du -hs target
       - make -C txs/tx_template deps
       - make build-wasm-scripts
       - make build
@@ -355,8 +355,8 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - du -hs target
       - . /drone/workspace/.cargo/env
+      - du -hs target
       - make test
     depends_on:
       - build
