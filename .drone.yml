@@ -4,10 +4,10 @@ type: docker
 name: anoma-ci-build-pr
 
 workspace:
-  path: /drone/src
+  path: /drone/workspace
 
 environment:
-  # CARGO_HOME: /root/.cargo/
+  CARGO_HOME: /drone/workspace/.cargo
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -23,8 +23,8 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        # - /root/.cargo/registry
-        # - /root/.cargo/git
+        - .cargo/registry
+        - .cargo/git
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -41,15 +41,12 @@ steps:
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
     
-  - name: debug
+  - name: install-rust
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - which rustc
-      - which rustup
-      - ls /root/.cargo
-      - pwd
-      - ls -a
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - . /drone/workspace/.cargo/env
     depends_on:
       - restore-cache
 
@@ -60,11 +57,8 @@ steps:
       - make -C txs/tx_template deps
       - make build-wasm-scripts
       - make build
-      - ls -a
-      - ls /root/.cargo
     depends_on:
-      - restore-cache
-      - debug
+      - install-rust
 
   - name: test
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -73,19 +67,6 @@ steps:
       - make test
     depends_on:
       - build
-
-  - name: debug-2
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - which rustc
-      - which rustup
-      - ls /root/.cargo
-      - pwd
-      - ls -a
-      - ls /root/.cargo
-    depends_on:
-      - test
 
   - name: rebuild-cache
     image: meltwater/drone-cache
@@ -99,8 +80,8 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        # - /root/.cargo/registry
-        # - /root/.cargo/git
+        - .cargo/registry
+        - .cargo/git
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -137,10 +118,10 @@ type: docker
 name: anoma-ci-checks-pr
 
 workspace:
-  path: /drone/src
+  path: /drone/workspace
 
 environment:
-  # CARGO_HOME: /root/.cargo/
+  CARGO_HOME: /drone/workspace/.cargo
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -156,8 +137,8 @@ steps:
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        # - /root/.cargo/registry
-        # - /root/.cargo/git
+        - .cargo/registry
+        - .cargo/git
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -165,32 +146,24 @@ steps:
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
 
+  - name: install-rust
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - . /drone/workspace/.cargo/env
+    depends_on:
+      - restore-cache
+
   - name: clippy-fmt-checks
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      # - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      # - . /drone/workspace/.cargo/env
       - make dev-deps
       - make clippy-check
       - make fmt-check
-      - ls -a
-      - ls /root/.cargo
     depends_on:
-      - restore-cache
-
-  - name: debug
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - which rustc
-      - which rustup
-      - ls /root/.cargo
-      - pwd
-      - ls -a
-      - ls /root/.cargo
-    depends_on:
-      - clippy-fmt-checks
+      - install-rust
 
   - name: rebuild-cache
     image: meltwater/drone-cache
@@ -204,8 +177,8 @@ steps:
       override: false
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       mount:
-        # - /root/.cargo/registry
-        # - /root/.cargo/git
+        - .cargo/registry
+        - .cargo/git
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -219,7 +192,6 @@ steps:
         - failure
     depends_on:
       - clippy-fmt-checks
-      - debug
   
 trigger:
   event:
@@ -234,13 +206,11 @@ type: docker
 name: anoma-ci-audit-pr
 
 workspace:
-  path: /drone/src
+  path: /drone/workspace
 
 environment:
-  # CARGO_HOME: /drone/workspace/.cargo
-  # RUSTUP_HOME: /drone/workspace/.rustup
+  CARGO_HOME: /drone/workspace/.cargo
   GIT_LFS_SKIP_SMUDGE: "1"
-  # CARGO_TARGET_DIR: $CARGO_HOME/target
   CARGO_INCREMENTAL: 0
 
 steps:
@@ -255,12 +225,21 @@ steps:
       cache_key: "audit/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - ./.cargo
+        - .cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+
+  - name: install-rust
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - . /drone/workspace/.cargo/env
+    depends_on:
+      - restore-cache
 
   - name: audit
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -269,7 +248,7 @@ steps:
       - cargo install cargo-audit
       - make audit
     depends_on:
-      - restore-cache
+      - install-rust
 
   - name: rebuild-cache
     image: meltwater/drone-cache
@@ -283,7 +262,7 @@ steps:
       override: false
       cache_key: "audit/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - ./.cargo
+        - .cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -310,12 +289,10 @@ type: docker
 name: anoma-ci-build-master-develop
 
 workspace:
-  path: /drone/src
+  path: /drone/workspace
 
 environment:
-  # CARGO_HOME: /drone/workspace/.cargo
-  # RUSTUP_HOME: /drone/workspace/.rustup
-  # CARGO_TARGET_DIR: $CARGO_HOME/target
+  CARGO_HOME: /drone/workspace/.cargo
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -331,6 +308,8 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
+        - .cargo/git
+        - .cargo/registry
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -347,6 +326,15 @@ steps:
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
 
+  - name: install-rust
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - . /drone/workspace/.cargo/env
+    depends_on:
+      - restore-cache
+
   - name: build
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
@@ -355,7 +343,7 @@ steps:
       - make build-wasm-scripts
       - make build
     depends_on:
-      - restore-cache
+      - install-rust
 
   - name: test
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -377,6 +365,8 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
+        - .cargo/git
+        - .cargo/registry
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
