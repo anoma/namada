@@ -3,8 +3,8 @@ kind: pipeline
 type: docker
 name: anoma-ci-build-pr
 
-workspace:
-  path: /root
+# workspace:
+#   path: /root
 
 environment:
   # CARGO_HOME: /root/.cargo/
