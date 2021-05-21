@@ -50,9 +50,6 @@ steps:
       - ls /root/.cargo
       - pwd
       - ls -a
-      - du -hs ./.cargo
-      - du -hs vps/vp_user/target
-      - du -hs target
     depends_on:
       - restore-cache
 
@@ -129,7 +126,6 @@ workspace:
 
 environment:
   CARGO_HOME: /root/.cargo/
-  CARGO_TARGET_DIR: $CARGO_HOME/target
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -158,8 +154,8 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      - . /drone/workspace/.cargo/env
+      # - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      # - . /drone/workspace/.cargo/env
       - make dev-deps
       - make clippy-check
       - make fmt-check
