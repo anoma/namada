@@ -47,10 +47,6 @@ steps:
     pull: if-not-exists
     commands:
       - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      - . /drone/workspace/.cargo/env
-      - which cargo
-      - which rustc
-      - which rustup
     depends_on:
       - restore-cache
 
@@ -58,7 +54,6 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - . /drone/workspace/.cargo/env
       - which cargo
       - which rustc
