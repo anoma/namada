@@ -81,6 +81,7 @@ steps:
       - ls /root/.cargo
       - pwd
       - ls -a
+      - ls /root/.cargo
     depends_on:
       - test
 
@@ -183,6 +184,7 @@ steps:
       - ls /root/.cargo
       - pwd
       - ls -a
+      - ls /root/.cargo
     depends_on:
       - clippy-fmt-checks
 
