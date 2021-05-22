@@ -31,8 +31,10 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/registry
-        - .cargo/git
+        - .cargo/bin/
+        - .cargo/registry/index/
+        - .cargo/registry/cache/
+        - .cargo/git/db/
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -56,6 +58,9 @@ steps:
     pull: if-not-exists
     commands:
       - . /drone/workspace/.cargo/env
+      - which rustup
+      - which rustc
+      - which cargo
       - make -C txs/tx_template deps
       - make build-wasm-scripts
       - make build
@@ -66,6 +71,10 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
+      - . /drone/workspace/.cargo/env
+      - which rustup
+      - which rustc
+      - which cargo
       - make test
     depends_on:
       - build
@@ -82,8 +91,10 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/registry
-        - .cargo/git
+        - .cargo/bin/
+        - .cargo/registry/index/
+        - .cargo/registry/cache/
+        - .cargo/git/db/
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -147,9 +158,11 @@ steps:
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/registry
-        - .cargo/git
-        - target
+        - .cargo/bin/
+        - .cargo/registry/index/
+        - .cargo/registry/cache/
+        - .cargo/git/db/
+        - .cargo/target
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -163,7 +176,9 @@ steps:
     pull: if-not-exists
     commands:
       - . /drone/workspace/.cargo/env
-      - du -hs target
+      - which rustup
+      - which rustc
+      - which cargo
       - make dev-deps
       - make clippy-check
       - make fmt-check
@@ -182,9 +197,11 @@ steps:
       override: false
       cache_key: "nightly/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/registry
-        - .cargo/git
-        - target
+        - .cargo/bin/
+        - .cargo/registry/index/
+        - .cargo/registry/cache/
+        - .cargo/git/db/
+        - .cargo/target
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -237,7 +254,10 @@ steps:
       cache_key: "audit/{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo
+        - .cargo/bin/
+        - .cargo/registry/index/
+        - .cargo/registry/cache/
+        - .cargo/git/db/
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -268,7 +288,10 @@ steps:
       override: false
       cache_key: "audit/{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo
+        - .cargo/bin/
+        - .cargo/registry/index/
+        - .cargo/registry/cache/
+        - .cargo/git/db/
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -346,7 +369,6 @@ steps:
     pull: if-not-exists
     commands:
       - . /drone/workspace/.cargo/env
-      - du -hs target
       - make -C txs/tx_template deps
       - make build-wasm-scripts
       - make build
@@ -358,7 +380,6 @@ steps:
     pull: if-not-exists
     commands:
       - . /drone/workspace/.cargo/env
-      - du -hs target
       - make test
     depends_on:
       - build
