@@ -179,9 +179,11 @@ steps:
     commands:
       - . /drone/workspace/.cargo/env
       - which rustup
-      - which rustc
-      - which cargo
-      - make dev-deps
+      - |
+        exit=$?
+        if [ $exit -ne 0 ]; then
+            make dev-deps
+        fi
       - make clippy-check
       - make fmt-check
     depends_on:
@@ -259,7 +261,7 @@ steps:
         - .cargo/bin/
         - .cargo/registry/index/
         # - .cargo/registry/cache/
-        - .cargo/git/db/
+        # - .cargo/git/db/
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -293,7 +295,7 @@ steps:
         - .cargo/bin/
         - .cargo/registry/index/
         # - .cargo/registry/cache/
-        - .cargo/git/db/
+        # - .cargo/git/db/
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
