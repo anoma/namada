@@ -9,7 +9,7 @@ workspace:
 environment:
   CARGO_HOME: /drone/workspace/.cargo
   RUSTUP_HOME: /drone/workspace/.cargo/bin
-  CARGO_TARGET_DIR: /drone/workspace/target
+  # CARGO_TARGET_DIR: /drone/workspace/target
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -19,6 +19,7 @@ steps:
     pull: if-not-exists
     commands:
       - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - rustup toolchain install stable
 
   - name: restore-cache
     image: meltwater/drone-cache
@@ -136,7 +137,7 @@ workspace:
 environment:
   CARGO_HOME: /drone/workspace/.cargo
   RUSTUP_HOME: /drone/workspace/.cargo/bin
-  CARGO_TARGET_DIR: /drone/workspace/target
+  # CARGO_TARGET_DIR: /drone/workspace/target
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -162,7 +163,7 @@ steps:
         - .cargo/registry/index/
         - .cargo/registry/cache/
         - .cargo/git/db/
-        - .cargo/target
+        - target
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -201,7 +202,7 @@ steps:
         - .cargo/registry/index/
         - .cargo/registry/cache/
         - .cargo/git/db/
-        - .cargo/target
+        - target
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -256,7 +257,7 @@ steps:
       mount:
         - .cargo/bin/
         - .cargo/registry/index/
-        - .cargo/registry/cache/
+        # - .cargo/registry/cache/
         - .cargo/git/db/
     environment:
       AWS_ACCESS_KEY_ID:
@@ -290,7 +291,7 @@ steps:
       mount:
         - .cargo/bin/
         - .cargo/registry/index/
-        - .cargo/registry/cache/
+        # - .cargo/registry/cache/
         - .cargo/git/db/
     environment:
       AWS_ACCESS_KEY_ID:
