@@ -19,6 +19,7 @@ steps:
     pull: if-not-exists
     commands:
       - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - . /drone/workspace/.cargo/env
       - rustup toolchain install stable
 
   - name: restore-cache
