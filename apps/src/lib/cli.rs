@@ -15,7 +15,7 @@ use libp2p::Multiaddr;
 
 use super::config;
 
-const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
+const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
 const APP_NAME: &str = "Anoma";
 const CLI_VERSION: &str = "0.1.0";
 const NODE_VERSION: &str = "0.1.0";
