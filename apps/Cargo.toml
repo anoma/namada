@@ -3,7 +3,7 @@ authors = ["Heliax AG <hello@heliax.dev>"]
 description = "Anoma apps"
 edition = "2018"
 license = "GPL-3.0"
-name = "Anoma"
+name = "anoma"
 readme = "../README.md"
 version = "0.1.0"
 

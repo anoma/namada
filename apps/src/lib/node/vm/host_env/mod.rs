@@ -1474,7 +1474,7 @@ pub mod testing {
         write_log: &WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut BlockGasMeter,
-        tx_code: &Vec<u8>,
+        #[allow(clippy::ptr_arg)] tx_code: &Vec<u8>,
     ) -> VpEnv<DB, NativeMemory>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,

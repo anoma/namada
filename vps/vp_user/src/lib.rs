@@ -183,3 +183,28 @@ fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
     // TODO once an intent is fulfilled, it should be invalidated somehow to
     // prevent replay
 }
+
+#[cfg(test)]
+mod tests {
+    use anoma_tests::vp::*;
+    use anoma_vm_env::vp_prelude::address;
+
+    use super::*;
+
+    /// Test that no-op transaction (i.e. no storage modifications) is deemed
+    /// valid.
+    #[test]
+    fn test_no_op_transaction() {
+        // The environment must be initialized first
+        let mut env = TestVpEnv::default();
+        init_vp_env(&mut env);
+
+        let tx_data: vm_memory::Data = vec![];
+        let addr: Address = address::testing::established_address_1();
+        let keys_changed: Vec<Key> = vec![];
+        let verifiers: HashSet<Address> = HashSet::default();
+        let valid = validate_tx(tx_data, addr, keys_changed, verifiers);
+
+        assert!(valid);
+    }
+}

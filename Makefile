@@ -1,4 +1,4 @@
-package = Anoma
+package = anoma
 
 # env = OPENSSL_INCLUDE_DIR="/usr/local/opt/openssl/include"
 cargo = $(env) cargo

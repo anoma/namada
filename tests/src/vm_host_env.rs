@@ -166,6 +166,7 @@ pub mod tx {
     }
 
     /// Initialize the host environment inside the [`tx_host_env`] module.
+    #[allow(dead_code)]
     pub fn init_tx_env(
         TestTxEnv {
             storage,
@@ -308,6 +309,7 @@ i64);
     }
 
     /// Initialize the host environment inside the [`vp_host_env`] module.
+    #[allow(dead_code)]
     pub fn init_vp_env(
         TestVpEnv {
             addr,

@@ -2,11 +2,11 @@ cargo = $(env) cargo
 rustup = $(env) rustup
 
 build-release:
-	$(cargo) build --release
+	$(cargo) build --release --target wasm32-unknown-unknown
 	cp "./target/wasm32-unknown-unknown/release/vp_user.wasm" vp.wasm
 
 build:
-	$(cargo) build
+	$(cargo) build --target wasm32-unknown-unknown
 
 clippy:
 	$(cargo) clippy

@@ -3,63 +3,6 @@
 version = 3
 
 [[package]]
-name = "Anoma"
-version = "0.1.0"
-dependencies = [
- "anoma_shared",
- "base64 0.13.0",
- "bech32",
- "blake2b-rs",
- "borsh",
- "byteorder",
- "bytesize",
- "cargo-watch",
- "clap 3.0.0-beta.2",
- "color-eyre",
- "config",
- "ed25519-dalek",
- "eyre",
- "futures",
- "hex",
- "libp2p",
- "parity-wasm",
- "proptest",
- "prost",
- "prost-types",
- "pwasm-utils",
- "rand 0.7.3",
- "rand_core 0.5.1",
- "rayon",
- "regex",
- "rocksdb",
- "rustc_version",
- "serde 1.0.125",
- "serde_bytes",
- "serde_json",
- "serde_regex",
- "sha2 0.9.3",
- "sparse-merkle-tree",
- "tempdir",
- "tendermint",
- "tendermint-abci",
- "tendermint-proto",
- "tendermint-rpc",
- "thiserror",
- "tokio",
- "toml 0.5.8",
- "tonic",
- "tonic-build",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
- "wasmer",
- "wasmer-compiler-singlepass",
- "wasmer-engine-jit",
- "wasmer-vm",
- "wasmparser 0.77.0",
-]
-
-[[package]]
 name = "addr2line"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -125,13 +68,60 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma_integration_tests"
+name = "anoma"
 version = "0.1.0"
 dependencies = [
- "Anoma",
  "anoma_shared",
- "anoma_vm_env",
- "concat-idents",
+ "base64 0.13.0",
+ "bech32",
+ "blake2b-rs",
+ "borsh",
+ "byteorder",
+ "bytesize",
+ "cargo-watch",
+ "clap 3.0.0-beta.2",
+ "color-eyre",
+ "config",
+ "ed25519-dalek",
+ "eyre",
+ "futures",
+ "hex",
+ "libp2p",
+ "parity-wasm",
+ "proptest",
+ "prost",
+ "prost-types",
+ "pwasm-utils",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
+ "rayon",
+ "regex",
+ "rocksdb",
+ "rustc_version",
+ "serde 1.0.125",
+ "serde_bytes",
+ "serde_json",
+ "serde_regex",
+ "sha2 0.9.3",
+ "sparse-merkle-tree",
+ "tempdir",
+ "tendermint",
+ "tendermint-abci",
+ "tendermint-proto",
+ "tendermint-rpc",
+ "thiserror",
+ "tokio",
+ "toml 0.5.8",
+ "tonic",
+ "tonic-build",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+ "wasmer",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-jit",
+ "wasmer-vm",
+ "wasmparser 0.77.0",
 ]
 
 [[package]]
@@ -146,6 +136,16 @@ dependencies = [
  "serde 1.0.125",
  "sha2 0.9.3",
  "thiserror",
+]
+
+[[package]]
+name = "anoma_tests"
+version = "0.1.0"
+dependencies = [
+ "anoma",
+ "anoma_shared",
+ "anoma_vm_env",
+ "concat-idents",
 ]
 
 [[package]]
