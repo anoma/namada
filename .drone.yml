@@ -272,7 +272,7 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - make audit
+      - make audit || true
     depends_on:
       - restore-cache
 
