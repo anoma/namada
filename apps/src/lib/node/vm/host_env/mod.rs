@@ -375,7 +375,7 @@ where
         .expect("Cannot read the key from memory");
     tx_add_gas(env, gas);
 
-    tracing::debug!("tx_storage_has_key {}, key {}", key, key_ptr,);
+    tracing::debug!("tx_has_key {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -423,7 +423,7 @@ where
     tx_add_gas(env, gas);
 
     tracing::debug!(
-        "tx_storage_read {}, key {}, result_ptr {}",
+        "tx_read {}, key {}, result_ptr {}",
         key,
         key_ptr,
         result_ptr,
@@ -505,7 +505,7 @@ where
         .expect("Cannot read the prefix from memory");
     tx_add_gas(env, gas);
 
-    tracing::debug!("tx_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+    tracing::debug!("tx_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
@@ -533,7 +533,7 @@ where
     MEM: VmMemory,
 {
     tracing::debug!(
-        "tx_storage_iter_next iter_id {}, result_ptr {}",
+        "tx_iter_next iter_id {}, result_ptr {}",
         iter_id,
         result_ptr,
     );
@@ -614,7 +614,7 @@ pub fn tx_write<DB, MEM>(
         .expect("Cannot read the value from memory");
     tx_add_gas(env, gas);
 
-    tracing::debug!("tx_storage_update {}, {:#?}", key, value);
+    tracing::debug!("tx_update {}, {:#?}", key, value);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -666,7 +666,7 @@ where
         .expect("Cannot read the key from memory");
     tx_add_gas(env, gas);
 
-    tracing::debug!("tx_storage_delete {}", key);
+    tracing::debug!("tx_delete {}", key);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -1383,18 +1383,20 @@ pub mod testing {
     use core::ffi::c_void;
 
     use super::*;
-    use crate::node::shell::storage::db::mock::MockDB;
-    use crate::node::shell::storage::testing::TestStorage;
-    use crate::node::vm::memory::testing::MockMemory;
+    use crate::node::shell::storage;
+    use crate::node::vm::memory::testing::NativeMemory;
 
-    pub fn mock_tx_env(
-        storage: &TestStorage,
+    pub fn tx_env<DB>(
+        storage: &Storage<DB>,
         write_log: &mut WriteLog,
-        iterators: &mut PrefixIterators<'static, MockDB>,
+        iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
-    ) -> TxEnv<MockDB, MockMemory> {
-        let storage: EnvHostWrapper<TestStorage> = unsafe {
+    ) -> TxEnv<DB, NativeMemory>
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    {
+        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
         let write_log = unsafe {
@@ -1415,7 +1417,7 @@ pub mod testing {
             iterators,
             verifiers,
             gas_meter,
-            memory: MockMemory,
+            memory: NativeMemory,
         }
     }
 }

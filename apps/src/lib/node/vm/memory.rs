@@ -345,9 +345,9 @@ pub mod testing {
     use super::*;
 
     #[derive(Clone)]
-    pub struct MockMemory;
+    pub struct NativeMemory;
 
-    impl VmMemory for MockMemory {
+    impl VmMemory for NativeMemory {
         fn read_bytes(
             &self,
             offset: u64,
@@ -361,7 +361,12 @@ pub mod testing {
         where
             T: AsRef<[u8]>,
         {
-            todo!()
+            let bytes = bytes.as_ref();
+            let len = bytes.len();
+            let target =
+                unsafe { slice::from_raw_parts_mut(offset as _, len as _) };
+            target.clone_from_slice(bytes);
+            Ok(0)
         }
 
         fn read_string(
@@ -377,7 +382,12 @@ pub mod testing {
         }
 
         fn write_string(&self, offset: u64, string: String) -> Result<u64> {
-            todo!()
+            let bytes = string.as_bytes();
+            let len = bytes.len();
+            let target =
+                unsafe { slice::from_raw_parts_mut(offset as _, len as _) };
+            target.clone_from_slice(bytes);
+            Ok(0)
         }
     }
 }

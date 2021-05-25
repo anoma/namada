@@ -149,7 +149,6 @@ dependencies = [
  "anoma_shared",
  "anoma_vm_env",
  "concat-idents",
- "lazy_static 1.4.0",
 ]
 
 [[package]]
