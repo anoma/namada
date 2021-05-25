@@ -417,6 +417,9 @@ steps:
 trigger:
   event:
     - pull_request
+  branch:
+    - master
+    - develop
 
 node:
   project: anoma
