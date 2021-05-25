@@ -139,7 +139,6 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - . /drone/workspace/.cargo/env
       - make clippy-check
       - make fmt-check
     depends_on:
@@ -321,7 +320,6 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - . /drone/workspace/.cargo/env
       - make -C txs/tx_template deps
       - make build-wasm-scripts
       - make build
@@ -332,7 +330,6 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - . /drone/workspace/.cargo/env
       - make test
     depends_on:
       - build
