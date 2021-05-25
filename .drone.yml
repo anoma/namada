@@ -29,6 +29,7 @@ steps:
         - .cargo/registry/index/
         - .cargo/registry/cache/
         - .cargo/git/db/
+        - .cargo/env
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -102,6 +103,7 @@ steps:
         - .cargo/registry/index/
         - .cargo/registry/cache/
         - .cargo/git/db/
+        - .cargo/env
         - matchmaker_template/target
         - txs/tx_from_intent/target
         - txs/tx_template/target
@@ -162,6 +164,7 @@ steps:
         - .cargo/registry/index/
         - .cargo/registry/cache/
         - .cargo/git/db/
+        - .cargo/env
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -210,6 +213,7 @@ steps:
         - .cargo/registry/index/
         - .cargo/registry/cache/
         - .cargo/git/db/
+        - .cargo/env
         - target
     environment:
       AWS_ACCESS_KEY_ID:
@@ -265,6 +269,7 @@ steps:
       mount:
         - .cargo/bin/
         - .cargo/registry/index/
+        - .cargo/env
         # - .cargo/registry/cache/
         # - .cargo/git/db/
     environment:
@@ -299,6 +304,7 @@ steps:
       mount:
         - .cargo/bin/
         - .cargo/registry/index/
+        - .cargo/env
         # - .cargo/registry/cache/
         # - .cargo/git/db/
     environment:
