@@ -416,7 +416,7 @@ steps:
 
 trigger:
   event:
-    - pull_request
+    - push
   branch:
     - master
     - develop
