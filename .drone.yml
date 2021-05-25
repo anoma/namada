@@ -116,6 +116,11 @@ steps:
 trigger:
   event:
     - pull_request
+    - push
+  branch:
+    - develop
+    - master
+
 
 node:
   project: anoma
@@ -222,6 +227,11 @@ steps:
 trigger:
   event:
     - pull_request
+    - push
+  branch:
+    - develop
+    - master
+
 
 node:
   project: anoma
@@ -295,131 +305,13 @@ steps:
 trigger:
   event:
     - pull_request
+    - push
+  branch:
+    - develop
+    - master
 
 node:
   project: anoma
-
----
-kind: pipeline
-type: docker
-name: anoma-ci-build-master-develop
-
-workspace:
-  path: /usr/local/rust/project
-
-environment:
-  CARGO_HOME: /usr/local/rust/project/.cargo
-  GIT_LFS_SKIP_SMUDGE: "1"
-  CARGO_INCREMENTAL: 0
-
-steps:
-  - name: restore-cache
-    image: meltwater/drone-cache
-    pull: if-not-exists
-    settings:
-      backend: "s3"
-      restore: true
-      bucket: heliax-drone-cache-v2
-      region: eu-west-1
-      cache_key: "{{ checksum \"Cargo.lock\" }}"
-      archive_format: "gzip"
-      mount:
-        - .cargo
-    environment:
-      AWS_ACCESS_KEY_ID:
-        from_secret: aws_access_key_id
-      AWS_SECRET_ACCESS_KEY:
-        from_secret: aws_secret_access_key
-    
-  - name: build-deps
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - sccache --start-server
-      - make -C txs/tx_template deps
-      - make build-wasm-scripts
-    environment:
-      AWS_ACCESS_KEY_ID:
-        from_secret: aws_access_key_id
-      AWS_SECRET_ACCESS_KEY:
-        from_secret: aws_secret_access_key
-      SCCACHE_BUCKET: heliax-drone-cache-v2
-      SCCACHE_S3_KEY_PREFIX: sccache-build-deps
-    depends_on:
-      - restore-cache
-
-  - name: build
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - sccache --start-server
-      - make build
-    depends_on:
-      - build-deps
-    environment:
-      AWS_ACCESS_KEY_ID:
-        from_secret: aws_access_key_id
-      AWS_SECRET_ACCESS_KEY:
-        from_secret: aws_secret_access_key
-      SCCACHE_BUCKET: heliax-drone-cache-v2
-      SCCACHE_S3_KEY_PREFIX: sccache-build
-
-  - name: test
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - sccache --start-server
-      - make test
-    depends_on:
-      - build
-    environment:
-      AWS_ACCESS_KEY_ID:
-        from_secret: aws_access_key_id
-      AWS_SECRET_ACCESS_KEY:
-        from_secret: aws_secret_access_key
-      SCCACHE_BUCKET: heliax-drone-cache-v2
-      SCCACHE_S3_KEY_PREFIX: sccache-test
-
-  - name: clean-cache
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - cargo-cache
-    depends_on:
-      - test
-
-  - name: rebuild-cache
-    image: meltwater/drone-cache
-    pull: if-not-exists
-    settings:
-      backend: "s3"
-      bucket: heliax-drone-cache-v2
-      region: eu-west-1
-      rebuild: true
-      archive_format: "gzip"
-      override: false
-      cache_key: "{{ checksum \"Cargo.lock\" }}"
-      mount:
-        - .cargo
-    environment:
-      AWS_ACCESS_KEY_ID:
-        from_secret: aws_access_key_id
-      AWS_SECRET_ACCESS_KEY:
-        from_secret: aws_secret_access_key
-      BACKEND_OPERATION_TIMEOUT: "8m"
-    when:
-      status:
-        - success
-        - failure
-    depends_on:
-      - clean-cache
-
-trigger:
-  event:
-    - push
-  branch:
-    - master
-    - develop
 
 node:
   project: anoma
