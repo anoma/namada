@@ -15,7 +15,7 @@ use libp2p::Multiaddr;
 
 use super::config;
 
-const AUTHOR: &str = "Heliax <TODO@heliax.dev>";
+const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
 const APP_NAME: &str = "Anoma";
 const CLI_VERSION: &str = "0.1.0";
 const NODE_VERSION: &str = "0.1.0";
@@ -155,6 +155,15 @@ fn client_tx_subcommand() -> App {
                 .takes_value(false)
                 .required(false)
                 .about("Dry run the transaction."),
+        )
+        .arg(
+            Arg::new(LEDGER_ADDRESS_ARG)
+                .long(LEDGER_ADDRESS_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .required(false)
+                .default_value("127.0.0.1:26657")
+                .about("Address of a ledger node as host:port"),
         )
 }
 
@@ -305,6 +314,15 @@ fn client_tx_transfer_subcommand() -> App {
                 .required(false)
                 .about("Dry run the transaction."),
         )
+        .arg(
+            Arg::new(LEDGER_ADDRESS_ARG)
+                .long(LEDGER_ADDRESS_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .required(false)
+                .default_value("127.0.0.1:26657")
+                .about("Address of a ledger node as host:port"),
+        )
 }
 
 fn client_tx_update_subcommand() -> App {
@@ -333,6 +351,15 @@ fn client_tx_update_subcommand() -> App {
                 .takes_value(false)
                 .required(false)
                 .about("Dry run the transaction."),
+        )
+        .arg(
+            Arg::new(LEDGER_ADDRESS_ARG)
+                .long(LEDGER_ADDRESS_ARG)
+                .multiple(false)
+                .takes_value(true)
+                .required(false)
+                .default_value("127.0.0.1:26657")
+                .about("Address of a ledger node as host:port"),
         )
 }
 
@@ -365,7 +392,7 @@ fn run_gossip_subcommand() -> App {
             Arg::new(RPC_ARG)
                 .long(RPC_ARG)
                 .multiple(false)
-                .takes_value(false)
+                .takes_value(true)
                 .about("Enable RPC service."),
         )
         .arg(
@@ -508,6 +535,8 @@ pub fn update_gossip_config(
              the matchmaker"
         );
     }
-    config.rpc = args.is_present(RPC_ARG);
+    if let Some(address) = parse_opt(args, RPC_ARG) {
+        config.rpc = Some(config::RpcServer { address });
+    }
     Ok(())
 }

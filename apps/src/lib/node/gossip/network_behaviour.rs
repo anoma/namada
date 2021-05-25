@@ -2,6 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
+use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
 };
@@ -11,9 +12,9 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::identity::Keypair;
-use libp2p::swarm::NetworkBehaviourEventProcess;
+use libp2p::mdns::{Mdns, MdnsConfig, MdnsEvent};
+use libp2p::swarm::{NetworkBehaviour, NetworkBehaviourEventProcess};
 use libp2p::{NetworkBehaviour, PeerId};
-use regex::Regex;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
@@ -26,13 +27,15 @@ use crate::types::MatchmakerMessage;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed to subscribe")]
-    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
+    FailedSubscription(libp2p::gossipsub::error::SubscriptionError),
     #[error("Failed initializing the intent broadcaster app: {0}")]
     GossipIntentError(intent_broadcaster::Error),
     #[error("Failed initializing the topic filter: {0}")]
     Filter(String),
     #[error("Failed initializing the gossip network: {0}")]
     GossipConfig(String),
+    #[error("Failed initializing mdns: {0}")]
+    Mdns(std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -44,7 +47,7 @@ pub type Gossipsub = libp2p::gossipsub::Gossipsub<
 
 // TODO merge type of config and this one ? Maybe not a good idea
 pub enum IntentBroadcasterSubscriptionFilter {
-    RegexFilter(RegexSubscribtionFilter),
+    RegexFilter(RegexSubscriptionFilter),
     WhitelistFilter(WhitelistSubscriptionFilter),
 }
 
@@ -103,6 +106,7 @@ pub struct Behaviour {
         IdentityTransform,
         IntentBroadcasterSubscriptionFilter,
     >,
+    local_discovery: Mdns,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
     pub intent_broadcaster_app: intent_broadcaster::GossipIntent,
@@ -122,17 +126,21 @@ impl Behaviour {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")
-            .heartbeat_interval(Duration::from_secs(10))
+            .heartbeat_interval(Duration::from_secs(1))
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id)
             .validate_messages()
+            .mesh_outbound_min(1)
+            .mesh_n_low(2)
+            .mesh_n(3)
+            .mesh_n_high(6)
             .build()
             .map_err(|s| Error::GossipConfig(s.to_string()))?;
 
         let filter = match &config.subscription_filter {
             crate::config::SubscriptionFilter::RegexFilter(regex) => {
                 IntentBroadcasterSubscriptionFilter::RegexFilter(
-                    RegexSubscribtionFilter(regex.clone()),
+                    RegexSubscriptionFilter(regex.clone()),
                 )
             }
             crate::config::SubscriptionFilter::WhitelistFilter(topics) => {
@@ -149,7 +157,7 @@ impl Behaviour {
             }
         };
 
-        let intent_broadcaster_gossip: Gossipsub =
+        let mut intent_broadcaster_gossip: Gossipsub =
             Gossipsub::new_with_subscription_filter(
                 MessageAuthenticity::Signed(key),
                 gossipsub_config,
@@ -161,9 +169,29 @@ impl Behaviour {
             intent_broadcaster::GossipIntent::new(&config)
                 .map_err(Error::GossipIntentError)?;
 
+        config
+            .topics
+            .iter()
+            .try_for_each(|topic| {
+                intent_broadcaster_gossip
+                    .subscribe(&IdentTopic::new(topic))
+                    .map_err(Error::FailedSubscription)
+                    // it returns bool signifying if it was already subscribed.
+                    // discard because it can't be false as the config.topics is
+                    // a hash set
+                    .map(|_| ())
+            })
+            .expect("failed to subscribe to topic");
+
+        let local_discovery = {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(Mdns::new(MdnsConfig::default()))
+                .map_err(Error::Mdns)?
+        };
         Ok((
             Self {
                 intent_broadcaster_gossip,
+                local_discovery,
                 intent_broadcaster_app,
             },
             matchmaker_event_receiver,
@@ -227,6 +255,7 @@ impl Behaviour {
 
 impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     fn inject_event(&mut self, event: GossipsubEvent) {
+        tracing::info!("received : {:?}", event);
         match event {
             GossipsubEvent::Message {
                 message,
@@ -245,9 +274,9 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
             GossipsubEvent::Subscribed { peer_id: _, topic } => {
                 self.intent_broadcaster_gossip
                     .subscribe(&IdentTopic::new(topic.into_string()))
-                    .map_err(Error::FailedSubscribtion)
+                    .map_err(Error::FailedSubscription)
                     .unwrap_or_else(|e| {
-                        tracing::error!("failed to subscribe: {:}", e);
+                        tracing::error!("failed to subscribe: {:?}", e);
                         false
                     });
             }
@@ -259,13 +288,29 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     }
 }
 
-// TODO this is part of libp2p::gossipsub::subscription_filter but it's cannot
-// be exported because it's part of a feature "regex-filter" that is not
-// exposed. see issue https://github.com/libp2p/rust-libp2p/issues/2055
-pub struct RegexSubscribtionFilter(pub Regex);
-
-impl TopicSubscriptionFilter for RegexSubscribtionFilter {
-    fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
-        self.0.is_match(topic_hash.as_str())
+impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
+    // Called when `mdns` produces an event.
+    fn inject_event(&mut self, event: MdnsEvent) {
+        match event {
+            MdnsEvent::Discovered(list) => {
+                for (peer, addr) in list {
+                    tracing::debug!("discovering peer {} : {} ", peer, addr);
+                    self.intent_broadcaster_gossip.inject_connected(&peer);
+                }
+            }
+            MdnsEvent::Expired(list) => {
+                for (peer, addr) in list {
+                    if self.local_discovery.has_node(&peer) {
+                        tracing::debug!(
+                            "disconnecting peer {} : {} ",
+                            peer,
+                            addr
+                        );
+                        self.intent_broadcaster_gossip
+                            .inject_disconnected(&peer);
+                    }
+                }
+            }
+        }
     }
 }

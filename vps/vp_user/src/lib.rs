@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use anoma_vm_env::validity_predicate;
 use anoma_vm_env::vp_prelude::intent::{Intent, IntentTransfers};
 use anoma_vm_env::vp_prelude::key::ed25519::{Signed, SignedTxData};
 use anoma_vm_env::vp_prelude::*;
@@ -23,82 +22,88 @@ impl<'a> From<&'a Key> for KeyType<'a> {
     }
 }
 
-validity_predicate! {
-    fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: Vec<Key>, verifiers: HashSet<Address>) -> bool {
-        log_string(format!(
-            "validate_tx called with user addr: {}, key_changed: {:#?}, verifiers: {:?}",
-            addr, keys_changed, verifiers
-        ));
+#[validity_predicate]
+fn validate_tx(
+    tx_data: vm_memory::Data,
+    addr: Address,
+    keys_changed: Vec<Key>,
+    verifiers: HashSet<Address>,
+) -> bool {
+    log_string(format!(
+        "validate_tx called with user addr: {}, key_changed: {:#?}, \
+         verifiers: {:?}",
+        addr, keys_changed, verifiers
+    ));
 
-        // TODO memoize?
-        let valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
-            Ok(tx) => {
-                let pk = key::ed25519::get(&addr);
-                match pk {
-                    None => {
-                        false
-                    },
-                    Some(pk) => {
-                        verify_tx_signature(&pk, &tx.data, &tx.sig)
-                    }
-                }
-            },
-            _ => {
-                false
-            },
-        };
-
-        // TODO memoize?
-        // TODO this is not needed for matchmaker, maybe we should have a different VP?
-        let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
-
-        for key in keys_changed.iter() {
-            let is_valid = match KeyType::from(key){
-                KeyType::Token(owner)
-                    if owner == &addr => {
-                        let key = key.to_string();
-                        let pre: token::Amount = read_pre(&key).unwrap_or_default();
-                        let post: token::Amount = read_post(&key).unwrap_or_default();
-                        let change = post.change() - pre.change();
-                        log_string(format!(
-                            "token key: {}, change: {}, valid_sig: {}, valid_intent: {}, valid modification: {}",
-                            key, change, valid_sig, valid_intent,
-                            (change < 0 && (valid_sig || valid_intent)) || change > 0
-                        ));
-                        // debit has to signed, credit doesn't
-                        (change < 0 && (valid_sig || valid_intent)) || change > 0
-                    },
-                KeyType::InvalidIntentSet(owner) if owner == &addr => {
-                    let key = key.to_string();
-                    let pre: Vec<Vec<u8>> = read_pre(&key).unwrap_or_default();
-                    let post: Vec<Vec<u8>> = read_post(&key).unwrap_or_default();
-                    // only one sig is added, intent is already checked
-                    log_string(format!(
-                        "intent sig set key: {}, valid modification: {}",
-                        key, pre.len() +1 != post.len()
-                    ));
-                    pre.len() +1 == post.len()
-                },
-                KeyType::Token(_owner) | KeyType::InvalidIntentSet(_owner)
-                    => {
-                        log_string(format!(
-                            "key {} is not of owner, valid_sig {}",
-                            key, valid_sig
-                        ));
-                        valid_sig
-                    },
-                KeyType::Unknown => {
-                    log_string("Unknown key modified");
-                    false
-                }
-            };
-            if !is_valid{
-                log_string(format!("key {} modification failed vp", key));
-                return false;
+    // TODO memoize?
+    let valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
+        Ok(tx) => {
+            let pk = key::ed25519::get(&addr);
+            match pk {
+                None => false,
+                Some(pk) => verify_tx_signature(&pk, &tx.data, &tx.sig),
             }
         }
-        true
+        _ => false,
+    };
+
+    // TODO memoize?
+    // TODO this is not needed for matchmaker, maybe we should have a different
+    // VP?
+    let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
+
+    for key in keys_changed.iter() {
+        let is_valid = match KeyType::from(key) {
+            KeyType::Token(owner) if owner == &addr => {
+                let key = key.to_string();
+                let pre: token::Amount = read_pre(&key).unwrap_or_default();
+                let post: token::Amount = read_post(&key).unwrap_or_default();
+                let change = post.change() - pre.change();
+                log_string(format!(
+                    "token key: {}, change: {}, valid_sig: {}, valid_intent: \
+                     {}, valid modification: {}",
+                    key,
+                    change,
+                    valid_sig,
+                    valid_intent,
+                    (change < 0 && (valid_sig || valid_intent)) || change > 0
+                ));
+                // debit has to signed, credit doesn't
+                (change < 0 && (valid_sig || valid_intent)) || change > 0
+            }
+            KeyType::InvalidIntentSet(owner) if owner == &addr => {
+                let key = key.to_string();
+                let pre: Vec<Vec<u8>> = read_pre(&key).unwrap_or_default();
+                let post: Vec<Vec<u8>> = read_post(&key).unwrap_or_default();
+                // only one sig is added, intent is already checked
+                log_string(format!(
+                    "intent sig set key: {}, valid modification: {}",
+                    key,
+                    pre.len() + 1 != post.len()
+                ));
+                pre.len() + 1 == post.len()
+            }
+            KeyType::Token(_owner) | KeyType::InvalidIntentSet(_owner) => {
+                log_string(format!(
+                    "key {} is not of owner, valid_sig {}",
+                    key, valid_sig
+                ));
+                valid_sig
+            }
+            KeyType::Unknown => {
+                log_string(format!(
+                    "Unknown key modified, valid sig {}",
+                    valid_sig
+                ));
+                valid_sig
+            }
+        };
+        if !is_valid {
+            log_string(format!("key {} modification failed vp", key));
+            return false;
+        }
     }
+    true
 }
 
 fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {

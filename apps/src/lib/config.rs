@@ -75,10 +75,24 @@ impl Default for Ledger {
             tendermint: PathBuf::from(BASEDIR).join(TENDERMINT_DIR),
             db: PathBuf::from(BASEDIR).join(DB_DIR),
             address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                 26658,
             ),
             network: String::from("mainnet"),
+        }
+    }
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RpcServer {
+    pub address: SocketAddr,
+}
+impl Default for RpcServer {
+    fn default() -> Self {
+        Self {
+            address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                39111,
+            ),
         }
     }
 }
@@ -108,10 +122,10 @@ pub enum SubscriptionFilter {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IntentBroadcaster {
     pub address: Multiaddr,
-    pub rpc: bool,
     pub peers: HashSet<Multiaddr>,
     pub topics: HashSet<String>,
     pub subscription_filter: SubscriptionFilter,
+    pub rpc: Option<RpcServer>,
     pub gossiper: Gossiper,
     pub matchmaker: Option<Matchmaker>,
 }
@@ -120,8 +134,8 @@ impl Default for IntentBroadcaster {
     fn default() -> Self {
         Self {
             // TODO there must be a better option here
-            address: Multiaddr::from_str("/ip4/127.0.0.1/tcp/20201").unwrap(),
-            rpc: false,
+            address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/20201").unwrap(),
+            rpc: None,
             subscription_filter: SubscriptionFilter::RegexFilter(
                 Regex::new("asset_v\\d{1,2}").unwrap(),
             ),

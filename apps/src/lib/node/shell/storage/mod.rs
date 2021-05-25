@@ -345,8 +345,9 @@ mod tests {
         let db_path = TempDir::new("anoma_test")
             .expect("Unable to create a temporary DB directory");
         let mut storage = PersistentStorage::new(db_path.path());
+        let chain_id = "test_chain_id_000000";
         storage
-            .set_chain_id("test_chain_id_000000")
+            .set_chain_id(chain_id)
             .expect("setting a chain ID failed");
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -357,17 +358,30 @@ mod tests {
         let value_bytes = types::encode(&value);
 
         // insert and commit
-        storage.write(&key, value_bytes).expect("write failed");
-        let expected_root = storage.merkle_root().as_slice().deref().to_vec();
+        storage
+            .write(&key, value_bytes.clone())
+            .expect("write failed");
         storage.commit().expect("commit failed");
 
+        // save the last state and drop the storage
+        let root = storage.merkle_root().as_slice().deref().to_vec();
+        let hash = storage.get_block_hash().0;
+        let address_gen = storage.address_gen.clone();
+        drop(storage);
+
         // load the last state
-        let (root, height) = storage
+        let mut storage = PersistentStorage::new(db_path.path());
+        let (loaded_root, height) = storage
             .load_last_state()
             .expect("loading the last state failed")
             .expect("no block exists");
-        assert_eq!(root.0, expected_root);
+        assert_eq!(loaded_root.0, root);
         assert_eq!(height, 100);
+        assert_eq!(storage.get_chain_id().0, chain_id);
+        assert_eq!(storage.get_block_hash().0, hash);
+        assert_eq!(storage.address_gen, address_gen);
+        let (val, _) = storage.read(&key).expect("read failed");
+        assert_eq!(val.expect("no value"), value_bytes);
     }
 
     #[test]
@@ -408,6 +422,36 @@ mod tests {
                 None => panic!("read a pair though no expected pair"),
             }
         }
+    }
+
+    #[test]
+    fn test_validity_predicate() {
+        let db_path = TempDir::new("anoma_test")
+            .expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::new(db_path.path());
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(100))
+            .expect("begin_block failed");
+
+        let addr = storage.address_gen.generate_address("test".as_bytes());
+        let key =
+            Key::validity_predicate(&addr).expect("cannot create a VP key");
+
+        // not exist
+        let (vp, gas) =
+            storage.validity_predicate(&addr).expect("VP load failed");
+        assert_eq!(vp, None);
+        assert_eq!(gas, key.len() as u64);
+
+        // insert
+        let vp1 = "vp1".as_bytes().to_vec();
+        storage.write(&key, vp1.clone()).expect("write failed");
+
+        // check
+        let (vp, gas) =
+            storage.validity_predicate(&addr).expect("VP load failed");
+        assert_eq!(vp.expect("no VP"), vp1);
+        assert_eq!(gas, (key.len() + vp1.len()) as u64);
     }
 }
 

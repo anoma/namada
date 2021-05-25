@@ -1,7 +1,8 @@
 [package]
-authors = ["Heliax <TODO@heliax.dev>"]
+authors = ["Heliax AG <hello@heliax.dev>"]
 description = "Anoma apps"
 edition = "2018"
+license = "GPL-3.0"
 name = "Anoma"
 readme = "../README.md"
 version = "0.1.0"
@@ -52,7 +53,7 @@ ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand"
 eyre = "0.6.5"
 futures = "0.3"
 hex = "0.4.2"
-libp2p = "0.35.1"
+libp2p = "0.38.0"
 parity-wasm = "0.42.2"
 prost = "0.7.0"
 prost-types = "0.7.0"
@@ -79,6 +80,7 @@ tokio = {version = "1.2.0", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.4.0"
 tracing = "0.1.26"
+tracing-log = "0.1.2"
 tracing-subscriber = "0.2.18"
 wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
@@ -92,4 +94,5 @@ tempdir = "0.3.7"
 wasmer-vm = "1.0.2"
 
 [build-dependencies]
+rustc_version = "0.3.3"
 tonic-build = "0.4.0"

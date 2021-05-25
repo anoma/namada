@@ -45,6 +45,7 @@
   - [Intent broadcaster system]()
   - [Fractal scaling]()
   - [Upgrade system]()
+- [Playnet](./playnet/README.md)
 - [Archive](./archive/README.md)
   - [Domain name addresses](./archive/domain-name-addresses.md)
 

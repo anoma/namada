@@ -153,7 +153,7 @@ pub struct EstablishedAddress {
     hash: String,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct EstablishedAddressGen {
     last_hash: String,
 }

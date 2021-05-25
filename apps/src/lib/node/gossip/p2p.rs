@@ -1,13 +1,16 @@
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
-use libp2p::PeerId;
+use libp2p::{PeerId, TransportError};
 use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::network_behaviour::Behaviour;
 use crate::proto::services::{rpc_message, RpcResponse};
+use crate::proto::types::{
+    intent_broadcaster_message, IntentBroadcasterMessage,
+};
 use crate::types::MatchmakerMessage;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
@@ -16,10 +19,12 @@ pub type Swarm = libp2p::Swarm<Behaviour>;
 pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),
-    #[error("Failed to subscribe")]
-    FailedSubscribtion(libp2p::gossipsub::error::SubscriptionError),
     #[error("Error with the network behavior: {0}")]
     Behavior(super::network_behaviour::Error),
+    #[error("Error while dialing: {0}")]
+    Dialing(libp2p::swarm::DialError),
+    #[error("Error while starting to listing: {0}")]
+    Listening(TransportError<std::io::Error>),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -34,50 +39,32 @@ impl P2P {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
-        // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-        let transport = libp2p::build_development_transport(local_key.clone())
-            .map_err(Error::TransportError)?;
+        let transport = {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(libp2p::development_transport(local_key.clone()))
+                .map_err(Error::TransportError)?
+        };
 
         let (gossipsub, matchmaker_event_receiver) =
             Behaviour::new(local_key, config).map_err(Error::Behavior)?;
-        let swarm = Swarm::new(transport, gossipsub, local_peer_id);
 
-        let mut p2p = Self { swarm };
+        let mut swarm = libp2p::Swarm::new(transport, gossipsub, local_peer_id);
 
-        config
-            .topics
-            .iter()
-            .try_for_each(|topic| {
-                p2p.swarm
-                    .intent_broadcaster_gossip
-                    .subscribe(&IdentTopic::new(topic))
-                    .map_err(Error::FailedSubscribtion)
-                    // it returns bool signifying if it was already subscribed.
-                    // discard because it can't be false as
-                    // the config.topics is a hash set
-                    .map(|_| ())
-            })
-            .expect("failed to subscribe to topic");
-
-        Swarm::listen_on(&mut p2p.swarm, config.address.clone()).unwrap();
+        Swarm::listen_on(&mut swarm, config.address.clone())
+            .map_err(Error::Listening)?;
 
         for to_dial in &config.peers {
-            match Swarm::dial_addr(&mut p2p.swarm, to_dial.clone()) {
-                Ok(_) => tracing::info!("Dialed {:?}", to_dial.clone()),
-                Err(e) => {
-                    tracing::debug!(
-                        "Dial {:?} failed: {:?}",
-                        to_dial.clone(),
-                        e
-                    )
-                }
-            }
+            Swarm::dial_addr(&mut swarm, to_dial.clone())
+                .map_err(Error::Dialing)?;
+            tracing::info!("Dialed {:?}", to_dial.clone());
         }
-        Ok((p2p, matchmaker_event_receiver))
+        tracing::info!("network info {:?}", Swarm::network_info(&swarm));
+        Ok((Self { swarm }, matchmaker_event_receiver))
     }
 
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
         self.swarm
+            .behaviour_mut()
             .intent_broadcaster_app
             .handle_mm_message(mm_message)
             .await
@@ -87,6 +74,7 @@ impl P2P {
         &mut self,
         event: rpc_message::Message,
     ) -> RpcResponse {
+        tracing::info!("network info {:?}", Swarm::network_info(&self.swarm));
         match event {
             rpc_message::Message::Intent(
                 crate::proto::services::IntentMesage {
@@ -109,14 +97,21 @@ impl P2P {
             ) => {
                 match self
                     .swarm
+                    .behaviour_mut()
                     .intent_broadcaster_app
                     .apply_intent(intent.clone())
                 {
                     Ok(true) => {
                         let mut intent_bytes = vec![];
+                        let intent = IntentBroadcasterMessage {
+                            msg: Some(intent_broadcaster_message::Msg::Intent(
+                                intent,
+                            )),
+                        };
                         intent.encode(&mut intent_bytes).unwrap();
                         match self
                             .swarm
+                            .behaviour_mut()
                             .intent_broadcaster_gossip
                             .publish(IdentTopic::new(topic), intent_bytes)
                         {
@@ -181,7 +176,12 @@ impl P2P {
                 },
             ) => {
                 let topic = IdentTopic::new(&topic_str);
-                match self.swarm.intent_broadcaster_gossip.subscribe(&topic) {
+                match self
+                    .swarm
+                    .behaviour_mut()
+                    .intent_broadcaster_gossip
+                    .subscribe(&topic)
+                {
                     Ok(true) => {
                         let result = format!("Node subscribed to {}", topic);
                         tracing::info!("{}", result);

@@ -3,12 +3,11 @@ mod network_behaviour;
 mod p2p;
 mod rpc;
 
-use std::thread;
-
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
 use self::p2p::P2P;
+use crate::config::IntentBroadcaster;
 use crate::proto::services::{rpc_message, RpcResponse};
 use crate::types::MatchmakerMessage;
 
@@ -20,15 +19,8 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub fn run(config: crate::config::IntentBroadcaster) -> Result<()> {
-    let rpc_event_receiver = if config.rpc {
-        let (sender, receiver) = mpsc::channel(100);
-        thread::spawn(|| rpc::rpc_server(sender).unwrap());
-        Some(receiver)
-    } else {
-        None
-    };
-
+pub fn run(config: IntentBroadcaster) -> Result<()> {
+    let rpc_event_receiver = config.rpc.as_ref().map(rpc::start_rpc_server);
     let (gossip, matchmaker_event_receiver) =
         p2p::P2P::new(&config).map_err(Error::P2pInit)?;
 
