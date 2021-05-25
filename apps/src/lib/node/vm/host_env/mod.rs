@@ -46,11 +46,6 @@ where
     memory: MEM,
 }
 
-// pub trait TxEnvT {
-//     type DB: storage::DB;
-//     type Memory: VmMemory;
-// }
-
 // We have to implement the `Clone` instance manually, because we cannot
 // implement `DB: Clone` which is required by `WasmerEnv`, but we don't store
 // the `DB` directly here, so we don't need to. Instead, we store the reference
@@ -84,9 +79,10 @@ where
     }
 }
 
-struct VpEnv<DB>
+pub struct VpEnv<DB, MEM>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     /// The address of the account that owns the VP
     addr: Address,
@@ -102,16 +98,17 @@ where
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
     // The transaction code is used for signature verification
     tx_code: EnvHostWrapper<Vec<u8>>,
-    memory: WasmMemory,
+    memory: MEM,
 }
 
 // We have to implement the `Clone` instance manually, because we cannot
 // implement `DB: Clone` which is required by `WasmerEnv`, but we don't store
 // the `DB` directly here, so we don't need to. Instead, we store the reference
 // to `DB` inside the `EnvHostWrapper` which is safe to clone.
-impl<DB> Clone for VpEnv<DB>
+impl<DB, MEM> Clone for VpEnv<DB, MEM>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     fn clone(&self) -> Self {
         Self {
@@ -126,7 +123,7 @@ where
     }
 }
 
-impl<DB> WasmerEnv for VpEnv<DB>
+impl<DB> WasmerEnv for VpEnv<DB, WasmMemory>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -242,13 +239,13 @@ where
         "env" => {
             "memory" => initial_memory,
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_charge_gas),
-            "_read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
-            "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
-            "_has_key_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_pre),
-            "_has_key_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_post),
-            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_prefix),
-            "_iter_pre_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next),
-            "_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next),
+            "_read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_read_pre),
+            "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_read_post),
+            "_has_key_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_has_key_pre),
+            "_has_key_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_has_key_post),
+            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_iter_prefix),
+            "_iter_pre_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_iter_pre_next),
+            "_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_iter_post_next),
             "_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_chain_id),
             "_get_block_height" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_height),
             "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_hash),
@@ -337,16 +334,18 @@ where
 }
 
 /// Called from VP wasm to request to use the given gas amount
-fn vp_charge_gas<DB>(env: &VpEnv<DB>, used_gas: i32)
+pub fn vp_charge_gas<DB, MEM>(env: &VpEnv<DB, MEM>, used_gas: i32)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     vp_add_gas(env, used_gas as _)
 }
 
-fn vp_add_gas<DB>(env: &VpEnv<DB>, used_gas: u64)
+pub fn vp_add_gas<DB, MEM>(env: &VpEnv<DB, MEM>, used_gas: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let gas_meter: &mut VpGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     if let Err(err) = gas_meter.add(used_gas) {
@@ -683,14 +682,15 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_read_pre<DB>(
-    env: &VpEnv<DB>,
+pub fn vp_read_pre<DB, MEM>(
+    env: &VpEnv<DB, MEM>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (key, gas) = env
         .memory
@@ -704,7 +704,7 @@ where
     let (value, gas) = storage.read(&key).expect("storage read failed");
     vp_add_gas(env, gas);
     tracing::debug!(
-        "vp_storage_read_pre addr {}, key {}, value {:#?}",
+        "vp_read_pre addr {}, key {}, value {:#?}",
         env.addr,
         key,
         value,
@@ -733,14 +733,15 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_read_post<DB>(
-    env: &VpEnv<DB>,
+pub fn vp_read_post<DB, MEM>(
+    env: &VpEnv<DB, MEM>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (key, gas) = env
         .memory
@@ -749,7 +750,7 @@ where
     vp_add_gas(env, gas);
 
     tracing::debug!(
-        "vp_storage_read_post {}, key {}, result_ptr {}",
+        "vp_read_post {}, key {}, result_ptr {}",
         key,
         key_ptr,
         result_ptr,
@@ -814,13 +815,14 @@ where
 
 /// Storage `has_key` in prior state (before tx execution) function exposed to
 /// the wasm VM VP environment. It will try to read from the storage.
-fn vp_storage_has_key_pre<DB>(
-    env: &VpEnv<DB>,
+pub fn vp_has_key_pre<DB, MEM>(
+    env: &VpEnv<DB, MEM>,
     key_ptr: u64,
     key_len: u64,
 ) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (key, gas) = env
         .memory
@@ -828,7 +830,7 @@ where
         .expect("Cannot read the key from memory");
     vp_add_gas(env, gas);
 
-    tracing::debug!("vp_storage_has_key_pre {}, key {}", key, key_ptr,);
+    tracing::debug!("vp_has_key_pre {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -841,13 +843,14 @@ where
 /// Storage `has_key` in posterior state (after tx execution) function exposed
 /// to the wasm VM VP environment. It will
 /// try to check the write log first and if no entry found then the storage.
-fn vp_storage_has_key_post<DB>(
-    env: &VpEnv<DB>,
+pub fn vp_has_key_post<DB, MEM>(
+    env: &VpEnv<DB, MEM>,
     key_ptr: u64,
     key_len: u64,
 ) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (key, gas) = env
         .memory
@@ -855,7 +858,7 @@ where
         .expect("Cannot read the key from memory");
     vp_add_gas(env, gas);
 
-    tracing::debug!("vp_storage_has_key_post {}, key {}", key, key_ptr,);
+    tracing::debug!("vp_has_key_post {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -884,13 +887,14 @@ where
 /// Storage prefix iterator function exposed to the wasm VM VP environment.
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator.
-fn vp_storage_iter_prefix<DB>(
-    env: &VpEnv<DB>,
+pub fn vp_iter_prefix<DB, MEM>(
+    env: &VpEnv<DB, MEM>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> u64
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (prefix, gas) = env
         .memory
@@ -898,7 +902,7 @@ where
         .expect("Cannot read the prefix from memory");
     vp_add_gas(env, gas);
 
-    tracing::debug!("vp_storage_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+    tracing::debug!("vp_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
@@ -915,16 +919,17 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_iter_pre_next<DB>(
-    env: &VpEnv<DB>,
+pub fn vp_iter_pre_next<DB, MEM>(
+    env: &VpEnv<DB, MEM>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     tracing::debug!(
-        "vp_storage_iter_pre_next iter_id {}, result_ptr {}",
+        "vp_iter_pre_next iter_id {}, result_ptr {}",
         iter_id,
         result_ptr,
     );
@@ -955,16 +960,17 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-fn vp_storage_iter_post_next<DB>(
-    env: &VpEnv<DB>,
+pub fn vp_iter_post_next<DB, MEM>(
+    env: &VpEnv<DB, MEM>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     tracing::debug!(
-        "vp_storage_iter_post_next iter_id {}, result_ptr {}",
+        "vp_iter_post_next iter_id {}, result_ptr {}",
         iter_id,
         result_ptr,
     );
@@ -1183,9 +1189,10 @@ where
 }
 
 /// Getting the chain ID function exposed to the wasm VM VP environment.
-fn vp_get_chain_id<DB>(env: &VpEnv<DB>, result_ptr: u64)
+pub fn vp_get_chain_id<DB, MEM>(env: &VpEnv<DB, MEM>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (chain_id, gas) = storage.get_chain_id();
@@ -1200,9 +1207,10 @@ where
 /// Getting the block height function exposed to the wasm VM VP
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
-fn vp_get_block_height<DB>(env: &VpEnv<DB>) -> u64
+pub fn vp_get_block_height<DB, MEM>(env: &VpEnv<DB, MEM>) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (height, gas) = storage.get_block_height();
@@ -1212,9 +1220,10 @@ where
 
 /// Getting the block hash function exposed to the wasm VM VP environment. The
 /// hash is that of the block to which the current transaction is being applied.
-fn vp_get_block_hash<DB>(env: &VpEnv<DB>, result_ptr: u64)
+pub fn vp_get_block_hash<DB, MEM>(env: &VpEnv<DB, MEM>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
     let (hash, gas) = storage.get_block_hash();
@@ -1226,8 +1235,8 @@ where
     vp_add_gas(env, gas);
 }
 
-fn vp_verify_tx_signature<DB>(
-    env: &VpEnv<DB>,
+pub fn vp_verify_tx_signature<DB, MEM>(
+    env: &VpEnv<DB, MEM>,
     pk_ptr: u64,
     pk_len: u64,
     data_ptr: u64,
@@ -1237,6 +1246,7 @@ fn vp_verify_tx_signature<DB>(
 ) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (pk, gas) = env
         .memory
@@ -1291,9 +1301,10 @@ where
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`tracing::Level::Info`]. This function is for development
 /// only.
-fn vp_log_string<DB>(env: &VpEnv<DB>, str_ptr: u64, str_len: u64)
+pub fn vp_log_string<DB, MEM>(env: &VpEnv<DB, MEM>, str_ptr: u64, str_len: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    MEM: VmMemory,
 {
     let (str, _gas) = env
         .memory
@@ -1417,6 +1428,43 @@ pub mod testing {
             iterators,
             verifiers,
             gas_meter,
+            memory: NativeMemory,
+        }
+    }
+
+    pub fn vp_env<DB>(
+        addr: Address,
+        storage: &Storage<DB>,
+        write_log: &WriteLog,
+        iterators: &mut PrefixIterators<'static, DB>,
+        gas_meter: &mut BlockGasMeter,
+        tx_code: &Vec<u8>,
+    ) -> VpEnv<DB, NativeMemory>
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    {
+        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
+            EnvHostWrapper::new(storage as *const _ as *const c_void)
+        };
+        let write_log = unsafe {
+            EnvHostWrapper::new(write_log as *const _ as *const c_void)
+        };
+        let iterators = unsafe {
+            MutEnvHostWrapper::new(iterators as *mut _ as *mut c_void)
+        };
+        let gas_meter = unsafe {
+            MutEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
+        };
+        let tx_code = unsafe {
+            EnvHostWrapper::new(tx_code as *const _ as *const c_void)
+        };
+        VpEnv {
+            addr,
+            storage,
+            write_log,
+            iterators,
+            gas_meter,
+            tx_code,
             memory: NativeMemory,
         }
     }

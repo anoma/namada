@@ -7,6 +7,6 @@ version = "0.1.0"
 
 [dev-dependencies]
 Anoma = {path = "../apps", features = ["testing"]}
-anoma_shared = {path = "../shared"}
+anoma_shared = {path = "../shared", features = ["testing"]}
 anoma_vm_env = {path = "../vm_env"}
 concat-idents = "1.1.2"
