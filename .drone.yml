@@ -305,7 +305,7 @@ type: docker
 name: anoma-ci-build-master-develop
 
 workspace:
-  path: /drone/workspace
+  path: /usr/local/rust/project
 
 environment:
   CARGO_HOME: /usr/local/rust/project/.cargo
@@ -324,29 +324,27 @@ steps:
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       archive_format: "gzip"
       mount:
-        - .cargo/git
-        - .cargo/registry
-        - matchmaker_template/target
-        - txs/tx_from_intent/target
-        - txs/tx_template/target
-        - txs/tx_transfer/target
-        - vps/vp_template/target
-        - vps/vp_token/target
-        - vps/vp_user/target
-        - txs/tx_update_vp
-        - filter_template
-        - target
+        - .cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
-
-  - name: install-rust
+    
+  - name: build-deps
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - sccache --start-server
+      - make -C txs/tx_template deps
+      - make build-wasm-scripts
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key_id
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_secret_access_key
+      SCCACHE_BUCKET: heliax-drone-cache-v2
+      SCCACHE_S3_KEY_PREFIX: sccache-build-deps
     depends_on:
       - restore-cache
 
@@ -354,19 +352,41 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - make -C txs/tx_template deps
-      - make build-wasm-scripts
+      - sccache --start-server
       - make build
     depends_on:
-      - install-rust
+      - build-deps
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key_id
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_secret_access_key
+      SCCACHE_BUCKET: heliax-drone-cache-v2
+      SCCACHE_S3_KEY_PREFIX: sccache-build
 
   - name: test
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
+      - sccache --start-server
       - make test
     depends_on:
       - build
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key_id
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_secret_access_key
+      SCCACHE_BUCKET: heliax-drone-cache-v2
+      SCCACHE_S3_KEY_PREFIX: sccache-test
+
+  - name: clean-cache
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - cargo-cache
+    depends_on:
+      - test
 
   - name: rebuild-cache
     image: meltwater/drone-cache
@@ -380,18 +400,7 @@ steps:
       override: false
       cache_key: "{{ checksum \"Cargo.lock\" }}"
       mount:
-        - .cargo/git
-        - .cargo/registry
-        - matchmaker_template/target
-        - txs/tx_from_intent/target
-        - txs/tx_template/target
-        - txs/tx_transfer/target
-        - vps/vp_template/target
-        - vps/vp_token/target
-        - vps/vp_user/target
-        - txs/tx_update_vp
-        - filter_template
-        - target
+        - .cargo
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -403,19 +412,11 @@ steps:
         - success
         - failure
     depends_on:
-      - test
-  
+      - clean-cache
+
 trigger:
   event:
-    - push
-  branch:
-    - develop
-    - master
+    - pull_request
 
 node:
   project: anoma
----
-kind: signature
-hmac: bd26512545713cedd44fd5e37a5fb65fcb2ba88afc56bfb683e4d89c0bae9e21
-
-...
