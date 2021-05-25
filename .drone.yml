@@ -29,14 +29,26 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
-
-  - name: build
+    
+  - name: build-deps
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
       - sccache --start-server
       - make -C txs/tx_template deps
       - make build-wasm-scripts
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key_id
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_secret_access_key\
+      SCCACHE_BUCKET: heliax-drone-cache-v2
+      SCCACHE_S3_KEY_PREFIX: sccache-build-deps
+
+  - name: build
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
       - make build
     depends_on:
       - restore-cache
@@ -62,7 +74,7 @@ steps:
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key\
       SCCACHE_BUCKET: heliax-drone-cache-v2
-      SCCACHE_S3_KEY_PREFIX: sccache-build
+      SCCACHE_S3_KEY_PREFIX: sccache-test
 
   - name: clean-cache
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
