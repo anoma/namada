@@ -14,14 +14,6 @@ environment:
   CARGO_INCREMENTAL: 0
 
 steps:
-  - name: install-rust
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      - . /drone/workspace/.cargo/env
-      - rustup toolchain install stable
-
   - name: restore-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -52,8 +44,21 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+
+  - name: install-rust
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - . /drone/workspace/.cargo/env
+      - |
+        if which rustup >/dev/null; then
+          exit 0
+        else
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . /drone/workspace/.cargo/env
+        fi
     depends_on:
-      - install-rust
+      - restore-cache
 
   - name: build
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -67,7 +72,7 @@ steps:
       - make build-wasm-scripts
       - make build
     depends_on:
-      - restore-cache
+      - install-rust
 
   - name: test
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -138,17 +143,10 @@ workspace:
 environment:
   CARGO_HOME: /drone/workspace/.cargo
   RUSTUP_HOME: /drone/workspace/.cargo/bin
-  # CARGO_TARGET_DIR: /drone/workspace/target
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
 steps:
-  - name: install-rust
-    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-    pull: if-not-exists
-    commands:
-      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-
   - name: restore-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -170,24 +168,31 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+
+  - name: install-rust
+    image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+    pull: if-not-exists
+    commands:
+      - . /drone/workspace/.cargo/env
+      - |
+        if which rustup >/dev/null; then
+          exit 0
+        else
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          make dev-deps
+        fi
     depends_on:
-      - install-rust
+      - restore-cache
 
   - name: clippy-fmt-checks
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
       - . /drone/workspace/.cargo/env
-      - which rustup
-      - |
-        exit=$?
-        if [ $exit -ne 0 ]; then
-            make dev-deps
-        fi
       - make clippy-check
       - make fmt-check
     depends_on:
-      - restore-cache
+      - install-rust
 
   - name: rebuild-cache
     image: meltwater/drone-cache
