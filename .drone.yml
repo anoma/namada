@@ -129,7 +129,6 @@ workspace:
 
 environment:
   CARGO_HOME: /usr/local/rust/project/.cargo
-  RUSTUP_HOME: /usr/local/rust/rustup
   GIT_LFS_SKIP_SMUDGE: "1"
   CARGO_INCREMENTAL: 0
 
@@ -157,8 +156,6 @@ steps:
     pull: if-not-exists
     commands:
       - sccache --start-server
-      - which rustup
-      - make dev-deps
       - make clippy-check
       - make fmt-check
     depends_on:
