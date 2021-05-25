@@ -1,12 +1,15 @@
 #[cfg(test)]
 mod tests {
+    use anoma_shared::types::Key;
+    use anoma_vm_env::tx_prelude::BorshSerialize;
+
     use super::tx::*;
     use super::vp::*;
 
-    /// An example how to write tx host environment integration test
+    /// An example how to write a tx host environment integration test
     #[test]
     fn test_tx_host_env() {
-        // the environment must be initialized first
+        // The environment must be initialized first
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
 
@@ -17,19 +20,27 @@ mod tests {
         let read_value: Option<String> = tx_host_env::read(key);
         assert_eq!(Some(value), read_value);
     }
-    /// An example how to write vp host environment integration test
+
+    /// An example how to write a VP host environment integration test
     #[test]
     fn test_vp_host_env() {
-        // the environment must be initialized first
-        let mut env = TestTxEnv::default();
-        init_tx_env(&mut env);
+        // The environment must be initialized first
+        let mut env = TestVpEnv::default();
+        init_vp_env(&mut env);
 
-        let key = "key";
+        // We can add some data to the environment
+        let key_raw = "key";
+        let key = Key::parse(key_raw.to_string()).unwrap();
         let value = "test".to_string();
-        tx_host_env::write(key, value.clone());
+        let value_raw = value.try_to_vec().unwrap();
+        env.write_log.write(&key, value_raw);
 
-        let read_value: Option<String> = tx_host_env::read(key);
-        assert_eq!(Some(value), read_value);
+        let read_pre_value: Option<String> = vp_host_env::read_pre(key_raw);
+        assert_eq!(None, read_pre_value);
+        let read_post_value: Option<String> = vp_host_env::read_post(key_raw);
+        assert_eq!(Some(value), read_post_value);
+        // let read_post_value = env.write_log.read(&key);
+        // println!("A {:?}", read_post_value);
     }
 }
 
@@ -69,62 +80,60 @@ pub mod tx {
         macro_rules! native_host_fn {
             // unit return type
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) ) => {
-                #[no_mangle]
-                extern "C" fn $fn( $($arg: $type),* ) {
-                    ENV.with(|env| {
-                        let env = env.borrow_mut();
-                        let env = env.as_ref().expect("Did you forget to initialize the ENV?");
+                concat_idents!(extern_fn_name = anoma, _, $fn {
+                    #[no_mangle]
+                    extern "C" fn extern_fn_name( $($arg: $type),* ) {
+                        ENV.with(|env| {
+                            let env = env.borrow_mut();
+                            let env = env.as_ref().expect("Did you forget to initialize the ENV?");
 
-                        concat_idents!(fn_name = tx, $fn {
-                            fn_name( &env, $($arg),* )
+                            $fn( &env, $($arg),* )
                         })
-                    })
-                }
-
+                    }
+                });
             };
 
             // non-unit return type
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty ) => {
-                #[no_mangle]
-                extern "C" fn $fn( $($arg: $type),* ) -> $ret {
-                    ENV.with(|env| {
-                        let env = env.borrow_mut();
-                        let env = env.as_ref().expect("Did you forget to initialize the ENV?");
+                concat_idents!(extern_fn_name = anoma, _, $fn {
+                    #[no_mangle]
+                    extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
+                        ENV.with(|env| {
+                            let env = env.borrow_mut();
+                            let env = env.as_ref().expect("Did you forget to initialize the ENV?");
 
-                        concat_idents!(fn_name = tx, $fn {
-                            fn_name( &env, $($arg),* )
+                            $fn( &env, $($arg),* )
                         })
-                    })
-                }
-
+                    }
+                });
             }
         }
 
         // Implement all the exported functions from
         // [`anoma_vm_env::imports::tx`] `extern "C"` section.
-        native_host_fn!(_read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
-        native_host_fn!(_has_key(key_ptr: u64, key_len: u64) -> u64);
-        native_host_fn!(_write(
+        native_host_fn!(tx_read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
+        native_host_fn!(tx_has_key(key_ptr: u64, key_len: u64) -> i64);
+        native_host_fn!(tx_write(
             key_ptr: u64,
             key_len: u64,
             val_ptr: u64,
             val_len: u64
         ));
-        native_host_fn!(_delete(key_ptr: u64, key_len: u64) -> u64);
-        native_host_fn!(_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
-        native_host_fn!(_iter_next(iter_id: u64, result_ptr: u64) -> i64);
-        native_host_fn!(_insert_verifier(addr_ptr: u64, addr_len: u64));
-        native_host_fn!(_update_validity_predicate(
+        native_host_fn!(tx_delete(key_ptr: u64, key_len: u64));
+        native_host_fn!(tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
+        native_host_fn!(tx_iter_next(iter_id: u64, result_ptr: u64) -> i64);
+        native_host_fn!(tx_insert_verifier(addr_ptr: u64, addr_len: u64));
+        native_host_fn!(tx_update_validity_predicate(
             addr_ptr: u64,
             addr_len: u64,
             code_ptr: u64,
             code_len: u64,
         ));
-        native_host_fn!(_init_account(code_ptr: u64, code_len: u64, result_ptr: u64) -> u64);
-        native_host_fn!(_get_chain_id(result_ptr: u64));
-        native_host_fn!(_get_block_height() -> u64);
-        native_host_fn!(_get_block_hash(result_ptr: u64));
-        native_host_fn!(_log_string(str_ptr: u64, str_len: u64));
+        native_host_fn!(tx_init_account(code_ptr: u64, code_len: u64, result_ptr: u64) -> u64);
+        native_host_fn!(tx_get_chain_id(result_ptr: u64));
+        native_host_fn!(tx_get_block_height() -> u64);
+        native_host_fn!(tx_get_block_hash(result_ptr: u64));
+        native_host_fn!(tx_log_string(str_ptr: u64, str_len: u64));
     }
 
     /// This module combines the native host function implementations from
@@ -139,11 +148,11 @@ pub mod tx {
 
     /// Host environment structures required for transactions.
     pub struct TestTxEnv {
-        storage: TestStorage,
-        write_log: WriteLog,
-        iterators: PrefixIterators<'static, MockDB>,
-        verifiers: HashSet<Address>,
-        gas_meter: BlockGasMeter,
+        pub storage: TestStorage,
+        pub write_log: WriteLog,
+        pub iterators: PrefixIterators<'static, MockDB>,
+        pub verifiers: HashSet<Address>,
+        pub gas_meter: BlockGasMeter,
     }
 
     impl Default for TestTxEnv {
@@ -212,59 +221,59 @@ pub mod vp {
         macro_rules! native_host_fn {
             // unit return type
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) ) => {
-                #[no_mangle]
-                extern "C" fn $fn( $($arg: $type),* ) {
-                    ENV.with(|env| {
-                        let env = env.borrow_mut();
-                        let env = env.as_ref().expect("Did you forget to initialize the ENV?");
+                concat_idents!(extern_fn_name = anoma, _, $fn {
+                    #[no_mangle]
+                    extern "C" fn extern_fn_name( $($arg: $type),* ) {
+                        ENV.with(|env| {
+                            let env = env.borrow_mut();
+                            let env = env.as_ref().expect("Did you forget to
+    initialize the ENV?");
 
-                        concat_idents!(fn_name = vp, $fn {
-                            fn_name( &env, $($arg),* )
+                            $fn( &env, $($arg),* )
                         })
-                    })
-                }
-
+                    }
+                });
             };
 
             // non-unit return type
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty ) => {
-                #[no_mangle]
-                extern "C" fn $fn( $($arg: $type),* ) -> $ret {
-                    ENV.with(|env| {
-                        let env = env.borrow_mut();
-                        let env = env.as_ref().expect("Did you forget to initialize the ENV?");
+                concat_idents!(extern_fn_name = anoma, _, $fn {
+                    #[no_mangle]
+                    extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
+                        ENV.with(|env| {
+                            let env = env.borrow_mut();
+                            let env = env.as_ref().expect("Did you forget to
+    initialize the ENV?");
 
-                        concat_idents!(fn_name = vp, $fn {
-                            fn_name( &env, $($arg),* )
+                            $fn( &env, $($arg),* )
                         })
-                    })
-                }
-
+                    }
+                });
             }
         }
 
         // Implement all the exported functions from
         // [`anoma_vm_env::imports::vp`] `extern "C"` section.
-        native_host_fn!(_read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
-        native_host_fn!(_read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
-        native_host_fn!(_has_key_pre(key_ptr: u64, key_len: u64) -> u64);
-        native_host_fn!(_has_key_post(key_ptr: u64, key_len: u64) -> u64);
-        // native_host_fn!(_iter_prefix(prefix_ptr: u64, prefix_len: u64) ->
-        // u64);
-        native_host_fn!(_iter_pre_next(iter_id: u64, result_ptr: u64) -> i64);
-        native_host_fn!(_iter_post_next(iter_id: u64, result_ptr: u64) -> i64);
-        // native_host_fn!(_get_chain_id(result_ptr: u64));
-        // native_host_fn!(_get_block_height() -> u64);
-        // native_host_fn!(_get_block_hash(result_ptr: u64));
-        native_host_fn!(_verify_tx_signature(
+        native_host_fn!(vp_read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
+        native_host_fn!(vp_read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
+        native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
+        native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);
+        native_host_fn!(vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
+        native_host_fn!(vp_iter_pre_next(iter_id: u64, result_ptr: u64) ->
+i64);
+        native_host_fn!(vp_iter_post_next(iter_id: u64, result_ptr: u64) -> i64);
+        native_host_fn!(vp_get_chain_id(result_ptr: u64));
+        native_host_fn!(vp_get_block_height() -> u64);
+        native_host_fn!(vp_get_block_hash(result_ptr: u64));
+        native_host_fn!(vp_verify_tx_signature(
             pk_ptr: u64,
             pk_len: u64,
             data_ptr: u64,
             data_len: u64,
             sig_ptr: u64,
             sig_len: u64,
-        ) -> u64);
-        native_host_fn!(_log_string(str_ptr: u64, str_len: u64));
+        ) -> i64);
+        native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
     }
 
     /// This module combines the native host function implementations from
@@ -279,12 +288,12 @@ pub mod vp {
 
     /// Host environment structures required for transactions.
     pub struct TestVpEnv {
-        addr: Address,
-        storage: TestStorage,
-        write_log: WriteLog,
-        iterators: PrefixIterators<'static, MockDB>,
-        gas_meter: BlockGasMeter,
-        tx_code: Vec<u8>,
+        pub addr: Address,
+        pub storage: TestStorage,
+        pub write_log: WriteLog,
+        pub iterators: PrefixIterators<'static, MockDB>,
+        pub gas_meter: BlockGasMeter,
+        pub tx_code: Vec<u8>,
     }
 
     impl Default for TestVpEnv {
