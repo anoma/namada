@@ -39,8 +39,6 @@ mod tests {
         assert_eq!(None, read_pre_value);
         let read_post_value: Option<String> = vp_host_env::read_post(key_raw);
         assert_eq!(Some(value), read_post_value);
-        // let read_post_value = env.write_log.read(&key);
-        // println!("A {:?}", read_post_value);
     }
 }
 
