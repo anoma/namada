@@ -312,6 +312,3 @@ trigger:
 
 node:
   project: anoma
-
-node:
-  project: anoma
