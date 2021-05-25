@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# This script is used to sign the drone configuration file (.drone.yml). More info at https://readme.drone.io/signature/
+
 PROFILE=$1
 DRONE_URL=${2:-ci.heliax.dev}
 
