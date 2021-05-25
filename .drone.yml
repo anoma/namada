@@ -187,6 +187,7 @@ steps:
         if [ ! -f /tmp/foo.txt ]; then
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           . /drone/workspace/.cargo/env
+          make dev-deps
           exit 0
         else
           . /drone/workspace/.cargo/env
@@ -196,6 +197,7 @@ steps:
           exit 0
         else
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . /drone/workspace/.cargo/env
           make dev-deps
         fi
     depends_on:
