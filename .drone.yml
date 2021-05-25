@@ -44,6 +44,8 @@ steps:
         from_secret: aws_secret_access_key\
       SCCACHE_BUCKET: heliax-drone-cache-v2
       SCCACHE_S3_KEY_PREFIX: sccache-build-deps
+    depends_on:
+      - restore-cache
 
   - name: build
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -51,7 +53,7 @@ steps:
     commands:
       - make build
     depends_on:
-      - restore-cache
+      - build-deps
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
