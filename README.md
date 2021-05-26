@@ -60,12 +60,6 @@ cargo run --bin anomac -- transfer --source $ALAN --target $ADA --token $XAN --a
 # Submit a transaction to update an account's validity predicate
 cargo run --bin anomac -- update --address $ALAN --code-path vps/vp_user/vp.wasm
 
-# Watch and on change run a node (the state will be persisted)
-cargo watch -x "run --bin anoman -- run-ledger"
-
-# Watch and on change reset & run a node
-cargo watch -x "run --bin anoman -- reset-ledger" -x "run --bin anoman -- run"
-
 # run gossip node with intent broadcaster and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc "127.0.0.1:39111"
 
