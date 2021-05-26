@@ -8,12 +8,6 @@ build-release:
 build:
 	$(cargo) build --target wasm32-unknown-unknown
 
-clippy:
-	$(cargo) clippy
-
-fmt:
-	$(cargo) fmt
-
 watch:
 	$(cargo) watch
 
@@ -23,4 +17,4 @@ clean:
 deps:
 	$(rustup) target add wasm32-unknown-unknown
 
-.PHONY : build-release build clippy fmt watch clean deps
+.PHONY : build-release build watch clean deps
