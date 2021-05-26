@@ -1,4 +1,15 @@
-# Anoma ledger prototype
+# Anoma
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
+[![Drone CI build status](https://ci.heliax.dev/api/badges/heliaxdev/anoma-prototype/status.svg)](https://ci.heliax.dev/heliaxdev/anoma-prototype)
+
+## Overview
+
+[Anoma](https://anoma.network/) is a sovereign, proof-of-stake blockchain protocol that enables private, asset-agnostic cash and private bartering among any number of parties.
+
+## Warning
+
+This project is currently under active development and there will be breaking changes. Depend on it at your own risk.
 
 ## Quick start
 
@@ -6,38 +17,30 @@ The ledger currently requires that [Tendermint version 0.34.x](https://github.co
 
 The transaction code can currently be built from [tx_template](txs/tx_template) and validity predicates from [vp_template](vps/vp_template), which is Rust code compiled to wasm.
 
-The transaction template calls functions from the host environment. The validity predicate template can validate a transaction and the key changes that is has performed.
-
-The validity predicate is currently hard-coded in the shell and used for every account. To experiment with a different validity predicate, build it from the template and restart the shell.
-
-The gossip node needs to toggle the intent flag `--intent` to activate the intent broadcaster, multiple nodes can be connected with the `--peers` option.
+The transaction template calls functions from the host environment. The validity predicate template can validate a transaction and the storage key changes that is has performed.
 
 The matchmaker template receives intents with the borsh encoding define in `data_template` and crafts data to be sent with `tx_intent_template` to the ledger. It matches only two intents that are the exact opposite.
+
+## Development
 
 ```shell
 # Install development dependencies
 make dev-deps
 
-# Run this first if you don't have Rust wasm target installed:
-make -C txs/tx_template deps
+# Run this first if you don't have Rust wasm target installed
+rustup target add wasm32-unknown-unknown
 
-# Build the validity predicate, transaction and matchmaker wasm modules:
+# Build the validity predicate, transaction and matchmaker wasm modules
 make build-wasm-scripts
 
 # Build Anoma
 make
 
-# Build and link the executables
-make install
-
-# generate default config in .anoma/
-cargo run --bin anoman -- --base-dir .anoma generate-config
-
 # Run Anoma node (this will also initialize and run Tendermint node)
 make run-ledger
 
 # Reset the state (resets Tendermint too)
-cargo run --bin anoman -- reset-ledger
+make reset-ledger
 
 # Submit a custom transaction with a wasm code and arbitrary data in `tx.data` file.
 # Note that you have to have a `tx.data` file for this to work, albeit it can be empty.
@@ -84,6 +87,9 @@ cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path int
 
 # Format the code
 make fmt
+
+# Lint the code
+make clippy-check
 ```
 
 ## Logging
