@@ -1,13 +1,17 @@
 package = anoma
 
-# env = OPENSSL_INCLUDE_DIR="/usr/local/opt/openssl/include"
-cargo = $(env) cargo
-rustup = $(env) rustup
-debug-env = RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
-debug-cargo = $(env) $(debug-env) cargo
+cargo := $(env) cargo
+rustup := $(env) rustup
+debug-env := RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
+debug-cargo := $(env) $(debug-env) cargo
 # Nightly build is currently used for rustfmt and clippy.
 # NOTE On change also update `RUSTFMT_TOOLCHAIN` in `apps/build.rs`.
-nightly = nightly-2021-03-09
+nightly := nightly-2021-03-09
+
+# Paths for all the wasm sources
+tx_wasms := $(dir $(wildcard txs/*/.))
+vp_wasms := $(dir $(wildcard vps/*/.))	
+wasms := $(tx_wasms) $(vp_wasms) matchmaker_template filter_template
 
 build:
 	$(cargo) build
@@ -15,11 +19,15 @@ build:
 build-release:
 	$(cargo) build --release
 
+clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml
 clippy:
-	$(cargo) +$(nightly) clippy
+	$(cargo) +$(nightly) clippy && \
+	$(foreach wasm,$(wasms),$(clippy-wasm) && ) true
 
+clippy-check-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml -- -D warnings
 clippy-check:
-	$(cargo) +$(nightly) clippy -- -D warnings
+	$(cargo) +$(nightly) clippy -- -D warnings && \
+	$(foreach wasm,$(wasms),$(clippy-check-wasm) && ) true
 
 install:
 	# Warning: built in debug mode for now
@@ -46,11 +54,15 @@ test:
 test-debug:
 	$(debug-cargo) test -- --nocapture
 
+fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
 fmt:
-	$(cargo) +$(nightly) fmt --all
+	$(cargo) +$(nightly) fmt --all && \
+	$(foreach wasm,$(wasms),$(fmt-wasm) && ) true
 
+fmt-check-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml -- --check
 fmt-check:
-	$(cargo) +$(nightly) fmt --all -- --check
+	$(cargo) +$(nightly) fmt --all -- --check && \
+	$(foreach wasm,$(wasms),$(fmt-check-wasm) && ) true
 
 watch:
 	$(cargo) watch
@@ -62,18 +74,10 @@ doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
 
-# Build the validity predicate and transaction wasm from templates
+# Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+build-wasm = make -C $(wasm)
 build-wasm-scripts:
-	make -C vps/vp_template && \
-	make -C vps/vp_token && \
-	make -C vps/vp_user && \
-	make -C txs/tx_template && \
-	make -C txs/tx_transfer && \
-	make -C txs/tx_from_intent && \
-	make -C txs/tx_update_vp && \
-	make -C matchmaker_template && \
-	make -C filter_template
-
+	$(foreach wasm,$(wasms),$(build-wasm) && ) true
 
 dev-deps:
 	$(rustup) toolchain install $(nightly)
