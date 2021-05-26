@@ -48,8 +48,10 @@ reset-ledger:
 audit:
 	$(cargo) audit
 
+test-wasm = $(cargo) test --manifest-path $(wasm)/Cargo.toml
 test:
-	$(cargo) test
+	$(cargo) test && \
+	$(foreach wasm,$(wasms),$(test-wasm) && ) true
 
 test-debug:
 	$(debug-cargo) test -- --nocapture
