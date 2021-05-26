@@ -187,7 +187,6 @@ fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
 #[cfg(test)]
 mod tests {
     use anoma_tests::vp::*;
-    use anoma_vm_env::vp_prelude::address;
 
     use super::*;
 
@@ -200,9 +199,10 @@ mod tests {
         init_vp_env(&mut env);
 
         let tx_data: vm_memory::Data = vec![];
-        let addr: Address = address::testing::established_address_1();
+        let addr: Address = env.addr.clone();
         let keys_changed: Vec<Key> = vec![];
         let verifiers: HashSet<Address> = HashSet::default();
+
         let valid = validate_tx(tx_data, addr, keys_changed, verifiers);
 
         assert!(valid);
