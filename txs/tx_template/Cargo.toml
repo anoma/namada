@@ -13,6 +13,9 @@ anoma_vm_env = {path = "../../vm_env"}
 borsh = "0.8.2"
 wee_alloc = "0.4.5"
 
+[dev-dependencies]
+anoma_tests = {path = "../../tests"}
+
 [profile.release]
 # smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto
 lto = true

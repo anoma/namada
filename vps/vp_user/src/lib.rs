@@ -194,7 +194,6 @@ mod tests {
     /// valid.
     #[test]
     fn test_no_op_transaction() {
-        // The environment must be initialized first
         let mut env = TestVpEnv::default();
         init_vp_env(&mut env);
 
