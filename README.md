@@ -27,9 +27,6 @@ The matchmaker template receives intents with the borsh encoding define in `data
 # Install development dependencies
 make dev-deps
 
-# Run this first if you don't have Rust wasm target installed
-rustup target add wasm32-unknown-unknown
-
 # Build the validity predicate, transaction and matchmaker wasm modules
 make build-wasm-scripts
 

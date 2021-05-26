@@ -77,6 +77,7 @@ build-wasm-scripts:
 
 dev-deps:
 	$(rustup) toolchain install $(nightly)
+	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy --toolchain $(nightly)
 	$(cargo) install cargo-watch
 
