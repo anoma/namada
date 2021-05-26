@@ -7,7 +7,6 @@ use petgraph::graph::{node_index, DiGraph, NodeIndex};
 use petgraph::visit::{depth_first_search, Control, DfsEvent};
 use petgraph::Graph;
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct IntentNode {
@@ -44,7 +43,7 @@ fn send_tx(tx_data: IntentTransfers) {
 }
 
 fn decode_intent_data(bytes: &[u8]) -> Signed<Intent> {
-    Signed::<Intent>::try_from_slice(&bytes[..]).unwrap()
+    Signed::<Intent>::try_from_slice(bytes).unwrap()
 }
 
 fn decode_graph(bytes: Vec<u8>) -> DiGraph<IntentNode, Address> {
