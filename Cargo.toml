@@ -1,9 +1,11 @@
 [workspace]
+resolver = "2"
 
 members = [
   "apps",
   "shared",
   "vm_env",
+  "vm_macro",
   "tests",
 ]
 

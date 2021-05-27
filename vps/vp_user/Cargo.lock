@@ -93,7 +93,6 @@ dependencies = [
  "rayon",
  "regex",
  "rocksdb",
- "rustc_version",
  "serde 1.0.126",
  "serde_bytes",
  "serde_json",
@@ -127,7 +126,9 @@ dependencies = [
  "ed25519-dalek",
  "serde 1.0.126",
  "sha2 0.9.3",
+ "sparse-merkle-tree",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
