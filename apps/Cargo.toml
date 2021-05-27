@@ -95,5 +95,4 @@ tempdir = "0.3.7"
 wasmer-vm = "1.0.2"
 
 [build-dependencies]
-rustc_version = "0.3.3"
 tonic-build = "0.4.0"

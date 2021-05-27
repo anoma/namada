@@ -1,2 +1,4 @@
 [toolchain]
 channel = "stable"
+date = "2021-05-18"
+components = ["rustc", "cargo", "rust-std", "rust-docs", "rls", "rust-src", "rust-analysis"]
