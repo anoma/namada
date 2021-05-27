@@ -54,7 +54,7 @@ steps:
       SCCACHE_BUCKET: heliax-drone-cache-v2
       SCCACHE_S3_KEY_PREFIX: sccache-build-wasm
     depends_on:
-      - build-deps
+      - restore-cache
 
   - name: build
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
