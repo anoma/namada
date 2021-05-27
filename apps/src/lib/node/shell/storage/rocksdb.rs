@@ -1,9 +1,24 @@
 //! The persistent storage in RocksDB.
+//!
+//! The current storage tree is:
+//! - `chain_id`
+//! - `height`: the last committed block height
+//! - `h`: for each block at height `h`:
+//!   - `tree`: merkle tree
+//!     - `root`: root hash
+//!     - `store`: the tree's store
+//!   - `hash`: block hash
+//!   - `subspace`: any byte data associated with accounts
+//!   - `address_gen`: established address generator
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
+use anoma_shared::protocol::storage::types::PrefixIterator;
+use anoma_shared::protocol::storage::{
+    types, BlockState, DBIter, Error, Result, StorageHasher, DB,
+};
 use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{
     Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
@@ -15,8 +30,7 @@ use rocksdb::{
 };
 use sparse_merkle_tree::SparseMerkleTree;
 
-use super::{BlockState, DBIter, Error, Result, DB};
-use crate::node::shell::storage::types::{self, MerkleTree, PrefixIterator};
+use crate::node::shell::storage::types::MerkleTree;
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -50,9 +64,7 @@ pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
     // TODO use column families
     rocksdb::DB::open_cf_descriptors(&cf_opts, path, vec![])
         .map(RocksDB)
-        .map_err(|e| Error::DBError {
-            error: e.into_string(),
-        })
+        .map_err(|e| Error::DBError(e.into_string()))
 }
 
 fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
@@ -84,14 +96,14 @@ impl DB for RocksDB {
     fn flush(&self) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(true);
-        self.0.flush_opt(&flush_opts).map_err(|e| Error::DBError {
-            error: e.into_string(),
-        })
+        self.0
+            .flush_opt(&flush_opts)
+            .map_err(|e| Error::DBError(e.into_string()))
     }
 
-    fn write_block(
+    fn write_block<H: StorageHasher>(
         &mut self,
-        tree: &MerkleTree,
+        tree: &MerkleTree<H>,
         hash: &BlockHash,
         height: BlockHeight,
         subspaces: &HashMap<Key, Vec<u8>>,
@@ -154,17 +166,13 @@ impl DB for RocksDB {
         // write_opts.disable_wal(true);
         self.0
             .write_opt(batch, &write_opts)
-            .map_err(|e| Error::DBError {
-                error: e.into_string(),
-            })?;
+            .map_err(|e| Error::DBError(e.into_string()))?;
         // Block height - write after everything else is written
         // NOTE for async writes, we need to take care that all previous heights
         // are known when updating this
         self.0
             .put_opt("height", types::encode(&height), &write_opts)
-            .map_err(|e| Error::DBError {
-                error: e.into_string(),
-            })
+            .map_err(|e| Error::DBError(e.into_string()))
     }
 
     fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
@@ -174,9 +182,7 @@ impl DB for RocksDB {
         // write_opts.disable_wal(true);
         self.0
             .put_opt("chain_id", types::encode(chain_id), &write_opts)
-            .map_err(|e| Error::DBError {
-                error: e.into_string(),
-            })
+            .map_err(|e| Error::DBError(e.into_string()))
     }
 
     fn read(&self, height: BlockHeight, key: &Key) -> Result<Option<Vec<u8>>> {
@@ -184,30 +190,38 @@ impl DB for RocksDB {
             .push(&"subspace".to_owned())
             .map_err(Error::KeyError)?
             .join(key);
-        match self.0.get(key.to_string()).map_err(|e| Error::DBError {
-            error: e.into_string(),
-        })? {
+        match self
+            .0
+            .get(key.to_string())
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
             Some(bytes) => Ok(Some(bytes)),
             None => Ok(None),
         }
     }
 
-    fn read_last_block(&mut self) -> Result<Option<BlockState>> {
+    fn read_last_block<H: StorageHasher>(
+        &mut self,
+    ) -> Result<Option<BlockState<H>>> {
         let chain_id;
         let height: BlockHeight;
         // Chain ID
-        match self.0.get("chain_id").map_err(|e| Error::DBError {
-            error: e.into_string(),
-        })? {
+        match self
+            .0
+            .get("chain_id")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
             Some(bytes) => {
                 chain_id = types::decode(bytes).map_err(Error::CodingError)?;
             }
             None => return Ok(None),
         }
         // Block height
-        match self.0.get("height").map_err(|e| Error::DBError {
-            error: e.into_string(),
-        })? {
+        match self
+            .0
+            .get("height")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
             Some(bytes) => {
                 // TODO if there's an issue decoding this height, should we try
                 // load its predecessor instead?
@@ -314,7 +328,9 @@ impl DB for RocksDB {
         }
         match (root, store, hash, address_gen) {
             (Some(root), Some(store), Some(hash), Some(address_gen)) => {
-                let tree = MerkleTree(SparseMerkleTree::new(root, store));
+                let tree = anoma_shared::protocol::storage::types::MerkleTree(
+                    SparseMerkleTree::new(root, store),
+                );
                 Ok(Some(BlockState {
                     chain_id,
                     tree,
@@ -356,22 +372,24 @@ impl<'iter> DBIter<'iter> for RocksDB {
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
         );
-        PersistentPrefixIterator::new(iter, db_prefix)
+        PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
     }
 }
 
-pub type PersistentPrefixIterator<'a> = PrefixIterator<rocksdb::DBIterator<'a>>;
+pub struct PersistentPrefixIterator<'a>(
+    PrefixIterator<rocksdb::DBIterator<'a>>,
+);
 
 impl<'a> Iterator for PersistentPrefixIterator<'a> {
     type Item = (String, Vec<u8>, u64);
 
     /// Returns the next pair and the gas cost
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
-        match self.iter.next() {
+        match self.0.iter.next() {
             Some((key, val)) => {
                 let key = String::from_utf8(key.to_vec())
                     .expect("Cannot convert from bytes to key string");
-                match key.strip_prefix(&self.db_prefix) {
+                match key.strip_prefix(&self.0.db_prefix) {
                     Some(k) => {
                         let gas = k.len() + val.len();
                         Some((k.to_owned(), val.to_vec(), gas as _))

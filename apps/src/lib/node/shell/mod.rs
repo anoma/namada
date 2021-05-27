@@ -1,4 +1,3 @@
-pub mod gas;
 pub mod storage;
 mod tendermint;
 
@@ -6,6 +5,8 @@ use std::path::Path;
 use std::sync::mpsc;
 
 use anoma_shared::bytes::ByteBuf;
+use anoma_shared::protocol::gas::{self, BlockGasMeter};
+use anoma_shared::protocol::storage::MerkleRoot;
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{
     address, key, token, Address, BlockHash, BlockHeight, Key,
@@ -14,8 +15,6 @@ use borsh::BorshSerialize;
 use prost::Message;
 use thiserror::Error;
 
-use self::gas::BlockGasMeter;
-use self::storage::PersistentStorage;
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::node::protocol;
 use crate::node::vm::host_env::write_log::WriteLog;
@@ -27,7 +26,7 @@ pub enum Error {
     #[error("Error removing the DB data: {0}")]
     RemoveDB(std::io::Error),
     #[error("Storage error: {0}")]
-    StorageError(storage::Error),
+    StorageError(anoma_shared::protocol::storage::Error),
     #[error("Shell ABCI channel receiver error: {0}")]
     AbciChannelRecvError(mpsc::RecvError),
     #[error("Shell ABCI channel sender error: {0}")]
@@ -80,11 +79,9 @@ pub enum MempoolTxType {
     RecheckTransaction,
 }
 
-pub struct MerkleRoot(pub Vec<u8>);
-
 impl Shell {
     pub fn new(abci: AbciReceiver, db_path: impl AsRef<Path>) -> Self {
-        let mut storage = PersistentStorage::new(db_path);
+        let mut storage = storage::open(db_path);
 
         let token_vp = std::fs::read("vps/vp_token/vp.wasm")
             .expect("cannot load token VP");

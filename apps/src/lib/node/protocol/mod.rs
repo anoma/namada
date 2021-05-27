@@ -3,13 +3,12 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+use anoma_shared::protocol::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::types::{Address, Key};
 use prost::Message;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::node::shell::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
-use crate::node::shell::storage;
 use crate::node::shell::storage::PersistentStorage;
 use crate::node::vm;
 use crate::node::vm::host_env::write_log::WriteLog;
@@ -19,7 +18,7 @@ use crate::proto::types::Tx;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    StorageError(storage::Error),
+    StorageError(anoma_shared::protocol::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
     #[error("Transaction runner error: {0}")]

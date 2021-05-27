@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
+use anoma_shared::protocol::storage::{self, Storage, StorageHasher};
 use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::{Address, Key};
 use thiserror::Error;
-
-use crate::node::shell::storage::{self, Storage};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -194,9 +193,13 @@ impl WriteLog {
 
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.
-    pub fn commit_block<DB>(&mut self, storage: &mut Storage<DB>) -> Result<()>
+    pub fn commit_block<DB, H>(
+        &mut self,
+        storage: &mut Storage<DB, H>,
+    ) -> Result<()>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: StorageHasher,
     {
         for (key, entry) in self.block_write_log.iter() {
             match entry {
@@ -277,8 +280,8 @@ mod tests {
 
         // read the deleted key
         let (value, gas) = write_log.read(&key);
-        match value.expect("no read value") {
-            &StorageModification::Delete => {}
+        match &value.expect("no read value") {
+            StorageModification::Delete => {}
             _ => panic!("unexpected result"),
         }
         assert_eq!(gas, key.len() as u64);
@@ -350,7 +353,7 @@ mod tests {
     #[test]
     fn test_commit() {
         let mut storage =
-            crate::node::shell::storage::testing::TestStorage::default();
+            anoma_shared::protocol::storage::testing::TestStorage::default();
         let mut write_log = WriteLog::new();
         let address_gen = EstablishedAddressGen::new("test");
 

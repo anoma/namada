@@ -88,6 +88,7 @@ wasmer-engine-jit = "1.0.2"
 wasmparser = "0.77.0"
 
 [dev-dependencies]
+anoma_shared = {path = "../shared", features = ["testing"]}
 cargo-watch = "7.5.0"
 proptest = "1.0.0"
 tempdir = "0.3.7"

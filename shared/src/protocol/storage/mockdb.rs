@@ -4,17 +4,17 @@ use std::collections::btree_map::Range;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
 
-use anoma_shared::types::address::EstablishedAddressGen;
-use anoma_shared::types::{
+use sparse_merkle_tree::SparseMerkleTree;
+
+use super::{BlockState, DBIter, Error, Result, StorageHasher, DB};
+use crate::protocol::storage::types::{
+    self, KVBytes, MerkleTree, PrefixIterator,
+};
+use crate::types::address::EstablishedAddressGen;
+use crate::types::{
     Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
     RESERVED_VP_KEY,
 };
-use sparse_merkle_tree::SparseMerkleTree;
-
-use super::super::types::{KVBytes, MerkleTree};
-use super::{BlockState, Error, Result, DB};
-use crate::node::shell::storage::types::{self, PrefixIterator};
-use crate::node::shell::storage::DBIter;
 
 #[derive(Debug)]
 pub struct MockDB(BTreeMap<String, Vec<u8>>);
@@ -30,9 +30,9 @@ impl DB for MockDB {
         Ok(())
     }
 
-    fn write_block(
+    fn write_block<H: StorageHasher>(
         &mut self,
-        tree: &MerkleTree,
+        tree: &MerkleTree<H>,
         hash: &BlockHash,
         height: BlockHeight,
         subspaces: &HashMap<Key, Vec<u8>>,
@@ -108,7 +108,9 @@ impl DB for MockDB {
         }
     }
 
-    fn read_last_block(&mut self) -> Result<Option<BlockState>> {
+    fn read_last_block<H: StorageHasher>(
+        &mut self,
+    ) -> Result<Option<BlockState<H>>> {
         let chain_id;
         let height: BlockHeight;
         // Chain ID

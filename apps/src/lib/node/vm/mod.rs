@@ -5,6 +5,8 @@ use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
+use anoma_shared::protocol::gas::{BlockGasMeter, VpGasMeter};
+use anoma_shared::protocol::storage::{self, Storage, StorageHasher};
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
 use parity_wasm::elements;
@@ -16,8 +18,6 @@ use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
-use crate::node::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::node::shell::storage::{self, Storage};
 use crate::types::MatchmakerMessage;
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
@@ -165,9 +165,9 @@ impl TxRunner {
 
     /// Execute a transaction code. Returns verifiers requested by the
     /// transaction.
-    pub fn run<DB>(
+    pub fn run<DB, H>(
         &self,
-        storage: &Storage<DB>,
+        storage: &Storage<DB, H>,
         write_log: &mut WriteLog,
         gas_meter: &mut BlockGasMeter,
         tx_code: Vec<u8>,
@@ -175,11 +175,12 @@ impl TxRunner {
     ) -> Result<HashSet<Address>>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: 'static + StorageHasher,
     {
         validate_untrusted_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
+        let storage: EnvHostWrapper<Storage<DB, H>> = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
@@ -275,13 +276,13 @@ impl VpRunner {
 
     // TODO consider using a wrapper object for all the host env references
     #[allow(clippy::too_many_arguments)]
-    pub fn run<DB>(
+    pub fn run<DB, H>(
         &self,
         vp_code: impl AsRef<[u8]>,
         tx_data: Vec<u8>,
         #[allow(clippy::ptr_arg)] tx_code: &Vec<u8>,
         addr: &Address,
-        storage: &Storage<DB>,
+        storage: &Storage<DB, H>,
         write_log: &WriteLog,
         vp_gas_meter: &mut VpGasMeter,
         keys_changed: Vec<Key>,
@@ -289,11 +290,12 @@ impl VpRunner {
     ) -> Result<bool>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: 'static + StorageHasher,
     {
         validate_untrusted_wasm(vp_code.as_ref())?;
 
         // Read-only access from parallel Vp runners
-        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
+        let storage: EnvHostWrapper<Storage<DB, H>> = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
         // Read-only access from parallel Vp runners
@@ -595,8 +597,9 @@ pub fn validate_untrusted_wasm(wasm_code: impl AsRef<[u8]>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use anoma_shared::protocol::storage::testing::TestStorage;
+
     use super::*;
-    use crate::node::shell::storage::testing::TestStorage;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.

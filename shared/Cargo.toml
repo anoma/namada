@@ -17,7 +17,10 @@ borsh = "0.8.1"
 ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend", "serde"]}
 serde = {version = "1.0.125", features = ["derive"]}
 sha2 = "0.9.3"
+# We switch off "blake2b" because it cannot be compiled to wasm
+sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding", default-features = false, features = ["std", "with_borsh"]}
 thiserror = "1.0.24"
+tracing = "0.1.26"
 
 [dev-dependencies]
 proptest = "1.0.0"

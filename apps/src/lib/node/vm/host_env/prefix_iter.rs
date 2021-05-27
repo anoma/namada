@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::node::shell::storage::DBIter;
+use anoma_shared::protocol::storage;
 
 pub struct PrefixIterators<'iter, DB>
 where
-    DB: DBIter<'iter>,
+    DB: storage::DBIter<'iter>,
 {
     index: PrefixIteratorId,
     iterators: HashMap<PrefixIteratorId, DB::PrefixIter>,
@@ -12,7 +12,7 @@ where
 
 impl<'iter, DB> PrefixIterators<'iter, DB>
 where
-    DB: DBIter<'iter>,
+    DB: storage::DBIter<'iter>,
 {
     pub fn new() -> Self {
         Self::default()
@@ -38,7 +38,7 @@ where
 
 impl<'iter, DB> Default for PrefixIterators<'iter, DB>
 where
-    DB: DBIter<'iter>,
+    DB: storage::DBIter<'iter>,
 {
     fn default() -> Self {
         Self {

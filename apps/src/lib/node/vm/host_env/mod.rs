@@ -4,6 +4,8 @@ pub mod write_log;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
+use anoma_shared::protocol::gas::{BlockGasMeter, VpGasMeter};
+use anoma_shared::protocol::storage::{self, Storage, StorageHasher};
 use anoma_shared::types::internal::HostEnvResult;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
@@ -20,8 +22,6 @@ use self::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use self::write_log::WriteLog;
 use super::memory::WasmMemory;
 use super::{EnvHostWrapper, MutEnvHostWrapper};
-use crate::node::shell::gas::{BlockGasMeter, VpGasMeter};
-use crate::node::shell::storage::{self, Storage};
 use crate::node::vm::memory::VmMemory;
 use crate::proto::types::Tx;
 use crate::types::MatchmakerMessage;
@@ -30,12 +30,13 @@ use crate::wallet;
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
-pub struct TxEnv<DB, MEM>
+pub struct TxEnv<DB, MEM, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
-    storage: EnvHostWrapper<Storage<DB>>,
+    storage: EnvHostWrapper<Storage<DB, H>>,
     // not thread-safe, assuming single-threaded Tx runner
     write_log: MutEnvHostWrapper<WriteLog>,
     // not thread-safe, assuming single-threaded Tx runner
@@ -51,10 +52,11 @@ where
 // implement `DB: Clone` which is required by `WasmerEnv`, but we don't store
 // the `DB` directly here, so we don't need to. Instead, we store the reference
 // to `DB` inside the `EnvHostWrapper` which is safe to clone.
-impl<DB, MEM> Clone for TxEnv<DB, MEM>
+impl<DB, MEM, H> Clone for TxEnv<DB, MEM, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     fn clone(&self) -> Self {
         Self {
@@ -68,9 +70,10 @@ where
     }
 }
 
-impl<DB> WasmerEnv for TxEnv<DB, WasmMemory>
+impl<DB, H> WasmerEnv for TxEnv<DB, WasmMemory, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
 {
     fn init_with_instance(
         &mut self,
@@ -80,10 +83,11 @@ where
     }
 }
 
-pub struct VpEnv<DB, MEM>
+pub struct VpEnv<DB, MEM, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     /// The address of the account that owns the VP
     addr: Address,
@@ -91,7 +95,7 @@ where
     // is no shared access
     iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
     // thread-safe read-only access from parallel Vp runners
-    storage: EnvHostWrapper<Storage<DB>>,
+    storage: EnvHostWrapper<Storage<DB, H>>,
     // thread-safe read-only access from parallel Vp runners
     write_log: EnvHostWrapper<WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
@@ -106,10 +110,11 @@ where
 // implement `DB: Clone` which is required by `WasmerEnv`, but we don't store
 // the `DB` directly here, so we don't need to. Instead, we store the reference
 // to `DB` inside the `EnvHostWrapper` which is safe to clone.
-impl<DB, MEM> Clone for VpEnv<DB, MEM>
+impl<DB, MEM, H> Clone for VpEnv<DB, MEM, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     fn clone(&self) -> Self {
         Self {
@@ -124,9 +129,10 @@ where
     }
 }
 
-impl<DB> WasmerEnv for VpEnv<DB, WasmMemory>
+impl<DB, H> WasmerEnv for VpEnv<DB, WasmMemory, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
 {
     fn init_with_instance(
         &mut self,
@@ -168,9 +174,9 @@ impl WasmerEnv for FilterEnv {
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
-pub fn prepare_tx_imports<DB>(
+pub fn prepare_tx_imports<DB, H>(
     wasm_store: &Store,
-    storage: EnvHostWrapper<Storage<DB>>,
+    storage: EnvHostWrapper<Storage<DB, H>>,
     write_log: MutEnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
     verifiers: MutEnvHostWrapper<HashSet<Address>>,
@@ -179,6 +185,7 @@ pub fn prepare_tx_imports<DB>(
 ) -> ImportObject
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     let env = TxEnv {
         storage,
@@ -237,10 +244,10 @@ where
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
 #[allow(clippy::too_many_arguments)]
-pub fn prepare_vp_imports<DB>(
+pub fn prepare_vp_imports<DB, H>(
     wasm_store: &Store,
     addr: Address,
-    storage: EnvHostWrapper<Storage<DB>>,
+    storage: EnvHostWrapper<Storage<DB, H>>,
     write_log: EnvHostWrapper<WriteLog>,
     iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
     gas_meter: MutEnvHostWrapper<VpGasMeter>,
@@ -249,6 +256,7 @@ pub fn prepare_vp_imports<DB>(
 ) -> ImportObject
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     let env = VpEnv {
         addr,
@@ -356,18 +364,20 @@ pub fn prepare_filter_imports(
 }
 
 /// Called from tx wasm to request to use the given gas amount
-pub fn tx_charge_gas<DB, MEM>(env: &TxEnv<DB, MEM>, used_gas: i32)
+pub fn tx_charge_gas<DB, MEM, H>(env: &TxEnv<DB, MEM, H>, used_gas: i32)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     tx_add_gas(env, used_gas as _)
 }
 
-pub fn tx_add_gas<DB, MEM>(env: &TxEnv<DB, MEM>, used_gas: u64)
+pub fn tx_add_gas<DB, MEM, H>(env: &TxEnv<DB, MEM, H>, used_gas: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     // if we run out of gas, we need to stop the execution
@@ -381,18 +391,20 @@ where
 }
 
 /// Called from VP wasm to request to use the given gas amount
-pub fn vp_charge_gas<DB, MEM>(env: &VpEnv<DB, MEM>, used_gas: i32)
+pub fn vp_charge_gas<DB, MEM, H>(env: &VpEnv<DB, MEM, H>, used_gas: i32)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     vp_add_gas(env, used_gas as _)
 }
 
-pub fn vp_add_gas<DB, MEM>(env: &VpEnv<DB, MEM>, used_gas: u64)
+pub fn vp_add_gas<DB, MEM, H>(env: &VpEnv<DB, MEM, H>, used_gas: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let gas_meter: &mut VpGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     if let Err(err) = gas_meter.add(used_gas) {
@@ -406,14 +418,15 @@ where
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
-pub fn tx_has_key<DB, MEM>(
-    env: &TxEnv<DB, MEM>,
+pub fn tx_has_key<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
     key_ptr: u64,
     key_len: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (key, gas) = env
         .memory
@@ -442,7 +455,7 @@ where
         }
         None => {
             // when not found in write log, try to check the storage
-            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
@@ -456,8 +469,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn tx_read<DB, MEM>(
-    env: &TxEnv<DB, MEM>,
+pub fn tx_read<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
@@ -465,6 +478,7 @@ pub fn tx_read<DB, MEM>(
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (key, gas) = env
         .memory
@@ -514,7 +528,7 @@ where
         }
         None => {
             // when not found in write log, try to read from the storage
-            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
             tx_add_gas(env, gas);
             match value {
@@ -537,14 +551,15 @@ where
 /// Storage prefix iterator function exposed to the wasm VM Tx environment.
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator.
-pub fn tx_iter_prefix<DB, MEM>(
-    env: &TxEnv<DB, MEM>,
+pub fn tx_iter_prefix<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> u64
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: 'static + StorageHasher,
 {
     let (prefix, gas) = env
         .memory
@@ -556,7 +571,7 @@ where
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let iterators: &mut PrefixIterators<DB> =
         unsafe { &mut *(env.iterators.get()) };
     let (iter, gas) = storage.iter_prefix(&prefix);
@@ -570,14 +585,15 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn tx_iter_next<DB, MEM>(
-    env: &TxEnv<DB, MEM>,
+pub fn tx_iter_next<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     tracing::debug!(
         "tx_iter_next iter_id {}, result_ptr {}",
@@ -639,8 +655,8 @@ where
 
 /// Storage write function exposed to the wasm VM Tx environment. The given
 /// key/value will be written to the write log.
-pub fn tx_write<DB, MEM>(
-    env: &TxEnv<DB, MEM>,
+pub fn tx_write<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
     key_ptr: u64,
     key_len: u64,
     val_ptr: u64,
@@ -648,6 +664,7 @@ pub fn tx_write<DB, MEM>(
 ) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (key, gas) = env
         .memory
@@ -666,7 +683,7 @@ pub fn tx_write<DB, MEM>(
 
     // check address existence
     let write_log: &WriteLog = unsafe { &*(env.write_log.get()) };
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     for addr in key.find_addresses() {
         let vp_key = Key::validity_predicate(&addr)
             .expect("Unable to create a validity predicate key");
@@ -697,10 +714,14 @@ pub fn tx_write<DB, MEM>(
 
 /// Storage delete function exposed to the wasm VM Tx environment. The given
 /// key/value will be written as deleted to the write log.
-pub fn tx_delete<DB, MEM>(env: &TxEnv<DB, MEM>, key_ptr: u64, key_len: u64)
-where
+pub fn tx_delete<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
+    key_ptr: u64,
+    key_len: u64,
+) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (key, gas) = env
         .memory
@@ -723,8 +744,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn vp_read_pre<DB, MEM>(
-    env: &VpEnv<DB, MEM>,
+pub fn vp_read_pre<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
@@ -732,6 +753,7 @@ pub fn vp_read_pre<DB, MEM>(
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (key, gas) = env
         .memory
@@ -741,7 +763,7 @@ where
 
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let (value, gas) = storage.read(&key).expect("storage read failed");
     vp_add_gas(env, gas);
     tracing::debug!(
@@ -771,8 +793,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn vp_read_post<DB, MEM>(
-    env: &VpEnv<DB, MEM>,
+pub fn vp_read_post<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
@@ -780,6 +802,7 @@ pub fn vp_read_post<DB, MEM>(
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (key, gas) = env
         .memory
@@ -828,7 +851,7 @@ where
         }
         None => {
             // when not found in write log, try to read from the storage
-            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
             let (value, gas) = storage.read(&key).expect("storage read failed");
             vp_add_gas(env, gas);
             match value {
@@ -850,14 +873,15 @@ where
 
 /// Storage `has_key` in prior state (before tx execution) function exposed to
 /// the wasm VM VP environment. It will try to read from the storage.
-pub fn vp_has_key_pre<DB, MEM>(
-    env: &VpEnv<DB, MEM>,
+pub fn vp_has_key_pre<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
     key_ptr: u64,
     key_len: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (key, gas) = env
         .memory
@@ -869,7 +893,7 @@ where
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
     HostEnvResult::from(present).to_i64()
@@ -878,14 +902,15 @@ where
 /// Storage `has_key` in posterior state (after tx execution) function exposed
 /// to the wasm VM VP environment. It will
 /// try to check the write log first and if no entry found then the storage.
-pub fn vp_has_key_post<DB, MEM>(
-    env: &VpEnv<DB, MEM>,
+pub fn vp_has_key_post<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
     key_ptr: u64,
     key_len: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (key, gas) = env
         .memory
@@ -914,7 +939,7 @@ where
         }
         None => {
             // when not found in write log, try to check the storage
-            let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+            let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
@@ -926,14 +951,15 @@ where
 /// Storage prefix iterator function exposed to the wasm VM VP environment.
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator.
-pub fn vp_iter_prefix<DB, MEM>(
-    env: &VpEnv<DB, MEM>,
+pub fn vp_iter_prefix<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> u64
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: 'static + StorageHasher,
 {
     let (prefix, gas) = env
         .memory
@@ -945,7 +971,7 @@ where
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let iterators: &mut PrefixIterators<DB> =
         unsafe { &mut *(env.iterators.get()) };
     let (iter, gas) = (*storage).iter_prefix(&prefix);
@@ -958,14 +984,15 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn vp_iter_pre_next<DB, MEM>(
-    env: &VpEnv<DB, MEM>,
+pub fn vp_iter_pre_next<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     tracing::debug!(
         "vp_iter_pre_next iter_id {}, result_ptr {}",
@@ -998,14 +1025,15 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn vp_iter_post_next<DB, MEM>(
-    env: &VpEnv<DB, MEM>,
+pub fn vp_iter_post_next<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     tracing::debug!(
         "vp_iter_post_next iter_id {}, result_ptr {}",
@@ -1066,13 +1094,14 @@ where
 }
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
-pub fn tx_insert_verifier<DB, MEM>(
-    env: &TxEnv<DB, MEM>,
+pub fn tx_insert_verifier<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
     addr_ptr: u64,
     addr_len: u64,
 ) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (addr, gas) = env
         .memory
@@ -1091,8 +1120,8 @@ pub fn tx_insert_verifier<DB, MEM>(
 }
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
-pub fn tx_update_validity_predicate<DB, MEM>(
-    env: &TxEnv<DB, MEM>,
+pub fn tx_update_validity_predicate<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
     addr_ptr: u64,
     addr_len: u64,
     code_ptr: u64,
@@ -1100,6 +1129,7 @@ pub fn tx_update_validity_predicate<DB, MEM>(
 ) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (addr, gas) = env
         .memory
@@ -1135,8 +1165,8 @@ pub fn tx_update_validity_predicate<DB, MEM>(
 }
 
 /// Initialize a new account established address.
-pub fn tx_init_account<DB, MEM>(
-    env: &TxEnv<DB, MEM>,
+pub fn tx_init_account<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
     code_ptr: u64,
     code_len: u64,
     result_ptr: u64,
@@ -1144,6 +1174,7 @@ pub fn tx_init_account<DB, MEM>(
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (code, gas) = env
         .memory
@@ -1163,7 +1194,7 @@ where
 
     tracing::debug!("tx_init_account");
 
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let write_log: &mut WriteLog = unsafe { &mut *(env.write_log.get()) };
     let (addr, gas) = write_log.init_account(&storage.address_gen, code);
     let addr_bytes =
@@ -1179,12 +1210,13 @@ where
 }
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
-pub fn tx_get_chain_id<DB, MEM>(env: &TxEnv<DB, MEM>, result_ptr: u64)
+pub fn tx_get_chain_id<DB, MEM, H>(env: &TxEnv<DB, MEM, H>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let (chain_id, gas) = storage.get_chain_id();
     tx_add_gas(env, gas);
     let gas = env
@@ -1197,12 +1229,13 @@ where
 /// Getting the block height function exposed to the wasm VM Tx
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
-pub fn tx_get_block_height<DB, MEM>(env: &TxEnv<DB, MEM>) -> u64
+pub fn tx_get_block_height<DB, MEM, H>(env: &TxEnv<DB, MEM, H>) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let (height, gas) = storage.get_block_height();
     tx_add_gas(env, gas);
     height.0
@@ -1210,12 +1243,13 @@ where
 
 /// Getting the block hash function exposed to the wasm VM Tx environment. The
 /// hash is that of the block to which the current transaction is being applied.
-pub fn tx_get_block_hash<DB, MEM>(env: &TxEnv<DB, MEM>, result_ptr: u64)
+pub fn tx_get_block_hash<DB, MEM, H>(env: &TxEnv<DB, MEM, H>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let (hash, gas) = storage.get_block_hash();
     tx_add_gas(env, gas);
     let gas = env
@@ -1226,12 +1260,13 @@ where
 }
 
 /// Getting the chain ID function exposed to the wasm VM VP environment.
-pub fn vp_get_chain_id<DB, MEM>(env: &VpEnv<DB, MEM>, result_ptr: u64)
+pub fn vp_get_chain_id<DB, MEM, H>(env: &VpEnv<DB, MEM, H>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let (chain_id, gas) = storage.get_chain_id();
     vp_add_gas(env, gas);
     let gas = env
@@ -1244,12 +1279,13 @@ where
 /// Getting the block height function exposed to the wasm VM VP
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
-pub fn vp_get_block_height<DB, MEM>(env: &VpEnv<DB, MEM>) -> u64
+pub fn vp_get_block_height<DB, MEM, H>(env: &VpEnv<DB, MEM, H>) -> u64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let (height, gas) = storage.get_block_height();
     vp_add_gas(env, gas);
     height.0
@@ -1257,12 +1293,13 @@ where
 
 /// Getting the block hash function exposed to the wasm VM VP environment. The
 /// hash is that of the block to which the current transaction is being applied.
-pub fn vp_get_block_hash<DB, MEM>(env: &VpEnv<DB, MEM>, result_ptr: u64)
+pub fn vp_get_block_hash<DB, MEM, H>(env: &VpEnv<DB, MEM, H>, result_ptr: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
-    let storage: &Storage<DB> = unsafe { &*(env.storage.get()) };
+    let storage: &Storage<DB, H> = unsafe { &*(env.storage.get()) };
     let (hash, gas) = storage.get_block_hash();
     vp_add_gas(env, gas);
     let gas = env
@@ -1272,8 +1309,8 @@ where
     vp_add_gas(env, gas);
 }
 
-pub fn vp_verify_tx_signature<DB, MEM>(
-    env: &VpEnv<DB, MEM>,
+pub fn vp_verify_tx_signature<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
     pk_ptr: u64,
     pk_len: u64,
     data_ptr: u64,
@@ -1284,6 +1321,7 @@ pub fn vp_verify_tx_signature<DB, MEM>(
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (pk, gas) = env
         .memory
@@ -1321,10 +1359,14 @@ where
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
 /// printed at the [`tracing::Level::Info`]. This function is for development
 /// only.
-pub fn tx_log_string<DB, MEM>(env: &TxEnv<DB, MEM>, str_ptr: u64, str_len: u64)
-where
+pub fn tx_log_string<DB, MEM, H>(
+    env: &TxEnv<DB, MEM, H>,
+    str_ptr: u64,
+    str_len: u64,
+) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (str, _gas) = env
         .memory
@@ -1337,10 +1379,14 @@ where
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`tracing::Level::Info`]. This function is for development
 /// only.
-pub fn vp_log_string<DB, MEM>(env: &VpEnv<DB, MEM>, str_ptr: u64, str_len: u64)
-where
+pub fn vp_log_string<DB, MEM, H>(
+    env: &VpEnv<DB, MEM, H>,
+    str_ptr: u64,
+    str_len: u64,
+) where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     MEM: VmMemory,
+    H: StorageHasher,
 {
     let (str, _gas) = env
         .memory
@@ -1429,21 +1475,23 @@ fn update_data(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
 pub mod testing {
     use core::ffi::c_void;
 
+    use anoma_shared::protocol::storage::{self, StorageHasher};
+
     use super::*;
-    use crate::node::shell::storage;
     use crate::node::vm::memory::testing::NativeMemory;
 
-    pub fn tx_env<DB>(
-        storage: &Storage<DB>,
+    pub fn tx_env<DB, H>(
+        storage: &Storage<DB, H>,
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
-    ) -> TxEnv<DB, NativeMemory>
+    ) -> TxEnv<DB, NativeMemory, H>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: StorageHasher,
     {
-        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
+        let storage: EnvHostWrapper<Storage<DB, H>> = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
         let write_log = unsafe {
@@ -1468,18 +1516,19 @@ pub mod testing {
         }
     }
 
-    pub fn vp_env<DB>(
+    pub fn vp_env<DB, H>(
         addr: Address,
-        storage: &Storage<DB>,
+        storage: &Storage<DB, H>,
         write_log: &WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut BlockGasMeter,
         #[allow(clippy::ptr_arg)] tx_code: &Vec<u8>,
-    ) -> VpEnv<DB, NativeMemory>
+    ) -> VpEnv<DB, NativeMemory, H>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: StorageHasher,
     {
-        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
+        let storage: EnvHostWrapper<Storage<DB, H>> = unsafe {
             EnvHostWrapper::new(storage as *const _ as *const c_void)
         };
         let write_log = unsafe {

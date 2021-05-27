@@ -22,6 +22,8 @@ const PARALLEL_GAS_MULTIPLER: f64 = 0.1;
 const BLOCK_GAS_LIMIT: u64 = 10_000_000_000_000;
 const TRANSACTION_GAS_LIMIT: u64 = 10_000_000_000;
 
+pub const MIN_STORAGE_GAS: u64 = 1;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]

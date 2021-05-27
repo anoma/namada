@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 
-use anoma::node::shell::gas::BlockGasMeter;
-use anoma::node::shell::storage::db::mock::MockDB;
-use anoma::node::shell::storage::testing::TestStorage;
 use anoma::node::vm::host_env::prefix_iter::PrefixIterators;
 use anoma::node::vm::host_env::testing;
 use anoma::node::vm::host_env::write_log::WriteLog;
 use anoma::node::vm::memory::testing::NativeMemory;
+use anoma_shared::protocol::gas::BlockGasMeter;
+use anoma_shared::protocol::storage::mockdb::MockDB;
+use anoma_shared::protocol::storage::testing::TestStorage;
 use anoma_shared::types::{Address, Key};
 
 /// This module combines the native host function implementations from
@@ -73,13 +73,14 @@ mod native_tx_host_env {
     use std::cell::RefCell;
 
     use anoma::node::vm::host_env::*;
+    use anoma_shared::protocol::storage::testing::Sha256Hasher;
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
 
     use super::*;
 
     thread_local! {
-        pub static ENV: RefCell<Option<TxEnv<MockDB, NativeMemory>>> = RefCell::new(None);
+        pub static ENV: RefCell<Option<TxEnv<MockDB, NativeMemory, Sha256Hasher>>> = RefCell::new(None);
     }
 
     /// A helper macro to create implementations of the host environment
