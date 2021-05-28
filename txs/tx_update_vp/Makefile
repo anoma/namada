@@ -1,9 +1,10 @@
 cargo = $(env) cargo
 rustup = $(env) rustup
+wasm = tx.wasm
 
 build-release:
 	$(cargo) build --release && \
-	cp "./target/wasm32-unknown-unknown/release/tx_update_vp.wasm" tx.wasm
+	cp "./target/wasm32-unknown-unknown/release/tx_update_vp.wasm" $(wasm)
 
 build:
 	$(cargo) build
@@ -18,7 +19,7 @@ watch:
 	$(cargo) watch
 
 clean:
-	$(cargo) clean
+	$(cargo) clean && if [ -e $(wasm) ]; then rm $(wasm); fi
 
 deps:
 	$(rustup) target add wasm32-unknown-unknown
