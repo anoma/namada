@@ -74,7 +74,7 @@ Serde is Rust native framework with great ergonomics. It supports many [differen
 
 Built on top of serde. Easy to use.
 
-## Borsch
+## Borsh
 
 <https://github.com/near/borsh-rs>
 
