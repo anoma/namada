@@ -45,7 +45,7 @@ reset-ledger:
 	$(cargo) run --bin anoman -- reset-ledger
 
 audit:
-	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
+	$(cargo) audit --deny warnings $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
 test:
 	$(cargo) test
