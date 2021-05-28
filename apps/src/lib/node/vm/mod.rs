@@ -4,6 +4,7 @@ mod memory;
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
+use std::slice;
 
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm_memory::{TxInput, VpInput};
@@ -16,6 +17,7 @@ use wasmparser::{Validator, WasmFeatures};
 
 use self::host_env::prefix_iter::PrefixIterators;
 use self::host_env::write_log::WriteLog;
+use self::host_env::VpEnv;
 use crate::node::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::node::shell::storage::{self, Storage};
 use crate::types::MatchmakerMessage;
@@ -31,27 +33,26 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 /// reference, so the access is thread-safe, but because of the unsafe
 /// reference conversion, care must be taken that while this reference is
 /// borrowed, no other process can modify it.
-pub struct EnvHostWrapper<T>(*const c_void, PhantomData<T>);
-unsafe impl<T> Send for EnvHostWrapper<T> {}
-unsafe impl<T> Sync for EnvHostWrapper<T> {}
-
-// Have to manually implement [`Clone`], because the derived [`Clone`] for
-// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
-impl<T> Clone for EnvHostWrapper<T> {
-    fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
-    }
+#[derive(Clone)]
+pub struct EnvHostWrapper<'a, T: 'a> {
+    data: *const c_void,
+    phantom: PhantomData<&'a T>,
 }
+unsafe impl<T> Send for EnvHostWrapper<'_, T> {}
+unsafe impl<T> Sync for EnvHostWrapper<'_, T> {}
 
-impl<T> EnvHostWrapper<T> {
+impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
     /// Wrap a reference for VM environment.
     ///
     /// # Safety
     ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
-    unsafe fn new(host_structure: *const c_void) -> Self {
-        Self(host_structure, PhantomData)
+    unsafe fn new(host_structure: &T) -> Self {
+        Self {
+            data: host_structure as *const T as *const c_void,
+            phantom: PhantomData,
+        }
     }
 
     /// Get a reference from VM environment.
@@ -60,9 +61,48 @@ impl<T> EnvHostWrapper<T> {
     ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
-    #[allow(dead_code)]
-    pub unsafe fn get(&self) -> *const T {
-        self.0 as *const T
+    unsafe fn get(&self) -> &'a T {
+        &*(self.data as *const T)
+    }
+}
+
+/// This is used to attach the Ledger's host structures to wasm environment,
+/// which is used for implementing some host calls. It wraps an immutable
+/// slice, so the access is thread-safe, but because of the unsafe slice
+/// conversion, care must be taken that while this slice is borrowed, no other
+/// process can modify it.
+#[derive(Clone)]
+pub struct EnvHostSliceWrapper<'a, T: 'a> {
+    data: *const c_void,
+    len: usize,
+    phantom: PhantomData<&'a T>,
+}
+unsafe impl<T> Send for EnvHostSliceWrapper<'_, T> {}
+unsafe impl<T> Sync for EnvHostSliceWrapper<'_, T> {}
+
+impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
+    /// Wrap a slice for VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    unsafe fn new(host_structure: &[T]) -> Self {
+        Self {
+            data: host_structure as *const [T] as *const c_void,
+            len: host_structure.len(),
+            phantom: PhantomData,
+        }
+    }
+
+    /// Get a slice from VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    pub unsafe fn get(&self) -> &'a [T] {
+        slice::from_raw_parts(self.data as *const T, self.len)
     }
 }
 
@@ -70,20 +110,15 @@ impl<T> EnvHostWrapper<T> {
 /// which is used for implementing some host calls. Because it's mutable, it's
 /// not thread-safe. Also, care must be taken that while this reference is
 /// borrowed, no other process can read or modify it.
-pub struct MutEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
-unsafe impl<T> Send for MutEnvHostWrapper<T> {}
-unsafe impl<T> Sync for MutEnvHostWrapper<T> {}
-
-// Same as for [`EnvHostWrapper`], we have to manually implement [`Clone`],
-// because the derived [`Clone`] for [`PhantomData<T>`] puts the bound on [`T:
-// Clone`].
-impl<T> Clone for MutEnvHostWrapper<T> {
-    fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
-    }
+#[derive(Clone)]
+pub struct MutEnvHostWrapper<'a, T: 'a> {
+    data: *mut c_void,
+    phantom: PhantomData<&'a T>,
 }
+unsafe impl<T> Send for MutEnvHostWrapper<'_, T> {}
+unsafe impl<T> Sync for MutEnvHostWrapper<'_, T> {}
 
-impl<T> MutEnvHostWrapper<T> {
+impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
     /// Wrap a mutable reference for VM environment.
     ///
     /// # Safety
@@ -91,8 +126,11 @@ impl<T> MutEnvHostWrapper<T> {
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
-    unsafe fn new(host_structure: *mut c_void) -> Self {
-        Self(host_structure, PhantomData)
+    unsafe fn new(host_structure: &mut T) -> Self {
+        Self {
+            data: host_structure as *mut T as *mut c_void,
+            phantom: PhantomData,
+        }
     }
 
     /// Get a mutable reference from VM environment.
@@ -102,8 +140,49 @@ impl<T> MutEnvHostWrapper<T> {
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
-    pub unsafe fn get(&self) -> *mut T {
-        self.0 as *mut T
+    unsafe fn get(&self) -> &'a mut T {
+        &mut *(self.data as *mut T)
+    }
+}
+
+/// This is used to attach the Ledger's host structures to wasm environment,
+/// which is used for implementing some host calls. It wraps an mutable
+/// slice, so the access is thread-safe, but because of the unsafe slice
+/// conversion, care must be taken that while this slice is borrowed, no other
+/// process can modify it.
+#[derive(Clone)]
+pub struct MutEnvHostSliceWrapper<'a, T: 'a> {
+    data: *mut c_void,
+    len: usize,
+    phantom: PhantomData<&'a T>,
+}
+unsafe impl<T> Send for MutEnvHostSliceWrapper<'_, T> {}
+unsafe impl<T> Sync for MutEnvHostSliceWrapper<'_, T> {}
+
+impl<'a, T: 'a> MutEnvHostSliceWrapper<'a, &[T]> {
+    /// Wrap a slice for VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    #[allow(dead_code)]
+    unsafe fn new(host_structure: &mut [T]) -> Self {
+        Self {
+            data: host_structure as *mut [T] as *mut c_void,
+            len: host_structure.len(),
+            phantom: PhantomData,
+        }
+    }
+
+    /// Get a slice from VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    pub unsafe fn get(&self) -> &'a mut [T] {
+        slice::from_raw_parts_mut(self.data as *mut T, self.len)
     }
 }
 
@@ -179,31 +258,22 @@ impl TxRunner {
         validate_untrusted_wasm(&tx_code)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
-            EnvHostWrapper::new(storage as *const _ as *const c_void)
-        };
+        let storage: EnvHostWrapper<'_, &Storage<DB>> =
+            unsafe { EnvHostWrapper::new(storage) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let write_log = unsafe {
-            MutEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
-        };
+        let write_log = unsafe { MutEnvHostWrapper::new(write_log) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
-        let iterators = unsafe {
-            MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
-        };
+        let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
         let mut verifiers = HashSet::new();
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let env_verifiers = unsafe {
-            MutEnvHostWrapper::new(&mut verifiers as *mut _ as *mut c_void)
-        };
+        let env_verifiers = unsafe { MutEnvHostWrapper::new(&mut verifiers) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let gas_meter = unsafe {
-            MutEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
-        };
+        let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
 
         let tx_code = prepare_wasm_code(&tx_code)?;
 
@@ -268,6 +338,7 @@ impl VpRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        // TODO: Maybe refactor wasm_store: not necessary to do in two steps
         let wasm_store =
             wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
         Self { wasm_store }
@@ -278,14 +349,14 @@ impl VpRunner {
     pub fn run<DB>(
         &self,
         vp_code: impl AsRef<[u8]>,
-        tx_data: Vec<u8>,
-        #[allow(clippy::ptr_arg)] tx_code: &Vec<u8>,
+        tx_data: impl AsRef<[u8]>,
+        tx_code: impl AsRef<[u8]>,
         addr: &Address,
         storage: &Storage<DB>,
         write_log: &WriteLog,
         vp_gas_meter: &mut VpGasMeter,
-        keys_changed: Vec<Key>,
-        verifiers: HashSet<Address>,
+        storage_keys: &[Key],
+        verifiers: &HashSet<Address>,
     ) -> Result<bool>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -293,28 +364,24 @@ impl VpRunner {
         validate_untrusted_wasm(vp_code.as_ref())?;
 
         // Read-only access from parallel Vp runners
-        let storage: EnvHostWrapper<Storage<DB>> = unsafe {
-            EnvHostWrapper::new(storage as *const _ as *const c_void)
-        };
+        let storage: EnvHostWrapper<&Storage<DB>> =
+            unsafe { EnvHostWrapper::new(storage) };
         // Read-only access from parallel Vp runners
-        let write_log = unsafe {
-            EnvHostWrapper::new(write_log as *const _ as *const c_void)
-        };
+        let write_log = unsafe { EnvHostWrapper::new(write_log) };
         // Read-only access from parallel Vp runners
-        let tx_code = unsafe {
-            EnvHostWrapper::new(tx_code as *const _ as *const c_void)
-        };
+        let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code.as_ref()) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
-        let iterators = unsafe {
-            MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
-        };
+        let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
-        let gas_meter = unsafe {
-            MutEnvHostWrapper::new(vp_gas_meter as *mut _ as *mut c_void)
-        };
+        let gas_meter = unsafe { MutEnvHostWrapper::new(vp_gas_meter) };
+        // Read-only access from parallel Vp runners
+        let env_storage_keys =
+            unsafe { EnvHostSliceWrapper::new(storage_keys) };
+        // Read-only access from parallel Vp runners
+        let env_verifiers = unsafe { EnvHostWrapper::new(verifiers) };
 
         let vp_code = prepare_wasm_code(vp_code)?;
 
@@ -322,8 +389,13 @@ impl VpRunner {
             .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let input: VpInput = (addr.clone(), tx_data, keys_changed, verifiers);
-        let vp_imports = host_env::prepare_vp_imports(
+        let input: VpInput = VpInput {
+            addr: &addr,
+            data: tx_data.as_ref(),
+            keys_changed: storage_keys,
+            verifiers,
+        };
+        let vp_imports = host_env::prepare_vp_env(
             &self.wasm_store,
             addr.clone(),
             storage,
@@ -332,12 +404,51 @@ impl VpRunner {
             gas_meter,
             tx_code,
             initial_memory,
+            env_storage_keys,
+            env_verifiers,
         );
 
         // compile and run the transaction wasm code
-        let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
+        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::InstantiationError)?;
-        VpRunner::run_with_input(vp_code, input)
+        VpRunner::run_with_input(vp_instance, input)
+    }
+
+    fn run_eval<DB>(
+        &self,
+        // we read the validity predicate from wasm memory as bytes
+        vp_code: Vec<u8>,
+        input_data: &[u8],
+        vp_env: VpEnv<'static, DB>,
+    ) -> Result<bool>
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    {
+        let vp_code = prepare_wasm_code(&vp_code)?;
+        let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
+            .map_err(Error::CompileError)?;
+        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
+            .map_err(Error::MemoryError)?;
+
+        let keys_changed = unsafe { &*(vp_env.keys_changed.get()) };
+        let verifiers = unsafe { &*(vp_env.verifiers.get()) };
+        let input: VpInput = VpInput {
+            addr: &vp_env.addr,
+            data: input_data,
+            keys_changed,
+            verifiers,
+        };
+
+        let vp_imports = host_env::prepare_vp_imports(
+            &self.wasm_store,
+            initial_memory,
+            &vp_env,
+        );
+
+        // compile and run the transaction wasm code
+        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
+            .map_err(Error::InstantiationError)?;
+        VpRunner::run_with_input(vp_instance, input)
     }
 
     fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
@@ -350,8 +461,8 @@ impl VpRunner {
         let memory::VpCallInput {
             addr_ptr,
             addr_len,
-            tx_data_ptr,
-            tx_data_len,
+            data_ptr,
+            data_len,
             keys_changed_ptr,
             keys_changed_len,
             verifiers_ptr,
@@ -373,8 +484,8 @@ impl VpRunner {
             .call(
                 addr_ptr,
                 addr_len,
-                tx_data_ptr,
-                tx_data_len,
+                data_ptr,
+                data_len,
                 keys_changed_ptr,
                 keys_changed_len,
                 verifiers_ptr,
@@ -721,8 +832,8 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                keys_changed,
-                verifiers,
+                &keys_changed[..],
+                &verifiers,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \
