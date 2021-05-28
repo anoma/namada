@@ -6,7 +6,7 @@ PROFILE=$1
 DRONE_URL=${2:-ci.heliax.dev}
 
 if [ $# -eq 0 ]; then
-    echo "No arguments provided. AWS Profile and Drone url needed."
+    echo "No arguments provided. AWS Profile is mandatory."
     exit 1
 fi
 
