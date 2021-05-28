@@ -225,9 +225,6 @@ pub mod tx {
 }
 
 /// Validity predicate environment imports
-/// TODO: Add C interface for calling the host env
-/// Transactions are not limited to smart contracts?
-/// We don't have smart contracts
 pub mod vp {
     pub use core::slice;
     use std::convert::TryFrom;
@@ -436,6 +433,9 @@ pub mod vp {
         }
     }
 
+    /// Evaluate a validity predicate with given data. The address, changed
+    /// storage keys and verifiers will have the same values as the input to
+    /// caller's validity predicate.
     pub fn eval(vp_code: Vec<u8>, input_data: Vec<u8>) -> bool {
         let result = unsafe {
             anoma_eval(
