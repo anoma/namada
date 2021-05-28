@@ -7,7 +7,7 @@
 
 [Anoma](https://anoma.network/) is a sovereign, proof-of-stake blockchain protocol that enables private, asset-agnostic cash and private bartering among any number of parties.
 
-This is an implementation of the [Anoma](https://anoma.network/papers/whitepaper.pdf) ledger in Rust.
+This is an implementation of the Anoma ledger in Rust.
 
 ## Warning
 
