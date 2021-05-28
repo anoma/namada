@@ -1,7 +1,8 @@
 [package]
-authors = ["Heliax <TODO@heliax.dev>"]
+authors = ["Heliax AG <hello@heliax.dev>"]
 description = "Anoma apps"
 edition = "2018"
+license = "GPL-3.0"
 name = "Anoma"
 readme = "../README.md"
 version = "0.1.0"
@@ -91,5 +92,4 @@ tempdir = "0.3.7"
 wasmer-vm = "1.0.2"
 
 [build-dependencies]
-rustc_version = "0.3.3"
 tonic-build = "0.4.0"

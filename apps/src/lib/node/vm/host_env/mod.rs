@@ -4,6 +4,7 @@ pub mod write_log;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
+use anoma_shared::types::internal::HostEnvResult;
 use anoma_shared::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
@@ -198,19 +199,43 @@ where
             // These functions must still be compatible with the wasm interface
             // They must match exactly the C fn, except we prepend the env arg
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_charge_gas),
-            "_read" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_read),
-            "_has_key" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_has_key),
-            "_write" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_write),
-            "_delete" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_delete),
-            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_prefix),
-            "_iter_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_storage_iter_next),
-            "_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_insert_verifier),
-            "_update_validity_predicate" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_update_validity_predicate),
-            "_init_account" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_init_account),
-            "_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_get_chain_id),
-            "_get_block_height" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_get_block_height),
-            "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), tx_get_block_hash),
-            "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
+            "anoma_read" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                  env.clone(),
+                                                                  tx_storage_read),
+            "anoma_has_key" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                     env.clone(),
+                                                                     tx_storage_has_key),
+            "anoma_write" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                   env.clone(),
+                                                                   tx_storage_write),
+            "anoma_delete" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                    env.clone(),
+                                                                    tx_storage_delete),
+            "anoma_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                         env.clone(),
+                                                                         tx_storage_iter_prefix),
+            "anoma_iter_next" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                       env.clone(),
+                                                                       tx_storage_iter_next),
+            "anoma_insert_verifier" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                             env.clone(),
+                                                                             tx_insert_verifier),
+            "anoma_update_validity_predicate" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                                       env.clone(),
+                                                                                       tx_update_validity_predicate),
+            "anoma_init_account" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                          env.clone(),
+                                                                          tx_init_account),
+            "anoma_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                          env.clone(),
+                                                                          tx_get_chain_id),
+            "anoma_get_block_height" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                              env.clone(),
+                                                                              tx_get_block_height),
+            "anoma_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                            env.clone(),
+                                                                            tx_get_block_hash),
+            "anoma_log_string" => wasmer::Function::new_native_with_env(wasm_store, env, tx_log_string),
         },
     }
 }
@@ -262,19 +287,41 @@ where
             "memory" => initial_memory,
             // Each function takes ownership of the environment (wrappers around references, cheap to clone), so we need to clone it
             "gas" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_charge_gas),
-            "_read_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_pre),
-            "_read_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_read_post),
-            "_has_key_pre" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_pre),
-            "_has_key_post" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_has_key_post),
-            "_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_prefix),
-            "_iter_pre_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_pre_next),
-            "_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_storage_iter_post_next),
-            "_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_chain_id),
-            "_get_block_height" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_height),
-            "_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_get_block_hash),
-            "_verify_tx_signature" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_verify_tx_signature),
-            "_log_string" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_log_string),
-            "_eval" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_eval),
+            "anoma_read_pre" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                      env.clone(),
+                                                                      vp_storage_read_pre),
+            "anoma_read_post" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                       env.clone(),
+                                                                       vp_storage_read_post),
+            "anoma_has_key_pre" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                         env.clone(),
+                                                                         vp_storage_has_key_pre),
+            "anoma_has_key_post" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                          env.clone(),
+                                                                          vp_storage_has_key_post),
+            "anoma_iter_prefix" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                         env.clone(),
+                                                                         vp_storage_iter_prefix),
+            "anoma_iter_pre_next" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                           env.clone(),
+                                                                           vp_storage_iter_pre_next),
+            "anoma_iter_post_next" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                            env.clone(),
+                                                                            vp_storage_iter_post_next),
+            "anoma_get_chain_id" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                          env.clone(),
+                                                                          vp_get_chain_id),
+            "anoma_get_block_height" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                              env.clone(),
+                                                                              vp_get_block_height),
+            "anoma_get_block_hash" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                            env.clone(),
+                                                                            vp_get_block_hash),
+            "anoma_verify_tx_signature" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                                 env.clone(),
+                                                                                 vp_verify_tx_signature),
+            "anoma_log_string" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_log_string),
+            "anoma_eval" => wasmer::Function::new_native_with_env(wasm_store, env.clone(), vp_eval),
         },
     }
 }
@@ -295,18 +342,18 @@ pub fn prepare_matchmaker_imports(
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            "_send_match" => wasmer::Function::new_native_with_env(wasm_store,
-                                                                  env.clone(),
-                                                                   send_match),
-            "_update_data" => wasmer::Function::new_native_with_env(wasm_store,
-                                                                    env.clone(),
-                                                                    update_data),
-            "_remove_intents" => wasmer::Function::new_native_with_env(wasm_store,
-                                                                       env.clone(),
-                                                                       remove_intents),
-            "_log_string" => wasmer::Function::new_native_with_env(wasm_store,
-                                                                  env,
-                                                                   matchmaker_log_string),
+            "anoma_send_match" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                        env.clone(),
+                                                                        send_match),
+            "anoma_update_data" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                         env.clone(),
+                                                                         update_data),
+            "anoma_remove_intents" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                            env.clone(),
+                                                                            remove_intents),
+            "anoma_log_string" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                        env,
+                                                                        matchmaker_log_string),
         },
     }
 }
@@ -324,9 +371,9 @@ pub fn prepare_filter_imports(
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            "_log_string" => wasmer::Function::new_native_with_env(wasm_store,
-                                                                  env,
-                                                                   filter_log_string),
+            "anoma_log_string" => wasmer::Function::new_native_with_env(wasm_store,
+                                                                        env,
+                                                                        filter_log_string),
         },
     }
 }
@@ -378,7 +425,7 @@ where
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
-fn tx_storage_has_key<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> u64
+fn tx_storage_has_key<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -397,19 +444,23 @@ where
     let (log_val, gas) = write_log.read(&key);
     tx_add_gas(env, gas);
     match log_val {
-        Some(&write_log::StorageModification::Write { .. }) => 1,
+        Some(&write_log::StorageModification::Write { .. }) => {
+            HostEnvResult::Success.to_i64()
+        }
         Some(&write_log::StorageModification::Delete) => {
             // the given key has been deleted
-            0
+            HostEnvResult::Fail.to_i64()
         }
-        Some(&write_log::StorageModification::InitAccount { .. }) => 1,
+        Some(&write_log::StorageModification::InitAccount { .. }) => {
+            HostEnvResult::Success.to_i64()
+        }
         None => {
             // when not found in write log, try to check the storage
             let storage: &Storage<DB> = unsafe { env.storage.get() };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
-            if present { 1 } else { 0 }
+            HostEnvResult::from(present).to_i64()
         }
     }
 }
@@ -460,7 +511,7 @@ where
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            -1
+            HostEnvResult::Fail.to_i64()
         }
         Some(&write_log::StorageModification::InitAccount {
             ref vp, ..
@@ -490,10 +541,7 @@ where
                     tx_add_gas(env, gas);
                     len
                 }
-                None => {
-                    // fail, key not found
-                    -1
-                }
+                None => HostEnvResult::Fail.to_i64(),
             }
         }
     }
@@ -597,8 +645,7 @@ where
             }
         }
     }
-    // key not found
-    -1
+    HostEnvResult::Fail.to_i64()
 }
 
 /// Storage write function exposed to the wasm VM Tx environment. The given
@@ -660,7 +707,7 @@ fn tx_storage_write<DB>(
 
 /// Storage delete function exposed to the wasm VM Tx environment. The given
 /// key/value will be written as deleted to the write log.
-fn tx_storage_delete<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64) -> u64
+fn tx_storage_delete<DB>(env: &TxEnv<DB>, key_ptr: u64, key_len: u64)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -678,8 +725,6 @@ where
     let (gas, _size_diff) = write_log.delete(&key);
     tx_add_gas(env, gas);
     // TODO: charge the size diff
-
-    1
 }
 
 /// Storage read prior state (before tx execution) function exposed to the wasm
@@ -724,10 +769,7 @@ where
             vp_add_gas(env, gas);
             len
         }
-        None => {
-            // fail, key not found
-            -1
-        }
+        None => HostEnvResult::Fail.to_i64(),
     }
 }
 
@@ -777,7 +819,7 @@ where
         }
         Some(&write_log::StorageModification::Delete) => {
             // fail, given key has been deleted
-            -1
+            HostEnvResult::Fail.to_i64()
         }
         Some(&write_log::StorageModification::InitAccount {
             ref vp, ..
@@ -807,10 +849,7 @@ where
                     vp_add_gas(env, gas);
                     len
                 }
-                None => {
-                    // fail, key not found
-                    -1
-                }
+                None => HostEnvResult::Fail.to_i64(),
             }
         }
     }
@@ -822,7 +861,7 @@ fn vp_storage_has_key_pre<'a, DB>(
     env: &VpEnv<'a, DB>,
     key_ptr: u64,
     key_len: u64,
-) -> u64
+) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -839,7 +878,7 @@ where
     let storage: &Storage<DB> = unsafe { env.storage.get() };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
-    if present { 1 } else { 0 }
+    HostEnvResult::from(present).to_i64()
 }
 
 /// Storage `has_key` in posterior state (after tx execution) function exposed
@@ -849,7 +888,7 @@ fn vp_storage_has_key_post<'a, DB>(
     env: &VpEnv<'a, DB>,
     key_ptr: u64,
     key_len: u64,
-) -> u64
+) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -868,19 +907,23 @@ where
     let (log_val, gas) = write_log.read(&key);
     vp_add_gas(env, gas);
     match log_val {
-        Some(&write_log::StorageModification::Write { .. }) => 1,
+        Some(&write_log::StorageModification::Write { .. }) => {
+            HostEnvResult::Success.to_i64()
+        }
         Some(&write_log::StorageModification::Delete) => {
             // the given key has been deleted
-            0
+            HostEnvResult::Fail.to_i64()
         }
-        Some(&write_log::StorageModification::InitAccount { .. }) => 1,
+        Some(&write_log::StorageModification::InitAccount { .. }) => {
+            HostEnvResult::Success.to_i64()
+        }
         None => {
             // when not found in write log, try to check the storage
             let storage: &Storage<DB> = unsafe { env.storage.get() };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
-            if present { 1 } else { 0 }
+            HostEnvResult::from(present).to_i64()
         }
     }
 }
@@ -949,8 +992,7 @@ where
         vp_add_gas(env, gas);
         return len;
     }
-    // key not found
-    -1
+    HostEnvResult::Fail.to_i64()
 }
 
 /// Storage prefix iterator next for posterior state (after tx execution)
@@ -1022,8 +1064,7 @@ where
             }
         }
     }
-    // key not found
-    -1
+    HostEnvResult::Fail.to_i64()
 }
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
@@ -1229,7 +1270,7 @@ fn vp_verify_tx_signature<'a, DB>(
     data_len: u64,
     sig_ptr: u64,
     sig_len: u64,
-) -> u64
+) -> i64
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -1260,11 +1301,10 @@ where
     let signature_data = [&data[..], tx_code].concat();
 
     vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
-    if verify_signature_raw(&pk, &signature_data, &sig).is_ok() {
-        1
-    } else {
-        0
-    }
+    HostEnvResult::from(
+        verify_signature_raw(&pk, &signature_data, &sig).is_ok(),
+    )
+    .to_i64()
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
@@ -1305,7 +1345,7 @@ fn vp_eval<DB>(
     input_data_len: u64,
 ) -> u64
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>, 
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
 {
     let (vp_code, gas) = env
         .memory

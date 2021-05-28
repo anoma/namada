@@ -13,6 +13,7 @@ use crate::types::key::ed25519::{Keypair, SignedTxData};
 
 pub mod address;
 pub mod intent;
+pub mod internal;
 pub mod key;
 pub mod token;
 
