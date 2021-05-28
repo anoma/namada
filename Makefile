@@ -9,6 +9,13 @@ debug-cargo = $(env) $(debug-env) cargo
 # NOTE On change also update `RUSTFMT_TOOLCHAIN` in `apps/build.rs`.
 nightly = nightly-2021-03-09
 
+# Transitive dependency of wasmer. It's safe to ignore as we don't use cranelift compiler. It should disseaper once the wasmer library updates its dependencies
+audit-ignores := RUSTSEC-2021-0067
+# Transitive dependency warning from tendermint-rpc
+audit-ignores += RUSTSEC-2021-0064
+# Transitive dependency warning from tendermint-rpc
+audit-ignores += RUSTSEC-2020-0016
+
 build:
 	$(cargo) build
 
@@ -38,7 +45,7 @@ reset-ledger:
 	$(cargo) run --bin anoman -- reset-ledger
 
 audit:
-	$(cargo) audit
+	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
 test:
 	$(cargo) test
