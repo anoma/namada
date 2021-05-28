@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use anoma_shared::protocol::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
+use anoma_shared::protocol::vm::write_log::WriteLog;
 use anoma_shared::types::{Address, Key};
 use prost::Message;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -11,7 +12,6 @@ use thiserror::Error;
 
 use crate::node::shell::storage::PersistentStorage;
 use crate::node::vm;
-use crate::node::vm::host_env::write_log::WriteLog;
 use crate::node::vm::{TxRunner, VpRunner};
 use crate::proto::types::Tx;
 

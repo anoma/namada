@@ -22,6 +22,7 @@ sha2 = "0.9.3"
 sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding", default-features = false, features = ["std", "with_borsh"]}
 thiserror = "1.0.24"
 tracing = "0.1.26"
+wasmparser = "0.78.2"
 
 [dev-dependencies]
 proptest = "1.0.0"

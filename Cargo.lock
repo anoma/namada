@@ -120,7 +120,6 @@ dependencies = [
  "wasmer-compiler-singlepass",
  "wasmer-engine-jit",
  "wasmer-vm",
- "wasmparser 0.77.0",
 ]
 
 [[package]]
@@ -137,6 +136,7 @@ dependencies = [
  "sparse-merkle-tree",
  "thiserror",
  "tracing",
+ "wasmparser 0.78.2",
 ]
 
 [[package]]
@@ -5311,9 +5311,9 @@ checksum = "87cc2fe6350834b4e528ba0901e7aa405d78b89dc1fa3145359eb4de0e323fcf"
 
 [[package]]
 name = "wasmparser"
-version = "0.77.0"
+version = "0.78.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b35c86d22e720a07d954ebbed772d01180501afe7d03d464f413bb5f8914a8d6"
+checksum = "52144d4c78e5cf8b055ceab8e5fa22814ce4315d6002ad32cfd914f37c12fd65"
 
 [[package]]
 name = "wast"

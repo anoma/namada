@@ -20,7 +20,9 @@ use sparse_merkle_tree::H256;
 
 pub struct PersistentStorageHasher(Blake2bHasher);
 
-pub type PersistentStorage = Storage<rocksdb::RocksDB, PersistentStorageHasher>;
+pub type PersistentDB = rocksdb::RocksDB;
+
+pub type PersistentStorage = Storage<PersistentDB, PersistentStorageHasher>;
 
 pub fn open(db_path: impl AsRef<Path>) -> PersistentStorage {
     let tree = MerkleTree::default();

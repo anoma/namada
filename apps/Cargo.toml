@@ -86,7 +86,6 @@ tracing-subscriber = "0.2.18"
 wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
 wasmer-engine-jit = "1.0.2"
-wasmparser = "0.77.0"
 
 [dev-dependencies]
 anoma_shared = {path = "../shared", features = ["testing"]}

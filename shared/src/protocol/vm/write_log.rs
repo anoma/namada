@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use anoma_shared::protocol::storage::{self, Storage, StorageHasher};
-use anoma_shared::types::address::EstablishedAddressGen;
-use anoma_shared::types::{Address, Key};
 use thiserror::Error;
+
+use crate::protocol::storage::{self, Storage, StorageHasher};
+use crate::types::address::EstablishedAddressGen;
+use crate::types::{Address, Key};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -353,7 +354,7 @@ mod tests {
     #[test]
     fn test_commit() {
         let mut storage =
-            anoma_shared::protocol::storage::testing::TestStorage::default();
+            crate::protocol::storage::testing::TestStorage::default();
         let mut write_log = WriteLog::new();
         let address_gen = EstablishedAddressGen::new("test");
 
