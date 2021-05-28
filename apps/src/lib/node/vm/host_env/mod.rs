@@ -35,13 +35,13 @@ where
 {
     storage: EnvHostWrapper<'a, &'a Storage<DB>>,
     // not thread-safe, assuming single-threaded Tx runner
-    write_log: MutEnvHostWrapper<WriteLog>,
+    write_log: MutEnvHostWrapper<'a, &'a WriteLog>,
     // not thread-safe, assuming single-threaded Tx runner
-    iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
+    iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'static, DB>>,
     // not thread-safe, assuming single-threaded Tx runner
-    verifiers: MutEnvHostWrapper<HashSet<Address>>,
+    verifiers: MutEnvHostWrapper<'a, &'a HashSet<Address>>,
     // not thread-safe, assuming single-threaded Tx runner
-    gas_meter: MutEnvHostWrapper<BlockGasMeter>,
+    gas_meter: MutEnvHostWrapper<'a, &'a BlockGasMeter>,
     memory: AnomaMemory,
 }
 
@@ -86,14 +86,14 @@ where
     pub addr: Address,
     /// this is not thread-safe, but because each VP has its own instance there
     /// is no shared access
-    iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
+    iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'static, DB>>,
     /// thread-safe read-only access from parallel Vp runners
     storage: EnvHostWrapper<'a, &'a Storage<DB>>,
     /// thread-safe read-only access from parallel Vp runners
     write_log: EnvHostWrapper<'a, &'a WriteLog>,
     // TODO In parallel runs, we can change only the maximum used gas of all
     /// the VPs that we ran.
-    gas_meter: MutEnvHostWrapper<VpGasMeter>,
+    gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
     tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
     /// Change storage keys, we use these for `eval` invocations
@@ -173,10 +173,10 @@ impl WasmerEnv for FilterEnv {
 pub fn prepare_tx_imports<DB>(
     wasm_store: &Store,
     storage: EnvHostWrapper<'static, &Storage<DB>>,
-    write_log: MutEnvHostWrapper<WriteLog>,
-    iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
-    verifiers: MutEnvHostWrapper<HashSet<Address>>,
-    gas_meter: MutEnvHostWrapper<BlockGasMeter>,
+    write_log: MutEnvHostWrapper<'static, &WriteLog>,
+    iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
+    verifiers: MutEnvHostWrapper<'static, &HashSet<Address>>,
+    gas_meter: MutEnvHostWrapper<'static, &BlockGasMeter>,
     initial_memory: Memory,
 ) -> ImportObject
 where
@@ -222,8 +222,8 @@ pub fn prepare_vp_env<DB>(
     addr: Address,
     storage: EnvHostWrapper<'static, &'static Storage<DB>>,
     write_log: EnvHostWrapper<'static, &WriteLog>,
-    iterators: MutEnvHostWrapper<PrefixIterators<'static, DB>>,
-    gas_meter: MutEnvHostWrapper<VpGasMeter>,
+    iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
+    gas_meter: MutEnvHostWrapper<'static, &VpGasMeter>,
     tx_code: EnvHostSliceWrapper<'static, &[u8]>,
     initial_memory: Memory,
     keys_changed: EnvHostSliceWrapper<'static, &[Key]>,
@@ -1305,7 +1305,7 @@ fn vp_eval<DB>(
     input_data_len: u64,
 ) -> u64
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>, /* Generic over a lifetime */
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>, 
 {
     let (vp_code, gas) = env
         .memory

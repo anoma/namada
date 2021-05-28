@@ -131,20 +131,27 @@ impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
 /// which is used for implementing some host calls. Because it's mutable, it's
 /// not thread-safe. Also, care must be taken that while this reference is
 /// borrowed, no other process can read or modify it.
-pub struct MutEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
-unsafe impl<T> Send for MutEnvHostWrapper<T> {}
-unsafe impl<T> Sync for MutEnvHostWrapper<T> {}
+pub struct MutEnvHostWrapper<'a, T: 'a>{
+    data: *mut c_void, 
+    phantom: PhantomData<&'a T>
+}
+unsafe impl<T> Send for MutEnvHostWrapper<'_, T> {}
+unsafe impl<T> Sync for MutEnvHostWrapper<'_, T> {}
 
 // Same as for [`EnvHostWrapper`], we have to manually implement [`Clone`],
 // because the derived [`Clone`] for [`PhantomData<T>`] puts the bound on [`T:
 // Clone`].
-impl<T> Clone for MutEnvHostWrapper<T> {
+impl<T> Clone for MutEnvHostWrapper<'_, T> {
     fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
+        Self {
+            data: self.data,
+            phantom: PhantomData
+        }
     }
 }
 
-impl<T> MutEnvHostWrapper<T> {
+
+impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
     /// Wrap a mutable reference for VM environment.
     ///
     /// # Safety
@@ -152,9 +159,13 @@ impl<T> MutEnvHostWrapper<T> {
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
-    unsafe fn new(host_structure: *mut c_void) -> Self {
-        Self(host_structure, PhantomData)
+    unsafe fn new(host_structure: &mut T) -> Self {
+        Self {
+            data: host_structure as *mut T as *mut c_void,
+            phantom: PhantomData,
+        }
     }
+
 
     /// Get a mutable reference from VM environment.
     ///
@@ -163,10 +174,65 @@ impl<T> MutEnvHostWrapper<T> {
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
-    pub unsafe fn get(&self) -> *mut T {
-        self.0 as *mut T
+    unsafe fn get(&self) -> &'a mut T {
+        &mut *(self.data as *mut T)
     }
 }
+
+
+/// This is used to attach the Ledger's host structures to wasm environment,
+/// which is used for implementing some host calls. It wraps an immutable
+/// slice, so the access is thread-safe, but because of the unsafe slice
+/// conversion, care must be taken that while this slice is borrowed, no other
+/// process can modify it.
+pub struct MutEnvHostSliceWrapper<'a, T: 'a> {
+    data: *mut c_void,
+    len: usize,
+    phantom: PhantomData<&'a T>,
+}
+unsafe impl<T> Send for MutEnvHostSliceWrapper<'_, T> {}
+unsafe impl<T> Sync for MutEnvHostSliceWrapper<'_, T> {}
+
+// Have to manually implement [`Clone`], because the derived [`Clone`] for
+// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
+impl<T> Clone for MutEnvHostSliceWrapper<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            data: self.data,
+            len: self.len,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: 'a> MutEnvHostSliceWrapper<'a, &[T]> {
+    /// Wrap a slice for VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    unsafe fn new(host_structure: &mut [T]) -> Self {
+        Self {
+            data: host_structure as *mut [T] as *mut c_void,
+            len: host_structure.len(),
+            phantom: PhantomData,
+        }
+    }
+
+    /// Get a slice from VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    pub unsafe fn get(&self) -> &'a mut [T] {
+        slice::from_raw_parts_mut(self.data as *mut T, self.len)
+    }
+}
+
+
+
 
 #[derive(Clone, Debug)]
 pub struct TxRunner {
@@ -245,24 +311,24 @@ impl TxRunner {
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let write_log = unsafe {
-            MutEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
+            MutEnvHostWrapper::new(write_log)
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
         let iterators = unsafe {
-            MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
+            MutEnvHostWrapper::new(&mut iterators)
         };
         let mut verifiers = HashSet::new();
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let env_verifiers = unsafe {
-            MutEnvHostWrapper::new(&mut verifiers as *mut _ as *mut c_void)
+            MutEnvHostWrapper::new(&mut verifiers)
         };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let gas_meter = unsafe {
-            MutEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
+            MutEnvHostWrapper::new(gas_meter)
         };
 
         let tx_code = prepare_wasm_code(&tx_code)?;
@@ -364,12 +430,12 @@ impl VpRunner {
         // there is no shared access
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
         let iterators = unsafe {
-            MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
+            MutEnvHostWrapper::new(&mut iterators)
         };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
         let gas_meter = unsafe {
-            MutEnvHostWrapper::new(vp_gas_meter as *mut _ as *mut c_void)
+            MutEnvHostWrapper::new(vp_gas_meter)
         };
         // Read-only access from parallel Vp runners
         let env_storage_keys =
