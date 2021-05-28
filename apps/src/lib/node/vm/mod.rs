@@ -131,9 +131,9 @@ impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
 /// which is used for implementing some host calls. Because it's mutable, it's
 /// not thread-safe. Also, care must be taken that while this reference is
 /// borrowed, no other process can read or modify it.
-pub struct MutEnvHostWrapper<'a, T: 'a>{
-    data: *mut c_void, 
-    phantom: PhantomData<&'a T>
+pub struct MutEnvHostWrapper<'a, T: 'a> {
+    data: *mut c_void,
+    phantom: PhantomData<&'a T>,
 }
 unsafe impl<T> Send for MutEnvHostWrapper<'_, T> {}
 unsafe impl<T> Sync for MutEnvHostWrapper<'_, T> {}
@@ -145,11 +145,10 @@ impl<T> Clone for MutEnvHostWrapper<'_, T> {
     fn clone(&self) -> Self {
         Self {
             data: self.data,
-            phantom: PhantomData
+            phantom: PhantomData,
         }
     }
 }
-
 
 impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
     /// Wrap a mutable reference for VM environment.
@@ -166,7 +165,6 @@ impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
         }
     }
 
-
     /// Get a mutable reference from VM environment.
     ///
     /// # Safety
@@ -178,7 +176,6 @@ impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
         &mut *(self.data as *mut T)
     }
 }
-
 
 /// This is used to attach the Ledger's host structures to wasm environment,
 /// which is used for implementing some host calls. It wraps an immutable
@@ -212,6 +209,7 @@ impl<'a, T: 'a> MutEnvHostSliceWrapper<'a, &[T]> {
     ///
     /// Because this is unsafe, care must be taken that while this slice is
     /// borrowed, no other process can modify it.
+    #[allow(dead_code)]
     unsafe fn new(host_structure: &mut [T]) -> Self {
         Self {
             data: host_structure as *mut [T] as *mut c_void,
@@ -230,9 +228,6 @@ impl<'a, T: 'a> MutEnvHostSliceWrapper<'a, &[T]> {
         slice::from_raw_parts_mut(self.data as *mut T, self.len)
     }
 }
-
-
-
 
 #[derive(Clone, Debug)]
 pub struct TxRunner {
@@ -310,26 +305,18 @@ impl TxRunner {
             unsafe { EnvHostWrapper::new(storage) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let write_log = unsafe {
-            MutEnvHostWrapper::new(write_log)
-        };
+        let write_log = unsafe { MutEnvHostWrapper::new(write_log) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
-        let iterators = unsafe {
-            MutEnvHostWrapper::new(&mut iterators)
-        };
+        let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
         let mut verifiers = HashSet::new();
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let env_verifiers = unsafe {
-            MutEnvHostWrapper::new(&mut verifiers)
-        };
+        let env_verifiers = unsafe { MutEnvHostWrapper::new(&mut verifiers) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let gas_meter = unsafe {
-            MutEnvHostWrapper::new(gas_meter)
-        };
+        let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
 
         let tx_code = prepare_wasm_code(&tx_code)?;
 
@@ -429,14 +416,10 @@ impl VpRunner {
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
-        let iterators = unsafe {
-            MutEnvHostWrapper::new(&mut iterators)
-        };
+        let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
-        let gas_meter = unsafe {
-            MutEnvHostWrapper::new(vp_gas_meter)
-        };
+        let gas_meter = unsafe { MutEnvHostWrapper::new(vp_gas_meter) };
         // Read-only access from parallel Vp runners
         let env_storage_keys =
             unsafe { EnvHostSliceWrapper::new(storage_keys) };
