@@ -93,14 +93,14 @@ mod tests {
     use std::ops::Deref;
 
     use anoma_shared::protocol::storage::types;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     use super::*;
 
     #[test]
     fn test_crud_value() {
-        let db_path = TempDir::new("anoma_test")
-            .expect("Unable to create a temporary DB directory");
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
         let mut storage = open(db_path.path());
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
@@ -142,8 +142,8 @@ mod tests {
 
     #[test]
     fn test_commit_block() {
-        let db_path = TempDir::new("anoma_test")
-            .expect("Unable to create a temporary DB directory");
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
         let mut storage = open(db_path.path());
         let chain_id = "test_chain_id_000000";
         storage
@@ -186,8 +186,8 @@ mod tests {
 
     #[test]
     fn test_iter() {
-        let db_path = TempDir::new("anoma_test")
-            .expect("Unable to create a temporary DB directory");
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
         let mut storage = open(db_path.path());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -226,8 +226,8 @@ mod tests {
 
     #[test]
     fn test_validity_predicate() {
-        let db_path = TempDir::new("anoma_test")
-            .expect("Unable to create a temporary DB directory");
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
         let mut storage = open(db_path.path());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))

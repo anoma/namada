@@ -4,6 +4,7 @@ pub mod memory;
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
+use std::slice;
 
 use anoma_shared::protocol::gas::{BlockGasMeter, VpGasMeter};
 use anoma_shared::protocol::storage::{self, Storage, StorageHasher};
@@ -101,31 +102,22 @@ impl TxRunner {
         validate_untrusted_wasm(&tx_code).map_err(Error::ValidationError)?;
 
         // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage: EnvHostWrapper<Storage<DB, H>> = unsafe {
-            EnvHostWrapper::new(storage as *const _ as *const c_void)
-        };
+        let storage: EnvHostWrapper<'_, &Storage<DB, H>> =
+            unsafe { EnvHostWrapper::new(storage) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let write_log = unsafe {
-            MutEnvHostWrapper::new(write_log as *mut _ as *mut c_void)
-        };
+        let write_log = unsafe { MutEnvHostWrapper::new(write_log) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
-        let iterators = unsafe {
-            MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
-        };
+        let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
         let mut verifiers = HashSet::new();
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let env_verifiers = unsafe {
-            MutEnvHostWrapper::new(&mut verifiers as *mut _ as *mut c_void)
-        };
+        let env_verifiers = unsafe { MutEnvHostWrapper::new(&mut verifiers) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let gas_meter = unsafe {
-            MutEnvHostWrapper::new(gas_meter as *mut _ as *mut c_void)
-        };
+        let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
 
         let tx_code = prepare_wasm_code(&tx_code)?;
 
@@ -190,6 +182,7 @@ impl VpRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        // TODO: Maybe refactor wasm_store: not necessary to do in two steps
         let wasm_store =
             wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
         Self { wasm_store }
@@ -200,14 +193,14 @@ impl VpRunner {
     pub fn run<DB, H>(
         &self,
         vp_code: impl AsRef<[u8]>,
-        tx_data: Vec<u8>,
-        #[allow(clippy::ptr_arg)] tx_code: &Vec<u8>,
+        tx_data: impl AsRef<[u8]>,
+        tx_code: impl AsRef<[u8]>,
         addr: &Address,
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
         vp_gas_meter: &mut VpGasMeter,
-        keys_changed: Vec<Key>,
-        verifiers: HashSet<Address>,
+        storage_keys: &[Key],
+        verifiers: &HashSet<Address>,
     ) -> Result<bool>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -217,28 +210,24 @@ impl VpRunner {
             .map_err(Error::ValidationError)?;
 
         // Read-only access from parallel Vp runners
-        let storage: EnvHostWrapper<Storage<DB, H>> = unsafe {
-            EnvHostWrapper::new(storage as *const _ as *const c_void)
-        };
+        let storage: EnvHostWrapper<&Storage<DB, H>> =
+            unsafe { EnvHostWrapper::new(storage) };
         // Read-only access from parallel Vp runners
-        let write_log = unsafe {
-            EnvHostWrapper::new(write_log as *const _ as *const c_void)
-        };
+        let write_log = unsafe { EnvHostWrapper::new(write_log) };
         // Read-only access from parallel Vp runners
-        let tx_code = unsafe {
-            EnvHostWrapper::new(tx_code as *const _ as *const c_void)
-        };
+        let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code.as_ref()) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
-        let iterators = unsafe {
-            MutEnvHostWrapper::new(&mut iterators as *mut _ as *mut c_void)
-        };
+        let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
-        let gas_meter = unsafe {
-            MutEnvHostWrapper::new(vp_gas_meter as *mut _ as *mut c_void)
-        };
+        let gas_meter = unsafe { MutEnvHostWrapper::new(vp_gas_meter) };
+        // Read-only access from parallel Vp runners
+        let env_storage_keys =
+            unsafe { EnvHostSliceWrapper::new(storage_keys) };
+        // Read-only access from parallel Vp runners
+        let env_verifiers = unsafe { EnvHostWrapper::new(verifiers) };
 
         let vp_code = prepare_wasm_code(vp_code)?;
 
@@ -246,8 +235,13 @@ impl VpRunner {
             .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
-        let input: VpInput = (addr.clone(), tx_data, keys_changed, verifiers);
-        let vp_imports = host_env::prepare_vp_imports(
+        let input: VpInput = VpInput {
+            addr: &addr,
+            data: tx_data.as_ref(),
+            keys_changed: storage_keys,
+            verifiers,
+        };
+        let vp_imports = host_env::prepare_vp_env(
             &self.wasm_store,
             addr.clone(),
             storage,
@@ -256,12 +250,51 @@ impl VpRunner {
             gas_meter,
             tx_code,
             initial_memory,
+            env_storage_keys,
+            env_verifiers,
         );
 
         // compile and run the transaction wasm code
-        let vp_code = wasmer::Instance::new(&vp_module, &vp_imports)
+        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
             .map_err(Error::InstantiationError)?;
-        VpRunner::run_with_input(vp_code, input)
+        VpRunner::run_with_input(vp_instance, input)
+    }
+
+    fn run_eval<DB>(
+        &self,
+        // we read the validity predicate from wasm memory as bytes
+        vp_code: Vec<u8>,
+        input_data: &[u8],
+        vp_env: VpEnv<'static, DB>,
+    ) -> Result<bool>
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    {
+        let vp_code = prepare_wasm_code(&vp_code)?;
+        let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
+            .map_err(Error::CompileError)?;
+        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
+            .map_err(Error::MemoryError)?;
+
+        let keys_changed = unsafe { &*(vp_env.keys_changed.get()) };
+        let verifiers = unsafe { &*(vp_env.verifiers.get()) };
+        let input: VpInput = VpInput {
+            addr: &vp_env.addr,
+            data: input_data,
+            keys_changed,
+            verifiers,
+        };
+
+        let vp_imports = host_env::prepare_vp_imports(
+            &self.wasm_store,
+            initial_memory,
+            &vp_env,
+        );
+
+        // compile and run the transaction wasm code
+        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
+            .map_err(Error::InstantiationError)?;
+        VpRunner::run_with_input(vp_instance, input)
     }
 
     fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
@@ -274,8 +307,8 @@ impl VpRunner {
         let memory::VpCallInput {
             addr_ptr,
             addr_len,
-            tx_data_ptr,
-            tx_data_len,
+            data_ptr,
+            data_len,
             keys_changed_ptr,
             keys_changed_len,
             verifiers_ptr,
@@ -297,8 +330,8 @@ impl VpRunner {
             .call(
                 addr_ptr,
                 addr_len,
-                tx_data_ptr,
-                tx_data_len,
+                data_ptr,
+                data_len,
                 keys_changed_ptr,
                 keys_changed_len,
                 verifiers_ptr,
@@ -622,8 +655,8 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                keys_changed,
-                verifiers,
+                &keys_changed[..],
+                &verifiers,
             )
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \

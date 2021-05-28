@@ -29,21 +29,30 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
-    
-  - name: build-deps
+
+  - name: build-wasm
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
       - sccache --start-server
       - make -C txs/tx_template deps
       - make build-wasm-scripts
+      - |
+        for wasm in $(ls filter_template/*.wasm matchmaker_template/*.wasm txs/*/*.wasm vps/*/*.wasm)
+        do
+          shasum -a 256 ${wasm} >> checksum.sha256
+        done
+      - make clean-wasm-scripts
+      - make build-wasm-scripts
+      - shasum -c checksum.sha256
+      - rm checksum.sha256
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
       SCCACHE_BUCKET: heliax-drone-cache-v2
-      SCCACHE_S3_KEY_PREFIX: sccache-build-deps
+      SCCACHE_S3_KEY_PREFIX: sccache-build-wasm
     depends_on:
       - restore-cache
 
@@ -54,7 +63,7 @@ steps:
       - sccache --start-server
       - make build
     depends_on:
-      - build-deps
+      - build-wasm
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
@@ -172,7 +181,7 @@ steps:
         from_secret: aws_secret_access_key
       SCCACHE_BUCKET: heliax-drone-cache-v2
       SCCACHE_S3_KEY_PREFIX: sccache-check
-  
+
   - name: fmt-check
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
@@ -197,7 +206,7 @@ steps:
     depends_on:
       - clippy-check
       - fmt-check
-    
+
   - name: rebuild-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -272,7 +281,7 @@ steps:
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
     pull: if-not-exists
     commands:
-      - make audit || true 
+      - make audit
     depends_on:
       - restore-cache
 
@@ -301,7 +310,7 @@ steps:
         - failure
     depends_on:
       - restore-cache
-  
+
 trigger:
   event:
     - pull_request

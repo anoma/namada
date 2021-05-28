@@ -13,6 +13,13 @@ tx_wasms := $(dir $(wildcard txs/*/.))
 vp_wasms := $(dir $(wildcard vps/*/.))	
 wasms := $(tx_wasms) $(vp_wasms) matchmaker_template filter_template
 
+# Transitive dependency of wasmer. It's safe to ignore as we don't use cranelift compiler. It should disseaper once the wasmer library updates its dependencies
+audit-ignores := RUSTSEC-2021-0067
+# Transitive dependency warning from tendermint-rpc
+audit-ignores += RUSTSEC-2021-0064
+# Transitive dependency warning from tendermint-rpc
+audit-ignores += RUSTSEC-2020-0016
+
 build:
 	$(cargo) build
 
@@ -46,7 +53,7 @@ reset-ledger:
 	$(cargo) run --bin anoman -- reset-ledger
 
 audit:
-	$(cargo) audit
+	$(cargo) audit --deny warnings $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
 test-wasm = $(cargo) test --manifest-path $(wasm)/Cargo.toml
 test:
@@ -81,8 +88,13 @@ build-wasm = make -C $(wasm)
 build-wasm-scripts:
 	$(foreach wasm,$(wasms),$(build-wasm) && ) true
 
+clean-wasm = make -C $(wasm)
+clean-wasm-scripts:
+	$(foreach wasm,$(wasms),$(clean-wasm) && ) true
+
 dev-deps:
 	$(rustup) toolchain install $(nightly)
+	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy --toolchain $(nightly)
 	$(cargo) install cargo-watch
 

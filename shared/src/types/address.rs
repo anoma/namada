@@ -213,8 +213,28 @@ pub fn btc() -> Address {
 }
 
 /// Temporary helper for testing
-pub fn xtz() -> Address {
+pub fn eth() -> Address {
     Address::decode("a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9").expect("The token address decoding shouldn't fail")
+}
+
+/// Temporary helper for testing
+pub fn dot() -> Address {
+    Address::decode("a1qq5qqqqqxq652v3sxap523fs8pznjse5g3pyydf3xqurws6ygvc5gdfcxyuy2deeggenjsjrjrl2ph").expect("The token address decoding shouldn't fail")
+}
+
+/// Temporary helper for testing
+pub fn schnitzel() -> Address {
+    Address::decode("a1qq5qqqqq8prrzv6xxcury3p4xucygdp5gfprzdfex9prz3jyg56rxv69gvenvsj9g5enswpcl8npyz").expect("The token address decoding shouldn't fail")
+}
+
+/// Temporary helper for testing
+pub fn apfel() -> Address {
+    Address::decode("a1qq5qqqqqgfp52de4x56nqd3ex56y2wph8pznssjzx5ersw2pxfznsd3jxeqnjd3cxapnqsjz2fyt3j").expect("The token address decoding shouldn't fail")
+}
+
+/// Temporary helper for testing
+pub fn kartoffel() -> Address {
+    Address::decode("a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn233sgccnjs3eak5wwh").expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing

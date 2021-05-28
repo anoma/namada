@@ -13,27 +13,26 @@ pub mod write_log;
 /// reference, so the access is thread-safe, but because of the unsafe
 /// reference conversion, care must be taken that while this reference is
 /// borrowed, no other process can modify it.
-pub struct EnvHostWrapper<T>(*const c_void, PhantomData<T>);
-unsafe impl<T> Send for EnvHostWrapper<T> {}
-unsafe impl<T> Sync for EnvHostWrapper<T> {}
-
-// Have to manually implement [`Clone`], because the derived [`Clone`] for
-// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
-impl<T> Clone for EnvHostWrapper<T> {
-    fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
-    }
+#[derive(Clone)]
+pub struct EnvHostWrapper<'a, T: 'a> {
+    data: *const c_void,
+    phantom: PhantomData<&'a T>,
 }
+unsafe impl<T> Send for EnvHostWrapper<'_, T> {}
+unsafe impl<T> Sync for EnvHostWrapper<'_, T> {}
 
-impl<T> EnvHostWrapper<T> {
+impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
     /// Wrap a reference for VM environment.
     ///
     /// # Safety
     ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
-    pub unsafe fn new(host_structure: *const c_void) -> Self {
-        Self(host_structure, PhantomData)
+    unsafe fn new(host_structure: &T) -> Self {
+        Self {
+            data: host_structure as *const T as *const c_void,
+            phantom: PhantomData,
+        }
     }
 
     /// Get a reference from VM environment.
@@ -42,9 +41,48 @@ impl<T> EnvHostWrapper<T> {
     ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
-    #[allow(dead_code)]
-    pub unsafe fn get(&self) -> *const T {
-        self.0 as *const T
+    unsafe fn get(&self) -> &'a T {
+        &*(self.data as *const T)
+    }
+}
+
+/// This is used to attach the Ledger's host structures to wasm environment,
+/// which is used for implementing some host calls. It wraps an immutable
+/// slice, so the access is thread-safe, but because of the unsafe slice
+/// conversion, care must be taken that while this slice is borrowed, no other
+/// process can modify it.
+#[derive(Clone)]
+pub struct EnvHostSliceWrapper<'a, T: 'a> {
+    data: *const c_void,
+    len: usize,
+    phantom: PhantomData<&'a T>,
+}
+unsafe impl<T> Send for EnvHostSliceWrapper<'_, T> {}
+unsafe impl<T> Sync for EnvHostSliceWrapper<'_, T> {}
+
+impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
+    /// Wrap a slice for VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    unsafe fn new(host_structure: &[T]) -> Self {
+        Self {
+            data: host_structure as *const [T] as *const c_void,
+            len: host_structure.len(),
+            phantom: PhantomData,
+        }
+    }
+
+    /// Get a slice from VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    pub unsafe fn get(&self) -> &'a [T] {
+        slice::from_raw_parts(self.data as *const T, self.len)
     }
 }
 
@@ -52,20 +90,15 @@ impl<T> EnvHostWrapper<T> {
 /// which is used for implementing some host calls. Because it's mutable, it's
 /// not thread-safe. Also, care must be taken that while this reference is
 /// borrowed, no other process can read or modify it.
-pub struct MutEnvHostWrapper<T>(*mut c_void, PhantomData<T>);
-unsafe impl<T> Send for MutEnvHostWrapper<T> {}
-unsafe impl<T> Sync for MutEnvHostWrapper<T> {}
-
-// Same as for [`EnvHostWrapper`], we have to manually implement [`Clone`],
-// because the derived [`Clone`] for [`PhantomData<T>`] puts the bound on [`T:
-// Clone`].
-impl<T> Clone for MutEnvHostWrapper<T> {
-    fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
-    }
+#[derive(Clone)]
+pub struct MutEnvHostWrapper<'a, T: 'a> {
+    data: *mut c_void,
+    phantom: PhantomData<&'a T>,
 }
+unsafe impl<T> Send for MutEnvHostWrapper<'_, T> {}
+unsafe impl<T> Sync for MutEnvHostWrapper<'_, T> {}
 
-impl<T> MutEnvHostWrapper<T> {
+impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
     /// Wrap a mutable reference for VM environment.
     ///
     /// # Safety
@@ -73,8 +106,11 @@ impl<T> MutEnvHostWrapper<T> {
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
-    pub unsafe fn new(host_structure: *mut c_void) -> Self {
-        Self(host_structure, PhantomData)
+    unsafe fn new(host_structure: &mut T) -> Self {
+        Self {
+            data: host_structure as *mut T as *mut c_void,
+            phantom: PhantomData,
+        }
     }
 
     /// Get a mutable reference from VM environment.
@@ -84,8 +120,49 @@ impl<T> MutEnvHostWrapper<T> {
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
-    pub unsafe fn get(&self) -> *mut T {
-        self.0 as *mut T
+    unsafe fn get(&self) -> &'a mut T {
+        &mut *(self.data as *mut T)
+    }
+}
+
+/// This is used to attach the Ledger's host structures to wasm environment,
+/// which is used for implementing some host calls. It wraps an mutable
+/// slice, so the access is thread-safe, but because of the unsafe slice
+/// conversion, care must be taken that while this slice is borrowed, no other
+/// process can modify it.
+#[derive(Clone)]
+pub struct MutEnvHostSliceWrapper<'a, T: 'a> {
+    data: *mut c_void,
+    len: usize,
+    phantom: PhantomData<&'a T>,
+}
+unsafe impl<T> Send for MutEnvHostSliceWrapper<'_, T> {}
+unsafe impl<T> Sync for MutEnvHostSliceWrapper<'_, T> {}
+
+impl<'a, T: 'a> MutEnvHostSliceWrapper<'a, &[T]> {
+    /// Wrap a slice for VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    #[allow(dead_code)]
+    unsafe fn new(host_structure: &mut [T]) -> Self {
+        Self {
+            data: host_structure as *mut [T] as *mut c_void,
+            len: host_structure.len(),
+            phantom: PhantomData,
+        }
+    }
+
+    /// Get a slice from VM environment.
+    ///
+    /// # Safety
+    ///
+    /// Because this is unsafe, care must be taken that while this slice is
+    /// borrowed, no other process can modify it.
+    pub unsafe fn get(&self) -> &'a mut [T] {
+        slice::from_raw_parts_mut(self.data as *mut T, self.len)
     }
 }
 
