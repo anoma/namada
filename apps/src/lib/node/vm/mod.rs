@@ -178,7 +178,7 @@ impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
 }
 
 /// This is used to attach the Ledger's host structures to wasm environment,
-/// which is used for implementing some host calls. It wraps an immutable
+/// which is used for implementing some host calls. It wraps an mutable
 /// slice, so the access is thread-safe, but because of the unsafe slice
 /// conversion, care must be taken that while this slice is borrowed, no other
 /// process can modify it.
