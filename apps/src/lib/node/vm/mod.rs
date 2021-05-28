@@ -33,23 +33,13 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 /// reference, so the access is thread-safe, but because of the unsafe
 /// reference conversion, care must be taken that while this reference is
 /// borrowed, no other process can modify it.
+#[derive(Clone)]
 pub struct EnvHostWrapper<'a, T: 'a> {
     data: *const c_void,
     phantom: PhantomData<&'a T>,
 }
 unsafe impl<T> Send for EnvHostWrapper<'_, T> {}
 unsafe impl<T> Sync for EnvHostWrapper<'_, T> {}
-
-// Have to manually implement [`Clone`], because the derived [`Clone`] for
-// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
-impl<T> Clone for EnvHostWrapper<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            data: self.data,
-            phantom: PhantomData,
-        }
-    }
-}
 
 impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
     /// Wrap a reference for VM environment.
@@ -81,6 +71,7 @@ impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
 /// slice, so the access is thread-safe, but because of the unsafe slice
 /// conversion, care must be taken that while this slice is borrowed, no other
 /// process can modify it.
+#[derive(Clone)]
 pub struct EnvHostSliceWrapper<'a, T: 'a> {
     data: *const c_void,
     len: usize,
@@ -88,18 +79,6 @@ pub struct EnvHostSliceWrapper<'a, T: 'a> {
 }
 unsafe impl<T> Send for EnvHostSliceWrapper<'_, T> {}
 unsafe impl<T> Sync for EnvHostSliceWrapper<'_, T> {}
-
-// Have to manually implement [`Clone`], because the derived [`Clone`] for
-// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
-impl<T> Clone for EnvHostSliceWrapper<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            data: self.data,
-            len: self.len,
-            phantom: PhantomData,
-        }
-    }
-}
 
 impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
     /// Wrap a slice for VM environment.
@@ -131,24 +110,13 @@ impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
 /// which is used for implementing some host calls. Because it's mutable, it's
 /// not thread-safe. Also, care must be taken that while this reference is
 /// borrowed, no other process can read or modify it.
+#[derive(Clone)]
 pub struct MutEnvHostWrapper<'a, T: 'a> {
     data: *mut c_void,
     phantom: PhantomData<&'a T>,
 }
 unsafe impl<T> Send for MutEnvHostWrapper<'_, T> {}
 unsafe impl<T> Sync for MutEnvHostWrapper<'_, T> {}
-
-// Same as for [`EnvHostWrapper`], we have to manually implement [`Clone`],
-// because the derived [`Clone`] for [`PhantomData<T>`] puts the bound on [`T:
-// Clone`].
-impl<T> Clone for MutEnvHostWrapper<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            data: self.data,
-            phantom: PhantomData,
-        }
-    }
-}
 
 impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
     /// Wrap a mutable reference for VM environment.
@@ -182,6 +150,7 @@ impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
 /// slice, so the access is thread-safe, but because of the unsafe slice
 /// conversion, care must be taken that while this slice is borrowed, no other
 /// process can modify it.
+#[derive(Clone)]
 pub struct MutEnvHostSliceWrapper<'a, T: 'a> {
     data: *mut c_void,
     len: usize,
@@ -189,18 +158,6 @@ pub struct MutEnvHostSliceWrapper<'a, T: 'a> {
 }
 unsafe impl<T> Send for MutEnvHostSliceWrapper<'_, T> {}
 unsafe impl<T> Sync for MutEnvHostSliceWrapper<'_, T> {}
-
-// Have to manually implement [`Clone`], because the derived [`Clone`] for
-// [`PhantomData<T>`] puts the bound on [`T: Clone`]. Relevant issue: <https://github.com/rust-lang/rust/issues/26925>
-impl<T> Clone for MutEnvHostSliceWrapper<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            data: self.data,
-            len: self.len,
-            phantom: PhantomData,
-        }
-    }
-}
 
 impl<'a, T: 'a> MutEnvHostSliceWrapper<'a, &[T]> {
     /// Wrap a slice for VM environment.
@@ -459,8 +416,8 @@ impl VpRunner {
 
     fn run_eval<DB>(
         &self,
-        vp_code: Vec<u8>, /* Vec<u8> is how we read the validity predicate
-                           * from wasm memory */
+        // we read the validity predicate from wasm memory as bytes
+        vp_code: Vec<u8>,
         input_data: &[u8],
         vp_env: VpEnv<'static, DB>,
     ) -> Result<bool>
@@ -705,8 +662,6 @@ impl FilterRunner {
 }
 
 /// Inject gas counter and stack-height limiter into the given wasm code
-/// AsRef is a generic interface to pass a reference to a slice or a reference
-/// to vector
 fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
     let module: elements::Module = elements::deserialize_buffer(code.as_ref())
         .map_err(Error::DeserializationError)?;
