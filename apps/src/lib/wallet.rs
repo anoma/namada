@@ -2,7 +2,7 @@
 
 use anoma_shared::types::key::ed25519::{Keypair, PublicKey};
 
-pub fn ada_keypair() -> Keypair {
+pub fn alberto_keypair() -> Keypair {
     // generated from [`tests::temp_gen_keypair`]
     let bytes = [
         115, 191, 32, 247, 18, 101, 5, 106, 26, 203, 48, 145, 39, 41, 41, 196,
@@ -14,7 +14,7 @@ pub fn ada_keypair() -> Keypair {
     Keypair::from_bytes(&bytes).unwrap()
 }
 
-pub fn alan_keypair() -> Keypair {
+pub fn bertha_keypair() -> Keypair {
     // generated from [`tests::temp_gen_keypair`]
     let bytes = [
         240, 3, 224, 69, 201, 148, 60, 53, 112, 79, 80, 107, 101, 127, 186, 6,
@@ -26,7 +26,7 @@ pub fn alan_keypair() -> Keypair {
     Keypair::from_bytes(&bytes).unwrap()
 }
 
-pub fn alonzo_keypair() -> Keypair {
+pub fn christel_keypair() -> Keypair {
     // generated from [`tests::temp_gen_keypair`]
     let bytes = [
         65, 198, 96, 145, 237, 227, 84, 182, 107, 55, 209, 235, 115, 105, 71,
@@ -50,16 +50,16 @@ pub fn matchmaker_keypair() -> Keypair {
     Keypair::from_bytes(&bytes).unwrap()
 }
 
-pub fn ada_pk() -> PublicKey {
-    PublicKey::from(ada_keypair().public)
+pub fn alberto_pk() -> PublicKey {
+    PublicKey::from(alberto_keypair().public)
 }
 
-pub fn alan_pk() -> PublicKey {
-    PublicKey::from(alan_keypair().public)
+pub fn bertha_pk() -> PublicKey {
+    PublicKey::from(bertha_keypair().public)
 }
 
-pub fn alonzo_pk() -> PublicKey {
-    PublicKey::from(alonzo_keypair().public)
+pub fn christel_pk() -> PublicKey {
+    PublicKey::from(christel_keypair().public)
 }
 
 pub fn matchmaker_pk() -> PublicKey {
@@ -68,9 +68,9 @@ pub fn matchmaker_pk() -> PublicKey {
 
 pub fn key_of(name: impl AsRef<str>) -> Keypair {
     match name.as_ref() {
-        "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx" => ada_keypair(),
-        "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9" => alan_keypair(),
-        "a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s" => alonzo_keypair(),
+        "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx" => alberto_keypair(),
+        "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9" => bertha_keypair(),
+        "a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s" => christel_keypair(),
         "a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td" => matchmaker_keypair(),
         other => {
             panic!("Dont' have keys for: {}", other)

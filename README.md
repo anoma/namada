@@ -54,23 +54,33 @@ make reset-ledger
 # Note that you have to have a `tx.data` file for this to work, albeit it can be empty.
 cargo run --bin anoma -- tx --code-path txs/tx_template/tx.wasm --data-path tx.data
 
-# Setup temporary addresses aliases until we have a better client support
-export ADA=a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx
-export ALAN=a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9
-export ALONZO=a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s
+# Setup temporary addresses aliases until we have a better client support:
+
+# User addresses
+export ALBERT=a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx
+export BERTHA=a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9
+export CHRISTEL=a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s
+
+# Fungible token addresses
 export XAN=a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3
 export BTC=a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc
-export XTZ=a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9
+export ETH=a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9
+export DOT=a1qq5qqqqqxq652v3sxap523fs8pznjse5g3pyydf3xqurws6ygvc5gdfcxyuy2deeggenjsjrjrl2ph
+
+# Bite-sized tokens
+export SCHNITZEL=a1qq5qqqqq8prrzv6xxcury3p4xucygdp5gfprzdfex9prz3jyg56rxv69gvenvsj9g5enswpcl8npyz
+export APFEL=a1qq5qqqqqgfp52de4x56nqd3ex56y2wph8pznssjzx5ersw2pxfznsd3jxeqnjd3cxapnqsjz2fyt3j
+export KARTOFFEL=a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn233sgccnjs3eak5wwh
 ```
 
 ## Interacting with Anoma
 
 ```shell
 # Submit a token transfer
-cargo run --bin anomac -- transfer --source $ALAN --target $ADA --token $XAN --amount 10.1 --code-path txs/tx_transfer/tx.wasm
+cargo run --bin anomac -- transfer --source $BERTHA --target $ALBERT --token $XAN --amount 10.1 --code-path txs/tx_transfer/tx.wasm
 
 # Submit a transaction to update an account's validity predicate
-cargo run --bin anomac -- update --address $ALAN --code-path vps/vp_user/vp.wasm
+cargo run --bin anomac -- update --address $BERTHA --code-path vps/vp_user/vp.wasm
 
 # run gossip node with intent broadcaster and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc "127.0.0.1:39111"
@@ -79,9 +89,9 @@ cargo run --bin anoma -- run-gossip --rpc "127.0.0.1:39111"
 cargo run --bin anoman -- run-gossip --rpc "127.0.0.1:39111" --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
 
 # craft intents
-cargo run --bin anomac -- craft-intent --address $ADA    --token-buy $XTZ --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_A.data
-cargo run --bin anomac -- craft-intent --address $ALAN   --token-buy $BTC --amount-buy 20 --token-sell $XAN --amount-sell 30 --file-path intent_B.data
-cargo run --bin anomac -- craft-intent --address $ALONZO --token-buy $XAN --amount-buy 30 --token-sell $XTZ --amount-sell 10 --file-path intent_C.data
+cargo run --bin anomac -- craft-intent --address $ALBERT    --token-buy $ETH --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_A.data
+cargo run --bin anomac -- craft-intent --address $BERTHA   --token-buy $BTC --amount-buy 20 --token-sell $XAN --amount-sell 30 --file-path intent_B.data
+cargo run --bin anomac -- craft-intent --address $CHRISTEL --token-buy $XAN --amount-buy 30 --token-sell $ETH --amount-sell 10 --file-path intent_C.data
 
 # Subscribe to new network
 cargo run --bin anomac -- subscribe-topic --node "http://127.0.0.1:39111" --topic "asset_v1"
