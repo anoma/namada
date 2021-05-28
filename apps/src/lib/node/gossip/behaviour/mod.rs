@@ -1,3 +1,4 @@
+mod discovery;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
@@ -12,13 +13,17 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::identity::Keypair;
-use libp2p::mdns::{Mdns, MdnsConfig, MdnsEvent};
-use libp2p::swarm::{NetworkBehaviour, NetworkBehaviourEventProcess};
+use libp2p::swarm::toggle::Toggle;
+use libp2p::swarm::NetworkBehaviourEventProcess;
 use libp2p::{NetworkBehaviour, PeerId};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
+use self::discovery::DiscoveryEvent;
 use super::intent_broadcaster;
+use crate::node::gossip::behaviour::discovery::{
+    DiscoveryBehaviour, DiscoveryConfigBuilder,
+};
 use crate::proto::types::{
     intent_broadcaster_message, IntentBroadcasterMessage,
 };
@@ -32,8 +37,12 @@ pub enum Error {
     GossipIntentError(intent_broadcaster::Error),
     #[error("Failed initializing the topic filter: {0}")]
     Filter(String),
-    #[error("Failed initializing the gossip network: {0}")]
+    #[error("Failed initializing the gossip behaviour: {0}")]
     GossipConfig(String),
+    #[error("Failed on the the discovery behaviour config: {0}")]
+    DiscoveryConfig(String),
+    #[error("Failed initializing the discovery behaviour: {0}")]
+    Discovery(discovery::Error),
     #[error("Failed initializing mdns: {0}")]
     Mdns(std::io::Error),
 }
@@ -106,7 +115,7 @@ pub struct Behaviour {
         IdentityTransform,
         IntentBroadcasterSubscriptionFilter,
     >,
-    local_discovery: Mdns,
+    discovery: Toggle<discovery::DiscoveryBehaviour>,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
     pub intent_broadcaster_app: intent_broadcaster::GossipIntent,
@@ -123,10 +132,12 @@ impl Behaviour {
         key: Keypair,
         config: &crate::config::IntentBroadcaster,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
+        let peer_id = PeerId::from_public_key(key.public());
+
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_broadcaster")
-            .heartbeat_interval(Duration::from_secs(1))
+            .heartbeat_interval(Duration::from_secs(10))
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id)
             .validate_messages()
@@ -183,15 +194,27 @@ impl Behaviour {
             })
             .expect("failed to subscribe to topic");
 
-        let local_discovery = {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(Mdns::new(MdnsConfig::default()))
-                .map_err(Error::Mdns)?
+        let discovery_opt = if let Some(dis_config) = &config.discover_peer {
+            let discovery_config = DiscoveryConfigBuilder::default()
+                .with_user_defined(dis_config.bootstrap_peers.clone())
+                .discovery_limit(dis_config.max_discovery_peers)
+                .with_kademlia(dis_config.kademlia)
+                .with_mdns(dis_config.mdns)
+                .build()
+                .map_err(|s| Error::DiscoveryConfig(s.to_string()))?;
+
+            Some(
+                DiscoveryBehaviour::new(peer_id, discovery_config)
+                    .map_err(Error::Discovery)?,
+            )
+        } else {
+            None
         };
+        // tracing::debug!("discovery: {:?}", discovery_opt);
         Ok((
             Self {
                 intent_broadcaster_gossip,
-                local_discovery,
+                discovery: discovery_opt.into(),
                 intent_broadcaster_app,
             },
             matchmaker_event_receiver,
@@ -288,28 +311,16 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     }
 }
 
-impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
-    // Called when `mdns` produces an event.
-    fn inject_event(&mut self, event: MdnsEvent) {
+impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
+    fn inject_event(&mut self, event: DiscoveryEvent) {
+        // TODO: nothing to do for the moment, everything should be taking care
+        // of by the behaviour
         match event {
-            MdnsEvent::Discovered(list) => {
-                for (peer, addr) in list {
-                    tracing::debug!("discovering peer {} : {} ", peer, addr);
-                    self.intent_broadcaster_gossip.inject_connected(&peer);
-                }
+            DiscoveryEvent::Connected(p) => {
+                tracing::debug!("connected to {}", p);
             }
-            MdnsEvent::Expired(list) => {
-                for (peer, addr) in list {
-                    if self.local_discovery.has_node(&peer) {
-                        tracing::debug!(
-                            "disconnecting peer {} : {} ",
-                            peer,
-                            addr
-                        );
-                        self.intent_broadcaster_gossip
-                            .inject_disconnected(&peer);
-                    }
-                }
+            DiscoveryEvent::Disconnected(p) => {
+                tracing::debug!("disconnected to {}", p);
             }
         }
     }

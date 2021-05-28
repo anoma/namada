@@ -1,5 +1,5 @@
+mod behaviour;
 mod intent_broadcaster;
-mod network_behaviour;
 mod p2p;
 mod rpc;
 

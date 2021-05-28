@@ -120,13 +120,34 @@ pub enum SubscriptionFilter {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct DiscoverPeer {
+    pub max_discovery_peers: u64,
+    pub kademlia: bool,
+    pub mdns: bool,
+    pub bootstrap_peers: HashSet<Multiaddr>,
+    /* TODO add reserved_peers(explicit peers for gossipsub network, to not
+     * be added to kademlia) */
+}
+
+impl Default for DiscoverPeer {
+    fn default() -> Self {
+        Self {
+            max_discovery_peers: 16,
+            kademlia: true,
+            mdns: true,
+            bootstrap_peers: HashSet::new(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IntentBroadcaster {
     pub address: Multiaddr,
-    pub peers: HashSet<Multiaddr>,
     pub topics: HashSet<String>,
     pub subscription_filter: SubscriptionFilter,
     pub rpc: Option<RpcServer>,
     pub gossiper: Gossiper,
+    pub discover_peer: Option<DiscoverPeer>,
     pub matchmaker: Option<Matchmaker>,
 }
 
@@ -139,10 +160,11 @@ impl Default for IntentBroadcaster {
             subscription_filter: SubscriptionFilter::RegexFilter(
                 Regex::new("asset_v\\d{1,2}").unwrap(),
             ),
-            peers: HashSet::new(),
+
             topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
             gossiper: Gossiper::new(),
             matchmaker: None,
+            discover_peer: Some(DiscoverPeer::default()),
         }
     }
 }

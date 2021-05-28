@@ -6,7 +6,7 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::network_behaviour::Behaviour;
+use super::behaviour::Behaviour;
 use crate::proto::services::{rpc_message, RpcResponse};
 use crate::proto::types::{
     intent_broadcaster_message, IntentBroadcasterMessage,
@@ -20,7 +20,7 @@ pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),
     #[error("Error with the network behavior: {0}")]
-    Behavior(super::network_behaviour::Error),
+    Behavior(super::behaviour::Error),
     #[error("Error while dialing: {0}")]
     Dialing(libp2p::swarm::DialError),
     #[error("Error while starting to listing: {0}")]
@@ -53,12 +53,6 @@ impl P2P {
         Swarm::listen_on(&mut swarm, config.address.clone())
             .map_err(Error::Listening)?;
 
-        for to_dial in &config.peers {
-            Swarm::dial_addr(&mut swarm, to_dial.clone())
-                .map_err(Error::Dialing)?;
-            tracing::info!("Dialed {:?}", to_dial.clone());
-        }
-        tracing::info!("network info {:?}", Swarm::network_info(&swarm));
         Ok((Self { swarm }, matchmaker_event_receiver))
     }
 
@@ -74,7 +68,6 @@ impl P2P {
         &mut self,
         event: rpc_message::Message,
     ) -> RpcResponse {
-        tracing::info!("network info {:?}", Swarm::network_info(&self.swarm));
         match event {
             rpc_message::Message::Intent(
                 crate::proto::services::IntentMesage {
