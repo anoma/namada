@@ -445,7 +445,7 @@ pub mod vp {
                 input_data.len() as _,
             )
         };
-        result == 1
+        HostEnvResult::is_success(result)
     }
 
     /// These host functions are implemented in the Anoma's [`host_env`]
@@ -507,7 +507,7 @@ pub mod vp {
             vp_code_len: u64,
             input_data_ptr: u64,
             input_data_len: u64,
-        ) -> u64;
+        ) -> i64;
     }
 }
 

@@ -1343,7 +1343,7 @@ fn vp_eval<DB>(
     vp_code_len: u64,
     input_data_ptr: u64,
     input_data_len: u64,
-) -> u64
+) -> i64
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
 {
@@ -1376,15 +1376,13 @@ where
     let result = vp_runner.run_eval(vp_code, &input_data, new_env);
 
     match result {
-        Ok(b) => {
-            if b {
-                1
-            } else {
-                0
-            }
+        Ok(b) => HostEnvResult::from(b),
+        Err(e) => {
+            tracing::error!("Error trying to run eval {}", e);
+            HostEnvResult::Fail
         }
-        Err(_e) => 0,
     }
+    .to_i64()
 }
 
 /// Log a string from exposed to the wasm VM matchmaker environment. The message
