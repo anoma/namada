@@ -393,7 +393,7 @@ impl VpRunner {
         &self,
         vp_code: impl AsRef<[u8]>,
         tx_data: impl AsRef<[u8]>,
-        #[allow(clippy::ptr_arg)] tx_code: &Vec<u8>,
+        tx_code: &[u8],
         addr: &Address,
         storage: &Storage<DB>,
         write_log: &WriteLog,

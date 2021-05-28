@@ -282,7 +282,7 @@ fn execute_vp(
             storage,
             write_log,
             vp_gas_meter,
-            &keys.to_vec(),
+            keys,
             &addresses,
         )
         .map_err(Error::VpRunnerError);
