@@ -23,7 +23,7 @@ use super::{EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper};
 use crate::node::shell::gas::{BlockGasMeter, VpGasMeter};
 use crate::node::shell::storage::{self, Storage};
 use crate::node::vm::VpRunner;
-use crate::proto::types::Tx;
+use crate::proto::Tx;
 use crate::types::MatchmakerMessage;
 use crate::wallet;
 
@@ -1439,11 +1439,7 @@ fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
     let signed_bytes = signed
         .try_to_vec()
         .expect("Couldn't encoded signed matchmaker tx data");
-    let tx = Tx {
-        code: tx_code,
-        data: Some(signed_bytes),
-        timestamp: Some(std::time::SystemTime::now().into()),
-    };
+    let tx = Tx::new(tx_code, Some(signed_bytes));
     env.inject_mm_message
         .try_send(MatchmakerMessage::InjectTx(tx))
         .expect("failed to send tx")

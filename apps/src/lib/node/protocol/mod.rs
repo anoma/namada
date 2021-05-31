@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use anoma_shared::types::{Address, Key};
-use prost::Message;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -14,14 +13,14 @@ use crate::node::shell::storage::PersistentStorage;
 use crate::node::vm;
 use crate::node::vm::host_env::write_log::WriteLog;
 use crate::node::vm::{TxRunner, VpRunner};
-use crate::proto::types::Tx;
+use crate::proto::{self, Tx};
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
     StorageError(storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
-    TxDecodingError(prost::DecodeError),
+    TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::Error),
     #[error("Gas error: {0}")]
@@ -79,7 +78,7 @@ pub fn apply_tx(
         .add_base_transaction_fee(tx_bytes.len())
         .map_err(Error::GasError)?;
 
-    let tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
+    let tx = Tx::from(tx_bytes).map_err(Error::TxDecodingError)?;
 
     let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
     let changed_keys = write_log.get_all_keys();
@@ -105,11 +104,11 @@ fn execute_tx(
     gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
 ) -> Result<HashSet<Address>> {
-    let tx_code = tx.code.clone();
+    let tx_code = tx.code();
     gas_meter
         .add_compiling_fee(tx_code.len())
         .map_err(Error::GasError)?;
-    let tx_data = tx.data.clone().unwrap_or_default();
+    let tx_data = tx.data();
     let tx_runner = TxRunner::new();
 
     tx_runner
@@ -127,8 +126,8 @@ fn check_vps(
 ) -> Result<VpsResult> {
     let verifiers = get_verifiers(write_log, verifiers_from_tx);
 
-    let tx_data = tx.data.clone().unwrap_or_default();
-    let tx_code = tx.code.clone();
+    let tx_data = tx.data();
+    let tx_code = tx.code();
 
     // collect the changed storage keys and VPs for the verifiers
     let verifiers: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers

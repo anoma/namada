@@ -1,4 +1,3 @@
-use prost::Message;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
@@ -8,8 +7,7 @@ use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
 use crate::config;
 use crate::node::vm;
-use crate::proto::types::Intent;
-use crate::proto::IntentId;
+use crate::proto::{Intent, IntentId};
 use crate::types::MatchmakerMessage;
 
 #[derive(Debug)]
@@ -92,8 +90,8 @@ impl Matchmaker {
                 .run(
                     &self.matchmaker_code.clone(),
                     &self.data,
-                    &IntentId::new(&intent).0,
-                    &intent.data,
+                    &intent.id().0,
+                    &intent.data(),
                     &self.tx_code,
                     self.inject_mm_message.clone(),
                 )
@@ -107,8 +105,7 @@ impl Matchmaker {
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
         match mm_message {
             MatchmakerMessage::InjectTx(tx) => {
-                let mut tx_bytes = vec![];
-                tx.encode(&mut tx_bytes).unwrap();
+                let tx_bytes = tx.to_bytes();
                 let client =
                     HttpClient::new(self.ledger_address.clone()).unwrap();
                 let response =

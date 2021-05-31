@@ -3,7 +3,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::node::vm;
-use crate::proto::types::Intent;
+use crate::proto::Intent;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -30,7 +30,7 @@ impl Filter {
     pub fn validate(&self, intent: &Intent) -> Result<bool> {
         let filter_runner = vm::FilterRunner::new();
         filter_runner
-            .run(self.code.clone(), &intent.data)
+            .run(self.code.clone(), &intent.data())
             .map_err(Error::RunnerError)
     }
 }

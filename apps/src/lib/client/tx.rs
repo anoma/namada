@@ -3,10 +3,9 @@ use std::str::FromStr;
 use anoma_shared::types::key::ed25519::Keypair;
 use anoma_shared::types::{token, Address, UpdateVp};
 use borsh::BorshSerialize;
-use prost::Message;
 use tendermint_rpc::{Client, HttpClient};
 
-use crate::proto::types::Tx;
+use crate::proto::Tx;
 use crate::wallet;
 
 const TX_UPDATE_VP: &str = "txs/tx_update_vp/tx.wasm";
@@ -88,13 +87,8 @@ async fn submit_tx(
     dry_run: bool,
     ledger_address: String,
 ) {
-    let tx = Tx {
-        code,
-        data,
-        timestamp: Some(std::time::SystemTime::now().into()),
-    };
-    let mut tx_bytes = vec![];
-    tx.encode(&mut tx_bytes).unwrap();
+    let tx = Tx::new(code, data);
+    let tx_bytes = tx.to_bytes();
 
     // NOTE: use this to print the request JSON body:
 

@@ -19,7 +19,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::intent_gossiper;
-use crate::proto::types::{intent_gossip_message, IntentGossipMessage};
+use crate::proto::{self, Intent, IntentGossipMessage};
 use crate::types::MatchmakerMessage;
 
 #[derive(Error, Debug)]
@@ -196,10 +196,7 @@ impl Behaviour {
         ))
     }
 
-    fn handle_intent(
-        &mut self,
-        intent: crate::proto::types::Intent,
-    ) -> MessageAcceptance {
+    fn handle_intent(&mut self, intent: Intent) -> MessageAcceptance {
         match self.intent_gossip_app.apply_intent(intent) {
             Ok(true) => MessageAcceptance::Accept,
             Ok(false) => MessageAcceptance::Reject,
@@ -226,27 +223,17 @@ impl Behaviour {
         &mut self,
         data: impl AsRef<[u8]>,
     ) -> MessageAcceptance {
-        match self.intent_gossip_app.parse_raw_msg(data) {
-            Ok(IntentGossipMessage {
-                msg: Some(intent_gossip_message::Msg::Intent(intent)),
-            }) => self.handle_intent(intent),
-            Ok(IntentGossipMessage { msg: None }) => {
+        match IntentGossipMessage::from(data) {
+            Ok(message) => self.handle_intent(message.intent()),
+            Err(proto::Error::NoIntentError) => {
                 tracing::info!("Empty message, rejecting it");
                 MessageAcceptance::Reject
             }
-            Err(err) => match err {
-                intent_gossiper::Error::DecodeError(..) => {
-                    tracing::info!(
-                        "error while decoding the intent: {:?}",
-                        err
-                    );
-                    MessageAcceptance::Reject
-                }
-                intent_gossiper::Error::MatchmakerInit(..)
-                | intent_gossiper::Error::Matchmaker(..) => {
-                    panic!("can't happens, because intent already decoded")
-                }
-            },
+            Err(proto::Error::IntentDecodingError(err)) => {
+                tracing::info!("error while decoding the intent: {:?}", err);
+                MessageAcceptance::Reject
+            }
+            _ => unreachable!(),
         }
     }
 }
