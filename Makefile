@@ -65,6 +65,10 @@ watch:
 clean:
 	$(cargo) clean
 
+build-doc:
+	$(cargo) doc --no-deps
+	make -C tech-specs build
+
 doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
