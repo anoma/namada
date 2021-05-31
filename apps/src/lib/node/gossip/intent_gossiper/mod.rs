@@ -7,7 +7,7 @@ use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use crate::proto::types::{Intent, IntentBroadcasterMessage};
+use crate::proto::types::{Intent, IntentGossipMessage};
 use crate::types::MatchmakerMessage;
 
 // TODO split Error and Result type in two, one for Result/Error that can only
@@ -31,7 +31,7 @@ pub struct GossipIntent {
 
 impl GossipIntent {
     pub fn new(
-        config: &crate::config::IntentBroadcaster,
+        config: &crate::config::IntentGossiper,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let (matchmaker, matchmaker_event_receiver) = if let Some(matchmaker) =
             &config.matchmaker
@@ -61,8 +61,8 @@ impl GossipIntent {
     pub fn parse_raw_msg(
         &mut self,
         data: impl AsRef<[u8]>,
-    ) -> Result<IntentBroadcasterMessage> {
-        IntentBroadcasterMessage::decode(data.as_ref())
+    ) -> Result<IntentGossipMessage> {
+        IntentGossipMessage::decode(data.as_ref())
             .map_err(Error::DecodeError)
     }
 

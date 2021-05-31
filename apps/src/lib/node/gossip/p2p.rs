@@ -9,7 +9,7 @@ use tokio::sync::mpsc::Receiver;
 use super::network_behaviour::Behaviour;
 use crate::proto::services::{rpc_message, RpcResponse};
 use crate::proto::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage,
+    intent_gossip_message, IntentGossipMessage,
 };
 use crate::types::MatchmakerMessage;
 
@@ -34,7 +34,7 @@ pub struct P2P {
 
 impl P2P {
     pub fn new(
-        config: &crate::config::IntentBroadcaster,
+        config: &crate::config::IntentGossiper
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
@@ -65,7 +65,7 @@ impl P2P {
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
         self.swarm
             .behaviour_mut()
-            .intent_broadcaster_app
+            .intent_gossip_app
             .handle_mm_message(mm_message)
             .await
     }
@@ -98,13 +98,13 @@ impl P2P {
                 match self
                     .swarm
                     .behaviour_mut()
-                    .intent_broadcaster_app
+                    .intent_gossip_app
                     .apply_intent(intent.clone())
                 {
                     Ok(true) => {
                         let mut intent_bytes = vec![];
-                        let intent = IntentBroadcasterMessage {
-                            msg: Some(intent_broadcaster_message::Msg::Intent(
+                        let intent = IntentGossipMessage {
+                            msg: Some(intent_gossip_message::Msg::Intent(
                                 intent,
                             )),
                         };
@@ -112,7 +112,7 @@ impl P2P {
                         match self
                             .swarm
                             .behaviour_mut()
-                            .intent_broadcaster_gossip
+                            .intent_gossip_behaviour
                             .publish(IdentTopic::new(topic), intent_bytes)
                         {
                             Ok(message_id) => {
@@ -179,7 +179,7 @@ impl P2P {
                 match self
                     .swarm
                     .behaviour_mut()
-                    .intent_broadcaster_gossip
+                    .intent_gossip_behaviour
                     .subscribe(&topic)
                 {
                     Ok(true) => {

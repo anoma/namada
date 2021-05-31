@@ -18,9 +18,9 @@ use libp2p::{NetworkBehaviour, PeerId};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::intent_broadcaster;
+use super::intent_gossiper;
 use crate::proto::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage,
+    intent_gossip_message, IntentGossipMessage,
 };
 use crate::types::MatchmakerMessage;
 
@@ -28,8 +28,8 @@ use crate::types::MatchmakerMessage;
 pub enum Error {
     #[error("Failed to subscribe")]
     FailedSubscription(libp2p::gossipsub::error::SubscriptionError),
-    #[error("Failed initializing the intent broadcaster app: {0}")]
-    GossipIntentError(intent_broadcaster::Error),
+    #[error("Failed initializing the intent gossiper app: {0}")]
+    GossipIntentError(intent_gossiper::Error),
     #[error("Failed initializing the topic filter: {0}")]
     Filter(String),
     #[error("Failed initializing the gossip network: {0}")]
@@ -42,17 +42,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub type Gossipsub = libp2p::gossipsub::Gossipsub<
     IdentityTransform,
-    IntentBroadcasterSubscriptionFilter,
+    IntentGossipSubscriptionFilter,
 >;
 
 // TODO merge type of config and this one ? Maybe not a good idea
-pub enum IntentBroadcasterSubscriptionFilter {
+pub enum IntentGossipSubscriptionFilter {
     RegexFilter(RegexSubscriptionFilter),
     WhitelistFilter(WhitelistSubscriptionFilter),
 }
 
 #[derive(Debug)]
-pub struct IntentBroadcasterEvent {
+pub struct IntentGossipEvent {
     pub propagation_source: PeerId,
     pub message_id: MessageId,
     pub source: Option<PeerId>,
@@ -60,7 +60,7 @@ pub struct IntentBroadcasterEvent {
     pub topic: TopicHash,
 }
 
-impl From<GossipsubEvent> for IntentBroadcasterEvent {
+impl From<GossipsubEvent> for IntentGossipEvent {
     // To be used only with Message event
     fn from(event: GossipsubEvent) -> Self {
         if let GossipsubEvent::Message {
@@ -87,13 +87,13 @@ impl From<GossipsubEvent> for IntentBroadcasterEvent {
         }
     }
 }
-impl TopicSubscriptionFilter for IntentBroadcasterSubscriptionFilter {
+impl TopicSubscriptionFilter for IntentGossipSubscriptionFilter {
     fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
         match self {
-            IntentBroadcasterSubscriptionFilter::RegexFilter(filter) => {
+            IntentGossipSubscriptionFilter::RegexFilter(filter) => {
                 filter.can_subscribe(topic_hash)
             }
-            IntentBroadcasterSubscriptionFilter::WhitelistFilter(filter) => {
+            IntentGossipSubscriptionFilter::WhitelistFilter(filter) => {
                 filter.can_subscribe(topic_hash)
             }
         }
@@ -102,14 +102,14 @@ impl TopicSubscriptionFilter for IntentBroadcasterSubscriptionFilter {
 
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
-    pub intent_broadcaster_gossip: libp2p::gossipsub::Gossipsub<
+    pub intent_gossip_behaviour: libp2p::gossipsub::Gossipsub<
         IdentityTransform,
-        IntentBroadcasterSubscriptionFilter,
+        IntentGossipSubscriptionFilter,
     >,
     local_discovery: Mdns,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
-    pub intent_broadcaster_app: intent_broadcaster::GossipIntent,
+    pub intent_gossip_app: intent_gossiper::GossipIntent,
 }
 
 pub fn message_id(message: &GossipsubMessage) -> MessageId {
@@ -121,11 +121,11 @@ pub fn message_id(message: &GossipsubMessage) -> MessageId {
 impl Behaviour {
     pub fn new(
         key: Keypair,
-        config: &crate::config::IntentBroadcaster,
+        config: &crate::config::IntentGossiper,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
-            .protocol_id_prefix("intent_broadcaster")
+            .protocol_id_prefix("intent_gossip")
             .heartbeat_interval(Duration::from_secs(1))
             .validation_mode(ValidationMode::Strict)
             .message_id_fn(message_id)
@@ -139,12 +139,12 @@ impl Behaviour {
 
         let filter = match &config.subscription_filter {
             crate::config::SubscriptionFilter::RegexFilter(regex) => {
-                IntentBroadcasterSubscriptionFilter::RegexFilter(
+                IntentGossipSubscriptionFilter::RegexFilter(
                     RegexSubscriptionFilter(regex.clone()),
                 )
             }
             crate::config::SubscriptionFilter::WhitelistFilter(topics) => {
-                IntentBroadcasterSubscriptionFilter::WhitelistFilter(
+                IntentGossipSubscriptionFilter::WhitelistFilter(
                     WhitelistSubscriptionFilter(
                         topics
                             .iter()
@@ -157,7 +157,7 @@ impl Behaviour {
             }
         };
 
-        let mut intent_broadcaster_gossip: Gossipsub =
+        let mut intent_gossip_behaviour: Gossipsub =
             Gossipsub::new_with_subscription_filter(
                 MessageAuthenticity::Signed(key),
                 gossipsub_config,
@@ -165,15 +165,15 @@ impl Behaviour {
             )
             .map_err(|s| Error::Filter(s.to_string()))?;
 
-        let (intent_broadcaster_app, matchmaker_event_receiver) =
-            intent_broadcaster::GossipIntent::new(&config)
+        let (intent_gossip_app, matchmaker_event_receiver) =
+            intent_gossiper::GossipIntent::new(&config)
                 .map_err(Error::GossipIntentError)?;
 
         config
             .topics
             .iter()
             .try_for_each(|topic| {
-                intent_broadcaster_gossip
+                intent_gossip_behaviour
                     .subscribe(&IdentTopic::new(topic))
                     .map_err(Error::FailedSubscription)
                     // it returns bool signifying if it was already subscribed.
@@ -190,9 +190,9 @@ impl Behaviour {
         };
         Ok((
             Self {
-                intent_broadcaster_gossip,
+                intent_gossip_behaviour,
                 local_discovery,
-                intent_broadcaster_app,
+                intent_gossip_app,
             },
             matchmaker_event_receiver,
         ))
@@ -202,17 +202,17 @@ impl Behaviour {
         &mut self,
         intent: crate::proto::types::Intent,
     ) -> MessageAcceptance {
-        match self.intent_broadcaster_app.apply_intent(intent) {
+        match self.intent_gossip_app.apply_intent(intent) {
             Ok(true) => MessageAcceptance::Accept,
             Ok(false) => MessageAcceptance::Reject,
             Err(e) => {
                 tracing::error!("Error while trying to apply an intent: {}", e);
                 match e {
-                    intent_broadcaster::Error::DecodeError(_) => {
+                    intent_gossiper::Error::DecodeError(_) => {
                         panic!("can't happens, because intent already decoded")
                     }
-                    intent_broadcaster::Error::MatchmakerInit(err)
-                    | intent_broadcaster::Error::Matchmaker(err) => {
+                    intent_gossiper::Error::MatchmakerInit(err)
+                    | intent_gossiper::Error::Matchmaker(err) => {
                         tracing::info!(
                             "error while running the matchmaker: {:?}",
                             err
@@ -228,24 +228,24 @@ impl Behaviour {
         &mut self,
         data: impl AsRef<[u8]>,
     ) -> MessageAcceptance {
-        match self.intent_broadcaster_app.parse_raw_msg(data) {
-            Ok(IntentBroadcasterMessage {
-                msg: Some(intent_broadcaster_message::Msg::Intent(intent)),
+        match self.intent_gossip_app.parse_raw_msg(data) {
+            Ok(IntentGossipMessage {
+                msg: Some(intent_gossip_message::Msg::Intent(intent)),
             }) => self.handle_intent(intent),
-            Ok(IntentBroadcasterMessage { msg: None }) => {
+            Ok(IntentGossipMessage { msg: None }) => {
                 tracing::info!("Empty message, rejecting it");
                 MessageAcceptance::Reject
             }
             Err(err) => match err {
-                intent_broadcaster::Error::DecodeError(..) => {
+                intent_gossiper::Error::DecodeError(..) => {
                     tracing::info!(
                         "error while decoding the intent: {:?}",
                         err
                     );
                     MessageAcceptance::Reject
                 }
-                intent_broadcaster::Error::MatchmakerInit(..)
-                | intent_broadcaster::Error::Matchmaker(..) => {
+                intent_gossiper::Error::MatchmakerInit(..)
+                | intent_gossiper::Error::Matchmaker(..) => {
                     panic!("can't happens, because intent already decoded")
                 }
             },
@@ -263,7 +263,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                 message_id,
             } => {
                 let validity = self.handle_raw_intent(message.data);
-                self.intent_broadcaster_gossip
+                self.intent_gossip_behaviour
                     .report_message_validation_result(
                         &message_id,
                         &propagation_source,
@@ -272,7 +272,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                     .expect("Failed to validate the message ");
             }
             GossipsubEvent::Subscribed { peer_id: _, topic } => {
-                self.intent_broadcaster_gossip
+                self.intent_gossip_behaviour
                     .subscribe(&IdentTopic::new(topic.into_string()))
                     .map_err(Error::FailedSubscription)
                     .unwrap_or_else(|e| {
@@ -295,7 +295,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
             MdnsEvent::Discovered(list) => {
                 for (peer, addr) in list {
                     tracing::debug!("discovering peer {} : {} ", peer, addr);
-                    self.intent_broadcaster_gossip.inject_connected(&peer);
+                    self.intent_gossip_behaviour.inject_connected(&peer);
                 }
             }
             MdnsEvent::Expired(list) => {
@@ -306,7 +306,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
                             peer,
                             addr
                         );
-                        self.intent_broadcaster_gossip
+                        self.intent_gossip_behaviour
                             .inject_disconnected(&peer);
                     }
                 }

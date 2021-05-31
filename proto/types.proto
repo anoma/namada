@@ -17,7 +17,7 @@ message Intent {
   google.protobuf.Timestamp timestamp = 2;
 }
 
-message IntentBroadcasterMessage{
+message IntentGossipMessage{
   oneof msg {
     Intent intent = 1;
   }
@@ -27,7 +27,7 @@ message Dkg {
   string data = 1;
 }
 
-message DkgBroadcasterMessage{
+message DkgGossipMessage{
   oneof dkg_message {
     Dkg dkg = 1;
   }

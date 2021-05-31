@@ -1,6 +1,6 @@
 # Matchmaker
 
-The matchmaker is a process that can be activated in any intent broadcaster
+The matchmaker is a process that can be activated in any intent gossip node
 process. It tries to match any number of intents to create a fulfilling
 transaction. The matchmaker is defined with three wasm modules, a filter, a
 matchmaker program and a transaction template.

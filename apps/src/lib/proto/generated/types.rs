@@ -15,12 +15,12 @@ pub struct Intent {
     pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IntentBroadcasterMessage {
-    #[prost(oneof = "intent_broadcaster_message::Msg", tags = "1")]
-    pub msg: ::core::option::Option<intent_broadcaster_message::Msg>,
+pub struct IntentGossipMessage {
+    #[prost(oneof = "intent_gossip_message::Msg", tags = "1")]
+    pub msg: ::core::option::Option<intent_gossip_message::Msg>,
 }
-/// Nested message and enum types in `IntentBroadcasterMessage`.
-pub mod intent_broadcaster_message {
+/// Nested message and enum types in `IntentGossipMessage`.
+pub mod intent_gossip_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
         #[prost(message, tag = "1")]
@@ -33,13 +33,12 @@ pub struct Dkg {
     pub data: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DkgBroadcasterMessage {
-    #[prost(oneof = "dkg_broadcaster_message::DkgMessage", tags = "1")]
-    pub dkg_message:
-        ::core::option::Option<dkg_broadcaster_message::DkgMessage>,
+pub struct DkgGossipMessage {
+    #[prost(oneof = "dkg_gossip_message::DkgMessage", tags = "1")]
+    pub dkg_message: ::core::option::Option<dkg_gossip_message::DkgMessage>,
 }
-/// Nested message and enum types in `DkgBroadcasterMessage`.
-pub mod dkg_broadcaster_message {
+/// Nested message and enum types in `DkgGossipMessage`.
+pub mod dkg_gossip_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum DkgMessage {
         #[prost(message, tag = "1")]
