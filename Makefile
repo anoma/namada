@@ -45,7 +45,7 @@ reset-ledger:
 	$(cargo) run --bin anoman -- reset-ledger
 
 audit:
-	$(cargo) audit --deny warnings $(foreach ignore,$(audit-ignores), --ignore $(ignore))
+	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
 test:
 	$(cargo) test
@@ -64,6 +64,10 @@ watch:
 
 clean:
 	$(cargo) clean
+
+build-doc:
+	$(cargo) doc --no-deps
+	make -C tech-specs build
 
 doc:
 	# build and opens the docs in browser
