@@ -8,9 +8,7 @@ use tokio::sync::mpsc::Receiver;
 
 use super::network_behaviour::Behaviour;
 use crate::proto::services::{rpc_message, RpcResponse};
-use crate::proto::types::{
-    intent_gossip_message, IntentGossipMessage,
-};
+use crate::proto::types::{intent_gossip_message, IntentGossipMessage};
 use crate::types::MatchmakerMessage;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
@@ -34,7 +32,7 @@ pub struct P2P {
 
 impl P2P {
     pub fn new(
-        config: &crate::config::IntentGossiper
+        config: &crate::config::IntentGossiper,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());

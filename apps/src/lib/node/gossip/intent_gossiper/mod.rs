@@ -62,8 +62,7 @@ impl GossipIntent {
         &mut self,
         data: impl AsRef<[u8]>,
     ) -> Result<IntentGossipMessage> {
-        IntentGossipMessage::decode(data.as_ref())
-            .map_err(Error::DecodeError)
+        IntentGossipMessage::decode(data.as_ref()).map_err(Error::DecodeError)
     }
 
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {

@@ -19,9 +19,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::intent_gossiper;
-use crate::proto::types::{
-    intent_gossip_message, IntentGossipMessage,
-};
+use crate::proto::types::{intent_gossip_message, IntentGossipMessage};
 use crate::types::MatchmakerMessage;
 
 #[derive(Error, Debug)]
@@ -306,8 +304,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
                             peer,
                             addr
                         );
-                        self.intent_gossip_behaviour
-                            .inject_disconnected(&peer);
+                        self.intent_gossip_behaviour.inject_disconnected(&peer);
                     }
                 }
             }
