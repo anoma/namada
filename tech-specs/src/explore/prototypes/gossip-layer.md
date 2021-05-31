@@ -1,4 +1,4 @@
-# Gossip layer/Orderbook prototype
+# Intent Gossip system prototype
 
 tracking issue <https://github.com/heliaxdev/anoma-prototype/issues/35>
 
@@ -13,16 +13,16 @@ tracking issue <https://github.com/heliaxdev/anoma-prototype/issues/35>
 
 ## components
 
-The orderbook is build conjointly to the ledger and share the same binary.
+The intent gossip is build conjointly to the ledger and share the same binary.
 
 ### Node
 
 The node is built into `anoman`, it runs all the necesarry part, rpc server,
-libp2p, orderbook app.
+libp2p, intent gossip app.
 
-#### Orderbook
+#### Intent gossip application
 
-The orderbook application
+The intent gossip application
 
 ##### Mempool
 
@@ -30,13 +30,13 @@ The orderbook application
 
 #### Network behaviour
 The network behaviour is the part that react on network event. It creates a
-channel (e.g. `tokio::mpsc::channel`) with the orderbook to communicate all
+channel (e.g. `tokio::mpsc::channel`) with the intent gossip to communicate all
 intent it receive.
 
 #### Rpc server
 If the rpc command line option is set it creates a tonic server that receive
 command from a client and send theses through a channel
-(e.g. `tokio::mpsc::channel`) to the the orderbook.
+(e.g. `tokio::mpsc::channel`) to the the intent gossip.
 
 ### Client
 Allow to submit a intent :
