@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::ops::Add;
 use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -10,14 +9,11 @@ use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::internal::HostEnvResult;
-use crate::types::key::ed25519::{
-    verify_signature_raw, PublicKey, Signature, SignedTxData,
-};
+use crate::types::key::ed25519::{verify_signature_raw, PublicKey, Signature};
 use crate::types::{Address, Key};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::types::KeyVal;
-use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
@@ -1128,7 +1124,7 @@ pub fn mm_remove_intents<MEM, MM>(
     let intents_id =
         HashSet::<Vec<u8>>::try_from_slice(&intents_id_bytes).unwrap();
 
-    let mut mm = env.mm.lock().unwrap();
+    let mm = env.mm.lock().unwrap();
     mm.remove_intents(intents_id);
 }
 
@@ -1142,23 +1138,7 @@ pub fn mm_send_match<MEM, MM>(
     MM: MmHost,
 {
     let (tx_data, _gas) = env.memory.read_bytes(data_ptr, data_len as _);
-    // TODO do this in the matchmaker host
-    // TODO sign in the matchmaker module instead. use a ref for the tx_code
-    // here to avoid copying
-    // let tx_code = unsafe { env.tx_code.get() };
-    // let keypair = wallet::matchmaker_keypair();
-    // let signed = SignedTxData::new(&keypair, tx_data, tx_code);
-    // let signed_bytes = signed
-    //     .try_to_vec()
-    //     .expect("Couldn't encoded signed matchmaker tx data");
-    // let tx = Tx {
-    //     code: tx_code,
-    //     data: Some(signed_bytes),
-    //     timestamp: Some(std::time::SystemTime::now().into()),
-    // };
-    // env.inject_mm_message
-    //     .try_send(MatchmakerMessage::InjectTx(tx))
-    //     .expect("failed to send tx")
+
     let mm = env.mm.lock().unwrap();
     mm.inject_tx(tx_data);
 }
@@ -1173,7 +1153,7 @@ pub fn mm_update_data<MEM, MM>(
 {
     let (data, _gas) = env.memory.read_bytes(data_ptr, data_len as _);
 
-    let mut mm = env.mm.lock().unwrap();
+    let mm = env.mm.lock().unwrap();
     mm.update_data(data);
 }
 

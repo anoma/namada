@@ -1,7 +1,4 @@
 use std::collections::HashSet;
-use std::ffi::c_void;
-use std::marker::PhantomData;
-use std::slice;
 use std::sync::{Arc, Mutex};
 
 use parity_wasm::elements;

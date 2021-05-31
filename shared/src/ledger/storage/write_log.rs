@@ -327,13 +327,13 @@ mod tests {
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
-        let (addr, _) = write_log.init_account(&address_gen, init_vp.clone());
+        let (addr, _) = write_log.init_account(&address_gen, init_vp);
         let vp_key =
             Key::validity_predicate(&addr).expect("cannot create the vp key");
 
         // update should fail
         let updated_vp = "updated".as_bytes().to_vec();
-        write_log.write(&vp_key, updated_vp.clone());
+        write_log.write(&vp_key, updated_vp);
     }
 
     #[test]
@@ -343,7 +343,7 @@ mod tests {
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
-        let (addr, _) = write_log.init_account(&address_gen, init_vp.clone());
+        let (addr, _) = write_log.init_account(&address_gen, init_vp);
         let vp_key =
             Key::validity_predicate(&addr).expect("cannot create the vp key");
 
@@ -381,7 +381,7 @@ mod tests {
         let val2 = "val2".as_bytes().to_vec();
         write_log.write(&key1, val2.clone());
         write_log.write(&key2, val2.clone());
-        write_log.write(&key3, val2.clone());
+        write_log.write(&key3, val2);
         write_log.drop_tx();
 
         // deletes and updates values

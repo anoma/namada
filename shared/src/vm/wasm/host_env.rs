@@ -8,11 +8,11 @@ use wasmer::{
 
 use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
-use crate::ledger::storage::write_log::{self, WriteLog};
+use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::{Address, Key};
 use crate::vm::host_env::{FilterEnv, MatchmakerEnv, TxEnv, VpEnv};
-use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
+use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{
     host_env, EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
