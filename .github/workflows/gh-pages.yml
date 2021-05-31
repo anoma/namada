@@ -23,8 +23,10 @@ jobs:
       - run: | 
           make -C tech-specs dev-deps
           make build-doc
+          mkdir tech-specs/book/rustdoc
+          mv -v target/doc/* tech-specs/book/rustdoc/
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc
+          publish_dir: ./tech-specs/book
