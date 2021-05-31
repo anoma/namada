@@ -38,9 +38,9 @@ mod tests {
         let value_raw = value.try_to_vec().unwrap();
         env.write_log.write(&key, value_raw);
 
-        let read_pre_value: Option<String> = host_env::read_pre(key_raw);
+        let read_pre_value: Option<String> = vp_host_env::read_pre(key_raw);
         assert_eq!(None, read_pre_value);
-        let read_post_value: Option<String> = host_env::read_post(key_raw);
+        let read_post_value: Option<String> = vp_host_env::read_post(key_raw);
         assert_eq!(Some(value), read_post_value);
     }
 }

@@ -7,6 +7,7 @@ use std::sync::mpsc;
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::protocol::gas::{self, BlockGasMeter};
 use anoma_shared::protocol::storage::MerkleRoot;
+use anoma_shared::protocol::vm::write_log::WriteLog;
 use anoma_shared::types::key::ed25519::PublicKey;
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{
@@ -18,7 +19,6 @@ use thiserror::Error;
 
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::node::protocol;
-use crate::node::vm::host_env::write_log::WriteLog;
 use crate::proto::types::Tx;
 use crate::{config, wallet};
 
@@ -65,8 +65,6 @@ pub fn reset(config: config::Ledger) -> Result<()> {
 pub struct Shell {
     abci: AbciReceiver,
     storage: storage::PersistentStorage,
-    // The gas meter is sync with mutex to allow VPs sharing it
-    // TODO it should be possible to impl a lock-free gas metering for VPs
     gas_meter: BlockGasMeter,
     write_log: WriteLog,
 }

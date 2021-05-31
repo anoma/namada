@@ -4,6 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use anoma_shared::protocol::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
+use anoma_shared::protocol::vm;
+use anoma_shared::protocol::vm::wasm::runner::{TxRunner, VpRunner};
 use anoma_shared::protocol::vm::write_log::WriteLog;
 use anoma_shared::types::{Address, Key};
 use prost::Message;
@@ -11,8 +13,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::node::shell::storage::PersistentStorage;
-use crate::node::vm;
-use crate::node::vm::{TxRunner, VpRunner};
 use crate::proto::types::Tx;
 
 #[derive(Error, Debug)]
@@ -22,11 +22,11 @@ pub enum Error {
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
     #[error("Transaction runner error: {0}")]
-    TxRunnerError(vm::Error),
+    TxRunnerError(vm::wasm::runner::Error),
     #[error("Gas error: {0}")]
     GasError(gas::Error),
     #[error("Error executing VP for addresses: {0:?}")]
-    VpRunnerError(vm::Error),
+    VpRunnerError(vm::wasm::runner::Error),
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
 }

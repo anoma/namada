@@ -1,9 +1,9 @@
-use anoma_shared::protocol::vm::memory::VmMemory;
-use anoma_shared::vm_memory;
-use anoma_shared::vm_memory::{self, VpInput};
 use borsh::BorshSerialize;
 use thiserror::Error;
 use wasmer::{HostEnvInitError, LazyInit, Memory};
+
+use crate::protocol::vm::memory::VmMemory;
+use crate::vm_memory::{self, VpInput};
 
 #[derive(Error, Debug)]
 pub enum Error {

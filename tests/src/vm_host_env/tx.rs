@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 
-use anoma::node::vm::host_env::prefix_iter::PrefixIterators;
-use anoma::node::vm::host_env::testing;
-use anoma::node::vm::host_env::write_log::WriteLog;
-use anoma::node::vm::memory::testing::NativeMemory;
 use anoma_shared::protocol::gas::BlockGasMeter;
 use anoma_shared::protocol::storage::mockdb::MockDB;
 use anoma_shared::protocol::storage::testing::TestStorage;
+use anoma_shared::protocol::vm;
+use anoma_shared::protocol::vm::prefix_iter::PrefixIterators;
+use anoma_shared::protocol::vm::write_log::WriteLog;
 use anoma_shared::types::{Address, Key};
 
 /// This module combines the native host function implementations from
@@ -59,7 +58,9 @@ pub fn init_tx_env(
 ) {
     tx_host_env::ENV.with(|env| {
         *env.borrow_mut() = Some({
-            testing::tx_env(storage, write_log, iterators, verifiers, gas_meter)
+            vm::host_env::testing::tx_env(
+                storage, write_log, iterators, verifiers, gas_meter,
+            )
         })
     });
 }
@@ -72,15 +73,16 @@ mod native_tx_host_env {
 
     use std::cell::RefCell;
 
-    use anoma::node::vm::host_env::*;
     use anoma_shared::protocol::storage::testing::Sha256Hasher;
+    use anoma_shared::protocol::vm::host_env::*;
+    use anoma_shared::protocol::vm::memory::testing::NativeMemory;
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
 
     use super::*;
 
     thread_local! {
-        pub static ENV: RefCell<Option<TxEnv<MockDB, NativeMemory, Sha256Hasher>>> = RefCell::new(None);
+        pub static ENV: RefCell<Option<TxEnv<'static, NativeMemory, MockDB, Sha256Hasher>>> = RefCell::new(None);
     }
 
     /// A helper macro to create implementations of the host environment

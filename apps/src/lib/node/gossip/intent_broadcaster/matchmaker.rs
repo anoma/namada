@@ -1,3 +1,4 @@
+use anoma_shared::protocol::vm;
 use prost::Message;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
@@ -7,7 +8,6 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
 use crate::config;
-use crate::node::vm;
 use crate::proto::types::Intent;
 use crate::proto::IntentId;
 use crate::types::MatchmakerMessage;
@@ -29,7 +29,7 @@ pub enum Error {
     #[error("Failed to add intent to mempool: {0}")]
     MempoolFailed(mempool::Error),
     #[error("Failed to run matchmaker prog: {0}")]
-    RunnerFailed(vm::Error),
+    RunnerFailed(vm::wasm::runner::Error),
     #[error("Failed to read file: {0}")]
     FileFailed(std::io::Error),
     #[error("Failed to create filter: {0}")]
@@ -87,18 +87,19 @@ impl Matchmaker {
             self.mempool
                 .put(intent.clone())
                 .map_err(Error::MempoolFailed)?;
-            let matchmaker_runner = vm::MatchmakerRunner::new();
-            Ok(matchmaker_runner
-                .run(
-                    &self.matchmaker_code.clone(),
-                    &self.data,
-                    &IntentId::new(&intent).0,
-                    &intent.data,
-                    &self.tx_code,
-                    self.inject_mm_message.clone(),
-                )
-                .map_err(Error::RunnerFailed)
-                .unwrap())
+            // let matchmaker_runner = vm::MatchmakerRunner::new();
+            // Ok(matchmaker_runner
+            //     .run(
+            //         &self.matchmaker_code.clone(),
+            //         &self.data,
+            //         &IntentId::new(&intent).0,
+            //         &intent.data,
+            //         &self.tx_code,
+            //         self.inject_mm_message.clone(),
+            //     )
+            //     .map_err(Error::RunnerFailed)
+            //     .unwrap())
+            todo!()
         } else {
             Ok(false)
         }

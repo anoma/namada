@@ -1,11 +1,13 @@
-use anoma::node::vm::host_env::prefix_iter::PrefixIterators;
-use anoma::node::vm::host_env::testing;
-use anoma::node::vm::host_env::write_log::WriteLog;
-use anoma::node::vm::memory::testing::NativeMemory;
-use anoma_shared::protocol::gas::BlockGasMeter;
+use std::collections::HashSet;
+
+use anoma_shared::protocol::gas::VpGasMeter;
 use anoma_shared::protocol::storage::mockdb::MockDB;
 use anoma_shared::protocol::storage::testing::TestStorage;
+use anoma_shared::protocol::vm;
+use anoma_shared::protocol::vm::prefix_iter::PrefixIterators;
+use anoma_shared::protocol::vm::write_log::WriteLog;
 use anoma_shared::types::address::{self, Address};
+use anoma_shared::types::Key;
 
 /// This module combines the native host function implementations from
 /// [`native_vp_host_env`] above with the functions exposed to the vp wasm
@@ -23,8 +25,10 @@ pub struct TestVpEnv {
     pub storage: TestStorage,
     pub write_log: WriteLog,
     pub iterators: PrefixIterators<'static, MockDB>,
-    pub gas_meter: BlockGasMeter,
+    pub gas_meter: VpGasMeter,
     pub tx_code: Vec<u8>,
+    pub keys_changed: Vec<Key>,
+    pub verifiers: HashSet<Address>,
 }
 
 impl Default for TestVpEnv {
@@ -34,8 +38,10 @@ impl Default for TestVpEnv {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
             iterators: PrefixIterators::default(),
-            gas_meter: BlockGasMeter::default(),
+            gas_meter: VpGasMeter::new(0),
             tx_code: vec![],
+            keys_changed: vec![],
+            verifiers: HashSet::default(),
         }
     }
 }
@@ -50,17 +56,21 @@ pub fn init_vp_env(
         iterators,
         gas_meter,
         tx_code,
+        keys_changed,
+        verifiers,
     }: &mut TestVpEnv,
 ) {
     vp_host_env::ENV.with(|env| {
         *env.borrow_mut() = Some({
-            testing::vp_env(
+            vm::host_env::testing::vp_env(
                 addr.clone(),
                 storage,
                 write_log,
                 iterators,
                 gas_meter,
                 tx_code,
+                keys_changed,
+                verifiers,
             )
         })
     });
@@ -74,15 +84,16 @@ mod native_vp_host_env {
 
     use std::cell::RefCell;
 
-    use anoma::node::vm::host_env::*;
     use anoma_shared::protocol::storage::testing::Sha256Hasher;
+    use anoma_shared::protocol::vm::host_env::*;
+    use anoma_shared::protocol::vm::memory::testing::NativeMemory;
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
 
     use super::*;
 
     thread_local! {
-        pub static ENV: RefCell<Option<VpEnv<MockDB, NativeMemory, Sha256Hasher>>> = RefCell::new(None);
+        pub static ENV: RefCell<Option<VpEnv<'static, NativeMemory, MockDB, Sha256Hasher>>> = RefCell::new(None);
     }
 
     /// A helper macro to create implementations of the host environment

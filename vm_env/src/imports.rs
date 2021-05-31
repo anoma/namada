@@ -450,7 +450,7 @@ pub mod vp {
     /// caller's validity predicate.
     pub fn eval(vp_code: Vec<u8>, input_data: Vec<u8>) -> bool {
         let result = unsafe {
-            anoma_eval(
+            anoma_vp_eval(
                 vp_code.as_ptr() as _,
                 vp_code.len() as _,
                 input_data.as_ptr() as _,

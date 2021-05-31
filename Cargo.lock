@@ -75,7 +75,7 @@ dependencies = [
  "base64 0.13.0",
  "bech32",
  "blake2b-rs",
- "borsh 0.9.0",
+ "borsh",
  "byteorder",
  "bytesize",
  "cargo-watch",
@@ -87,11 +87,9 @@ dependencies = [
  "futures",
  "hex",
  "libp2p",
- "parity-wasm",
  "proptest",
  "prost",
  "prost-types",
- "pwasm-utils",
  "rand 0.7.3",
  "rand_core 0.5.1",
  "rayon",
@@ -102,7 +100,7 @@ dependencies = [
  "serde_json",
  "serde_regex",
  "sha2 0.9.3",
- "sparse-merkle-tree 0.3.1-pre (git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding-0.9.0)",
+ "sparse-merkle-tree",
  "tempfile",
  "tendermint",
  "tendermint-abci",
@@ -116,10 +114,6 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
- "wasmer",
- "wasmer-compiler-singlepass",
- "wasmer-engine-jit",
- "wasmer-vm",
 ]
 
 [[package]]
@@ -127,15 +121,21 @@ name = "anoma_shared"
 version = "0.1.0"
 dependencies = [
  "bech32",
- "borsh 0.9.0",
+ "borsh",
  "ed25519-dalek",
+ "parity-wasm",
  "proptest",
+ "pwasm-utils",
  "rand 0.8.3",
  "serde 1.0.125",
  "sha2 0.9.3",
- "sparse-merkle-tree 0.3.1-pre (git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding)",
+ "sparse-merkle-tree",
  "thiserror",
  "tracing",
+ "wasmer",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-jit",
+ "wasmer-vm",
  "wasmparser 0.78.2",
 ]
 
@@ -155,7 +155,7 @@ version = "0.1.0"
 dependencies = [
  "anoma_shared",
  "anoma_vm_macro",
- "borsh 0.9.0",
+ "borsh",
 ]
 
 [[package]]
@@ -575,35 +575,12 @@ dependencies = [
 
 [[package]]
 name = "borsh"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09a7111f797cc721407885a323fb071636aee57f750b1a4ddc27397eba168a74"
-dependencies = [
- "borsh-derive 0.8.2",
- "hashbrown",
-]
-
-[[package]]
-name = "borsh"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fcabb02816fdadf90866dc9a7824491ccb63d69f55375a266dc03509ac68d36"
 dependencies = [
- "borsh-derive 0.9.0",
+ "borsh-derive",
  "hashbrown",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "307f3740906bac2c118a8122fe22681232b244f1369273e45f1156b45c43d2dd"
-dependencies = [
- "borsh-derive-internal 0.8.2",
- "borsh-schema-derive-internal 0.8.2",
- "proc-macro-crate",
- "proc-macro2",
- "syn",
 ]
 
 [[package]]
@@ -612,21 +589,10 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4bd16f0729b89f0a212b0e2e1d19cc6593df63f771161a11863967780e2d033d"
 dependencies = [
- "borsh-derive-internal 0.9.0",
- "borsh-schema-derive-internal 0.9.0",
+ "borsh-derive-internal",
+ "borsh-schema-derive-internal",
  "proc-macro-crate",
  "proc-macro2",
- "syn",
-]
-
-[[package]]
-name = "borsh-derive-internal"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2104c73179359431cc98e016998f2f23bc7a05bc53e79741bcba705f30047bc"
-dependencies = [
- "proc-macro2",
- "quote",
  "syn",
 ]
 
@@ -635,17 +601,6 @@ name = "borsh-derive-internal"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e321a130a3ac4b88eb59a6d670bde11eec9721a397b77e0f2079060e2a1b785"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "borsh-schema-derive-internal"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae29eb8418fcd46f723f8691a2ac06857d31179d33d2f2d91eb13967de97c728"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4139,19 +4094,10 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding#84f9a920fce8873ee67376242d95b89092cddd19"
-dependencies = [
- "borsh 0.8.2",
- "cfg-if 1.0.0",
-]
-
-[[package]]
-name = "sparse-merkle-tree"
-version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding-0.9.0#b1f0dc2c6041abb3b3e4f4f526c5ca261ff04371"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding-0.9.0b#2e4770b4b4e4f4af86bfe082a048bc66b2156003"
 dependencies = [
  "blake2b-rs",
- "borsh 0.9.0",
+ "borsh",
  "cfg-if 1.0.0",
 ]
 

@@ -1,11 +1,13 @@
 use std::ffi::c_void;
 use std::marker::PhantomData;
+use std::slice;
 
 use wasmparser::{Validator, WasmFeatures};
 
 pub mod host_env;
 pub mod memory;
 pub mod prefix_iter;
+pub mod wasm;
 pub mod write_log;
 
 /// This is used to attach the Ledger's host structures to wasm environment,
@@ -28,7 +30,7 @@ impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
     ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
-    unsafe fn new(host_structure: &T) -> Self {
+    pub unsafe fn new(host_structure: &T) -> Self {
         Self {
             data: host_structure as *const T as *const c_void,
             phantom: PhantomData,
@@ -41,7 +43,7 @@ impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
     ///
     /// Because this is unsafe, care must be taken that while this reference
     /// is borrowed, no other process can modify it.
-    unsafe fn get(&self) -> &'a T {
+    pub unsafe fn get(&self) -> &'a T {
         &*(self.data as *const T)
     }
 }
@@ -67,7 +69,7 @@ impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
     ///
     /// Because this is unsafe, care must be taken that while this slice is
     /// borrowed, no other process can modify it.
-    unsafe fn new(host_structure: &[T]) -> Self {
+    pub unsafe fn new(host_structure: &[T]) -> Self {
         Self {
             data: host_structure as *const [T] as *const c_void,
             len: host_structure.len(),
@@ -106,7 +108,7 @@ impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
-    unsafe fn new(host_structure: &mut T) -> Self {
+    pub unsafe fn new(host_structure: &mut T) -> Self {
         Self {
             data: host_structure as *mut T as *mut c_void,
             phantom: PhantomData,
@@ -120,7 +122,7 @@ impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
     /// This is not thread-safe. Also, because this is unsafe, care must be
     /// taken that while this reference is borrowed, no other process can read
     /// or modify it.
-    unsafe fn get(&self) -> &'a mut T {
+    pub unsafe fn get(&self) -> &'a mut T {
         &mut *(self.data as *mut T)
     }
 }
@@ -147,7 +149,7 @@ impl<'a, T: 'a> MutEnvHostSliceWrapper<'a, &[T]> {
     /// Because this is unsafe, care must be taken that while this slice is
     /// borrowed, no other process can modify it.
     #[allow(dead_code)]
-    unsafe fn new(host_structure: &mut [T]) -> Self {
+    pub unsafe fn new(host_structure: &mut [T]) -> Self {
         Self {
             data: host_structure as *mut [T] as *mut c_void,
             len: host_structure.len(),
