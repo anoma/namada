@@ -1,4 +1,8 @@
+use std::sync::{Arc, Mutex};
+
+use anoma_shared::gossip::mm::MmHost;
 use anoma_shared::vm;
+use anoma_shared::vm::wasm::runner::{self, MmRunner};
 use prost::Message;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
@@ -16,20 +20,23 @@ use crate::types::MatchmakerMessage;
 pub struct Matchmaker {
     mempool: IntentMempool,
     filter: Option<Filter>,
-    inject_mm_message: Sender<MatchmakerMessage>,
     matchmaker_code: Vec<u8>,
     tx_code: Vec<u8>,
     // the matchmaker's state as arbitrary bytes
     data: Vec<u8>,
     ledger_address: net::Address,
+    wasm_host: WasmHost,
 }
+
+#[derive(Debug)]
+struct WasmHost(Sender<MatchmakerMessage>);
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed to add intent to mempool: {0}")]
     MempoolFailed(mempool::Error),
     #[error("Failed to run matchmaker prog: {0}")]
-    RunnerFailed(vm::wasm::wasm_runner::Error),
+    RunnerFailed(runner::Error),
     #[error("Failed to read file: {0}")]
     FileFailed(std::io::Error),
     #[error("Failed to create filter: {0}")]
@@ -39,6 +46,20 @@ pub enum Error {
 }
 
 type Result<T> = std::result::Result<T, Error>;
+
+impl MmHost for WasmHost {
+    fn remove_intents(&self, intents_id: std::collections::HashSet<Vec<u8>>) {
+        todo!()
+    }
+
+    fn inject_tx(&self, tx_data: Vec<u8>) {
+        todo!()
+    }
+
+    fn update_data(&self, data: Vec<u8>) {
+        todo!()
+    }
+}
 
 impl Matchmaker {
     pub fn new(
@@ -60,11 +81,11 @@ impl Matchmaker {
             Self {
                 mempool: IntentMempool::new(),
                 filter,
-                inject_mm_message,
                 matchmaker_code,
                 tx_code,
                 data: Vec::new(),
                 ledger_address: config.ledger_address.clone(),
+                wasm_host: WasmHost(inject_mm_message),
             },
             receiver_mm_message,
         ))
@@ -87,19 +108,17 @@ impl Matchmaker {
             self.mempool
                 .put(intent.clone())
                 .map_err(Error::MempoolFailed)?;
-            // let matchmaker_runner = vm::MatchmakerRunner::new();
-            // Ok(matchmaker_runner
-            //     .run(
-            //         &self.matchmaker_code.clone(),
-            //         &self.data,
-            //         &IntentId::new(&intent).0,
-            //         &intent.data,
-            //         &self.tx_code,
-            //         self.inject_mm_message.clone(),
-            //     )
-            //     .map_err(Error::RunnerFailed)
-            //     .unwrap())
-            todo!()
+            let matchmaker_runner = MmRunner::new();
+            Ok(matchmaker_runner
+                .run(
+                    &self.matchmaker_code.clone(),
+                    &self.data,
+                    &IntentId::new(&intent).0,
+                    &intent.data,
+                    Arc::new(Mutex::new(&self.wasm_host)),
+                )
+                .map_err(Error::RunnerFailed)
+                .unwrap())
         } else {
             Ok(false)
         }

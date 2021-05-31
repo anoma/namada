@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::slice;
+use std::sync::{Arc, Mutex};
 
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
@@ -9,10 +10,12 @@ use thiserror::Error;
 // use tokio::sync::mpsc::Sender;
 use wasmer::Instance;
 
-use super::wasm_host_env::{
-    prepare_tx_imports, prepare_vp_env, prepare_vp_imports,
+use super::host_env::{
+    prepare_mm_filter_imports, prepare_mm_imports, prepare_tx_imports,
+    prepare_vp_env, prepare_vp_imports,
 };
-use super::wasm_memory::WasmMemory;
+use super::memory::WasmMemory;
+use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -20,7 +23,7 @@ use crate::types::{Address, Key};
 use crate::vm::host_env::VpEnv;
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::types::{TxInput, VpInput};
-use crate::vm::wasm::wasm_memory;
+use crate::vm::wasm::memory;
 use crate::vm::{
     validate_untrusted_wasm, EnvHostSliceWrapper, EnvHostWrapper,
     MutEnvHostWrapper,
@@ -41,7 +44,7 @@ pub struct TxRunner {
 pub enum Error {
     // 1. Common error types
     #[error("Memory error: {0}")]
-    MemoryError(wasm_memory::Error),
+    MemoryError(memory::Error),
     #[error("Unable to inject gas meter")]
     StackLimiterInjection,
     #[error("Wasm deserialization error: {0}")]
@@ -125,7 +128,7 @@ impl TxRunner {
 
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::CompileError)?;
-        let initial_memory = wasm_memory::prepare_tx_memory(&self.wasm_store)
+        let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let tx_imports = prepare_tx_imports(
             &self.wasm_store,
@@ -151,10 +154,10 @@ impl TxRunner {
             .exports
             .get_memory("memory")
             .map_err(Error::MissingModuleMemory)?;
-        let wasm_memory::TxCallInput {
+        let memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
-        } = wasm_memory::write_tx_inputs(memory, tx_data)
+        } = memory::write_tx_inputs(memory, tx_data)
             .map_err(Error::MemoryError)?;
 
         // Get the module's entrypoint to be called
@@ -234,7 +237,7 @@ impl VpRunner {
 
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(Error::CompileError)?;
-        let initial_memory = wasm_memory::prepare_vp_memory(&self.wasm_store)
+        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let input: VpInput = VpInput {
             addr: &addr,
@@ -275,7 +278,7 @@ impl VpRunner {
         let vp_code = prepare_wasm_code(&vp_code)?;
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(Error::CompileError)?;
-        let initial_memory = wasm_memory::prepare_vp_memory(&self.wasm_store)
+        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
 
         let keys_changed = unsafe { vp_env.keys_changed.get() };
@@ -303,7 +306,7 @@ impl VpRunner {
             .exports
             .get_memory("memory")
             .map_err(Error::MissingModuleMemory)?;
-        let wasm_memory::VpCallInput {
+        let memory::VpCallInput {
             addr_ptr,
             addr_len,
             data_ptr,
@@ -312,7 +315,7 @@ impl VpRunner {
             keys_changed_len,
             verifiers_ptr,
             verifiers_len,
-        } = wasm_memory::write_vp_inputs(memory, input)
+        } = memory::write_vp_inputs(memory, input)
             .map_err(Error::MemoryError)?;
 
         // Get the module's entrypoint to be called
@@ -342,172 +345,168 @@ impl VpRunner {
     }
 }
 
-// #[derive(Clone, Debug)]
-// pub struct MatchmakerRunner {
-//     wasm_store: wasmer::Store,
-// }
+#[derive(Clone, Debug)]
+pub struct MmRunner {
+    wasm_store: wasmer::Store,
+}
 
-// impl MatchmakerRunner {
-//     /// TODO remove the `new`, it's not very useful
-//     #[allow(clippy::new_without_default)]
-//     pub fn new() -> Self {
-//         // TODO for the matchmaker we could use a compiler that does more
-//         // optimisation.
-//         let compiler = wasmer_compiler_singlepass::Singlepass::default();
-//         let wasm_store =
-//
-// wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
-//         Self { wasm_store }
-//     }
+impl MmRunner {
+    /// TODO remove the `new`, it's not very useful
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        // TODO for the matchmaker we could use a compiler that does more
+        // optimisation.
+        let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let wasm_store =
+            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        Self { wasm_store }
+    }
 
-//     pub fn run(
-//         &self,
-//         matchmaker_code: impl AsRef<[u8]>,
-//         data: impl AsRef<[u8]>,
-//         intent_id: impl AsRef<[u8]>,
-//         intent_data: impl AsRef<[u8]>,
-//         tx_code: impl AsRef<[u8]>,
-//         inject_mm_message: Sender<MatchmakerMessage>,
-//     ) -> Result<bool> {
-//         let matchmaker_module: wasmer::Module =
-//             wasmer::Module::new(&self.wasm_store, &matchmaker_code)
-//                 .map_err(Error::CompileError)?;
+    pub fn run<MM>(
+        &self,
+        matchmaker_code: impl AsRef<[u8]>,
+        data: impl AsRef<[u8]>,
+        intent_id: impl AsRef<[u8]>,
+        intent_data: impl AsRef<[u8]>,
+        mm: Arc<Mutex<&MM>>,
+    ) -> Result<bool>
+    where
+        MM: 'static + MmHost,
+    {
+        let matchmaker_module: wasmer::Module =
+            wasmer::Module::new(&self.wasm_store, &matchmaker_code)
+                .map_err(Error::CompileError)?;
 
-//         let initial_memory =
-//             memory::prepare_matchmaker_memory(&self.wasm_store)
-//                 .map_err(Error::MemoryError)?;
+        let initial_memory =
+            memory::prepare_matchmaker_memory(&self.wasm_store)
+                .map_err(Error::MemoryError)?;
 
-//         let matchmaker_imports = host_env::prepare_matchmaker_imports(
-//             &self.wasm_store,
-//             initial_memory,
-//             tx_code,
-//             inject_mm_message,
-//         );
+        let matchmaker_imports =
+            prepare_mm_imports(&self.wasm_store, initial_memory, mm);
 
-//         // compile and run the matchmaker wasm code
-//         let matchmaker_code =
-//             wasmer::Instance::new(&matchmaker_module, &matchmaker_imports)
-//                 .map_err(Error::InstantiationError)?;
+        // compile and run the matchmaker wasm code
+        let matchmaker_code =
+            wasmer::Instance::new(&matchmaker_module, &matchmaker_imports)
+                .map_err(Error::InstantiationError)?;
 
-//         Self::run_with_input(&matchmaker_code, data, intent_id, intent_data)
-//     }
+        Self::run_with_input(&matchmaker_code, data, intent_id, intent_data)
+    }
 
-//     fn run_with_input(
-//         code: &Instance,
-//         data: impl AsRef<[u8]>,
-//         intent_id: impl AsRef<[u8]>,
-//         intent_data: impl AsRef<[u8]>,
-//     ) -> Result<bool> {
-//         let memory = code
-//             .exports
-//             .get_memory("memory")
-//             .map_err(Error::MissingModuleMemory)?;
-//         let memory::MatchmakerCallInput {
-//             data_ptr,
-//             data_len,
-//             intent_id_ptr,
-//             intent_id_len,
-//             intent_data_ptr,
-//             intent_data_len,
-//         }: memory::MatchmakerCallInput = memory::write_matchmaker_inputs(
-//             &memory,
-//             data,
-//             intent_id,
-//             intent_data,
-//         )
-//         .map_err(Error::MemoryError)?;
-//         let apply_matchmaker = code
-//             .exports
-//             .get_function(MATCHMAKER_ENTRYPOINT)
-//             .map_err(Error::MissingModuleEntrypoint)?
-//             .native::<(u64, u64, u64, u64, u64, u64), u64>()
-//             .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-//                 entrypoint: MATCHMAKER_ENTRYPOINT,
-//                 error,
-//             })?;
-//         let found_match = apply_matchmaker
-//             .call(
-//                 data_ptr,
-//                 data_len,
-//                 intent_id_ptr,
-//                 intent_id_len,
-//                 intent_data_ptr,
-//                 intent_data_len,
-//             )
-//             .map_err(Error::RuntimeError)?;
-//         Ok(found_match == 0)
-//     }
-// }
+    fn run_with_input(
+        code: &Instance,
+        data: impl AsRef<[u8]>,
+        intent_id: impl AsRef<[u8]>,
+        intent_data: impl AsRef<[u8]>,
+    ) -> Result<bool> {
+        let memory = code
+            .exports
+            .get_memory("memory")
+            .map_err(Error::MissingModuleMemory)?;
+        let memory::MatchmakerCallInput {
+            data_ptr,
+            data_len,
+            intent_id_ptr,
+            intent_id_len,
+            intent_data_ptr,
+            intent_data_len,
+        }: memory::MatchmakerCallInput = memory::write_matchmaker_inputs(
+            &memory,
+            data,
+            intent_id,
+            intent_data,
+        )
+        .map_err(Error::MemoryError)?;
+        let apply_matchmaker = code
+            .exports
+            .get_function(MATCHMAKER_ENTRYPOINT)
+            .map_err(Error::MissingModuleEntrypoint)?
+            .native::<(u64, u64, u64, u64, u64, u64), u64>()
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: MATCHMAKER_ENTRYPOINT,
+                error,
+            })?;
+        let found_match = apply_matchmaker
+            .call(
+                data_ptr,
+                data_len,
+                intent_id_ptr,
+                intent_id_len,
+                intent_data_ptr,
+                intent_data_len,
+            )
+            .map_err(Error::RuntimeError)?;
+        Ok(found_match == 0)
+    }
+}
 
-// #[derive(Clone, Debug)]
-// pub struct FilterRunner {
-//     wasm_store: wasmer::Store,
-// }
+#[derive(Clone, Debug)]
+pub struct MmFilterRunner {
+    wasm_store: wasmer::Store,
+}
 
-// impl FilterRunner {
-//     /// TODO remove the `new`, it's not very useful
-//     #[allow(clippy::new_without_default)]
-//     pub fn new() -> Self {
-//         // TODO replace to use a better compiler because this program is
-// local         let compiler =
-// wasmer_compiler_singlepass::Singlepass::default();         let wasm_store =
-//
-// wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
-//         Self { wasm_store }
-//     }
+impl MmFilterRunner {
+    /// TODO remove the `new`, it's not very useful
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        // TODO replace to use a better compiler because this program is local
+        let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let wasm_store =
+            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        Self { wasm_store }
+    }
 
-//     pub fn run(
-//         &self,
-//         code: impl AsRef<[u8]>,
-//         intent_data: impl AsRef<[u8]>,
-//     ) -> Result<bool> {
-//         validate_untrusted_wasm(code.as_ref())
-//             .map_err(Error::ValidationError)?;
-//         let code = prepare_wasm_code(code)?;
-//         let filter_module: wasmer::Module =
-//             wasmer::Module::new(&self.wasm_store, &code)
-//                 .map_err(Error::CompileError)?;
-//         let initial_memory = memory::prepare_filter_memory(&self.wasm_store)
-//             .map_err(Error::MemoryError)?;
+    pub fn run(
+        &self,
+        code: impl AsRef<[u8]>,
+        intent_data: impl AsRef<[u8]>,
+    ) -> Result<bool> {
+        validate_untrusted_wasm(code.as_ref())
+            .map_err(Error::ValidationError)?;
+        let code = prepare_wasm_code(code)?;
+        let filter_module: wasmer::Module =
+            wasmer::Module::new(&self.wasm_store, &code)
+                .map_err(Error::CompileError)?;
+        let initial_memory = memory::prepare_filter_memory(&self.wasm_store)
+            .map_err(Error::MemoryError)?;
 
-//         let filter_imports =
-//             host_env::prepare_filter_imports(&self.wasm_store,
-// initial_memory);         let filter_code =
-//             wasmer::Instance::new(&filter_module, &filter_imports)
-//                 .map_err(Error::InstantiationError)?;
+        let filter_imports =
+            prepare_mm_filter_imports(&self.wasm_store, initial_memory);
+        let filter_code =
+            wasmer::Instance::new(&filter_module, &filter_imports)
+                .map_err(Error::InstantiationError)?;
 
-//         Self::run_with_input(&filter_code, intent_data)
-//     }
+        Self::run_with_input(&filter_code, intent_data)
+    }
 
-//     fn run_with_input(
-//         code: &Instance,
-//         intent_data: impl AsRef<[u8]>,
-//     ) -> Result<bool> {
-//         let memory = code
-//             .exports
-//             .get_memory("memory")
-//             .map_err(Error::MissingModuleMemory)?;
-//         let memory::FilterCallInput {
-//             intent_data_ptr,
-//             intent_data_len,
-//         }: memory::FilterCallInput =
-//             memory::write_filter_inputs(&memory, intent_data)
-//                 .map_err(Error::MemoryError)?;
-//         let apply_filter = code
-//             .exports
-//             .get_function(FILTER_ENTRYPOINT)
-//             .map_err(Error::MissingModuleEntrypoint)?
-//             .native::<(u64, u64), u64>()
-//             .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-//                 entrypoint: FILTER_ENTRYPOINT,
-//                 error,
-//             })?;
-//         let found_match = apply_filter
-//             .call(intent_data_ptr, intent_data_len)
-//             .map_err(Error::RuntimeError)?;
-//         Ok(found_match == 0)
-//     }
-// }
+    fn run_with_input(
+        code: &Instance,
+        intent_data: impl AsRef<[u8]>,
+    ) -> Result<bool> {
+        let memory = code
+            .exports
+            .get_memory("memory")
+            .map_err(Error::MissingModuleMemory)?;
+        let memory::FilterCallInput {
+            intent_data_ptr,
+            intent_data_len,
+        }: memory::FilterCallInput =
+            memory::write_filter_inputs(&memory, intent_data)
+                .map_err(Error::MemoryError)?;
+        let apply_filter = code
+            .exports
+            .get_function(FILTER_ENTRYPOINT)
+            .map_err(Error::MissingModuleEntrypoint)?
+            .native::<(u64, u64), u64>()
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: FILTER_ENTRYPOINT,
+                error,
+            })?;
+        let found_match = apply_filter
+            .call(intent_data_ptr, intent_data_len)
+            .map_err(Error::RuntimeError)?;
+        Ok(found_match == 0)
+    }
+}
 
 /// Inject gas counter and stack-height limiter into the given wasm code
 fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {

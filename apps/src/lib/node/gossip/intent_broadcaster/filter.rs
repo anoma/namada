@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anoma_shared::vm;
+use anoma_shared::vm::wasm::runner::{self, MmFilterRunner};
 use thiserror::Error;
 
 use crate::proto::types::Intent;
@@ -8,7 +8,7 @@ use crate::proto::types::Intent;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("error while running the filter: {0}")]
-    RunnerError(vm::wasm::wasm_runner::Error),
+    RunnerError(runner::Error),
     #[error("Failed to read file: {0}")]
     FileFailed(std::io::Error),
 }
@@ -28,10 +28,9 @@ impl Filter {
     }
 
     pub fn validate(&self, intent: &Intent) -> Result<bool> {
-        // let filter_runner = vm::FilterRunner::new();
-        // filter_runner
-        //     .run(self.code.clone(), &intent.data)
-        //     .map_err(Error::RunnerError)
-        todo!()
+        let filter_runner = MmFilterRunner::new();
+        filter_runner
+            .run(self.code.clone(), &intent.data)
+            .map_err(Error::RunnerError)
     }
 }

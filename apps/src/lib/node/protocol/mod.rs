@@ -7,7 +7,7 @@ use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm;
-use anoma_shared::vm::wasm::wasm_runner::{TxRunner, VpRunner};
+use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
 use prost::Message;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -22,11 +22,11 @@ pub enum Error {
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
     #[error("Transaction runner error: {0}")]
-    TxRunnerError(vm::wasm::wasm_runner::Error),
+    TxRunnerError(vm::wasm::runner::Error),
     #[error("Gas error: {0}")]
     GasError(gas::Error),
     #[error("Error executing VP for addresses: {0:?}")]
-    VpRunnerError(vm::wasm::wasm_runner::Error),
+    VpRunnerError(vm::wasm::runner::Error),
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
 }

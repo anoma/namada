@@ -1,9 +1,11 @@
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::ops::Add;
+use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
+use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -15,7 +17,7 @@ use crate::types::{Address, Key};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::types::KeyVal;
-use crate::vm::wasm::wasm_memory::WasmMemory;
+use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
@@ -105,17 +107,49 @@ where
     }
 }
 
-// TODO parameterize
-#[derive(Clone)]
-pub struct MatchmakerEnv {
-    // pub tx_code: Vec<u8>,
-    // pub inject_mm_message: Sender<MatchmakerMessage>,
-    pub memory: WasmMemory,
+pub struct MatchmakerEnv<'a, MEM, MM>
+where
+    MEM: VmMemory,
+    MM: MmHost,
+{
+    pub memory: MEM,
+    pub mm: Arc<Mutex<&'a MM>>,
+}
+
+impl<MEM, MM> Clone for MatchmakerEnv<'_, MEM, MM>
+where
+    MEM: VmMemory,
+    MM: MmHost,
+{
+    fn clone(&self) -> Self {
+        Self {
+            memory: self.memory.clone(),
+            mm: self.mm.clone(),
+        }
+    }
+}
+
+// TODO better?
+unsafe impl<MEM, MM> Send for MatchmakerEnv<'_, MEM, MM>
+where
+    MEM: VmMemory,
+    MM: MmHost,
+{
+}
+
+unsafe impl<MEM, MM> Sync for MatchmakerEnv<'_, MEM, MM>
+where
+    MEM: VmMemory,
+    MM: MmHost,
+{
 }
 
 #[derive(Clone)]
-pub struct FilterEnv {
-    pub memory: WasmMemory,
+pub struct FilterEnv<MEM>
+where
+    MEM: VmMemory,
+{
+    pub memory: MEM,
 }
 
 /// Called from tx wasm to request to use the given gas amount
@@ -1081,71 +1115,100 @@ pub fn vp_log_string<MEM, DB, H>(
     tracing::info!("WASM Validity predicate log: {}", str);
 }
 
-// /// Log a string from exposed to the wasm VM matchmaker environment. The
-// message /// will be printed at the [`tracing::Level::Info`]. This function is
-// for /// development only.
-// fn matchmaker_log_string(env: &MatchmakerEnv, str_ptr: u64, str_len: u64) {
-//     let (str, _gas) = env.memory.read_string(str_ptr, str_len as _);
+pub fn mm_remove_intents<MEM, MM>(
+    env: &MatchmakerEnv<MEM, MM>,
+    intents_id_ptr: u64,
+    intents_id_len: u64,
+) where
+    MEM: VmMemory,
+    MM: MmHost,
+{
+    let (intents_id_bytes, _gas) =
+        env.memory.read_bytes(intents_id_ptr, intents_id_len as _);
 
-//     tracing::info!("WASM Matchmaker log: {}", str);
-// }
+    let intents_id =
+        HashSet::<Vec<u8>>::try_from_slice(&intents_id_bytes).unwrap();
 
-// /// Log a string from exposed to the wasm VM filter environment. The message
-// /// will be printed at the [`tracing::Level::Info`].
-// fn filter_log_string(env: &FilterEnv, str_ptr: u64, str_len: u64) {
-//     let (str, _gas) = env.memory.read_string(str_ptr, str_len as _);
-//     tracing::info!("WASM Filter log: {}", str);
-// }
+    let mut mm = env.mm.lock().unwrap();
+    mm.remove_intents(intents_id);
+}
 
-// fn remove_intents(
-//     env: &MatchmakerEnv,
-//     intents_id_ptr: u64,
-//     intents_id_len: u64,
-// ) {
-//     let (intents_id_bytes, _gas) =
-//         env.memory.read_bytes(intents_id_ptr, intents_id_len as _);
+/// Inject a transaction from matchmaker's matched intents to the ledger
+pub fn mm_send_match<MEM, MM>(
+    env: &MatchmakerEnv<MEM, MM>,
+    data_ptr: u64,
+    data_len: u64,
+) where
+    MEM: VmMemory,
+    MM: MmHost,
+{
+    let (tx_data, _gas) = env.memory.read_bytes(data_ptr, data_len as _);
+    // TODO do this in the matchmaker host
+    // TODO sign in the matchmaker module instead. use a ref for the tx_code
+    // here to avoid copying
+    // let tx_code = unsafe { env.tx_code.get() };
+    // let keypair = wallet::matchmaker_keypair();
+    // let signed = SignedTxData::new(&keypair, tx_data, tx_code);
+    // let signed_bytes = signed
+    //     .try_to_vec()
+    //     .expect("Couldn't encoded signed matchmaker tx data");
+    // let tx = Tx {
+    //     code: tx_code,
+    //     data: Some(signed_bytes),
+    //     timestamp: Some(std::time::SystemTime::now().into()),
+    // };
+    // env.inject_mm_message
+    //     .try_send(MatchmakerMessage::InjectTx(tx))
+    //     .expect("failed to send tx")
+    let mm = env.mm.lock().unwrap();
+    mm.inject_tx(tx_data);
+}
 
-//     let intents_id =
-//         HashSet::<Vec<u8>>::try_from_slice(&intents_id_bytes).unwrap();
+pub fn mm_update_data<MEM, MM>(
+    env: &MatchmakerEnv<MEM, MM>,
+    data_ptr: u64,
+    data_len: u64,
+) where
+    MEM: VmMemory,
+    MM: MmHost,
+{
+    let (data, _gas) = env.memory.read_bytes(data_ptr, data_len as _);
 
-//     env.inject_mm_message
-//         .try_send(MatchmakerMessage::RemoveIntents(intents_id))
-//         .expect("failed to send intents_id")
-// }
+    let mut mm = env.mm.lock().unwrap();
+    mm.update_data(data);
+}
 
-// /// Inject a transaction from matchmaker's matched intents to the ledger
-// fn send_match(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
-//     let (tx_data, _gas) = env.memory.read_bytes(data_ptr, data_len as _);
-//     // TODO sign in the matchmaker module instead. use a ref for the tx_code
-//     // here to avoid copying
-//     let tx_code = env.tx_code.clone();
-//     let keypair = wallet::matchmaker_keypair();
-//     let signed = SignedTxData::new(&keypair, tx_data, &tx_code);
-//     let signed_bytes = signed
-//         .try_to_vec()
-//         .expect("Couldn't encoded signed matchmaker tx data");
-//     let tx = Tx {
-//         code: tx_code,
-//         data: Some(signed_bytes),
-//         timestamp: Some(std::time::SystemTime::now().into()),
-//     };
-//     env.inject_mm_message
-//         .try_send(MatchmakerMessage::InjectTx(tx))
-//         .expect("failed to send tx")
-// }
+/// Log a string from exposed to the wasm VM matchmaker environment. The message
+/// will be printed at the [`tracing::Level::Info`]. This function is for
+/// development only.
+pub fn mm_log_string<MEM, MM>(
+    env: &MatchmakerEnv<MEM, MM>,
+    str_ptr: u64,
+    str_len: u64,
+) where
+    MEM: VmMemory,
+    MM: MmHost,
+{
+    let (str, _gas) = env.memory.read_string(str_ptr, str_len as _);
 
-// fn update_data(env: &MatchmakerEnv, data_ptr: u64, data_len: u64) {
-//     let (data, _gas) = env.memory.read_bytes(data_ptr, data_len as _);
+    tracing::info!("WASM Matchmaker log: {}", str);
+}
 
-//     env.inject_mm_message
-//         .try_send(MatchmakerMessage::UpdateData(data))
-//         .expect("failed to send updated data")
-// }
+/// Log a string from exposed to the wasm VM filter environment. The message
+/// will be printed at the [`tracing::Level::Info`].
+pub fn mm_filter_log_string<MEM>(
+    env: &FilterEnv<MEM>,
+    str_ptr: u64,
+    str_len: u64,
+) where
+    MEM: VmMemory,
+{
+    let (str, _gas) = env.memory.read_string(str_ptr, str_len as _);
+    tracing::info!("WASM Filter log: {}", str);
+}
 
 #[cfg(feature = "testing")]
 pub mod testing {
-    use core::ffi::c_void;
-
     use super::*;
     use crate::ledger::storage::{self, StorageHasher};
     use crate::vm::memory::testing::NativeMemory;
