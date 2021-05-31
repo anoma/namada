@@ -555,22 +555,8 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                 }
             }
         }
-
-        // Poll pending events
         if let Some(ev) = self.external_pending_events.pop_front() {
-            match ev {
-                DiscoveryEvent::Connected(peer_id) => {
-                    tracing::info!("CONNECTING : {:?}", peer_id);
-                    Poll::Ready(NetworkBehaviourAction::DialPeer {
-                        peer_id,
-                        condition: DialPeerCondition::Always,
-                    })
-                }
-                DiscoveryEvent::Disconnected(_peer_id) => {
-                    tracing::info!("DISCONNECTING : {:?}", _peer_id);
-                    Poll::Pending
-                }
-            }
+            Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev))
         } else {
             Poll::Pending
         }
