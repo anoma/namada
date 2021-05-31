@@ -16,7 +16,7 @@ steps:
     image: alpine/git:v2.30.1
     pull: if-not-exists
     commands:
-      - echo "538fe54b81fd052d064ee8f43254b1e1a666e4aa548fa49d0ddcdebe115f55cb  Makefile" | sha256sum -c -
+      - echo "0cbd614f1ffafaaee7c95235e56d746809610cb6e022f699db57b78017a9afdb  Makefile" | sha256sum -c -
     
   - name: restore-cache
     image: meltwater/drone-cache
@@ -160,7 +160,7 @@ steps:
     image: alpine/git:v2.30.1
     pull: if-not-exists
     commands:
-      - echo "538fe54b81fd052d064ee8f43254b1e1a666e4aa548fa49d0ddcdebe115f55cb  Makefile" | sha256sum -c -
+      - echo "0cbd614f1ffafaaee7c95235e56d746809610cb6e022f699db57b78017a9afdb  Makefile" | sha256sum -c -
 
   - name: restore-cache
     image: meltwater/drone-cache
@@ -279,7 +279,7 @@ steps:
     image: alpine/git:v2.30.1
     pull: if-not-exists
     commands:
-      - echo "538fe54b81fd052d064ee8f43254b1e1a666e4aa548fa49d0ddcdebe115f55cb  Makefile" | sha256sum -c -
+      - echo "0cbd614f1ffafaaee7c95235e56d746809610cb6e022f699db57b78017a9afdb  Makefile" | sha256sum -c -
 
   - name: restore-cache
     image: meltwater/drone-cache
@@ -347,6 +347,6 @@ node:
   project: anoma
 ---
 kind: signature
-hmac: 4d7485a97c60cedf8c4d7416cbdd39d8d8bdb705d4aa03ea45f89a1f88bbe647
+hmac: 6a2898cb189a8a8dbdd07d6891ba60670141d194cd107c8f05eddd83ecfcf965
 
 ...
