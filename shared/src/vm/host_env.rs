@@ -107,16 +107,16 @@ where
     }
 }
 
-pub struct MatchmakerEnv<'a, MEM, MM>
+pub struct MatchmakerEnv<MEM, MM>
 where
     MEM: VmMemory,
     MM: MmHost,
 {
     pub memory: MEM,
-    pub mm: Arc<Mutex<&'a MM>>,
+    pub mm: Arc<Mutex<MM>>,
 }
 
-impl<MEM, MM> Clone for MatchmakerEnv<'_, MEM, MM>
+impl<MEM, MM> Clone for MatchmakerEnv<MEM, MM>
 where
     MEM: VmMemory,
     MM: MmHost,
@@ -129,15 +129,14 @@ where
     }
 }
 
-// TODO better?
-unsafe impl<MEM, MM> Send for MatchmakerEnv<'_, MEM, MM>
+unsafe impl<MEM, MM> Send for MatchmakerEnv<MEM, MM>
 where
     MEM: VmMemory,
     MM: MmHost,
 {
 }
 
-unsafe impl<MEM, MM> Sync for MatchmakerEnv<'_, MEM, MM>
+unsafe impl<MEM, MM> Sync for MatchmakerEnv<MEM, MM>
 where
     MEM: VmMemory,
     MM: MmHost,

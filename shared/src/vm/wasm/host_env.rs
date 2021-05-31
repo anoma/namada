@@ -12,9 +12,7 @@ use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::{Address, Key};
 use crate::vm::host_env::{FilterEnv, MatchmakerEnv, TxEnv, VpEnv};
-use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
-use crate::vm::types::KeyVal;
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{
     host_env, EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
@@ -46,7 +44,7 @@ where
     }
 }
 
-impl<MM> WasmerEnv for MatchmakerEnv<'_, WasmMemory, MM>
+impl<MM> WasmerEnv for MatchmakerEnv<WasmMemory, MM>
 where
     MM: MmHost,
 {
@@ -183,7 +181,7 @@ where
 pub fn prepare_mm_imports<MM>(
     wasm_store: &Store,
     initial_memory: Memory,
-    mm: Arc<Mutex<&'static MM>>,
+    mm: Arc<Mutex<MM>>,
 ) -> ImportObject
 where
     MM: 'static + MmHost,

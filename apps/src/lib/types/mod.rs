@@ -4,7 +4,7 @@ use crate::proto::types;
 
 #[derive(Debug)]
 pub enum MatchmakerMessage {
-    InjectTx(types::Tx),
+    InjectTx(Vec<u8>),
     RemoveIntents(HashSet<Vec<u8>>),
     UpdateData(Vec<u8>),
 }

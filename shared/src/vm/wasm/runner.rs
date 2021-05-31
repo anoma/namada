@@ -368,7 +368,7 @@ impl MmRunner {
         data: impl AsRef<[u8]>,
         intent_id: impl AsRef<[u8]>,
         intent_data: impl AsRef<[u8]>,
-        mm: Arc<Mutex<&MM>>,
+        mm: Arc<Mutex<MM>>,
     ) -> Result<bool>
     where
         MM: 'static + MmHost,

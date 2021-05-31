@@ -1,8 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use anoma_shared::gossip::mm::MmHost;
-use anoma_shared::vm;
+use anoma_shared::types::key::ed25519::SignedTxData;
 use anoma_shared::vm::wasm::runner::{self, MmRunner};
+use borsh::BorshSerialize;
 use prost::Message;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
@@ -11,10 +12,10 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
-use crate::config;
-use crate::proto::types::Intent;
+use crate::proto::types::{Intent, Tx};
 use crate::proto::IntentId;
 use crate::types::MatchmakerMessage;
+use crate::{config, wallet};
 
 #[derive(Debug)]
 pub struct Matchmaker {
@@ -25,7 +26,7 @@ pub struct Matchmaker {
     // the matchmaker's state as arbitrary bytes
     data: Vec<u8>,
     ledger_address: net::Address,
-    wasm_host: WasmHost,
+    wasm_host: Arc<Mutex<WasmHost>>,
 }
 
 #[derive(Debug)]
@@ -49,15 +50,21 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl MmHost for WasmHost {
     fn remove_intents(&self, intents_id: std::collections::HashSet<Vec<u8>>) {
-        todo!()
+        self.0
+            .try_send(MatchmakerMessage::RemoveIntents(intents_id))
+            .expect("Sending matchmaker message")
     }
 
     fn inject_tx(&self, tx_data: Vec<u8>) {
-        todo!()
+        self.0
+            .try_send(MatchmakerMessage::InjectTx(tx_data))
+            .expect("Sending matchmaker message")
     }
 
     fn update_data(&self, data: Vec<u8>) {
-        todo!()
+        self.0
+            .try_send(MatchmakerMessage::UpdateData(data))
+            .expect("Sending matchmaker message")
     }
 }
 
@@ -85,7 +92,7 @@ impl Matchmaker {
                 tx_code,
                 data: Vec::new(),
                 ledger_address: config.ledger_address.clone(),
-                wasm_host: WasmHost(inject_mm_message),
+                wasm_host: Arc::new(Mutex::new(WasmHost(inject_mm_message))),
             },
             receiver_mm_message,
         ))
@@ -115,7 +122,7 @@ impl Matchmaker {
                     &self.data,
                     &IntentId::new(&intent).0,
                     &intent.data,
-                    Arc::new(Mutex::new(&self.wasm_host)),
+                    self.wasm_host.clone(),
                 )
                 .map_err(Error::RunnerFailed)
                 .unwrap())
@@ -126,9 +133,22 @@ impl Matchmaker {
 
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
         match mm_message {
-            MatchmakerMessage::InjectTx(tx) => {
+            MatchmakerMessage::InjectTx(tx_data) => {
+                let tx_code = self.tx_code.clone();
+                let keypair = wallet::matchmaker_keypair();
+                let signed = SignedTxData::new(&keypair, tx_data, &tx_code);
+                let signed_bytes = signed
+                    .try_to_vec()
+                    .expect("Couldn't encoded signed matchmaker tx data");
+                let tx = Tx {
+                    code: tx_code,
+                    data: Some(signed_bytes),
+                    timestamp: Some(std::time::SystemTime::now().into()),
+                };
+
                 let mut tx_bytes = vec![];
                 tx.encode(&mut tx_bytes).unwrap();
+
                 let client =
                     HttpClient::new(self.ledger_address.clone()).unwrap();
                 let response =
