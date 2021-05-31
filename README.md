@@ -9,6 +9,11 @@
 
 This is an implementation of the Anoma ledger in Rust.
 
+## Docs
+
+- [docs](https://heliaxdev.github.io/anoma-prototype/): built from [tech-specs mdBook](./tech-specs/)
+- [rustdoc](https://heliaxdev.github.io/anoma-prototype/rustdoc/anoma/): built from the source
+
 ## Warning
 
 > Here lay dragons: this codebase is still experimental, try at your own risk!
