@@ -433,6 +433,21 @@ pub mod vp {
         }
     }
 
+    /// Evaluate a validity predicate with given data. The address, changed
+    /// storage keys and verifiers will have the same values as the input to
+    /// caller's validity predicate.
+    pub fn eval(vp_code: Vec<u8>, input_data: Vec<u8>) -> bool {
+        let result = unsafe {
+            anoma_eval(
+                vp_code.as_ptr() as _,
+                vp_code.len() as _,
+                input_data.as_ptr() as _,
+                input_data.len() as _,
+            )
+        };
+        HostEnvResult::is_success(result)
+    }
+
     /// These host functions are implemented in the Anoma's [`host_env`]
     /// module. The environment provides calls to them via this C interface.
     extern "C" {
@@ -486,6 +501,13 @@ pub mod vp {
 
         // Requires a node running with "Info" log level
         fn anoma_log_string(str_ptr: u64, str_len: u64);
+
+        fn anoma_eval(
+            vp_code_ptr: u64,
+            vp_code_len: u64,
+            input_data_ptr: u64,
+            input_data_len: u64,
+        ) -> i64;
     }
 }
 

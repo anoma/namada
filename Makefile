@@ -9,6 +9,13 @@ debug-cargo = $(env) $(debug-env) cargo
 # NOTE On change also update `RUSTFMT_TOOLCHAIN` in `apps/build.rs`.
 nightly = nightly-2021-03-09
 
+# Transitive dependency of wasmer. It's safe to ignore as we don't use cranelift compiler. It should disseaper once the wasmer library updates its dependencies
+audit-ignores := RUSTSEC-2021-0067
+# Transitive dependency warning from tendermint-rpc
+audit-ignores += RUSTSEC-2021-0064
+# Transitive dependency warning from tendermint-rpc
+audit-ignores += RUSTSEC-2020-0016
+
 build:
 	$(cargo) build
 
@@ -38,7 +45,7 @@ reset-ledger:
 	$(cargo) run --bin anoman -- reset-ledger
 
 audit:
-	$(cargo) audit
+	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
 test:
 	$(cargo) test
@@ -58,6 +65,10 @@ watch:
 clean:
 	$(cargo) clean
 
+build-doc:
+	$(cargo) doc --no-deps
+	make -C tech-specs build
+
 doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
@@ -74,9 +85,20 @@ build-wasm-scripts:
 	make -C matchmaker_template && \
 	make -C filter_template
 
+clean-wasm-scripts:
+	make -C vps/vp_template clean && \
+	make -C vps/vp_token clean && \
+	make -C vps/vp_user clean && \
+	make -C txs/tx_template clean && \
+	make -C txs/tx_transfer clean && \
+	make -C txs/tx_from_intent clean && \
+	make -C txs/tx_update_vp clean && \
+	make -C matchmaker_template clean && \
+	make -C filter_template clean
 
 dev-deps:
 	$(rustup) toolchain install $(nightly)
+	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy --toolchain $(nightly)
 	$(cargo) install cargo-watch
 
