@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
 
-use anoma_shared::protocol::storage::MerkleRoot;
+use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::types::{BlockHash, BlockHeight};
 use serde_json::json;
 use tendermint_abci::{self, ServerBuilder};
@@ -28,8 +28,8 @@ use tendermint_proto::abci::{
 
 use crate::config;
 use crate::genesis::{self, Validator};
+use crate::node::ledger::MempoolTxType;
 use crate::node::protocol::TxResult;
-use crate::node::shell::MempoolTxType;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
 pub type AbciSender = mpsc::Sender<AbciMsg>;

@@ -9,22 +9,22 @@ use thiserror::Error;
 // use tokio::sync::mpsc::Sender;
 use wasmer::Instance;
 
-use super::memory::WasmMemory;
 use super::wasm_host_env::{
     prepare_tx_imports, prepare_vp_env, prepare_vp_imports,
 };
-use crate::protocol::gas::{BlockGasMeter, VpGasMeter};
-use crate::protocol::storage::{self, Storage, StorageHasher};
-use crate::protocol::vm::host_env::VpEnv;
-use crate::protocol::vm::prefix_iter::PrefixIterators;
-use crate::protocol::vm::wasm::memory;
-use crate::protocol::vm::write_log::WriteLog;
-use crate::protocol::vm::{
+use super::wasm_memory::WasmMemory;
+use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
+use crate::ledger::storage::write_log::WriteLog;
+use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::types::{Address, Key};
+use crate::vm::host_env::VpEnv;
+use crate::vm::prefix_iter::PrefixIterators;
+use crate::vm::types::{TxInput, VpInput};
+use crate::vm::wasm::wasm_memory;
+use crate::vm::{
     validate_untrusted_wasm, EnvHostSliceWrapper, EnvHostWrapper,
     MutEnvHostWrapper,
 };
-use crate::types::{Address, Key};
-use crate::vm_memory::{TxInput, VpInput};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -41,7 +41,7 @@ pub struct TxRunner {
 pub enum Error {
     // 1. Common error types
     #[error("Memory error: {0}")]
-    MemoryError(memory::Error),
+    MemoryError(wasm_memory::Error),
     #[error("Unable to inject gas meter")]
     StackLimiterInjection,
     #[error("Wasm deserialization error: {0}")]
@@ -125,7 +125,7 @@ impl TxRunner {
 
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
             .map_err(Error::CompileError)?;
-        let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
+        let initial_memory = wasm_memory::prepare_tx_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let tx_imports = prepare_tx_imports(
             &self.wasm_store,
@@ -151,10 +151,10 @@ impl TxRunner {
             .exports
             .get_memory("memory")
             .map_err(Error::MissingModuleMemory)?;
-        let memory::TxCallInput {
+        let wasm_memory::TxCallInput {
             tx_data_ptr,
             tx_data_len,
-        } = memory::write_tx_inputs(memory, tx_data)
+        } = wasm_memory::write_tx_inputs(memory, tx_data)
             .map_err(Error::MemoryError)?;
 
         // Get the module's entrypoint to be called
@@ -234,7 +234,7 @@ impl VpRunner {
 
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(Error::CompileError)?;
-        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
+        let initial_memory = wasm_memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let input: VpInput = VpInput {
             addr: &addr,
@@ -275,7 +275,7 @@ impl VpRunner {
         let vp_code = prepare_wasm_code(&vp_code)?;
         let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
             .map_err(Error::CompileError)?;
-        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
+        let initial_memory = wasm_memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
 
         let keys_changed = unsafe { vp_env.keys_changed.get() };
@@ -303,7 +303,7 @@ impl VpRunner {
             .exports
             .get_memory("memory")
             .map_err(Error::MissingModuleMemory)?;
-        let memory::VpCallInput {
+        let wasm_memory::VpCallInput {
             addr_ptr,
             addr_len,
             data_ptr,
@@ -312,7 +312,7 @@ impl VpRunner {
             keys_changed_len,
             verifiers_ptr,
             verifiers_len,
-        } = memory::write_vp_inputs(memory, input)
+        } = wasm_memory::write_vp_inputs(memory, input)
             .map_err(Error::MemoryError)?;
 
         // Get the module's entrypoint to be called
@@ -530,7 +530,7 @@ fn get_gas_rules() -> rules::Set {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::storage::testing::TestStorage;
+    use crate::ledger::storage::testing::TestStorage;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.

@@ -7,7 +7,7 @@ use std::ops::Bound::{Excluded, Included};
 use sparse_merkle_tree::SparseMerkleTree;
 
 use super::{BlockState, DBIter, Error, Result, StorageHasher, DB};
-use crate::protocol::storage::types::{
+use crate::ledger::storage::types::{
     self, KVBytes, MerkleTree, PrefixIterator,
 };
 use crate::types::address::EstablishedAddressGen;

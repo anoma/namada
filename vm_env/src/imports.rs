@@ -9,7 +9,7 @@ pub mod tx {
     use anoma_shared::types::{
         Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
-    use anoma_shared::vm_memory::KeyVal;
+    use anoma_shared::vm::types::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
@@ -247,7 +247,7 @@ pub mod vp {
     use anoma_shared::types::{
         BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
-    use anoma_shared::vm_memory::KeyVal;
+    use anoma_shared::vm::types::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     pub struct PreKeyValIterator<T>(pub u64, pub PhantomData<T>);

@@ -7,22 +7,22 @@ use wasmer::{
     WasmerEnv,
 };
 
-use super::memory::WasmMemory;
-use crate::protocol::gas::{BlockGasMeter, VpGasMeter};
-use crate::protocol::storage::{self, Storage, StorageHasher};
-use crate::protocol::vm::host_env::{FilterEnv, MatchmakerEnv, TxEnv, VpEnv};
-use crate::protocol::vm::memory::VmMemory;
-use crate::protocol::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
-use crate::protocol::vm::write_log::{self, WriteLog};
-use crate::protocol::vm::{
-    host_env, EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
-};
+use super::wasm_memory::WasmMemory;
+use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
+use crate::ledger::storage::write_log::{self, WriteLog};
+use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::internal::HostEnvResult;
 use crate::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
 use crate::types::{Address, Key};
-use crate::vm_memory::KeyVal;
+use crate::vm::host_env::{FilterEnv, MatchmakerEnv, TxEnv, VpEnv};
+use crate::vm::memory::VmMemory;
+use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
+use crate::vm::types::KeyVal;
+use crate::vm::{
+    host_env, EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
+};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;

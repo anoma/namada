@@ -15,8 +15,8 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
-use anoma_shared::protocol::storage::types::PrefixIterator;
-use anoma_shared::protocol::storage::{
+use anoma_shared::ledger::storage::types::PrefixIterator;
+use anoma_shared::ledger::storage::{
     types, BlockState, DBIter, Error, Result, StorageHasher, DB,
 };
 use anoma_shared::types::address::EstablishedAddressGen;
@@ -30,7 +30,7 @@ use rocksdb::{
 };
 use sparse_merkle_tree::SparseMerkleTree;
 
-use crate::node::shell::storage::types::MerkleTree;
+use crate::node::ledger::storage::types::MerkleTree;
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -328,7 +328,7 @@ impl DB for RocksDB {
         }
         match (root, store, hash, address_gen) {
             (Some(root), Some(store), Some(hash), Some(address_gen)) => {
-                let tree = anoma_shared::protocol::storage::types::MerkleTree(
+                let tree = anoma_shared::ledger::storage::types::MerkleTree(
                     SparseMerkleTree::new(root, store),
                 );
                 Ok(Some(BlockState {

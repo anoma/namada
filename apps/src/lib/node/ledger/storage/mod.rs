@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 
-use anoma_shared::protocol::storage::types::MerkleTree;
-use anoma_shared::protocol::storage::{
+use anoma_shared::ledger::storage::types::MerkleTree;
+use anoma_shared::ledger::storage::{
     types, BlockStorage, Storage, StorageHasher,
 };
 use anoma_shared::types::address::EstablishedAddressGen;
@@ -92,7 +92,7 @@ fn new_blake2b() -> Blake2b {
 mod tests {
     use std::ops::Deref;
 
-    use anoma_shared::protocol::storage::types;
+    use anoma_shared::ledger::storage::types;
     use tempfile::TempDir;
 
     use super::*;

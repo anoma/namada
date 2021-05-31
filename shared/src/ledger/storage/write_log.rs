@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::protocol::storage::{self, Storage, StorageHasher};
+use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::EstablishedAddressGen;
 use crate::types::{Address, Key};
 
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn test_commit() {
         let mut storage =
-            crate::protocol::storage::testing::TestStorage::default();
+            crate::ledger::storage::testing::TestStorage::default();
         let mut write_log = WriteLog::new();
         let address_gen = EstablishedAddressGen::new("test");
 

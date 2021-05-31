@@ -1,5 +1,8 @@
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
+pub mod types;
+pub mod write_log;
+
 use std::collections::HashMap;
 use std::ops::Deref;
 
@@ -7,13 +10,11 @@ use sparse_merkle_tree::H256;
 use thiserror::Error;
 use types::MerkleTree;
 
-use crate::protocol::gas::MIN_STORAGE_GAS;
+use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::types::address::EstablishedAddressGen;
 use crate::types::{
     Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
-
-pub mod types;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

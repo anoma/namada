@@ -1,3 +1,3 @@
 pub mod gossip;
+pub mod ledger;
 pub mod protocol;
-pub mod shell;

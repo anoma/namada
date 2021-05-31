@@ -5,9 +5,9 @@ use std::path::Path;
 use std::sync::mpsc;
 
 use anoma_shared::bytes::ByteBuf;
-use anoma_shared::protocol::gas::{self, BlockGasMeter};
-use anoma_shared::protocol::storage::MerkleRoot;
-use anoma_shared::protocol::vm::write_log::WriteLog;
+use anoma_shared::ledger::gas::{self, BlockGasMeter};
+use anoma_shared::ledger::storage::write_log::WriteLog;
+use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::types::key::ed25519::PublicKey;
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{
@@ -27,7 +27,7 @@ pub enum Error {
     #[error("Error removing the DB data: {0}")]
     RemoveDB(std::io::Error),
     #[error("Storage error: {0}")]
-    StorageError(anoma_shared::protocol::storage::Error),
+    StorageError(anoma_shared::ledger::storage::Error),
     #[error("Shell ABCI channel receiver error: {0}")]
     AbciChannelRecvError(mpsc::RecvError),
     #[error("Shell ABCI channel sender error: {0}")]

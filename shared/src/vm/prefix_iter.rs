@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::protocol::storage;
+use crate::ledger::storage;
 
 pub struct PrefixIterators<'iter, DB>
 where

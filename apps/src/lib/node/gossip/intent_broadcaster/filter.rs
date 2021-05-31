@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anoma_shared::protocol::vm;
+use anoma_shared::vm;
 use thiserror::Error;
 
 use crate::proto::types::Intent;
@@ -8,7 +8,7 @@ use crate::proto::types::Intent;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("error while running the filter: {0}")]
-    RunnerError(vm::wasm::runner::Error),
+    RunnerError(vm::wasm::wasm_runner::Error),
     #[error("Failed to read file: {0}")]
     FileFailed(std::io::Error),
 }

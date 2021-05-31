@@ -7,8 +7,8 @@ use wasmparser::{Validator, WasmFeatures};
 pub mod host_env;
 pub mod memory;
 pub mod prefix_iter;
+pub mod types;
 pub mod wasm;
-pub mod write_log;
 
 /// This is used to attach the Ledger's host structures to wasm environment,
 /// which is used for implementing some host calls. It wraps an immutable

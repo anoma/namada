@@ -2,8 +2,8 @@ use borsh::BorshSerialize;
 use thiserror::Error;
 use wasmer::{HostEnvInitError, LazyInit, Memory};
 
-use crate::protocol::vm::memory::VmMemory;
-use crate::vm_memory::{self, VpInput};
+use crate::vm::memory::VmMemory;
+use crate::vm::types::VpInput;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -72,7 +72,7 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data_bytes: vm_memory::Data,
+    tx_data_bytes: Vec<u8>,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
     let tx_data_len = tx_data_bytes.len() as _;

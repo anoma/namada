@@ -4,20 +4,19 @@ use std::ops::Add;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use super::wasm::memory::WasmMemory;
-use super::{EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper};
-use crate::protocol::gas::{BlockGasMeter, VpGasMeter};
-use crate::protocol::storage::{self, Storage, StorageHasher};
-use crate::protocol::vm::memory::VmMemory;
-use crate::protocol::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
-use crate::protocol::vm::write_log;
-use crate::protocol::vm::write_log::WriteLog;
+use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
+use crate::ledger::storage::write_log::{self, WriteLog};
+use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::internal::HostEnvResult;
 use crate::types::key::ed25519::{
     verify_signature_raw, PublicKey, Signature, SignedTxData,
 };
 use crate::types::{Address, Key};
-use crate::vm_memory::KeyVal;
+use crate::vm::memory::VmMemory;
+use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
+use crate::vm::types::KeyVal;
+use crate::vm::wasm::wasm_memory::WasmMemory;
+use crate::vm::{EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -1148,8 +1147,8 @@ pub mod testing {
     use core::ffi::c_void;
 
     use super::*;
-    use crate::protocol::storage::{self, StorageHasher};
-    use crate::protocol::vm::memory::testing::NativeMemory;
+    use crate::ledger::storage::{self, StorageHasher};
+    use crate::vm::memory::testing::NativeMemory;
 
     pub fn tx_env<DB, H>(
         storage: &Storage<DB, H>,

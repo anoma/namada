@@ -1,4 +1,4 @@
 pub mod bytes;
-pub mod protocol;
+pub mod ledger;
 pub mod types;
-pub mod vm_memory;
+pub mod vm;

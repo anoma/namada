@@ -1,4 +1,4 @@
-use anoma_shared::protocol::vm;
+use anoma_shared::vm;
 use prost::Message;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
@@ -29,7 +29,7 @@ pub enum Error {
     #[error("Failed to add intent to mempool: {0}")]
     MempoolFailed(mempool::Error),
     #[error("Failed to run matchmaker prog: {0}")]
-    RunnerFailed(vm::wasm::runner::Error),
+    RunnerFailed(vm::wasm::wasm_runner::Error),
     #[error("Failed to read file: {0}")]
     FileFailed(std::io::Error),
     #[error("Failed to create filter: {0}")]
