@@ -8,6 +8,9 @@ on:
     branches:
       - master
 
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
   deploy:
     runs-on: ubuntu-18.04
@@ -16,7 +19,10 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      - run: make build-doc
+      - uses: Swatinem/rust-cache@v1
+      - run: | 
+          make -C tech-specs dev-deps
+          make build-doc
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
