@@ -9,15 +9,15 @@ use wasmer::Instance;
 
 use super::host_env::{
     prepare_mm_filter_imports, prepare_mm_imports, prepare_tx_imports,
-    prepare_vp_env, prepare_vp_imports,
+    prepare_vp_env,
 };
-use super::memory::WasmMemory;
 use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::types::internal::HostEnvResult;
 use crate::types::{Address, Key};
-use crate::vm::host_env::VpEnv;
+use crate::vm::host_env::VpEvalRunner;
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::types::{TxInput, VpInput};
 use crate::vm::wasm::memory;
@@ -197,11 +197,11 @@ impl VpRunner {
         vp_code: impl AsRef<[u8]>,
         tx_data: impl AsRef<[u8]>,
         tx_code: impl AsRef<[u8]>,
-        addr: &Address,
+        address: &Address,
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
         vp_gas_meter: &mut VpGasMeter,
-        storage_keys: &[Key],
+        keys_changed: &[Key],
         verifiers: &HashSet<Address>,
     ) -> Result<bool>
     where
@@ -225,10 +225,23 @@ impl VpRunner {
         // there is no shared access
         let gas_meter = unsafe { MutEnvHostWrapper::new(vp_gas_meter) };
         // Read-only access from parallel Vp runners
-        let env_storage_keys =
-            unsafe { EnvHostSliceWrapper::new(storage_keys) };
+        let env_keys_changed =
+            unsafe { EnvHostSliceWrapper::new(keys_changed) };
         // Read-only access from parallel Vp runners
         let env_verifiers = unsafe { EnvHostWrapper::new(verifiers) };
+
+        let eval_runner = VpEval {
+            address: address.clone(),
+            storage: storage.clone(),
+            write_log: write_log.clone(),
+            iterators: iterators.clone(),
+            gas_meter: gas_meter.clone(),
+            tx_code: tx_code.clone(),
+            keys_changed: env_keys_changed.clone(),
+            verifiers: env_verifiers.clone(),
+        };
+        // Assuming single-threaded VP wasm runner
+        let eval_runner = unsafe { EnvHostWrapper::new(&eval_runner) };
 
         let vp_code = prepare_wasm_code(vp_code)?;
 
@@ -237,22 +250,23 @@ impl VpRunner {
         let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
             .map_err(Error::MemoryError)?;
         let input: VpInput = VpInput {
-            addr: &addr,
+            addr: &address,
             data: tx_data.as_ref(),
-            keys_changed: storage_keys,
+            keys_changed,
             verifiers,
         };
         let vp_imports = prepare_vp_env(
             &self.wasm_store,
-            addr.clone(),
+            address.clone(),
             storage,
             write_log,
             iterators,
             gas_meter,
             tx_code,
             initial_memory,
-            env_storage_keys,
+            env_keys_changed,
             env_verifiers,
+            eval_runner,
         );
 
         // compile and run the transaction wasm code
@@ -261,40 +275,41 @@ impl VpRunner {
         VpRunner::run_with_input(vp_instance, input)
     }
 
-    fn run_eval<DB, H>(
-        &self,
-        // we read the validity predicate from wasm memory as bytes
-        vp_code: Vec<u8>,
-        input_data: &[u8],
-        vp_env: VpEnv<'static, WasmMemory, DB, H>,
-    ) -> Result<bool>
-    where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: StorageHasher,
-    {
-        let vp_code = prepare_wasm_code(&vp_code)?;
-        let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
-            .map_err(Error::CompileError)?;
-        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
-            .map_err(Error::MemoryError)?;
+    // fn run_eval<DB, H, EVAL>(
+    //     &self,
+    //     // we read the validity predicate from wasm memory as bytes
+    //     vp_code: Vec<u8>,
+    //     input_data: &[u8],
+    //     vp_env: VpEnv<'static, WasmMemory, DB, H, EVAL>,
+    // ) -> Result<bool>
+    // where
+    //     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    //     H: StorageHasher,
+    //     EVAL: VpEvalRunner,
+    // {
+    //     let vp_code = prepare_wasm_code(&vp_code)?;
+    //     let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
+    //         .map_err(Error::CompileError)?;
+    //     let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
+    //         .map_err(Error::MemoryError)?;
 
-        let keys_changed = unsafe { vp_env.keys_changed.get() };
-        let verifiers = unsafe { vp_env.verifiers.get() };
-        let input: VpInput = VpInput {
-            addr: &vp_env.address,
-            data: input_data,
-            keys_changed,
-            verifiers,
-        };
+    //     let keys_changed = unsafe { vp_env.keys_changed.get() };
+    //     let verifiers = unsafe { vp_env.verifiers.get() };
+    //     let input: VpInput = VpInput {
+    //         addr: &vp_env.address,
+    //         data: input_data,
+    //         keys_changed,
+    //         verifiers,
+    //     };
 
-        let vp_imports =
-            prepare_vp_imports(&self.wasm_store, initial_memory, &vp_env);
+    //     let vp_imports =
+    //         prepare_vp_imports(&self.wasm_store, initial_memory, &vp_env);
 
-        // compile and run the transaction wasm code
-        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
-            .map_err(Error::InstantiationError)?;
-        VpRunner::run_with_input(vp_instance, input)
-    }
+    //     // compile and run the transaction wasm code
+    //     let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
+    //         .map_err(Error::InstantiationError)?;
+    //     VpRunner::run_with_input(vp_instance, input)
+    // }
 
     fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
         // We need to write the inputs in the memory exported from the wasm
@@ -339,6 +354,104 @@ impl VpRunner {
             .map_err(Error::RuntimeError)?;
         tracing::debug!("is_valid {}", is_valid);
         Ok(is_valid == 1)
+    }
+}
+
+struct VpEval<'a, DB, H>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    pub address: Address,
+    pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
+    pub write_log: EnvHostWrapper<'a, &'a WriteLog>,
+    pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
+    pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
+    pub tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
+    pub keys_changed: EnvHostSliceWrapper<'a, &'a [Key]>,
+    pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
+}
+
+impl<DB, H> VpEvalRunner for VpEval<'static, DB, H>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    fn eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> HostEnvResult {
+        if validate_untrusted_wasm(&vp_code).is_err() {
+            return HostEnvResult::Fail;
+        }
+
+        // Use Singlepass compiler with the default settings
+        let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        // TODO: Maybe refactor wasm_store: not necessary to do in two steps
+        let wasm_store =
+            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+
+        let eval_runner = VpEval {
+            address: self.address.clone(),
+            storage: self.storage.clone(),
+            write_log: self.write_log.clone(),
+            iterators: self.iterators.clone(),
+            gas_meter: self.gas_meter.clone(),
+            tx_code: self.tx_code.clone(),
+            keys_changed: self.keys_changed.clone(),
+            verifiers: self.verifiers.clone(),
+        };
+        // Assuming single-threaded VP wasm runner
+        let eval_runner = unsafe { EnvHostWrapper::new(&eval_runner) };
+
+        let vp_code = match prepare_wasm_code(vp_code) {
+            Ok(ok) => ok,
+            Err(_) => return HostEnvResult::Fail,
+        };
+
+        let vp_module = match wasmer::Module::new(&wasm_store, &vp_code)
+            .map_err(Error::CompileError)
+        {
+            Ok(ok) => ok,
+            Err(_) => return HostEnvResult::Fail,
+        };
+        let initial_memory = match memory::prepare_vp_memory(&wasm_store)
+            .map_err(Error::MemoryError)
+        {
+            Ok(ok) => ok,
+            Err(_) => return HostEnvResult::Fail,
+        };
+        let addr = &self.address;
+        let keys_changed = unsafe { self.keys_changed.get() };
+        let verifiers = unsafe { self.verifiers.get() };
+        let input: VpInput = VpInput {
+            addr,
+            data: &input_data[..],
+            keys_changed,
+            verifiers,
+        };
+        let vp_imports = prepare_vp_env(
+            &wasm_store,
+            addr.clone(),
+            self.storage.clone(),
+            self.write_log.clone(),
+            self.iterators.clone(),
+            self.gas_meter.clone(),
+            self.tx_code.clone(),
+            initial_memory,
+            self.keys_changed.clone(),
+            self.verifiers.clone(),
+            eval_runner,
+        );
+
+        // compile and run the transaction wasm code
+        let vp_instance = match wasmer::Instance::new(&vp_module, &vp_imports)
+            .map_err(Error::InstantiationError)
+        {
+            Ok(ok) => ok,
+            Err(_) => return HostEnvResult::Fail,
+        };
+        match VpRunner::run_with_input(vp_instance, input) {
+            Ok(ok) => HostEnvResult::from(ok),
+            Err(_) => HostEnvResult::Fail,
+        }
     }
 }
 

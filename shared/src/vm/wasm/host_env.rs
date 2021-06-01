@@ -11,7 +11,9 @@ use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::{Address, Key};
-use crate::vm::host_env::{FilterEnv, MatchmakerEnv, TxEnv, VpEnv};
+use crate::vm::host_env::{
+    FilterEnv, MatchmakerEnv, TxEnv, VpEnv, VpEvalRunner,
+};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{
@@ -31,10 +33,11 @@ where
     }
 }
 
-impl<DB, H> WasmerEnv for VpEnv<'_, WasmMemory, DB, H>
+impl<DB, H, EVAL> WasmerEnv for VpEnv<'_, WasmMemory, DB, H, EVAL>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     fn init_with_instance(
         &mut self,
@@ -113,7 +116,7 @@ where
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
 #[allow(clippy::too_many_arguments)]
-pub fn prepare_vp_env<DB, H>(
+pub fn prepare_vp_env<DB, H, EVAL>(
     wasm_store: &Store,
     addr: Address,
     storage: EnvHostWrapper<'static, &'static Storage<DB, H>>,
@@ -124,10 +127,12 @@ pub fn prepare_vp_env<DB, H>(
     initial_memory: Memory,
     keys_changed: EnvHostSliceWrapper<'static, &[Key]>,
     verifiers: EnvHostWrapper<'static, &'static HashSet<Address>>,
+    eval_runner: EnvHostWrapper<'static, &'static EVAL>,
 ) -> ImportObject
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let env = VpEnv {
         memory: WasmMemory::default(),
@@ -139,20 +144,22 @@ where
         tx_code,
         verifiers,
         keys_changed,
+        eval_runner,
     };
     prepare_vp_imports(wasm_store, initial_memory, &env)
 }
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
-pub fn prepare_vp_imports<DB, H>(
+pub fn prepare_vp_imports<DB, H, EVAL>(
     wasm_store: &Store,
     initial_memory: Memory,
-    env: &VpEnv<'static, WasmMemory, DB, H>,
+    env: &VpEnv<'static, WasmMemory, DB, H, EVAL>,
 ) -> ImportObject
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     wasmer::imports! {
         // default namespace

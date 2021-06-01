@@ -55,11 +55,12 @@ where
     }
 }
 
-pub struct VpEnv<'a, MEM, DB, H>
+pub struct VpEnv<'a, MEM, DB, H, EVAL>
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     pub memory: MEM,
     /// The address of the account that owns the VP
@@ -80,13 +81,20 @@ where
     pub keys_changed: EnvHostSliceWrapper<'a, &'a [Key]>,
     /// Addresses of transaction verifiers, we use these for `eval` invocations
     pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
+    /// The runner of the `eval` function
+    pub eval_runner: EnvHostWrapper<'a, &'a EVAL>,
 }
 
-impl<MEM, DB, H> Clone for VpEnv<'_, MEM, DB, H>
+pub trait VpEvalRunner {
+    fn eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> HostEnvResult;
+}
+
+impl<MEM, DB, H, EVAL> Clone for VpEnv<'_, MEM, DB, H, EVAL>
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     fn clone(&self) -> Self {
         Self {
@@ -99,6 +107,7 @@ where
             tx_code: self.tx_code.clone(),
             keys_changed: self.keys_changed.clone(),
             verifiers: self.verifiers.clone(),
+            eval_runner: self.eval_runner.clone(),
         }
     }
 }
@@ -175,20 +184,26 @@ where
 }
 
 /// Called from VP wasm to request to use the given gas amount
-pub fn vp_charge_gas<MEM, DB, H>(env: &VpEnv<MEM, DB, H>, used_gas: i32)
-where
+pub fn vp_charge_gas<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
+    used_gas: i32,
+) where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     vp_add_gas(env, used_gas as _)
 }
 
-pub fn vp_add_gas<MEM, DB, H>(env: &VpEnv<MEM, DB, H>, used_gas: u64)
-where
+pub fn vp_add_gas<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
+    used_gas: u64,
+) where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let gas_meter: &mut VpGasMeter = unsafe { &mut *(env.gas_meter.get()) };
     if let Err(err) = gas_meter.add(used_gas) {
@@ -492,8 +507,8 @@ pub fn tx_delete<MEM, DB, H>(
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn vp_read_pre<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_read_pre<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
@@ -502,6 +517,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
@@ -535,8 +551,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn vp_read_post<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_read_post<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
     key_len: u64,
     result_ptr: u64,
@@ -545,6 +561,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
@@ -603,8 +620,8 @@ where
 
 /// Storage `has_key` in prior state (before tx execution) function exposed to
 /// the wasm VM VP environment. It will try to read from the storage.
-pub fn vp_has_key_pre<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_has_key_pre<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
     key_len: u64,
 ) -> i64
@@ -612,6 +629,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
@@ -629,8 +647,8 @@ where
 /// Storage `has_key` in posterior state (after tx execution) function exposed
 /// to the wasm VM VP environment. It will
 /// try to check the write log first and if no entry found then the storage.
-pub fn vp_has_key_post<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_has_key_post<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
     key_len: u64,
 ) -> i64
@@ -638,6 +656,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
@@ -675,8 +694,8 @@ where
 /// Storage prefix iterator function exposed to the wasm VM VP environment.
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator.
-pub fn vp_iter_prefix<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_iter_prefix<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> u64
@@ -684,6 +703,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let (prefix, gas) = env.memory.read_string(prefix_ptr, prefix_len as _);
     vp_add_gas(env, gas);
@@ -704,8 +724,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn vp_iter_pre_next<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_iter_pre_next<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
@@ -713,6 +733,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     tracing::debug!(
         "vp_iter_pre_next iter_id {}, result_ptr {}",
@@ -741,8 +762,8 @@ where
 ///
 /// Returns [`-1`] when the key is not present, or the length of the data when
 /// the key is present (the length may be [`0`]).
-pub fn vp_iter_post_next<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_iter_post_next<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     iter_id: u64,
     result_ptr: u64,
 ) -> i64
@@ -750,6 +771,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     tracing::debug!(
         "vp_iter_post_next iter_id {}, result_ptr {}",
@@ -947,11 +969,14 @@ where
 }
 
 /// Getting the chain ID function exposed to the wasm VM VP environment.
-pub fn vp_get_chain_id<MEM, DB, H>(env: &VpEnv<MEM, DB, H>, result_ptr: u64)
-where
+pub fn vp_get_chain_id<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
+    result_ptr: u64,
+) where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let storage = unsafe { env.storage.get() };
     let (chain_id, gas) = storage.get_chain_id();
@@ -963,11 +988,14 @@ where
 /// Getting the block height function exposed to the wasm VM VP
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
-pub fn vp_get_block_height<MEM, DB, H>(env: &VpEnv<MEM, DB, H>) -> u64
+pub fn vp_get_block_height<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
+) -> u64
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let storage = unsafe { env.storage.get() };
     let (height, gas) = storage.get_block_height();
@@ -977,11 +1005,14 @@ where
 
 /// Getting the block hash function exposed to the wasm VM VP environment. The
 /// hash is that of the block to which the current transaction is being applied.
-pub fn vp_get_block_hash<MEM, DB, H>(env: &VpEnv<MEM, DB, H>, result_ptr: u64)
-where
+pub fn vp_get_block_hash<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
+    result_ptr: u64,
+) where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let storage = unsafe { env.storage.get() };
     let (hash, gas) = storage.get_block_hash();
@@ -990,8 +1021,8 @@ where
     vp_add_gas(env, gas);
 }
 
-pub fn vp_verify_tx_signature<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_verify_tx_signature<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     pk_ptr: u64,
     pk_len: u64,
     data_ptr: u64,
@@ -1003,6 +1034,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let (pk, gas) = env.memory.read_bytes(pk_ptr, pk_len as _);
     vp_add_gas(env, gas);
@@ -1045,8 +1077,8 @@ pub fn tx_log_string<MEM, DB, H>(
     tracing::info!("WASM Transaction log: {}", str);
 }
 
-pub fn vp_eval<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_eval<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     vp_code_ptr: u64,
     vp_code_len: u64,
     input_data_ptr: u64,
@@ -1056,6 +1088,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let (vp_code, gas) = env.memory.read_bytes(vp_code_ptr, vp_code_len as _);
     vp_add_gas(env, gas);
@@ -1064,46 +1097,22 @@ where
         env.memory.read_bytes(input_data_ptr, input_data_len as _);
     vp_add_gas(env, gas);
 
-    // TODO parameterize with a runner function?
-    // let vp_runner = VpRunner::new();
-    // // Clone everything except for the memory
-    // let new_env = VpEnv {
-    //     addr: env.addr.clone(),
-    //     iterators: env.iterators.clone(),
-    //     storage: env.storage.clone(),
-    //     write_log: env.write_log.clone(),
-    //     gas_meter: env.gas_meter.clone(),
-    //     tx_code: env.tx_code.clone(),
-    //     keys_changed: env.keys_changed.clone(),
-    //     verifiers: env.verifiers.clone(),
-    //     memory: AnomaMemory::default(),
-    // };
-
-    // let result = vp_runner.run_eval(vp_code, &input_data, new_env);
-
-    // match result {
-    //     Ok(b) => HostEnvResult::from(b),
-    //     Err(e) => {
-    //         tracing::error!("Error trying to run eval {}", e);
-    //         HostEnvResult::Fail
-    //     }
-    // }
-    // .to_i64()
-
-    0
+    let eval_runner = unsafe { env.eval_runner.get() };
+    eval_runner.eval(vp_code, input_data).to_i64()
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`tracing::Level::Info`]. This function is for development
 /// only.
-pub fn vp_log_string<MEM, DB, H>(
-    env: &VpEnv<MEM, DB, H>,
+pub fn vp_log_string<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
     str_ptr: u64,
     str_len: u64,
 ) where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvalRunner,
 {
     let (str, _gas) = env.memory.read_string(str_ptr, str_len as _);
 
@@ -1218,7 +1227,8 @@ pub mod testing {
         }
     }
 
-    pub fn vp_env<DB, H>(
+    #[allow(clippy::too_many_arguments)]
+    pub fn vp_env<DB, H, EVAL>(
         address: Address,
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
@@ -1227,10 +1237,12 @@ pub mod testing {
         tx_code: &[u8],
         keys_changed: &[Key],
         verifiers: &HashSet<Address>,
-    ) -> VpEnv<'static, NativeMemory, DB, H>
+        eval_runner: &EVAL,
+    ) -> VpEnv<'static, NativeMemory, DB, H, EVAL>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher,
+        EVAL: VpEvalRunner,
     {
         let storage = unsafe { EnvHostWrapper::new(storage) };
         let write_log = unsafe { EnvHostWrapper::new(write_log) };
@@ -1239,6 +1251,7 @@ pub mod testing {
         let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code) };
         let keys_changed = unsafe { EnvHostSliceWrapper::new(keys_changed) };
         let verifiers = unsafe { EnvHostWrapper::new(verifiers) };
+        let eval_runner = unsafe { EnvHostWrapper::new(eval_runner) };
         VpEnv {
             memory: NativeMemory,
             address,
@@ -1249,6 +1262,7 @@ pub mod testing {
             tx_code,
             keys_changed,
             verifiers,
+            eval_runner,
         }
     }
 }

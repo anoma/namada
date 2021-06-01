@@ -29,6 +29,7 @@ pub struct TestVpEnv {
     pub tx_code: Vec<u8>,
     pub keys_changed: Vec<Key>,
     pub verifiers: HashSet<Address>,
+    pub eval_runner: native_vp_host_env::VpEval,
 }
 
 impl Default for TestVpEnv {
@@ -42,6 +43,7 @@ impl Default for TestVpEnv {
             tx_code: vec![],
             keys_changed: vec![],
             verifiers: HashSet::default(),
+            eval_runner: native_vp_host_env::VpEval,
         }
     }
 }
@@ -58,6 +60,7 @@ pub fn init_vp_env(
         tx_code,
         keys_changed,
         verifiers,
+        eval_runner,
     }: &mut TestVpEnv,
 ) {
     vp_host_env::ENV.with(|env| {
@@ -71,6 +74,7 @@ pub fn init_vp_env(
                 tx_code,
                 keys_changed,
                 verifiers,
+                eval_runner,
             )
         })
     });
@@ -93,7 +97,19 @@ mod native_vp_host_env {
     use super::*;
 
     thread_local! {
-        pub static ENV: RefCell<Option<VpEnv<'static, NativeMemory, MockDB, Sha256Hasher>>> = RefCell::new(None);
+        pub static ENV: RefCell<Option<VpEnv<'static, NativeMemory, MockDB, Sha256Hasher, VpEval>>> = RefCell::new(None);
+    }
+
+    pub struct VpEval;
+
+    impl VpEvalRunner for VpEval {
+        fn eval(
+            &self,
+            _vp_code: Vec<u8>,
+            _input_data: Vec<u8>,
+        ) -> anoma_shared::types::internal::HostEnvResult {
+            todo!()
+        }
     }
 
     /// A helper macro to create implementations of the host environment

@@ -26,6 +26,8 @@ pub struct Matchmaker {
     // the matchmaker's state as arbitrary bytes
     data: Vec<u8>,
     ledger_address: net::Address,
+    // TODO this doesn't have to be a mutex as it's just a Sender which is
+    // thread-safe
     wasm_host: Arc<Mutex<WasmHost>>,
 }
 
