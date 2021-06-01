@@ -86,7 +86,7 @@ build-wasm-scripts:
 	make -C txs/tx_from_intent && \
 	make -C txs/tx_update_vp && \
 	make -C matchmaker_template && \
-	make -C filter_template && \
+	make -C filter_template &&
 
 clean-wasm-scripts:
 	make -C vps/vp_template clean && \

@@ -4,7 +4,7 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "6e33197c81367023b2f6774e195c5b2e3b80c3a52a7b2459299ae8465cc634e2  Makefile"
+- commands: [echo "25f764d153c190861f10183e3bd3962d05c551f88f389e49b3b62b66220f9e0d  Makefile"
       | sha256sum -c -, echo "6ff9ee796028a3cc674c5234487a6438c44994af4bae458302c4ff2bd75199a8  vps/vp_template/Makefile"
       | sha256sum -c -, echo "e5e1c98a178c66f170acea2094a0a71536f68e806ced68930658e284976b9241  vps/vp_token/Makefile"
       | sha256sum -c -, echo "23e0790dc5d81059c121b1d0cef3c294aec09e1ae2b1a2252f20ae1d0051417f  vps/vp_user/Makefile"
@@ -101,7 +101,7 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "6e33197c81367023b2f6774e195c5b2e3b80c3a52a7b2459299ae8465cc634e2  Makefile"
+- commands: [echo "25f764d153c190861f10183e3bd3962d05c551f88f389e49b3b62b66220f9e0d  Makefile"
       | sha256sum -c -, echo "6ff9ee796028a3cc674c5234487a6438c44994af4bae458302c4ff2bd75199a8  vps/vp_template/Makefile"
       | sha256sum -c -, echo "e5e1c98a178c66f170acea2094a0a71536f68e806ced68930658e284976b9241  vps/vp_token/Makefile"
       | sha256sum -c -, echo "23e0790dc5d81059c121b1d0cef3c294aec09e1ae2b1a2252f20ae1d0051417f  vps/vp_user/Makefile"
@@ -185,7 +185,7 @@ kind: pipeline
 name: anoma-ci-audit-pr
 node: {project: anoma}
 steps:
-- commands: [echo "6e33197c81367023b2f6774e195c5b2e3b80c3a52a7b2459299ae8465cc634e2  Makefile"
+- commands: [echo "25f764d153c190861f10183e3bd3962d05c551f88f389e49b3b62b66220f9e0d  Makefile"
       | sha256sum -c -, echo "6ff9ee796028a3cc674c5234487a6438c44994af4bae458302c4ff2bd75199a8  vps/vp_template/Makefile"
       | sha256sum -c -, echo "e5e1c98a178c66f170acea2094a0a71536f68e806ced68930658e284976b9241  vps/vp_token/Makefile"
       | sha256sum -c -, echo "23e0790dc5d81059c121b1d0cef3c294aec09e1ae2b1a2252f20ae1d0051417f  vps/vp_user/Makefile"
@@ -245,6 +245,6 @@ type: docker
 workspace: {path: /drone/workspace}
 ---
 kind: signature
-hmac: d391f519d3b7f309a8e8aff2b3a81020a4b2eddde046f7afea60a2293343efb1
+hmac: d01fb391e818d0765e46ff54eb6fea32288f26e1513355ce80dee5fd4f63fb52
 
 ...
