@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
-// use tokio::sync::mpsc::Sender;
 use wasmer::Instance;
 
 use super::host_env::{
