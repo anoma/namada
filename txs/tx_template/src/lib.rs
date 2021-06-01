@@ -1,7 +1,7 @@
 use anoma_vm_env::tx_prelude::*;
 
 #[transaction]
-fn apply_tx(tx_data: vm_memory::Data) {
+fn apply_tx(tx_data: Vec<u8>) {
     log_string(format!("apply_tx called with data: {:#?}", tx_data));
 }
 
@@ -19,7 +19,7 @@ mod tests {
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
 
-        let tx_data: vm_memory::Data = vec![];
+        let tx_data = vec![];
         apply_tx(tx_data);
 
         assert!(env.all_touched_storage_keys().is_empty());

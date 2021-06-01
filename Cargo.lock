@@ -143,7 +143,6 @@ dependencies = [
 name = "anoma_tests"
 version = "0.1.0"
 dependencies = [
- "anoma",
  "anoma_shared",
  "anoma_vm_env",
  "concat-idents",

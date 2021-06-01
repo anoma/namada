@@ -24,7 +24,7 @@ impl<'a> From<&'a Key> for KeyType<'a> {
 
 #[validity_predicate]
 fn validate_tx(
-    tx_data: vm_memory::Data,
+    tx_data: Vec<u8>,
     addr: Address,
     keys_changed: Vec<Key>,
     verifiers: HashSet<Address>,
@@ -197,7 +197,7 @@ mod tests {
         let mut env = TestVpEnv::default();
         init_vp_env(&mut env);
 
-        let tx_data: vm_memory::Data = vec![];
+        let tx_data: Vec<u8> = vec![];
         let addr: Address = env.addr.clone();
         let keys_changed: Vec<Key> = vec![];
         let verifiers: HashSet<Address> = HashSet::default();

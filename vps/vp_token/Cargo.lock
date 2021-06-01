@@ -18,6 +18,7 @@ dependencies = [
  "sparse-merkle-tree",
  "thiserror",
  "tracing",
+ "wasmparser",
 ]
 
 [[package]]
@@ -337,7 +338,7 @@ checksum = "0f0242b8e50dd9accdd56170e94ca1ebd223b098eb9c83539a6e367d0f36ae68"
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding#84f9a920fce8873ee67376242d95b89092cddd19"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding-0.9.0b#2e4770b4b4e4f4af86bfe082a048bc66b2156003"
 dependencies = [
  "borsh",
  "cfg-if 1.0.0",
@@ -459,6 +460,12 @@ dependencies = [
  "borsh",
  "wee_alloc",
 ]
+
+[[package]]
+name = "wasmparser"
+version = "0.78.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52144d4c78e5cf8b055ceab8e5fa22814ce4315d6002ad32cfd914f37c12fd65"
 
 [[package]]
 name = "wee_alloc"

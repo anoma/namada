@@ -9,9 +9,10 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+default = []
 # for integration tests and test utilies
 testing = []
-wasm_runtime = [
+wasm-runtime = [
   "wasmer",
   "wasmer-compiler-singlepass",
   "wasmer-engine-jit",

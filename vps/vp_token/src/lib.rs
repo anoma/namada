@@ -4,7 +4,7 @@ use anoma_vm_env::vp_prelude::*;
 
 #[validity_predicate]
 fn validate_tx(
-    tx_data: vm_memory::Data,
+    tx_data: Vec<u8>,
     addr: Address,
     keys_changed: Vec<Key>,
     verifiers: HashSet<Address>,

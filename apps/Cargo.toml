@@ -38,7 +38,7 @@ std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 testing = []
 
 [dependencies]
-anoma_shared = {path = "../shared", features = ["wasm_runtime"]}
+anoma_shared = {path = "../shared", features = ["wasm-runtime"]}
 base64 = "0.13.0"
 bech32 = "0.8.0"
 blake2b-rs = "0.2.0"
@@ -83,7 +83,7 @@ tracing-log = "0.1.2"
 tracing-subscriber = "0.2.18"
 
 [dev-dependencies]
-anoma_shared = {path = "../shared", features = ["testing", "wasm_runtime"]}
+anoma_shared = {path = "../shared", features = ["testing", "wasm-runtime"]}
 cargo-watch = "7.5.0"
 proptest = "1.0.0"
 tempfile = "3.2.0"
