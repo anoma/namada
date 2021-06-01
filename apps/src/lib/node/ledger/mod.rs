@@ -146,12 +146,11 @@ impl Shell {
                 .expect("Unable to set genesis user public key");
         }
 
-        // Temporary for testing, we have a fixed matchmaker account.
-        // This account has a public key for signing matchmaker txs and
-        // verifying their signatures in its VP. The VP is the same as
-        // the user's VP, which simply checks the signature.
-        // We could consider using the same key as the intent broadcaster's p2p
-        // key.
+        // Temporary for testing, we have a fixed matchmaker account.  This
+        // account has a public key for signing matchmaker txs and verifying
+        // their signatures in its VP. The VP is the same as the user's VP,
+        // which simply checks the signature. We could consider using the same
+        // key as the intent gossip's p2p key.
         let matchmaker = address::matchmaker();
         let matchmaker_pk = key::ed25519::pk_key(&matchmaker);
         storage

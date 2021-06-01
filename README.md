@@ -1,13 +1,18 @@
 # Anoma
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-[![Drone CI build status](https://ci.heliax.dev/api/badges/heliaxdev/anoma-prototype/status.svg)](https://ci.heliax.dev/heliaxdev/anoma-prototype)
+[![Drone CI build status](https://ci.heliax.dev/api/badges/anomanetwork/anoma/status.svg)](https://ci.heliax.dev/anomanetwork/anoma)
 
 ## Overview
 
 [Anoma](https://anoma.network/) is a sovereign, proof-of-stake blockchain protocol that enables private, asset-agnostic cash and private bartering among any number of parties.
 
 This is an implementation of the Anoma ledger in Rust.
+
+## Docs
+
+- [docs](https://anomanetwork.github.io/anoma/): built from [tech-specs mdBook](./tech-specs/)
+- [rustdoc](https://anomanetwork.github.io/anoma/rustdoc/anoma/): built from the source
 
 ## Warning
 
@@ -82,10 +87,10 @@ cargo run --bin anomac -- transfer --source $BERTHA --target $ALBERT --token $XA
 # Submit a transaction to update an account's validity predicate
 cargo run --bin anomac -- update --address $BERTHA --code-path vps/vp_user/vp.wasm
 
-# run gossip node with intent broadcaster and rpc server (use default config)
+# run gossip node with intent gossip system and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc "127.0.0.1:39111"
 
-# run gossip node with intent broadcaster, matchmaker and rpc (use default config)
+# run gossip node with intent gossip system, matchmaker and rpc (use default config)
 cargo run --bin anoman -- run-gossip --rpc "127.0.0.1:39111" --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
 
 # craft intents
@@ -96,7 +101,7 @@ cargo run --bin anomac -- craft-intent --address $CHRISTEL --token-buy $XAN --am
 # Subscribe to new network
 cargo run --bin anomac -- subscribe-topic --node "http://127.0.0.1:39111" --topic "asset_v1"
 
-# Submit the intents (need a rpc server), hardcoded address rpc node address
+# Submit the intents (need a rpc server)
 cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_A.data --topic "asset_v1"
 cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_B.data --topic "asset_v1"
 cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_C.data --topic "asset_v1"

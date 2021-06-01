@@ -12,6 +12,12 @@ environment:
   CARGO_INCREMENTAL: 0
 
 steps:
+  - name: check-scripts-integrity
+    image: alpine/git:v2.30.1
+    pull: if-not-exists
+    commands:
+      - echo "88255b0d9db32c01c9e0287403bb165894b4c1444b497d92f42233bf986132c6  Makefile" | sha256sum -c -
+    
   - name: restore-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -29,6 +35,8 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+    depends_on:
+      - check-scripts-integrity
 
   - name: build-wasm
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -148,6 +156,12 @@ environment:
   CARGO_INCREMENTAL: 0
 
 steps:
+  - name: check-scripts-integrity
+    image: alpine/git:v2.30.1
+    pull: if-not-exists
+    commands:
+      - echo "88255b0d9db32c01c9e0287403bb165894b4c1444b497d92f42233bf986132c6  Makefile" | sha256sum -c -
+
   - name: restore-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -165,6 +179,8 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+    depends_on:
+      - check-scripts-integrity
 
   - name: clippy-check
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -259,6 +275,12 @@ environment:
   CARGO_INCREMENTAL: 0
 
 steps:
+  - name: check-scripts-integrity
+    image: alpine/git:v2.30.1
+    pull: if-not-exists
+    commands:
+      - echo "88255b0d9db32c01c9e0287403bb165894b4c1444b497d92f42233bf986132c6  Makefile" | sha256sum -c -
+
   - name: restore-cache
     image: meltwater/drone-cache
     pull: if-not-exists
@@ -276,6 +298,8 @@ steps:
         from_secret: aws_access_key_id
       AWS_SECRET_ACCESS_KEY:
         from_secret: aws_secret_access_key
+    depends_on:
+      - check-scripts-integrity
 
   - name: audit
     image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -321,3 +345,8 @@ trigger:
 
 node:
   project: anoma
+---
+kind: signature
+hmac: a8278ae6f8809ded0647ee78b2054db1326d79dab145fc3d250cf382501ac4f1
+
+...
