@@ -10,7 +10,7 @@ This script is useful when you have to modify either `.drone.yml` or one of the 
 - Ask for aws credential and [setup aws-cli with a profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-profiles).
 - [Install poetry](https://python-poetry.org/docs/).
 - Run `poetry install`.
-- Run `poetry run python update-drone-config.py`.
+- Run `poetry run python update-drone-config.py --aws-profile {profile_name:- default>`.
 - Check that `.drone.yml` has changed.
 - Commit and push.
 
