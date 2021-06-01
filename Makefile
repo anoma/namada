@@ -73,6 +73,9 @@ doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
 
+build-wasm-scripts-docker:
+	docker run --rm  -v ${PWD}:/usr/local/rust/project anoma-wasm make build-wasm-scripts
+
 # Build the validity predicate and transaction wasm from templates
 build-wasm-scripts:
 	make -C vps/vp_template && \
@@ -83,7 +86,7 @@ build-wasm-scripts:
 	make -C txs/tx_from_intent && \
 	make -C txs/tx_update_vp && \
 	make -C matchmaker_template && \
-	make -C filter_template
+	make -C filter_template && \
 
 clean-wasm-scripts:
 	make -C vps/vp_template clean && \
