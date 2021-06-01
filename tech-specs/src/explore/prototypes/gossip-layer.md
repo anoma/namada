@@ -1,6 +1,6 @@
 # Intent Gossip system prototype
 
-tracking issue <https://github.com/heliaxdev/anoma-prototype/issues/35>
+tracking issue <https://github.com/anomanetwork/anoma/issues/35>
 
 ## Goals
 
