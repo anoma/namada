@@ -58,7 +58,7 @@ mod tests {
 
         // evaluating the VP template which always returns `true` should pass
         // TODO check in the wasm source code to tests resources
-        let vp_template = std::fs::read("../vps/vp_template/vp.wasm")
+        let vp_template = std::fs::read("res/wasm/vp_template.wasm")
             .expect("cannot load user VP");
         let input_data = vec![];
         let result = vp_host_env::eval(vp_template, input_data);
