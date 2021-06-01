@@ -25,3 +25,5 @@ RUN rustup target add wasm32-unknown-unknown
 RUN cargo install sccache
 
 ENV RUSTC_WRAPPER=/usr/local/rust/cargo/bin/sccache
+
+WORKDIR /usr/local/rust/project
