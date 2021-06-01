@@ -275,42 +275,6 @@ impl VpRunner {
         VpRunner::run_with_input(vp_instance, input)
     }
 
-    // fn run_eval<DB, H, EVAL>(
-    //     &self,
-    //     // we read the validity predicate from wasm memory as bytes
-    //     vp_code: Vec<u8>,
-    //     input_data: &[u8],
-    //     vp_env: VpEnv<'static, WasmMemory, DB, H, EVAL>,
-    // ) -> Result<bool>
-    // where
-    //     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    //     H: StorageHasher,
-    //     EVAL: VpEvalRunner,
-    // {
-    //     let vp_code = prepare_wasm_code(&vp_code)?;
-    //     let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
-    //         .map_err(Error::CompileError)?;
-    //     let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
-    //         .map_err(Error::MemoryError)?;
-
-    //     let keys_changed = unsafe { vp_env.keys_changed.get() };
-    //     let verifiers = unsafe { vp_env.verifiers.get() };
-    //     let input: VpInput = VpInput {
-    //         addr: &vp_env.address,
-    //         data: input_data,
-    //         keys_changed,
-    //         verifiers,
-    //     };
-
-    //     let vp_imports =
-    //         prepare_vp_imports(&self.wasm_store, initial_memory, &vp_env);
-
-    //     // compile and run the transaction wasm code
-    //     let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
-    //         .map_err(Error::InstantiationError)?;
-    //     VpRunner::run_with_input(vp_instance, input)
-    // }
-
     fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
         // We need to write the inputs in the memory exported from the wasm
         // module
@@ -377,6 +341,7 @@ where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
+    // TODO more code re-use with VpRunner
     fn eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> HostEnvResult {
         if validate_untrusted_wasm(&vp_code).is_err() {
             return HostEnvResult::Fail;
@@ -384,7 +349,6 @@ where
 
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        // TODO: Maybe refactor wasm_store: not necessary to do in two steps
         let wasm_store =
             wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
 
