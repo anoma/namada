@@ -6,6 +6,7 @@ from typing import Dict
 
 from botocore.config import Config
 from ruamel.yaml import YAML
+import argparse
 
 import boto3
 
@@ -37,7 +38,6 @@ boto_config = Config(
         'mode': 'standard'
     }
 )
-# boto3.setup_default_session(profile_name='heliax.org.new')
 
 client = boto3.client('ssm', config=boto_config)
 
@@ -118,4 +118,10 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser("Update drone configuration.")
+    parser.add_argument('--aws-profile', help='The name of the AWS profile to use.', type=str, default="default")
+    args = parser.parse_args()
+
+    boto3.setup_default_session(profile_name=args.aws_profile)
+
     main()
