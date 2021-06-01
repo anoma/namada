@@ -43,7 +43,7 @@ client = boto3.client('ssm', config=boto_config)
 
 
 def get_project_root() -> Path:
-    return Path(__file__).parent.parent
+    return Path(__file__).parent.parent.parent
 
 
 def get_drone_conf_path() -> Path:
@@ -84,9 +84,10 @@ def get_drone_token() -> str:
 
 
 def sign_drone_config():
+    project_root = get_project_root()
     token = get_drone_token()
     try:
-        os.system(' '.join(["DRONE_TOKEN={}".format(token), "DRONE_SERVER={}".format('https://ci.heliax.dev'), "drone", "sign", "--save", "anomanetwork/anoma"]))
+        os.system(' '.join(["cd {} &&".format(project_root), "DRONE_TOKEN={}".format(token), "DRONE_SERVER={}".format('https://ci.heliax.dev'), "drone", "sign", "--save", "anomanetwork/anoma"]))
     except Exception as e:
         print(e)
         exit(1)
