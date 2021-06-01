@@ -263,8 +263,8 @@ where
 /// Storage read function exposed to the wasm VM Tx environment. It will try to
 /// read from the write log first and if no entry found then from the storage.
 ///
-/// Returns [`-1`] when the key is not present, or the length of the data when
-/// the key is present (the length may be [`0`]).
+/// Returns `-1` when the key is not present, or the length of the data when
+/// the key is present (the length may be `0`).
 pub fn tx_read<MEM, DB, H>(
     env: &TxEnv<MEM, DB, H>,
     key_ptr: u64,
@@ -363,8 +363,8 @@ where
 /// It will try to read from the write log first and if no entry found then from
 /// the storage.
 ///
-/// Returns [`-1`] when the key is not present, or the length of the data when
-/// the key is present (the length may be [`0`]).
+/// Returns `-1` when the key is not present, or the length of the data when
+/// the key is present (the length may be `0`).
 pub fn tx_iter_next<MEM, DB, H>(
     env: &TxEnv<MEM, DB, H>,
     iter_id: u64,
@@ -505,8 +505,8 @@ pub fn tx_delete<MEM, DB, H>(
 /// Storage read prior state (before tx execution) function exposed to the wasm
 /// VM VP environment. It will try to read from the storage.
 ///
-/// Returns [`-1`] when the key is not present, or the length of the data when
-/// the key is present (the length may be [`0`]).
+/// Returns `-1` when the key is not present, or the length of the data when
+/// the key is present (the length may be `0`).
 pub fn vp_read_pre<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
@@ -549,8 +549,8 @@ where
 /// wasm VM VP environment. It will try to read from the write log first and if
 /// no entry found then from the storage.
 ///
-/// Returns [`-1`] when the key is not present, or the length of the data when
-/// the key is present (the length may be [`0`]).
+/// Returns `-1` when the key is not present, or the length of the data when
+/// the key is present (the length may be `0`).
 pub fn vp_read_post<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
@@ -722,8 +722,8 @@ where
 /// Storage prefix iterator for prior state (before tx execution) function
 /// exposed to the wasm VM VP environment. It will try to read from the storage.
 ///
-/// Returns [`-1`] when the key is not present, or the length of the data when
-/// the key is present (the length may be [`0`]).
+/// Returns `-1` when the key is not present, or the length of the data when
+/// the key is present (the length may be `0`).
 pub fn vp_iter_pre_next<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     iter_id: u64,
@@ -760,8 +760,8 @@ where
 /// function exposed to the wasm VM VP environment. It will try to read from the
 /// write log first and if no entry found then from the storage.
 ///
-/// Returns [`-1`] when the key is not present, or the length of the data when
-/// the key is present (the length may be [`0`]).
+/// Returns `-1` when the key is not present, or the length of the data when
+/// the key is present (the length may be `0`).
 pub fn vp_iter_post_next<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     iter_id: u64,
@@ -1061,7 +1061,7 @@ where
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
-/// printed at the [`tracing::Level::Info`]. This function is for development
+/// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
 pub fn tx_log_string<MEM, DB, H>(
     env: &TxEnv<MEM, DB, H>,
@@ -1102,7 +1102,7 @@ where
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be
-/// printed at the [`tracing::Level::Info`]. This function is for development
+/// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
 pub fn vp_log_string<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
@@ -1167,7 +1167,7 @@ pub fn mm_update_data<MEM, MM>(
 }
 
 /// Log a string from exposed to the wasm VM matchmaker environment. The message
-/// will be printed at the [`tracing::Level::Info`]. This function is for
+/// will be printed at the [`tracing::Level::INFO`]. This function is for
 /// development only.
 pub fn mm_log_string<MEM, MM>(
     env: &MatchmakerEnv<MEM, MM>,
@@ -1183,7 +1183,7 @@ pub fn mm_log_string<MEM, MM>(
 }
 
 /// Log a string from exposed to the wasm VM filter environment. The message
-/// will be printed at the [`tracing::Level::Info`].
+/// will be printed at the [`tracing::Level::INFO`].
 pub fn mm_filter_log_string<MEM>(
     env: &FilterEnv<MEM>,
     str_ptr: u64,

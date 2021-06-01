@@ -9,7 +9,7 @@ use anoma_shared::vm;
 use anoma_shared::vm::prefix_iter::PrefixIterators;
 
 /// This module combines the native host function implementations from
-/// [`native_tx_host_env`] above with the functions exposed to the tx wasm
+/// `native_tx_host_env` with the functions exposed to the tx wasm
 /// that will call to the native functions, instead of interfacing via a
 /// wasm runtime. It can be used for host environment integration tests.
 pub mod tx_host_env {
