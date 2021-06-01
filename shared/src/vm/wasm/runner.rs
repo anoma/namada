@@ -320,7 +320,7 @@ impl VpRunner {
     }
 }
 
-struct VpEval<'a, DB, H>
+pub struct VpEval<'a, DB, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,

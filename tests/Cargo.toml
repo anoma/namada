@@ -7,6 +7,10 @@ name = "anoma_tests"
 resolver = "2"
 version = "0.1.0"
 
+[features]
+default = ["wasm-runtime"]
+wasm-runtime = ["anoma_shared/wasm-runtime"]
+
 [dependencies]
 anoma_shared = {path = "../shared", features = ["testing"]}
 anoma_vm_env = {path = "../vm_env"}
