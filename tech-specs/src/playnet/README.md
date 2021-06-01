@@ -37,7 +37,7 @@ git clone https://github.com/anomanetwork/anoma.git
 # or
 git clone git@github.com:anomanetwork/anoma.git
 
-cd anoma-prototype
+cd anoma
 
 # Checkout the release branch
 git checkout v0.1-playnet

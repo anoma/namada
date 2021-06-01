@@ -1,6 +1,6 @@
 # Introduction
 
-This book is written using [mdBook](https://rust-lang.github.io/mdBook/) with [mdbook-mermaid](https://github.com/badboy/mdbook-mermaid) for diagrams, it currently lives in the [anoma-prototype repo](https://github.com/anomanetwork/anoma).
+This book is written using [mdBook](https://rust-lang.github.io/mdBook/) with [mdbook-mermaid](https://github.com/badboy/mdbook-mermaid) for diagrams, it currently lives in the [Anoma repo](https://github.com/anomanetwork/anoma).
 
 To get started quickly, one can:
 

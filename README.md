@@ -11,8 +11,8 @@ This is an implementation of the Anoma ledger in Rust.
 
 ## Docs
 
-- [docs](https://heliaxdev.github.io/anoma-prototype/): built from [tech-specs mdBook](./tech-specs/)
-- [rustdoc](https://heliaxdev.github.io/anoma-prototype/rustdoc/anoma/): built from the source
+- [docs](https://anomanetwork.github.io/anoma/): built from [tech-specs mdBook](./tech-specs/)
+- [rustdoc](https://anomanetwork.github.io/anoma/rustdoc/anoma/): built from the source
 
 ## Warning
 
