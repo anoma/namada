@@ -85,7 +85,7 @@ impl P2P {
                         {
                             Ok(true) => {
                                 let gossip_message =
-                                    IntentGossipMessage::new(&intent);
+                                    IntentGossipMessage::new(intent);
                                 let intent_bytes = gossip_message.to_bytes();
                                 match self
                                     .swarm

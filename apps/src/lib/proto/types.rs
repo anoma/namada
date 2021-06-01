@@ -70,6 +70,7 @@ impl Tx {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct IntentGossipMessage {
     inner: types::IntentGossipMessage,
 }
@@ -84,7 +85,7 @@ impl IntentGossipMessage {
         }
     }
 
-    pub fn new(intent: &Intent) -> Self {
+    pub fn new(intent: Intent) -> Self {
         let inner = types::IntentGossipMessage {
             msg: Some(types::intent_gossip_message::Msg::Intent(
                 intent.convert(),
@@ -112,6 +113,7 @@ impl IntentGossipMessage {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, PartialEq)]
 pub struct DkgGossipMessage {
     inner: types::DkgGossipMessage,
 }
@@ -127,7 +129,7 @@ impl DkgGossipMessage {
         }
     }
 
-    pub fn new(dkg: &Dkg) -> Self {
+    pub fn new(dkg: Dkg) -> Self {
         let message = types::dkg_gossip_message::DkgMessage::Dkg(dkg.convert());
         let inner = types::DkgGossipMessage {
             dkg_message: Some(message),
@@ -183,6 +185,7 @@ impl RpcMessage {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct IntentMessage {
     inner: services::IntentMessage,
 }
@@ -217,6 +220,7 @@ impl IntentMessage {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct SubscribeTopicMessage {
     inner: services::SubscribeTopicMessage,
 }
@@ -242,7 +246,7 @@ impl SubscribeTopicMessage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Intent {
     inner: types::Intent,
 }
@@ -306,6 +310,7 @@ impl<T: Into<Vec<u8>>> From<T> for IntentId {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Dkg {
     inner: types::Dkg,
 }
@@ -323,7 +328,119 @@ impl Dkg {
         Dkg { inner }
     }
 
+    pub fn data(&self) -> String {
+        self.inner.data.clone()
+    }
+
     pub fn convert(&self) -> types::Dkg {
         self.inner.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tx() {
+        let code = "wasm code".as_bytes().to_owned();
+        let data = Some("arbitrary data".as_bytes().to_owned());
+        let tx = Tx::new(code.clone(), data.clone());
+
+        let types_tx = types::Tx {
+            code: code,
+            data: data,
+            timestamp: Some(std::time::SystemTime::now().into()),
+        };
+        let mut bytes = vec![];
+        types_tx.encode(&mut bytes).expect("encoding failed");
+        let tx_from_types = Tx::from(&bytes).expect("decoding failed");
+
+        assert_eq!(tx_from_types.code(), tx.code());
+        assert_eq!(tx_from_types.data(), tx.data());
+    }
+
+    #[test]
+    fn test_intent_gossip_message() {
+        let data = "arbitrary data".as_bytes().to_owned();
+        let intent = Intent::new(data);
+        let message = IntentGossipMessage::new(intent.clone());
+        assert_eq!(message.intent(), intent);
+
+        let bytes = message.to_bytes();
+        let message_from_bytes =
+            IntentGossipMessage::from(bytes).expect("decoding failed");
+        assert_eq!(message_from_bytes, message);
+    }
+
+    #[test]
+    fn test_dkg_gossip_message() {
+        let data = "arbitrary string".to_owned();
+        let dkg = Dkg::new(data);
+        let message = DkgGossipMessage::new(dkg.clone());
+        assert_eq!(message.dkg(), dkg);
+
+        let bytes = message.to_bytes();
+        let message_from_bytes =
+            DkgGossipMessage::from(bytes).expect("decoding failed");
+        assert_eq!(message_from_bytes, message);
+    }
+
+    #[test]
+    fn test_intent_message() {
+        let data = "arbitrary data".as_bytes().to_owned();
+        let intent = Intent::new(data);
+        let topic = "arbitrary string".to_owned();
+        let intent_message = IntentMessage::new(intent.clone(), topic.clone());
+        assert_eq!(intent_message.intent(), intent);
+        assert_eq!(intent_message.topic(), topic);
+
+        let intent_rpc_message = RpcMessage::new_intent(intent, topic);
+        match intent_rpc_message.convert().message {
+            Some(services::rpc_message::Message::Intent(i)) => {
+                let message_from_types =
+                    IntentMessage::from(i).expect("no intent");
+                assert_eq!(intent_message, message_from_types);
+            }
+            _ => panic!("no intent message"),
+        }
+    }
+
+    #[test]
+    fn test_topic_message() {
+        let topic = "arbitrary string".to_owned();
+        let topic_message = SubscribeTopicMessage::new(topic.clone());
+        assert_eq!(topic_message.topic(), topic);
+
+        let topic_rpc_message = RpcMessage::new_topic(topic.clone());
+        match topic_rpc_message.convert().message {
+            Some(services::rpc_message::Message::Topic(t)) => {
+                let message_from_types = SubscribeTopicMessage::from(t);
+                assert_eq!(topic_message, message_from_types);
+            }
+            _ => panic!("no intent message"),
+        }
+    }
+
+    #[test]
+    fn test_intent() {
+        let data = "arbitrary data".as_bytes().to_owned();
+        let intent = Intent::new(data.clone());
+        assert_eq!(intent.data(), data);
+
+        let types_intent = intent.convert();
+        let intent_from_types = Intent::from(types_intent);
+        assert_eq!(intent_from_types, intent);
+    }
+
+    #[test]
+    fn test_dkg() {
+        let data = "arbitrary string".to_owned();
+        let dkg = Dkg::new(data.clone());
+        assert_eq!(dkg.data(), data);
+
+        let types_dkg = dkg.convert();
+        let dkg_from_types = Dkg::from(types_dkg);
+        assert_eq!(dkg_from_types, dkg);
     }
 }
