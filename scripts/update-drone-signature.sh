@@ -15,4 +15,4 @@ TOKEN=$(aws ssm get-parameter --name "drone_machine_secret" --with-decryption --
 export DRONE_TOKEN=$TOKEN
 export DRONE_SERVER=https://$DRONE_URL
 
-drone sign --save heliaxdev/anoma-prototype
+drone sign --save anomanetwork/anoma

@@ -14,7 +14,7 @@ You can either use the pre-built binaries we've released on Github or build from
 
 We have built for Mac (darwin_amd64) and Linux (linux_amd64). If you're not on one of these, you'll have to build from the source.
 
-Download the release for your platform from <https://github.com/heliaxdev/anoma-prototype/releases>. They are packaged with Tendermint, which will be used by the Anoma node.
+Download the release for your platform from <https://github.com/anomanetwork/anoma/releases>. They are packaged with Tendermint, which will be used by the Anoma node.
 
 ```shell
 # Extract the archive
@@ -33,9 +33,9 @@ And you're ready to go!
 
 ```shell
 # Clone the repo
-git clone https://github.com/heliaxdev/anoma-prototype.git
+git clone https://github.com/anomanetwork/anoma.git
 # or
-git clone git@github.com:heliaxdev/anoma-prototype.git
+git clone git@github.com:anomanetwork/anoma.git
 
 cd anoma-prototype
 
