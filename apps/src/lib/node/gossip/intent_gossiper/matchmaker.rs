@@ -4,7 +4,6 @@ use anoma_shared::gossip::mm::MmHost;
 use anoma_shared::types::key::ed25519::SignedTxData;
 use anoma_shared::vm::wasm::runner::{self, MmRunner};
 use borsh::BorshSerialize;
-use prost::Message;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
@@ -12,8 +11,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
-use crate::proto::types::{Intent, Tx};
-use crate::proto::IntentId;
+use crate::proto::{Intent, IntentId, Tx};
 use crate::types::MatchmakerMessage;
 use crate::{config, wallet};
 
@@ -122,7 +120,7 @@ impl Matchmaker {
                 .run(
                     &self.matchmaker_code.clone(),
                     &self.data,
-                    &IntentId::new(&intent).0,
+                    &intent.id().0,
                     &intent.data,
                     self.wasm_host.clone(),
                 )
@@ -145,11 +143,10 @@ impl Matchmaker {
                 let tx = Tx {
                     code: tx_code,
                     data: Some(signed_bytes),
-                    timestamp: Some(std::time::SystemTime::now().into()),
+                    timestamp: std::time::SystemTime::now().into(),
                 };
 
-                let mut tx_bytes = vec![];
-                tx.encode(&mut tx_bytes).unwrap();
+                let tx_bytes = tx.to_bytes();
 
                 let client =
                     HttpClient::new(self.ledger_address.clone()).unwrap();

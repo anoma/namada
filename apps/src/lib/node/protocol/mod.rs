@@ -1,6 +1,7 @@
 //! The ledger's protocol
 
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::fmt;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
@@ -8,19 +9,18 @@ use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm;
 use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
-use prost::Message;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::node::ledger::storage::PersistentStorage;
-use crate::proto::types::Tx;
+use crate::proto::{self, Tx};
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
     StorageError(anoma_shared::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
-    TxDecodingError(prost::DecodeError),
+    TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::runner::Error),
     #[error("Gas error: {0}")]
@@ -78,7 +78,7 @@ pub fn apply_tx(
         .add_base_transaction_fee(tx_bytes.len())
         .map_err(Error::GasError)?;
 
-    let tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
+    let tx = Tx::try_from(tx_bytes).map_err(Error::TxDecodingError)?;
 
     let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
     let changed_keys = write_log.get_all_keys();
