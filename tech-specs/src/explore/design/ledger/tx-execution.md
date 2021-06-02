@@ -1,6 +1,8 @@
 # Transaction execution
 
-tracking issue <https://github.com/heliaxdev/rd-pm/issues/27>
+[Tracking Issue](https://github.com/anomanetwork/anoma/issues/43)
+
+---
 
 ## Implementation overview (verbatim from the paper section 1.1)
 
@@ -28,8 +30,10 @@ There is only a single transaction type:
 struct Transaction {
     // A wasm module with a required entrypoint
     code: Vec<u8>
-    // Arbitrary data
-    data: Vec<u8>,
+    // Optional arbitrary data
+    data: Option<Vec<u8>>,
+    // A timestamp of when the transaction was created
+    timestamp: Timestamp,
     gas_limit: TODO,
 }
 ```

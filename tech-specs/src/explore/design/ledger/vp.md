@@ -1,3 +1,5 @@
 # Validity predicates
 
-tracking issue <https://github.com/heliaxdev/rd-pm/issues/26>
+[Tracking Issue](https://github.com/anomanetwork/anoma/issues/44)
+
+---

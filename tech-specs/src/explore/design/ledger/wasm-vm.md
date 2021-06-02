@@ -17,10 +17,6 @@ The VM should provide:
 - helpers to estimate gas usage
 - VM and environment versioning
 
-Needs more info:
-- TODO: review [wasmer gas metering](https://github.com/wasmerio/wasmer/blob/1ee7b4a07ff1acaec93078e618d64c810e7691f0/examples/metering.rs), are there any loop-holes that could potentially escape metering?
-- TODO: can VPs be pre-compiled/cached?
-
 ## Resources
 
 - [WebAssembly Specifications](https://webassembly.github.io/spec/)
