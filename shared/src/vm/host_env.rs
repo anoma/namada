@@ -30,14 +30,18 @@ where
 {
     /// The VM memory for bi-directional data passing
     pub memory: MEM,
-    /// Read only access to the storage
+    /// Read-only access to the storage
     pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
+    /// Read/write access to the write log.
     /// Not thread-safe, assuming single-threaded Tx runner
     pub write_log: MutEnvHostWrapper<'a, &'a WriteLog>,
+    /// Storage prefix iterators.
     /// Not thread-safe, assuming single-threaded Tx runner
     pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
+    /// Transaction gas meter.
     /// Not thread-safe, assuming single-threaded Tx runner
     pub gas_meter: MutEnvHostWrapper<'a, &'a BlockGasMeter>,
+    /// The verifiers whose validity predicates should be triggered.
     /// Not thread-safe, assuming single-threaded Tx runner
     pub verifiers: MutEnvHostWrapper<'a, &'a HashSet<Address>>,
 }
@@ -72,13 +76,17 @@ where
     pub memory: MEM,
     /// The address of the account that owns the VP
     pub address: Address,
+    /// Read-only access to the storage.
     /// Thread-safe read-only access from parallel Vp runners
     pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
+    /// Read-only access to the write log.
     /// Thread-safe read-only access from parallel Vp runners
     pub write_log: EnvHostWrapper<'a, &'a WriteLog>,
+    /// Storage prefix iterators.
     /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
     pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
+    /// VP gas meter.
     /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
     pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,

@@ -333,13 +333,21 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
+    /// The address of the validity predicate that called the `eval`
     pub address: Address,
+    /// Read-only access to the storage.
     pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
+    /// Read-only access to the write log.
     pub write_log: EnvHostWrapper<'a, &'a WriteLog>,
+    /// Storage prefix iterators.
     pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
+    /// VP gas meter.
     pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
+    /// The transaction code.
     pub tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
+    /// The storage keys that have been changed.
     pub keys_changed: EnvHostSliceWrapper<'a, &'a [Key]>,
+    /// The verifiers whose validity predicates should be triggered.
     pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
 }
 
