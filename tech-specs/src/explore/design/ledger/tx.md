@@ -1,30 +1,10 @@
-# Transaction execution
+# Transaction
 
 [Tracking Issue](https://github.com/anomanetwork/anoma/issues/43)
 
 ---
 
-## Implementation overview (verbatim from the paper section 1.1)
-
-The aforementioned abstract trade system is instantiated using a validity predicate (VP) account model. Like a distributed virtual machine such as the EVM, the ledger contains many independent accounts with their own state subspace and code. Unlike a distributed virtual machine, execution does not proceed in a step-by-step flow where contracts initiate message calls to other contracts. Instead, transactions execute arbitrary code, read and write state as they please, and then all accounts whose state was al- tered in the course of the transaction decide whether to accept or reject it. The code associated with an account is referred to as a validity predicate, and the validity predicate can also be changed in a transaction (the change being validated by the old validity predicate before being enacted).
-
-In order, a transaction is executed as follows:
-1. Arbitrary code is executed in a virtual machine (LLVM/WASM) which can read/write all public state.
-    1. The ledger tracks which accounts state was read or written.
-    2. The ledger keeps writes in a temporary cache and does not yet commit them.
-    3. Separate transactions are parallelized based on the read/write graph with a multi-version concurrency control approach similar to that used in PostgreSQL.
-2. All accounts whose state was written during the code execution have the opportunity to accept or reject the transaction.
-    1. The accounts validity predicate is called with access to all state changes which occurred and any extra data in the transaction (e.g. proofs).
-    2. This validity predicate check is stateless and thus can happen in parallel for any number of involved accounts.
-3. The state changes are committed if and only if all involved accounts accept the transaction.
-
-For our purpose of multi-party exchange, this model has several advantages over step-based execution and contract-originating message calls:
-- No coordinating contract is required to handle multi-party exchange, and accounts involved in multi-party exchange do not necessarily need to know about each other’s existence. Generally speaking, ac- counts accept transactions as long as certain invariants (e.g. ownership and preservation of supply for a token) are preserved.
-- Transaction execution can be much more efficient, since state changes can be directly specified (instead of computed) and only validated by the involved accounts, which can be done in parallel. The possibility of code execution during the first phase allows for limited computation in the case of possibly contentious shared resources (e.g. a counter being incremented).
-
-## Transaction (tx) data
-
-There is only a single transaction type:
+There is only a single general transaction (tx) type:
 
 ```rust
 struct Transaction {
