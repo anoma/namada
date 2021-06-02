@@ -16,6 +16,7 @@ use crate::types::{
     RESERVED_VP_KEY,
 };
 
+/// An in-memory DB for testing.
 #[derive(Debug)]
 pub struct MockDB(BTreeMap<String, Vec<u8>>);
 
@@ -253,10 +254,13 @@ impl<'iter> DBIter<'iter> for MockDB {
     }
 }
 
+/// A prefix iterator base for the [`MockPrefixIterator`].
 pub struct MockIterator<'a> {
+    /// A sub-range iterator
     pub iter: Range<'a, String, Vec<u8>>,
 }
 
+/// A prefix iterator for the [`MockDB`].
 pub type MockPrefixIterator<'a> = PrefixIterator<MockIterator<'a>>;
 
 impl<'a> Iterator for MockIterator<'a> {

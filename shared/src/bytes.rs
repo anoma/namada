@@ -1,3 +1,5 @@
+//! A helper module for dealing with bytes
+
 use std::fmt::Display;
 
 /// A helper to show bytes in hex

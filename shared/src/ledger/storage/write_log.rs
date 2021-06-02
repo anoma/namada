@@ -1,3 +1,6 @@
+//! Write log is temporary storage for modifications performed by a transaction.
+//! before they are committed to the ledger's storage.
+
 use std::collections::HashMap;
 
 use thiserror::Error;
@@ -6,32 +9,44 @@ use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::EstablishedAddressGen;
 use crate::types::{Address, Key};
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error applying a write log: {0}")]
     StorageError(storage::Error),
 }
 
+/// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// A storage modification
 #[derive(Clone, Debug)]
 pub enum StorageModification {
-    Write { value: Vec<u8> },
+    /// Write a new value
+    Write {
+        /// Value bytes
+        value: Vec<u8>,
+    },
+    /// Delete an existing key-value
     Delete,
-    InitAccount { vp: Vec<u8> },
+    /// Initialize a new account with established address and a given validity
+    /// predicate
+    InitAccount {
+        /// Validity predicate bytes
+        vp: Vec<u8>,
+    },
 }
 
+/// The write log storage
 #[derive(Debug, Clone)]
 pub struct WriteLog {
+    /// The generator of established addresses
     address_gen: Option<EstablishedAddressGen>,
+    /// All the storage modification accepted by validity predicates are stored
+    /// in block write-log, before being committed to the storage
     block_write_log: HashMap<Key, StorageModification>,
+    /// The storage modifications for the current transaction
     tx_write_log: HashMap<Key, StorageModification>,
-}
-
-impl WriteLog {
-    pub fn new() -> Self {
-        Self::default()
-    }
 }
 
 impl Default for WriteLog {
@@ -233,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_crud_value() {
-        let mut write_log = WriteLog::new();
+        let mut write_log = WriteLog::default();
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
 
@@ -296,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_crud_account() {
-        let mut write_log = WriteLog::new();
+        let mut write_log = WriteLog::default();
         let address_gen = EstablishedAddressGen::new("test");
 
         // init
@@ -323,7 +338,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_update_initialized_account() {
-        let mut write_log = WriteLog::new();
+        let mut write_log = WriteLog::default();
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
@@ -339,7 +354,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_delete_initialized_account() {
-        let mut write_log = WriteLog::new();
+        let mut write_log = WriteLog::default();
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
@@ -355,7 +370,7 @@ mod tests {
     fn test_commit() {
         let mut storage =
             crate::ledger::storage::testing::TestStorage::default();
-        let mut write_log = WriteLog::new();
+        let mut write_log = WriteLog::default();
         let address_gen = EstablishedAddressGen::new("test");
 
         let key1 =

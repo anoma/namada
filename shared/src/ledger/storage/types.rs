@@ -8,12 +8,14 @@ use thiserror::Error;
 
 use crate::bytes::ByteBuf;
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Deserialization error: {0}")]
     DeserializationError(std::io::Error),
 }
 
+/// Result for functions that may fail
 type Result<T> = std::result::Result<T, Error>;
 
 /// Encode a value with borsh
@@ -35,6 +37,7 @@ where
     T::try_from_slice(bytes.as_ref()).map_err(Error::DeserializationError)
 }
 
+/// Merkle tree storage
 pub struct MerkleTree<H: Hasher + Default>(
     pub SparseMerkleTree<H, H256, DefaultStore<H256>>,
 );
@@ -54,14 +57,19 @@ impl<H: Hasher + Default> core::fmt::Debug for MerkleTree<H> {
     }
 }
 
+/// A key-value pair as raw bytes
 pub type KVBytes = (Box<[u8]>, Box<[u8]>);
 
+/// Storage prefix iterator generic wrapper type.
 pub struct PrefixIterator<I> {
+    /// The concrete iterator implementation
     pub iter: I,
+    /// The prefix that is being iterated
     pub db_prefix: String,
 }
 
 impl<I> PrefixIterator<I> {
+    /// Initialize a new prefix iterator
     pub fn new(iter: I, db_prefix: String) -> Self
     where
         I: Iterator<Item = KVBytes>,

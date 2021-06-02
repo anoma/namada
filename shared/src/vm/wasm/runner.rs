@@ -1,3 +1,5 @@
+//! Wasm runners
+
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
@@ -31,11 +33,7 @@ const MATCHMAKER_ENTRYPOINT: &str = "_match_intent";
 const FILTER_ENTRYPOINT: &str = "_validate_intent";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
-#[derive(Clone, Debug)]
-pub struct TxRunner {
-    wasm_store: wasmer::Store,
-}
-
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     // 1. Common error types
@@ -71,7 +69,14 @@ pub enum Error {
     ValidationError(wasmparser::BinaryReaderError),
 }
 
+/// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Transaction wasm runner
+#[derive(Clone, Debug)]
+pub struct TxRunner {
+    wasm_store: wasmer::Store,
+}
 
 impl TxRunner {
     /// TODO remove the `new`, it's not very useful
@@ -110,7 +115,7 @@ impl TxRunner {
         let write_log = unsafe { MutEnvHostWrapper::new(write_log) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
+        let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
         let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
         let mut verifiers = HashSet::new();
         // This is also not thread-safe, we're assuming single-threaded Tx
@@ -172,6 +177,7 @@ impl TxRunner {
     }
 }
 
+/// Validity predicate wasm runner
 #[derive(Clone, Debug)]
 pub struct VpRunner {
     wasm_store: wasmer::Store,
@@ -189,6 +195,9 @@ impl VpRunner {
         Self { wasm_store }
     }
 
+    /// Execute a validity predicate code. Returns whether the validity
+    /// predicate accepted storage modifications performed by the transaction
+    /// that triggered the execution.
     // TODO consider using a wrapper object for all the host env references
     #[allow(clippy::too_many_arguments)]
     pub fn run<DB, H>(
@@ -218,7 +227,7 @@ impl VpRunner {
         let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code.as_ref()) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
-        let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::new();
+        let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
         let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
@@ -320,6 +329,7 @@ impl VpRunner {
     }
 }
 
+/// Validity predicate wasm runner from `eval` function calls.
 struct VpEval<'a, DB, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -418,6 +428,7 @@ where
     }
 }
 
+/// Matchmaker wasm runner.
 #[derive(Clone, Debug)]
 pub struct MmRunner {
     wasm_store: wasmer::Store,
@@ -435,6 +446,7 @@ impl MmRunner {
         Self { wasm_store }
     }
 
+    /// Execute a matchmaker code.
     pub fn run<MM>(
         &self,
         matchmaker_code: impl AsRef<[u8]>,
@@ -512,6 +524,7 @@ impl MmRunner {
     }
 }
 
+/// Matchmaker's filter wasm runner
 #[derive(Clone, Debug)]
 pub struct MmFilterRunner {
     wasm_store: wasmer::Store,
@@ -528,6 +541,8 @@ impl MmFilterRunner {
         Self { wasm_store }
     }
 
+    /// Execute a matchmaker filter code to check if it accepts the given
+    /// intent.
     pub fn run(
         &self,
         code: impl AsRef<[u8]>,
@@ -648,16 +663,10 @@ mod tests {
         let runner = TxRunner::new();
         let tx_data = vec![];
         let mut storage = TestStorage::default();
-        let mut write_log = WriteLog::new();
+        let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
         let error = runner
-            .run(
-                &mut storage,
-                &mut write_log,
-                &mut gas_meter,
-                tx_code,
-                tx_data,
-            )
+            .run(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
             .expect_err(
                 "Expecting runtime error \"unreachable\" caused by \
                  stack-height overflow",
@@ -714,7 +723,7 @@ mod tests {
         let tx_code = vec![];
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
-        let write_log = WriteLog::new();
+        let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = vec![];
         let verifiers = HashSet::new();

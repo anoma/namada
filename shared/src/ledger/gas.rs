@@ -1,7 +1,11 @@
+//! Gas accounting module to track the gas usage in a block for transactions and
+//! validity predicates triggered by transactions.
+
 use std::convert::TryFrom;
 
 use thiserror::Error;
 
+#[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     #[error("Transaction gas limit exceeded")]
@@ -22,17 +26,24 @@ const PARALLEL_GAS_MULTIPLER: f64 = 0.1;
 const BLOCK_GAS_LIMIT: u64 = 10_000_000_000_000;
 const TRANSACTION_GAS_LIMIT: u64 = 10_000_000_000;
 
+/// The minimum gas cost for accessing the storage
 pub const MIN_STORAGE_GAS: u64 = 1;
 
+/// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Gas metering in a block. Tracks the gas in a current block and a current
+/// transaction.
 #[derive(Debug, Clone)]
 pub struct BlockGasMeter {
     block_gas: u64,
     transaction_gas: u64,
 }
+
+/// Gas metering in a validity predicate
 #[derive(Debug, Clone)]
 pub struct VpGasMeter {
+    /// The current gas usage
     pub vp_gas: u64,
     /// We store the `error` inside here, because when we run out of gas in VP
     /// wasm, the execution is immediately shut down with `unreachable!()`
@@ -50,7 +61,9 @@ pub struct VpsGas {
 }
 
 impl BlockGasMeter {
-    /// Add gas cost for the current transaction.
+    /// Add gas cost for the current transaction. It will return error when the
+    /// consumed gas exceeds the transaction gas limit, but the state will still
+    /// be updated.
     pub fn add(&mut self, gas: u64) -> Result<()> {
         self.transaction_gas = self
             .transaction_gas
@@ -71,43 +84,48 @@ impl BlockGasMeter {
         self.add(bytes_len as u64 * TX_GAS_PER_BYTE)
     }
 
-    // Add the compiling cost proportionate to the code length
+    /// Add the compiling cost proportionate to the code length
     pub fn add_compiling_fee(&mut self, bytes_len: usize) -> Result<()> {
         self.add(bytes_len as u64 * COMPILE_GAS_PER_BYTE)
     }
 
     /// Add the transaction gas to the block's total gas. Returns the
-    /// transaction's gas cost and resets the transaction meter.
+    /// transaction's gas cost and resets the transaction meter. It will return
+    /// error when the consumed gas exceeds the block gas limit, but the state
+    /// will still be updated.
     pub fn finalize_transaction(&mut self) -> Result<u64> {
         self.block_gas = self
             .block_gas
             .checked_add(self.transaction_gas)
             .ok_or(Error::GasOverflow)?;
 
+        let transaction_gas = self.transaction_gas;
+        self.transaction_gas = 0;
         if self.block_gas > BLOCK_GAS_LIMIT {
             return Err(Error::BlockGasExceeded);
         }
-        let transaction_gas = self.transaction_gas;
-        self.transaction_gas = 0;
         Ok(transaction_gas)
     }
 
-    /// Reset the gas meter
+    /// Reset the gas meter.
     pub fn reset(&mut self) {
         self.transaction_gas = 0;
         self.block_gas = 0;
     }
 
+    /// Add a fee for parallelized validity predicate run.
     pub fn add_parallel_fee(&mut self, vps_gases: &[u64]) -> Result<()> {
         let gas_used =
             vps_gases.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLER;
         self.add(gas_used as u64)
     }
 
-    pub fn get_current_transaction_gas(&mut self) -> u64 {
+    /// Get the total gas used in the current transaction.
+    pub fn get_current_transaction_gas(&self) -> u64 {
         self.transaction_gas
     }
 
+    /// Add the gas cost used in validity predicates to the current transaction.
     pub fn add_vps_gas(&mut self, VpsGas { max, rest }: &VpsGas) -> Result<()> {
         self.add(*max)?;
         self.add_parallel_fee(rest)
@@ -115,6 +133,8 @@ impl BlockGasMeter {
 }
 
 impl VpGasMeter {
+    /// Initialize a new VP gas meter, starting with the gas consumed in the
+    /// transaction so far.
     pub fn new(vp_gas: u64) -> Self {
         Self {
             vp_gas,
@@ -122,6 +142,9 @@ impl VpGasMeter {
         }
     }
 
+    /// Consume gas in a validity predicate. It will return error when the
+    /// consumed gas exceeds the transaction gas limit, but the state will still
+    /// be updated.
     pub fn add(&mut self, gas: u64) -> Result<()> {
         match self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow) {
             Ok(gas) => {
@@ -139,17 +162,10 @@ impl VpGasMeter {
         }
         Ok(())
     }
-
-    pub fn parallel_fee() -> f64 {
-        PARALLEL_GAS_MULTIPLER
-    }
-
-    pub fn transaction_gas_limit() -> u64 {
-        TRANSACTION_GAS_LIMIT
-    }
 }
 
 impl VpsGas {
+    /// Merge validity predicates gas meters from parallelized runs.
     pub fn merge(
         &mut self,
         other: &mut VpsGas,
@@ -164,8 +180,7 @@ impl VpsGas {
         }
 
         let parallel_gas: u64 = (self.rest.clone().iter().sum::<u64>() as f64
-            * VpGasMeter::parallel_fee())
-            as u64;
+            * PARALLEL_GAS_MULTIPLER) as u64;
 
         let total = self
             .max
@@ -173,7 +188,7 @@ impl VpsGas {
             .ok_or(Error::GasOverflow)?
             .checked_add(parallel_gas)
             .ok_or(Error::GasOverflow)?;
-        if total > VpGasMeter::transaction_gas_limit() {
+        if total > TRANSACTION_GAS_LIMIT {
             return Err(Error::GasOverflow);
         }
         Ok(())
@@ -198,6 +213,9 @@ impl Default for VpsGas {
     }
 }
 
+/// Convert the gas from signed to unsigned int. This will panic on overflow,
+/// but it should never occur for our gas limits (see
+/// `tests::gas_limits_cannot_overflow_i64`).
 pub fn as_i64(gas: u64) -> i64 {
     i64::try_from(gas).expect("Gas should never overflow i64")
 }
