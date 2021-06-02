@@ -40,7 +40,7 @@
   - [Resources](./explore/resources/README.md)
     - [IDE](./explore/resources/ide.md)
 - [Specifications](./specs/README.md)
-  - [Overall architecture]()
+  - [Overview](./specs/overview.md)
   - [Trade system]()
   - [Intent gossip system]()
   - [Fractal scaling]()
