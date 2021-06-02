@@ -3,8 +3,7 @@ use std::io::Write;
 
 use anoma::client::tx;
 use anoma::proto::services::rpc_service_client::RpcServiceClient;
-use anoma::proto::services::{rpc_message, RpcMessage};
-use anoma::proto::{services, types};
+use anoma::proto::{self, services, RpcMessage};
 use anoma::{cli, wallet};
 use anoma_shared::types::intent::Intent;
 use anoma_shared::types::key::ed25519::Signed;
@@ -98,16 +97,9 @@ pub async fn main() -> Result<()> {
 async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let data = std::fs::read(data_path).expect("data file IO error");
-    let intent = types::Intent {
-        data,
-        timestamp: Some(std::time::SystemTime::now().into()),
-    };
-    let message = RpcMessage {
-        message: Some(rpc_message::Message::Intent(services::IntentMesage {
-            intent: Some(intent),
-            topic,
-        })),
-    };
+    let intent = proto::Intent::new(data);
+    let message: services::RpcMessage =
+        RpcMessage::new_intent(intent, topic).into();
     let response = client
         .send_message(message)
         .await
@@ -117,11 +109,7 @@ async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
 
 async fn subscribe_topic(node_addr: String, topic: String) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
-    let message = RpcMessage {
-        message: Some(rpc_message::Message::Topic(
-            services::SubscribeTopicMessage { topic },
-        )),
-    };
+    let message: services::RpcMessage = RpcMessage::new_topic(topic).into();
     let response = client
         .send_message(message)
         .await

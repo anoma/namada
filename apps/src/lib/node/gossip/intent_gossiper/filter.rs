@@ -3,7 +3,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::node::vm;
-use crate::proto::types::Intent;
+use crate::proto::Intent;
 
 #[derive(Error, Debug)]
 pub enum Error {
