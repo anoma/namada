@@ -1,5 +1,5 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IntentMesage {
+pub struct IntentMessage {
     #[prost(message, optional, tag = "1")]
     pub intent: ::core::option::Option<super::types::Intent>,
     #[prost(string, tag = "2")]
@@ -20,7 +20,7 @@ pub mod rpc_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Message {
         #[prost(message, tag = "1")]
-        Intent(super::IntentMesage),
+        Intent(super::IntentMessage),
         #[prost(message, tag = "2")]
         Topic(super::SubscribeTopicMessage),
         #[prost(message, tag = "3")]

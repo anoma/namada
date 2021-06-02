@@ -3,7 +3,7 @@ use std::path::Path;
 use anoma_shared::vm::wasm::runner::{self, MmFilterRunner};
 use thiserror::Error;
 
-use crate::proto::types::Intent;
+use crate::proto::Intent;
 
 #[derive(Error, Debug)]
 pub enum Error {

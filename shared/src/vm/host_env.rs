@@ -84,11 +84,6 @@ where
     pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
     pub tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
-    /// Changed storage keys, we use these for [`vp_eval`] invocations
-    pub keys_changed: EnvHostSliceWrapper<'a, &'a [Key]>,
-    /// Addresses of transaction verifiers, we use these for [`vp_eval`]
-    /// invocations
-    pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
     /// The runner of the [`vp_eval`] function
     pub eval_runner: EnvHostWrapper<'a, &'a EVAL>,
 }
@@ -115,8 +110,6 @@ where
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
             tx_code: self.tx_code.clone(),
-            keys_changed: self.keys_changed.clone(),
-            verifiers: self.verifiers.clone(),
             eval_runner: self.eval_runner.clone(),
         }
     }
@@ -1259,8 +1252,6 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut VpGasMeter,
         tx_code: &[u8],
-        keys_changed: &[Key],
-        verifiers: &HashSet<Address>,
         eval_runner: &EVAL,
     ) -> VpEnv<'static, NativeMemory, DB, H, EVAL>
     where
@@ -1273,8 +1264,6 @@ pub mod testing {
         let iterators = unsafe { MutEnvHostWrapper::new(iterators) };
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
         let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code) };
-        let keys_changed = unsafe { EnvHostSliceWrapper::new(keys_changed) };
-        let verifiers = unsafe { EnvHostWrapper::new(verifiers) };
         let eval_runner = unsafe { EnvHostWrapper::new(eval_runner) };
         VpEnv {
             memory: NativeMemory,
@@ -1284,8 +1273,6 @@ pub mod testing {
             iterators,
             gas_meter,
             tx_code,
-            keys_changed,
-            verifiers,
             eval_runner,
         }
     }

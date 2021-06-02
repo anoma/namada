@@ -8,6 +8,9 @@ use anoma_shared::types::address::{self, Address};
 use anoma_shared::types::Key;
 use anoma_shared::vm;
 use anoma_shared::vm::prefix_iter::PrefixIterators;
+use anoma_shared::vm::{
+    EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
+};
 
 /// This module combines the native host function implementations from
 /// `native_vp_host_env` with the functions exposed to the vp wasm
@@ -29,22 +32,65 @@ pub struct TestVpEnv {
     pub tx_code: Vec<u8>,
     pub keys_changed: Vec<Key>,
     pub verifiers: HashSet<Address>,
-    pub eval_runner: native_vp_host_env::VpEval,
+    pub eval_runner: Option<native_vp_host_env::VpEval>,
 }
 
 impl Default for TestVpEnv {
     fn default() -> Self {
-        Self {
-            addr: address::testing::established_address_1(),
-            storage: TestStorage::default(),
-            write_log: WriteLog::default(),
-            iterators: PrefixIterators::default(),
-            gas_meter: VpGasMeter::new(0),
-            tx_code: vec![],
-            keys_changed: vec![],
-            verifiers: HashSet::default(),
-            eval_runner: native_vp_host_env::VpEval,
-        }
+        let addr = address::testing::established_address_1();
+        let storage = TestStorage::default();
+        let write_log = WriteLog::default();
+        let iterators = PrefixIterators::default();
+        let gas_meter = VpGasMeter::new(0);
+        let tx_code = vec![];
+        let keys_changed = vec![];
+        let verifiers = HashSet::default();
+
+        // Because the `eval_runner`'s references must point to the data inside
+        // the `env`, we have to initialize `env` with the other fields first,
+        // and then add `eval_runner` in.
+        let mut env = Self {
+            addr,
+            storage,
+            write_log,
+            iterators,
+            gas_meter,
+            tx_code,
+            keys_changed,
+            verifiers,
+            eval_runner: None,
+        };
+
+        #[cfg(feature = "wasm-runtime")]
+        let eval_runner = {
+            let env_storage = unsafe { EnvHostWrapper::new(&env.storage) };
+            let env_write_log = unsafe { EnvHostWrapper::new(&env.write_log) };
+            let env_iterators =
+                unsafe { MutEnvHostWrapper::new(&mut env.iterators) };
+            let env_gas_meter =
+                unsafe { MutEnvHostWrapper::new(&mut env.gas_meter) };
+            let env_tx_code =
+                unsafe { EnvHostSliceWrapper::new(&env.tx_code[..]) };
+            let env_keys_changed =
+                unsafe { EnvHostSliceWrapper::new(&env.keys_changed[..]) };
+            let env_verifiers = unsafe { EnvHostWrapper::new(&env.verifiers) };
+
+            anoma_shared::vm::wasm::runner::VpEval {
+                address: env.addr.clone(),
+                storage: env_storage,
+                write_log: env_write_log,
+                iterators: env_iterators,
+                gas_meter: env_gas_meter,
+                tx_code: env_tx_code,
+                keys_changed: env_keys_changed,
+                verifiers: env_verifiers,
+            }
+        };
+        #[cfg(not(feature = "wasm-runtime"))]
+        let eval_runner = native_vp_host_env::VpEval;
+        env.eval_runner = Some(eval_runner);
+
+        env
     }
 }
 
@@ -58,8 +104,8 @@ pub fn init_vp_env(
         iterators,
         gas_meter,
         tx_code,
-        keys_changed,
-        verifiers,
+        keys_changed: _,
+        verifiers: _,
         eval_runner,
     }: &mut TestVpEnv,
 ) {
@@ -72,9 +118,9 @@ pub fn init_vp_env(
                 iterators,
                 gas_meter,
                 tx_code,
-                keys_changed,
-                verifiers,
-                eval_runner,
+                eval_runner
+                    .as_ref()
+                    .expect("the eval_runner should be initialized"),
             )
         })
     });
@@ -96,19 +142,27 @@ mod native_vp_host_env {
 
     use super::*;
 
+    #[cfg(feature = "wasm-runtime")]
+    pub type VpEval =
+        anoma_shared::vm::wasm::runner::VpEval<'static, MockDB, Sha256Hasher>;
+    #[cfg(not(feature = "wasm-runtime"))]
+    pub struct VpEval;
+
     thread_local! {
         pub static ENV: RefCell<Option<VpEnv<'static, NativeMemory, MockDB, Sha256Hasher, VpEval>>> = RefCell::new(None);
     }
 
-    pub struct VpEval;
-
+    #[cfg(not(feature = "wasm-runtime"))]
     impl VpEvalRunner for VpEval {
         fn eval(
             &self,
-            _vp_code: Vec<u8>,
-            _input_data: Vec<u8>,
+            vp_code: Vec<u8>,
+            input_data: Vec<u8>,
         ) -> anoma_shared::types::internal::HostEnvResult {
-            todo!()
+            unimplemented!(
+                "The \"wasm-runtime\" feature must be enabled to test with \
+                 the `eval` function."
+            )
         }
     }
 
@@ -169,6 +223,12 @@ i64);
             data_len: u64,
             sig_ptr: u64,
             sig_len: u64,
+        ) -> i64);
+    native_host_fn!(vp_eval(
+            vp_code_ptr: u64,
+            vp_code_len: u64,
+            input_data_ptr: u64,
+            input_data_len: u64,
         ) -> i64);
     native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
 }

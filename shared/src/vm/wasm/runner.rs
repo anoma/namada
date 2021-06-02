@@ -272,8 +272,6 @@ impl VpRunner {
             gas_meter,
             tx_code,
             initial_memory,
-            env_keys_changed,
-            env_verifiers,
             eval_runner,
         );
 
@@ -330,7 +328,7 @@ impl VpRunner {
 }
 
 /// Validity predicate wasm runner from `eval` function calls.
-struct VpEval<'a, DB, H>
+pub struct VpEval<'a, DB, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
@@ -409,8 +407,6 @@ where
             self.gas_meter.clone(),
             self.tx_code.clone(),
             initial_memory,
-            self.keys_changed.clone(),
-            self.verifiers.clone(),
             eval_runner,
         );
 
