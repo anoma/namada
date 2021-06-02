@@ -104,8 +104,8 @@ pub fn init_vp_env(
         iterators,
         gas_meter,
         tx_code,
-        keys_changed,
-        verifiers,
+        keys_changed: _,
+        verifiers: _,
         eval_runner,
     }: &mut TestVpEnv,
 ) {
@@ -118,8 +118,6 @@ pub fn init_vp_env(
                 iterators,
                 gas_meter,
                 tx_code,
-                keys_changed,
-                verifiers,
                 eval_runner
                     .as_ref()
                     .expect("the eval_runner should be initialized"),

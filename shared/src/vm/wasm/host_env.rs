@@ -10,7 +10,7 @@ use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::types::{Address, Key};
+use crate::types::Address;
 use crate::vm::host_env::{
     FilterEnv, MatchmakerEnv, TxEnv, VpEnv, VpEvalRunner,
 };
@@ -125,8 +125,6 @@ pub fn prepare_vp_env<DB, H, EVAL>(
     gas_meter: MutEnvHostWrapper<'static, &VpGasMeter>,
     tx_code: EnvHostSliceWrapper<'static, &[u8]>,
     initial_memory: Memory,
-    keys_changed: EnvHostSliceWrapper<'static, &[Key]>,
-    verifiers: EnvHostWrapper<'static, &'static HashSet<Address>>,
     eval_runner: EnvHostWrapper<'static, &'static EVAL>,
 ) -> ImportObject
 where
@@ -142,8 +140,6 @@ where
         iterators,
         gas_meter,
         tx_code,
-        verifiers,
-        keys_changed,
         eval_runner,
     };
     prepare_vp_imports(wasm_store, initial_memory, &env)

@@ -263,8 +263,6 @@ impl VpRunner {
             gas_meter,
             tx_code,
             initial_memory,
-            env_keys_changed,
-            env_verifiers,
             eval_runner,
         );
 
@@ -399,8 +397,6 @@ where
             self.gas_meter.clone(),
             self.tx_code.clone(),
             initial_memory,
-            self.keys_changed.clone(),
-            self.verifiers.clone(),
             eval_runner,
         );
 
