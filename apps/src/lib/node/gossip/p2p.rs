@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -74,25 +76,25 @@ impl P2P {
         tracing::info!("network info {:?}", Swarm::network_info(&self.swarm));
         match event {
             rpc_message::Message::Intent(message) => {
-                match IntentMessage::from(message) {
+                match IntentMessage::try_from(message) {
                     Ok(message) => {
-                        let intent = message.intent();
                         match self
                             .swarm
                             .behaviour_mut()
                             .intent_gossip_app
-                            .apply_intent(intent.clone())
+                            .apply_intent(message.intent.clone())
                         {
                             Ok(true) => {
-                                let gossip_message =
-                                    IntentGossipMessage::new(intent);
+                                let gossip_message = IntentGossipMessage::new(
+                                    message.intent.clone(),
+                                );
                                 let intent_bytes = gossip_message.to_bytes();
                                 match self
                                     .swarm
                                     .behaviour_mut()
                                     .intent_gossip_behaviour
                                     .publish(
-                                        IdentTopic::new(message.topic()),
+                                        IdentTopic::new(message.topic),
                                         intent_bytes,
                                     ) {
                                     Ok(message_id) => {
@@ -164,7 +166,7 @@ impl P2P {
             }
             rpc_message::Message::Topic(topic_message) => {
                 let topic = SubscribeTopicMessage::from(topic_message);
-                let topic = IdentTopic::new(&topic.topic());
+                let topic = IdentTopic::new(&topic.topic);
                 match self
                     .swarm
                     .behaviour_mut()

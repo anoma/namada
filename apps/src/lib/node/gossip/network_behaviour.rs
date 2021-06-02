@@ -1,4 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
+use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
@@ -223,8 +224,8 @@ impl Behaviour {
         &mut self,
         data: impl AsRef<[u8]>,
     ) -> MessageAcceptance {
-        match IntentGossipMessage::from(data) {
-            Ok(message) => self.handle_intent(message.intent()),
+        match IntentGossipMessage::try_from(data.as_ref()) {
+            Ok(message) => self.handle_intent(message.intent),
             Err(proto::Error::NoIntentError) => {
                 tracing::info!("Empty message, rejecting it");
                 MessageAcceptance::Reject

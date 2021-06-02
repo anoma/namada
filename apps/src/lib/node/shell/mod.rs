@@ -2,6 +2,7 @@ pub mod gas;
 pub mod storage;
 mod tendermint;
 
+use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
 
@@ -279,7 +280,7 @@ impl Shell {
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> Result<()> {
-        let _tx = Tx::from(tx_bytes).map_err(Error::TxDecodingError)?;
+        let _tx = Tx::try_from(tx_bytes).map_err(Error::TxDecodingError)?;
         Ok(())
     }
 

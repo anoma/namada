@@ -1,6 +1,7 @@
 //! The ledger's protocol
 
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::fmt;
 
 use anoma_shared::types::{Address, Key};
@@ -78,7 +79,7 @@ pub fn apply_tx(
         .add_base_transaction_fee(tx_bytes.len())
         .map_err(Error::GasError)?;
 
-    let tx = Tx::from(tx_bytes).map_err(Error::TxDecodingError)?;
+    let tx = Tx::try_from(tx_bytes).map_err(Error::TxDecodingError)?;
 
     let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
     let changed_keys = write_log.get_all_keys();
@@ -104,11 +105,11 @@ fn execute_tx(
     gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
 ) -> Result<HashSet<Address>> {
-    let tx_code = tx.code();
+    let tx_code = tx.code.clone();
     gas_meter
         .add_compiling_fee(tx_code.len())
         .map_err(Error::GasError)?;
-    let tx_data = tx.data();
+    let tx_data = tx.data.clone().unwrap_or_default();
     let tx_runner = TxRunner::new();
 
     tx_runner
@@ -126,8 +127,8 @@ fn check_vps(
 ) -> Result<VpsResult> {
     let verifiers = get_verifiers(write_log, verifiers_from_tx);
 
-    let tx_data = tx.data();
-    let tx_code = tx.code();
+    let tx_data = tx.data.clone().unwrap_or_default();
+    let tx_code = tx.code.clone();
 
     // collect the changed storage keys and VPs for the verifiers
     let verifiers: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers

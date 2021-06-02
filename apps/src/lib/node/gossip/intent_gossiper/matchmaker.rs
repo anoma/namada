@@ -91,7 +91,7 @@ impl Matchmaker {
                     &self.matchmaker_code.clone(),
                     &self.data,
                     &intent.id().0,
-                    &intent.data(),
+                    &intent.data,
                     &self.tx_code,
                     self.inject_mm_message.clone(),
                 )
