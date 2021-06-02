@@ -1,6 +1,7 @@
 pub mod storage;
 mod tendermint;
 
+use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
 
@@ -14,12 +15,11 @@ use anoma_shared::types::{
     address, key, token, Address, BlockHash, BlockHeight, Key,
 };
 use borsh::BorshSerialize;
-use prost::Message;
 use thiserror::Error;
 
 use self::tendermint::{AbciMsg, AbciReceiver};
 use crate::node::protocol;
-use crate::proto::types::Tx;
+use crate::proto::{self, Tx};
 use crate::{config, wallet};
 
 #[derive(Error, Debug)]
@@ -33,7 +33,7 @@ pub enum Error {
     #[error("Shell ABCI channel sender error: {0}")]
     AbciChannelSendError(String),
     #[error("Error decoding a transaction from bytes: {0}")]
-    TxDecodingError(prost::DecodeError),
+    TxDecodingError(proto::Error),
     #[error("Error trying to apply a transaction: {0}")]
     TxError(protocol::Error),
 }
@@ -275,7 +275,7 @@ impl Shell {
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> Result<()> {
-        let _tx = Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
+        let _tx = Tx::try_from(tx_bytes).map_err(Error::TxDecodingError)?;
         Ok(())
     }
 
