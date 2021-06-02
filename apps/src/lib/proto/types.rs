@@ -1,5 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 
 use prost::Message;
@@ -20,6 +20,8 @@ pub enum Error {
     NoIntentError,
     #[error("Dkg is empty")]
     NoDkgError,
+    #[error("Timestamp is empty")]
+    NoTimestampError,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -38,7 +40,7 @@ impl TryFrom<&[u8]> for Tx {
         let tx = types::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
         let timestamp = match tx.timestamp {
             Some(t) => t,
-            None => std::time::SystemTime::now().into(),
+            None => return Err(Error::NoTimestampError),
         };
         Ok(Tx {
             code: tx.code,
@@ -90,7 +92,7 @@ impl TryFrom<&[u8]> for IntentGossipMessage {
         match &intent.msg {
             Some(types::intent_gossip_message::Msg::Intent(intent)) => {
                 Ok(IntentGossipMessage {
-                    intent: intent.clone().into(),
+                    intent: intent.clone().try_into()?,
                 })
             }
             None => Err(Error::NoIntentError),
@@ -221,7 +223,7 @@ impl TryFrom<services::IntentMessage> for IntentMessage {
     fn try_from(message: services::IntentMessage) -> Result<Self> {
         match message.intent {
             Some(intent) => Ok(IntentMessage {
-                intent: intent.into(),
+                intent: intent.try_into()?,
                 topic: message.topic,
             }),
             None => Err(Error::NoIntentError),
@@ -277,16 +279,18 @@ pub struct Intent {
     pub timestamp: Timestamp,
 }
 
-impl From<types::Intent> for Intent {
-    fn from(intent: types::Intent) -> Self {
+impl TryFrom<types::Intent> for Intent {
+    type Error = Error;
+
+    fn try_from(intent: types::Intent) -> Result<Self> {
         let timestamp = match intent.timestamp {
             Some(t) => t,
-            None => std::time::SystemTime::now().into(),
+            None => return Err(Error::NoTimestampError),
         };
-        Intent {
+        Ok(Intent {
             data: intent.data,
             timestamp,
-        }
+        })
     }
 }
 
@@ -370,8 +374,19 @@ mod tests {
         let bytes = tx.to_bytes();
         let tx_from_bytes =
             Tx::try_from(bytes.as_ref()).expect("decoding failed");
-
         assert_eq!(tx_from_bytes, tx);
+
+        let types_tx = types::Tx {
+            code,
+            data,
+            timestamp: None,
+        };
+        let mut bytes = vec![];
+        types_tx.encode(&mut bytes).expect("encoding failed");
+        match Tx::try_from(bytes.as_ref()) {
+            Err(Error::NoTimestampError) => {}
+            _ => panic!("unexpected result"),
+        }
     }
 
     #[test]
@@ -441,8 +456,18 @@ mod tests {
         let intent = Intent::new(data.clone());
 
         let types_intent: types::Intent = intent.clone().into();
-        let intent_from_types = Intent::from(types_intent);
+        let intent_from_types =
+            Intent::try_from(types_intent).expect("no timestamp");
         assert_eq!(intent_from_types, intent);
+
+        let types_intent = types::Intent {
+            data,
+            timestamp: None,
+        };
+        match Intent::try_from(types_intent) {
+            Err(Error::NoTimestampError) => {}
+            _ => panic!("unexpected result"),
+        }
     }
 
     #[test]
