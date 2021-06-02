@@ -7,7 +7,7 @@
     - [The ledger](./explore/design/ledger.md)
       - [Accounts](./explore/design/ledger/accounts.md)
       - [Validity predicates](./explore/design/ledger/vp.md)
-      - [Transaction](./explore/design/ledger/tx.md)
+      - [Transactions](./explore/design/ledger/tx.md)
       - [WASM VM](./explore/design/ledger/wasm-vm.md)
       - [Front-running prevention](./explore/design/ledger/front-running.md)
     - [Gossip network](./explore/design/gossip.md)

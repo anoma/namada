@@ -1,4 +1,4 @@
-# Transaction
+# Transactions
 
 [Tracking Issue](https://github.com/anomanetwork/anoma/issues/43)
 
