@@ -43,4 +43,24 @@ mod tests {
         let read_post_value: Option<String> = vp_host_env::read_post(key_raw);
         assert_eq!(Some(value), read_post_value);
     }
+
+    #[test]
+    fn test_vp_eval() {
+        // The environment must be initialized first
+        let mut env = TestVpEnv::default();
+        init_vp_env(&mut env);
+
+        // evaluating without any code should fail
+        let empty_code = vec![];
+        let input_data = vec![];
+        let result = vp_host_env::eval(empty_code, input_data);
+        assert!(!result);
+
+        // evaluating the VP template which always returns `true` should pass
+        let vp_template = std::fs::read("res/wasm/vp_template.wasm")
+            .expect("cannot load user VP");
+        let input_data = vec![];
+        let result = vp_host_env::eval(vp_template, input_data);
+        assert!(result);
+    }
 }
