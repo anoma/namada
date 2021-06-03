@@ -158,36 +158,27 @@ impl WriteLog {
         (addr, gas)
     }
 
-    /// Get the storage keys changed in the current transaction. This excludes
-    /// keys of validity predicates of newly initialized accounts, but may
-    /// include keys of other data written into newly initialized accounts.
-    pub fn get_changed_keys(&self) -> Vec<&Key> {
-        self.tx_write_log
-            .iter()
-            .filter_map(|(key, value)| match value {
-                StorageModification::InitAccount { .. } => None,
-                _ => Some(key),
-            })
-            .collect()
-    }
-
-    /// Get the keys to the accounts initialized in the current transaction.
-    /// The keys point to the validity predicates of the newly created accounts.
-    pub fn get_initialized_accounts(&self) -> Vec<&Key> {
-        self.tx_write_log
-            .iter()
-            .filter_map(|(key, value)| match value {
-                StorageModification::InitAccount { .. } => Some(key),
-                _ => None,
-            })
-            .collect()
-    }
-
     /// Get the storage keys changed and accounts keys initialized in the
     /// current transaction. The account keys point to the validity predicates
     /// of the newly created accounts.
-    pub fn get_all_keys(&self) -> Vec<Key> {
+    pub fn get_keys(&self) -> Vec<Key> {
         self.tx_write_log.keys().cloned().collect()
+    }
+
+    /// Get the storage keys changed in the current transaction (left) and
+    /// the keys to the accounts initialized in the current transaction (right).
+    /// The first vector excludes keys of validity predicates of newly
+    /// initialized accounts, but may include keys of other data written
+    /// into newly initialized accounts. The accounts keys point to the validity
+    /// predicates of the newly created accounts.
+    pub fn get_partitioned_keys(&self) -> (Vec<&Key>, Vec<&Key>) {
+        use itertools::{Either, Itertools};
+        self.tx_write_log
+            .iter()
+            .partition_map(|(key, value)| match value {
+                StorageModification::InitAccount { .. } => Either::Right(key),
+                _ => Either::Left(key),
+            })
     }
 
     /// Commit the current transaction's write log to the block when it's

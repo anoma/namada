@@ -81,7 +81,6 @@ pub fn apply_tx(
     let tx = Tx::try_from(tx_bytes).map_err(Error::TxDecodingError)?;
 
     let verifiers = execute_tx(&tx, storage, block_gas_meter, write_log)?;
-    let changed_keys = write_log.get_all_keys();
 
     let vps_result =
         check_vps(&tx, storage, block_gas_meter, write_log, &verifiers)?;
@@ -89,6 +88,7 @@ pub fn apply_tx(
     let gas_used = block_gas_meter
         .finalize_transaction()
         .map_err(Error::GasError)?;
+    let changed_keys = write_log.get_keys();
 
     Ok(TxResult {
         gas_used,
@@ -177,8 +177,10 @@ fn get_verifiers(
                 acc.insert(addr.clone(), vec![]);
                 acc
             });
+
+    let (changed_keys, initialized_accounts) = write_log.get_partitioned_keys();
     // get changed keys grouped by the address
-    for key in write_log.get_changed_keys() {
+    for key in changed_keys {
         for addr in &key.find_addresses() {
             match verifiers.get_mut(&addr) {
                 Some(keys) => keys.push(key.clone()),
@@ -189,7 +191,7 @@ fn get_verifiers(
         }
     }
     // The new accounts should be validated by every verifier's VP
-    for key in write_log.get_initialized_accounts() {
+    for key in initialized_accounts {
         for (_verifier, keys) in verifiers.iter_mut() {
             keys.push(key.clone());
         }
