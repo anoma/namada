@@ -4,16 +4,16 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "88255b0d9db32c01c9e0287403bb165894b4c1444b497d92f42233bf986132c6  Makefile"
-      | sha256sum -c -, echo "6ff9ee796028a3cc674c5234487a6438c44994af4bae458302c4ff2bd75199a8  vps/vp_template/Makefile"
-      | sha256sum -c -, echo "e5e1c98a178c66f170acea2094a0a71536f68e806ced68930658e284976b9241  vps/vp_token/Makefile"
-      | sha256sum -c -, echo "23e0790dc5d81059c121b1d0cef3c294aec09e1ae2b1a2252f20ae1d0051417f  vps/vp_user/Makefile"
-      | sha256sum -c -, echo "56bbb4a6c96a48e7be40c98f2c7e674c0580e6e5d3caa0316e64bb6c5be20aa4  txs/tx_template/Makefile"
-      | sha256sum -c -, echo "8155f89cd64ca742ef48dfd24fe4144be2edc8d8d8019f6dc0379b0d59f355ac  txs/tx_transfer/Makefile"
-      | sha256sum -c -, echo "f98eadb24cc100740298fe20636c9c7faf7232437587285dc02609992961f0db  txs/tx_from_intent/Makefile"
-      | sha256sum -c -, echo "d3e31e26868d9f54577491332e6cd182d357a242fcef487dd63505a7fb7b4574  txs/tx_update_vp/Makefile"
-      | sha256sum -c -, echo "1a434407b45351e0f4a8bb83654e1c098eb35de444fdec2f2083cc682e9785c9  matchmaker_template/Makefile"
-      | sha256sum -c -, echo "8f3e68c0447731b7fc2027084920ada9e5c671d7e0b58ed907e07b49c9972189  filter_template/Makefile"
+- commands: [echo "60456953903d198c53824d18cb745af0a70e1bff25e40a45e310ee3c9dc4833b  Makefile"
+      | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  vps/vp_template/Makefile"
+      | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  vps/vp_token/Makefile"
+      | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  vps/vp_user/Makefile"
+      | sha256sum -c -, echo "0ffac9aeaaa22c679de32c32f96d4f799eac1b2d95dcf805ac811e03cd8a273f  txs/tx_template/Makefile"
+      | sha256sum -c -, echo "7afb743d825d6232932c23b73a1a1558b24ff6edda70ac094d404ffbe5d63681  txs/tx_transfer/Makefile"
+      | sha256sum -c -, echo "29fcc33d481b7cebb61759d455e27e7b39ca08451b57a32ca5ccaa8a29a9fdfa  txs/tx_from_intent/Makefile"
+      | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  txs/tx_update_vp/Makefile"
+      | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  matchmaker_template/Makefile"
+      | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  filter_template/Makefile"
       | sha256sum -c -]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -101,16 +101,16 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "88255b0d9db32c01c9e0287403bb165894b4c1444b497d92f42233bf986132c6  Makefile"
-      | sha256sum -c -, echo "6ff9ee796028a3cc674c5234487a6438c44994af4bae458302c4ff2bd75199a8  vps/vp_template/Makefile"
-      | sha256sum -c -, echo "e5e1c98a178c66f170acea2094a0a71536f68e806ced68930658e284976b9241  vps/vp_token/Makefile"
-      | sha256sum -c -, echo "23e0790dc5d81059c121b1d0cef3c294aec09e1ae2b1a2252f20ae1d0051417f  vps/vp_user/Makefile"
-      | sha256sum -c -, echo "56bbb4a6c96a48e7be40c98f2c7e674c0580e6e5d3caa0316e64bb6c5be20aa4  txs/tx_template/Makefile"
-      | sha256sum -c -, echo "8155f89cd64ca742ef48dfd24fe4144be2edc8d8d8019f6dc0379b0d59f355ac  txs/tx_transfer/Makefile"
-      | sha256sum -c -, echo "f98eadb24cc100740298fe20636c9c7faf7232437587285dc02609992961f0db  txs/tx_from_intent/Makefile"
-      | sha256sum -c -, echo "d3e31e26868d9f54577491332e6cd182d357a242fcef487dd63505a7fb7b4574  txs/tx_update_vp/Makefile"
-      | sha256sum -c -, echo "1a434407b45351e0f4a8bb83654e1c098eb35de444fdec2f2083cc682e9785c9  matchmaker_template/Makefile"
-      | sha256sum -c -, echo "8f3e68c0447731b7fc2027084920ada9e5c671d7e0b58ed907e07b49c9972189  filter_template/Makefile"
+- commands: [echo "60456953903d198c53824d18cb745af0a70e1bff25e40a45e310ee3c9dc4833b  Makefile"
+      | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  vps/vp_template/Makefile"
+      | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  vps/vp_token/Makefile"
+      | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  vps/vp_user/Makefile"
+      | sha256sum -c -, echo "0ffac9aeaaa22c679de32c32f96d4f799eac1b2d95dcf805ac811e03cd8a273f  txs/tx_template/Makefile"
+      | sha256sum -c -, echo "7afb743d825d6232932c23b73a1a1558b24ff6edda70ac094d404ffbe5d63681  txs/tx_transfer/Makefile"
+      | sha256sum -c -, echo "29fcc33d481b7cebb61759d455e27e7b39ca08451b57a32ca5ccaa8a29a9fdfa  txs/tx_from_intent/Makefile"
+      | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  txs/tx_update_vp/Makefile"
+      | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  matchmaker_template/Makefile"
+      | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  filter_template/Makefile"
       | sha256sum -c -]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -185,16 +185,16 @@ kind: pipeline
 name: anoma-ci-audit-pr
 node: {project: anoma}
 steps:
-- commands: [echo "88255b0d9db32c01c9e0287403bb165894b4c1444b497d92f42233bf986132c6  Makefile"
-      | sha256sum -c -, echo "6ff9ee796028a3cc674c5234487a6438c44994af4bae458302c4ff2bd75199a8  vps/vp_template/Makefile"
-      | sha256sum -c -, echo "e5e1c98a178c66f170acea2094a0a71536f68e806ced68930658e284976b9241  vps/vp_token/Makefile"
-      | sha256sum -c -, echo "23e0790dc5d81059c121b1d0cef3c294aec09e1ae2b1a2252f20ae1d0051417f  vps/vp_user/Makefile"
-      | sha256sum -c -, echo "56bbb4a6c96a48e7be40c98f2c7e674c0580e6e5d3caa0316e64bb6c5be20aa4  txs/tx_template/Makefile"
-      | sha256sum -c -, echo "8155f89cd64ca742ef48dfd24fe4144be2edc8d8d8019f6dc0379b0d59f355ac  txs/tx_transfer/Makefile"
-      | sha256sum -c -, echo "f98eadb24cc100740298fe20636c9c7faf7232437587285dc02609992961f0db  txs/tx_from_intent/Makefile"
-      | sha256sum -c -, echo "d3e31e26868d9f54577491332e6cd182d357a242fcef487dd63505a7fb7b4574  txs/tx_update_vp/Makefile"
-      | sha256sum -c -, echo "1a434407b45351e0f4a8bb83654e1c098eb35de444fdec2f2083cc682e9785c9  matchmaker_template/Makefile"
-      | sha256sum -c -, echo "8f3e68c0447731b7fc2027084920ada9e5c671d7e0b58ed907e07b49c9972189  filter_template/Makefile"
+- commands: [echo "60456953903d198c53824d18cb745af0a70e1bff25e40a45e310ee3c9dc4833b  Makefile"
+      | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  vps/vp_template/Makefile"
+      | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  vps/vp_token/Makefile"
+      | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  vps/vp_user/Makefile"
+      | sha256sum -c -, echo "0ffac9aeaaa22c679de32c32f96d4f799eac1b2d95dcf805ac811e03cd8a273f  txs/tx_template/Makefile"
+      | sha256sum -c -, echo "7afb743d825d6232932c23b73a1a1558b24ff6edda70ac094d404ffbe5d63681  txs/tx_transfer/Makefile"
+      | sha256sum -c -, echo "29fcc33d481b7cebb61759d455e27e7b39ca08451b57a32ca5ccaa8a29a9fdfa  txs/tx_from_intent/Makefile"
+      | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  txs/tx_update_vp/Makefile"
+      | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  matchmaker_template/Makefile"
+      | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  filter_template/Makefile"
       | sha256sum -c -]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -245,6 +245,6 @@ type: docker
 workspace: {path: /drone/workspace}
 ---
 kind: signature
-hmac: 8e7b71b60e56cc359fd418dd035566210b265be12126933f49d7ed591b5df928
+hmac: b12617a5289103d5846c8fa9a4545bd935db0016cba9394dff26f16bfe2aa464
 
 ...

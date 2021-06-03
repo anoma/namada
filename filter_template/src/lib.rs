@@ -1,4 +1,5 @@
-use anoma_vm_env::filter_prelude::{intent::Intent, *};
+use anoma_vm_env::filter_prelude::intent::Intent;
+use anoma_vm_env::filter_prelude::*;
 
 #[filter]
 fn validate_intent(intent: Vec<u8>) -> bool {
@@ -6,8 +7,9 @@ fn validate_intent(intent: Vec<u8>) -> bool {
     if intent.is_some() {
         log_string(format!(r#"intent {:#?} is valid"#, intent));
         true
+    } else {
+        false
     }
-    else {false}
 }
 
 fn decode_intent_data(bytes: Vec<u8>) -> Option<Intent> {

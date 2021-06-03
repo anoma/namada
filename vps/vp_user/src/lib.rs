@@ -24,7 +24,7 @@ impl<'a> From<&'a Key> for KeyType<'a> {
 
 #[validity_predicate]
 fn validate_tx(
-    tx_data: vm_memory::Data,
+    tx_data: Vec<u8>,
     addr: Address,
     keys_changed: Vec<Key>,
     verifiers: HashSet<Address>,
@@ -182,4 +182,28 @@ fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
     res
     // TODO once an intent is fulfilled, it should be invalidated somehow to
     // prevent replay
+}
+
+#[cfg(test)]
+mod tests {
+    use anoma_tests::vp::*;
+
+    use super::*;
+
+    /// Test that no-op transaction (i.e. no storage modifications) is deemed
+    /// valid.
+    #[test]
+    fn test_no_op_transaction() {
+        let mut env = TestVpEnv::default();
+        init_vp_env(&mut env);
+
+        let tx_data: Vec<u8> = vec![];
+        let addr: Address = env.addr.clone();
+        let keys_changed: Vec<Key> = vec![];
+        let verifiers: HashSet<Address> = HashSet::default();
+
+        let valid = validate_tx(tx_data, addr, keys_changed, verifiers);
+
+        assert!(valid);
+    }
 }

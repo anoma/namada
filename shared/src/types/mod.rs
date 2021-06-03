@@ -397,7 +397,7 @@ mod tests {
         /// `Address` or validity predicate.
         #[test]
         fn test_key_push(s in "[^#?/][^/]*") {
-            let addr = address::tests::established_address_1();
+            let addr = address::testing::established_address_1();
             let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
             assert_eq!(key.segments[1].to_string(), s);
         }
@@ -405,7 +405,7 @@ mod tests {
 
     #[test]
     fn test_key_parse_valid() {
-        let addr = address::tests::established_address_1();
+        let addr = address::testing::established_address_1();
         let target = format!("{}/test", KeySeg::to_string(&addr));
         let key = Key::parse(target.clone()).expect("cannot parse the string");
         assert_eq!(key.to_string(), target);
@@ -426,8 +426,8 @@ mod tests {
 
     #[test]
     fn test_key_push_valid() {
-        let addr = address::tests::established_address_1();
-        let other = address::tests::established_address_2();
+        let addr = address::testing::established_address_1();
+        let other = address::testing::established_address_2();
         let target = KeySeg::to_string(&other);
         let key = Key::from(addr.to_db_key())
             .push(&target)
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn test_key_push_invalid() {
-        let addr = address::tests::established_address_1();
+        let addr = address::testing::established_address_1();
         let target = "/".to_owned();
         match Key::from(addr.to_db_key())
             .push(&target)
