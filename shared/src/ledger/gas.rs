@@ -113,13 +113,6 @@ impl BlockGasMeter {
         self.block_gas = 0;
     }
 
-    /// Add a fee for parallelized validity predicate run.
-    pub fn add_parallel_fee(&mut self, vps_gases: &[u64]) -> Result<()> {
-        let gas_used =
-            vps_gases.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLER;
-        self.add(gas_used as u64)
-    }
-
     /// Get the total gas used in the current transaction.
     pub fn get_current_transaction_gas(&self) -> u64 {
         self.transaction_gas
@@ -128,7 +121,8 @@ impl BlockGasMeter {
     /// Add the gas cost used in validity predicates to the current transaction.
     pub fn add_vps_gas(&mut self, VpsGas { max, rest }: &VpsGas) -> Result<()> {
         self.add(*max)?;
-        self.add_parallel_fee(rest)
+        let gas_used = rest.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLER;
+        self.add(gas_used as u64)
     }
 }
 
