@@ -139,7 +139,7 @@ impl Matchmaker {
                 let signed = SignedTxData::new(&keypair, tx_data, &tx_code);
                 let signed_bytes = signed
                     .try_to_vec()
-                    .expect("Couldn't encoded signed matchmaker tx data");
+                    .expect("Couldn't encode signed matchmaker tx data");
                 let tx = Tx {
                     code: tx_code,
                     data: Some(signed_bytes),
