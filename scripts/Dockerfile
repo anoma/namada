@@ -1,4 +1,4 @@
-FROM rust:latest
+FROM rust:1.52.1
 
 ENV SCCACHE_CACHE_SIZE=2G
 

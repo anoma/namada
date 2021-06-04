@@ -74,7 +74,7 @@ doc:
 	$(cargo) doc --open
 
 build-wasm-scripts-docker:
-	docker run --rm  -v ${PWD}:/usr/local/rust/project anoma-wasm-2 make build-wasm-scripts
+	docker run --rm  -v ${PWD}:/usr/local/rust/project anoma-wasm make build-wasm-scripts
 
 # Build the validity predicate and transaction wasm from templates
 build-wasm-scripts:
