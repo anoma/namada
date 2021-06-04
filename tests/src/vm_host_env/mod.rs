@@ -4,24 +4,120 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
     use anoma_shared::types::Key;
-    use anoma_vm_env::tx_prelude::BorshSerialize;
+    use anoma_vm_env::tx_prelude::{BorshSerialize, KeyValIterator};
 
     use super::tx::*;
     use super::vp::*;
 
-    /// An example how to write a tx host environment integration test
     #[test]
-    fn test_tx_host_env() {
+    fn test_tx_read_write() {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
 
         let key = "key";
+        let read_value: Option<String> = tx_host_env::read(key);
+        assert_eq!(
+            None, read_value,
+            "Trying to read a key that doesn't exists shouldn't find any value"
+        );
+
+        // Write some value
         let value = "test".to_string();
         tx_host_env::write(key, value.clone());
 
         let read_value: Option<String> = tx_host_env::read(key);
-        assert_eq!(Some(value), read_value);
+        assert_eq!(
+            Some(value),
+            read_value,
+            "After a value has been written, we should get back the same \
+             value when we read it"
+        );
+
+        let value = "anoma".to_string();
+        tx_host_env::write(key, value.clone());
+        let read_value: Option<String> = tx_host_env::read(key);
+        assert_eq!(
+            Some(value),
+            read_value,
+            "Writing to an existing key should override the previous value"
+        );
+    }
+
+    #[test]
+    fn test_tx_has_key() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        let key = "key";
+        assert!(
+            !tx_host_env::has_key(key),
+            "Before a key-value is written, its key shouldn't be found"
+        );
+
+        // Write some value
+        let value = "test".to_string();
+        tx_host_env::write(key, value);
+
+        assert!(
+            tx_host_env::has_key(key),
+            "After a key-value has been written, its key should be found"
+        );
+    }
+
+    #[test]
+    fn test_tx_delete() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        // Trying to delete a key that doesn't exists should be a no-op
+        let key = "key";
+        tx_host_env::delete(key);
+
+        let value = "test".to_string();
+        tx_host_env::write(key, value);
+        assert!(
+            tx_host_env::has_key(key),
+            "After a key-value has been written, its key should be found"
+        );
+
+        // Then delete it
+        tx_host_env::delete(key);
+
+        assert!(
+            !tx_host_env::has_key(key),
+            "After a key has been deleted, its key shouldn't be found"
+        );
+    }
+
+    #[test]
+    fn test_tx_iter() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        let iter: KeyValIterator<Vec<u8>> = tx_host_env::iter_prefix("empty");
+        assert_eq!(
+            iter.count(),
+            0,
+            "Trying to iter a prefix that doesn't have any matching keys \
+             should yield an empty iterator."
+        );
+
+        // Write some values directly into the storage first
+        let prefix = "key";
+        for i in 0..10_i32 {
+            let key = Key::parse(format!("{}/{}", prefix, i)).unwrap();
+            let value = i.try_to_vec().unwrap();
+            env.storage.write(&key, value).unwrap();
+        }
+
+        // Then try to iterate over their prefix
+        let iter: KeyValIterator<i32> = tx_host_env::iter_prefix(prefix);
+        let expected = (0..10).map(|i| (format!("{}/{}", prefix, i), i));
+        itertools::assert_equal(iter, expected);
     }
 
     /// An example how to write a VP host environment integration test

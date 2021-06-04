@@ -12,6 +12,7 @@ pub mod tx {
     use anoma_shared::vm::types::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
+    #[derive(Debug)]
     pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
     impl<T: BorshDeserialize> Iterator for KeyValIterator<T> {
@@ -39,7 +40,7 @@ pub mod tx {
     }
 
     /// Try to read a variable-length value at the given key from storage.
-    pub fn read<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+    pub fn read<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
@@ -68,7 +69,7 @@ pub mod tx {
     }
 
     /// Write a value at the given key to storage.
-    pub fn write<K: AsRef<str>, T: BorshSerialize>(key: K, val: T) {
+    pub fn write<T: BorshSerialize>(key: impl AsRef<str>, val: T) {
         let key = key.as_ref();
         let mut buf: Vec<u8> = Vec::with_capacity(size_of::<T>());
         val.serialize(&mut buf).unwrap();
@@ -83,14 +84,14 @@ pub mod tx {
     }
 
     /// Delete a value at the given key from storage.
-    pub fn delete<K: AsRef<str>, T: BorshSerialize>(key: K) {
+    pub fn delete(key: impl AsRef<str>) {
         let key = key.as_ref();
         unsafe { anoma_tx_delete(key.as_ptr() as _, key.len() as _) };
     }
 
     /// Get an iterator with the given prefix
-    pub fn iter_prefix<K: AsRef<str>, T: BorshDeserialize>(
-        prefix: K,
+    pub fn iter_prefix<T: BorshDeserialize>(
+        prefix: impl AsRef<str>,
     ) -> KeyValIterator<T> {
         let prefix = prefix.as_ref();
         let iter_id = unsafe {
@@ -255,7 +256,7 @@ pub mod vp {
 
     /// Try to read a variable-length value at the given key from storage before
     /// transaction execution.
-    pub fn read_pre<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+    pub fn read_pre<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
@@ -277,7 +278,7 @@ pub mod vp {
 
     /// Try to read a variable-length value at the given key from storage after
     /// transaction execution.
-    pub fn read_post<K: AsRef<str>, T: BorshDeserialize>(key: K) -> Option<T> {
+    pub fn read_post<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
         let size = size_of::<T>();
         let result = Vec::with_capacity(size);
@@ -316,8 +317,8 @@ pub mod vp {
     }
 
     /// Get an iterator with the given prefix before transaction execution
-    pub fn iter_prefix_pre<K: AsRef<str>, T: BorshDeserialize>(
-        prefix: K,
+    pub fn iter_prefix_pre<T: BorshDeserialize>(
+        prefix: impl AsRef<str>,
     ) -> PreKeyValIterator<T> {
         let prefix = prefix.as_ref();
         let iter_id = unsafe {
@@ -351,8 +352,8 @@ pub mod vp {
     }
 
     /// Get an iterator with the given prefix after transaction execution
-    pub fn iter_prefix_post<K: AsRef<str>, T: BorshDeserialize>(
-        prefix: K,
+    pub fn iter_prefix_post<T: BorshDeserialize>(
+        prefix: impl AsRef<str>,
     ) -> PostKeyValIterator<T> {
         let prefix = prefix.as_ref();
         let iter_id = unsafe {
