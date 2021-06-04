@@ -3,17 +3,11 @@ rustup = $(env) rustup
 wasm = vp.wasm
 
 build-release:
-	$(cargo) build --release
+	$(cargo) build --release --target wasm32-unknown-unknown && \
 	cp "./target/wasm32-unknown-unknown/release/vp_token.wasm" $(wasm)
 
 build:
-	$(cargo) build
-
-clippy:
-	$(cargo) clippy
-
-fmt:
-	$(cargo) fmt
+	$(cargo) build --target wasm32-unknown-unknown
 
 watch:
 	$(cargo) watch
@@ -24,4 +18,4 @@ clean:
 deps:
 	$(rustup) target add wasm32-unknown-unknown
 
-.PHONY : build-release build clippy fmt watch clean deps
+.PHONY : build-release build watch clean deps

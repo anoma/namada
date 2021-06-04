@@ -277,6 +277,11 @@ pub mod tests {
         let address = key_gen.generate_address(rng_source);
         println!("address {}", address);
     }
+}
+
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use super::*;
 
     /// A sampled established address for tests
     pub fn established_address_1() -> Address {

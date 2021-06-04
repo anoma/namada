@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::proto::types::Intent;
-use crate::proto::IntentId;
+use crate::proto::{Intent, IntentId};
 
 #[derive(Error, Debug)]
 pub enum Error {}
@@ -19,7 +18,7 @@ impl IntentMempool {
     }
 
     pub fn put(&mut self, intent: Intent) -> Result<bool> {
-        Ok(self.0.insert(IntentId::new(&intent), intent).is_none())
+        Ok(self.0.insert(intent.id(), intent).is_none())
     }
 
     pub fn remove(&mut self, intent_id: &IntentId) -> bool {

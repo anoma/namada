@@ -3,62 +3,6 @@
 version = 3
 
 [[package]]
-name = "Anoma"
-version = "0.1.0"
-dependencies = [
- "anoma_shared",
- "base64 0.13.0",
- "bech32",
- "blake2b-rs",
- "borsh",
- "byteorder",
- "bytesize",
- "cargo-watch",
- "clap 3.0.0-beta.2",
- "color-eyre",
- "config",
- "ed25519-dalek",
- "eyre",
- "futures",
- "hex",
- "libp2p",
- "parity-wasm",
- "proptest",
- "prost",
- "prost-types",
- "pwasm-utils",
- "rand 0.7.3",
- "rand_core 0.5.1",
- "rayon",
- "regex",
- "rocksdb",
- "serde 1.0.125",
- "serde_bytes",
- "serde_json",
- "serde_regex",
- "sha2 0.9.3",
- "sparse-merkle-tree",
- "tempfile",
- "tendermint",
- "tendermint-abci",
- "tendermint-proto",
- "tendermint-rpc",
- "thiserror",
- "tokio",
- "toml",
- "tonic",
- "tonic-build",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
- "wasmer",
- "wasmer-compiler-singlepass",
- "wasmer-engine-jit",
- "wasmer-vm",
- "wasmparser 0.78.2",
-]
-
-[[package]]
 name = "addr2line"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -124,17 +68,84 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma"
+version = "0.1.0"
+dependencies = [
+ "anoma_shared",
+ "base64 0.13.0",
+ "bech32",
+ "blake2b-rs",
+ "borsh",
+ "byteorder",
+ "bytesize",
+ "cargo-watch",
+ "clap 3.0.0-beta.2",
+ "color-eyre",
+ "config",
+ "ed25519-dalek",
+ "eyre",
+ "futures",
+ "hex",
+ "libp2p",
+ "proptest",
+ "prost",
+ "prost-types",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
+ "rayon",
+ "regex",
+ "rocksdb",
+ "serde 1.0.125",
+ "serde_bytes",
+ "serde_json",
+ "serde_regex",
+ "sha2 0.9.3",
+ "sparse-merkle-tree",
+ "tempfile",
+ "tendermint",
+ "tendermint-abci",
+ "tendermint-proto",
+ "tendermint-rpc",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tonic",
+ "tonic-build",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "anoma_shared"
 version = "0.1.0"
 dependencies = [
  "bech32",
  "borsh",
  "ed25519-dalek",
+ "parity-wasm",
  "proptest",
+ "pwasm-utils",
  "rand 0.8.3",
  "serde 1.0.125",
  "sha2 0.9.3",
+ "sparse-merkle-tree",
  "thiserror",
+ "tracing",
+ "wasmer",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-jit",
+ "wasmer-vm",
+ "wasmparser 0.78.2",
+]
+
+[[package]]
+name = "anoma_tests"
+version = "0.1.0"
+dependencies = [
+ "anoma_shared",
+ "anoma_vm_env",
+ "concat-idents",
 ]
 
 [[package]]
@@ -836,6 +847,16 @@ dependencies = [
  "owo-colors",
  "tracing-core",
  "tracing-error",
+]
+
+[[package]]
+name = "concat-idents"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f29bafee6d91a80db18bcd41dbdbb8d1d117ea31676b22e7370061ccea5f76c"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -4072,7 +4093,7 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding-0.9.0#b1f0dc2c6041abb3b3e4f4f526c5ca261ff04371"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding-0.9.0b#2e4770b4b4e4f4af86bfe082a048bc66b2156003"
 dependencies = [
  "blake2b-rs",
  "borsh",

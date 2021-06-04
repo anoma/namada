@@ -26,13 +26,31 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug integration tests",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib=anoma_integration_tests",
+                ],
+                "filter": {
+                    "name": "anoma_integration_tests",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in library 'anoma'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=Anoma"
+                    "--package=anoma"
                 ],
                 "filter": {
                     "name": "anoma",
@@ -50,7 +68,7 @@
                 "args": [
                     "build",
                     "--bin=anoma",
-                    "--package=Anoma"
+                    "--package=anoma"
                 ],
                 "filter": {
                     "name": "anoma",
@@ -69,7 +87,7 @@
                     "test",
                     "--no-run",
                     "--bin=anoma",
-                    "--package=Anoma"
+                    "--package=anoma"
                 ],
                 "filter": {
                     "name": "anoma",
@@ -87,7 +105,7 @@
                 "args": [
                     "build",
                     "--bin=anoman",
-                    "--package=Anoma"
+                    "--package=anoma"
                 ],
                 "filter": {
                     "name": "anoman",
@@ -106,7 +124,7 @@
                     "test",
                     "--no-run",
                     "--bin=anoman",
-                    "--package=Anoma"
+                    "--package=anoma"
                 ],
                 "filter": {
                     "name": "anoman",
@@ -124,7 +142,7 @@
                 "args": [
                     "build",
                     "--bin=anomac",
-                    "--package=Anoma"
+                    "--package=anoma"
                 ],
                 "filter": {
                     "name": "anomac",
@@ -143,7 +161,7 @@
                     "test",
                     "--no-run",
                     "--bin=anomac",
-                    "--package=Anoma"
+                    "--package=anoma"
                 ],
                 "filter": {
                     "name": "anomac",

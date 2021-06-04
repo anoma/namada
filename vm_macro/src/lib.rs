@@ -5,7 +5,7 @@ use syn::{parse_macro_input, ItemFn};
 /// This macro expects a function with signature:
 ///
 /// ```compile_fail
-/// fn apply_tx(tx_data: vm_memory::Data)
+/// fn apply_tx(tx_data: Vec<u8>)
 /// ```
 #[proc_macro_attribute]
 pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
@@ -27,7 +27,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
                     tx_data_len as _,
                 )
             };
-            let tx_data = slice.to_vec() as vm_memory::Data;
+            let tx_data = slice.to_vec();
             #ident(tx_data);
         }
     };
@@ -37,7 +37,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// This macro expects a function with signature:
 ///
 /// ```compiler_fail
-/// fn validate_tx(tx_data: vm_memory::Data, addr: Address, keys_changed: Vec<Key>, verifiers: HashSet<Address>) -> bool
+/// fn validate_tx(tx_data: Vec<u8>, addr: Address, keys_changed: Vec<Key>, verifiers: HashSet<Address>) -> bool
 /// ```
 #[proc_macro_attribute]
 pub fn validity_predicate(
@@ -78,7 +78,7 @@ pub fn validity_predicate(
                     tx_data_len as _,
                 )
             };
-            let tx_data = slice.to_vec() as vm_memory::Data;
+            let tx_data = slice.to_vec();
 
             let slice = unsafe {
                 slice::from_raw_parts(

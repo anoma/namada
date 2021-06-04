@@ -3,8 +3,9 @@ authors = ["Heliax AG <hello@heliax.dev>"]
 description = "Anoma apps"
 edition = "2018"
 license = "GPL-3.0"
-name = "Anoma"
+name = "anoma"
 readme = "../README.md"
+resolver = "2"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -33,9 +34,11 @@ default = ["std", "dev"]
 # NOTE "dev" features that shouldn't be used in live networks are enabled by default for now
 dev = []
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
+# for integration tests and test utilies
+testing = []
 
 [dependencies]
-anoma_shared = {path = "../shared"}
+anoma_shared = {path = "../shared", features = ["wasm-runtime"]}
 base64 = "0.13.0"
 bech32 = "0.8.0"
 blake2b-rs = "0.2.0"
@@ -52,10 +55,8 @@ eyre = "0.6.5"
 futures = "0.3"
 hex = "0.4.2"
 libp2p = "0.38.0"
-parity-wasm = "0.42.2"
 prost = "0.7.0"
 prost-types = "0.7.0"
-pwasm-utils = "0.18.0"
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
 rand = {version = "0.7", default-features = false}
 rand_core = {version = "0.5", default-features = false}
@@ -67,7 +68,7 @@ serde_bytes = "0.11.5"
 serde_json = "1.0.62"
 serde_regex = "1.1.0"
 sha2 = "0.9.3"
-sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding-0.9.0", features = ["with_borsh"]}
+sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding-0.9.0b", features = ["borsh"]}
 # temporarily using fork work-around for https://github.com/informalsystems/tendermint-rs/issues/876
 tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/rpc-gas"}
 tendermint-abci = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/rpc-gas"}
@@ -80,16 +81,12 @@ tonic = "0.4.0"
 tracing = "0.1.26"
 tracing-log = "0.1.2"
 tracing-subscriber = "0.2.18"
-wasmer = "1.0.2"
-wasmer-compiler-singlepass = "1.0.2"
-wasmer-engine-jit = "1.0.2"
-wasmparser = "0.78.2"
 
 [dev-dependencies]
+anoma_shared = {path = "../shared", features = ["testing", "wasm-runtime"]}
 cargo-watch = "7.5.0"
 proptest = "1.0.0"
 tempfile = "3.2.0"
-wasmer-vm = "1.0.2"
 
 [build-dependencies]
 tonic-build = "0.4.0"
