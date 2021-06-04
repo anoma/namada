@@ -89,7 +89,13 @@ pub mod tx {
         unsafe { anoma_tx_delete(key.as_ptr() as _, key.len() as _) };
     }
 
-    /// Get an iterator with the given prefix
+    /// Get an iterator with the given prefix.
+    ///
+    /// Important note: The prefix iterator will ignore keys that are not yet
+    /// committed to storage from the block in which this transaction is being
+    /// applied. It will only find keys that are already committed to
+    /// storage (i.e. from predecessor blocks). However, it will provide the
+    /// most up-to-date value for such keys.
     pub fn iter_prefix<T: BorshDeserialize>(
         prefix: impl AsRef<str>,
     ) -> KeyValIterator<T> {
@@ -199,9 +205,8 @@ pub mod tx {
         // Get an ID of a data iterator with key prefix
         fn anoma_tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
-        // Read variable-length data when we don't know the size up-front,
-        // returns the size of the value (can be 0), or -1 if the key is not
-        // present.
+        // Returns the size of the value (can be 0), or -1 if there's no next
+        // value.
         fn anoma_tx_iter_next(iter_id: u64, result_ptr: u64) -> i64;
 
         // Insert a verifier
