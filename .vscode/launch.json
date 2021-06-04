@@ -38,8 +38,10 @@
                     "kind": "lib"
                 }
             },
-            "args": [],
-            "cwd": "${workspaceFolder}"
+            "args": [
+                "--nocapture"
+            ],
+            "cwd": "${workspaceFolder}/tests"
         },
         {
             "type": "lldb",
