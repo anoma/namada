@@ -26,6 +26,25 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug 'anoman run-gossip'",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=anoman",
+                ],
+                "filter": {
+                    "name": "anoman",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "run-gossip"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in library 'anoma'",
             "cargo": {
                 "args": [
