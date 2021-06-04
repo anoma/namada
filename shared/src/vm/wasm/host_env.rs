@@ -70,6 +70,7 @@ impl WasmerEnv for FilterEnv<WasmMemory> {
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_tx_imports<DB, H>(
     wasm_store: &Store,
     storage: EnvHostWrapper<'static, &'static Storage<DB, H>>,
