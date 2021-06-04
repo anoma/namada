@@ -21,18 +21,18 @@ pub mod tx {
         type Item = (String, T);
 
         fn next(&mut self) -> Option<(String, T)> {
-            // Memory safety - there MUST BE no other allocation while we're
-            // reading result
-            let result: Vec<u8> = Vec::with_capacity(0);
-            let size =
-                unsafe { anoma_tx_iter_next(self.0, result.as_ptr() as _) };
+            let size = unsafe { anoma_tx_iter_next(self.0) };
             if HostEnvResult::is_fail(size) {
                 None
             } else {
-                let slice = unsafe {
-                    slice::from_raw_parts(result.as_ptr(), size as _)
+                let result: Vec<u8> = Vec::with_capacity(size as _);
+                let result = ManuallyDrop::new(result);
+                let offset = result.as_slice().as_ptr() as u64;
+                unsafe { anoma_tx_read_cache(offset) };
+                let target = unsafe {
+                    Vec::from_raw_parts(offset as _, size as _, size as _)
                 };
-                match KeyVal::try_from_slice(slice) {
+                match KeyVal::try_from_slice(&target[..]) {
                     Ok(key_val) => match T::try_from_slice(&key_val.val) {
                         Ok(v) => Some((key_val.key, v)),
                         Err(_) => None,
@@ -54,12 +54,9 @@ pub mod tx {
             let result = ManuallyDrop::new(result);
             let offset = result.as_slice().as_ptr() as u64;
             unsafe { anoma_tx_read_cache(offset) };
-            // let slice =
-            //     unsafe { slice::from_raw_parts(offset as _, size as _) };
             let target = unsafe {
                 Vec::from_raw_parts(offset as _, size as _, size as _)
             };
-            // drop the pre-allocated buffer
             T::try_from_slice(&target[..]).ok()
         }
     }
@@ -214,9 +211,10 @@ pub mod tx {
         fn anoma_tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
         // Returns the size of the value (can be 0), or -1 if there's no next
-        // value.
-        // TODO use read cache
-        fn anoma_tx_iter_next(iter_id: u64, result_ptr: u64) -> i64;
+        // value. If a value is found, it will be placed in the read
+        // cache, because we cannot allocate a buffer for it before we know
+        // its size.
+        fn anoma_tx_iter_next(iter_id: u64) -> i64;
 
         // Insert a verifier
         fn anoma_tx_insert_verifier(addr_ptr: u64, addr_len: u64);

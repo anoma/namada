@@ -373,21 +373,13 @@ where
 ///
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
-pub fn tx_iter_next<MEM, DB, H>(
-    env: &TxEnv<MEM, DB, H>,
-    iter_id: u64,
-    result_ptr: u64,
-) -> i64
+pub fn tx_iter_next<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, iter_id: u64) -> i64
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    tracing::debug!(
-        "tx_iter_next iter_id {}, result_ptr {}",
-        iter_id,
-        result_ptr,
-    );
+    tracing::debug!("tx_iter_next iter_id {}", iter_id,);
 
     let write_log = unsafe { env.write_log.get() };
     let iterators = unsafe { env.iterators.get() };
@@ -407,8 +399,8 @@ where
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let gas = env.memory.write_bytes(result_ptr, key_val);
-                tx_add_gas(env, gas);
+                let read_cache = unsafe { env.read_cache.get() };
+                read_cache.replace(key_val);
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -425,8 +417,8 @@ where
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let gas = env.memory.write_bytes(result_ptr, key_val);
-                tx_add_gas(env, gas);
+                let read_cache = unsafe { env.read_cache.get() };
+                read_cache.replace(key_val);
                 return len;
             }
         }
