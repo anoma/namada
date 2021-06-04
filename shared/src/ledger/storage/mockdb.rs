@@ -244,9 +244,6 @@ impl<'iter> DBIter<'iter> for MockDB {
         let db_prefix = format!("{}/subspace/", height.to_string());
         let prefix = format!("{}{}", db_prefix, prefix.to_string());
 
-        self.0.iter().for_each(|(k, v)| {
-            println!("key {}", k);
-        });
         let filter_fn: MockIteratorFilter =
             Box::new(move |(key, _value): &(&String, &Vec<u8>)| {
                 println!("key {}, prefix {}", key, prefix);
