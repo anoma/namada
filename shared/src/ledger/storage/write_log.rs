@@ -321,7 +321,7 @@ mod tests {
         assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
 
         // get all
-        let accounts = write_log.get_initialized_accounts();
+        let (_changed_keys, accounts) = write_log.get_partitioned_keys();
         assert!(accounts.contains(&&vp_key));
         assert_eq!(accounts.len(), 1);
     }
