@@ -4,7 +4,7 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "2df3efad6ea8f3e9bda7c495c4f6ff55f609126dfb304129dbab2b5665789c10  Makefile"
+- commands: [echo "6f1e5c5449a77f25cbe6cc1595646404756ee70e1b5ee929c5eec23717d1c2e9  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  vps/vp_user/Makefile"
@@ -33,10 +33,11 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make -C txs/tx_template deps, make build-wasm-scripts,
+- commands: [sccache --start-server, make -C txs/tx_template deps, make build-wasm-scripts-ci,
     "for wasm in $(ls filter_template/*.wasm matchmaker_template/*.wasm txs/*/*.wasm
       vps/*/*.wasm)\ndo\n  shasum -a 256 ${wasm} >> checksum.sha256\ndone\n", make
-      clean-wasm-scripts, make build-wasm-scripts, shasum -c checksum.sha256, rm checksum.sha256]
+      clean-wasm-scripts, make build-wasm-scripts-ci, shasum -c checksum.sha256, rm
+      checksum.sha256]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -101,7 +102,7 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "2df3efad6ea8f3e9bda7c495c4f6ff55f609126dfb304129dbab2b5665789c10  Makefile"
+- commands: [echo "6f1e5c5449a77f25cbe6cc1595646404756ee70e1b5ee929c5eec23717d1c2e9  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  vps/vp_user/Makefile"
@@ -185,7 +186,7 @@ kind: pipeline
 name: anoma-ci-audit-pr
 node: {project: anoma}
 steps:
-- commands: [echo "2df3efad6ea8f3e9bda7c495c4f6ff55f609126dfb304129dbab2b5665789c10  Makefile"
+- commands: [echo "6f1e5c5449a77f25cbe6cc1595646404756ee70e1b5ee929c5eec23717d1c2e9  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  vps/vp_user/Makefile"
@@ -245,6 +246,6 @@ type: docker
 workspace: {path: /drone/workspace}
 ---
 kind: signature
-hmac: 9619eab958320d29ca040ca1f6aab71bbb7b24dd59779793b9e4268f0bf0dcb9
+hmac: c5e4468bc7557b96b329ee7cb7b4777189f845aa3766a33cbf7683006d43340d
 
 ...

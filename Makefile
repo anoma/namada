@@ -107,4 +107,9 @@ dev-deps:
 	$(rustup) component add rustfmt clippy --toolchain $(nightly)
 	$(cargo) install cargo-watch
 
+# only for CI use
+build-wasm = make -C $(wasm)
+build-wasm-scripts-ci:
+	$(foreach wasm,$(wasms),$(build-wasm) && ) true
+
 .PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps
