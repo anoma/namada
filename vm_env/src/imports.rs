@@ -7,7 +7,8 @@ pub mod tx {
 
     use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::{
-        Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+        address, Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH,
+        CHAIN_ID_LENGTH,
     };
     use anoma_shared::vm::types::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
@@ -19,6 +20,8 @@ pub mod tx {
         type Item = (String, T);
 
         fn next(&mut self) -> Option<(String, T)> {
+            // Memory safety - there MUST BE no other allocation while we're
+            // reading result
             let result: Vec<u8> = Vec::with_capacity(0);
             let size =
                 unsafe { anoma_tx_iter_next(self.0, result.as_ptr() as _) };
@@ -42,8 +45,9 @@ pub mod tx {
     /// Try to read a variable-length value at the given key from storage.
     pub fn read<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
-        let size = size_of::<T>();
-        let result = Vec::with_capacity(size);
+        // Memory safety - there MUST BE no other allocation while we're reading
+        // result
+        let result = Vec::with_capacity(0);
         let size = unsafe {
             anoma_tx_read(
                 key.as_ptr() as _,
@@ -71,8 +75,7 @@ pub mod tx {
     /// Write a value at the given key to storage.
     pub fn write<T: BorshSerialize>(key: impl AsRef<str>, val: T) {
         let key = key.as_ref();
-        let mut buf: Vec<u8> = Vec::with_capacity(size_of::<T>());
-        val.serialize(&mut buf).unwrap();
+        let buf = val.try_to_vec().unwrap();
         unsafe {
             anoma_tx_write(
                 key.as_ptr() as _,
@@ -129,16 +132,17 @@ pub mod tx {
     // Initialize a new account
     pub fn init_account(code: impl AsRef<[u8]>) -> Address {
         let code = code.as_ref();
-        let result = Vec::with_capacity(0);
-        let result_len = unsafe {
+        let result = Vec::with_capacity(address::RAW_ADDRESS_LEN);
+        unsafe {
             anoma_tx_init_account(
                 code.as_ptr() as _,
                 code.len() as _,
                 result.as_ptr() as _,
             )
         };
-        let slice =
-            unsafe { slice::from_raw_parts(result.as_ptr(), result_len as _) };
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), address::RAW_ADDRESS_LEN)
+        };
         Address::try_from_slice(slice)
             .expect("Decoding address created by the ledger shouldn't fail")
     }
@@ -149,9 +153,8 @@ pub mod tx {
         unsafe {
             anoma_tx_get_chain_id(result.as_ptr() as _);
         }
-        let slice = unsafe {
-            slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH as _)
-        };
+        let slice =
+            unsafe { slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH) };
         String::from_utf8(slice.to_vec()).expect("Cannot convert the ID string")
     }
 
@@ -167,7 +170,7 @@ pub mod tx {
             anoma_tx_get_block_hash(result.as_ptr() as _);
         }
         let slice = unsafe {
-            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
+            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH)
         };
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
@@ -221,11 +224,7 @@ pub mod tx {
         );
 
         // Initialize a new account
-        fn anoma_tx_init_account(
-            code_ptr: u64,
-            code_len: u64,
-            result_ptr: u64,
-        ) -> u64;
+        fn anoma_tx_init_account(code_ptr: u64, code_len: u64, result_ptr: u64);
 
         // Get the chain ID
         fn anoma_tx_get_chain_id(result_ptr: u64);
@@ -263,8 +262,9 @@ pub mod vp {
     /// transaction execution.
     pub fn read_pre<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
-        let size = size_of::<T>();
-        let result = Vec::with_capacity(size);
+        // Memory safety - there MUST BE no other allocation while we're
+        // reading result
+        let result = Vec::with_capacity(0);
         let size = unsafe {
             anoma_vp_read_pre(
                 key.as_ptr() as _,
@@ -285,8 +285,9 @@ pub mod vp {
     /// transaction execution.
     pub fn read_post<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
-        let size = size_of::<T>();
-        let result = Vec::with_capacity(size);
+        // Memory safety - there MUST BE no other allocation while we're
+        // reading result
+        let result = Vec::with_capacity(100);
         let size = unsafe {
             anoma_vp_read_post(
                 key.as_ptr() as _,
@@ -336,6 +337,8 @@ pub mod vp {
         type Item = (String, T);
 
         fn next(&mut self) -> Option<(String, T)> {
+            // Memory safety - there MUST BE no other allocation while we're
+            // reading result
             let result: Vec<u8> = Vec::with_capacity(0);
             let size =
                 unsafe { anoma_vp_iter_pre_next(self.0, result.as_ptr() as _) };
@@ -371,6 +374,8 @@ pub mod vp {
         type Item = (String, T);
 
         fn next(&mut self) -> Option<(String, T)> {
+            // Memory safety - there MUST BE no other allocation while we're
+            // reading result
             let result: Vec<u8> = Vec::with_capacity(0);
             let size = unsafe {
                 anoma_vp_iter_post_next(self.0, result.as_ptr() as _)
@@ -398,9 +403,8 @@ pub mod vp {
         unsafe {
             anoma_vp_get_chain_id(result.as_ptr() as _);
         }
-        let slice = unsafe {
-            slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH as _)
-        };
+        let slice =
+            unsafe { slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH) };
         String::from_utf8(slice.to_vec()).expect("Cannot convert the ID string")
     }
 
@@ -416,7 +420,7 @@ pub mod vp {
             anoma_vp_get_block_hash(result.as_ptr() as _);
         }
         let slice = unsafe {
-            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH as _)
+            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH)
         };
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }

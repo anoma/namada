@@ -370,6 +370,8 @@ pub mod testing {
 
     impl Default for TestStorage {
         fn default() -> Self {
+            let chain_id = "Testing-chain-000000".to_string();
+            assert_eq!(chain_id.len(), CHAIN_ID_LENGTH);
             let tree = MerkleTree::default();
             let subspaces = HashMap::new();
             let block = BlockStorage {
@@ -380,7 +382,7 @@ pub mod testing {
             };
             Self {
                 db: MockDB::default(),
-                chain_id: "Testing-chain".to_string(),
+                chain_id,
                 block,
                 current_height: BlockHeight(0),
                 address_gen: EstablishedAddressGen::new(

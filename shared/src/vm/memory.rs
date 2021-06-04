@@ -1,9 +1,7 @@
 pub trait VmMemory: Clone + Send + Sync {
     fn read_bytes(&self, offset: u64, len: usize) -> (Vec<u8>, u64);
 
-    fn write_bytes<T>(&self, offset: u64, bytes: T) -> u64
-    where
-        T: AsRef<[u8]>;
+    fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> u64;
 
     fn read_string(&self, offset: u64, len: usize) -> (String, u64);
 
@@ -25,10 +23,7 @@ pub mod testing {
             (slice.to_vec(), 0)
         }
 
-        fn write_bytes<T>(&self, offset: u64, bytes: T) -> u64
-        where
-            T: AsRef<[u8]>,
-        {
+        fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> u64 {
             let bytes = bytes.as_ref();
             let len = bytes.len();
             let target =

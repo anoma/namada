@@ -140,7 +140,11 @@ mod native_tx_host_env {
         code_ptr: u64,
         code_len: u64,
     ));
-    native_host_fn!(tx_init_account(code_ptr: u64, code_len: u64, result_ptr: u64) -> u64);
+    native_host_fn!(tx_init_account(
+        code_ptr: u64,
+        code_len: u64,
+        result_ptr: u64
+    ));
     native_host_fn!(tx_get_chain_id(result_ptr: u64));
     native_host_fn!(tx_get_block_height() -> u64);
     native_host_fn!(tx_get_block_hash(result_ptr: u64));

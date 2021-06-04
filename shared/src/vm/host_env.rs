@@ -885,8 +885,7 @@ pub fn tx_init_account<MEM, DB, H>(
     code_ptr: u64,
     code_len: u64,
     result_ptr: u64,
-) -> u64
-where
+) where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
@@ -911,11 +910,9 @@ where
     let (addr, gas) = write_log.init_account(&storage.address_gen, code);
     let addr_bytes =
         addr.try_to_vec().expect("Encoding address shouldn't fail");
-    let result_len = addr_bytes.len() as u64;
     tx_add_gas(env, gas);
     let gas = env.memory.write_bytes(result_ptr, addr_bytes);
     tx_add_gas(env, gas);
-    result_len
 }
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.

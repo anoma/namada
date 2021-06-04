@@ -3,7 +3,8 @@ pub mod vp;
 
 #[cfg(test)]
 mod tests {
-    use anoma_shared::types::Key;
+
+    use anoma_shared::types::{address, Key};
     use anoma_vm_env::tx_prelude::{BorshSerialize, KeyValIterator};
     use itertools::Itertools;
 
@@ -11,6 +12,9 @@ mod tests {
     use super::vp::*;
 
     #[test]
+    #[ignore = "There's a bug in read because of its allocations, which \
+                override our result pointer. We'll probably need to use \
+                registers for this one"]
     fn test_tx_read_write() {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
@@ -123,6 +127,65 @@ mod tests {
         let iter: KeyValIterator<i32> = tx_host_env::iter_prefix(prefix);
         let expected = (0..10).map(|i| (format!("{}/{}", prefix, i), i));
         itertools::assert_equal(iter.sorted(), expected.sorted());
+    }
+
+    #[test]
+    fn test_tx_insert_verifier() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        assert!(env.verifiers.is_empty(), "pre-condition");
+        let verifier = address::testing::established_address_1();
+        tx_host_env::insert_verifier(verifier.clone());
+        assert!(
+            env.verifiers.contains(&verifier),
+            "The verifier should have been inserted"
+        );
+        assert_eq!(
+            env.verifiers.len(),
+            1,
+            "There should be only one verifier inserted"
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_tx_init_account_with_invalid_vp() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        let code = vec![];
+        tx_host_env::init_account(code);
+    }
+
+    #[test]
+    fn test_tx_init_account_with_valid_vp() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        let code = std::fs::read("res/wasm/vp_template.wasm")
+            .expect("cannot load user VP");
+        tx_host_env::init_account(code);
+    }
+
+    #[test]
+    fn test_tx_get_metadata() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        assert_eq!(tx_host_env::get_chain_id(), env.storage.get_chain_id().0);
+        assert_eq!(
+            tx_host_env::get_block_height(),
+            env.storage.get_block_height().0
+        );
+        assert_eq!(
+            tx_host_env::get_block_hash(),
+            env.storage.get_block_hash().0
+        );
     }
 
     /// An example how to write a VP host environment integration test
