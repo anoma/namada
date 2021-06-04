@@ -35,6 +35,8 @@ where
     pub gas_meter: MutEnvHostWrapper<'a, &'a BlockGasMeter>,
     // not thread-safe, assuming single-threaded Tx runner
     pub verifiers: MutEnvHostWrapper<'a, &'a HashSet<Address>>,
+    // not thread-safe, assuming single-threaded Tx runner
+    pub read_cache: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 
 impl<MEM, DB, H> Clone for TxEnv<'_, MEM, DB, H>
@@ -51,6 +53,7 @@ where
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
             verifiers: self.verifiers.clone(),
+            read_cache: self.read_cache.clone(),
         }
     }
 }
@@ -263,7 +266,6 @@ pub fn tx_read<MEM, DB, H>(
     env: &TxEnv<MEM, DB, H>,
     key_ptr: u64,
     key_len: u64,
-    result_ptr: u64,
 ) -> i64
 where
     MEM: VmMemory,
@@ -273,12 +275,7 @@ where
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     tx_add_gas(env, gas);
 
-    tracing::debug!(
-        "tx_read {}, key {}, result_ptr {}",
-        key,
-        key_ptr,
-        result_ptr,
-    );
+    tracing::debug!("tx_read {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -290,8 +287,8 @@ where
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let gas = env.memory.write_bytes(result_ptr, value);
-            tx_add_gas(env, gas);
+            let read_cache = unsafe { env.read_cache.get() };
+            read_cache.replace(value.clone());
             len
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -303,27 +300,44 @@ where
         }) => {
             // read the VP of a new account
             let len: i64 = vp.len() as _;
-            let gas = env.memory.write_bytes(result_ptr, vp);
-            tx_add_gas(env, gas);
+            let read_cache = unsafe { env.read_cache.get() };
+            read_cache.replace(vp.clone());
             len
         }
         None => {
             // when not found in write log, try to read from the storage
             let storage = unsafe { env.storage.get() };
-            let (value, gas) = storage.read(&key).expect("storage read failed");
+            let (value, gas) = storage.read(&key).expect(
+                "storage read
+    failed",
+            );
             tx_add_gas(env, gas);
             match value {
                 Some(value) => {
-                    let len: i64 =
-                        value.len().try_into().expect("data length overflow");
-                    let gas = env.memory.write_bytes(result_ptr, value);
-                    tx_add_gas(env, gas);
+                    let len: i64 = value.len().try_into().expect(
+                        "data length
+    overflow",
+                    );
+                    let read_cache = unsafe { env.read_cache.get() };
+                    read_cache.replace(value);
                     len
                 }
                 None => HostEnvResult::Fail.to_i64(),
             }
         }
     }
+}
+
+pub fn tx_read_cache<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, result_ptr: u64)
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let read_cache = unsafe { env.read_cache.get() };
+    let value = read_cache.take().unwrap();
+    let gas = env.memory.write_bytes(result_ptr, value);
+    tx_add_gas(env, gas);
 }
 
 /// Storage prefix iterator function exposed to the wasm VM Tx environment.
@@ -1198,6 +1212,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
+        read_cache: &mut Option<Vec<u8>>,
     ) -> TxEnv<'static, NativeMemory, DB, H>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1208,6 +1223,7 @@ pub mod testing {
         let iterators = unsafe { MutEnvHostWrapper::new(iterators) };
         let verifiers = unsafe { MutEnvHostWrapper::new(verifiers) };
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
+        let read_cache = unsafe { MutEnvHostWrapper::new(read_cache) };
         TxEnv {
             memory: NativeMemory,
             storage,
@@ -1215,6 +1231,7 @@ pub mod testing {
             iterators,
             verifiers,
             gas_meter,
+            read_cache,
         }
     }
 

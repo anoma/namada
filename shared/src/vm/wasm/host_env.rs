@@ -77,6 +77,7 @@ pub fn prepare_tx_imports<DB, H>(
     iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
     verifiers: MutEnvHostWrapper<'static, &HashSet<Address>>,
     gas_meter: MutEnvHostWrapper<'static, &BlockGasMeter>,
+    read_cache: MutEnvHostWrapper<'static, &Option<Vec<u8>>>,
     initial_memory: Memory,
 ) -> ImportObject
 where
@@ -90,6 +91,7 @@ where
         iterators,
         verifiers,
         gas_meter,
+        read_cache,
     };
     wasmer::imports! {
         // default namespace
@@ -97,6 +99,7 @@ where
             "memory" => initial_memory,
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             "anoma_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
+            "anoma_tx_read_cache" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read_cache),
             "anoma_tx_has_key" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_has_key),
             "anoma_tx_write" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_write),
             "anoma_tx_delete" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_delete),

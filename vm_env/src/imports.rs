@@ -4,6 +4,7 @@ pub mod tx {
     use std::convert::TryFrom;
     use std::marker::PhantomData;
     pub use std::mem::size_of;
+    use std::mem::ManuallyDrop;
 
     use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::{
@@ -45,22 +46,21 @@ pub mod tx {
     /// Try to read a variable-length value at the given key from storage.
     pub fn read<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
-        // Memory safety - there MUST BE no other allocation while we're reading
-        // result
-        let result = Vec::with_capacity(0);
-        let size = unsafe {
-            anoma_tx_read(
-                key.as_ptr() as _,
-                key.len() as _,
-                result.as_ptr() as _,
-            )
-        };
+        let size = unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
         if HostEnvResult::is_fail(size) {
             None
         } else {
-            let slice =
-                unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
-            T::try_from_slice(slice).ok()
+            let result: Vec<u8> = Vec::with_capacity(size as _);
+            let result = ManuallyDrop::new(result);
+            let offset = result.as_slice().as_ptr() as u64;
+            unsafe { anoma_tx_read_cache(offset) };
+            // let slice =
+            //     unsafe { slice::from_raw_parts(offset as _, size as _) };
+            let target = unsafe {
+                Vec::from_raw_parts(offset as _, size as _, size as _)
+            };
+            // drop the pre-allocated buffer
+            T::try_from_slice(&target[..]).ok()
         }
     }
 
@@ -188,8 +188,13 @@ pub mod tx {
     extern "C" {
         // Read variable-length data when we don't know the size up-front,
         // returns the size of the value (can be 0), or -1 if the key is
-        // not present.
-        fn anoma_tx_read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64;
+        // not present. If a value is found, it will be placed in the read
+        // cache, because we cannot allocate a buffer for it before we know
+        // its size.
+        fn anoma_tx_read(key_ptr: u64, key_len: u64) -> i64;
+
+        // Read a value from read cache.
+        fn anoma_tx_read_cache(result_ptr: u64);
 
         // Returns 1 if the key is present, -1 otherwise.
         fn anoma_tx_has_key(key_ptr: u64, key_len: u64) -> i64;
@@ -210,6 +215,7 @@ pub mod tx {
 
         // Returns the size of the value (can be 0), or -1 if there's no next
         // value.
+        // TODO use read cache
         fn anoma_tx_iter_next(iter_id: u64, result_ptr: u64) -> i64;
 
         // Insert a verifier

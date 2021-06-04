@@ -120,6 +120,9 @@ impl TxRunner {
         // runner.
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
 
+        let mut read_cache: Option<Vec<u8>> = None;
+        let env_read_cache = unsafe { MutEnvHostWrapper::new(&mut read_cache) };
+
         let tx_code = prepare_wasm_code(&tx_code)?;
 
         let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
@@ -133,6 +136,7 @@ impl TxRunner {
             iterators,
             env_verifiers,
             gas_meter,
+            env_read_cache,
             initial_memory,
         );
 

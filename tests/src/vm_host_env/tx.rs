@@ -25,6 +25,7 @@ pub struct TestTxEnv {
     pub iterators: PrefixIterators<'static, MockDB>,
     pub verifiers: HashSet<Address>,
     pub gas_meter: BlockGasMeter,
+    pub read_cache: Option<Vec<u8>>,
 }
 
 impl Default for TestTxEnv {
@@ -35,6 +36,7 @@ impl Default for TestTxEnv {
             iterators: PrefixIterators::default(),
             verifiers: HashSet::default(),
             gas_meter: BlockGasMeter::default(),
+            read_cache: None,
         }
     }
 }
@@ -54,12 +56,13 @@ pub fn init_tx_env(
         iterators,
         verifiers,
         gas_meter,
+        read_cache,
     }: &mut TestTxEnv,
 ) {
     tx_host_env::ENV.with(|env| {
         *env.borrow_mut() = Some({
             vm::host_env::testing::tx_env(
-                storage, write_log, iterators, verifiers, gas_meter,
+                storage, write_log, iterators, verifiers, gas_meter, read_cache,
             )
         })
     });
@@ -122,7 +125,8 @@ mod native_tx_host_env {
 
     // Implement all the exported functions from
     // [`anoma_vm_env::imports::tx`] `extern "C"` section.
-    native_host_fn!(tx_read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
+    native_host_fn!(tx_read(key_ptr: u64, key_len: u64) -> i64);
+    native_host_fn!(tx_read_cache(result_ptr: u64));
     native_host_fn!(tx_has_key(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(tx_write(
         key_ptr: u64,

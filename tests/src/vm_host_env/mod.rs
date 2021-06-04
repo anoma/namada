@@ -12,9 +12,6 @@ mod tests {
     use super::vp::*;
 
     #[test]
-    #[ignore = "There's a bug in read because of its allocations, which \
-                override our result pointer. We'll probably need to use \
-                registers for this one"]
     fn test_tx_read_write() {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
@@ -28,7 +25,7 @@ mod tests {
         );
 
         // Write some value
-        let value = "test".to_string();
+        let value = "test".repeat(4);
         tx_host_env::write(key, value.clone());
 
         let read_value: Option<String> = tx_host_env::read(key);
@@ -39,9 +36,9 @@ mod tests {
              value when we read it"
         );
 
-        let value = "anoma".to_string();
+        let value = vec![1_u8; 1000];
         tx_host_env::write(key, value.clone());
-        let read_value: Option<String> = tx_host_env::read(key);
+        let read_value: Option<Vec<u8>> = tx_host_env::read(key);
         assert_eq!(
             Some(value),
             read_value,
