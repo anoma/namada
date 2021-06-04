@@ -1,7 +1,7 @@
 //! DB mock for testing
 
-use std::collections::btree_map::Range;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{btree_map, BTreeMap, HashMap};
+use std::iter::Filter;
 use std::ops::Bound::{Excluded, Included};
 
 use sparse_merkle_tree::SparseMerkleTree;
@@ -231,6 +231,8 @@ impl DB for MockDB {
     }
 }
 
+type MockIteratorFilter = Box<dyn FnMut(&(&String, &Vec<u8>)) -> bool>;
+
 impl<'iter> DBIter<'iter> for MockDB {
     type PrefixIter = MockPrefixIterator<'iter>;
 
@@ -242,19 +244,21 @@ impl<'iter> DBIter<'iter> for MockDB {
         let db_prefix = format!("{}/subspace/", height.to_string());
         let prefix = format!("{}{}", db_prefix, prefix.to_string());
 
-        let mut upper_prefix = prefix.clone().into_bytes();
-        if let Some(last) = upper_prefix.pop() {
-            upper_prefix.push(last + 1);
-        }
-        let upper =
-            String::from_utf8(upper_prefix).expect("failed convert to string");
-        let iter = self.0.range((Included(prefix), Excluded(upper)));
+        self.0.iter().for_each(|(k, v)| {
+            println!("key {}", k);
+        });
+        let filter_fn: MockIteratorFilter =
+            Box::new(move |(key, _value): &(&String, &Vec<u8>)| {
+                println!("key {}, prefix {}", key, prefix);
+                key.starts_with(&prefix)
+            });
+        let iter = self.0.iter().filter(filter_fn);
         MockPrefixIterator::new(MockIterator { iter }, db_prefix)
     }
 }
 
 pub struct MockIterator<'a> {
-    pub iter: Range<'a, String, Vec<u8>>,
+    pub iter: Filter<btree_map::Iter<'a, String, Vec<u8>>, MockIteratorFilter>,
 }
 
 pub type MockPrefixIterator<'a> = PrefixIterator<MockIterator<'a>>;

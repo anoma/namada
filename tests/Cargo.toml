@@ -15,4 +15,6 @@ wasm-runtime = ["anoma_shared/wasm-runtime"]
 anoma_shared = {path = "../shared", features = ["testing"]}
 anoma_vm_env = {path = "../vm_env"}
 concat-idents = "1.1.2"
+
+[dev-dependencies]
 itertools = "0.10.0"

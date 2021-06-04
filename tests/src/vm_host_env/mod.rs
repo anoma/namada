@@ -5,6 +5,7 @@ pub mod vp;
 mod tests {
     use anoma_shared::types::Key;
     use anoma_vm_env::tx_prelude::{BorshSerialize, KeyValIterator};
+    use itertools::Itertools;
 
     use super::tx::*;
     use super::vp::*;
@@ -112,12 +113,13 @@ mod tests {
             let key = Key::parse(format!("{}/{}", prefix, i)).unwrap();
             let value = i.try_to_vec().unwrap();
             env.storage.write(&key, value).unwrap();
+            env.storage.commit().unwrap();
         }
 
         // Then try to iterate over their prefix
         let iter: KeyValIterator<i32> = tx_host_env::iter_prefix(prefix);
         let expected = (0..10).map(|i| (format!("{}/{}", prefix, i), i));
-        itertools::assert_equal(iter, expected);
+        itertools::assert_equal(iter.sorted(), expected.sorted());
     }
 
     /// An example how to write a VP host environment integration test
