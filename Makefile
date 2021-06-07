@@ -87,9 +87,14 @@ doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
 
+build-wasm-scripts-docker:
+	docker run --rm  -v ${PWD}:/usr/local/rust/project anoma-wasm make build-wasm-scripts
+
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm = make -C $(wasm)
 build-wasm-scripts:
+	$(rustup) toolchain install $(nightly) && \
+	$(rustup) target add wasm32-unknown-unknown && \
 	$(foreach wasm,$(wasms),$(build-wasm) && ) true
 
 clean-wasm = make -C $(wasm)
@@ -101,5 +106,10 @@ dev-deps:
 	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy --toolchain $(nightly)
 	$(cargo) install cargo-watch
+
+# only for CI use
+build-wasm = make -C $(wasm)
+build-wasm-scripts-ci:
+	$(foreach wasm,$(wasms),$(build-wasm) && ) true
 
 .PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps
