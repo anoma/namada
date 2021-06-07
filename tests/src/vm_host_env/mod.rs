@@ -1,3 +1,15 @@
+//! VM host environment integration tests.
+//!
+//! You can enable logging with the `RUST_LOG` environment variable, e.g.:
+//!
+//! `RUST_LOG=debug cargo test`.
+//!
+//! Because the test runner captures the standard output from the test, this
+//! will only print logging from failed tests. To avoid that, use the
+//! `--nocapture` argument. Also, because by default the tests run in parallel,
+//! it is better to select a single test, e.g.:
+//!
+//! `RUST_LOG=debug cargo test test_tx_read_write -- --nocapture`
 pub mod tx;
 pub mod vp;
 
@@ -7,6 +19,7 @@ mod tests {
     use anoma_shared::types::{address, Key};
     use anoma_vm_env::tx_prelude::{BorshSerialize, KeyValIterator};
     use itertools::Itertools;
+    use test_env_log::test;
 
     use super::tx::*;
     use super::vp::*;
