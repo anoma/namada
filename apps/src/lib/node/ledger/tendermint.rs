@@ -28,8 +28,8 @@ use tendermint_proto::abci::{
 
 use crate::config;
 use crate::genesis::{self, Validator};
+use crate::node::ledger::protocol::TxResult;
 use crate::node::ledger::MempoolTxType;
-use crate::node::protocol::TxResult;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
 pub type AbciSender = mpsc::Sender<AbciMsg>;

@@ -1,3 +1,4 @@
+pub mod protocol;
 pub mod storage;
 mod tendermint;
 
@@ -18,7 +19,6 @@ use borsh::BorshSerialize;
 use thiserror::Error;
 
 use self::tendermint::{AbciMsg, AbciReceiver};
-use crate::node::protocol;
 use crate::proto::{self, Tx};
 use crate::{config, wallet};
 

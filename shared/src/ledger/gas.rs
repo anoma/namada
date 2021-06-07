@@ -19,7 +19,7 @@ pub enum Error {
 const TX_GAS_PER_BYTE: u64 = 2;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
-const PARALLEL_GAS_MULTIPLER: f64 = 0.1;
+const PARALLEL_GAS_MULTIPLIER: f64 = 0.1;
 
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
@@ -113,22 +113,14 @@ impl BlockGasMeter {
         self.block_gas = 0;
     }
 
-    /// Add a fee for parallelized validity predicate run.
-    pub fn add_parallel_fee(&mut self, vps_gases: &[u64]) -> Result<()> {
-        let gas_used =
-            vps_gases.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLER;
-        self.add(gas_used as u64)
-    }
-
     /// Get the total gas used in the current transaction.
     pub fn get_current_transaction_gas(&self) -> u64 {
         self.transaction_gas
     }
 
     /// Add the gas cost used in validity predicates to the current transaction.
-    pub fn add_vps_gas(&mut self, VpsGas { max, rest }: &VpsGas) -> Result<()> {
-        self.add(*max)?;
-        self.add_parallel_fee(rest)
+    pub fn add_vps_gas(&mut self, vps_gas: &VpsGas) -> Result<()> {
+        self.add(vps_gas.get_current_gas()?)
     }
 }
 
@@ -179,19 +171,22 @@ impl VpsGas {
             self.rest.append(&mut other.rest);
         }
 
-        let parallel_gas: u64 = (self.rest.clone().iter().sum::<u64>() as f64
-            * PARALLEL_GAS_MULTIPLER) as u64;
-
-        let total = self
-            .max
-            .checked_add(initial_gas)
-            .ok_or(Error::GasOverflow)?
-            .checked_add(parallel_gas)
+        let total = initial_gas
+            .checked_add(self.get_current_gas()?)
             .ok_or(Error::GasOverflow)?;
         if total > TRANSACTION_GAS_LIMIT {
             return Err(Error::GasOverflow);
         }
         Ok(())
+    }
+
+    /// Get the gas consumed by the parallelized VPs
+    fn get_current_gas(&self) -> Result<u64> {
+        let parallel_gas =
+            self.rest.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLIER;
+        self.max
+            .checked_add(parallel_gas as u64)
+            .ok_or(Error::GasOverflow)
     }
 }
 
