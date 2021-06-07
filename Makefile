@@ -93,7 +93,6 @@ build-wasm-scripts-docker:
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm = make -C $(wasm)
 build-wasm-scripts:
-	$(rustup) toolchain install $(nightly) && \
 	$(rustup) target add wasm32-unknown-unknown && \
 	$(foreach wasm,$(wasms),$(build-wasm) && ) true
 
