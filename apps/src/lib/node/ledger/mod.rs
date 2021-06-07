@@ -171,7 +171,7 @@ impl Shell {
             abci,
             storage,
             gas_meter: BlockGasMeter::default(),
-            write_log: WriteLog::new(),
+            write_log: WriteLog::default(),
         }
     }
 

@@ -1,3 +1,6 @@
+//! Wasm memory is used for bi-directionally passing data between the host and a
+//! wasm instance.
+
 use borsh::BorshSerialize;
 use thiserror::Error;
 use wasmer::{HostEnvInitError, LazyInit, Memory};
@@ -5,6 +8,7 @@ use wasmer::{HostEnvInitError, LazyInit, Memory};
 use crate::vm::memory::VmMemory;
 use crate::vm::types::VpInput;
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed initializing the memory: {0}")]
@@ -13,6 +17,7 @@ pub enum Error {
     MemoryOutOfBounds(wasmer::MemoryError),
 }
 
+/// Result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
 // The bounds are set in number of pages, the actual size is multiplied by
@@ -64,8 +69,11 @@ pub fn prepare_filter_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
     Memory::new(store, mem_type).map_err(Error::InitMemoryError)
 }
 
+/// Input data for transaction wasm call
 pub struct TxCallInput {
+    /// Raw pointer to the data
     pub tx_data_ptr: u64,
+    /// Length of the data
     pub tx_data_len: u64,
 }
 
@@ -85,15 +93,24 @@ pub fn write_tx_inputs(
     })
 }
 
+/// Input data for validity predicate wasm call
 #[derive(Clone, Debug)]
 pub struct VpCallInput {
+    /// Pointer to the address
     pub addr_ptr: u64,
+    /// Length of the address
     pub addr_len: u64,
+    /// Pointer to the data
     pub data_ptr: u64,
+    /// Length of the data
     pub data_len: u64,
+    /// Pointer to the serialized changed keys
     pub keys_changed_ptr: u64,
+    /// Length of the serialized changed keys
     pub keys_changed_len: u64,
+    /// Pointer to the serialized verifiers
     pub verifiers_ptr: u64,
+    /// Length of the serialized verifiers
     pub verifiers_len: u64,
 }
 
@@ -149,15 +166,23 @@ pub fn write_vp_inputs(
     })
 }
 
+/// Input data for matchmaker wasm call
 pub struct MatchmakerCallInput {
+    /// Pointer to the data
     pub data_ptr: u64,
+    /// Length of the data
     pub data_len: u64,
+    /// Pointer to the intent ID
     pub intent_id_ptr: u64,
+    /// Length of the intent ID
     pub intent_id_len: u64,
+    /// Pointer to the intent data
     pub intent_data_ptr: u64,
+    /// Length of the intent data
     pub intent_data_len: u64,
 }
 
+/// Write matchmaker inputs into wasm memory
 pub fn write_matchmaker_inputs(
     memory: &wasmer::Memory,
     data: impl AsRef<[u8]>,
@@ -187,11 +212,15 @@ pub fn write_matchmaker_inputs(
     })
 }
 
+/// Input data for matchmaker filter wasm call
 pub struct FilterCallInput {
+    /// Pointer to the intent data
     pub intent_data_ptr: u64,
+    /// Length of the intent data
     pub intent_data_len: u64,
 }
 
+/// Write matchmaker filter inputs into wasm memory
 pub fn write_filter_inputs(
     memory: &wasmer::Memory,
     intent_data: impl AsRef<[u8]>,
@@ -265,6 +294,7 @@ where
     Ok(())
 }
 
+/// The wasm memory
 #[derive(Debug, Clone)]
 pub struct WasmMemory {
     inner: LazyInit<wasmer::Memory>,

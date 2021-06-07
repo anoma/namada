@@ -1,3 +1,8 @@
+//! The wasm host environment.
+//!
+//! Here, we expose the host functions into wasm's
+//! imports, so they can be called from inside the wasm.
+
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 

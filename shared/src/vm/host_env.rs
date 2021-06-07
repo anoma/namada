@@ -1,3 +1,5 @@
+//! Virtual machine's host environment exposes functions that may be called from
+//! within a virtual machine.
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
@@ -19,21 +21,28 @@ use crate::vm::{EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper};
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
+/// A transaction's host environment
 pub struct TxEnv<'a, MEM, DB, H>
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
+    /// The VM memory for bi-directional data passing
     pub memory: MEM,
+    /// Read-only access to the storage
     pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
-    // not thread-safe, assuming single-threaded Tx runner
+    /// Read/write access to the write log.
+    /// Not thread-safe, assuming single-threaded Tx runner
     pub write_log: MutEnvHostWrapper<'a, &'a WriteLog>,
-    // not thread-safe, assuming single-threaded Tx runner
+    /// Storage prefix iterators.
+    /// Not thread-safe, assuming single-threaded Tx runner
     pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
-    // not thread-safe, assuming single-threaded Tx runner
+    /// Transaction gas meter.
+    /// Not thread-safe, assuming single-threaded Tx runner
     pub gas_meter: MutEnvHostWrapper<'a, &'a BlockGasMeter>,
-    // not thread-safe, assuming single-threaded Tx runner
+    /// The verifiers whose validity predicates should be triggered.
+    /// Not thread-safe, assuming single-threaded Tx runner
     pub verifiers: MutEnvHostWrapper<'a, &'a HashSet<Address>>,
 }
 
@@ -55,6 +64,7 @@ where
     }
 }
 
+/// A validity predicate's host environment
 pub struct VpEnv<'a, MEM, DB, H, EVAL>
 where
     MEM: VmMemory,
@@ -62,26 +72,33 @@ where
     H: StorageHasher,
     EVAL: VpEvalRunner,
 {
+    /// The VM memory for bi-directional data passing
     pub memory: MEM,
     /// The address of the account that owns the VP
     pub address: Address,
-    /// thread-safe read-only access from parallel Vp runners
+    /// Read-only access to the storage.
+    /// Thread-safe read-only access from parallel Vp runners
     pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
-    /// thread-safe read-only access from parallel Vp runners
+    /// Read-only access to the write log.
+    /// Thread-safe read-only access from parallel Vp runners
     pub write_log: EnvHostWrapper<'a, &'a WriteLog>,
-    /// this is not thread-safe, but because each VP has its own instance there
+    /// Storage prefix iterators.
+    /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
     pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
-    /// this is not thread-safe, but because each VP has its own instance there
+    /// VP gas meter.
+    /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
     pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
     pub tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
-    /// The runner of the `eval` function
+    /// The runner of the [`vp_eval`] function
     pub eval_runner: EnvHostWrapper<'a, &'a EVAL>,
 }
 
+/// A Validity predicate runner for calls from the [`vp_eval`] function.
 pub trait VpEvalRunner {
+    /// Evaluate a given validity predicate code with the given input data.
     fn eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> HostEnvResult;
 }
 
@@ -106,12 +123,15 @@ where
     }
 }
 
+/// A matchmakers's host environment
 pub struct MatchmakerEnv<MEM, MM>
 where
     MEM: VmMemory,
     MM: MmHost,
 {
+    /// The VM memory for bi-directional data passing
     pub memory: MEM,
+    /// The matchmaker's host
     pub mm: Arc<Mutex<MM>>,
 }
 
@@ -143,10 +163,12 @@ where
 }
 
 #[derive(Clone)]
+/// A matchmakers filter's host environment
 pub struct FilterEnv<MEM>
 where
     MEM: VmMemory,
 {
+    /// The VM memory for bi-directional data passing
     pub memory: MEM,
 }
 
@@ -160,6 +182,7 @@ where
     tx_add_gas(env, used_gas as _)
 }
 
+/// Add a gas cost incured in a transaction
 pub fn tx_add_gas<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, used_gas: u64)
 where
     MEM: VmMemory,
@@ -190,6 +213,7 @@ pub fn vp_charge_gas<MEM, DB, H, EVAL>(
     vp_add_gas(env, used_gas as _)
 }
 
+/// Add a gas cost incured in a validity predicate
 pub fn vp_add_gas<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     used_gas: u64,
@@ -1015,6 +1039,7 @@ pub fn vp_get_block_hash<MEM, DB, H, EVAL>(
     vp_add_gas(env, gas);
 }
 
+/// Verify a transaction signature.
 pub fn vp_verify_tx_signature<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     pk_ptr: u64,
@@ -1071,6 +1096,7 @@ pub fn tx_log_string<MEM, DB, H>(
     tracing::info!("WASM Transaction log: {}", str);
 }
 
+/// Evaluate a validity predicate with the given input data.
 pub fn vp_eval<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     vp_code_ptr: u64,
@@ -1113,6 +1139,7 @@ pub fn vp_log_string<MEM, DB, H, EVAL>(
     tracing::info!("WASM Validity predicate log: {}", str);
 }
 
+/// Remove given intents from the matchmaker's mempool
 pub fn mm_remove_intents<MEM, MM>(
     env: &MatchmakerEnv<MEM, MM>,
     intents_id_ptr: u64,
@@ -1146,6 +1173,7 @@ pub fn mm_send_match<MEM, MM>(
     mm.inject_tx(tx_data);
 }
 
+/// Update matchmaker's state data
 pub fn mm_update_data<MEM, MM>(
     env: &MatchmakerEnv<MEM, MM>,
     data_ptr: u64,
@@ -1189,12 +1217,14 @@ pub fn mm_filter_log_string<MEM>(
     tracing::info!("WASM Filter log: {}", str);
 }
 
+/// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
     use super::*;
     use crate::ledger::storage::{self, StorageHasher};
     use crate::vm::memory::testing::NativeMemory;
 
+    /// Setup a transaction environment
     pub fn tx_env<DB, H>(
         storage: &Storage<DB, H>,
         write_log: &mut WriteLog,
@@ -1221,6 +1251,7 @@ pub mod testing {
         }
     }
 
+    /// Setup a validity predicate environment
     #[allow(clippy::too_many_arguments)]
     pub fn vp_env<DB, H, EVAL>(
         address: Address,

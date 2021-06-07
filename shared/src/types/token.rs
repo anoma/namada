@@ -26,6 +26,7 @@ pub struct Amount {
     micro: u64,
 }
 
+/// A change in tokens amount
 pub type Change = i128;
 
 impl Default for Amount {
@@ -35,18 +36,22 @@ impl Default for Amount {
 }
 
 impl Amount {
+    /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
         self.micro as Change
     }
 
+    /// Spend a given amount
     pub fn spend(&mut self, amount: &Amount) {
         self.micro -= amount.micro
     }
 
+    /// Receive a given amount
     pub fn receive(&mut self, amount: &Amount) {
         self.micro += amount.micro
     }
 
+    /// Create a new amount from whole number of tokens
     pub fn whole(amount: u64) -> Self {
         Self {
             micro: amount * 1_000_000,
@@ -108,7 +113,7 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
     }
 }
 
-/// A simple 2-party token transfer
+/// A simple bilateral token transfer
 #[derive(
     Debug,
     Clone,
@@ -122,9 +127,13 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
     Deserialize,
 )]
 pub struct Transfer {
+    /// Source address will spend the tokens
     pub source: Address,
+    /// Target address will receive the tokens
     pub target: Address,
+    /// Token's address
     pub token: Address,
+    /// The amount of tokens
     pub amount: Amount,
 }
 

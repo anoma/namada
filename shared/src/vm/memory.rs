@@ -1,21 +1,31 @@
+//! Virtual machine's memory.
+
+/// Abstract representation of virtual machine's memory.
 pub trait VmMemory: Clone + Send + Sync {
+    /// Returns bytes read from memory together with the associated gas cost.
     fn read_bytes(&self, offset: u64, len: usize) -> (Vec<u8>, u64);
 
+    /// Write bytes to memory. Returns the gas cost.
     fn write_bytes<T>(&self, offset: u64, bytes: T) -> u64
     where
         T: AsRef<[u8]>;
 
+    /// Returns string read from memory together with the associated gas cost.
     fn read_string(&self, offset: u64, len: usize) -> (String, u64);
 
+    /// Write string to memory. Returns the gas cost.
     fn write_string(&self, offset: u64, string: String) -> u64;
 }
 
+/// Helper module for VM testing
 #[cfg(feature = "testing")]
 pub mod testing {
     pub use core::slice;
 
     use super::*;
 
+    /// Native memory implementation may be used for testing VM host environment
+    /// natively, without compiling to wasm.
     #[derive(Clone)]
     pub struct NativeMemory;
 
