@@ -14,6 +14,8 @@ use std::sync::mpsc::{self, channel, Sender};
 use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::types::{BlockHash, BlockHeight};
 use serde_json::json;
+use signal_hook::consts::TERM_SIGNALS;
+use signal_hook::iterator::Signals;
 use tendermint_abci::{self, ServerBuilder};
 use tendermint_proto::abci::{
     CheckTxType, RequestApplySnapshotChunk, RequestBeginBlock, RequestCheckTx,
@@ -85,11 +87,7 @@ pub enum AbciMsg {
 }
 
 /// Run the ABCI server in the current thread (blocking).
-pub fn run(
-    sender: AbciSender,
-    signal_receiver: mpsc::Receiver<()>,
-    config: config::Ledger,
-) {
+pub fn run(sender: AbciSender, config: config::Ledger) {
     let home_dir = config.tendermint;
     let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
@@ -124,16 +122,17 @@ pub fn run(
             .expect("TEMPORARY: failed to start up ABCI server")
     });
 
-    match signal_receiver.recv() {
-        Ok(_) => tracing::info!("terminating tendermint node"),
-        Err(e) => {
-            tracing::error!(
-                "terminating tendermint node though signal receipt error: {}",
-                e
+    let mut signals =
+        Signals::new(TERM_SIGNALS).expect("cannot create Signals");
+    for sig in signals.forever() {
+        if TERM_SIGNALS.contains(&sig) {
+            tracing::info!(
+                "Received termination signal, shutting down Tendermint node"
             );
+            tendermint_node.kill().expect("termination failed");
+            break;
         }
     }
-    tendermint_node.kill().expect("termination failed");
 }
 
 pub fn reset(config: config::Ledger) {
@@ -162,7 +161,6 @@ struct AbciWrapper {
 
 impl Drop for AbciWrapper {
     fn drop(&mut self) {
-        tracing::info!("terminating AbciWrapper");
         // the channel might have been already closed
         let _ = self.sender.send(AbciMsg::Terminate);
     }
