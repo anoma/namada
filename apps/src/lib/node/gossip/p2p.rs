@@ -52,6 +52,7 @@ impl P2P {
             Behaviour::new(local_key, config).map_err(Error::Behavior)?;
 
         tracing::debug!("p2p.discover_peer -> {:?}", config.discover_peer);
+        tracing::debug!("p2p.address -> {:?}", config.address.clone());
 
         let mut swarm = libp2p::Swarm::new(transport, gossipsub, local_peer_id);
 

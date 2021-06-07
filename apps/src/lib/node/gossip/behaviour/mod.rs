@@ -331,13 +331,8 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
 impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
     fn inject_event(&mut self, event: DiscoveryEvent) {
         match event {
-            DiscoveryEvent::Connected(peer) => {
-                self.events.push_back(AnomaBehaviourEvent::Connected(peer));
-            }
-            DiscoveryEvent::Disconnected(peer) => {
-                self.events
-                    .push_back(AnomaBehaviourEvent::Disconnected(peer));
-            }
+            DiscoveryEvent::Connected(_) => {}
+            DiscoveryEvent::Disconnected(_) => {}
         }
     }
 }
