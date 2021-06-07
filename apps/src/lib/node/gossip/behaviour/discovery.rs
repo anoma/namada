@@ -533,7 +533,6 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                 }
             }
         }
-
         Poll::Pending
     }
 }
