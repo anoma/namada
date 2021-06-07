@@ -2,8 +2,7 @@ mod discovery;
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
-use std::task::Context;
-use std::task::Poll;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
@@ -16,16 +15,14 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::identity::Keypair;
-use libp2p::swarm::NetworkBehaviourAction;
-use libp2p::swarm::NetworkBehaviourEventProcess;
-use libp2p::swarm::PollParameters;
-use libp2p::swarm::toggle::Toggle;
+use libp2p::swarm::{
+    NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters,
+};
 use libp2p::{NetworkBehaviour, PeerId};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use self::discovery::DiscoveryEvent;
-
 use super::intent_gossiper;
 use crate::node::gossip::behaviour::discovery::{
     DiscoveryBehaviour, DiscoveryConfigBuilder,
@@ -129,14 +126,15 @@ pub struct Behaviour {
     events: Vec<AnomaBehaviourEvent>,
 }
 
-/// Event type which is emitted from the [ForestBehaviour] into the libp2p service.
+/// Event type which is emitted from the [ForestBehaviour] into the libp2p
+/// service.
 #[derive(Debug)]
 pub enum AnomaBehaviourEvent {
     Connected(PeerId),
     Disconnected(PeerId),
     Message(GossipsubMessage, PeerId, MessageId),
     Subscribed(PeerId, TopicHash),
-    Unsubscribed(PeerId, TopicHash)
+    Unsubscribed(PeerId, TopicHash),
 }
 
 pub fn message_id(message: &GossipsubMessage) -> MessageId {
@@ -146,14 +144,15 @@ pub fn message_id(message: &GossipsubMessage) -> MessageId {
 }
 
 impl Behaviour {
-
     fn poll<TBehaviourIn>(
         &mut self,
         cx: &mut Context,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<TBehaviourIn, AnomaBehaviourEvent>> {
         if !self.events.is_empty() {
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(self.events.remove(0)));
+            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+                self.events.remove(0),
+            ));
         }
         Poll::Pending
     }
@@ -237,7 +236,8 @@ impl Behaviour {
 
             DiscoveryBehaviour::new(peer_id, discovery_config)
         } else {
-            let discovery_config = DiscoveryConfigBuilder::default().build().unwrap();
+            let discovery_config =
+                DiscoveryConfigBuilder::default().build().unwrap();
             DiscoveryBehaviour::new(peer_id, discovery_config)
         };
 
@@ -246,7 +246,7 @@ impl Behaviour {
                 intent_gossip_behaviour,
                 discovery: discovery_opt.unwrap(),
                 intent_gossip_app,
-                events: Vec::new()
+                events: Vec::new(),
             },
             matchmaker_event_receiver,
         ))
@@ -333,13 +333,11 @@ impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
     fn inject_event(&mut self, event: DiscoveryEvent) {
         match event {
             DiscoveryEvent::Connected(peer) => {
-                self.events
-                .push(AnomaBehaviourEvent::Connected(peer));
-            },
+                self.events.push(AnomaBehaviourEvent::Connected(peer));
+            }
             DiscoveryEvent::Disconnected(peer) => {
-                self.events
-                    .push(AnomaBehaviourEvent::Disconnected(peer));
-            },
+                self.events.push(AnomaBehaviourEvent::Disconnected(peer));
+            }
         }
     }
 }
