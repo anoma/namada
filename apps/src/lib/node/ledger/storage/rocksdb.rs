@@ -91,8 +91,13 @@ fn key_comparator(a: &[u8], b: &[u8]) -> Ordering {
     }
 }
 
+impl Drop for RocksDB {
+    fn drop(&mut self) {
+        self.flush().expect("flush failed");
+    }
+}
+
 impl DB for RocksDB {
-    #[allow(dead_code)]
     fn flush(&self) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(true);
@@ -161,9 +166,7 @@ impl DB for RocksDB {
             batch.put(key.to_string(), types::encode(value));
         }
         let mut write_opts = WriteOptions::default();
-        // TODO: disable WAL when we can shutdown with flush
-        write_opts.set_sync(true);
-        // write_opts.disable_wal(true);
+        write_opts.disable_wal(true);
         self.0
             .write_opt(batch, &write_opts)
             .map_err(|e| Error::DBError(e.into_string()))?;
@@ -177,9 +180,7 @@ impl DB for RocksDB {
 
     fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
         let mut write_opts = WriteOptions::default();
-        // TODO: disable WAL when we can shutdown with flush
-        write_opts.set_sync(true);
-        // write_opts.disable_wal(true);
+        write_opts.disable_wal(true);
         self.0
             .put_opt("chain_id", types::encode(chain_id), &write_opts)
             .map_err(|e| Error::DBError(e.into_string()))

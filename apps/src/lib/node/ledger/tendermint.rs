@@ -42,7 +42,10 @@ pub enum AbciMsg {
         reply: Sender<Option<(MerkleRoot, u64)>>,
     },
     /// Initialize a chain with the given ID
-    InitChain { reply: Sender<()>, chain_id: String },
+    InitChain {
+        reply: Sender<()>,
+        chain_id: String,
+    },
     /// Validate a given transaction for inclusion in the mempool
     MempoolValidate {
         reply: Sender<Result<(), String>>,
@@ -74,11 +77,19 @@ pub enum AbciMsg {
     },
     /// Commit the current block. The expected result is the Merkle root hash
     /// of the committed block.
-    CommitBlock { reply: Sender<MerkleRoot> },
+    CommitBlock {
+        reply: Sender<MerkleRoot>,
+    },
+
+    Terminate,
 }
 
 /// Run the ABCI server in the current thread (blocking).
-pub fn run(sender: AbciSender, config: config::Ledger) {
+pub fn run(
+    sender: AbciSender,
+    signal_receiver: mpsc::Receiver<()>,
+    config: config::Ledger,
+) {
     let home_dir = config.tendermint;
     let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
@@ -91,7 +102,7 @@ pub fn run(sender: AbciSender, config: config::Ledger) {
         write_validator_key(home_dir, &genesis::genesis().validator)
             .expect("TEMPORARY: failed to write tendermint validator key");
     }
-    let _tendermint_node = Command::new("tendermint")
+    let mut tendermint_node = Command::new("tendermint")
         .args(&[
             "node",
             "--home",
@@ -107,9 +118,22 @@ pub fn run(sender: AbciSender, config: config::Ledger) {
     let server = ServerBuilder::default()
         .bind(config.address, AbciWrapper { sender })
         .expect("TEMPORARY: failed to bind ABCI server address");
-    server
-        .listen()
-        .expect("TEMPORARY: failed to start up ABCI server")
+    std::thread::spawn(move || {
+        server
+            .listen()
+            .expect("TEMPORARY: failed to start up ABCI server")
+    });
+
+    match signal_receiver.recv() {
+        Ok(_) => tracing::info!("terminating tendermint node"),
+        Err(e) => {
+            tracing::error!(
+                "terminating tendermint node though signal receipt error: {}",
+                e
+            );
+        }
+    }
+    tendermint_node.kill().expect("termination failed");
 }
 
 pub fn reset(config: config::Ledger) {
@@ -134,6 +158,14 @@ pub fn reset(config: config::Ledger) {
 #[derive(Clone, Debug)]
 struct AbciWrapper {
     sender: AbciSender,
+}
+
+impl Drop for AbciWrapper {
+    fn drop(&mut self) {
+        tracing::info!("terminating AbciWrapper");
+        // the channel might have been already closed
+        let _ = self.sender.send(AbciMsg::Terminate);
+    }
 }
 
 impl tendermint_abci::Application for AbciWrapper {

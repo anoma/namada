@@ -16,6 +16,8 @@ use anoma_shared::types::{
     address, key, token, Address, BlockHash, BlockHeight, Key,
 };
 use borsh::BorshSerialize;
+use signal_hook::consts::TERM_SIGNALS;
+use signal_hook::iterator::Signals;
 use thiserror::Error;
 
 use self::tendermint::{AbciMsg, AbciReceiver};
@@ -41,12 +43,32 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn run(config: config::Ledger) -> Result<()> {
+    // for a termination signal
+    let (signal_sender, signal_receiver) = mpsc::channel();
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, &config.db);
     // Run Tendermint ABCI server in another thread
-    std::thread::spawn(move || tendermint::run(sender, config));
-    shell.run()
+    let tendermint_handle = std::thread::spawn(move || {
+        tendermint::run(sender, signal_receiver, config)
+    });
+    let shell_handle =
+        std::thread::spawn(move || shell.run().expect("shell failed"));
+
+    let mut sigs = Vec::new();
+    sigs.extend(TERM_SIGNALS);
+    let mut signals = Signals::new(&sigs).expect("cannot create Signals");
+    for sig in signals.forever() {
+        if TERM_SIGNALS.contains(&sig) {
+            tracing::info!("Shutting down Anoma node");
+            let _ = signal_sender.send(());
+            break;
+        }
+    }
+
+    let _ = tendermint_handle.join();
+    let _ = shell_handle.join();
+    Ok(())
 }
 
 pub fn reset(config: config::Ledger) -> Result<()> {
@@ -255,8 +277,12 @@ impl Shell {
                         })?
                     }
                 }
+                AbciMsg::Terminate => {
+                    break;
+                }
             }
         }
+        Ok(())
     }
 }
 
