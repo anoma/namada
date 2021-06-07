@@ -25,6 +25,7 @@ const ADDRESS_HRP: &str = "a";
 const ADDRESS_BECH32_VARIANT: bech32::Variant = Variant::Bech32m;
 pub(crate) const HASH_LEN: usize = 40;
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error decoding address from Bech32m: {0}")]
@@ -46,8 +47,11 @@ pub enum Error {
     #[error("Unexpected address hash length {0}, expected {HASH_LEN}")]
     UnexpectedHashLength(usize),
 }
+
+/// Result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// An account's address
 #[derive(
     Clone,
     BorshSerialize,
@@ -61,7 +65,9 @@ pub type Result<T> = std::result::Result<T, Error>;
     Deserialize,
 )]
 pub enum Address {
+    /// An established address is generated on-chain
     Established(EstablishedAddress),
+    /// An implicit address is derived from a cryptographic key
     Implicit(ImplicitAddress),
 }
 
@@ -141,6 +147,7 @@ impl Debug for Address {
     }
 }
 
+/// An established address is generated on-chain
 #[derive(
     Debug,
     Clone,
@@ -158,12 +165,14 @@ pub struct EstablishedAddress {
     hash: String,
 }
 
+/// A generator of established addresses
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct EstablishedAddressGen {
     last_hash: String,
 }
 
 impl EstablishedAddressGen {
+    /// Initialize a new address generator with a given randomness seed.
     pub fn new(seed: impl AsRef<str>) -> Self {
         Self {
             last_hash: seed.as_ref().to_owned(),
@@ -190,6 +199,7 @@ impl EstablishedAddressGen {
     }
 }
 
+/// An implicit address is derived from a cryptographic key
 #[derive(
     Debug,
     Clone,
@@ -204,6 +214,7 @@ impl EstablishedAddressGen {
     Deserialize,
 )]
 pub enum ImplicitAddress {
+    /// Address derived from [`key::ed25519::PublicKeyHash`]
     Ed25519(key::ed25519::PublicKeyHash),
 }
 
@@ -292,6 +303,7 @@ pub mod tests {
     }
 }
 
+/// Helpers for testing with addresses.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;

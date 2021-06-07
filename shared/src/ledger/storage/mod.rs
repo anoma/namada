@@ -1,3 +1,5 @@
+//! Ledger's state storage with key-value backed store and a merkle tree
+
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
 pub mod types;
@@ -16,29 +18,42 @@ use crate::types::{
     Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
 
+/// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// The storage data
 #[derive(Debug)]
 pub struct Storage<D, H>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
+    /// The database for the storage
     pub db: D,
+    /// The ID of the chain
     pub chain_id: String,
+    /// The storage for the last committed block
     pub block: BlockStorage<H>,
+    /// The height of the current block
     pub current_height: BlockHeight,
+    /// The current established address generator
     pub address_gen: EstablishedAddressGen,
 }
 
+/// The block storage data
 #[derive(Debug)]
 pub struct BlockStorage<H: StorageHasher> {
+    /// Merkle tree of all the other data in block storage
     pub tree: MerkleTree<H>,
+    /// Hash of the block
     pub hash: BlockHash,
+    /// Height of the block (i.e. the level)
     pub height: BlockHeight,
+    /// Accounts' subspaces storage for arbitrary key-values
     pub subspaces: HashMap<Key, Vec<u8>>,
 }
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("TEMPORARY error: {error}")]
@@ -55,15 +70,23 @@ pub enum Error {
     DBError(String),
 }
 
+/// The block's state as stored in the database.
 pub struct BlockState<H: StorageHasher> {
+    /// ID of the chain
     pub chain_id: String,
+    /// Merkle tree
     pub tree: MerkleTree<H>,
+    /// Hash of the block
     pub hash: BlockHash,
+    /// Height of the block
     pub height: BlockHeight,
+    /// Accounts' subspaces storage for arbitrary key-values
     pub subspaces: HashMap<Key, Vec<u8>>,
+    /// Established address generator
     pub address_gen: EstablishedAddressGen,
 }
 
+/// A database backend.
 pub trait DB: std::fmt::Debug {
     /// Flush data on the memory to persistent them
     fn flush(&self) -> Result<()>;
@@ -91,7 +114,9 @@ pub trait DB: std::fmt::Debug {
     ) -> Result<Option<BlockState<H>>>;
 }
 
+/// A database prefix iterator.
 pub trait DBIter<'iter> {
+    /// The concrete type of the iterator
     type PrefixIter: Iterator<Item = (String, Vec<u8>, u64)>;
 
     /// Read key value pairs with the given prefix from the DB
@@ -102,6 +127,7 @@ pub trait DBIter<'iter> {
     ) -> Self::PrefixIter;
 }
 
+/// The root hash of the merkle tree as bytes
 pub struct MerkleRoot(pub Vec<u8>);
 
 impl<D, H> Storage<D, H>
@@ -153,12 +179,12 @@ where
         Ok(())
     }
 
-    /// # Storage reads
+    /// Find the root hash of the merkle tree
     pub fn merkle_root(&self) -> &H256 {
         self.block.tree.0.root()
     }
 
-    /// # Storage writes
+    /// Update the merkle tree with a storage key-value.
     // TODO Enforce or check invariant (it should catch newly added storage
     // fields too) that every function that changes storage, except for data
     // from Tendermint's block header should call this function to update the
@@ -172,6 +198,8 @@ where
         Ok(())
     }
 
+    /// Check if the given key is present in storage. Returns the result and the
+    /// gas cost.
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
         let gas = key.len();
         Ok((
@@ -249,7 +277,7 @@ where
         Ok((gas as _, size_diff))
     }
 
-    /// # Block header data
+    /// Set the chain ID.
     /// Chain ID is not in the Merkle tree as it's tracked by Tendermint in the
     /// block header. Hence, we don't update the tree when this is set.
     pub fn set_chain_id(&mut self, chain_id: &str) -> Result<()> {
@@ -306,11 +334,15 @@ where
     }
 }
 
+/// The storage hasher used for the merkle tree.
 pub trait StorageHasher: sparse_merkle_tree::traits::Hasher + Default {
+    /// Hash a storage key
     fn hash_key(key: &Key) -> H256;
+    /// Hash a storage value
     fn hash_value(value: impl AsRef<[u8]>) -> H256;
 }
 
+/// Helpers for testing components that depend on storage
 #[cfg(feature = "testing")]
 pub mod testing {
     use std::convert::TryInto;
@@ -321,6 +353,7 @@ pub mod testing {
     use super::mockdb::MockDB;
     use super::*;
 
+    /// The storage hasher used for the merkle tree.
     pub struct Sha256Hasher(Sha256);
 
     impl Default for Sha256Hasher {
