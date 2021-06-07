@@ -1,13 +1,17 @@
-package = Anoma
+package = anoma
 
-# env = OPENSSL_INCLUDE_DIR="/usr/local/opt/openssl/include"
-cargo = $(env) cargo
-rustup = $(env) rustup
-debug-env = RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
-debug-cargo = $(env) $(debug-env) cargo
+cargo := $(env) cargo
+rustup := $(env) rustup
+debug-env := RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
+debug-cargo := $(env) $(debug-env) cargo
 # Nightly build is currently used for rustfmt and clippy.
 # NOTE On change also update `RUSTFMT_TOOLCHAIN` in `apps/build.rs`.
-nightly = nightly-2021-03-09
+nightly := nightly-2021-03-09
+
+# Paths for all the wasm sources
+tx_wasms := $(dir $(wildcard txs/*/.))
+vp_wasms := $(dir $(wildcard vps/*/.))	
+wasms := $(tx_wasms) $(vp_wasms) matchmaker_template filter_template
 
 # Transitive dependency of wasmer. It's safe to ignore as we don't use cranelift compiler. It should disseaper once the wasmer library updates its dependencies
 audit-ignores := RUSTSEC-2021-0067
@@ -22,11 +26,15 @@ build:
 build-release:
 	$(cargo) build --release
 
+clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml
 clippy:
-	$(cargo) +$(nightly) clippy
+	$(cargo) +$(nightly) clippy && \
+	$(foreach wasm,$(wasms),$(clippy-wasm) && ) true
 
+clippy-check-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml -- -D warnings
 clippy-check:
-	$(cargo) +$(nightly) clippy -- -D warnings
+	$(cargo) +$(nightly) clippy -- -D warnings && \
+	$(foreach wasm,$(wasms),$(clippy-check-wasm) && ) true
 
 install:
 	# Warning: built in debug mode for now
@@ -47,17 +55,23 @@ reset-ledger:
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
+test-wasm = $(cargo) test --manifest-path $(wasm)/Cargo.toml
 test:
-	$(cargo) test
+	$(cargo) test && \
+	$(foreach wasm,$(wasms),$(test-wasm) && ) true
 
 test-debug:
 	$(debug-cargo) test -- --nocapture
 
+fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
 fmt:
-	$(cargo) +$(nightly) fmt --all
+	$(cargo) +$(nightly) fmt --all && \
+	$(foreach wasm,$(wasms),$(fmt-wasm) && ) true
 
+fmt-check-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml -- --check
 fmt-check:
-	$(cargo) +$(nightly) fmt --all -- --check
+	$(cargo) +$(nightly) fmt --all -- --check && \
+	$(foreach wasm,$(wasms),$(fmt-check-wasm) && ) true
 
 watch:
 	$(cargo) watch
@@ -73,33 +87,29 @@ doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
 
-# Build the validity predicate and transaction wasm from templates
-build-wasm-scripts:
-	make -C vps/vp_template && \
-	make -C vps/vp_token && \
-	make -C vps/vp_user && \
-	make -C txs/tx_template && \
-	make -C txs/tx_transfer && \
-	make -C txs/tx_from_intent && \
-	make -C txs/tx_update_vp && \
-	make -C matchmaker_template && \
-	make -C filter_template
+build-wasm-scripts-docker:
+	docker run --rm  -v ${PWD}:/usr/local/rust/project anoma-wasm make build-wasm-scripts
 
+# Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+build-wasm = make -C $(wasm)
+build-wasm-scripts:
+	$(rustup) toolchain install $(nightly) && \
+	$(rustup) target add wasm32-unknown-unknown && \
+	$(foreach wasm,$(wasms),$(build-wasm) && ) true
+
+clean-wasm = make -C $(wasm)
 clean-wasm-scripts:
-	make -C vps/vp_template clean && \
-	make -C vps/vp_token clean && \
-	make -C vps/vp_user clean && \
-	make -C txs/tx_template clean && \
-	make -C txs/tx_transfer clean && \
-	make -C txs/tx_from_intent clean && \
-	make -C txs/tx_update_vp clean && \
-	make -C matchmaker_template clean && \
-	make -C filter_template clean
+	$(foreach wasm,$(wasms),$(clean-wasm) && ) true
 
 dev-deps:
 	$(rustup) toolchain install $(nightly)
 	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy --toolchain $(nightly)
 	$(cargo) install cargo-watch
+
+# only for CI use
+build-wasm = make -C $(wasm)
+build-wasm-scripts-ci:
+	$(foreach wasm,$(wasms),$(build-wasm) && ) true
 
 .PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps

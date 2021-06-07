@@ -24,7 +24,7 @@ Each transaction may be associated with the following fees, paid in `XAN`:
 | Signer  | Generate key shards  | portions of init_f, exe_f  | ✓  | Validator  |
 | Validator  | Validate  | portions of init_f, exe_f  |✓   |  Signer |
 | Submitter  | Submit orders & pay init_f  | successful orders get init_f back plus bonus  | X  |   |
-| Intent broadcaster operator  | Signs and shares orders  | portions of init_f, exe_f  | X  |   |
+| Intent gossip operator  | Signs and shares orders  | portions of init_f, exe_f  | X  |   |
 | Market maker  | Signs and broadcast orders  | the difference between the ask and bid price | X | |
 | Proposer | Proposes blocks | portions of init_f, exe_f | | Validator |
 

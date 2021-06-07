@@ -1,3 +1,5 @@
+//! Ed25519 keys and related functionality
+
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -14,12 +16,15 @@ use crate::types::{address, Address, DbKeySeg, Key, KeySeg};
 
 const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
 
+/// Ed25519 public key
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PublicKey(ed25519_dalek::PublicKey);
 
+/// Ed25519 signature
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Signature(ed25519_dalek::Signature);
 
+/// Ed25519 public key hash
 #[derive(
     Debug,
     Clone,
@@ -61,6 +66,7 @@ pub fn sign(keypair: &Keypair, data: impl AsRef<[u8]>) -> Signature {
     Signature(keypair.sign(&data.as_ref()))
 }
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum VerifySigError {
     #[error("Signature verification failed: {0}")]
@@ -106,6 +112,7 @@ pub struct SignedTxData {
 }
 
 impl SignedTxData {
+    /// Initialize a new signed transaction data.
     pub fn new(
         keypair: &Keypair,
         data: Vec<u8>,
@@ -116,6 +123,8 @@ impl SignedTxData {
         Self { data, sig }
     }
 
+    /// Verify that the transaction has been signed by the secret key
+    /// counterpart of the given public key.
     pub fn verify(
         &self,
         pk: &PublicKey,
@@ -131,7 +140,9 @@ impl SignedTxData {
     Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct Signed<T: BorshSerialize + BorshDeserialize> {
+    /// Arbitrary data to be signed
     pub data: T,
+    /// The signature of the data
     pub sig: Signature,
 }
 
@@ -139,6 +150,7 @@ impl<T> Signed<T>
 where
     T: BorshSerialize + BorshDeserialize,
 {
+    /// Initialize a new signed data.
     pub fn new(keypair: &Keypair, data: T) -> Self {
         let to_sign = data
             .try_to_vec()
@@ -147,6 +159,8 @@ where
         Self { data, sig }
     }
 
+    /// Verify that the data has been signed by the secret key
+    /// counterpart of the given public key.
     pub fn verify(&self, pk: &PublicKey) -> Result<(), VerifySigError> {
         let bytes = self
             .data

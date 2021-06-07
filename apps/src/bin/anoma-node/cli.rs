@@ -1,7 +1,7 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
 use anoma::config::Config;
-use anoma::node::{gossip, shell};
+use anoma::node::{gossip, ledger};
 use anoma::{cli, config};
 use eyre::{Context, Result};
 
@@ -17,7 +17,7 @@ pub fn main() -> Result<()> {
     match matches.subcommand() {
         Some((cli::RUN_GOSSIP_COMMAND, args)) => {
             let config = get_cfg(home);
-            let mut gossip_cfg = config.intent_broadcaster.unwrap_or_default();
+            let mut gossip_cfg = config.intent_gossiper.unwrap_or_default();
             cli::update_gossip_config(args, &mut gossip_cfg)
                 .expect("failed to update config with cli option");
             gossip::run(gossip_cfg).wrap_err("Failed to run gossip service")
@@ -25,12 +25,12 @@ pub fn main() -> Result<()> {
         Some((cli::RUN_LEDGER_COMMAND, _)) => {
             let config = get_cfg(home);
             let ledger_cfg = config.ledger.unwrap_or_default();
-            shell::run(ledger_cfg).wrap_err("Failed to run Anoma node")
+            ledger::run(ledger_cfg).wrap_err("Failed to run Anoma node")
         }
         Some((cli::RESET_LEDGER_COMMAND, _)) => {
             let config = get_cfg(home);
             let ledger_cfg = config.ledger.unwrap_or_default();
-            shell::reset(ledger_cfg).wrap_err("Failed to reset Anoma node")
+            ledger::reset(ledger_cfg).wrap_err("Failed to reset Anoma node")
         }
         Some((cli::GENERATE_CONFIG_COMMAND, _args)) => {
             let gen_config = config::Config::generate(&home, false)

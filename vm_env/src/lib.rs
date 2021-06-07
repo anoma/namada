@@ -1,14 +1,13 @@
 //! This crate contains library code for wasm. Some of the code is re-exported
 //! from the `shared` crate.
 
-mod imports;
+pub mod imports;
 mod intent;
 pub mod key;
 mod token;
 
 pub mod tx_prelude {
     pub use anoma_shared::types::*;
-    pub use anoma_shared::vm_memory;
     pub use anoma_vm_macro::transaction;
 
     pub use super::imports::tx::*;
@@ -28,7 +27,6 @@ pub mod tx_prelude {
 
 pub mod vp_prelude {
     pub use anoma_shared::types::*;
-    pub use anoma_shared::vm_memory;
     pub use anoma_vm_macro::validity_predicate;
 
     pub use crate::imports::vp::*;
@@ -56,7 +54,6 @@ pub mod vp_prelude {
 
 pub mod matchmaker_prelude {
     pub use anoma_shared::types::*;
-    pub use anoma_shared::vm_memory;
     pub use anoma_vm_macro::matchmaker;
 
     pub use crate::imports::matchmaker::*;
@@ -64,7 +61,6 @@ pub mod matchmaker_prelude {
 
 pub mod filter_prelude {
     pub use anoma_shared::types::*;
-    pub use anoma_shared::vm_memory;
     pub use anoma_vm_macro::filter;
 
     pub use super::imports::filter::*;

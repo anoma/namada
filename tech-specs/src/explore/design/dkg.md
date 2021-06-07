@@ -1,1 +1,1 @@
-# Distributed key generation
+# Distributed key generation gossip

@@ -17,6 +17,7 @@ pub mod internal;
 pub mod key;
 pub mod token;
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("TEMPORARY error: {error}")]
@@ -29,18 +30,26 @@ pub enum Error {
     InvalidKeySeg(String),
 }
 
+/// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// The length of chain ID string
 // TODO adjust once chain ID scheme is chosen, add `Default` impl that allocates
 // this
 pub const CHAIN_ID_LENGTH: usize = 20;
+/// The length of the block's hash string
 pub const BLOCK_HASH_LENGTH: usize = 32;
 
+/// The separator of storage key segments
 pub const KEY_SEGMENT_SEPARATOR: char = '/';
+/// The reserved storage key prefix for addresses
 pub const RESERVED_ADDRESS_PREFIX: char = '#';
+/// The reserved storage key prefix for validity predicates
 pub const VP_KEY_PREFIX: char = '?';
+/// The reserved storage key for validity predicates
 pub const RESERVED_VP_KEY: &str = "?";
 
+/// Height of a block, i.e. the level.
 #[derive(
     Clone,
     Copy,
@@ -56,6 +65,7 @@ pub const RESERVED_VP_KEY: &str = "?";
 )]
 pub struct BlockHeight(pub u64);
 
+/// Hash of a block as fixed-size byte array
 #[derive(
     Clone,
     BorshSerialize,
@@ -69,6 +79,8 @@ pub struct BlockHeight(pub u64);
 )]
 pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 
+/// A storage key is made of storage key segments [`DbKeySeg`], separated by
+/// [`KEY_SEGMENT_SEPARATOR`].
 #[derive(
     Clone,
     BorshSerialize,
@@ -83,6 +95,7 @@ pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
     Deserialize,
 )]
 pub struct Key {
+    /// The segments of the key in the original (left-to-right) order.
     pub segments: Vec<DbKeySeg>,
 }
 
@@ -136,6 +149,7 @@ impl Key {
         self.to_string().len()
     }
 
+    /// Returns `true` if the key is empty
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -177,6 +191,7 @@ pub trait KeySeg {
     fn to_db_key(&self) -> DbKeySeg;
 }
 
+/// A storage key segment
 #[derive(
     Clone,
     BorshSerialize,
@@ -191,7 +206,9 @@ pub trait KeySeg {
     Deserialize,
 )]
 pub enum DbKeySeg {
+    /// A segment made of an address
     AddressSeg(Address),
+    /// Any other key segment
     StringSeg(String),
 }
 
@@ -272,6 +289,7 @@ impl TryFrom<i64> for BlockHeight {
     }
 }
 impl BlockHeight {
+    /// Get the height of the next block
     pub fn next_height(&self) -> BlockHeight {
         BlockHeight(self.0 + 1)
     }
@@ -356,7 +374,9 @@ impl KeySeg for Address {
     Deserialize,
 )]
 pub struct UpdateVp {
+    /// An address of the account
     pub addr: Address,
+    /// The new VP code
     pub vp_code: Vec<u8>,
 }
 
@@ -397,7 +417,7 @@ mod tests {
         /// `Address` or validity predicate.
         #[test]
         fn test_key_push(s in "[^#?/][^/]*") {
-            let addr = address::tests::established_address_1();
+            let addr = address::testing::established_address_1();
             let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
             assert_eq!(key.segments[1].to_string(), s);
         }
@@ -405,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_key_parse_valid() {
-        let addr = address::tests::established_address_1();
+        let addr = address::testing::established_address_1();
         let target = format!("{}/test", KeySeg::to_string(&addr));
         let key = Key::parse(target.clone()).expect("cannot parse the string");
         assert_eq!(key.to_string(), target);
@@ -426,8 +446,8 @@ mod tests {
 
     #[test]
     fn test_key_push_valid() {
-        let addr = address::tests::established_address_1();
-        let other = address::tests::established_address_2();
+        let addr = address::testing::established_address_1();
+        let other = address::testing::established_address_2();
         let target = KeySeg::to_string(&other);
         let key = Key::from(addr.to_db_key())
             .push(&target)
@@ -443,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_key_push_invalid() {
-        let addr = address::tests::established_address_1();
+        let addr = address::testing::established_address_1();
         let target = "/".to_owned();
         match Key::from(addr.to_db_key())
             .push(&target)

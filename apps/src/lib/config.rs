@@ -124,8 +124,6 @@ pub struct PeerIdentity {
     id: String
 }
 
-
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiscoverPeer {
     pub max_discovery_peers: u64,
@@ -148,7 +146,7 @@ impl Default for DiscoverPeer {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct IntentBroadcaster {
+pub struct IntentGossiper {
     pub address: Multiaddr,
     pub topics: HashSet<String>,
     pub subscription_filter: SubscriptionFilter,
@@ -158,7 +156,7 @@ pub struct IntentBroadcaster {
     pub matchmaker: Option<Matchmaker>,
 }
 
-impl Default for IntentBroadcaster {
+impl Default for IntentGossiper {
     fn default() -> Self {
         Self {
             // TODO there must be a better option here
@@ -179,7 +177,7 @@ impl Default for IntentBroadcaster {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub ledger: Option<Ledger>,
-    pub intent_broadcaster: Option<IntentBroadcaster>,
+    pub intent_gossiper: Option<IntentGossiper>,
 }
 
 impl Default for Config {
@@ -187,7 +185,7 @@ impl Default for Config {
         Self {
             ledger: Some(Ledger::default()),
             // TODO Should it be None by default
-            intent_broadcaster: Some(IntentBroadcaster::default()),
+            intent_gossiper: Some(IntentGossiper::default()),
         }
     }
 }

@@ -477,7 +477,7 @@ pub fn parse_string_req(args: &ArgMatches, field: &str) -> String {
 
 pub fn update_gossip_config(
     args: &ArgMatches,
-    config: &mut config::IntentBroadcaster,
+    config: &mut config::IntentGossiper,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
     //     config.bootstrap_peers = peers

@@ -2,7 +2,7 @@
 
 ## Version 2
 
-tracking issue <https://github.com/heliaxdev/anoma-prototype/issues/62>
+tracking issue <https://github.com/anomanetwork/anoma/issues/62>
 
 ### Goals
 

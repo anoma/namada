@@ -1,3 +1,5 @@
+//! Intent data definitions and transaction and validity-predicate helpers.
+
 use std::collections::{HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -15,11 +17,18 @@ use crate::types::{token, Address, Key, KeySeg};
     Serialize,
     Deserialize,
 )]
+
+/// A simple intent for fungible token trade
 pub struct Intent {
+    /// The source address
     pub addr: Address,
+    /// The token to be sold
     pub token_sell: Address,
+    /// The amount of token to be sold
     pub amount_sell: token::Amount,
+    /// The token to be bought
     pub token_buy: Address,
+    /// The amount of token to be bought
     pub amount_buy: token::Amount,
 }
 
@@ -28,12 +37,15 @@ pub struct Intent {
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct IntentTransfers {
+    /// Transfers crafted from the matched intents
     pub transfers: HashSet<token::Transfer>,
     // TODO benchmark between an map or a set, see which is less costly
+    /// The intents that were matched
     pub intents: HashMap<Address, Signed<Intent>>,
 }
 
 impl IntentTransfers {
+    /// Create an empty [`IntentTransfers`].
     pub fn empty() -> Self {
         Self {
             transfers: HashSet::new(),

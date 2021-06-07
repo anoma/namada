@@ -1,8 +1,8 @@
 # Playnet
 
- 🕹🎮👾 Welcome to the very first Anoma testnet and thank you for joining us! 🕹🎮👾 
+ 🕹🎮👾 Welcome to the very first Anoma testnet and thank you for joining us! 🕹🎮👾
 
-The main goals of this testnet is to try out some of the functionality of the ledger, intent broadcaster and the matchmaker and to get some early feedback on its current state. To give feedback, ask questions and report issues, please use the #playnet Slack channel. Many issues and limitations are well known and our test coverage is currently very low, so please excuse Anoma while it is rough around the edges.
+The main goals of this testnet is to try out some of the functionality of the ledger, intent gossip and the matchmaker and to get some early feedback on its current state. To give feedback, ask questions and report issues, please use the #playnet Slack channel. Many issues and limitations are well known and our test coverage is currently very low, so please excuse Anoma while it is rough around the edges.
 
 You can interact with Anoma via transactions, validity predicates and intents turned into transactions by the matchmaker. Because we don't have a proper wallet yet, each of us will have a pre-generated account address and a wallet key on the genesis block. Because all the keys are public, please respect others' keys and do not use them to sign stuff :)
 
@@ -14,7 +14,7 @@ You can either use the pre-built binaries we've released on Github or build from
 
 We have built for Mac (darwin_amd64) and Linux (linux_amd64). If you're not on one of these, you'll have to build from the source.
 
-Download the release for your platform from <https://github.com/heliaxdev/anoma-prototype/releases>. They are packaged with Tendermint, which will be used by the Anoma node.
+Download the release for your platform from <https://github.com/anomanetwork/anoma/releases>. They are packaged with Tendermint, which will be used by the Anoma node.
 
 ```shell
 # Extract the archive
@@ -33,11 +33,11 @@ And you're ready to go!
 
 ```shell
 # Clone the repo
-git clone https://github.com/heliaxdev/anoma-prototype.git
+git clone https://github.com/anomanetwork/anoma.git
 # or
-git clone git@github.com:heliaxdev/anoma-prototype.git
+git clone git@github.com:anomanetwork/anoma.git
 
-cd anoma-prototype
+cd anoma
 
 # Checkout the release branch
 git checkout v0.1-playnet
@@ -95,7 +95,7 @@ export DOGE=a1qq5qqqqqx9rrq3zrg5myzv3eg9zyxvf3gery2dfhgg6nsdjrxscrgv6rgsunx33sxg
 
 ## ፨ The nodes
 
-There are 4 ledger validator and intent broadcaster nodes running in cloud at:
+There are 4 ledger validator and intent gossip nodes running in cloud at:
 - `52.210.23.30`
 - `63.34.55.152`
 - `54.195.72.213`
@@ -108,7 +108,7 @@ To run a local ledger node:
 anoma run-ledger
 ```
 
-To run the intent broadcaster with the matchmaker that can submit transactions to the local ledger:
+To run the intent gossip with the matchmaker that can submit transactions to the local ledger:
 ```shell
 anoma run-gossip --rpc "127.0.0.1:20202" \
   --matchmaker-path matchmaker_template/matchmaker.wasm \
@@ -214,14 +214,14 @@ anoma client craft-intent --address $awa \
   --file-path intent.data
 ```
 
-To submit the intent from the file to the intent broadcaster (which will propagate to matchmakers):
+To submit the intent from the file to the intent gossip (which will propagate to matchmakers):
 ```shell
-# Without a local intent broadcaster node, using one of the cloud nodes
+# Without a local intent gossip node, using one of the cloud nodes
 anoma client intent --node "http://52.210.23.30:20202" \
   --data-path intent.data \
   --topic "asset_v0"
 
-# With a local intent broadcaster node
+# With a local intent gossip node
 anoma client intent --node "http://127.0.0.1:20202" \
   --data-path intent.data \
   --topic "asset_v0"
@@ -243,4 +243,4 @@ make -C matchmaker_template
 make -C txs/tx_from_intent
 ```
 
-And then restart the intent broadcaster with the matchmaker.
+And then restart the intent gossip with the matchmaker.

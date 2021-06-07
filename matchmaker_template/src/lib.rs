@@ -1,15 +1,12 @@
-use anoma_vm_env::matchmaker_prelude::{
-        intent::{Intent, IntentTransfers},
-        key::ed25519::Signed,
-        *,
-    };
-use petgraph::graph::{node_index, NodeIndex};
-use petgraph::visit::depth_first_search;
-use petgraph::visit::{Control, DfsEvent};
-use petgraph::{graph::DiGraph, Graph};
-use serde::{Deserialize, Serialize};
-use serde_json;
 use std::collections::VecDeque;
+
+use anoma_vm_env::matchmaker_prelude::intent::{Intent, IntentTransfers};
+use anoma_vm_env::matchmaker_prelude::key::ed25519::Signed;
+use anoma_vm_env::matchmaker_prelude::*;
+use petgraph::graph::{node_index, DiGraph, NodeIndex};
+use petgraph::visit::{depth_first_search, Control, DfsEvent};
+use petgraph::Graph;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct IntentNode {
@@ -18,7 +15,7 @@ struct IntentNode {
 }
 
 #[matchmaker]
-fn add_intent(graph_bytes:Vec<u8>, id: Vec<u8>, data: Vec<u8>) -> bool {
+fn add_intent(graph_bytes: Vec<u8>, id: Vec<u8>, data: Vec<u8>) -> bool {
     let intent = decode_intent_data(&data);
     let mut graph = decode_graph(graph_bytes);
     log_string(format!("trying to match intent: {:#?}", intent));
@@ -46,7 +43,7 @@ fn send_tx(tx_data: IntentTransfers) {
 }
 
 fn decode_intent_data(bytes: &[u8]) -> Signed<Intent> {
-    Signed::<Intent>::try_from_slice(&bytes[..]).unwrap()
+    Signed::<Intent>::try_from_slice(bytes).unwrap()
 }
 
 fn decode_graph(bytes: Vec<u8>) -> DiGraph<IntentNode, Address> {
@@ -180,9 +177,7 @@ fn find_match_and_remove_node(graph: &mut DiGraph<IntentNode, Address>) {
     let mut to_remove_nodes = find_match_and_send_tx(&graph);
     // Must be sorted in reverse order because it removes the node by index
     // otherwise it would not remove the correct node
-    to_remove_nodes.sort_by(
-        |a, b| b.cmp(a)
-    );
+    to_remove_nodes.sort_by(|a, b| b.cmp(a));
     to_remove_nodes.into_iter().for_each(|i| {
         graph.remove_node(i);
     });

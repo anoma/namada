@@ -1,18 +1,17 @@
+use std::convert::TryFrom;
+
 use libp2p::Multiaddr;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
 use libp2p::multiaddr::Protocol;
 use libp2p::{PeerId, TransportError};
-use prost::Message;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::behaviour::Behaviour;
 use crate::proto::services::{rpc_message, RpcResponse};
-use crate::proto::types::{
-    intent_broadcaster_message, IntentBroadcasterMessage,
-};
+use crate::proto::{IntentGossipMessage, IntentMessage, SubscribeTopicMessage};
 use crate::types::MatchmakerMessage;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
@@ -38,7 +37,7 @@ pub struct P2P {
 
 impl P2P {
     pub fn new(
-        config: &crate::config::IntentBroadcaster,
+        config: &crate::config::IntentGossiper,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
@@ -67,7 +66,7 @@ impl P2P {
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
         self.swarm
             .behaviour_mut()
-            .intent_broadcaster_app
+            .intent_gossip_app
             .handle_mm_message(mm_message)
             .await
     }
@@ -77,84 +76,79 @@ impl P2P {
         event: rpc_message::Message,
     ) -> RpcResponse {
         match event {
-            rpc_message::Message::Intent(
-                crate::proto::services::IntentMesage {
-                    intent: None,
-                    topic: _,
-                },
-            ) => {
-                let result = format!(
-                    "rpc intent command for topic {:?} is empty",
-                    event
-                );
-                tracing::error!("{}", result);
-                RpcResponse { result }
-            }
-            rpc_message::Message::Intent(
-                crate::proto::services::IntentMesage {
-                    intent: Some(intent),
-                    topic,
-                },
-            ) => {
-                match self
-                    .swarm
-                    .behaviour_mut()
-                    .intent_broadcaster_app
-                    .apply_intent(intent.clone())
-                {
-                    Ok(true) => {
-                        let mut intent_bytes = vec![];
-                        let intent = IntentBroadcasterMessage {
-                            msg: Some(intent_broadcaster_message::Msg::Intent(
-                                intent,
-                            )),
-                        };
-                        intent.encode(&mut intent_bytes).unwrap();
+            rpc_message::Message::Intent(message) => {
+                match IntentMessage::try_from(message) {
+                    Ok(message) => {
                         match self
                             .swarm
                             .behaviour_mut()
-                            .intent_broadcaster_gossip
-                            .publish(IdentTopic::new(topic), intent_bytes)
+                            .intent_gossip_app
+                            .apply_intent(message.intent.clone())
                         {
-                            Ok(message_id) => {
-                                tracing::info!(
-                                    "publish intent with message_id {}",
-                                    message_id
+                            Ok(true) => {
+                                let gossip_message = IntentGossipMessage::new(
+                                    message.intent.clone(),
                                 );
-                                RpcResponse {
-                                    result: String::from(
-                                        "Intent sent correctly",
-                                    ),
+                                let intent_bytes = gossip_message.to_bytes();
+                                match self
+                                    .swarm
+                                    .behaviour_mut()
+                                    .intent_gossip_behaviour
+                                    .publish(
+                                        IdentTopic::new(message.topic),
+                                        intent_bytes,
+                                    ) {
+                                    Ok(message_id) => {
+                                        tracing::info!(
+                                            "publish intent with message_id {}",
+                                            message_id
+                                        );
+                                        RpcResponse {
+                                            result: String::from(
+                                                "Intent sent correctly",
+                                            ),
+                                        }
+                                    }
+                                    Err(err) => {
+                                        tracing::error!(
+                                            "error while publishing intent \
+                                             {:?}",
+                                            err
+                                        );
+                                        RpcResponse {
+                                            result: format!(
+                                                "Failed to publish_intent {:?}",
+                                                err
+                                            ),
+                                        }
+                                    }
                                 }
                             }
+                            Ok(false) => RpcResponse {
+                                result: String::from(
+                                    "Failed to apply the intent",
+                                ),
+                            },
                             Err(err) => {
                                 tracing::error!(
-                                    "error while publishing intent {:?}",
+                                    "error while applying the intent {:?}",
                                     err
                                 );
                                 RpcResponse {
                                     result: format!(
-                                        "Failed to publish_intent {:?}",
+                                        "Failed to apply the intent {:?}",
                                         err
                                     ),
                                 }
                             }
                         }
                     }
-                    Ok(false) => RpcResponse {
-                        result: String::from("Failed to apply the intent"),
-                    },
-                    Err(err) => {
-                        tracing::error!(
-                            "error while applying the intent {:?}",
-                            err
+                    Err(_) => {
+                        let result = String::from(
+                            "rpc intent command for topic is empty",
                         );
-                        RpcResponse {
-                            result: format!(
-                                "Failed to apply the intent {:?}",
-                                err
-                            ),
-                        }
+                        tracing::error!("{}", result);
+                        RpcResponse { result }
                     }
                 }
             }
@@ -171,16 +165,13 @@ impl P2P {
                     ),
                 }
             }
-            rpc_message::Message::Topic(
-                crate::proto::services::SubscribeTopicMessage {
-                    topic: topic_str,
-                },
-            ) => {
-                let topic = IdentTopic::new(&topic_str);
+            rpc_message::Message::Topic(topic_message) => {
+                let topic = SubscribeTopicMessage::from(topic_message);
+                let topic = IdentTopic::new(&topic.topic);
                 match self
                     .swarm
                     .behaviour_mut()
-                    .intent_broadcaster_gossip
+                    .intent_gossip_behaviour
                     .subscribe(&topic)
                 {
                     Ok(true) => {
