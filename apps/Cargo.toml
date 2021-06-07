@@ -84,6 +84,7 @@ wasmer = "1.0.2"
 wasmer-compiler-singlepass = "1.0.2"
 wasmer-engine-jit = "1.0.2"
 wasmparser = "0.78.2"
+async-std = {version = "1", features = ["attributes", "unstable"]}
 
 [dev-dependencies]
 cargo-watch = "7.5.0"

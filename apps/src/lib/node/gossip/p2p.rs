@@ -1,6 +1,8 @@
+use libp2p::Multiaddr;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
+use libp2p::multiaddr::Protocol;
 use libp2p::{PeerId, TransportError};
 use prost::Message;
 use thiserror::Error;
@@ -25,6 +27,8 @@ pub enum Error {
     Dialing(libp2p::swarm::DialError),
     #[error("Error while starting to listing: {0}")]
     Listening(TransportError<std::io::Error>),
+    #[error("Error decoding peer identity")]
+    BadPeerIdentity(TransportError<std::io::Error>),
 }
 type Result<T> = std::result::Result<T, Error>;
 

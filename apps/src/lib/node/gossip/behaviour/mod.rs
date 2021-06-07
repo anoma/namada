@@ -201,6 +201,7 @@ impl Behaviour {
                 .discovery_limit(dis_config.max_discovery_peers)
                 .with_kademlia(dis_config.kademlia)
                 .with_mdns(dis_config.mdns)
+                .use_kademlia_disjoint_query_paths(true)
                 .build()
                 .map_err(|s| Error::DiscoveryConfig(s.to_string()))?;
 
