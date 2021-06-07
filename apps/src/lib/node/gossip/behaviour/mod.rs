@@ -1,5 +1,6 @@
 mod discovery;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::task::{Context, Poll};
@@ -123,7 +124,7 @@ pub struct Behaviour {
     #[behaviour(ignore)]
     pub intent_gossip_app: intent_gossiper::GossipIntent,
     #[behaviour(ignore)]
-    events: Vec<AnomaBehaviourEvent>,
+    events: VecDeque<AnomaBehaviourEvent>,
 }
 
 /// Event type which is emitted from the [ForestBehaviour] into the libp2p
@@ -149,10 +150,8 @@ impl Behaviour {
         _: &mut Context,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<TBehaviourIn, AnomaBehaviourEvent>> {
-        if !self.events.is_empty() {
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                self.events.remove(0),
-            ));
+        if let Some(ev) = self.events.pop_front() {
+            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev));
         }
         Poll::Pending
     }
@@ -246,7 +245,7 @@ impl Behaviour {
                 intent_gossip_behaviour,
                 discovery: discovery_opt.unwrap(),
                 intent_gossip_app,
-                events: Vec::new(),
+                events: VecDeque::new(),
             },
             matchmaker_event_receiver,
         ))
@@ -333,10 +332,11 @@ impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
     fn inject_event(&mut self, event: DiscoveryEvent) {
         match event {
             DiscoveryEvent::Connected(peer) => {
-                self.events.push(AnomaBehaviourEvent::Connected(peer));
+                self.events.push_back(AnomaBehaviourEvent::Connected(peer));
             }
             DiscoveryEvent::Disconnected(peer) => {
-                self.events.push(AnomaBehaviourEvent::Disconnected(peer));
+                self.events
+                    .push_back(AnomaBehaviourEvent::Disconnected(peer));
             }
         }
     }
