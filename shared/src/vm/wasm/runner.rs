@@ -360,6 +360,7 @@ where
     pub keys_changed: EnvHostSliceWrapper<'a, &'a [Key]>,
     /// The verifiers whose validity predicates should be triggered.
     pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
+    /// Cache for 2-step reads from host environment.
     pub read_cache: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 

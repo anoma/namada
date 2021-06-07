@@ -44,7 +44,8 @@ where
     /// The verifiers whose validity predicates should be triggered.
     /// Not thread-safe, assuming single-threaded Tx runner
     pub verifiers: MutEnvHostWrapper<'a, &'a HashSet<Address>>,
-    // not thread-safe, assuming single-threaded Tx runner
+    /// Cache for 2-step reads from host environment.
+    /// Not thread-safe, assuming single-threaded Tx runner
     pub read_cache: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 
@@ -97,7 +98,8 @@ where
     pub tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
     /// The runner of the [`vp_eval`] function
     pub eval_runner: EnvHostWrapper<'a, &'a EVAL>,
-    /// this is not thread-safe, but because each VP has its own instance there
+    /// Cache for 2-step reads from host environment.
+    /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
     pub read_cache: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
@@ -356,6 +358,14 @@ where
     }
 }
 
+/// This function is a helper to handle the first step of reading var-len
+/// values from the host.
+///
+/// In cases where we're reading a value from the host in the guest and
+/// we don't know the byte size up-front, we have to read it in 2-steps. The
+/// first step reads the value into a read cache and returns the size (if any)
+/// back to the guest, the second step reads the value from cache into a
+/// pre-allocated buffer with the obtained size.
 pub fn tx_read_cache<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, result_ptr: u64)
 where
     MEM: VmMemory,
@@ -639,6 +649,14 @@ where
     }
 }
 
+/// This function is a helper to handle the first step of reading var-len
+/// values from the host.
+///
+/// In cases where we're reading a value from the host in the guest and
+/// we don't know the byte size up-front, we have to read it in 2-steps. The
+/// first step reads the value into a read cache and returns the size (if any)
+/// back to the guest, the second step reads the value from cache into a
+/// pre-allocated buffer with the obtained size.
 pub fn vp_read_cache<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     result_ptr: u64,
