@@ -20,15 +20,13 @@ use libp2p::{NetworkBehaviour, PeerId};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
+use super::intent_gossiper;
 use crate::node::gossip::behaviour::discovery::{
     DiscoveryBehaviour, DiscoveryConfigBuilder,
 };
 use crate::proto;
-use crate::proto::Intent;
-use crate::proto::IntentGossipMessage;
+use crate::proto::{Intent, IntentGossipMessage};
 use crate::types::MatchmakerMessage;
-
-use super::intent_gossiper;
 
 #[derive(Error, Debug)]
 pub enum Error {

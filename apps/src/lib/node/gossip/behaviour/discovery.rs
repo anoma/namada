@@ -4,27 +4,25 @@
 //
 // Copyright 2020 ChainSafe Systems SPDX-License-Identifier: Apache-2.0, MIT
 
-use async_std::stream::{self, Interval};
-use futures::StreamExt;
 use std::collections::{HashSet, VecDeque};
 use std::fmt::Display;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{cmp, io};
 
+use async_std::stream::{self, Interval};
+use futures::StreamExt;
 use libp2p::core::connection::{ConnectionId, ListenerId};
 use libp2p::core::ConnectedPoint;
 use libp2p::kad::handler::KademliaHandlerProto;
 use libp2p::kad::store::MemoryStore;
-use libp2p::kad::{
-    Kademlia, KademliaConfig, KademliaEvent, QueryId,
-};
+use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, QueryId};
 use libp2p::mdns::{Mdns, MdnsConfig, MdnsEvent};
 use libp2p::multiaddr::Protocol;
 use libp2p::swarm::toggle::{Toggle, ToggleIntoProtoHandler};
 use libp2p::swarm::{
-    IntoProtocolsHandler, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters, ProtocolsHandler,
+    IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters, ProtocolsHandler,
 };
 use libp2p::{Multiaddr, PeerId};
 use thiserror::Error;
@@ -59,7 +57,7 @@ pub struct DiscoveryConfig {
     discovery_max: u64,
     enable_kademlia: bool,
     enable_mdns: bool,
-    kademlia_disjoint_query_paths: bool
+    kademlia_disjoint_query_paths: bool,
 }
 impl Default for DiscoveryConfig {
     fn default() -> Self {
@@ -68,7 +66,7 @@ impl Default for DiscoveryConfig {
             discovery_max: u64::MAX,
             enable_kademlia: true,
             enable_mdns: true,
-            kademlia_disjoint_query_paths: true
+            kademlia_disjoint_query_paths: true,
         }
     }
 }
@@ -94,7 +92,10 @@ impl DiscoveryConfigBuilder {
         self
     }
 
-    pub fn use_kademlia_disjoint_query_paths(&mut self, value: bool) -> &mut Self {
+    pub fn use_kademlia_disjoint_query_paths(
+        &mut self,
+        value: bool,
+    ) -> &mut Self {
         self.config.kademlia_disjoint_query_paths = value;
         self
     }
@@ -173,7 +174,7 @@ impl DiscoveryBehaviour {
             discovery_max,
             enable_kademlia,
             enable_mdns,
-            kademlia_disjoint_query_paths
+            kademlia_disjoint_query_paths,
         } = config;
 
         let mut peers = HashSet::new();
@@ -424,7 +425,7 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                         peer_id,
                         handler,
                         event,
-                    })
+                    });
                 }
                 NetworkBehaviourAction::ReportObservedAddr {
                     address,
@@ -435,16 +436,16 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                             address,
                             score,
                         },
-                    )
+                    );
                 }
             }
         }
 
-        // Poll the stream that fires when we need to start a random Kademlia query.
+        // Poll the stream that fires when we need to start a random Kademlia
+        // query.
         if let Some(next_kad_random_query) = self.next_kad_random_query.as_mut()
         {
-            while next_kad_random_query.poll_next_unpin(cx).is_ready()
-            {
+            while next_kad_random_query.poll_next_unpin(cx).is_ready() {
                 if self.num_connections < self.discovery_max {
                     let random_peer_id = PeerId::random();
                     tracing::debug!(
@@ -455,9 +456,13 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                         k.get_closest_peers(random_peer_id);
                     }
                 }
-                
-                *next_kad_random_query = stream::interval(self.duration_to_next_kad);
-                self.duration_to_next_kad = cmp::min(self.duration_to_next_kad * 2, Duration::from_secs(60));
+
+                *next_kad_random_query =
+                    stream::interval(self.duration_to_next_kad);
+                self.duration_to_next_kad = cmp::min(
+                    self.duration_to_next_kad * 2,
+                    Duration::from_secs(60),
+                );
             }
         }
 

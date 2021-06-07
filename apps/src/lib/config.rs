@@ -121,7 +121,7 @@ pub enum SubscriptionFilter {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PeerIdentity {
-    id: String
+    id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -129,9 +129,8 @@ pub struct DiscoverPeer {
     pub max_discovery_peers: u64,
     pub kademlia: bool,
     pub mdns: bool,
-    pub bootstrap_peers: HashSet<Multiaddr>
-    /* TODO add reserved_peers(explicit peers for gossipsub network, to not
-     * be added to kademlia) */
+    pub bootstrap_peers: HashSet<Multiaddr>, /* TODO add reserved_peers(explicit peers for gossipsub network, to not
+                                              * be added to kademlia) */
 }
 
 impl Default for DiscoverPeer {
