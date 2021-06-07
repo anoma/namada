@@ -33,10 +33,10 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make -C txs/tx_template deps, make build-wasm-scripts-ci,
+- commands: [sccache --start-server, make -C txs/tx_template deps, make build-wasm-scripts,
     "for wasm in $(ls filter_template/*.wasm matchmaker_template/*.wasm txs/*/*.wasm
       vps/*/*.wasm)\ndo\n  shasum -a 256 ${wasm} >> checksum.sha256\ndone\n", make
-      clean-wasm-scripts, make build-wasm-scripts-ci, shasum -c checksum.sha256, rm
+      clean-wasm-scripts, make build-wasm-scripts, shasum -c checksum.sha256, rm
       checksum.sha256]
   depends_on: [restore-cache]
   environment:

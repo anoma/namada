@@ -82,10 +82,10 @@ impl Shell {
     pub fn new(abci: AbciReceiver, db_path: impl AsRef<Path>) -> Self {
         let mut storage = storage::open(db_path);
 
-        let token_vp = std::fs::read("vps/vp_token/vp.wasm")
+        let token_vp = std::fs::read("wasm/vps/vp_token/vp.wasm")
             .expect("cannot load token VP");
-        let user_vp =
-            std::fs::read("vps/vp_user/vp.wasm").expect("cannot load user VP");
+        let user_vp = std::fs::read("wasm/vps/vp_user/vp.wasm")
+            .expect("cannot load user VP");
 
         // TODO load initial accounts from genesis
 

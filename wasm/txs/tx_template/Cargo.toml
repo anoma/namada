@@ -10,12 +10,12 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-anoma_vm_env = {path = "../../vm_env"}
+anoma_vm_env = {path = "../../../vm_env"}
 borsh = "0.9.0"
 wee_alloc = "0.4.5"
 
 [dev-dependencies]
-anoma_tests = {path = "../../tests"}
+anoma_tests = {path = "../../../tests"}
 
 [profile.release]
 # smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto
