@@ -151,10 +151,17 @@ impl VpGasMeter {
             }
         }
 
-        let current_total = self
+        let current_total = match self
             .initial_gas
             .checked_add(self.current_gas)
-            .ok_or(Error::GasOverflow)?;
+            .ok_or(Error::GasOverflow)
+        {
+            Ok(gas) => gas,
+            Err(err) => {
+                self.error = Some(err.clone());
+                return Err(err);
+            }
+        };
         if current_total > TRANSACTION_GAS_LIMIT {
             self.error = Some(Error::TransactionGasExceedededError);
             return Err(Error::TransactionGasExceedededError);
