@@ -194,6 +194,7 @@ impl Behaviour {
             })
             .expect("failed to subscribe to topic");
 
+        // TODO: check silent fail if not bootstrap_peers is not multiaddr
         let discovery_opt = if let Some(dis_config) = &config.discover_peer {
             let discovery_config = DiscoveryConfigBuilder::default()
                 .with_user_defined(dis_config.bootstrap_peers.clone())
@@ -210,7 +211,8 @@ impl Behaviour {
         } else {
             None
         };
-        // tracing::debug!("discovery: {:?}", discovery_opt);
+        // println!("{:?}", discovery_opt)
+        tracing::debug!("discovery: {:?}", discovery_opt.is_some());
         Ok((
             Self {
                 intent_broadcaster_gossip,

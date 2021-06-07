@@ -39,6 +39,8 @@ impl P2P {
         let local_key: Keypair = Ed25519(config.gossiper.key.clone());
         let local_peer_id: PeerId = PeerId::from(local_key.public());
 
+        println!("Local peer id: {:?}", local_peer_id);
+
         let transport = {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(libp2p::development_transport(local_key.clone()))
@@ -47,6 +49,8 @@ impl P2P {
 
         let (gossipsub, matchmaker_event_receiver) =
             Behaviour::new(local_key, config).map_err(Error::Behavior)?;
+
+        tracing::debug!("p2p.discover_peer -> {:?}", config.discover_peer);
 
         let mut swarm = libp2p::Swarm::new(transport, gossipsub, local_peer_id);
 

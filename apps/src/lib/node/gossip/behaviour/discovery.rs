@@ -14,7 +14,9 @@ use libp2p::core::connection::{ConnectionId, ListenerId};
 use libp2p::core::ConnectedPoint;
 use libp2p::kad::handler::KademliaHandlerProto;
 use libp2p::kad::store::MemoryStore;
-use libp2p::kad::{GetClosestPeersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId};
+use libp2p::kad::{
+    GetClosestPeersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId,
+};
 use libp2p::mdns::{Mdns, MdnsConfig, MdnsEvent};
 use libp2p::multiaddr::Protocol;
 use libp2p::swarm::toggle::{Toggle, ToggleIntoProtoHandler};
@@ -186,17 +188,26 @@ impl DiscoveryBehaviour {
                 }
             })
             .collect();
+        tracing::info!("{:?}", user_defined);
         let kademlia_opt = if enable_kademlia {
             // Kademlia config
             let store = MemoryStore::new(local_peer_id.to_owned());
-            let kad_config = KademliaConfig::default();
+            let mut kad_config = KademliaConfig::default();
+            kad_config.set_protocol_name(
+                format!("/anoma/kad/{}/kad/1.0.0", "anoma")
+                    .as_bytes()
+                    .to_vec(),
+            );
 
             let mut kademlia =
                 Kademlia::with_config(local_peer_id, store, kad_config);
+
             for (peer_id, addr) in user_defined.iter() {
+                tracing::debug!("to add: {:?}, {:?}", peer_id, addr);
                 kademlia.add_address(&peer_id, addr.clone());
                 peers.insert(*peer_id);
             }
+
             if let Err(err) = kademlia.bootstrap() {
                 tracing::error!("failed to bootstrap kad : {:?}", err);
             };
@@ -380,19 +391,6 @@ impl NetworkBehaviour for DiscoveryBehaviour {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev));
         }
 
-        // Immediately process the content of `discovered`.
-        if let Some(ev) = self.internal_pending_events.pop_front() {
-            match ev {
-                InternDiscoveryEvent::Connect(peer_id) => {
-                    tracing::info!("CONNECTING : {:?}", peer_id);
-                    return Poll::Ready(NetworkBehaviourAction::DialPeer {
-                        peer_id,
-                        condition: DialPeerCondition::Disconnected,
-                    });
-                }
-            }
-        }
-
         // Poll Kademlia.
         while let Poll::Ready(ev) = self.kademlia.poll(cx, params) {
             match ev {
@@ -400,36 +398,18 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                     // Adding to Kademlia buckets is automatic with our config,
                     // no need to do manually.
                     KademliaEvent::RoutingUpdated { .. } => {}
+                    KademliaEvent::UnroutablePeer { .. } => {}
                     KademliaEvent::RoutablePeer { .. } => {}
+                    KademliaEvent::QueryResult { .. } => {}
                     KademliaEvent::PendingRoutablePeer { .. } => {
                         // Intentionally ignore
                     }
-                    KademliaEvent::QueryResult { id, result, stats } => {
-                        match result{
-                            libp2p::kad::QueryResult::Bootstrap(_) => {}
-                            libp2p::kad::QueryResult::GetClosestPeers(res) => {
-                                if let Ok(GetClosestPeersOk{peers,key:_ }) = res {
-                                    for peer in peers {
-                                        self.internal_pending_events.push_back(InternDiscoveryEvent::Connect(peer));
-                                    }
-                                }
-                            }
-                            libp2p::kad::QueryResult::GetProviders(_) => {}
-                            libp2p::kad::QueryResult::StartProviding(_) => {}
-                            libp2p::kad::QueryResult::RepublishProvider(_) => {}
-                            libp2p::kad::QueryResult::GetRecord(_) => {}
-                            libp2p::kad::QueryResult::PutRecord(_) => {}
-                            libp2p::kad::QueryResult::RepublishRecord(_) => {}
-                        }
+                    other => {
+                        tracing::warn!(
+                            "Libp2p => Unhandled Kademlia event: {:?}",
+                            other
+                        )
                     }
-                    KademliaEvent::UnroutablePeer { peer } => {}
-
-                    // other => {
-                    //     tracing::debug!(
-                    //         "Libp2p => Unhandled Kademlia event: {:?}",
-                    //         other
-                    //     )
-                    // }
                 },
                 NetworkBehaviourAction::DialAddress { address } => {
                     return Poll::Ready(NetworkBehaviourAction::DialAddress {
@@ -447,13 +427,11 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                     handler,
                     event,
                 } => {
-                    return Poll::Ready(
-                        NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler,
-                            event,
-                        },
-                    );
+                    return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        handler,
+                        event,
+                    })
                 }
                 NetworkBehaviourAction::ReportObservedAddr {
                     address,
@@ -464,38 +442,37 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                             address,
                             score,
                         },
-                    );
+                    )
                 }
             }
         }
 
-        if self.num_connections < self.discovery_max {
-            // Poll the stream that fires when we need to start a random
-            // Kademlia query.
-            if let Some(next_kad_random_query) =
-                self.next_kad_random_query.as_mut()
-            {
-                while next_kad_random_query.poll_tick(cx).is_ready() {
-                    // We still have not hit the discovery max, send random
-                    // request for peers.
-                    let random_peer_id = PeerId::random();
-                    self.kademlia
-                        .as_mut()
-                        .map(|k| k.get_closest_peers(random_peer_id));
-                }
-            }
-            // Schedule the next random query with exponentially increasing
-            // delay, capped at 60 seconds.
-            self.next_kad_random_query =
-                Some(tokio::time::interval(Duration::from_secs(10)));
-            self.duration_to_next_kad = cmp::min(
-                self.duration_to_next_kad * 2,
-                Duration::from_secs(60),
-            );
-        }
+        // if self.num_connections < self.discovery_max {
+        //     // Poll the stream that fires when we need to start a random
+        //     // Kademlia query.
+        //     if let Some(next_kad_random_query) =
+        //         self.next_kad_random_query.as_mut()
+        //     {
+        //         while next_kad_random_query.poll_tick(cx).is_ready() {
+        //             // We still have not hit the discovery max, send random
+        //             // request for peers.
+        //             let random_peer_id = PeerId::random();
+        //             self.kademlia
+        //                 .as_mut()
+        //                 .map(|k| k.get_closest_peers(random_peer_id));
+        //         }
+        //     }
+        //     // Schedule the next random query with exponentially increasing
+        //     // delay, capped at 60 seconds.
+        //     self.next_kad_random_query =
+        //         Some(tokio::time::interval(self.duration_to_next_kad));
+        //     self.duration_to_next_kad = cmp::min(
+        //         self.duration_to_next_kad * 2,
+        //         Duration::from_secs(60),
+        //     );
+        // }
 
         // Poll mdns.
-        // tracing::debug!("Trying MDNS");
         while let Poll::Ready(ev) = self.mdns.poll(cx, params) {
             match ev {
                 NetworkBehaviourAction::GenerateEvent(event) => match event {
@@ -522,7 +499,8 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                                 .as_mut()
                                 .map(|k| k.add_address(&peer_id, multiaddr));
                             self.internal_pending_events.push_back(
-                                InternDiscoveryEvent::Connect(peer_id));
+                                InternDiscoveryEvent::Connect(peer_id),
+                            );
                         }
                     }
                     MdnsEvent::Expired(_) => {}
@@ -556,23 +534,6 @@ impl NetworkBehaviour for DiscoveryBehaviour {
             }
         }
 
-        // Poll pending events
-        if let Some(ev) = self.external_pending_events.pop_front() {
-            match ev {
-                DiscoveryEvent::Connected(peer_id) => {
-                    tracing::info!("CONNECTING : {:?}", peer_id);
-                    Poll::Ready(NetworkBehaviourAction::DialPeer {
-                        peer_id,
-                        condition: DialPeerCondition::Always,
-                    })
-                }
-                DiscoveryEvent::Disconnected(_peer_id) => {
-                    tracing::info!("DISCONNECTING : {:?}", _peer_id);
-                    Poll::Pending
-                }
-            }
-        } else {
-            Poll::Pending
-        }
+        Poll::Pending
     }
 }
