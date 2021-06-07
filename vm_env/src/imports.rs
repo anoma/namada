@@ -1,64 +1,73 @@
+use std::mem::ManuallyDrop;
+
+use anoma_shared::types::internal::HostEnvResult;
+use anoma_shared::vm::types::KeyVal;
+use borsh::BorshDeserialize;
+
+/// This function is a helper to handle the second step of reading var-len
+/// values from the host.
+///
+/// In cases where we're reading a value from the host in the guest and
+/// we don't know the byte size up-front, we have to read it in 2-steps. The
+/// first step reads the value into a read cache and returns the size (if any)
+/// back to the guest, the second step reads the value from cache into a
+/// pre-allocated buffer with the obtained size.
+fn read_from_cache<T: BorshDeserialize>(
+    read_result: i64,
+    read_cache: unsafe extern "C" fn(u64),
+) -> Option<T> {
+    if HostEnvResult::is_fail(read_result) {
+        None
+    } else {
+        let result: Vec<u8> = Vec::with_capacity(read_result as _);
+        let result = ManuallyDrop::new(result);
+        let offset = result.as_slice().as_ptr() as u64;
+        unsafe { read_cache(offset) };
+        let target = unsafe {
+            Vec::from_raw_parts(offset as _, read_result as _, read_result as _)
+        };
+        T::try_from_slice(&target[..]).ok()
+    }
+}
+
+/// This function is a helper to handle the second step of reading var-len
+/// values in a key-value pair from the host.
+fn read_key_val_from_cache<T: BorshDeserialize>(
+    read_result: i64,
+    read_cache: unsafe extern "C" fn(u64),
+) -> Option<(String, T)> {
+    let key_val: Option<KeyVal> = read_from_cache(read_result, read_cache);
+    key_val.and_then(|key_val| {
+        // decode the value
+        T::try_from_slice(&key_val.val)
+            .map(|val| (key_val.key, val))
+            .ok()
+    })
+}
+
 /// Transaction environment imports
 pub mod tx {
     pub use core::slice;
     use std::convert::TryFrom;
     use std::marker::PhantomData;
     pub use std::mem::size_of;
-    use std::mem::ManuallyDrop;
 
     use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::{
         address, Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH,
         CHAIN_ID_LENGTH,
     };
-    use anoma_shared::vm::types::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     #[derive(Debug)]
     pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
-    impl<T: BorshDeserialize> Iterator for KeyValIterator<T> {
-        type Item = (String, T);
-
-        fn next(&mut self) -> Option<(String, T)> {
-            let size = unsafe { anoma_tx_iter_next(self.0) };
-            if HostEnvResult::is_fail(size) {
-                None
-            } else {
-                let result: Vec<u8> = Vec::with_capacity(size as _);
-                let result = ManuallyDrop::new(result);
-                let offset = result.as_slice().as_ptr() as u64;
-                unsafe { anoma_tx_read_cache(offset) };
-                let target = unsafe {
-                    Vec::from_raw_parts(offset as _, size as _, size as _)
-                };
-                match KeyVal::try_from_slice(&target[..]) {
-                    Ok(key_val) => match T::try_from_slice(&key_val.val) {
-                        Ok(v) => Some((key_val.key, v)),
-                        Err(_) => None,
-                    },
-                    Err(_) => None,
-                }
-            }
-        }
-    }
-
     /// Try to read a variable-length value at the given key from storage.
     pub fn read<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
-        let size = unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
-        if HostEnvResult::is_fail(size) {
-            None
-        } else {
-            let result: Vec<u8> = Vec::with_capacity(size as _);
-            let result = ManuallyDrop::new(result);
-            let offset = result.as_slice().as_ptr() as u64;
-            unsafe { anoma_tx_read_cache(offset) };
-            let target = unsafe {
-                Vec::from_raw_parts(offset as _, size as _, size as _)
-            };
-            T::try_from_slice(&target[..]).ok()
-        }
+        let read_result =
+            unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
+        super::read_from_cache(read_result, anoma_tx_read_cache)
     }
 
     /// Check if the given key is present in storage.
@@ -104,6 +113,15 @@ pub mod tx {
             anoma_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
         };
         KeyValIterator(iter_id, PhantomData)
+    }
+
+    impl<T: BorshDeserialize> Iterator for KeyValIterator<T> {
+        type Item = (String, T);
+
+        fn next(&mut self) -> Option<(String, T)> {
+            let read_result = unsafe { anoma_tx_iter_next(self.0) };
+            super::read_key_val_from_cache(read_result, anoma_tx_read_cache)
+        }
     }
 
     /// Insert a verifier
@@ -256,56 +274,28 @@ pub mod vp {
     use anoma_shared::types::{
         BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
-    use anoma_shared::vm::types::KeyVal;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     pub struct PreKeyValIterator<T>(pub u64, pub PhantomData<T>);
+
     pub struct PostKeyValIterator<T>(pub u64, pub PhantomData<T>);
 
     /// Try to read a variable-length value at the given key from storage before
     /// transaction execution.
     pub fn read_pre<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
-        // Memory safety - there MUST BE no other allocation while we're
-        // reading result
-        let result = Vec::with_capacity(0);
-        let size = unsafe {
-            anoma_vp_read_pre(
-                key.as_ptr() as _,
-                key.len() as _,
-                result.as_ptr() as _,
-            )
-        };
-        if HostEnvResult::is_fail(size) {
-            None
-        } else {
-            let slice =
-                unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
-            T::try_from_slice(slice).ok()
-        }
+        let read_result =
+            unsafe { anoma_vp_read_pre(key.as_ptr() as _, key.len() as _) };
+        super::read_from_cache(read_result, anoma_vp_read_cache)
     }
 
     /// Try to read a variable-length value at the given key from storage after
     /// transaction execution.
     pub fn read_post<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
-        // Memory safety - there MUST BE no other allocation while we're
-        // reading result
-        let result = Vec::with_capacity(100);
-        let size = unsafe {
-            anoma_vp_read_post(
-                key.as_ptr() as _,
-                key.len() as _,
-                result.as_ptr() as _,
-            )
-        };
-        if HostEnvResult::is_fail(size) {
-            None
-        } else {
-            let slice =
-                unsafe { slice::from_raw_parts(result.as_ptr(), size as _) };
-            T::try_from_slice(slice).ok()
-        }
+        let read_result =
+            unsafe { anoma_vp_read_post(key.as_ptr() as _, key.len() as _) };
+        super::read_from_cache(read_result, anoma_vp_read_cache)
     }
 
     /// Check if the given key was present in storage before transaction
@@ -341,25 +331,8 @@ pub mod vp {
         type Item = (String, T);
 
         fn next(&mut self) -> Option<(String, T)> {
-            // Memory safety - there MUST BE no other allocation while we're
-            // reading result
-            let result: Vec<u8> = Vec::with_capacity(0);
-            let size =
-                unsafe { anoma_vp_iter_pre_next(self.0, result.as_ptr() as _) };
-            if HostEnvResult::is_fail(size) {
-                None
-            } else {
-                let slice = unsafe {
-                    slice::from_raw_parts(result.as_ptr(), size as _)
-                };
-                match KeyVal::try_from_slice(slice) {
-                    Ok(key_val) => match T::try_from_slice(&key_val.val) {
-                        Ok(v) => Some((key_val.key, v)),
-                        Err(_) => None,
-                    },
-                    Err(_) => None,
-                }
-            }
+            let read_result = unsafe { anoma_vp_iter_pre_next(self.0) };
+            super::read_key_val_from_cache(read_result, anoma_vp_read_cache)
         }
     }
 
@@ -378,26 +351,8 @@ pub mod vp {
         type Item = (String, T);
 
         fn next(&mut self) -> Option<(String, T)> {
-            // Memory safety - there MUST BE no other allocation while we're
-            // reading result
-            let result: Vec<u8> = Vec::with_capacity(0);
-            let size = unsafe {
-                anoma_vp_iter_post_next(self.0, result.as_ptr() as _)
-            };
-            if HostEnvResult::is_fail(size) {
-                None
-            } else {
-                let slice = unsafe {
-                    slice::from_raw_parts(result.as_ptr(), size as _)
-                };
-                match KeyVal::try_from_slice(slice) {
-                    Ok(key_val) => match T::try_from_slice(&key_val.val) {
-                        Ok(v) => Some((key_val.key, v)),
-                        Err(_) => None,
-                    },
-                    Err(_) => None,
-                }
-            }
+            let read_result = unsafe { anoma_vp_iter_post_next(self.0) };
+            super::read_key_val_from_cache(read_result, anoma_vp_read_cache)
         }
     }
 
@@ -479,21 +434,20 @@ pub mod vp {
     extern "C" {
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
-        // the key is not present.
-        fn anoma_vp_read_pre(
-            key_ptr: u64,
-            key_len: u64,
-            result_ptr: u64,
-        ) -> i64;
+        // the key is not present. If a value is found, it will be placed in the
+        // read cache, because we cannot allocate a buffer for it before
+        // we know its size.
+        fn anoma_vp_read_pre(key_ptr: u64, key_len: u64) -> i64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
-        // the key is not present.
-        fn anoma_vp_read_post(
-            key_ptr: u64,
-            key_len: u64,
-            result_ptr: u64,
-        ) -> i64;
+        // the key is not present. If a value is found, it will be placed in the
+        // read cache, because we cannot allocate a buffer for it before
+        // we know its size.
+        fn anoma_vp_read_post(key_ptr: u64, key_len: u64) -> i64;
+
+        // Read a value from read cache.
+        fn anoma_vp_read_cache(result_ptr: u64);
 
         // Returns 1 if the key is present in prior state, -1 otherwise.
         fn anoma_vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64;
@@ -506,13 +460,17 @@ pub mod vp {
 
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
-        // the key is not present.
-        fn anoma_vp_iter_pre_next(iter_id: u64, result_ptr: u64) -> i64;
+        // the key is not present. If a value is found, it will be placed in the
+        // read cache, because we cannot allocate a buffer for it before
+        // we know its size.
+        fn anoma_vp_iter_pre_next(iter_id: u64) -> i64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if the
-        // key is not present.
-        fn anoma_vp_iter_post_next(iter_id: u64, result_ptr: u64) -> i64;
+        // key is not present. If a value is found, it will be placed in the
+        // read cache, because we cannot allocate a buffer for it before
+        // we know its size.
+        fn anoma_vp_iter_post_next(iter_id: u64) -> i64;
 
         // Get the chain ID
         fn anoma_vp_get_chain_id(result_ptr: u64);
