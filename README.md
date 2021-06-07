@@ -35,11 +35,9 @@ The matchmaker template receives intents with the borsh encoding define in `data
 ### Instructions
 
 ```shell
-# Install development dependencies
-make dev-deps
-
 # Build the validity predicate, transaction and matchmaker wasm modules
-make build-wasm-scripts
+docker build -t anoma-wasm scripts
+make build-wasm-scripts-docker
 
 # Build Anoma
 make
