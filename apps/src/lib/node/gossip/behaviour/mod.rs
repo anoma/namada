@@ -2,6 +2,8 @@ mod discovery;
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
+use std::task::Context;
+use std::task::Poll;
 use std::time::Duration;
 
 use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
@@ -14,11 +16,15 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::identity::Keypair;
-use libp2p::swarm::toggle::Toggle;
+use libp2p::swarm::NetworkBehaviourAction;
 use libp2p::swarm::NetworkBehaviourEventProcess;
+use libp2p::swarm::PollParameters;
+use libp2p::swarm::toggle::Toggle;
 use libp2p::{NetworkBehaviour, PeerId};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
+
+use self::discovery::DiscoveryEvent;
 
 use super::intent_gossiper;
 use crate::node::gossip::behaviour::discovery::{
@@ -109,16 +115,28 @@ impl TopicSubscriptionFilter for IntentGossipSubscriptionFilter {
 }
 
 #[derive(NetworkBehaviour)]
+#[behaviour(out_event = "AnomaBehaviourEvent", poll_method = "poll")]
 pub struct Behaviour {
     pub intent_gossip_behaviour: libp2p::gossipsub::Gossipsub<
         IdentityTransform,
         IntentGossipSubscriptionFilter,
     >,
-    #[behaviour(ignore)]
-    discovery: Option<discovery::DiscoveryBehaviour>,
+    pub discovery: DiscoveryBehaviour,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
     pub intent_gossip_app: intent_gossiper::GossipIntent,
+    #[behaviour(ignore)]
+    events: Vec<AnomaBehaviourEvent>,
+}
+
+/// Event type which is emitted from the [ForestBehaviour] into the libp2p service.
+#[derive(Debug)]
+pub enum AnomaBehaviourEvent {
+    Connected(PeerId),
+    Disconnected(PeerId),
+    Message(GossipsubMessage, PeerId, MessageId),
+    Subscribed(PeerId, TopicHash),
+    Unsubscribed(PeerId, TopicHash)
 }
 
 pub fn message_id(message: &GossipsubMessage) -> MessageId {
@@ -128,6 +146,18 @@ pub fn message_id(message: &GossipsubMessage) -> MessageId {
 }
 
 impl Behaviour {
+
+    fn poll<TBehaviourIn>(
+        &mut self,
+        cx: &mut Context,
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<TBehaviourIn, AnomaBehaviourEvent>> {
+        if !self.events.is_empty() {
+            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(self.events.remove(0)));
+        }
+        Poll::Pending
+    }
+
     pub fn new(
         key: Keypair,
         config: &crate::config::IntentGossiper,
@@ -205,20 +235,18 @@ impl Behaviour {
                 .build()
                 .map_err(|s| Error::DiscoveryConfig(s.to_string()))?;
 
-            Some(
-                DiscoveryBehaviour::new(peer_id, discovery_config)
-                    .map_err(Error::Discovery)?,
-            )
+            DiscoveryBehaviour::new(peer_id, discovery_config)
         } else {
-            None
+            let discovery_config = DiscoveryConfigBuilder::default().build().unwrap();
+            DiscoveryBehaviour::new(peer_id, discovery_config)
         };
-        // println!("{:?}", discovery_opt)
-        tracing::debug!("discovery: {:?}", discovery_opt.is_some());
+
         Ok((
             Self {
                 intent_gossip_behaviour,
-                discovery: discovery_opt,
+                discovery: discovery_opt.unwrap(),
                 intent_gossip_app,
+                events: Vec::new()
             },
             matchmaker_event_receiver,
         ))
@@ -297,6 +325,21 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                 peer_id: _,
                 topic: _,
             } => {}
+        }
+    }
+}
+
+impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
+    fn inject_event(&mut self, event: DiscoveryEvent) {
+        match event {
+            DiscoveryEvent::Connected(peer) => {
+                self.events
+                .push(AnomaBehaviourEvent::Connected(peer));
+            },
+            DiscoveryEvent::Disconnected(peer) => {
+                self.events
+                    .push(AnomaBehaviourEvent::Disconnected(peer));
+            },
         }
     }
 }

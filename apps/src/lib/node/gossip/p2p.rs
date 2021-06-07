@@ -3,8 +3,7 @@ use std::convert::TryFrom;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
-use libp2p::multiaddr::Protocol;
-use libp2p::{Multiaddr, PeerId, TransportError};
+use libp2p::{PeerId, TransportError};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 

@@ -421,11 +421,13 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                     handler,
                     event,
                 } => {
-                    return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        handler,
-                        event,
-                    });
+                    return Poll::Ready(
+                        NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler,
+                            event,
+                        },
+                    );
                 }
                 NetworkBehaviourAction::ReportObservedAddr {
                     address,
