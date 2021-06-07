@@ -43,8 +43,10 @@ pub struct BlockGasMeter {
 /// Gas metering in a validity predicate
 #[derive(Debug, Clone)]
 pub struct VpGasMeter {
-    /// The current gas usage
-    pub vp_gas: u64,
+    /// The gas used in the transaction before the VP run
+    pub initial_gas: u64,
+    /// The current gas usage in the VP
+    pub current_gas: u64,
     /// We store the `error` inside here, because when we run out of gas in VP
     /// wasm, the execution is immediately shut down with `unreachable!()`
     /// as we cannot simply return `Result` from wasm. So instead, we store
@@ -127,9 +129,10 @@ impl BlockGasMeter {
 impl VpGasMeter {
     /// Initialize a new VP gas meter, starting with the gas consumed in the
     /// transaction so far.
-    pub fn new(vp_gas: u64) -> Self {
+    pub fn new(initial_gas: u64) -> Self {
         Self {
-            vp_gas,
+            initial_gas,
+            current_gas: 0,
             error: None,
         }
     }
@@ -138,9 +141,9 @@ impl VpGasMeter {
     /// consumed gas exceeds the transaction gas limit, but the state will still
     /// be updated.
     pub fn add(&mut self, gas: u64) -> Result<()> {
-        match self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow) {
+        match self.current_gas.checked_add(gas).ok_or(Error::GasOverflow) {
             Ok(gas) => {
-                self.vp_gas = gas;
+                self.current_gas = gas;
             }
             Err(err) => {
                 self.error = Some(err.clone());
@@ -148,7 +151,11 @@ impl VpGasMeter {
             }
         }
 
-        if self.vp_gas > TRANSACTION_GAS_LIMIT {
+        let current_total = self
+            .initial_gas
+            .checked_add(self.current_gas)
+            .ok_or(Error::GasOverflow)?;
+        if current_total > TRANSACTION_GAS_LIMIT {
             self.error = Some(Error::TransactionGasExceedededError);
             return Err(Error::TransactionGasExceedededError);
         }
