@@ -44,7 +44,7 @@ pub struct BlockGasMeter {
 #[derive(Debug, Clone)]
 pub struct VpGasMeter {
     /// The gas used in the transaction before the VP run
-    pub initial_gas: u64,
+    initial_gas: u64,
     /// The current gas usage in the VP
     pub current_gas: u64,
     /// We store the `error` inside here, because when we run out of gas in VP
@@ -58,7 +58,7 @@ pub struct VpGasMeter {
 /// Gas meter for VPs parallel runs
 #[derive(Clone, Debug)]
 pub struct VpsGas {
-    max: u64,
+    max: Option<u64>,
     rest: Vec<u64>,
 }
 
@@ -164,20 +164,40 @@ impl VpGasMeter {
 }
 
 impl VpsGas {
+    /// Set the gas cost from a single VP run.
+    pub fn set(&mut self, vp_gas_meter: &VpGasMeter) -> Result<()> {
+        debug_assert_eq!(self.max, None);
+        debug_assert!(self.rest.is_empty());
+        self.max = Some(vp_gas_meter.current_gas);
+        self.check_limit(vp_gas_meter.initial_gas)
+    }
+
     /// Merge validity predicates gas meters from parallelized runs.
     pub fn merge(
         &mut self,
         other: &mut VpsGas,
         initial_gas: u64,
     ) -> Result<()> {
-        if other.max > self.max {
-            self.rest.push(self.max);
-            self.max = other.max;
-        } else {
-            self.rest.push(other.max);
-            self.rest.append(&mut other.rest);
+        match (self.max, other.max) {
+            (None, Some(_)) => {
+                self.max = other.max;
+            }
+            (Some(this_max), Some(other_max)) => {
+                if this_max < other_max {
+                    self.rest.push(this_max);
+                    self.max = other.max;
+                } else {
+                    self.rest.push(other_max);
+                }
+            }
+            _ => {}
         }
+        self.rest.append(&mut other.rest);
 
+        self.check_limit(initial_gas)
+    }
+
+    fn check_limit(&self, initial_gas: u64) -> Result<()> {
         let total = initial_gas
             .checked_add(self.get_current_gas()?)
             .ok_or(Error::GasOverflow)?;
@@ -192,6 +212,7 @@ impl VpsGas {
         let parallel_gas =
             self.rest.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLIER;
         self.max
+            .unwrap_or_default()
             .checked_add(parallel_gas as u64)
             .ok_or(Error::GasOverflow)
     }
@@ -209,7 +230,7 @@ impl Default for BlockGasMeter {
 impl Default for VpsGas {
     fn default() -> Self {
         Self {
-            max: 0,
+            max: None,
             rest: Vec::new(),
         }
     }
