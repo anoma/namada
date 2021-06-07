@@ -146,7 +146,7 @@ pub fn message_id(message: &GossipsubMessage) -> MessageId {
 impl Behaviour {
     fn poll<TBehaviourIn>(
         &mut self,
-        cx: &mut Context,
+        _: &mut Context,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<TBehaviourIn, AnomaBehaviourEvent>> {
         if !self.events.is_empty() {
