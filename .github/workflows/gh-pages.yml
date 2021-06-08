@@ -16,9 +16,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          components: rustfmt
       - uses: Swatinem/rust-cache@v1
-      - name: Install rustfmt
-        run: rustup component add rustfmt
       - run: | 
           make -C tech-specs dev-deps
           make build-doc
