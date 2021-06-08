@@ -54,7 +54,7 @@ ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand"
 eyre = "0.6.5"
 futures = "0.3"
 hex = "0.4.2"
-libp2p = "0.35.0"
+libp2p = "0.38.0"
 prost = "0.7.0"
 prost-types = "0.7.0"
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)

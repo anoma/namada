@@ -54,16 +54,19 @@ impl P2P {
         let peer_key = Keypair::Ed25519(config.gossiper.key.clone());
         let peer_id = PeerId::from(peer_key.public());
 
-        tracing::info!("Peer id: {:?}", peer_id);
+        tracing::info!("Peer id: {:?}", peer_id.clone());
 
-        let transport = build_transport(peer_key);
+        let transport =  {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(build_transport(peer_key.clone()))
+        };
 
         let (gossipsub, matchmaker_event_receiver) =
-            Behaviour::new(peer_key, config).map_err(Error::Behavior)?;
+            Behaviour::new(peer_key, config);
 
         let connection_limits = build_p2p_connections_limit();
 
-        let swarm  = SwarmBuilder::new(
+        let mut swarm  = SwarmBuilder::new(
             transport,
             gossipsub,
             peer_id
@@ -73,7 +76,7 @@ impl P2P {
         .connection_event_buffer_size(64)
         .build();
 
-        swarm.listen_on(&mut swarm, config.address.clone()).map_err(Error::Listening)?;
+        swarm.listen_on(config.address.clone()).map_err(Error::Listening)?;
 
         Ok((Self { swarm }, matchmaker_event_receiver))
     }
@@ -214,15 +217,18 @@ impl P2P {
     }
 }
 
-pub fn build_transport(peer_key: Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
-    let transport = TcpConfig::new().nodelay(true);
-    let transport = WsConfig::new(transport.clone()).or_transport(transport);
-    let transport = DnsConfig::new(transport).unwrap();
+pub async fn build_transport(peer_key: Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
+    let transport = {
+        let tcp_transport = TcpConfig::new().nodelay(true);
+        let dns_tcp_transport = DnsConfig::system(tcp_transport).await.unwrap();
+        let ws_dns_tcp_transport = WsConfig::new(dns_tcp_transport.clone());
+        dns_tcp_transport.or_transport(ws_dns_tcp_transport)
+    };
 
     let auth_config = {
         let dh_keys = noise::Keypair::<noise::X25519Spec>::new()
             .into_authentic(&peer_key)
-            .expect("Noise key generation failed");
+            .expect("Noise key generation failed. Should never happen.");
 
         noise::NoiseConfig::xx(dh_keys).into_authenticated()
     };
@@ -257,7 +263,7 @@ pub fn build_p2p_connections_limit() -> ConnectionLimits {
     ConnectionLimits::default()
         .with_max_pending_incoming(Some(10))
         .with_max_pending_outgoing(Some(30))
-        .with_max_established_incoming(Some(25)
-        .with_max_established_outgoing(Some(25)
+        .with_max_established_incoming(Some(25))
+        .with_max_established_outgoing(Some(25))
         .with_max_established_per_peer(Some(5))
 }

@@ -343,10 +343,6 @@ impl NetworkBehaviour for DiscoveryBehaviour {
         self.kademlia.inject_dial_failure(peer_id)
     }
 
-    fn inject_new_listener(&mut self, id: ListenerId) {
-        self.kademlia.inject_new_listener(id)
-    }
-
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.kademlia.inject_new_listen_addr(id, addr)
     }
@@ -373,10 +369,6 @@ impl NetworkBehaviour for DiscoveryBehaviour {
 
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
         self.kademlia.inject_new_external_addr(addr)
-    }
-
-    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
-        self.kademlia.inject_expired_external_addr(addr)
     }
 
     #[allow(clippy::type_complexity)]

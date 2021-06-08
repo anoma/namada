@@ -9,6 +9,7 @@ use std::time::Duration;
 use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
+
 };
 use libp2p::gossipsub::{
     self, GossipsubEvent, GossipsubMessage, IdentTopic, IdentityTransform,
@@ -158,7 +159,7 @@ impl Behaviour {
     pub fn new(
         key: Keypair,
         config: &crate::config::IntentGossiper,
-    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
+    ) -> (Self, Option<Receiver<MatchmakerMessage>>) {
         let peer_id = PeerId::from_public_key(key.public());
 
         // Set a custom gossipsub
@@ -173,7 +174,7 @@ impl Behaviour {
             .mesh_n(3)
             .mesh_n_high(6)
             .build()
-            .map_err(|s| Error::GossipConfig(s.to_string()))?;
+            .unwrap();
 
         let filter = match &config.subscription_filter {
             crate::config::SubscriptionFilter::RegexFilter(regex) => {
@@ -200,12 +201,11 @@ impl Behaviour {
                 MessageAuthenticity::Signed(key),
                 gossipsub_config,
                 filter,
-            )
-            .map_err(|s| Error::Filter(s.to_string()))?;
+            ).unwrap();
+            
 
         let (intent_gossip_app, matchmaker_event_receiver) =
-            intent_gossiper::GossipIntent::new(&config)
-                .map_err(Error::GossipIntentError)?;
+            intent_gossiper::GossipIntent::new(&config).unwrap();
 
         config
             .topics
@@ -230,7 +230,7 @@ impl Behaviour {
                 .with_mdns(dis_config.mdns)
                 .use_kademlia_disjoint_query_paths(true)
                 .build()
-                .map_err(|s| Error::DiscoveryConfig(s.to_string()))?;
+                .unwrap();
 
             DiscoveryBehaviour::new(peer_id, discovery_config)
         } else {
@@ -239,7 +239,7 @@ impl Behaviour {
             DiscoveryBehaviour::new(peer_id, discovery_config)
         };
 
-        Ok((
+        (
             Self {
                 intent_gossip_behaviour,
                 discovery: discovery_opt.unwrap(),
@@ -247,7 +247,7 @@ impl Behaviour {
                 events: VecDeque::new(),
             },
             matchmaker_event_receiver,
-        ))
+        )
     }
 
     fn handle_intent(&mut self, intent: Intent) -> MessageAcceptance {
