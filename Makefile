@@ -9,9 +9,9 @@ debug-cargo := $(env) $(debug-env) cargo
 nightly := nightly-2021-03-09
 
 # Paths for all the wasm sources
-tx_wasms := $(dir $(wildcard txs/*/.))
-vp_wasms := $(dir $(wildcard vps/*/.))	
-wasms := $(tx_wasms) $(vp_wasms) matchmaker_template filter_template
+tx_wasms := $(dir $(wildcard wasm/txs/*/.))
+vp_wasms := $(dir $(wildcard wasm/vps/*/.))	
+wasms := $(tx_wasms) $(vp_wasms) wasm/matchmaker_template wasm/filter_template
 
 # Transitive dependency of wasmer. It's safe to ignore as we don't use cranelift compiler. It should disseaper once the wasmer library updates its dependencies
 audit-ignores := RUSTSEC-2021-0067
@@ -88,13 +88,11 @@ doc:
 	$(cargo) doc --open
 
 build-wasm-scripts-docker:
-	docker run --rm  -v ${PWD}:/usr/local/rust/project anoma-wasm make build-wasm-scripts
+	docker run --rm -v ${PWD}:/usr/local/rust/project anoma-wasm make build-wasm-scripts
 
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm = make -C $(wasm)
 build-wasm-scripts:
-	$(rustup) toolchain install $(nightly) && \
-	$(rustup) target add wasm32-unknown-unknown && \
 	$(foreach wasm,$(wasms),$(build-wasm) && ) true
 
 clean-wasm = make -C $(wasm)
@@ -106,10 +104,5 @@ dev-deps:
 	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy --toolchain $(nightly)
 	$(cargo) install cargo-watch
-
-# only for CI use
-build-wasm = make -C $(wasm)
-build-wasm-scripts-ci:
-	$(foreach wasm,$(wasms),$(build-wasm) && ) true
 
 .PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps
