@@ -14,6 +14,7 @@ steps:
       | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  wasm/txs/tx_update_vp/Makefile"
       | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -112,6 +113,7 @@ steps:
       | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  wasm/txs/tx_update_vp/Makefile"
       | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -196,6 +198,7 @@ steps:
       | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  wasm/txs/tx_update_vp/Makefile"
       | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -246,6 +249,6 @@ type: docker
 workspace: {path: /drone/workspace}
 ---
 kind: signature
-hmac: b594cfae1ae7730021b1fc9ff6d5c7617c057c55ece697721c7e3371b38f2d55
+hmac: 52307de7b6065b1448f9a089c26b9cb04d5bb071dd727a0a0477d0bd74910abc
 
 ...
