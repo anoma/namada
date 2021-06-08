@@ -18,15 +18,15 @@ STEP_NAME = 'check-scripts-integrity'
 
 files_to_check = [
     'Makefile',
-    'vps/vp_template/Makefile',
-    'vps/vp_token/Makefile',
-    'vps/vp_user/Makefile',
-    'txs/tx_template/Makefile',
-    'txs/tx_transfer/Makefile',
-    'txs/tx_from_intent/Makefile',
-    'txs/tx_update_vp/Makefile',
-    'matchmaker_template/Makefile',
-    'filter_template/Makefile'
+    'wasm/vps/vp_template/Makefile',
+    'wasm/vps/vp_token/Makefile',
+    'wasm/vps/vp_user/Makefile',
+    'wasm/txs/tx_template/Makefile',
+    'wasm/txs/tx_transfer/Makefile',
+    'wasm/txs/tx_from_intent/Makefile',
+    'wasm/txs/tx_update_vp/Makefile',
+    'wasm/matchmaker_template/Makefile',
+    'wasm/filter_template/Makefile'
 ]
 
 command_template = 'echo "{}  {}" | sha256sum -c -'
