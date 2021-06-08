@@ -8,7 +8,7 @@ use tendermint_rpc::{Client, HttpClient};
 use crate::proto::Tx;
 use crate::wallet;
 
-const TX_UPDATE_VP: &str = "txs/tx_update_vp/tx.wasm";
+const TX_UPDATE_VP: &str = "wasm/txs/tx_update_vp/tx.wasm";
 
 pub async fn submit_custom(
     tx_code_path: String,
