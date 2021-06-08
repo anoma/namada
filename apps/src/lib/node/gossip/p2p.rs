@@ -4,20 +4,13 @@ use std::time::Duration;
 use libp2p::core::connection::ConnectionLimits;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
-use libp2p::core::{
-    self, upgrade
-};
-use libp2p::Transport;
 use libp2p::dns::DnsConfig;
+use libp2p::gossipsub::IdentTopic;
+use libp2p::identity::Keypair;
 use libp2p::swarm::SwarmBuilder;
 use libp2p::tcp::TcpConfig;
 use libp2p::websocket::WsConfig;
-use libp2p::gossipsub::IdentTopic;
-use libp2p::identity::Keypair;
-use libp2p::mplex;
-use libp2p::noise;
-use libp2p::yamux;
-use libp2p::{PeerId, TransportError};
+use libp2p::{core, mplex, noise, yamux, PeerId, Transport, TransportError};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
@@ -56,7 +49,7 @@ impl P2P {
 
         tracing::info!("Peer id: {:?}", peer_id.clone());
 
-        let transport =  {
+        let transport = {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(build_transport(peer_key.clone()))
         };
@@ -66,17 +59,17 @@ impl P2P {
 
         let connection_limits = build_p2p_connections_limit();
 
-        let mut swarm  = SwarmBuilder::new(
-            transport,
-            gossipsub,
-            peer_id
-        )
-        .connection_limits(connection_limits)
-        .notify_handler_buffer_size(std::num::NonZeroUsize::new(20).expect("Not zero"))
-        .connection_event_buffer_size(64)
-        .build();
+        let mut swarm = SwarmBuilder::new(transport, gossipsub, peer_id)
+            .connection_limits(connection_limits)
+            .notify_handler_buffer_size(
+                std::num::NonZeroUsize::new(20).expect("Not zero"),
+            )
+            .connection_event_buffer_size(64)
+            .build();
 
-        swarm.listen_on(config.address.clone()).map_err(Error::Listening)?;
+        swarm
+            .listen_on(config.address.clone())
+            .map_err(Error::Listening)?;
 
         Ok((Self { swarm }, matchmaker_event_receiver))
     }
@@ -217,7 +210,9 @@ impl P2P {
     }
 }
 
-pub async fn build_transport(peer_key: Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
+pub async fn build_transport(
+    peer_key: Keypair,
+) -> Boxed<(PeerId, StreamMuxerBox)> {
     let transport = {
         let tcp_transport = TcpConfig::new().nodelay(true);
         let dns_tcp_transport = DnsConfig::system(tcp_transport).await.unwrap();
@@ -235,11 +230,12 @@ pub async fn build_transport(peer_key: Keypair) -> Boxed<(PeerId, StreamMuxerBox
 
     let mplex_config = {
         let mut mplex_config = mplex::MplexConfig::new();
-		mplex_config.set_max_buffer_behaviour(mplex::MaxBufferBehaviour::Block);
-		mplex_config.set_max_buffer_size(usize::MAX);
+        mplex_config.set_max_buffer_behaviour(mplex::MaxBufferBehaviour::Block);
+        mplex_config.set_max_buffer_size(usize::MAX);
 
         let mut yamux_config = libp2p::yamux::YamuxConfig::default();
-        yamux_config.set_window_update_mode(libp2p::yamux::WindowUpdateMode::on_read());
+        yamux_config
+            .set_window_update_mode(libp2p::yamux::WindowUpdateMode::on_read());
         // TODO: check if its enought
         yamux_config.set_max_buffer_size(16 * 1024 * 1024);
         yamux_config.set_receive_window_size(16 * 1024 * 1024);
@@ -247,7 +243,7 @@ pub async fn build_transport(peer_key: Keypair) -> Boxed<(PeerId, StreamMuxerBox
         let mut yamux_config = yamux::YamuxConfig::default();
         yamux_config.set_max_buffer_size(16 * 1024 * 1024);
         yamux_config.set_receive_window_size(16 * 1024 * 1024);
-        
+
         core::upgrade::SelectUpgrade::new(yamux_config, mplex_config)
     };
 

@@ -9,7 +9,6 @@ use std::time::Duration;
 use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
-
 };
 use libp2p::gossipsub::{
     self, GossipsubEvent, GossipsubMessage, IdentTopic, IdentityTransform,
@@ -51,7 +50,7 @@ pub enum Error {
     Mdns(std::io::Error),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+// pub type Result<T> = std::result::Result<T, Error>;
 
 pub type Gossipsub = libp2p::gossipsub::Gossipsub<
     IdentityTransform,
@@ -128,7 +127,6 @@ pub struct Behaviour {
     events: VecDeque<AnomaBehaviourEvent>,
 }
 
-
 #[derive(Debug)]
 pub enum AnomaBehaviourEvent {
     Connected(PeerId),
@@ -201,8 +199,8 @@ impl Behaviour {
                 MessageAuthenticity::Signed(key),
                 gossipsub_config,
                 filter,
-            ).unwrap();
-            
+            )
+            .unwrap();
 
         let (intent_gossip_app, matchmaker_event_receiver) =
             intent_gossiper::GossipIntent::new(&config).unwrap();
