@@ -248,7 +248,79 @@ trigger:
 type: docker
 workspace: {path: /drone/workspace}
 ---
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+kind: pipeline
+name: anoma-master-build-gh-pages
+node: {project: anoma}
+steps:
+- commands: [echo "1a91af9c701bf67e269c02c92c9554ee90a524a21e1b16b3eadc42b7de8ce7be  Makefile"
+      | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
+      | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
+      | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
+      | sha256sum -c -, echo "0ffac9aeaaa22c679de32c32f96d4f799eac1b2d95dcf805ac811e03cd8a273f  wasm/txs/tx_template/Makefile"
+      | sha256sum -c -, echo "7afb743d825d6232932c23b73a1a1558b24ff6edda70ac094d404ffbe5d63681  wasm/txs/tx_transfer/Makefile"
+      | sha256sum -c -, echo "29fcc33d481b7cebb61759d455e27e7b39ca08451b57a32ca5ccaa8a29a9fdfa  wasm/txs/tx_from_intent/Makefile"
+      | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  wasm/txs/tx_update_vp/Makefile"
+      | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
+      | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -]
+  image: alpine/git:v2.30.1
+  name: check-scripts-integrity
+  pull: if-not-exists
+- depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+  image: meltwater/drone-cache
+  name: restore-cache
+  pull: if-not-exists
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: gh-pages/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    region: eu-west-1
+    restore: true
+- commands: [make -C tech-specs dev-deps, make build-doc, mkdir tech-specs/book/rustdoc,
+    mv -v target/doc/* tech-specs/book/rustdoc/]
+  depends_on: [restore-cache]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: audit
+  pull: if-not-exists
+- image: plugins/gh-pages
+  name: publish
+  settings:
+    pages_directory: ./tech-specs/book
+    password: {from_secret: github_token}
+    username: Drone
+- depends_on: [restore-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    BACKEND_OPERATION_TIMEOUT: 8m
+  image: meltwater/drone-cache
+  name: rebuild-cache
+  pull: if-not-exists
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: gh-pages/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    override: false
+    rebuild: true
+    region: eu-west-1
+  when:
+    status: [success, failure]
+trigger:
+  branch: [master]
+  event: [push]
+type: docker
+workspace: {path: /drone/workspace}
+---
 kind: signature
-hmac: 52307de7b6065b1448f9a089c26b9cb04d5bb071dd727a0a0477d0bd74910abc
+hmac: 7beb245da5e79e1f102b99a22899769200078c5dbd769149f3a0567dca91fbd1
 
 ...
