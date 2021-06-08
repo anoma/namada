@@ -1,8 +1,22 @@
 use std::convert::TryFrom;
+use std::time::Duration;
 
+use libp2p::core::connection::ConnectionLimits;
+use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::transport::Boxed;
+use libp2p::core::{
+    self, upgrade
+};
+use libp2p::Transport;
+use libp2p::dns::DnsConfig;
+use libp2p::swarm::SwarmBuilder;
+use libp2p::tcp::TcpConfig;
+use libp2p::websocket::WsConfig;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
-use libp2p::identity::Keypair::Ed25519;
+use libp2p::mplex;
+use libp2p::noise;
+use libp2p::yamux;
 use libp2p::{PeerId, TransportError};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
@@ -37,27 +51,29 @@ impl P2P {
     pub fn new(
         config: &crate::config::IntentGossiper,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
-        let local_key: Keypair = Ed25519(config.gossiper.key.clone());
-        let local_peer_id: PeerId = PeerId::from(local_key.public());
+        let peer_key = Keypair::Ed25519(config.gossiper.key.clone());
+        let peer_id = PeerId::from(peer_key.public());
 
-        println!("Local peer id: {:?}", local_peer_id);
+        tracing::info!("Peer id: {:?}", peer_id);
 
-        let transport = {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(libp2p::development_transport(local_key.clone()))
-                .map_err(Error::TransportError)?
-        };
+        let transport = build_transport(peer_key);
 
         let (gossipsub, matchmaker_event_receiver) =
-            Behaviour::new(local_key, config).map_err(Error::Behavior)?;
+            Behaviour::new(peer_key, config).map_err(Error::Behavior)?;
 
-        tracing::debug!("p2p.discover_peer -> {:?}", config.discover_peer);
-        tracing::debug!("p2p.address -> {:?}", config.address.clone());
+        let connection_limits = build_p2p_connections_limit();
 
-        let mut swarm = libp2p::Swarm::new(transport, gossipsub, local_peer_id);
+        let swarm  = SwarmBuilder::new(
+            transport,
+            gossipsub,
+            peer_id
+        )
+        .connection_limits(connection_limits)
+        .notify_handler_buffer_size(std::num::NonZeroUsize::new(20).expect("Not zero"))
+        .connection_event_buffer_size(64)
+        .build();
 
-        Swarm::listen_on(&mut swarm, config.address.clone())
-            .map_err(Error::Listening)?;
+        swarm.listen_on(&mut swarm, config.address.clone()).map_err(Error::Listening)?;
 
         Ok((Self { swarm }, matchmaker_event_receiver))
     }
@@ -196,4 +212,52 @@ impl P2P {
             }
         }
     }
+}
+
+pub fn build_transport(peer_key: Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
+    let transport = TcpConfig::new().nodelay(true);
+    let transport = WsConfig::new(transport.clone()).or_transport(transport);
+    let transport = DnsConfig::new(transport).unwrap();
+
+    let auth_config = {
+        let dh_keys = noise::Keypair::<noise::X25519Spec>::new()
+            .into_authentic(&peer_key)
+            .expect("Noise key generation failed");
+
+        noise::NoiseConfig::xx(dh_keys).into_authenticated()
+    };
+
+    let mplex_config = {
+        let mut mplex_config = mplex::MplexConfig::new();
+		mplex_config.set_max_buffer_behaviour(mplex::MaxBufferBehaviour::Block);
+		mplex_config.set_max_buffer_size(usize::MAX);
+
+        let mut yamux_config = libp2p::yamux::YamuxConfig::default();
+        yamux_config.set_window_update_mode(libp2p::yamux::WindowUpdateMode::on_read());
+        // TODO: check if its enought
+        yamux_config.set_max_buffer_size(16 * 1024 * 1024);
+        yamux_config.set_receive_window_size(16 * 1024 * 1024);
+
+        let mut yamux_config = yamux::YamuxConfig::default();
+        yamux_config.set_max_buffer_size(16 * 1024 * 1024);
+        yamux_config.set_receive_window_size(16 * 1024 * 1024);
+        
+        core::upgrade::SelectUpgrade::new(yamux_config, mplex_config)
+    };
+
+    transport
+        .upgrade(core::upgrade::Version::V1)
+        .authenticate(auth_config)
+        .multiplex(mplex_config)
+        .timeout(Duration::from_secs(20))
+        .boxed()
+}
+
+pub fn build_p2p_connections_limit() -> ConnectionLimits {
+    ConnectionLimits::default()
+        .with_max_pending_incoming(Some(10))
+        .with_max_pending_outgoing(Some(30))
+        .with_max_established_incoming(Some(25)
+        .with_max_established_outgoing(Some(25)
+        .with_max_established_per_peer(Some(5))
 }

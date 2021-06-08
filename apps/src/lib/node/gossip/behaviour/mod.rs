@@ -127,8 +127,7 @@ pub struct Behaviour {
     events: VecDeque<AnomaBehaviourEvent>,
 }
 
-/// Event type which is emitted from the [ForestBehaviour] into the libp2p
-/// service.
+
 #[derive(Debug)]
 pub enum AnomaBehaviourEvent {
     Connected(PeerId),
