@@ -34,9 +34,10 @@ steps:
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, make -C wasm/txs/tx_template deps, make build-wasm-scripts,
-    "for wasm in $(ls wasm/filter_template/*.wasm wasm/matchmaker_template/*.wasm wasm/txs/*/*.wasm
-      wasm/vps/*/*.wasm)\ndo\n  shasum -a 256 ${wasm} >> checksum.sha256\ndone\n", make
-      clean-wasm-scripts, make build-wasm-scripts, shasum -c checksum.sha256, rm checksum.sha256]
+    "for wasm in $(ls wasm/filter_template/*.wasm wasm/matchmaker_template/*.wasm
+      wasm/txs/*/*.wasm wasm/vps/*/*.wasm)\ndo\n  shasum -a 256 ${wasm} >> checksum.sha256\ndone\n",
+    make clean-wasm-scripts, make build-wasm-scripts, shasum -c checksum.sha256, rm
+      checksum.sha256]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -245,6 +246,6 @@ type: docker
 workspace: {path: /drone/workspace}
 ---
 kind: signature
-hmac: 90955b7b00f66410fc2a1dc9e98369a0fa94ff1e98c6da7bdca9a5b9ae8ce20e
+hmac: b594cfae1ae7730021b1fc9ff6d5c7617c057c55ece697721c7e3371b38f2d55
 
 ...
