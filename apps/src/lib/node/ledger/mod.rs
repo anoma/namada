@@ -302,13 +302,13 @@ impl Shell {
         match result {
             Ok(result) => {
                 if result.is_accepted() {
-                    tracing::debug!(
+                    tracing::info!(
                         "all VPs accepted apply_tx storage modification {:#?}",
                         result
                     );
                     self.write_log.commit_tx();
                 } else {
-                    tracing::debug!(
+                    tracing::info!(
                         "some VPs rejected apply_tx storage modification {:#?}",
                         result.vps_result.rejected_vps
                     );
