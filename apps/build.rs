@@ -26,9 +26,11 @@ fn main() {
         }
     }
 
+    // do not format in rustdoc build
+    let format = !cfg!(doc);
     tonic_build::configure()
         .out_dir("src/lib/proto/generated")
-        .format(true)
+        .format(format)
         // TODO try to add json encoding to simplify use for user
         // .type_attribute("types.Intent", "#[derive(serde::Serialize,
         // serde::Deserialize)]")
