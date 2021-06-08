@@ -240,10 +240,6 @@ pub async fn build_transport(
         yamux_config.set_max_buffer_size(16 * 1024 * 1024);
         yamux_config.set_receive_window_size(16 * 1024 * 1024);
 
-        let mut yamux_config = yamux::YamuxConfig::default();
-        yamux_config.set_max_buffer_size(16 * 1024 * 1024);
-        yamux_config.set_receive_window_size(16 * 1024 * 1024);
-
         core::upgrade::SelectUpgrade::new(yamux_config, mplex_config)
     };
 
