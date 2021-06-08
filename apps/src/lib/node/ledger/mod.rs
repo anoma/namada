@@ -1,3 +1,4 @@
+pub mod protocol;
 pub mod storage;
 mod tendermint;
 
@@ -18,7 +19,6 @@ use borsh::BorshSerialize;
 use thiserror::Error;
 
 use self::tendermint::{AbciMsg, AbciReceiver};
-use crate::node::protocol;
 use crate::proto::{self, Tx};
 use crate::{config, wallet};
 
@@ -45,8 +45,10 @@ pub fn run(config: config::Ledger) -> Result<()> {
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, &config.db);
     // Run Tendermint ABCI server in another thread
-    std::thread::spawn(move || tendermint::run(sender, config));
-    shell.run()
+    let _tendermint_handle =
+        std::thread::spawn(move || tendermint::run(sender, config));
+    shell.run().expect("shell failed");
+    Ok(())
 }
 
 pub fn reset(config: config::Ledger) -> Result<()> {
@@ -255,8 +257,13 @@ impl Shell {
                         })?
                     }
                 }
+                AbciMsg::Terminate => {
+                    tracing::info!("Shutting down Anoma node");
+                    break;
+                }
             }
         }
+        Ok(())
     }
 }
 

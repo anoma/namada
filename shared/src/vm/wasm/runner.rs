@@ -666,7 +666,7 @@ mod tests {
 
         let runner = TxRunner::new();
         let tx_data = vec![];
-        let mut storage = TestStorage::default();
+        let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
         let error = runner
