@@ -1,3 +1,4 @@
+pub mod protocol;
 pub mod storage;
 mod tendermint;
 
@@ -18,7 +19,6 @@ use borsh::BorshSerialize;
 use thiserror::Error;
 
 use self::tendermint::{AbciMsg, AbciReceiver};
-use crate::node::protocol;
 use crate::proto::{self, Tx};
 use crate::{config, wallet};
 
@@ -45,8 +45,10 @@ pub fn run(config: config::Ledger) -> Result<()> {
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, &config.db);
     // Run Tendermint ABCI server in another thread
-    std::thread::spawn(move || tendermint::run(sender, config));
-    shell.run()
+    let _tendermint_handle =
+        std::thread::spawn(move || tendermint::run(sender, config));
+    shell.run().expect("shell failed");
+    Ok(())
 }
 
 pub fn reset(config: config::Ledger) -> Result<()> {
@@ -82,10 +84,10 @@ impl Shell {
     pub fn new(abci: AbciReceiver, db_path: impl AsRef<Path>) -> Self {
         let mut storage = storage::open(db_path);
 
-        let token_vp = std::fs::read("vps/vp_token/vp.wasm")
+        let token_vp = std::fs::read("wasm/vps/vp_token/vp.wasm")
             .expect("cannot load token VP");
-        let user_vp =
-            std::fs::read("vps/vp_user/vp.wasm").expect("cannot load user VP");
+        let user_vp = std::fs::read("wasm/vps/vp_user/vp.wasm")
+            .expect("cannot load user VP");
 
         // TODO load initial accounts from genesis
 
@@ -255,8 +257,13 @@ impl Shell {
                         })?
                     }
                 }
+                AbciMsg::Terminate => {
+                    tracing::info!("Shutting down Anoma node");
+                    break;
+                }
             }
         }
+        Ok(())
     }
 }
 
@@ -295,13 +302,13 @@ impl Shell {
         match result {
             Ok(result) => {
                 if result.is_accepted() {
-                    tracing::debug!(
+                    tracing::info!(
                         "all VPs accepted apply_tx storage modification {:#?}",
                         result
                     );
                     self.write_log.commit_tx();
                 } else {
-                    tracing::debug!(
+                    tracing::info!(
                         "some VPs rejected apply_tx storage modification {:#?}",
                         result.vps_result.rejected_vps
                     );

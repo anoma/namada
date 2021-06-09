@@ -43,7 +43,7 @@ impl Default for TestTxEnv {
 
 impl TestTxEnv {
     pub fn all_touched_storage_keys(&self) -> Vec<Key> {
-        self.write_log.get_all_keys()
+        self.write_log.get_keys()
     }
 }
 

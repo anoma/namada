@@ -343,7 +343,7 @@ pub trait StorageHasher: sparse_merkle_tree::traits::Hasher + Default {
 }
 
 /// Helpers for testing components that depend on storage
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use std::convert::TryInto;
 

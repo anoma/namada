@@ -19,7 +19,7 @@ pub enum Error {
 const TX_GAS_PER_BYTE: u64 = 2;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
-const PARALLEL_GAS_MULTIPLER: f64 = 0.1;
+const PARALLEL_GAS_MULTIPLIER: f64 = 0.1;
 
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
@@ -43,8 +43,10 @@ pub struct BlockGasMeter {
 /// Gas metering in a validity predicate
 #[derive(Debug, Clone)]
 pub struct VpGasMeter {
-    /// The current gas usage
-    pub vp_gas: u64,
+    /// The gas used in the transaction before the VP run
+    initial_gas: u64,
+    /// The current gas usage in the VP
+    pub current_gas: u64,
     /// We store the `error` inside here, because when we run out of gas in VP
     /// wasm, the execution is immediately shut down with `unreachable!()`
     /// as we cannot simply return `Result` from wasm. So instead, we store
@@ -56,7 +58,7 @@ pub struct VpGasMeter {
 /// Gas meter for VPs parallel runs
 #[derive(Clone, Debug)]
 pub struct VpsGas {
-    max: u64,
+    max: Option<u64>,
     rest: Vec<u64>,
 }
 
@@ -113,31 +115,24 @@ impl BlockGasMeter {
         self.block_gas = 0;
     }
 
-    /// Add a fee for parallelized validity predicate run.
-    pub fn add_parallel_fee(&mut self, vps_gases: &[u64]) -> Result<()> {
-        let gas_used =
-            vps_gases.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLER;
-        self.add(gas_used as u64)
-    }
-
     /// Get the total gas used in the current transaction.
     pub fn get_current_transaction_gas(&self) -> u64 {
         self.transaction_gas
     }
 
     /// Add the gas cost used in validity predicates to the current transaction.
-    pub fn add_vps_gas(&mut self, VpsGas { max, rest }: &VpsGas) -> Result<()> {
-        self.add(*max)?;
-        self.add_parallel_fee(rest)
+    pub fn add_vps_gas(&mut self, vps_gas: &VpsGas) -> Result<()> {
+        self.add(vps_gas.get_current_gas()?)
     }
 }
 
 impl VpGasMeter {
     /// Initialize a new VP gas meter, starting with the gas consumed in the
     /// transaction so far.
-    pub fn new(vp_gas: u64) -> Self {
+    pub fn new(initial_gas: u64) -> Self {
         Self {
-            vp_gas,
+            initial_gas,
+            current_gas: 0,
             error: None,
         }
     }
@@ -146,9 +141,9 @@ impl VpGasMeter {
     /// consumed gas exceeds the transaction gas limit, but the state will still
     /// be updated.
     pub fn add(&mut self, gas: u64) -> Result<()> {
-        match self.vp_gas.checked_add(gas).ok_or(Error::GasOverflow) {
+        match self.current_gas.checked_add(gas).ok_or(Error::GasOverflow) {
             Ok(gas) => {
-                self.vp_gas = gas;
+                self.current_gas = gas;
             }
             Err(err) => {
                 self.error = Some(err.clone());
@@ -156,7 +151,18 @@ impl VpGasMeter {
             }
         }
 
-        if self.vp_gas > TRANSACTION_GAS_LIMIT {
+        let current_total = match self
+            .initial_gas
+            .checked_add(self.current_gas)
+            .ok_or(Error::GasOverflow)
+        {
+            Ok(gas) => gas,
+            Err(err) => {
+                self.error = Some(err.clone());
+                return Err(err);
+            }
+        };
+        if current_total > TRANSACTION_GAS_LIMIT {
             self.error = Some(Error::TransactionGasExceedededError);
             return Err(Error::TransactionGasExceedededError);
         }
@@ -165,33 +171,57 @@ impl VpGasMeter {
 }
 
 impl VpsGas {
+    /// Set the gas cost from a single VP run.
+    pub fn set(&mut self, vp_gas_meter: &VpGasMeter) -> Result<()> {
+        debug_assert_eq!(self.max, None);
+        debug_assert!(self.rest.is_empty());
+        self.max = Some(vp_gas_meter.current_gas);
+        self.check_limit(vp_gas_meter.initial_gas)
+    }
+
     /// Merge validity predicates gas meters from parallelized runs.
     pub fn merge(
         &mut self,
         other: &mut VpsGas,
         initial_gas: u64,
     ) -> Result<()> {
-        if other.max > self.max {
-            self.rest.push(self.max);
-            self.max = other.max;
-        } else {
-            self.rest.push(other.max);
-            self.rest.append(&mut other.rest);
+        match (self.max, other.max) {
+            (None, Some(_)) => {
+                self.max = other.max;
+            }
+            (Some(this_max), Some(other_max)) => {
+                if this_max < other_max {
+                    self.rest.push(this_max);
+                    self.max = other.max;
+                } else {
+                    self.rest.push(other_max);
+                }
+            }
+            _ => {}
         }
+        self.rest.append(&mut other.rest);
 
-        let parallel_gas: u64 = (self.rest.clone().iter().sum::<u64>() as f64
-            * PARALLEL_GAS_MULTIPLER) as u64;
+        self.check_limit(initial_gas)
+    }
 
-        let total = self
-            .max
-            .checked_add(initial_gas)
-            .ok_or(Error::GasOverflow)?
-            .checked_add(parallel_gas)
+    fn check_limit(&self, initial_gas: u64) -> Result<()> {
+        let total = initial_gas
+            .checked_add(self.get_current_gas()?)
             .ok_or(Error::GasOverflow)?;
         if total > TRANSACTION_GAS_LIMIT {
             return Err(Error::GasOverflow);
         }
         Ok(())
+    }
+
+    /// Get the gas consumed by the parallelized VPs
+    fn get_current_gas(&self) -> Result<u64> {
+        let parallel_gas =
+            self.rest.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLIER;
+        self.max
+            .unwrap_or_default()
+            .checked_add(parallel_gas as u64)
+            .ok_or(Error::GasOverflow)
     }
 }
 
@@ -207,7 +237,7 @@ impl Default for BlockGasMeter {
 impl Default for VpsGas {
     fn default() -> Self {
         Self {
-            max: 0,
+            max: None,
             rest: Vec::new(),
         }
     }

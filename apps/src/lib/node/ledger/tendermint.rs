@@ -14,6 +14,8 @@ use std::sync::mpsc::{self, channel, Sender};
 use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::types::{BlockHash, BlockHeight};
 use serde_json::json;
+use signal_hook::consts::TERM_SIGNALS;
+use signal_hook::iterator::Signals;
 use tendermint_abci::{self, ServerBuilder};
 use tendermint_proto::abci::{
     CheckTxType, RequestApplySnapshotChunk, RequestBeginBlock, RequestCheckTx,
@@ -28,8 +30,8 @@ use tendermint_proto::abci::{
 
 use crate::config;
 use crate::genesis::{self, Validator};
+use crate::node::ledger::protocol::TxResult;
 use crate::node::ledger::MempoolTxType;
-use crate::node::protocol::TxResult;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
 pub type AbciSender = mpsc::Sender<AbciMsg>;
@@ -42,7 +44,10 @@ pub enum AbciMsg {
         reply: Sender<Option<(MerkleRoot, u64)>>,
     },
     /// Initialize a chain with the given ID
-    InitChain { reply: Sender<()>, chain_id: String },
+    InitChain {
+        reply: Sender<()>,
+        chain_id: String,
+    },
     /// Validate a given transaction for inclusion in the mempool
     MempoolValidate {
         reply: Sender<Result<(), String>>,
@@ -74,7 +79,11 @@ pub enum AbciMsg {
     },
     /// Commit the current block. The expected result is the Merkle root hash
     /// of the committed block.
-    CommitBlock { reply: Sender<MerkleRoot> },
+    CommitBlock {
+        reply: Sender<MerkleRoot>,
+    },
+
+    Terminate,
 }
 
 /// Run the ABCI server in the current thread (blocking).
@@ -91,7 +100,7 @@ pub fn run(sender: AbciSender, config: config::Ledger) {
         write_validator_key(home_dir, &genesis::genesis().validator)
             .expect("TEMPORARY: failed to write tendermint validator key");
     }
-    let _tendermint_node = Command::new("tendermint")
+    let mut tendermint_node = Command::new("tendermint")
         .args(&[
             "node",
             "--home",
@@ -107,9 +116,23 @@ pub fn run(sender: AbciSender, config: config::Ledger) {
     let server = ServerBuilder::default()
         .bind(config.address, AbciWrapper { sender })
         .expect("TEMPORARY: failed to bind ABCI server address");
-    server
-        .listen()
-        .expect("TEMPORARY: failed to start up ABCI server")
+    std::thread::spawn(move || {
+        server
+            .listen()
+            .expect("TEMPORARY: failed to start up ABCI server")
+    });
+
+    let mut signals =
+        Signals::new(TERM_SIGNALS).expect("cannot create Signals");
+    for sig in signals.forever() {
+        if TERM_SIGNALS.contains(&sig) {
+            tracing::info!(
+                "Received termination signal, shutting down Tendermint node"
+            );
+            tendermint_node.kill().expect("termination failed");
+            break;
+        }
+    }
 }
 
 pub fn reset(config: config::Ledger) {
@@ -134,6 +157,13 @@ pub fn reset(config: config::Ledger) {
 #[derive(Clone, Debug)]
 struct AbciWrapper {
     sender: AbciSender,
+}
+
+impl Drop for AbciWrapper {
+    fn drop(&mut self) {
+        // the channel might have been already closed
+        let _ = self.sender.send(AbciMsg::Terminate);
+    }
 }
 
 impl tendermint_abci::Application for AbciWrapper {
