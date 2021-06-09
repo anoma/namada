@@ -27,11 +27,36 @@ use tendermint_proto::abci::{
     ResponseInitChain, ResponseListSnapshots, ResponseLoadSnapshotChunk,
     ResponseOfferSnapshot, ResponseQuery, ResponseSetOption,
 };
+use thiserror::Error;
 
 use crate::config;
 use crate::genesis::{self, Validator};
 use crate::node::ledger::protocol::TxResult;
 use crate::node::ledger::MempoolTxType;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Failed to initialize Tendermint: {0}")]
+    TendermintInit(std::io::Error),
+    #[error("Failed to write Tendermint validator key: {0}")]
+    TendermintValidatorKey(std::io::Error),
+    #[error("Failed to load Tendermint config file: {0}")]
+    TendermintLoadConfig(tendermint::error::Error),
+    #[error("Failed to open Tendermint config for writing: {0}")]
+    TendermintOpenWriteConfig(std::io::Error),
+    #[error("Failed to serialize Tendermint config TOML to string: {0}")]
+    TendermintConfigSerializeToml(toml::ser::Error),
+    #[error("Failed to write Tendermint config: {0}")]
+    TendermintWriteConfig(std::io::Error),
+    #[error("Failed to start up Tendermint node: {0}")]
+    TendermintStartUp(std::io::Error),
+    #[error("Failed to bind ABCI server: {0}")]
+    AbciServerBind(eyre::Report),
+    #[error("Failed to create OS signal handlers: {0}")]
+    SignalsHandlers(std::io::Error),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub type AbciReceiver = mpsc::Receiver<AbciMsg>;
 pub type AbciSender = mpsc::Sender<AbciMsg>;
@@ -50,7 +75,7 @@ pub enum AbciMsg {
     },
     /// Validate a given transaction for inclusion in the mempool
     MempoolValidate {
-        reply: Sender<Result<(), String>>,
+        reply: Sender<std::result::Result<(), String>>,
         tx: Vec<u8>,
         r#type: MempoolTxType,
     },
@@ -62,7 +87,7 @@ pub enum AbciMsg {
     },
     /// Apply a transaction in a block
     ApplyTx {
-        reply: Sender<(i64, Result<TxResult, String>)>,
+        reply: Sender<(i64, std::result::Result<TxResult, String>)>,
         tx: Vec<u8>,
     },
     /// End a block
@@ -71,7 +96,7 @@ pub enum AbciMsg {
         height: BlockHeight,
     },
     AbciQuery {
-        reply: Sender<Result<String, String>>,
+        reply: Sender<std::result::Result<String, String>>,
         path: String,
         data: Vec<u8>,
         height: BlockHeight,
@@ -87,57 +112,58 @@ pub enum AbciMsg {
 }
 
 /// Run the ABCI server in the current thread (blocking).
-pub fn run(sender: AbciSender, config: config::Ledger) {
+pub fn run(sender: AbciSender, config: config::Ledger) -> Result<()> {
     let home_dir = config.tendermint;
     let home_dir_string = home_dir.to_string_lossy().to_string();
     // init and run a Tendermint node child process
     Command::new("tendermint")
         .args(&["init", "--home", &home_dir_string])
         .output()
-        .expect("TEMPORARY: Failed to initialize tendermint node");
+        .map_err(Error::TendermintInit)?;
 
     if cfg!(feature = "dev") {
         // override the validator key file
         write_validator_key(&home_dir, &genesis::genesis().validator)
-            .expect("Failed to write Tendermint validator key");
+            .map_err(Error::TendermintValidatorKey)?;
     }
 
-    write_tendermint_config(&home_dir)
-        .expect("Failed to write Tendermint config");
+    update_tendermint_config(&home_dir)?;
 
     let mut tendermint_node = Command::new("tendermint")
-        .args(&[
-            "node",
-            "--home",
-            &home_dir_string,
-            // ! Only produce blocks when there are txs or when the AppHash
-            // changes for now
-            "--consensus.create_empty_blocks=false",
-        ])
+        .args(&["node", "--home", &home_dir_string])
         .spawn()
-        .expect("TEMPORARY: failed to start up tendermint node");
+        .map_err(Error::TendermintStartUp)?;
 
     // bind and run the ABCI server
     let server = ServerBuilder::default()
-        .bind(config.address, AbciWrapper { sender })
-        .expect("TEMPORARY: failed to bind ABCI server address");
+        .bind(
+            config.address,
+            AbciWrapper {
+                sender: sender.clone(),
+            },
+        )
+        .map_err(Error::AbciServerBind)?;
     std::thread::spawn(move || {
-        server
-            .listen()
-            .expect("TEMPORARY: failed to start up ABCI server")
+        if let Err(err) = server.listen() {
+            tracing::error!("Failed to start up ABCI server: {}", err);
+            sender.send(AbciMsg::Terminate).unwrap()
+        }
     });
 
     let mut signals =
-        Signals::new(TERM_SIGNALS).expect("cannot create Signals");
+        Signals::new(TERM_SIGNALS).map_err(Error::SignalsHandlers)?;
     for sig in signals.forever() {
         if TERM_SIGNALS.contains(&sig) {
             tracing::info!(
                 "Received termination signal, shutting down Tendermint node"
             );
-            tendermint_node.kill().expect("termination failed");
+            tendermint_node
+                .kill()
+                .expect("Tendermint node termination failed");
             break;
         }
     }
+    Ok(())
 }
 
 pub fn reset(config: config::Ledger) {
@@ -151,12 +177,12 @@ pub fn reset(config: config::Ledger) {
             &config.tendermint.to_string_lossy(),
         ])
         .output()
-        .expect("TEMPORARY: Failed to reset tendermint node's data");
+        .expect("Failed to reset tendermint node's data");
     fs::remove_dir_all(format!(
         "{}/config",
         &config.tendermint.to_string_lossy()
     ))
-    .expect("TEMPORARY: Failed to reset tendermint node's config");
+    .expect("Failed to reset tendermint node's config");
 }
 
 #[derive(Clone, Debug)]
@@ -184,14 +210,14 @@ impl tendermint_abci::Application for AbciWrapper {
         let (reply, reply_receiver) = channel();
         self.sender
             .send(AbciMsg::GetInfo { reply })
-            .expect("TEMPORARY: failed to send GetInfo request");
+            .expect("failed to send GetInfo request");
         if let Some((last_block_app_hash, last_block_height)) = reply_receiver
             .recv()
-            .expect("TEMPORARY: failed to recv GetInfo response")
+            .expect("failed to receive GetInfo response")
         {
             resp.last_block_height = last_block_height
                 .try_into()
-                .expect("TEMPORARY: unexpected height value");
+                .expect("unexpected height value");
             resp.last_block_app_hash = last_block_app_hash.0;
         }
 
@@ -206,10 +232,10 @@ impl tendermint_abci::Application for AbciWrapper {
         let (reply, reply_receiver) = channel();
         self.sender
             .send(AbciMsg::InitChain { reply, chain_id })
-            .expect("TEMPORARY: failed to send InitChain request");
+            .expect("failed to send InitChain request");
         reply_receiver
             .recv()
-            .expect("TEMPORARY: failed to recv InitChain response");
+            .expect("failed to receive InitChain response");
 
         // Set the initial validator set
         let genesis = genesis::genesis();
@@ -225,7 +251,7 @@ impl tendermint_abci::Application for AbciWrapper {
             .validator
             .voting_power
             .try_into()
-            .expect("TEMPORARY: unexpected validator's voting power");
+            .expect("unexpected validator's voting power");
         resp.validators.push(abci_validator);
         resp
     }
@@ -247,11 +273,11 @@ impl tendermint_abci::Application for AbciWrapper {
                 height: BlockHeight(height),
                 prove,
             })
-            .expect("TEMPORARY: failed to send AbciQuery request");
+            .expect("failed to send AbciQuery request");
 
         let result = reply_receiver
             .recv()
-            .expect("TEMPORARY: failed to recv AbciQuery response");
+            .expect("failed to receive AbciQuery response");
 
         match result {
             Ok(res) => resp.info = res,
@@ -267,7 +293,7 @@ impl tendermint_abci::Application for AbciWrapper {
     fn check_tx(&self, req: RequestCheckTx) -> ResponseCheckTx {
         let mut resp = ResponseCheckTx::default();
         let r#type = match CheckTxType::from_i32(req.r#type)
-            .expect("TEMPORARY: received unexpected CheckTxType from ABCI")
+            .expect("received unexpected CheckTxType from ABCI")
         {
             CheckTxType::New => MempoolTxType::NewTransaction,
             CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
@@ -280,10 +306,10 @@ impl tendermint_abci::Application for AbciWrapper {
                 tx: req.tx,
                 r#type,
             })
-            .expect("TEMPORARY: failed to send MempoolValidate request");
+            .expect("failed to send MempoolValidate request");
         let result = reply_receiver
             .recv()
-            .expect("TEMPORARY: failed to recv MempoolValidate response");
+            .expect("failed to receive MempoolValidate response");
 
         match result {
             Ok(_) => resp.info = "Mempool validation passed".to_string(),
@@ -303,10 +329,8 @@ impl tendermint_abci::Application for AbciWrapper {
                 tracing::error!("{:#?}", err);
             }
             Ok(hash) => {
-                let raw_height = req
-                    .header
-                    .expect("TEMPORARY: missing block's header")
-                    .height;
+                let raw_height =
+                    req.header.expect("missing block's header").height;
                 match raw_height.try_into() {
                     Err(_) => {
                         tracing::error!(
@@ -322,12 +346,10 @@ impl tendermint_abci::Application for AbciWrapper {
                                 hash,
                                 height,
                             })
-                            .expect(
-                                "TEMPORARY: failed to send BeginBlock request",
-                            );
-                        reply_receiver.recv().expect(
-                            "TEMPORARY: failed to recv BeginBlock response",
-                        );
+                            .expect("failed to send BeginBlock request");
+                        reply_receiver
+                            .recv()
+                            .expect("failed to receive BeginBlock response");
                     }
                 }
             }
@@ -341,10 +363,10 @@ impl tendermint_abci::Application for AbciWrapper {
         let (reply, reply_receiver) = channel();
         self.sender
             .send(AbciMsg::ApplyTx { reply, tx: req.tx })
-            .expect("TEMPORARY: failed to send ApplyTx request");
+            .expect("failed to send ApplyTx request");
         let (gas, result) = reply_receiver
             .recv()
-            .expect("TEMPORARY: failed to recv ApplyTx response");
+            .expect("failed to receive ApplyTx response");
 
         resp.gas_used = gas;
 
@@ -375,10 +397,10 @@ impl tendermint_abci::Application for AbciWrapper {
                 let (reply, reply_receiver) = channel();
                 self.sender
                     .send(AbciMsg::EndBlock { reply, height })
-                    .expect("TEMPORARY: failed to send EndBlock request");
+                    .expect("failed to send EndBlock request");
                 reply_receiver
                     .recv()
-                    .expect("TEMPORARY: failed to recv EndBlock response");
+                    .expect("failed to receive EndBlock response");
             }
         }
         resp
@@ -394,10 +416,10 @@ impl tendermint_abci::Application for AbciWrapper {
         let (reply, reply_receiver) = channel();
         self.sender
             .send(AbciMsg::CommitBlock { reply })
-            .expect("TEMPORARY: failed to send CommitBlock request");
+            .expect("failed to send CommitBlock request");
         let MerkleRoot(result) = reply_receiver
             .recv()
-            .expect("TEMPORARY: failed to recv CommitBlock response");
+            .expect("failed to receive CommitBlock response");
 
         resp.data = result;
         resp
@@ -433,21 +455,31 @@ impl tendermint_abci::Application for AbciWrapper {
     }
 }
 
-fn write_tendermint_config(home_dir: impl AsRef<Path>) -> io::Result<()> {
+fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
     let mut config = TendermintConfig::load_toml_file(&path)
-        .expect("Couldn't load Tendermint config");
+        .map_err(Error::TendermintLoadConfig)?;
+
+    // In "dev", only produce blocks when there are txs or when the AppHash
+    // changes
+    config.consensus.create_empty_blocks = !cfg!(feature = "dev");
 
     // We set this to true as we don't want any invalid tx be re-applied. This
     // also implies that it's not possible for an invalid tx to become valid
     // again in the future.
     config.mempool.keep_invalid_txs_in_cache = false;
 
-    let mut file = OpenOptions::new().write(true).truncate(true).open(path)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .map_err(Error::TendermintOpenWriteConfig)?;
     let config_str = toml::to_string(&config)
-        .expect("Couldn't convert Tendermint config to a TOML string");
-    file.write(config_str.as_bytes()).map(|_| ())
+        .map_err(Error::TendermintConfigSerializeToml)?;
+    file.write(config_str.as_bytes())
+        .map(|_| ())
+        .map_err(Error::TendermintWriteConfig)
 }
 
 #[cfg(feature = "dev")]
