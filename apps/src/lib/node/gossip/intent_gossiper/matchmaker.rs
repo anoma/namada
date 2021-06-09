@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use anoma_shared::gossip::mm::MmHost;
+use anoma_shared::proto::{Intent, IntentId, Tx};
 use anoma_shared::types::key::ed25519::SignedTxData;
 use anoma_shared::vm::wasm::runner::{self, MmRunner};
 use borsh::BorshSerialize;
@@ -11,7 +12,6 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
-use crate::proto::{Intent, IntentId, Tx};
 use crate::types::MatchmakerMessage;
 use crate::{config, wallet};
 

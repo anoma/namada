@@ -88,6 +88,3 @@ anoma_shared = {path = "../shared", features = ["testing", "wasm-runtime"]}
 cargo-watch = "7.5.0"
 proptest = "1.0.0"
 tempfile = "3.2.0"
-
-[build-dependencies]
-tonic-build = "0.4.0"

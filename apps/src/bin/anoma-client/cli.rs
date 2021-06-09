@@ -2,9 +2,9 @@ use std::fs::File;
 use std::io::Write;
 
 use anoma::client::tx;
-use anoma::proto::services::rpc_service_client::RpcServiceClient;
-use anoma::proto::{self, services, RpcMessage};
 use anoma::{cli, wallet};
+use anoma_shared::proto::services::rpc_service_client::RpcServiceClient;
+use anoma_shared::proto::{self, services, RpcMessage};
 use anoma_shared::types::intent::Intent;
 use anoma_shared::types::key::ed25519::Signed;
 use anoma_shared::types::{token, Address};

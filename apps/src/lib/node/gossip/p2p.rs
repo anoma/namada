@@ -1,5 +1,9 @@
 use std::convert::TryFrom;
 
+use anoma_shared::proto::services::{rpc_message, RpcResponse};
+use anoma_shared::proto::{
+    IntentGossipMessage, IntentMessage, SubscribeTopicMessage,
+};
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
 use libp2p::identity::Keypair::Ed25519;
@@ -8,8 +12,6 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::network_behaviour::Behaviour;
-use crate::proto::services::{rpc_message, RpcResponse};
-use crate::proto::{IntentGossipMessage, IntentMessage, SubscribeTopicMessage};
 use crate::types::MatchmakerMessage;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;

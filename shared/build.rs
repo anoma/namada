@@ -27,7 +27,7 @@ fn main() {
     }
 
     tonic_build::configure()
-        .out_dir("src/lib/proto/generated")
+        .out_dir("src/proto/generated")
         .format(true)
         // TODO try to add json encoding to simplify use for user
         // .type_attribute("types.Intent", "#[derive(serde::Serialize,

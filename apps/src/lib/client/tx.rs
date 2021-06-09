@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
+use anoma_shared::proto::Tx;
 use anoma_shared::types::key::ed25519::Keypair;
 use anoma_shared::types::{token, Address, UpdateVp};
 use borsh::BorshSerialize;
 use tendermint_rpc::{Client, HttpClient};
 
-use crate::proto::Tx;
 use crate::wallet;
 
 const TX_UPDATE_VP: &str = "wasm/txs/tx_update_vp/tx.wasm";

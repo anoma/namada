@@ -7,7 +7,6 @@ pub mod genesis;
 pub mod gossiper;
 pub mod logging;
 pub mod node;
-pub mod proto;
 pub mod types;
 pub mod wallet;
 

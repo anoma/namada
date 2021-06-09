@@ -6,6 +6,7 @@ use std::fmt;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::ledger::storage::write_log::WriteLog;
+use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm;
 use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
@@ -13,7 +14,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::node::ledger::storage::PersistentStorage;
-use crate::proto::{self, Tx};
 
 #[derive(Error, Debug)]
 pub enum Error {

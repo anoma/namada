@@ -2,11 +2,11 @@ mod filter;
 mod matchmaker;
 mod mempool;
 
+use anoma_shared::proto::Intent;
 use matchmaker::Matchmaker;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use crate::proto::Intent;
 use crate::types::MatchmakerMessage;
 
 // TODO split Error and Result type in two, one for Result/Error that can only
