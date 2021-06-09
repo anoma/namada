@@ -283,18 +283,24 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir tech-specs/book/rustdoc, mv -v target/doc/* tech-specs/book/rustdoc/]
+- commands: [sccache --start-server, make build-doc, mkdir tech-specs/book/rustdoc,
+    mv -v target/doc/* tech-specs/book/rustdoc/]
   depends_on: [restore-cache]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: generate-docs
   pull: if-not-exists
 - depends_on: [generate-docs]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-docs
   image: plugins/gh-pages
   name: publish
   settings:
     pages_directory: ./tech-specs/book
     password: {from_secret: github_token}
-    username: Drone
+    username: fraccaman
 - depends_on: [publish]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -321,6 +327,6 @@ type: docker
 workspace: {path: /drone/workspace}
 ---
 kind: signature
-hmac: c8b7d7adc9478bac211161d45c98c4eecea64aaef95956b48e583750b0aad8d3
+hmac: ad1475448c099409c9ba898fee940a9f1365e2e6eadde7ef13920cf9bbf8db38
 
 ...
