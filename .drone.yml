@@ -248,7 +248,8 @@ trigger:
 type: docker
 workspace: {path: /drone/workspace}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1',
+  GIT_TERMINAL_PROMP: '1'}
 kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
@@ -327,6 +328,6 @@ type: docker
 workspace: {path: /drone/workspace}
 ---
 kind: signature
-hmac: ad1475448c099409c9ba898fee940a9f1365e2e6eadde7ef13920cf9bbf8db38
+hmac: 415df92c7b34eca68d2c0543a132d0318ef8fd9f5801b66a332c2f1f5b79bfc4
 
 ...
