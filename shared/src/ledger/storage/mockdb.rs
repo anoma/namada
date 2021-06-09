@@ -128,8 +128,8 @@ impl DB for MockDB {
             None => return Ok(None),
         }
         // Load data at the height
-        let prefix = format!("{}/", height.to_string());
-        let upper_prefix = format!("{}/", height.next_height().to_string());
+        let prefix = format!("{}/", height.raw());
+        let upper_prefix = format!("{}/", height.next_height().raw());
         let mut root = None;
         let mut store = None;
         let mut hash = None;
@@ -239,7 +239,7 @@ impl<'iter> DBIter<'iter> for MockDB {
         height: BlockHeight,
         prefix: &Key,
     ) -> MockPrefixIterator<'iter> {
-        let db_prefix = format!("{}/subspace/", height.to_string());
+        let db_prefix = format!("{}/subspace/", height.raw());
         let prefix = format!("{}{}", db_prefix, prefix.to_string());
         let iter = self.0.iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
