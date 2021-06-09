@@ -296,7 +296,7 @@ steps:
   image: plugins/gh-pages
   name: publish-gh-pages
   settings: {pages_directory: ./tech-specs/book, username: fraccaman}
-- depends_on: [publish]
+- depends_on: [publish-gh-pages]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -421,6 +421,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 82d69f27190c8d329b3b755e1cec70277bd028933b156798fae7ab276f459bf1
+hmac: 94398e9d0954dfc107d0cd67e26d9a45a5d407a6ed021ecf6d4cadd3cdf15040
 
 ...
