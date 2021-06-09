@@ -317,11 +317,11 @@ steps:
     status: [success, failure]
 trigger:
   branch: [master]
-  event: [push]
+  event: [push, pull_request]
 type: docker
 workspace: {path: /drone/workspace}
 ---
 kind: signature
-hmac: 7ea31030b1da5be9e07a2242471c0a9b0c93d1a05e63475054ce08a9ceb75bd5
+hmac: c81db62ead5f37587949dcc5c7e27648164a2a39a674bf3d7b35c6e36940f038
 
 ...
