@@ -4,10 +4,9 @@
 //! of this module.
 
 use std::convert::{TryFrom, TryInto};
-use std::fs;
-use std::fs::File;
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
 
@@ -16,6 +15,7 @@ use anoma_shared::types::{BlockHash, BlockHeight};
 use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
+use tendermint::config::TendermintConfig;
 use tendermint_abci::{self, ServerBuilder};
 use tendermint_proto::abci::{
     CheckTxType, RequestApplySnapshotChunk, RequestBeginBlock, RequestCheckTx,
@@ -95,11 +95,16 @@ pub fn run(sender: AbciSender, config: config::Ledger) {
         .args(&["init", "--home", &home_dir_string])
         .output()
         .expect("TEMPORARY: Failed to initialize tendermint node");
+
     if cfg!(feature = "dev") {
         // override the validator key file
-        write_validator_key(home_dir, &genesis::genesis().validator)
-            .expect("TEMPORARY: failed to write tendermint validator key");
+        write_validator_key(&home_dir, &genesis::genesis().validator)
+            .expect("Failed to write Tendermint validator key");
     }
+
+    write_tendermint_config(&home_dir)
+        .expect("Failed to write Tendermint config");
+
     let mut tendermint_node = Command::new("tendermint")
         .args(&[
             "node",
@@ -428,10 +433,29 @@ impl tendermint_abci::Application for AbciWrapper {
     }
 }
 
+fn write_tendermint_config(home_dir: impl AsRef<Path>) -> io::Result<()> {
+    let home_dir = home_dir.as_ref();
+    let path = home_dir.join("config").join("config.toml");
+    let mut config = TendermintConfig::load_toml_file(&path)
+        .expect("Couldn't load Tendermint config");
+
+    // We set this to true as we don't want any invalid tx be re-applied. This
+    // also implies that it's not possible for an invalid tx to become valid
+    // again in the future.
+    config.mempool.keep_invalid_txs_in_cache = false;
+
+    let mut file = OpenOptions::new().write(true).truncate(true).open(path)?;
+    let config_str = toml::to_string(&config)
+        .expect("Couldn't convert Tendermint config to a TOML string");
+    file.write(config_str.as_bytes()).map(|_| ())
+}
+
+#[cfg(feature = "dev")]
 fn write_validator_key(
-    home_dir: PathBuf,
+    home_dir: impl AsRef<Path>,
     account: &Validator,
 ) -> io::Result<()> {
+    let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
     let mut file = File::create(path)?;
     let pk = base64::encode(account.keypair.public.as_bytes());
