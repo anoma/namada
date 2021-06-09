@@ -278,8 +278,13 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make test-miri]
+- commands: [sccache --start-server, make test-miri]
   depends_on: [restore-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-miri
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-miri
   pull: if-not-exists
@@ -487,6 +492,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: d94a6cc15141fce6b4194f7ecdc9c6f00576ad7144f01520846b36befb36efee
+hmac: 897659a5a86729e5db97a156ce7dce4d889137ab6bc42c4ff02790d50e68d907
 
 ...
