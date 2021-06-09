@@ -20,6 +20,8 @@ fn read_from_cache<T: BorshDeserialize>(
         None
     } else {
         let result: Vec<u8> = Vec::with_capacity(read_result as _);
+        // The `result` will be dropped from the `target`, which is
+        // reconstructed from the same memory
         let result = ManuallyDrop::new(result);
         let offset = result.as_slice().as_ptr() as u64;
         unsafe { read_cache(offset) };

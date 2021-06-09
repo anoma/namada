@@ -482,7 +482,7 @@ pub fn tx_write<MEM, DB, H>(
     let (value, gas) = env.memory.read_bytes(val_ptr, val_len as _);
     tx_add_gas(env, gas);
 
-    tracing::debug!("tx_update {}, {:#?}", key, value);
+    tracing::debug!("tx_update {}, {:?}", key, value);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -565,7 +565,7 @@ where
     let (value, gas) = storage.read(&key).expect("storage read failed");
     vp_add_gas(env, gas);
     tracing::debug!(
-        "vp_read_pre addr {}, key {}, value {:#?}",
+        "vp_read_pre addr {}, key {}, value {:?}",
         env.address,
         key,
         value,

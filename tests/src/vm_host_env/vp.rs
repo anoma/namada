@@ -12,6 +12,8 @@ use anoma_shared::vm::{
     EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
 };
 
+use crate::tx::{init_tx_env, TestTxEnv};
+
 /// This module combines the native host function implementations from
 /// `native_vp_host_env` with the functions exposed to the vp wasm
 /// that will call to the native functions, instead of interfacing via a
@@ -90,8 +92,52 @@ impl Default for TestVpEnv {
     }
 }
 
+/// Initialize the host environment inside the [`vp_host_env`] module by running
+/// a transaction. The transaction is expected to modify the given address
+/// `addr` or to add it to the set of verifiers using
+/// [`tx_host_env::insert_verifier`].
+pub fn init_vp_env_from_tx<F>(
+    addr: Address,
+    mut tx_env: TestTxEnv,
+    mut apply_tx: F,
+) -> TestVpEnv
+where
+    F: FnMut(&Address),
+{
+    // Write an empty validity predicate for the address, because it's used to
+    // check if the address exists when we write into its storage
+    let vp_key = Key::validity_predicate(&addr).unwrap();
+    tx_env.storage.write(&vp_key, vec![]).unwrap();
+
+    init_tx_env(&mut tx_env);
+    apply_tx(&addr);
+
+    let verifiers_from_tx = &tx_env.verifiers;
+    let verifiers_changed_keys =
+        tx_env.write_log.verifiers_changed_keys(verifiers_from_tx);
+    let verifiers = verifiers_changed_keys.keys().collect();
+    let keys_changed = verifiers_changed_keys
+        .get(&addr)
+        .expect(
+            "The VP for the given address has not been triggered by the \
+             transaction",
+        )
+        .to_owned();
+
+    let mut vp_env = TestVpEnv {
+        addr,
+        storage: tx_env.storage,
+        write_log: tx_env.write_log,
+        keys_changed,
+        verifiers,
+        ..Default::default()
+    };
+
+    init_vp_env(&mut vp_env);
+    vp_env
+}
+
 /// Initialize the host environment inside the [`vp_host_env`] module.
-#[allow(dead_code)]
 pub fn init_vp_env(
     TestVpEnv {
         addr,
@@ -103,7 +149,6 @@ pub fn init_vp_env(
         keys_changed: _,
         verifiers: _,
         eval_runner,
-
         read_cache,
     }: &mut TestVpEnv,
 ) {

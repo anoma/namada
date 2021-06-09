@@ -16,8 +16,9 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
-    use anoma_shared::types::{address, Key};
+    use anoma_shared::types::{address, Key, KeySeg};
     use anoma_vm_env::tx_prelude::{BorshSerialize, KeyValIterator};
+    use anoma_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
     use itertools::Itertools;
     use test_env_log::test;
 
@@ -108,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tx_iter() {
+    fn test_tx_iter_prefix() {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
@@ -122,16 +123,17 @@ mod tests {
         );
 
         // Write some values directly into the storage first
-        let prefix = "key";
+        let prefix = Key::parse("prefix").unwrap();
         for i in 0..10_i32 {
-            let key = Key::parse(format!("{}/{}", prefix, i)).unwrap();
+            let key = prefix.join(&Key::parse(i.to_string()).unwrap());
             let value = i.try_to_vec().unwrap();
             env.storage.write(&key, value).unwrap();
-            env.storage.commit().unwrap();
         }
+        env.storage.commit().unwrap();
 
         // Then try to iterate over their prefix
-        let iter: KeyValIterator<i32> = tx_host_env::iter_prefix(prefix);
+        let iter: KeyValIterator<i32> =
+            tx_host_env::iter_prefix(prefix.to_string());
         let expected = (0..10).map(|i| (format!("{}/{}", prefix, i), i));
         itertools::assert_equal(iter.sorted(), expected.sorted());
     }
@@ -213,6 +215,156 @@ mod tests {
         assert_eq!(None, read_pre_value);
         let read_post_value: Option<String> = vp_host_env::read_post(key_raw);
         assert_eq!(Some(value), read_post_value);
+    }
+
+    #[test]
+    fn test_vp_read_and_has_key() {
+        let mut tx_env = TestTxEnv::default();
+
+        let addr = address::testing::established_address_1();
+        let addr_key = Key::from(addr.to_db_key());
+
+        // Write some value to storage
+        let existing_key =
+            addr_key.join(&Key::parse("existing_key_raw").unwrap());
+        let existing_key_raw = existing_key.to_string();
+        let existing_value = vec![2_u8; 1000];
+        // Values written to storage have to be encoded with Borsh
+        let existing_value_encoded = existing_value.try_to_vec().unwrap();
+        tx_env
+            .storage
+            .write(&existing_key, existing_value_encoded)
+            .unwrap();
+
+        // In a transaction, write override the existing key's value and add
+        // another key-value
+        let override_value = "override".to_string();
+        let new_key =
+            addr_key.join(&Key::parse("new_key").unwrap()).to_string();
+        let new_value = "vp".repeat(4);
+
+        // Initialize the VP environment via a transaction
+        // The `_vp_env` MUST NOT be dropped until the end of the test
+        let _vp_env = init_vp_env_from_tx(addr, tx_env, |_addr| {
+            // Override the existing key
+            tx_host_env::write(&existing_key_raw, &override_value);
+
+            // Write the new key-value
+            tx_host_env::write(&new_key, new_value.clone());
+        });
+
+        assert!(
+            vp_host_env::has_key_pre(&existing_key_raw),
+            "The existing key before transaction should be found"
+        );
+        let pre_existing_value: Option<Vec<u8>> =
+            vp_host_env::read_pre(&existing_key_raw);
+        assert_eq!(
+            Some(existing_value),
+            pre_existing_value,
+            "The existing value read from state before transaction should be \
+             unchanged"
+        );
+
+        assert!(
+            !vp_host_env::has_key_pre(&new_key),
+            "The new key before transaction shouldn't be found"
+        );
+        let pre_new_value: Option<Vec<u8>> = vp_host_env::read_pre(&new_key);
+        assert_eq!(
+            None, pre_new_value,
+            "The new value read from state before transaction shouldn't yet \
+             exist"
+        );
+
+        assert!(
+            vp_host_env::has_key_post(&existing_key_raw),
+            "The existing key after transaction should still be found"
+        );
+        let post_existing_value: Option<String> =
+            vp_host_env::read_post(&existing_key_raw);
+        assert_eq!(
+            Some(override_value),
+            post_existing_value,
+            "The existing value read from state after transaction should be \
+             overridden"
+        );
+
+        assert!(
+            vp_host_env::has_key_post(&new_key),
+            "The new key after transaction should be found"
+        );
+        let post_new_value: Option<String> = vp_host_env::read_post(&new_key);
+        assert_eq!(
+            Some(new_value),
+            post_new_value,
+            "The new value read from state after transaction should have a \
+             value equal to the one written in the transaction"
+        );
+    }
+
+    #[test]
+    fn test_vp_iter_prefix() {
+        let mut tx_env = TestTxEnv::default();
+
+        let addr = address::testing::established_address_1();
+        let addr_key = Key::from(addr.to_db_key());
+
+        // Write some value to storage
+        let prefix = addr_key.join(&Key::parse("prefix").unwrap());
+        for i in 0..10_i32 {
+            let key = prefix.join(&Key::parse(i.to_string()).unwrap());
+            let value = i.try_to_vec().unwrap();
+            tx_env.storage.write(&key, value).unwrap();
+        }
+        tx_env.storage.commit().unwrap();
+
+        // In a transaction, write override the existing key's value and add
+        // another key-value
+        let existing_key = prefix.join(&Key::parse(5.to_string()).unwrap());
+        let existing_key_raw = existing_key.to_string();
+        let new_key = prefix.join(&Key::parse(11.to_string()).unwrap());
+        let new_key_raw = new_key.to_string();
+
+        // Initialize the VP environment via a transaction
+        // The `_vp_env` MUST NOT be dropped until the end of the test
+        let _vp_env = init_vp_env_from_tx(addr, tx_env, |_addr| {
+            // Override one of the existing keys
+            tx_host_env::write(&existing_key_raw, 100_i32);
+
+            // Write the new key-value under the same prefix
+            tx_host_env::write(&new_key_raw, 11.try_to_vec().unwrap());
+        });
+
+        let iter_pre: PreKeyValIterator<i32> =
+            vp_host_env::iter_prefix_pre(prefix.to_string());
+        let expected_pre = (0..10).map(|i| (format!("{}/{}", prefix, i), i));
+        itertools::assert_equal(iter_pre.sorted(), expected_pre.sorted());
+
+        let iter_post: PostKeyValIterator<i32> =
+            vp_host_env::iter_prefix_post(prefix.to_string());
+        let expected_post = (0..10).map(|i| {
+            let val = if i == 5 { 100 } else { i };
+            (format!("{}/{}", prefix, i), val)
+        });
+        itertools::assert_equal(iter_post.sorted(), expected_post.sorted());
+    }
+
+    #[test]
+    fn test_vp_get_metadata() {
+        // The environment must be initialized first
+        let mut env = TestVpEnv::default();
+        init_vp_env(&mut env);
+
+        assert_eq!(vp_host_env::get_chain_id(), env.storage.get_chain_id().0);
+        assert_eq!(
+            vp_host_env::get_block_height(),
+            env.storage.get_block_height().0
+        );
+        assert_eq!(
+            vp_host_env::get_block_hash(),
+            env.storage.get_block_hash().0
+        );
     }
 
     #[test]
