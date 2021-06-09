@@ -295,10 +295,7 @@ steps:
     SCCACHE_S3_KEY_PREFIX: sccache-docs
   image: plugins/gh-pages
   name: publish
-  settings:
-    pages_directory: ./tech-specs/book
-    # password: {from_secret: github_token}
-    username: fraccaman
+  settings: {pages_directory: ./tech-specs/book, username: fraccaman}
 - depends_on: [publish]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -424,6 +421,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 415df92c7b34eca68d2c0543a132d0318ef8fd9f5801b66a332c2f1f5b79bfc4
+hmac: ae4b3433a2b7bbf1b9ecc115b277010e82ef593463c8eff29d189e2a8048be29
 
 ...
