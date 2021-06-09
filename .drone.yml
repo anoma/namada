@@ -278,7 +278,7 @@ steps:
     backend: s3
     bucket: heliax-drone-cache-v2
     cache_key: gh-pages/{{ checksum "Cargo.lock" }}
-    mount: [.cargo, target/doc]
+    mount: [target/doc]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, make build-doc, mkdir tech-specs/book/rustdoc,
@@ -309,7 +309,7 @@ steps:
     backend: s3
     bucket: heliax-drone-cache-v2
     cache_key: gh-pages/{{ checksum "Cargo.lock" }}
-    mount: [.cargo, target/doc]
+    mount: [target/doc]
     override: false
     rebuild: true
     region: eu-west-1
@@ -421,6 +421,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 94398e9d0954dfc107d0cd67e26d9a45a5d407a6ed021ecf6d4cadd3cdf15040
+hmac: 107b22f78093124216f70375745d4145bde06783e23537b100bf5bba54dc93d5
 
 ...
