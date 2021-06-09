@@ -274,11 +274,11 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: audit/{{ checksum "Cargo.lock" }}
+    cache_key: miri/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make test-miri && true]
+- commands: [make test-miri -Zmiri-disable-isolation]
   depends_on: [restore-cache]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-miri
@@ -295,7 +295,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: audit/{{ checksum "Cargo.lock" }}
+    cache_key: miri/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -487,6 +487,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 3801c13c39753b40a146f5b14dee57315e3089c90afb6c73989bbc7876a90fa1
+hmac: 5f78250ee4e15f61b6908a610e2f8bc58b1c97ffd941a4fcbfd0944c721986a3
 
 ...
