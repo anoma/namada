@@ -295,7 +295,10 @@ steps:
 - depends_on: [generate-docs]
   image: plugins/gh-pages
   name: publish-gh-pages
-  settings: {pages_directory: ./tech-specs/book, username: fraccaman}
+  settings:
+    pages_directory: ./tech-specs/book
+    password: {from_secret: github_token}
+    username: DroneCI
 - depends_on: [publish-gh-pages]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -421,6 +424,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 107b22f78093124216f70375745d4145bde06783e23537b100bf5bba54dc93d5
+hmac: e155a30e2472f2b962516ff113e949af80432d34c05c0efd61cd51337b0a29d8
 
 ...
