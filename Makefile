@@ -107,6 +107,7 @@ dev-deps:
 
 test-miri:
 	$(cargo) +$(nightly) miri setup
-	$(cargo) +$(nightly) miri test
+	$(cargo) +$(nightly) clean
+	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 .PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps
