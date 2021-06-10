@@ -16,7 +16,8 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
-    use anoma_shared::types::{address, Key, KeySeg};
+    use anoma_shared::types::key::ed25519::SignedTxData;
+    use anoma_shared::types::{address, key, Key, KeySeg};
     use anoma_vm_env::tx_prelude::{BorshSerialize, KeyValIterator};
     use anoma_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
     use itertools::Itertools;
@@ -348,6 +349,46 @@ mod tests {
             (format!("{}/{}", prefix, i), val)
         });
         itertools::assert_equal(iter_post.sorted(), expected_post.sorted());
+    }
+
+    #[test]
+    fn test_vp_verify_tx_signature() {
+        let mut env = TestVpEnv::default();
+
+        let addr = address::testing::established_address_1();
+
+        // Write the public key to storage
+        let pk_key = key::ed25519::pk_key(&addr);
+        let keypair = key::ed25519::testing::keypair_1();
+        let pk = key::ed25519::PublicKey::from(keypair.public);
+        env.storage
+            .write(&pk_key, pk.try_to_vec().unwrap())
+            .unwrap();
+
+        // Use some arbitrary bytes for tx code
+        env.tx_code = vec![4, 3, 2, 1, 0];
+        // Initialize the environment
+        init_vp_env(&mut env);
+
+        // Use some arbitrary data
+        let data = vec![1, 2, 3, 4].repeat(10);
+        let signed_tx_data =
+            SignedTxData::new(&keypair, data.clone(), &env.tx_code);
+
+        assert_eq!(signed_tx_data.data, data);
+        assert!(vp_host_env::verify_tx_signature(
+            &pk,
+            &data[..],
+            &signed_tx_data.sig
+        ));
+
+        let other_keypair = key::ed25519::testing::keypair_2();
+        let other_pk = key::ed25519::PublicKey::from(other_keypair.public);
+        assert!(!vp_host_env::verify_tx_signature(
+            &other_pk,
+            &data[..],
+            &signed_tx_data.sig
+        ));
     }
 
     #[test]
