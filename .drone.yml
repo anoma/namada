@@ -430,6 +430,7 @@ steps:
 - depends_on: [generate-docs]
   image: plugins/gh-pages
   name: publish-gh-pages
+  pull: if-not-exists
   settings:
     pages_directory: ./tech-specs/book
     password: {from_secret: github_token}
@@ -560,6 +561,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 58a222943889ac5c5c199849745941891555c9bca36232f4fb2c42b769050c8c
+hmac: c7a7a2408cc084db0a4c1c002359463af5a40aec6daaca1bb68cf31a6e224839
 
 ...
