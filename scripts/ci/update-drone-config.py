@@ -27,7 +27,8 @@ files_to_check = [
     'wasm/txs/tx_update_vp/Makefile',
     'wasm/matchmaker_template/Makefile',
     'wasm/filter_template/Makefile',
-    'tech-specs/Makefile'
+    'tech-specs/Makefile',
+    'scripts/update-wasm.sh'
 ]
 
 command_template = 'echo "{}  {}" | sha256sum -c -'
