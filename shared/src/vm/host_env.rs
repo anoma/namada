@@ -337,17 +337,12 @@ where
         None => {
             // when not found in write log, try to read from the storage
             let storage = unsafe { env.storage.get() };
-            let (value, gas) = storage.read(&key).expect(
-                "storage read
-    failed",
-            );
+            let (value, gas) = storage.read(&key).expect("storage read failed");
             tx_add_gas(env, gas);
             match value {
                 Some(value) => {
-                    let len: i64 = value.len().try_into().expect(
-                        "data length
-    overflow",
-                    );
+                    let len: i64 =
+                        value.len().try_into().expect("data length overflow");
                     let read_cache = unsafe { env.read_cache.get() };
                     read_cache.replace(value);
                     len
