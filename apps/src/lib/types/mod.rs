@@ -1,10 +1,8 @@
 use std::collections::HashSet;
 
-use crate::proto::Tx;
-
 #[derive(Debug)]
 pub enum MatchmakerMessage {
-    InjectTx(Tx),
+    InjectTx(Vec<u8>),
     RemoveIntents(HashSet<Vec<u8>>),
     UpdateData(Vec<u8>),
 }

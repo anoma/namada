@@ -26,7 +26,7 @@ The ledger currently requires that [Tendermint version 0.34.x](https://github.co
 
 ### Notes
 
-The transaction code can currently be built from [tx_template](txs/tx_template) and validity predicates from [vp_template](vps/vp_template), which is Rust code compiled to wasm.
+The transaction code can currently be built from [tx_template](wasm/txs/tx_template) and validity predicates from [vp_template](wasm/vps/vp_template), which is Rust code compiled to wasm.
 
 The transaction template calls functions from the host environment. The validity predicate template can validate a transaction and the storage key changes that is has performed.
 
@@ -35,11 +35,9 @@ The matchmaker template receives intents with the borsh encoding define in `data
 ### Instructions
 
 ```shell
-# Install development dependencies
-make dev-deps
-
 # Build the validity predicate, transaction and matchmaker wasm modules
-make build-wasm-scripts
+docker build -t anoma-wasm wasm
+make build-wasm-scripts-docker
 
 # Build Anoma
 make
@@ -57,7 +55,7 @@ make reset-ledger
 
 # Submit a custom transaction with a wasm code and arbitrary data in `tx.data` file.
 # Note that you have to have a `tx.data` file for this to work, albeit it can be empty.
-cargo run --bin anoma -- tx --code-path txs/tx_template/tx.wasm --data-path tx.data
+cargo run --bin anoma -- tx --code-path wasm/txs/tx_template/tx.wasm --data-path tx.data
 
 # Setup temporary addresses aliases until we have a better client support:
 
@@ -82,16 +80,16 @@ export KARTOFFEL=a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn2
 
 ```shell
 # Submit a token transfer
-cargo run --bin anomac -- transfer --source $BERTHA --target $ALBERT --token $XAN --amount 10.1 --code-path txs/tx_transfer/tx.wasm
+cargo run --bin anomac -- transfer --source $BERTHA --target $ALBERT --token $XAN --amount 10.1 --code-path wasm/txs/tx_transfer/tx.wasm
 
 # Submit a transaction to update an account's validity predicate
-cargo run --bin anomac -- update --address $BERTHA --code-path vps/vp_user/vp.wasm
+cargo run --bin anomac -- update --address $BERTHA --code-path wasm/vps/vp_user/vp.wasm
 
 # run gossip node with intent gossip system and rpc server (use default config)
 cargo run --bin anoma -- run-gossip --rpc "127.0.0.1:39111"
 
 # run gossip node with intent gossip system, matchmaker and rpc (use default config)
-cargo run --bin anoman -- run-gossip --rpc "127.0.0.1:39111" --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
+cargo run --bin anoman -- run-gossip --rpc "127.0.0.1:39111" --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path wasm/txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
 
 # craft intents
 cargo run --bin anomac -- craft-intent --address $ALBERT    --token-buy $ETH --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_A.data

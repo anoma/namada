@@ -74,9 +74,9 @@ The choice should allow for easy usage in wasm for users (e.g. in Rust a bindgen
 
 Related [wasmer issue](https://github.com/wasmerio/wasmer/issues/315).
 
-We're currently using borsch for storage serialization, which is also a good option for wasm memory. 
+We're currently using borsh for storage serialization, which is also a good option for wasm memory. 
 - it's easy for users (can be derived)
-- because borsch encoding is safe and consistent, the encoded bytes can also be used for Merkle tree hashing
+- because borsh encoding is safe and consistent, the encoded bytes can also be used for Merkle tree hashing
 - good performance, although it's not clear at this point if that may be negligible anyway
 
 ### The data
