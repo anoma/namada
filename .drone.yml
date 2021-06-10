@@ -238,8 +238,7 @@ steps:
   when:
     status: [success, failure]
 trigger:
-  branch: [master]
-  event: [push]
+  event: [pull_request]
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
@@ -561,6 +560,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 095b20e3fa48745ef9a2d62357ca95bd98db6797a676399526dd5b1b311c2d46
+hmac: 58a222943889ac5c5c199849745941891555c9bca36232f4fb2c42b769050c8c
 
 ...
