@@ -6,7 +6,8 @@ use std::fmt;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::ledger::storage::write_log::WriteLog;
-use anoma_shared::types::{Address, Key};
+use anoma_shared::types::address::Address;
+use anoma_shared::types::storage::Key;
 use anoma_shared::vm;
 use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};

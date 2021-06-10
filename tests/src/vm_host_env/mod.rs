@@ -3,7 +3,7 @@ pub mod vp;
 
 #[cfg(test)]
 mod tests {
-    use anoma_shared::types::Key;
+    use anoma_shared::types::storage::Key;
     use anoma_vm_env::tx_prelude::BorshSerialize;
 
     use super::tx::*;

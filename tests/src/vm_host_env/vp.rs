@@ -5,7 +5,7 @@ use anoma_shared::ledger::storage::mockdb::MockDB;
 use anoma_shared::ledger::storage::testing::TestStorage;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::types::address::{self, Address};
-use anoma_shared::types::Key;
+use anoma_shared::types::storage::Key;
 use anoma_shared::vm;
 use anoma_shared::vm::prefix_iter::PrefixIterators;
 use anoma_shared::vm::{

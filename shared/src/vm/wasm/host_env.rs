@@ -15,7 +15,7 @@ use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::types::Address;
+use crate::types::address::Address;
 use crate::vm::host_env::{
     FilterEnv, MatchmakerEnv, TxEnv, VpEnv, VpEvalRunner,
 };

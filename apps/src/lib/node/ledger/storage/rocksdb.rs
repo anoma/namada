@@ -19,10 +19,9 @@ use anoma_shared::ledger::storage::types::PrefixIterator;
 use anoma_shared::ledger::storage::{
     types, BlockState, DBIter, Error, Result, StorageHasher, DB,
 };
-use anoma_shared::types::address::EstablishedAddressGen;
-use anoma_shared::types::{
-    Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
-    RESERVED_VP_KEY,
+use anoma_shared::types::address::{Address, EstablishedAddressGen};
+use anoma_shared::types::storage::{
+    BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR, RESERVED_VP_KEY,
 };
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,

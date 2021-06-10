@@ -10,11 +10,11 @@ use anoma_shared::bytes::ByteBuf;
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::storage::MerkleRoot;
+use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::PublicKey;
+use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
 use anoma_shared::types::token::Amount;
-use anoma_shared::types::{
-    address, key, token, Address, BlockHash, BlockHeight, Key,
-};
+use anoma_shared::types::{address, key, token};
 use borsh::BorshSerialize;
 use thiserror::Error;
 

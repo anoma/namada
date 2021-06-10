@@ -13,9 +13,9 @@ use thiserror::Error;
 use types::MerkleTree;
 
 use crate::ledger::gas::MIN_STORAGE_GAS;
-use crate::types::address::EstablishedAddressGen;
-use crate::types::{
-    Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+use crate::types::address::{Address, EstablishedAddressGen};
+use crate::types::storage::{
+    BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
 
 /// A result of a function that may fail
@@ -60,8 +60,8 @@ pub enum Error {
     Temporary { error: String },
     #[error("Found an unknown key: {key}")]
     UnknownKey { key: String },
-    #[error("Key error {0}")]
-    KeyError(crate::types::Error),
+    #[error("Storage key error {0}")]
+    KeyError(crate::types::storage::Error),
     #[error("Coding error: {0}")]
     CodingError(types::Error),
     #[error("Merkle tree error: {0}")]

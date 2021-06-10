@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::types::address::EstablishedAddressGen;
-use crate::types::{Address, Key};
+use crate::types::address::{Address, EstablishedAddressGen};
+use crate::types::storage::Key;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
