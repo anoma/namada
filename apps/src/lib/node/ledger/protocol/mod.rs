@@ -1,6 +1,6 @@
 //! The ledger's protocol
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt;
 
