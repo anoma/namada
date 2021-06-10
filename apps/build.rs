@@ -1,7 +1,7 @@
 use std::process::Command;
 use std::{env, str};
 
-/// Path to the .proto source files, relative to `shared` directory
+/// Path to the .proto source files, relative to `apps` directory
 const PROTO_SRC: &str = "../proto";
 /// The version should match the one we use in the `Makefile`
 const RUSTFMT_TOOLCHAIN: &str = "nightly-2021-03-09";
@@ -27,11 +27,15 @@ fn main() {
     }
 
     tonic_build::configure()
-        .out_dir("src/proto/generated")
+        .out_dir("src/lib/proto/generated")
         .format(true)
+        .extern_path(".types", "::anoma_shared::proto::generated::types")
         // TODO try to add json encoding to simplify use for user
         // .type_attribute("types.Intent", "#[derive(serde::Serialize,
         // serde::Deserialize)]")
-        .compile(&[format!("{}/types.proto", PROTO_SRC)], &[PROTO_SRC.into()])
+        .compile(
+            &[format!("{}/services.proto", PROTO_SRC)],
+            &[PROTO_SRC.into()],
+        )
         .unwrap();
 }

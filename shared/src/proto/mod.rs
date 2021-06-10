@@ -1,17 +1,13 @@
 #![allow(missing_docs)]
 
-mod generated;
+pub mod generated;
 mod types;
 
-pub use generated::services;
-pub use types::{
-    Error, Intent, IntentGossipMessage, IntentId, IntentMessage, RpcMessage,
-    SubscribeTopicMessage, Tx,
-};
+pub use types::{Dkg, Error, Intent, IntentGossipMessage, IntentId, Tx};
 
 #[cfg(test)]
 mod tests {
-    use generated::types::Tx;
+    use generated::types::{Tx, TxData};
     use prost::Message;
 
     use super::*;
@@ -20,7 +16,9 @@ mod tests {
     fn encoding_round_trip() {
         let tx = Tx {
             code: "wasm code".as_bytes().to_owned(),
-            data: Some("arbitrary data".as_bytes().to_owned()),
+            data: Some(TxData {
+                data: "arbitrary data".as_bytes().to_owned(),
+            }),
             timestamp: Some(std::time::SystemTime::now().into()),
         };
         let mut tx_bytes = vec![];

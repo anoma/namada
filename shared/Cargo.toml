@@ -35,7 +35,6 @@ sha2 = "0.9.3"
 # We switch off "blake2b" because it cannot be compiled to wasm
 sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding-0.9.0b", default-features = false, features = ["std", "borsh"]}
 thiserror = "1.0.24"
-tonic = "0.4.0"
 tracing = "0.1.26"
 wasmer = {version = "1.0.2", optional = true}
 wasmer-compiler-singlepass = {version = "1.0.2", optional = true}
