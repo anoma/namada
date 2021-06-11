@@ -206,7 +206,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make build-wasm-scripts, sh scripts/update-wasm.sh]
+- commands: [make build-wasm-scripts, sh scripts/update-wasm.sh]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -560,6 +560,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: f28a4515ed61da40919a9061b9e4a9e9238aee7b5c13d9408c7a0a441516a90f
+hmac: 04087a5712aabb3e2f2f179a42759d0cb9c60025baef84f7e5224a9693fd6d3c
 
 ...
