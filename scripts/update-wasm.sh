@@ -12,6 +12,7 @@ REMOTE=$(git remote get-url origin | cut -c 9-)
 PUSH_URL="https://${GITHUB_TOKEN}@${REMOTE}"
 
 git fetch --all
+git stash
 git checkout $DRONE_SOURCE_BRANCH
 
 if [ $? -ne 0 ]; then
@@ -19,6 +20,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+git stash pop
 git remote set-url origin $PUSH_URL
 
 git add ':wasm/*.wasm'
