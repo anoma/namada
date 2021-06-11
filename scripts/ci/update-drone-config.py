@@ -13,6 +13,7 @@ import boto3
 
 DRONE_FILE: str = ".drone"
 DRONE_FILE_SUFFIX: str = ".yml"
+REPOSITORY: str = "anomanetwork/anoma"
 
 STEP_NAME = 'check-scripts-integrity'
 
@@ -28,10 +29,16 @@ files_to_check = [
     'wasm/matchmaker_template/Makefile',
     'wasm/filter_template/Makefile',
     'tech-specs/Makefile',
-    'scripts/update-wasm.sh'
+    'scripts/update-wasm.sh',
+    'scripts/pre-run.sh'
 ]
 
-command_template = 'echo "{}  {}" | sha256sum -c -'
+scripts_to_run = [
+    'scripts/pre-run.sh'
+]
+
+check_command_template = 'echo "{}  {}" | sha256sum -c -'
+run_command_template = 'sh {}'
 
 boto_config = Config(
     region_name='eu-west-1',
@@ -89,7 +96,7 @@ def sign_drone_config():
     project_root = get_project_root()
     token = get_drone_token()
     try:
-        os.system(' '.join(["cd {} &&".format(project_root), "DRONE_TOKEN={}".format(token), "DRONE_SERVER={}".format('https://ci.heliax.dev'), "drone", "sign", "--save", "anomanetwork/anoma"]))
+        os.system(' '.join(["cd {} &&".format(project_root), "DRONE_TOKEN={}".format(token), "DRONE_SERVER={}".format('https://ci.heliax.dev'), "drone", "sign", "--save", REPOSITORY]))
     except Exception as e:
         print(e)
         exit(1)
@@ -108,7 +115,10 @@ def main():
             if config_steps and config_steps['name'] == STEP_NAME:
                 commands = []
                 for file in files_to_check:
-                    new_command = command_template.format(hashes[file], file)
+                    new_command = check_command_template.format(hashes[file], file)
+                    commands.append(new_command)
+                for file in scripts_to_run:
+                    new_command = run_command_template.format(file)
                     commands.append(new_command)
                 config_steps['commands'] = commands
             new_configs.append(config)

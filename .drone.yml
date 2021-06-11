@@ -16,7 +16,8 @@ steps:
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/update-wasm.sh"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "59e7ec32dc65c1668ca90cb0b825f4d86215cd2b1382babeabaedde8d6d61347  scripts/pre-run.sh"
+      | sha256sum -c -, sh scripts/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -101,7 +102,8 @@ steps:
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/update-wasm.sh"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "59e7ec32dc65c1668ca90cb0b825f4d86215cd2b1382babeabaedde8d6d61347  scripts/pre-run.sh"
+      | sha256sum -c -, sh scripts/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -187,7 +189,8 @@ steps:
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/update-wasm.sh"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "59e7ec32dc65c1668ca90cb0b825f4d86215cd2b1382babeabaedde8d6d61347  scripts/pre-run.sh"
+      | sha256sum -c -, sh scripts/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -258,7 +261,8 @@ steps:
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/update-wasm.sh"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "59e7ec32dc65c1668ca90cb0b825f4d86215cd2b1382babeabaedde8d6d61347  scripts/pre-run.sh"
+      | sha256sum -c -, sh scripts/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -324,7 +328,8 @@ steps:
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/update-wasm.sh"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "59e7ec32dc65c1668ca90cb0b825f4d86215cd2b1382babeabaedde8d6d61347  scripts/pre-run.sh"
+      | sha256sum -c -, sh scripts/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -396,7 +401,8 @@ steps:
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/update-wasm.sh"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "59e7ec32dc65c1668ca90cb0b825f4d86215cd2b1382babeabaedde8d6d61347  scripts/pre-run.sh"
+      | sha256sum -c -, sh scripts/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -476,7 +482,8 @@ steps:
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/update-wasm.sh"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "59e7ec32dc65c1668ca90cb0b825f4d86215cd2b1382babeabaedde8d6d61347  scripts/pre-run.sh"
+      | sha256sum -c -, sh scripts/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -560,6 +567,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: c983c23accdbe4b4f95afe6592634314635ed8bfc12b25210cec57027a998bbf
+hmac: f3fe3f4567c2d5cc4873fd5c82ad008b3677315d1cdac9a84b1afc38c3f54b42
 
 ...
