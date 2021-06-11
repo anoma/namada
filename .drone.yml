@@ -206,8 +206,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make -C wasm/txs/tx_template deps, make build-wasm-scripts,
-    sh scripts/update-wasm.sh]
+- commands: [sccache --start-server, make build-wasm-scripts, sh scripts/update-wasm.sh]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -215,7 +214,7 @@ steps:
     GITHUB_TOKEN: {from_secret: github_token}
     SCCACHE_BUCKET: heliax-drone-cache-v2s
     SCCACHE_S3_KEY_PREFIX: sccache-build-wasm
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
   pull: if-not-exists
 - depends_on: [build-wasm]
@@ -344,7 +343,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make test-miri]
+- commands: [sccache --start-server, make test-miri || true]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -561,6 +560,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: c7a7a2408cc084db0a4c1c002359463af5a40aec6daaca1bb68cf31a6e224839
+hmac: f28a4515ed61da40919a9061b9e4a9e9238aee7b5c13d9408c7a0a441516a90f
 
 ...
