@@ -129,8 +129,8 @@ pub struct Behaviour {
 
 #[derive(Debug)]
 pub enum AnomaBehaviourEvent {
-    Connected(PeerId),
-    Disconnected(PeerId),
+    PeerConnected(PeerId),
+    PeerDisconnected(PeerId),
     Message(GossipsubMessage, PeerId, MessageId),
     Subscribed(PeerId, TopicHash),
     Unsubscribed(PeerId, TopicHash),
@@ -148,8 +148,10 @@ impl Behaviour {
         _: &mut Context,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<TBehaviourIn, AnomaBehaviourEvent>> {
-        if let Some(ev) = self.events.pop_front() {
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev));
+        if !self.events.is_empty() {
+            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+                self.events.pop_front().unwrap(),
+            ));
         }
         Poll::Pending
     }
@@ -328,8 +330,12 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
 impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
     fn inject_event(&mut self, event: DiscoveryEvent) {
         match event {
-            DiscoveryEvent::Connected(_) => {}
-            DiscoveryEvent::Disconnected(_) => {}
+            DiscoveryEvent::Connected(peer_id) => self
+                .events
+                .push_back(AnomaBehaviourEvent::PeerConnected(peer_id)),
+            DiscoveryEvent::Disconnected(peer_id) => self
+                .events
+                .push_back(AnomaBehaviourEvent::PeerDisconnected(peer_id)),
         }
     }
 }

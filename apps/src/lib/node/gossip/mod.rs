@@ -8,6 +8,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use self::p2p::P2P;
 use crate::config::IntentGossiper;
+use crate::node::gossip::behaviour::AnomaBehaviourEvent;
 use crate::proto::services::{rpc_message, RpcResponse};
 use crate::types::MatchmakerMessage;
 
@@ -93,18 +94,22 @@ pub async fn dispatcher(
                 };
             }
         }
-        (None, None) => {
-            loop {
-                tokio::select! {
-                    swarm_event = gossip.swarm.next() => {
-                        // All events are handled by the
-                        // `NetworkBehaviourEventProcess`es.  I.e. the
-                        // `swarm.next()` future drives the `Swarm` without ever
-                        // terminating.
-                        panic!("Unexpected event: {:?}", swarm_event);
-                    },
-                }
+        (None, None) => loop {
+            tokio::select! {
+                swarm_event = gossip.swarm.next() => {
+                    match swarm_event {
+                        AnomaBehaviourEvent::PeerConnected(peer_id) => {
+                            tracing::info!("Peer connected, {:?}", peer_id);
+                        }
+                        AnomaBehaviourEvent::PeerDisconnected(peer_id) => {
+                            tracing::info!("Peer disconnected, {:?}", peer_id);
+                        }
+                        e => {
+                            tracing::info!("event, {:?}", e);
+                        }
+                    }
+                },
             }
-        }
+        },
     }
 }
