@@ -15,15 +15,16 @@ git fetch --all
 git checkout $DRONE_SOURCE_BRANCH
 
 if [ $? -ne 0 ]; then
-    echo "Can't checkout $DRONE_SOURCE_BRANCH."
+    echo "Can't checkout $DRONE_SOURCE_BRANCH. Update wasm manually."
     exit 1
 fi
 
 git remote set-url origin $PUSH_URL
 
 git add ':/*.wasm'
+git add ':/*.lock'
 git status
-# git commit -m "[ci]: update wasm"
+# git commit -m "[ci]: update wasms"
 
 # git push
 
