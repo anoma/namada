@@ -123,7 +123,7 @@ dependencies = [
  "bech32",
  "borsh",
  "ed25519-dalek",
- "itertools 0.10.0",
+ "itertools 0.10.1",
  "parity-wasm",
  "proptest",
  "pwasm-utils",
@@ -195,9 +195,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.40"
+version = "1.0.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28b2cd92db5cbd74e8e5028f7e27dd7aa3090e89e4f2a197cc7c8dfb69c7063b"
+checksum = "15af2628f6890fe2609a3b91bef4c83450512802e59489f9c1cb1fa5df064a61"
 
 [[package]]
 name = "arrayref"
@@ -1345,9 +1345,9 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.8.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17392a012ea30ef05a610aa97dfb49496e71c9f676b27879922ea5bdf60d9d3f"
+checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
 dependencies = [
  "log",
 ]
@@ -2072,9 +2072,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37d572918e350e82412fe766d24b15e6682fb2ed2bbe018280caa810397cb319"
+checksum = "69ddb889f9d0d08a67338271fa9b62996bc788c7796a5c18cf057420aaed5eaf"
 dependencies = [
  "either",
 ]
@@ -2167,9 +2167,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.95"
+version = "0.2.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "789da6d93f1b866ffe175afc5322a4d76c038605a1c3319bb57b06967ca98a36"
+checksum = "5600b4e6efc5421841a2138a6b082e07fe12f9aaa12783d50e5d13325b26b4fc"
 
 [[package]]
 name = "libloading"
@@ -3412,7 +3412,7 @@ dependencies = [
  "num-traits 0.2.14",
  "quick-error 2.0.1",
  "rand 0.8.3",
- "rand_chacha 0.3.0",
+ "rand_chacha 0.3.1",
  "rand_xorshift",
  "regex-syntax",
  "rusty-fork",
@@ -3472,9 +3472,9 @@ dependencies = [
 
 [[package]]
 name = "pwasm-utils"
-version = "0.18.0"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0e517f47d9964362883182404b68d0b6949382c0baa40aa5ffca94f5f1e3481"
+checksum = "f0c1a2f10b47d446372a4f397c58b329aaea72b2daf9395a623a411cb8ccb54f"
 dependencies = [
  "byteorder",
  "log",
@@ -3533,7 +3533,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ef9e7e66b4468674bfcb0c81af8b7fa0bb154fa9f28eb840da5c447baeb8d7e"
 dependencies = [
  "libc",
- "rand_chacha 0.3.0",
+ "rand_chacha 0.3.1",
  "rand_core 0.6.2",
  "rand_hc 0.3.0",
 ]
@@ -3550,9 +3550,9 @@ dependencies = [
 
 [[package]]
 name = "rand_chacha"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e12735cf05c9e10bf21534da50a147b924d555dc7a547c42e6bb2d5b6017ae0d"
+checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
  "rand_core 0.6.2",
@@ -4223,9 +4223,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.72"
+version = "1.0.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1e8cdbefb79a9a5a65e0db8b47b723ee907b7c7f8496c76a1770b5c310bab82"
+checksum = "f71489ff30030d2ae598524f61326b902466f72a0fb1a8564c001cc63425bcc7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4267,7 +4267,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/rpc-gas#1bb6fa9f61cdae4e0f6a212f914f141e48475963"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -4298,7 +4298,7 @@ dependencies = [
 [[package]]
 name = "tendermint-abci"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/rpc-gas#1bb6fa9f61cdae4e0f6a212f914f141e48475963"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "bytes 1.0.1",
  "eyre",
@@ -4311,7 +4311,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/rpc-gas#1bb6fa9f61cdae4e0f6a212f914f141e48475963"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",
@@ -4329,7 +4329,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/rpc-gas#1bb6fa9f61cdae4e0f6a212f914f141e48475963"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "async-trait",
  "bytes 1.0.1",

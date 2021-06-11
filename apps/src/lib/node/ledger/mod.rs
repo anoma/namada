@@ -45,10 +45,16 @@ pub fn run(config: config::Ledger) -> Result<()> {
     let (sender, receiver) = mpsc::channel();
     let shell = Shell::new(receiver, &config.db);
     // Run Tendermint ABCI server in another thread
-    let _tendermint_handle =
-        std::thread::spawn(move || tendermint::run(sender, config));
-    shell.run().expect("shell failed");
-    Ok(())
+    let _tendermint_handle = std::thread::spawn(move || {
+        if let Err(err) = tendermint::run(sender.clone(), config) {
+            tracing::error!(
+                "Failed to start-up a Tendermint node with {}",
+                err
+            );
+            sender.send(AbciMsg::Terminate).unwrap();
+        }
+    });
+    shell.run()
 }
 
 pub fn reset(config: config::Ledger) -> Result<()> {
@@ -302,13 +308,13 @@ impl Shell {
         match result {
             Ok(result) => {
                 if result.is_accepted() {
-                    tracing::debug!(
+                    tracing::info!(
                         "all VPs accepted apply_tx storage modification {:#?}",
                         result
                     );
                     self.write_log.commit_tx();
                 } else {
-                    tracing::debug!(
+                    tracing::info!(
                         "some VPs rejected apply_tx storage modification {:#?}",
                         result.vps_result.rejected_vps
                     );

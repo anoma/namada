@@ -157,6 +157,7 @@ fn check_vps(
         write_log,
         initial_gas,
     )?;
+    tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
 
     gas_meter
         .add_vps_gas(&vps_result.gas_used)
@@ -302,10 +303,12 @@ fn execute_vp(
         }
     }
 
+    // Returning error from here will short-circuit the VP parallel
+    // execution. It's important that we only short-circuit gas
+    // errors to get deterministic gas costs
+    tracing::debug!("VP {} used gas {}", addr, vp_gas_meter.current_gas);
+    result.gas_used.set(vp_gas_meter).map_err(Error::GasError)?;
     match &vp_gas_meter.error {
-        // Returning error from here will short-circuit the VP parallel
-        // execution. It's important that we only short-circuit gas
-        // errors to get deterministic gas costs
         Some(err) => Err(Error::GasError(err.clone())),
         None => Ok(result),
     }
