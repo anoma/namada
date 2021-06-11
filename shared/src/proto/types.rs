@@ -2,14 +2,13 @@ use std::collections::hash_map::DefaultHasher;
 use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 
-use borsh::BorshSerialize;
 use chrono::{DateTime, Utc};
 use prost::Message;
 use prost_types::Timestamp;
 use thiserror::Error;
 
 use super::generated::types;
-use crate::types::key::ed25519::{Keypair, SignedTxData};
+use crate::types::key::ed25519::{self, Keypair};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -87,21 +86,8 @@ impl Tx {
         bytes
     }
 
-    pub fn sign(&self, keypair: &Keypair) -> Tx {
-        let data = self.data.clone().unwrap_or_default();
-        let signed = SignedTxData::new(
-            keypair,
-            data,
-            &self.code,
-            self.timestamp.clone(),
-        )
-        .try_to_vec()
-        .expect("Encoding transaction data shouldn't fail");
-        Tx {
-            code: self.code.clone(),
-            data: Some(signed),
-            timestamp: self.timestamp.clone(),
-        }
+    pub fn sign(self, keypair: &Keypair) -> Tx {
+        ed25519::sign_tx(keypair, self)
     }
 }
 

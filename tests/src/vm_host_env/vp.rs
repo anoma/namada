@@ -263,8 +263,6 @@ mod native_vp_host_env {
     native_host_fn!(vp_verify_tx_signature(
             pk_ptr: u64,
             pk_len: u64,
-            data_ptr: u64,
-            data_len: u64,
             sig_ptr: u64,
             sig_len: u64,
         ) -> i64);

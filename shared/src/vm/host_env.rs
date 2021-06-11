@@ -12,7 +12,7 @@ use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::proto::Tx;
 use crate::types::internal::HostEnvResult;
-use crate::types::key::ed25519::{verify_signature_raw, PublicKey, Signature};
+use crate::types::key::ed25519::{verify_tx_sig, PublicKey, Signature};
 use crate::types::{Address, Key};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
@@ -1063,8 +1063,6 @@ pub fn vp_verify_tx_signature<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     pk_ptr: u64,
     pk_len: u64,
-    data_ptr: u64,
-    data_len: u64,
     sig_ptr: u64,
     sig_len: u64,
 ) -> i64
@@ -1079,24 +1077,14 @@ where
     let pk: PublicKey =
         BorshDeserialize::try_from_slice(&pk).expect("Canot decode public key");
 
-    let (data, gas) = env.memory.read_bytes(data_ptr, data_len as _);
-    vp_add_gas(env, gas);
-
     let (sig, gas) = env.memory.read_bytes(sig_ptr, sig_len as _);
     vp_add_gas(env, gas);
     let sig: Signature =
         BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
 
-    let tx = unsafe { env.tx.get() };
-    vp_add_gas(env, (data.len() + tx.code.len()) as _);
-    let signature_data =
-        [&data[..], &tx.code[..], &tx.timestamp.as_bytes()].concat();
-
     vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
-    HostEnvResult::from(
-        verify_signature_raw(&pk, &signature_data, &sig).is_ok(),
-    )
-    .to_i64()
+    let tx = unsafe { env.tx.get() };
+    HostEnvResult::from(verify_tx_sig(&pk, tx, &sig).is_ok()).to_i64()
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
