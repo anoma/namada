@@ -24,8 +24,8 @@ git remote set-url origin $PUSH_URL
 git add ':wasm/*.wasm'
 git add ':wasm/*.lock'
 git status
-git commit -m "[ci]: update wasms"
+# git commit -m "[ci]: update wasms"
 
-git push
+# git push
 
 exit $?
