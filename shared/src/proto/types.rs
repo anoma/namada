@@ -2,11 +2,14 @@ use std::collections::hash_map::DefaultHasher;
 use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 
+use borsh::BorshSerialize;
+use chrono::{DateTime, Utc};
 use prost::Message;
 use prost_types::Timestamp;
 use thiserror::Error;
 
 use super::generated::types;
+use crate::types::key::ed25519::{Keypair, SignedTxData};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -30,7 +33,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
-    pub timestamp: Timestamp,
+    pub timestamp: String,
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -39,7 +42,11 @@ impl TryFrom<&[u8]> for Tx {
     fn try_from(tx_bytes: &[u8]) -> Result<Self> {
         let tx = types::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
         let timestamp = match tx.timestamp {
-            Some(t) => t,
+            Some(t) => {
+                let t: std::time::SystemTime = t.into();
+                let dt: DateTime<Utc> = t.into();
+                dt.to_rfc3339()
+            }
             None => return Err(Error::NoTimestampError),
         };
         Ok(Tx {
@@ -52,10 +59,13 @@ impl TryFrom<&[u8]> for Tx {
 
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
+        let dt = DateTime::parse_from_rfc3339(&tx.timestamp)
+            .expect("conversion shouldn't fail");
+        let st: std::time::SystemTime = dt.into();
         types::Tx {
             code: tx.code.clone(),
             data: tx.data.map(|data| types::TxData { data }),
-            timestamp: Some(tx.timestamp),
+            timestamp: Some(st.into()),
         }
     }
 }
@@ -65,7 +75,7 @@ impl Tx {
         Tx {
             code,
             data,
-            timestamp: std::time::SystemTime::now().into(),
+            timestamp: Utc::now().to_rfc3339(),
         }
     }
 
@@ -75,6 +85,23 @@ impl Tx {
         tx.encode(&mut bytes)
             .expect("encoding a transaction failed");
         bytes
+    }
+
+    pub fn sign(&self, keypair: &Keypair) -> Tx {
+        let data = self.data.clone().unwrap_or_default();
+        let signed = SignedTxData::new(
+            keypair,
+            data,
+            &self.code,
+            self.timestamp.clone(),
+        )
+        .try_to_vec()
+        .expect("Encoding transaction data shouldn't fail");
+        Tx {
+            code: self.code.clone(),
+            data: Some(signed),
+            timestamp: self.timestamp.clone(),
+        }
     }
 }
 

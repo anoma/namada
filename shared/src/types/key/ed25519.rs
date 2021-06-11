@@ -107,7 +107,8 @@ pub fn verify_signature_raw(
 pub struct SignedTxData {
     /// The tx data bytes
     pub data: Vec<u8>,
-    /// The signature is produced on the tx data concatenated with the tx code.
+    /// The signature is produced on the tx data concatenated with the tx code
+    /// and the timestamp.
     pub sig: Signature,
 }
 
@@ -117,8 +118,10 @@ impl SignedTxData {
         keypair: &Keypair,
         data: Vec<u8>,
         tx_code: impl AsRef<[u8]>,
+        timestamp: String,
     ) -> Self {
-        let to_sign = [&data[..], tx_code.as_ref()].concat();
+        let to_sign =
+            [&data[..], tx_code.as_ref(), timestamp.as_bytes()].concat();
         let sig = sign(keypair, &to_sign);
         Self { data, sig }
     }
@@ -129,8 +132,10 @@ impl SignedTxData {
         &self,
         pk: &PublicKey,
         tx_code: impl AsRef<[u8]>,
+        timestamp: String,
     ) -> Result<(), VerifySigError> {
-        let data = [&self.data, tx_code.as_ref()].concat();
+        let data =
+            [&self.data, tx_code.as_ref(), timestamp.as_bytes()].concat();
         verify_signature_raw(pk, &data, &self.sig)
     }
 }

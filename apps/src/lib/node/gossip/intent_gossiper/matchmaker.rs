@@ -2,9 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use anoma_shared::gossip::mm::MmHost;
 use anoma_shared::proto::{Intent, IntentId, Tx};
-use anoma_shared::types::key::ed25519::SignedTxData;
 use anoma_shared::vm::wasm::runner::{self, MmRunner};
-use borsh::BorshSerialize;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
@@ -136,16 +134,7 @@ impl Matchmaker {
             MatchmakerMessage::InjectTx(tx_data) => {
                 let tx_code = self.tx_code.clone();
                 let keypair = wallet::matchmaker_keypair();
-                let signed = SignedTxData::new(&keypair, tx_data, &tx_code);
-                let signed_bytes = signed
-                    .try_to_vec()
-                    .expect("Couldn't encode signed matchmaker tx data");
-                let tx = Tx {
-                    code: tx_code,
-                    data: Some(signed_bytes),
-                    timestamp: std::time::SystemTime::now().into(),
-                };
-
+                let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair);
                 let tx_bytes = tx.to_bytes();
 
                 let client =

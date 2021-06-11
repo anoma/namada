@@ -4,6 +4,7 @@ use anoma_shared::ledger::gas::VpGasMeter;
 use anoma_shared::ledger::storage::mockdb::MockDB;
 use anoma_shared::ledger::storage::testing::TestStorage;
 use anoma_shared::ledger::storage::write_log::WriteLog;
+use anoma_shared::proto::Tx;
 use anoma_shared::types::address::{self, Address};
 use anoma_shared::types::Key;
 use anoma_shared::vm;
@@ -31,7 +32,7 @@ pub struct TestVpEnv {
     pub write_log: WriteLog,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub gas_meter: VpGasMeter,
-    pub tx_code: Vec<u8>,
+    pub tx: Tx,
     pub keys_changed: Vec<Key>,
     pub verifiers: HashSet<Address>,
     pub eval_runner: Option<native_vp_host_env::VpEval>,
@@ -49,7 +50,7 @@ impl Default for TestVpEnv {
             write_log: WriteLog::default(),
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::new(0),
-            tx_code: vec![],
+            tx: Tx::new(vec![], None),
             keys_changed: vec![],
             verifiers: HashSet::default(),
             eval_runner: None,
@@ -64,8 +65,7 @@ impl Default for TestVpEnv {
                 unsafe { MutEnvHostWrapper::new(&mut env.iterators) };
             let env_gas_meter =
                 unsafe { MutEnvHostWrapper::new(&mut env.gas_meter) };
-            let env_tx_code =
-                unsafe { EnvHostSliceWrapper::new(&env.tx_code[..]) };
+            let env_tx = unsafe { EnvHostWrapper::new(&env.tx) };
             let env_keys_changed =
                 unsafe { EnvHostSliceWrapper::new(&env.keys_changed[..]) };
             let env_verifiers = unsafe { EnvHostWrapper::new(&env.verifiers) };
@@ -78,7 +78,7 @@ impl Default for TestVpEnv {
                 write_log: env_write_log,
                 iterators: env_iterators,
                 gas_meter: env_gas_meter,
-                tx_code: env_tx_code,
+                tx: env_tx,
                 keys_changed: env_keys_changed,
                 verifiers: env_verifiers,
                 result_buffer: env_result_buffer,
@@ -145,7 +145,7 @@ pub fn init_vp_env(
         write_log,
         iterators,
         gas_meter,
-        tx_code,
+        tx,
         keys_changed: _,
         verifiers: _,
         eval_runner,
@@ -160,7 +160,7 @@ pub fn init_vp_env(
                 write_log,
                 iterators,
                 gas_meter,
-                tx_code,
+                tx,
                 eval_runner
                     .as_ref()
                     .expect("the eval_runner should be initialized"),

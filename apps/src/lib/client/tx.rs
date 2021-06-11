@@ -21,8 +21,9 @@ pub async fn submit_custom(
     let data = data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
+    let tx = Tx::new(tx_code, data);
 
-    submit_tx(tx_code, data, dry_run, ledger_address).await
+    submit_tx(tx, dry_run, ledger_address).await
 }
 
 pub async fn submit_update_vp(
@@ -39,14 +40,12 @@ pub async fn submit_update_vp(
         .expect("Expected a file at given code path");
 
     let update_vp = UpdateVp { addr, vp_code };
-    let signed = update_vp.sign(&tx_code, &source_key);
-    let data = Some(
-        signed
-            .try_to_vec()
-            .expect("Encoding transaction data shouldn't fail"),
+    let data = update_vp.try_to_vec().expect(
+        "Encoding transfer data to update a validity predicate shouldn't  fail",
     );
+    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
 
-    submit_tx(tx_code, data, dry_run, ledger_address).await
+    submit_tx(tx, dry_run, ledger_address).await
 }
 
 pub async fn submit_transfer(
@@ -71,23 +70,15 @@ pub async fn submit_transfer(
         token,
         amount,
     };
-    let signed = transfer.sign(&tx_code, &source_key);
-    let data = Some(
-        signed
-            .try_to_vec()
-            .expect("Encoding transaction data shouldn't fail"),
-    );
+    let data = transfer
+        .try_to_vec()
+        .expect("Encoding unsigned transfer shouldn't fail");
+    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
 
-    submit_tx(tx_code, data, dry_run, ledger_address).await
+    submit_tx(tx, dry_run, ledger_address).await
 }
 
-async fn submit_tx(
-    code: Vec<u8>,
-    data: Option<Vec<u8>>,
-    dry_run: bool,
-    ledger_address: String,
-) {
-    let tx = Tx::new(code, data);
+async fn submit_tx(tx: Tx, dry_run: bool, ledger_address: String) {
     let tx_bytes = tx.to_bytes();
 
     // NOTE: use this to print the request JSON body:

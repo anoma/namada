@@ -10,13 +10,14 @@ use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::proto::Tx;
 use crate::types::internal::HostEnvResult;
 use crate::types::key::ed25519::{verify_signature_raw, PublicKey, Signature};
 use crate::types::{Address, Key};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::types::KeyVal;
-use crate::vm::{EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper};
+use crate::vm::{EnvHostWrapper, MutEnvHostWrapper};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -95,7 +96,7 @@ where
     /// is no shared access
     pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
-    pub tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
+    pub tx: EnvHostWrapper<'a, &'a Tx>,
     /// The runner of the [`vp_eval`] function
     pub eval_runner: EnvHostWrapper<'a, &'a EVAL>,
     /// Cache for 2-step reads from host environment.
@@ -125,7 +126,7 @@ where
             write_log: self.write_log.clone(),
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
-            tx_code: self.tx_code.clone(),
+            tx: self.tx.clone(),
             eval_runner: self.eval_runner.clone(),
             result_buffer: self.result_buffer.clone(),
         }
@@ -1086,9 +1087,10 @@ where
     let sig: Signature =
         BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
 
-    let tx_code = unsafe { env.tx_code.get() };
-    vp_add_gas(env, (data.len() + tx_code.len()) as _);
-    let signature_data = [&data[..], tx_code].concat();
+    let tx = unsafe { env.tx.get() };
+    vp_add_gas(env, (data.len() + tx.code.len()) as _);
+    let signature_data =
+        [&data[..], &tx.code[..], &tx.timestamp.as_bytes()].concat();
 
     vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
     HostEnvResult::from(
@@ -1280,7 +1282,7 @@ pub mod testing {
         write_log: &WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut VpGasMeter,
-        tx_code: &[u8],
+        tx: &Tx,
         eval_runner: &EVAL,
         result_buffer: &mut Option<Vec<u8>>,
     ) -> VpEnv<'static, NativeMemory, DB, H, EVAL>
@@ -1293,7 +1295,7 @@ pub mod testing {
         let write_log = unsafe { EnvHostWrapper::new(write_log) };
         let iterators = unsafe { MutEnvHostWrapper::new(iterators) };
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
-        let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code) };
+        let tx = unsafe { EnvHostWrapper::new(tx) };
         let eval_runner = unsafe { EnvHostWrapper::new(eval_runner) };
         let result_buffer = unsafe { MutEnvHostWrapper::new(result_buffer) };
         VpEnv {
@@ -1303,7 +1305,7 @@ pub mod testing {
             write_log,
             iterators,
             gas_meter,
-            tx_code,
+            tx,
             eval_runner,
             result_buffer,
         }
