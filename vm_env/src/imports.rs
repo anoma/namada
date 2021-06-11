@@ -14,7 +14,7 @@ use borsh::BorshDeserialize;
 /// pre-allocated buffer with the obtained size.
 fn read_from_cache<T: BorshDeserialize>(
     read_result: i64,
-    read_cache: unsafe extern "C" fn(u64),
+    result_buffer: unsafe extern "C" fn(u64),
 ) -> Option<T> {
     if HostEnvResult::is_fail(read_result) {
         None
@@ -24,7 +24,7 @@ fn read_from_cache<T: BorshDeserialize>(
         // reconstructed from the same memory
         let result = ManuallyDrop::new(result);
         let offset = result.as_slice().as_ptr() as u64;
-        unsafe { read_cache(offset) };
+        unsafe { result_buffer(offset) };
         let target = unsafe {
             Vec::from_raw_parts(offset as _, read_result as _, read_result as _)
         };
@@ -36,9 +36,9 @@ fn read_from_cache<T: BorshDeserialize>(
 /// values in a key-value pair from the host.
 fn read_key_val_from_cache<T: BorshDeserialize>(
     read_result: i64,
-    read_cache: unsafe extern "C" fn(u64),
+    result_buffer: unsafe extern "C" fn(u64),
 ) -> Option<(String, T)> {
-    let key_val: Option<KeyVal> = read_from_cache(read_result, read_cache);
+    let key_val: Option<KeyVal> = read_from_cache(read_result, result_buffer);
     key_val.and_then(|key_val| {
         // decode the value
         T::try_from_slice(&key_val.val)
@@ -69,7 +69,7 @@ pub mod tx {
         let key = key.as_ref();
         let read_result =
             unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
-        super::read_from_cache(read_result, anoma_tx_read_cache)
+        super::read_from_cache(read_result, anoma_tx_result_buffer)
     }
 
     /// Check if the given key is present in storage.
@@ -122,7 +122,7 @@ pub mod tx {
 
         fn next(&mut self) -> Option<(String, T)> {
             let read_result = unsafe { anoma_tx_iter_next(self.0) };
-            super::read_key_val_from_cache(read_result, anoma_tx_read_cache)
+            super::read_key_val_from_cache(read_result, anoma_tx_result_buffer)
         }
     }
 
@@ -211,7 +211,7 @@ pub mod tx {
         fn anoma_tx_read(key_ptr: u64, key_len: u64) -> i64;
 
         // Read a value from read cache.
-        fn anoma_tx_read_cache(result_ptr: u64);
+        fn anoma_tx_result_buffer(result_ptr: u64);
 
         // Returns 1 if the key is present, -1 otherwise.
         fn anoma_tx_has_key(key_ptr: u64, key_len: u64) -> i64;
@@ -288,7 +288,7 @@ pub mod vp {
         let key = key.as_ref();
         let read_result =
             unsafe { anoma_vp_read_pre(key.as_ptr() as _, key.len() as _) };
-        super::read_from_cache(read_result, anoma_vp_read_cache)
+        super::read_from_cache(read_result, anoma_vp_result_buffer)
     }
 
     /// Try to read a variable-length value at the given key from storage after
@@ -297,7 +297,7 @@ pub mod vp {
         let key = key.as_ref();
         let read_result =
             unsafe { anoma_vp_read_post(key.as_ptr() as _, key.len() as _) };
-        super::read_from_cache(read_result, anoma_vp_read_cache)
+        super::read_from_cache(read_result, anoma_vp_result_buffer)
     }
 
     /// Check if the given key was present in storage before transaction
@@ -334,7 +334,7 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let read_result = unsafe { anoma_vp_iter_pre_next(self.0) };
-            super::read_key_val_from_cache(read_result, anoma_vp_read_cache)
+            super::read_key_val_from_cache(read_result, anoma_vp_result_buffer)
         }
     }
 
@@ -354,7 +354,7 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let read_result = unsafe { anoma_vp_iter_post_next(self.0) };
-            super::read_key_val_from_cache(read_result, anoma_vp_read_cache)
+            super::read_key_val_from_cache(read_result, anoma_vp_result_buffer)
         }
     }
 
@@ -449,7 +449,7 @@ pub mod vp {
         fn anoma_vp_read_post(key_ptr: u64, key_len: u64) -> i64;
 
         // Read a value from read cache.
-        fn anoma_vp_read_cache(result_ptr: u64);
+        fn anoma_vp_result_buffer(result_ptr: u64);
 
         // Returns 1 if the key is present in prior state, -1 otherwise.
         fn anoma_vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64;

@@ -46,7 +46,7 @@ where
     pub verifiers: MutEnvHostWrapper<'a, &'a HashSet<Address>>,
     /// Cache for 2-step reads from host environment.
     /// Not thread-safe, assuming single-threaded Tx runner
-    pub read_cache: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
+    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 
 impl<MEM, DB, H> Clone for TxEnv<'_, MEM, DB, H>
@@ -63,7 +63,7 @@ where
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
             verifiers: self.verifiers.clone(),
-            read_cache: self.read_cache.clone(),
+            result_buffer: self.result_buffer.clone(),
         }
     }
 }
@@ -101,7 +101,7 @@ where
     /// Cache for 2-step reads from host environment.
     /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
-    pub read_cache: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
+    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -127,7 +127,7 @@ where
             gas_meter: self.gas_meter.clone(),
             tx_code: self.tx_code.clone(),
             eval_runner: self.eval_runner.clone(),
-            read_cache: self.read_cache.clone(),
+            result_buffer: self.result_buffer.clone(),
         }
     }
 }
@@ -317,8 +317,8 @@ where
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let read_cache = unsafe { env.read_cache.get() };
-            read_cache.replace(value.clone());
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(value.clone());
             len
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -330,8 +330,8 @@ where
         }) => {
             // read the VP of a new account
             let len: i64 = vp.len() as _;
-            let read_cache = unsafe { env.read_cache.get() };
-            read_cache.replace(vp.clone());
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(vp.clone());
             len
         }
         None => {
@@ -343,8 +343,8 @@ where
                 Some(value) => {
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
-                    let read_cache = unsafe { env.read_cache.get() };
-                    read_cache.replace(value);
+                    let result_buffer = unsafe { env.result_buffer.get() };
+                    result_buffer.replace(value);
                     len
                 }
                 None => HostEnvResult::Fail.to_i64(),
@@ -361,14 +361,14 @@ where
 /// first step reads the value into a read cache and returns the size (if any)
 /// back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
-pub fn tx_read_cache<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, result_ptr: u64)
+pub fn tx_result_buffer<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, result_ptr: u64)
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let read_cache = unsafe { env.read_cache.get() };
-    let value = read_cache.take().unwrap();
+    let result_buffer = unsafe { env.result_buffer.get() };
+    let value = result_buffer.take().unwrap();
     let gas = env.memory.write_bytes(result_ptr, value);
     tx_add_gas(env, gas);
 }
@@ -432,8 +432,8 @@ where
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let read_cache = unsafe { env.read_cache.get() };
-                read_cache.replace(key_val);
+                let result_buffer = unsafe { env.result_buffer.get() };
+                result_buffer.replace(key_val);
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -450,8 +450,8 @@ where
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let read_cache = unsafe { env.read_cache.get() };
-                read_cache.replace(key_val);
+                let result_buffer = unsafe { env.result_buffer.get() };
+                result_buffer.replace(key_val);
                 return len;
             }
         }
@@ -569,8 +569,8 @@ where
         Some(value) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let read_cache = unsafe { env.read_cache.get() };
-            read_cache.replace(value);
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(value);
             len
         }
         None => HostEnvResult::Fail.to_i64(),
@@ -608,8 +608,8 @@ where
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let read_cache = unsafe { env.read_cache.get() };
-            read_cache.replace(value.clone());
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(value.clone());
             len
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -621,8 +621,8 @@ where
         }) => {
             // read the VP of a new account
             let len: i64 = vp.len() as _;
-            let read_cache = unsafe { env.read_cache.get() };
-            read_cache.replace(vp.clone());
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(vp.clone());
             len
         }
         None => {
@@ -634,8 +634,8 @@ where
                 Some(value) => {
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
-                    let read_cache = unsafe { env.read_cache.get() };
-                    read_cache.replace(value);
+                    let result_buffer = unsafe { env.result_buffer.get() };
+                    result_buffer.replace(value);
                     len
                 }
                 None => HostEnvResult::Fail.to_i64(),
@@ -652,7 +652,7 @@ where
 /// first step reads the value into a read cache and returns the size (if any)
 /// back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
-pub fn vp_read_cache<MEM, DB, H, EVAL>(
+pub fn vp_result_buffer<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     result_ptr: u64,
 ) where
@@ -661,8 +661,8 @@ pub fn vp_read_cache<MEM, DB, H, EVAL>(
     H: StorageHasher,
     EVAL: VpEvalRunner,
 {
-    let read_cache = unsafe { env.read_cache.get() };
-    let value = read_cache.take().unwrap();
+    let result_buffer = unsafe { env.result_buffer.get() };
+    let value = result_buffer.take().unwrap();
     let gas = env.memory.write_bytes(result_ptr, value);
     vp_add_gas(env, gas);
 }
@@ -793,8 +793,8 @@ where
             .try_to_vec()
             .expect("cannot serialize the key value pair");
         let len: i64 = key_val.len().try_into().expect("data length overflow");
-        let read_cache = unsafe { env.read_cache.get() };
-        read_cache.replace(key_val);
+        let result_buffer = unsafe { env.result_buffer.get() };
+        result_buffer.replace(key_val);
         return len;
     }
     HostEnvResult::Fail.to_i64()
@@ -836,8 +836,8 @@ where
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let read_cache = unsafe { env.read_cache.get() };
-                read_cache.replace(key_val);
+                let result_buffer = unsafe { env.result_buffer.get() };
+                result_buffer.replace(key_val);
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -854,8 +854,8 @@ where
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let read_cache = unsafe { env.read_cache.get() };
-                read_cache.replace(key_val);
+                let result_buffer = unsafe { env.result_buffer.get() };
+                result_buffer.replace(key_val);
                 return len;
             }
         }
@@ -1249,7 +1249,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
-        read_cache: &mut Option<Vec<u8>>,
+        result_buffer: &mut Option<Vec<u8>>,
     ) -> TxEnv<'static, NativeMemory, DB, H>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1260,7 +1260,7 @@ pub mod testing {
         let iterators = unsafe { MutEnvHostWrapper::new(iterators) };
         let verifiers = unsafe { MutEnvHostWrapper::new(verifiers) };
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
-        let read_cache = unsafe { MutEnvHostWrapper::new(read_cache) };
+        let result_buffer = unsafe { MutEnvHostWrapper::new(result_buffer) };
         TxEnv {
             memory: NativeMemory,
             storage,
@@ -1268,7 +1268,7 @@ pub mod testing {
             iterators,
             verifiers,
             gas_meter,
-            read_cache,
+            result_buffer,
         }
     }
 
@@ -1282,7 +1282,7 @@ pub mod testing {
         gas_meter: &mut VpGasMeter,
         tx_code: &[u8],
         eval_runner: &EVAL,
-        read_cache: &mut Option<Vec<u8>>,
+        result_buffer: &mut Option<Vec<u8>>,
     ) -> VpEnv<'static, NativeMemory, DB, H, EVAL>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1295,7 +1295,7 @@ pub mod testing {
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
         let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code) };
         let eval_runner = unsafe { EnvHostWrapper::new(eval_runner) };
-        let read_cache = unsafe { MutEnvHostWrapper::new(read_cache) };
+        let result_buffer = unsafe { MutEnvHostWrapper::new(result_buffer) };
         VpEnv {
             memory: NativeMemory,
             address,
@@ -1305,7 +1305,7 @@ pub mod testing {
             gas_meter,
             tx_code,
             eval_runner,
-            read_cache,
+            result_buffer,
         }
     }
 }

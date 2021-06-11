@@ -126,8 +126,9 @@ impl TxRunner {
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
-        let mut read_cache: Option<Vec<u8>> = None;
-        let env_read_cache = unsafe { MutEnvHostWrapper::new(&mut read_cache) };
+        let mut result_buffer: Option<Vec<u8>> = None;
+        let env_result_buffer =
+            unsafe { MutEnvHostWrapper::new(&mut result_buffer) };
 
         let tx_code = prepare_wasm_code(&tx_code)?;
 
@@ -142,7 +143,7 @@ impl TxRunner {
             iterators,
             env_verifiers,
             gas_meter,
-            env_read_cache,
+            env_result_buffer,
             initial_memory,
         );
 
@@ -244,8 +245,9 @@ impl VpRunner {
         let env_verifiers = unsafe { EnvHostWrapper::new(verifiers) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
-        let mut read_cache: Option<Vec<u8>> = None;
-        let env_read_cache = unsafe { MutEnvHostWrapper::new(&mut read_cache) };
+        let mut result_buffer: Option<Vec<u8>> = None;
+        let env_result_buffer =
+            unsafe { MutEnvHostWrapper::new(&mut result_buffer) };
 
         let eval_runner = VpEval {
             address: address.clone(),
@@ -256,7 +258,7 @@ impl VpRunner {
             tx_code: tx_code.clone(),
             keys_changed: env_keys_changed.clone(),
             verifiers: env_verifiers.clone(),
-            read_cache: env_read_cache.clone(),
+            result_buffer: env_result_buffer.clone(),
         };
         // Assuming single-threaded VP wasm runner
         let eval_runner = unsafe { EnvHostWrapper::new(&eval_runner) };
@@ -282,7 +284,7 @@ impl VpRunner {
             gas_meter,
             tx_code,
             eval_runner,
-            env_read_cache,
+            env_result_buffer,
             initial_memory,
         );
 
@@ -361,7 +363,7 @@ where
     /// The verifiers whose validity predicates should be triggered.
     pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
     /// Cache for 2-step reads from host environment.
-    pub read_cache: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
+    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 
 impl<DB, H> VpEvalRunner for VpEval<'static, DB, H>
@@ -403,7 +405,7 @@ where
             tx_code: self.tx_code.clone(),
             keys_changed: self.keys_changed.clone(),
             verifiers: self.verifiers.clone(),
-            read_cache: self.read_cache.clone(),
+            result_buffer: self.result_buffer.clone(),
         };
         // Assuming single-threaded VP wasm runner
         let eval_runner = unsafe { EnvHostWrapper::new(&eval_runner) };
@@ -432,7 +434,7 @@ where
             self.gas_meter.clone(),
             self.tx_code.clone(),
             eval_runner,
-            self.read_cache.clone(),
+            self.result_buffer.clone(),
             initial_memory,
         );
 

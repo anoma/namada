@@ -35,7 +35,7 @@ pub struct TestVpEnv {
     pub keys_changed: Vec<Key>,
     pub verifiers: HashSet<Address>,
     pub eval_runner: Option<native_vp_host_env::VpEval>,
-    pub read_cache: Option<Vec<u8>>,
+    pub result_buffer: Option<Vec<u8>>,
 }
 
 impl Default for TestVpEnv {
@@ -53,7 +53,7 @@ impl Default for TestVpEnv {
             keys_changed: vec![],
             verifiers: HashSet::default(),
             eval_runner: None,
-            read_cache: None,
+            result_buffer: None,
         };
 
         #[cfg(feature = "wasm-runtime")]
@@ -69,8 +69,8 @@ impl Default for TestVpEnv {
             let env_keys_changed =
                 unsafe { EnvHostSliceWrapper::new(&env.keys_changed[..]) };
             let env_verifiers = unsafe { EnvHostWrapper::new(&env.verifiers) };
-            let env_read_cache =
-                unsafe { MutEnvHostWrapper::new(&mut env.read_cache) };
+            let env_result_buffer =
+                unsafe { MutEnvHostWrapper::new(&mut env.result_buffer) };
 
             anoma_shared::vm::wasm::runner::VpEval {
                 address: env.addr.clone(),
@@ -81,7 +81,7 @@ impl Default for TestVpEnv {
                 tx_code: env_tx_code,
                 keys_changed: env_keys_changed,
                 verifiers: env_verifiers,
-                read_cache: env_read_cache,
+                result_buffer: env_result_buffer,
             }
         };
         #[cfg(not(feature = "wasm-runtime"))]
@@ -149,7 +149,7 @@ pub fn init_vp_env(
         keys_changed: _,
         verifiers: _,
         eval_runner,
-        read_cache,
+        result_buffer,
     }: &mut TestVpEnv,
 ) {
     vp_host_env::ENV.with(|env| {
@@ -164,7 +164,7 @@ pub fn init_vp_env(
                 eval_runner
                     .as_ref()
                     .expect("the eval_runner should be initialized"),
-                read_cache,
+                result_buffer,
             )
         })
     });
@@ -251,7 +251,7 @@ mod native_vp_host_env {
     // [`anoma_vm_env::imports::vp`] `extern "C"` section.
     native_host_fn!(vp_read_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_read_post(key_ptr: u64, key_len: u64) -> i64);
-    native_host_fn!(vp_read_cache(result_ptr: u64));
+    native_host_fn!(vp_result_buffer(result_ptr: u64));
     native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
