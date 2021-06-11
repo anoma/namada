@@ -358,8 +358,8 @@ where
 ///
 /// In cases where we're reading a value from the host in the guest and
 /// we don't know the byte size up-front, we have to read it in 2-steps. The
-/// first step reads the value into a read cache and returns the size (if any)
-/// back to the guest, the second step reads the value from cache into a
+/// first step reads the value into a result buffer and returns the size (if
+/// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 pub fn tx_result_buffer<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, result_ptr: u64)
 where
@@ -649,8 +649,8 @@ where
 ///
 /// In cases where we're reading a value from the host in the guest and
 /// we don't know the byte size up-front, we have to read it in 2-steps. The
-/// first step reads the value into a read cache and returns the size (if any)
-/// back to the guest, the second step reads the value from cache into a
+/// first step reads the value into a result buffer and returns the size (if
+/// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 pub fn vp_result_buffer<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,

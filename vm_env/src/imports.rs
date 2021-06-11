@@ -9,8 +9,8 @@ use borsh::BorshDeserialize;
 ///
 /// In cases where we're reading a value from the host in the guest and
 /// we don't know the byte size up-front, we have to read it in 2-steps. The
-/// first step reads the value into a read cache and returns the size (if any)
-/// back to the guest, the second step reads the value from cache into a
+/// first step reads the value into a result buffer and returns the size (if
+/// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 fn read_from_cache<T: BorshDeserialize>(
     read_result: i64,
@@ -210,7 +210,7 @@ pub mod tx {
         // its size.
         fn anoma_tx_read(key_ptr: u64, key_len: u64) -> i64;
 
-        // Read a value from read cache.
+        // Read a value from result buffer.
         fn anoma_tx_result_buffer(result_ptr: u64);
 
         // Returns 1 if the key is present, -1 otherwise.
@@ -437,18 +437,18 @@ pub mod vp {
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present. If a value is found, it will be placed in the
-        // read cache, because we cannot allocate a buffer for it before
+        // result buffer, because we cannot allocate a buffer for it before
         // we know its size.
         fn anoma_vp_read_pre(key_ptr: u64, key_len: u64) -> i64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present. If a value is found, it will be placed in the
-        // read cache, because we cannot allocate a buffer for it before
+        // result buffer, because we cannot allocate a buffer for it before
         // we know its size.
         fn anoma_vp_read_post(key_ptr: u64, key_len: u64) -> i64;
 
-        // Read a value from read cache.
+        // Read a value from result buffer.
         fn anoma_vp_result_buffer(result_ptr: u64);
 
         // Returns 1 if the key is present in prior state, -1 otherwise.
@@ -463,14 +463,14 @@ pub mod vp {
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if
         // the key is not present. If a value is found, it will be placed in the
-        // read cache, because we cannot allocate a buffer for it before
+        // result buffer, because we cannot allocate a buffer for it before
         // we know its size.
         fn anoma_vp_iter_pre_next(iter_id: u64) -> i64;
 
         // Read variable-length posterior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if the
         // key is not present. If a value is found, it will be placed in the
-        // read cache, because we cannot allocate a buffer for it before
+        // result buffer, because we cannot allocate a buffer for it before
         // we know its size.
         fn anoma_vp_iter_post_next(iter_id: u64) -> i64;
 
