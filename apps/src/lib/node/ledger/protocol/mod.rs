@@ -6,6 +6,7 @@ use std::fmt;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::ledger::storage::write_log::WriteLog;
+use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::{Address, Key};
 use anoma_shared::vm;
 use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
@@ -13,7 +14,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::node::ledger::storage::PersistentStorage;
-use crate::proto::{self, Tx};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -126,9 +126,6 @@ fn check_vps(
 ) -> Result<VpsResult> {
     let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
-    let tx_data = tx.data.clone().unwrap_or_default();
-    let tx_code = tx.code.clone();
-
     // collect the changed storage keys and VPs for the verifiers
     let verifiers: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers
         .iter()
@@ -149,14 +146,8 @@ fn check_vps(
 
     let initial_gas = gas_meter.get_current_transaction_gas();
 
-    let vps_result = execute_vps(
-        verifiers,
-        tx_data,
-        tx_code,
-        storage,
-        write_log,
-        initial_gas,
-    )?;
+    let vps_result =
+        execute_vps(verifiers, tx, storage, write_log, initial_gas)?;
     tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
 
     gas_meter
@@ -169,8 +160,7 @@ fn check_vps(
 /// Execute verifiers' validity predicates
 fn execute_vps(
     verifiers: Vec<(Address, Vec<Key>, Vec<u8>)>,
-    tx_data: Vec<u8>,
-    tx_code: Vec<u8>,
+    tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
     initial_gas: u64,
@@ -185,8 +175,7 @@ fn execute_vps(
         .try_fold(VpsResult::default, |result, (addr, keys, vp)| {
             execute_vp(
                 result,
-                tx_data.clone(),
-                tx_code.clone(),
+                tx,
                 storage,
                 write_log,
                 addresses.clone(),
@@ -231,8 +220,7 @@ fn merge_vp_results(
 #[allow(clippy::too_many_arguments)]
 fn execute_vp(
     mut result: VpsResult,
-    tx_data: Vec<u8>,
-    tx_code: Vec<u8>,
+    tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
     addresses: HashSet<Address>,
@@ -244,8 +232,7 @@ fn execute_vp(
     let accept = vp_runner
         .run(
             vp,
-            tx_data,
-            &tx_code,
+            tx,
             addr,
             storage,
             write_log,

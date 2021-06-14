@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::proto::Tx;
 use crate::types::{address, Address, DbKeySeg, Key, KeySeg};
 
 const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
@@ -105,34 +106,42 @@ pub fn verify_signature_raw(
 /// which is can then be checked by a validity predicate wasm.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SignedTxData {
-    /// The tx data bytes
-    pub data: Vec<u8>,
-    /// The signature is produced on the tx data concatenated with the tx code.
+    /// The original tx data bytes, if any
+    pub data: Option<Vec<u8>>,
+    /// The signature is produced on the tx data concatenated with the tx code
+    /// and the timestamp.
     pub sig: Signature,
 }
 
-impl SignedTxData {
-    /// Initialize a new signed transaction data.
-    pub fn new(
-        keypair: &Keypair,
-        data: Vec<u8>,
-        tx_code: impl AsRef<[u8]>,
-    ) -> Self {
-        let to_sign = [&data[..], tx_code.as_ref()].concat();
-        let sig = sign(keypair, &to_sign);
-        Self { data, sig }
+/// Sign a transaction using [`SignedTxData`].
+pub fn sign_tx(keypair: &Keypair, tx: Tx) -> Tx {
+    let to_sign = tx.to_bytes();
+    let sig = sign(keypair, &to_sign);
+    let signed = SignedTxData { data: tx.data, sig }
+        .try_to_vec()
+        .expect("Encoding transaction data shouldn't fail");
+    Tx {
+        code: tx.code,
+        data: Some(signed),
+        timestamp: tx.timestamp,
     }
+}
 
-    /// Verify that the transaction has been signed by the secret key
-    /// counterpart of the given public key.
-    pub fn verify(
-        &self,
-        pk: &PublicKey,
-        tx_code: impl AsRef<[u8]>,
-    ) -> Result<(), VerifySigError> {
-        let data = [&self.data, tx_code.as_ref()].concat();
-        verify_signature_raw(pk, &data, &self.sig)
-    }
+/// Verify that the transaction has been signed by the secret key
+/// counterpart of the given public key.
+pub fn verify_tx_sig(
+    pk: &PublicKey,
+    tx: &Tx,
+    sig: &Signature,
+) -> Result<(), VerifySigError> {
+    // revert the transaction data
+    let mut tx = tx.clone();
+    let tx_data = tx.data.expect("signed data should exist");
+    let signed_tx_data = SignedTxData::try_from_slice(&tx_data[..])
+        .expect("Decoding transaction data shouldn't fail");
+    tx.data = Some(signed_tx_data.data.expect("data should exist"));
+    let data = tx.to_bytes();
+    verify_signature_raw(pk, &data, sig)
 }
 
 /// A generic signed data wrapper for Borsh encode-able data.
