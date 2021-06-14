@@ -86,11 +86,14 @@ impl TxRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let limit = memory::tx_limit();
         // TODO Could we pass the modified accounts sub-spaces via WASM store
         // directly to VPs' wasm scripts to avoid passing it through the
         // host?
-        let wasm_store =
-            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        let wasm_store = wasmer::Store::new_with_tunables(
+            &wasmer_engine_jit::JIT::new(compiler).engine(),
+            limit,
+        );
         Self { wasm_store }
     }
 
@@ -197,9 +200,12 @@ impl VpRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let limit = memory::vp_limit();
         // TODO: Maybe refactor wasm_store: not necessary to do in two steps
-        let wasm_store =
-            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        let wasm_store = wasmer::Store::new_with_tunables(
+            &wasmer_engine_jit::JIT::new(compiler).engine(),
+            limit,
+        );
         Self { wasm_store }
     }
 
@@ -395,8 +401,11 @@ where
 
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let wasm_store =
-            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        let limit = memory::vp_limit();
+        let wasm_store = wasmer::Store::new_with_tunables(
+            &wasmer_engine_jit::JIT::new(compiler).engine(),
+            limit,
+        );
 
         let eval_runner = VpEval {
             address: self.address.clone(),

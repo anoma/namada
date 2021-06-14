@@ -13,11 +13,12 @@ default = []
 # for integration tests and test utilies
 testing = []
 wasm-runtime = [
-  "wasmer",
-  "wasmer-compiler-singlepass",
-  "wasmer-engine-jit",
   "parity-wasm",
   "pwasm-utils",
+  "wasmer-compiler-singlepass",
+  "wasmer-engine-jit",
+  "wasmer-vm",
+  "wasmer",
 ]
 
 [dependencies]
@@ -41,10 +42,10 @@ wasmer = {version = "1.0.2", optional = true}
 wasmer-compiler-singlepass = {version = "1.0.2", optional = true}
 wasmer-engine-jit = {version = "1.0.2", optional = true}
 wasmparser = "0.78.2"
+wasmer-vm = {version = "1.0.2" , optional = true}
 
 [dev-dependencies]
 proptest = "1.0.0"
-wasmer-vm = "1.0.2"
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
 rand = {version = "0.7"}
 rand_core = {version = "0.5"}
