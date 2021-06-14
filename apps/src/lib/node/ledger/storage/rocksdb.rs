@@ -231,11 +231,10 @@ impl DB for RocksDB {
             None => return Ok(None),
         }
         // Load data at the height
-        let prefix = format!("{}/", height.to_string());
+        let prefix = format!("{}/", height.raw());
         let mut read_opts = ReadOptions::default();
         read_opts.set_total_order_seek(false);
-        let next_height_prefix =
-            format!("{}/", height.next_height().to_string());
+        let next_height_prefix = format!("{}/", height.next_height().raw());
         read_opts.set_iterate_upper_bound(next_height_prefix);
         let mut root = None;
         let mut store = None;
@@ -357,7 +356,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
         height: BlockHeight,
         prefix: &Key,
     ) -> PersistentPrefixIterator<'iter> {
-        let db_prefix = format!("{}/subspace/", height.to_string());
+        let db_prefix = format!("{}/subspace/", height.raw());
         let prefix = format!("{}{}", db_prefix, prefix.to_string());
 
         let mut read_opts = ReadOptions::default();

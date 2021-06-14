@@ -109,9 +109,9 @@ impl From<DbKeySeg> for Key {
 
 impl Key {
     /// Parses string and returns a key
-    pub fn parse(string: String) -> Result<Self> {
+    pub fn parse(string: impl AsRef<str>) -> Result<Self> {
         let mut segments = Vec::new();
-        for s in string.split(KEY_SEGMENT_SEPARATOR) {
+        for s in string.as_ref().split(KEY_SEGMENT_SEPARATOR) {
             segments.push(DbKeySeg::parse(s.to_owned())?);
         }
         Ok(Key { segments })
@@ -120,7 +120,7 @@ impl Key {
     /// Returns a new key with segments of `Self` and the given segment
     pub fn push<T: KeySeg>(&self, other: &T) -> Result<Self> {
         let mut segments = self.segments.clone();
-        segments.push(DbKeySeg::parse(other.to_string())?);
+        segments.push(DbKeySeg::parse(other.raw())?);
         Ok(Key { segments })
     }
 
@@ -168,7 +168,7 @@ impl Display for Key {
         let key = self
             .segments
             .iter()
-            .map(|s| DbKeySeg::to_string(s))
+            .map(|s| DbKeySeg::raw(s))
             .collect::<Vec<String>>()
             .join(&KEY_SEGMENT_SEPARATOR.to_string());
         f.write_str(&key)
@@ -184,7 +184,7 @@ pub trait KeySeg {
         Self: Sized;
 
     /// Convert `Self` to a string.
-    fn to_string(&self) -> String;
+    fn raw(&self) -> String;
 
     /// Convert `Self` to a key segment. This mapping should preserve the
     /// ordering of `Self`
@@ -234,7 +234,7 @@ impl KeySeg for DbKeySeg {
         }
     }
 
-    fn to_string(&self) -> String {
+    fn raw(&self) -> String {
         match self {
             DbKeySeg::AddressSeg(addr) => {
                 format!("{}{}", RESERVED_ADDRESS_PREFIX, addr.encode())
@@ -249,7 +249,7 @@ impl KeySeg for DbKeySeg {
 }
 
 impl KeySeg for String {
-    fn to_string(&self) -> String {
+    fn raw(&self) -> String {
         self.to_owned()
     }
 
@@ -270,12 +270,12 @@ impl KeySeg for BlockHeight {
         Ok(BlockHeight(h))
     }
 
-    fn to_string(&self) -> String {
+    fn raw(&self) -> String {
         format!("{}", self.0)
     }
 
     fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::StringSeg(self.to_string())
+        DbKeySeg::StringSeg(self.raw())
     }
 }
 impl TryFrom<i64> for BlockHeight {
@@ -344,7 +344,7 @@ impl core::fmt::Debug for BlockHash {
 }
 
 impl KeySeg for Address {
-    fn to_string(&self) -> String {
+    fn raw(&self) -> String {
         format!("{}{}", RESERVED_ADDRESS_PREFIX, self.encode())
     }
 
@@ -419,14 +419,14 @@ mod tests {
         fn test_key_push(s in "[^#?/][^/]*") {
             let addr = address::testing::established_address_1();
             let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
-            assert_eq!(key.segments[1].to_string(), s);
+            assert_eq!(key.segments[1].raw(), s);
         }
     }
 
     #[test]
     fn test_key_parse_valid() {
         let addr = address::testing::established_address_1();
-        let target = format!("{}/test", KeySeg::to_string(&addr));
+        let target = format!("{}/test", KeySeg::raw(&addr));
         let key = Key::parse(target.clone()).expect("cannot parse the string");
         assert_eq!(key.to_string(), target);
 
@@ -448,17 +448,17 @@ mod tests {
     fn test_key_push_valid() {
         let addr = address::testing::established_address_1();
         let other = address::testing::established_address_2();
-        let target = KeySeg::to_string(&other);
+        let target = KeySeg::raw(&other);
         let key = Key::from(addr.to_db_key())
             .push(&target)
             .expect("cannnot push the segment");
-        assert_eq!(key.segments[1].to_string(), target);
+        assert_eq!(key.segments[1].raw(), target);
 
         let target = "?test".to_owned();
         let key = Key::from(addr.to_db_key())
             .push(&target)
             .expect("cannnot push the segment");
-        assert_eq!(key.segments[1].to_string(), target);
+        assert_eq!(key.segments[1].raw(), target);
     }
 
     #[test]

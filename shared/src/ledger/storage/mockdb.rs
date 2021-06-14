@@ -1,7 +1,6 @@
 //! DB mock for testing
 
-use std::collections::btree_map::Range;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{btree_map, BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
 
 use sparse_merkle_tree::SparseMerkleTree;
@@ -129,8 +128,8 @@ impl DB for MockDB {
             None => return Ok(None),
         }
         // Load data at the height
-        let prefix = format!("{}/", height.to_string());
-        let upper_prefix = format!("{}/", height.next_height().to_string());
+        let prefix = format!("{}/", height.raw());
+        let upper_prefix = format!("{}/", height.next_height().raw());
         let mut root = None;
         let mut store = None;
         let mut hash = None;
@@ -240,24 +239,18 @@ impl<'iter> DBIter<'iter> for MockDB {
         height: BlockHeight,
         prefix: &Key,
     ) -> MockPrefixIterator<'iter> {
-        let db_prefix = format!("{}/subspace/", height.to_string());
+        let db_prefix = format!("{}/subspace/", height.raw());
         let prefix = format!("{}{}", db_prefix, prefix.to_string());
-
-        let mut upper_prefix = prefix.clone().into_bytes();
-        if let Some(last) = upper_prefix.pop() {
-            upper_prefix.push(last + 1);
-        }
-        let upper =
-            String::from_utf8(upper_prefix).expect("failed convert to string");
-        let iter = self.0.range((Included(prefix), Excluded(upper)));
-        MockPrefixIterator::new(MockIterator { iter }, db_prefix)
+        let iter = self.0.iter();
+        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
     }
 }
 
 /// A prefix iterator base for the [`MockPrefixIterator`].
 pub struct MockIterator<'a> {
-    /// A sub-range iterator
-    pub iter: Range<'a, String, Vec<u8>>,
+    prefix: String,
+    /// The concrete iterator
+    pub iter: btree_map::Iter<'a, String, Vec<u8>>,
 }
 
 /// A prefix iterator for the [`MockDB`].
@@ -267,9 +260,15 @@ impl<'a> Iterator for MockIterator<'a> {
     type Item = KVBytes;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(key, val)| {
-            (Box::from(key.as_bytes()), Box::from(val.as_slice()))
-        })
+        while let Some((key, val)) = self.iter.next() {
+            if key.starts_with(&self.prefix) {
+                return Some((
+                    Box::from(key.as_bytes()),
+                    Box::from(val.as_slice()),
+                ));
+            }
+        }
+        None
     }
 }
 

@@ -128,7 +128,8 @@ dependencies = [
  "parity-wasm",
  "proptest",
  "pwasm-utils",
- "rand 0.8.3",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
  "serde 1.0.125",
  "sha2 0.9.3",
  "sparse-merkle-tree",
@@ -148,6 +149,10 @@ dependencies = [
  "anoma_shared",
  "anoma_vm_env",
  "concat-idents",
+ "itertools 0.10.0",
+ "test-env-log",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4231,7 +4236,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/rpc-gas#1bb6fa9f61cdae4e0f6a212f914f141e48475963"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -4262,7 +4267,7 @@ dependencies = [
 [[package]]
 name = "tendermint-abci"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/rpc-gas#1bb6fa9f61cdae4e0f6a212f914f141e48475963"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "bytes 1.0.1",
  "eyre",
@@ -4275,7 +4280,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/rpc-gas#1bb6fa9f61cdae4e0f6a212f914f141e48475963"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",
@@ -4293,7 +4298,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/rpc-gas#1bb6fa9f61cdae4e0f6a212f914f141e48475963"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "async-trait",
  "bytes 1.0.1",
@@ -4348,6 +4353,17 @@ dependencies = [
  "numtoa",
  "redox_syscall",
  "redox_termios",
+]
+
+[[package]]
+name = "test-env-log"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3e4b132a630cc8a0d06cfcb400da67adef3d0087a94b3332d4692908f0c2544"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
