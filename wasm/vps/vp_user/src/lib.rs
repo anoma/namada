@@ -41,7 +41,7 @@ fn validate_tx(
             let pk = key::ed25519::get(&addr);
             match pk {
                 None => false,
-                Some(pk) => verify_tx_signature(&pk, &tx.data, &tx.sig),
+                Some(pk) => verify_tx_signature(&pk, &tx.sig),
             }
         }
         _ => false,
@@ -108,18 +108,22 @@ fn validate_tx(
 
 fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
     match SignedTxData::try_from_slice(tx_data) {
-        Ok(tx) => match IntentTransfers::try_from_slice(&tx.data[..]) {
-            Ok(tx_data) => {
-                if let Some(intent) = &tx_data.intents.get(addr) {
-                    log_string("check intent".to_string());
-                    check_intent(addr, intent)
-                } else {
-                    log_string("no intent with a matching address".to_string());
-                    false
+        Ok(tx) => {
+            match IntentTransfers::try_from_slice(&tx.data.unwrap()[..]) {
+                Ok(tx_data) => {
+                    if let Some(intent) = &tx_data.intents.get(addr) {
+                        log_string("check intent".to_string());
+                        check_intent(addr, intent)
+                    } else {
+                        log_string(
+                            "no intent with a matching address".to_string(),
+                        );
+                        false
+                    }
                 }
+                Err(_) => false,
             }
-            Err(_) => false,
-        },
+        }
         Err(_) => false,
     }
 }

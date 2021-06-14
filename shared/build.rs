@@ -1,12 +1,19 @@
 use std::process::Command;
 use std::{env, str};
 
-/// Path to the .proto source files, relative to `apps` directory
+/// Path to the .proto source files, relative to `shared` directory
 const PROTO_SRC: &str = "../proto";
 /// The version should match the one we use in the `Makefile`
 const RUSTFMT_TOOLCHAIN: &str = "nightly-2021-03-09";
 
 fn main() {
+    if let Ok(val) = env::var("COMPILE_PROTO") {
+        if val.to_ascii_lowercase() == "false" {
+            // Skip compiling proto files
+            return;
+        }
+    }
+
     // Tell Cargo that if the given file changes, to rerun this build script.
     println!("cargo:rerun-if-changed={}", PROTO_SRC);
 
@@ -27,15 +34,12 @@ fn main() {
     }
 
     tonic_build::configure()
-        .out_dir("src/lib/proto/generated")
+        .out_dir("src/proto/generated")
         .format(true)
-        .extern_path(".types", "::anoma_shared::proto::generated::types")
         // TODO try to add json encoding to simplify use for user
         // .type_attribute("types.Intent", "#[derive(serde::Serialize,
         // serde::Deserialize)]")
-        .compile(
-            &[format!("{}/services.proto", PROTO_SRC)],
-            &[PROTO_SRC.into()],
-        )
+        .protoc_arg("--experimental_allow_proto3_optional")
+        .compile(&[format!("{}/types.proto", PROTO_SRC)], &[PROTO_SRC.into()])
         .unwrap();
 }

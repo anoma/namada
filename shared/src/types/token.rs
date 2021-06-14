@@ -4,7 +4,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
-use crate::types::key::ed25519::{Keypair, SignedTxData};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
@@ -136,18 +135,4 @@ pub struct Transfer {
     pub token: Address,
     /// The amount of tokens
     pub amount: Amount,
-}
-
-impl Transfer {
-    /// Sign a transfer with a given keypair.
-    pub fn sign(
-        self,
-        tx_code: impl AsRef<[u8]>,
-        keypair: &Keypair,
-    ) -> SignedTxData {
-        let bytes = self
-            .try_to_vec()
-            .expect("Encoding unsigned transfer shouldn't fail");
-        SignedTxData::new(keypair, bytes, tx_code)
-    }
 }

@@ -16,6 +16,7 @@ use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::internal::HostEnvResult;
 use crate::types::storage::Key;
@@ -125,6 +126,11 @@ impl TxRunner {
         // This is also not thread-safe, we're assuming single-threaded Tx
         // runner.
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
+        // This is also not thread-safe, we're assuming single-threaded Tx
+        // runner.
+        let mut result_buffer: Option<Vec<u8>> = None;
+        let env_result_buffer =
+            unsafe { MutEnvHostWrapper::new(&mut result_buffer) };
 
         let tx_code = prepare_wasm_code(&tx_code)?;
 
@@ -139,6 +145,7 @@ impl TxRunner {
             iterators,
             env_verifiers,
             gas_meter,
+            env_result_buffer,
             initial_memory,
         );
 
@@ -204,8 +211,7 @@ impl VpRunner {
     pub fn run<DB, H>(
         &self,
         vp_code: impl AsRef<[u8]>,
-        tx_data: impl AsRef<[u8]>,
-        tx_code: impl AsRef<[u8]>,
+        tx: &Tx,
         address: &Address,
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
@@ -219,13 +225,14 @@ impl VpRunner {
     {
         validate_untrusted_wasm(vp_code.as_ref())
             .map_err(Error::ValidationError)?;
+        let tx_data = tx.data.clone().unwrap_or_default();
 
         // Read-only access from parallel Vp runners
         let storage = unsafe { EnvHostWrapper::new(storage) };
         // Read-only access from parallel Vp runners
         let write_log = unsafe { EnvHostWrapper::new(write_log) };
         // Read-only access from parallel Vp runners
-        let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code.as_ref()) };
+        let tx = unsafe { EnvHostWrapper::new(tx) };
         // This is not thread-safe, but because each VP has its own instance
         // there is no shared access
         let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
@@ -238,6 +245,11 @@ impl VpRunner {
             unsafe { EnvHostSliceWrapper::new(keys_changed) };
         // Read-only access from parallel Vp runners
         let env_verifiers = unsafe { EnvHostWrapper::new(verifiers) };
+        // This is not thread-safe, but because each VP has its own instance
+        // there is no shared access
+        let mut result_buffer: Option<Vec<u8>> = None;
+        let env_result_buffer =
+            unsafe { MutEnvHostWrapper::new(&mut result_buffer) };
 
         let eval_runner = VpEval {
             address: address.clone(),
@@ -245,9 +257,10 @@ impl VpRunner {
             write_log: write_log.clone(),
             iterators: iterators.clone(),
             gas_meter: gas_meter.clone(),
-            tx_code: tx_code.clone(),
+            tx: tx.clone(),
             keys_changed: env_keys_changed.clone(),
             verifiers: env_verifiers.clone(),
+            result_buffer: env_result_buffer.clone(),
         };
         // Assuming single-threaded VP wasm runner
         let eval_runner = unsafe { EnvHostWrapper::new(&eval_runner) };
@@ -271,9 +284,10 @@ impl VpRunner {
             write_log,
             iterators,
             gas_meter,
-            tx_code,
-            initial_memory,
+            tx,
             eval_runner,
+            env_result_buffer,
+            initial_memory,
         );
 
         // compile and run the transaction wasm code
@@ -345,11 +359,13 @@ where
     /// VP gas meter.
     pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
     /// The transaction code.
-    pub tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
+    pub tx: EnvHostWrapper<'a, &'a Tx>,
     /// The storage keys that have been changed.
     pub keys_changed: EnvHostSliceWrapper<'a, &'a [Key]>,
     /// The verifiers whose validity predicates should be triggered.
     pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
+    /// Cache for 2-step reads from host environment.
+    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 
 impl<DB, H> VpEvalRunner for VpEval<'static, DB, H>
@@ -357,11 +373,25 @@ where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    // TODO more code re-use with VpRunner
     fn eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> HostEnvResult {
-        if validate_untrusted_wasm(&vp_code).is_err() {
-            return HostEnvResult::Fail;
+        match self.run_eval(vp_code, input_data) {
+            Ok(ok) => HostEnvResult::from(ok),
+            Err(err) => {
+                tracing::error!("VP eval error {}", err);
+                HostEnvResult::Fail
+            }
         }
+    }
+}
+
+impl<DB, H> VpEval<'static, DB, H>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    fn run_eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> Result<bool> {
+        // TODO more code re-use with VpRunner
+        validate_untrusted_wasm(&vp_code).map_err(Error::ValidationError)?;
 
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
@@ -374,30 +404,20 @@ where
             write_log: self.write_log.clone(),
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
-            tx_code: self.tx_code.clone(),
+            tx: self.tx.clone(),
             keys_changed: self.keys_changed.clone(),
             verifiers: self.verifiers.clone(),
+            result_buffer: self.result_buffer.clone(),
         };
         // Assuming single-threaded VP wasm runner
         let eval_runner = unsafe { EnvHostWrapper::new(&eval_runner) };
 
-        let vp_code = match prepare_wasm_code(vp_code) {
-            Ok(ok) => ok,
-            Err(_) => return HostEnvResult::Fail,
-        };
+        let vp_code = prepare_wasm_code(vp_code)?;
 
-        let vp_module = match wasmer::Module::new(&wasm_store, &vp_code)
-            .map_err(Error::CompileError)
-        {
-            Ok(ok) => ok,
-            Err(_) => return HostEnvResult::Fail,
-        };
-        let initial_memory = match memory::prepare_vp_memory(&wasm_store)
-            .map_err(Error::MemoryError)
-        {
-            Ok(ok) => ok,
-            Err(_) => return HostEnvResult::Fail,
-        };
+        let vp_module = wasmer::Module::new(&wasm_store, &vp_code)
+            .map_err(Error::CompileError)?;
+        let initial_memory = memory::prepare_vp_memory(&wasm_store)
+            .map_err(Error::MemoryError)?;
         let addr = &self.address;
         let keys_changed = unsafe { self.keys_changed.get() };
         let verifiers = unsafe { self.verifiers.get() };
@@ -414,22 +434,16 @@ where
             self.write_log.clone(),
             self.iterators.clone(),
             self.gas_meter.clone(),
-            self.tx_code.clone(),
-            initial_memory,
+            self.tx.clone(),
             eval_runner,
+            self.result_buffer.clone(),
+            initial_memory,
         );
 
         // compile and run the transaction wasm code
-        let vp_instance = match wasmer::Instance::new(&vp_module, &vp_imports)
-            .map_err(Error::InstantiationError)
-        {
-            Ok(ok) => ok,
-            Err(_) => return HostEnvResult::Fail,
-        };
-        match VpRunner::run_with_input(vp_instance, input) {
-            Ok(ok) => HostEnvResult::from(ok),
-            Err(_) => HostEnvResult::Fail,
-        }
+        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
+            .map_err(Error::InstantiationError)?;
+        VpRunner::run_with_input(vp_instance, input)
     }
 }
 
@@ -724,8 +738,7 @@ mod tests {
         .expect("unexpected error converting wat2wasm").into_owned();
 
         let runner = VpRunner::new();
-        let tx_data = vec![];
-        let tx_code = vec![];
+        let tx = Tx::new(vec![], None);
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
@@ -735,8 +748,7 @@ mod tests {
         let error = runner
             .run(
                 vp_code,
-                tx_data,
-                &tx_code,
+                &tx,
                 &addr,
                 &storage,
                 &write_log,

@@ -10,6 +10,7 @@ use anoma_shared::bytes::ByteBuf;
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::storage::MerkleRoot;
+use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::PublicKey;
 use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
@@ -19,7 +20,6 @@ use borsh::BorshSerialize;
 use thiserror::Error;
 
 use self::tendermint::{AbciMsg, AbciReceiver};
-use crate::proto::{self, Tx};
 use crate::{config, wallet};
 
 #[derive(Error, Debug)]

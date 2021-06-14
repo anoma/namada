@@ -5,5 +5,6 @@
 pub mod bytes;
 pub mod gossip;
 pub mod ledger;
+pub mod proto;
 pub mod types;
 pub mod vm;

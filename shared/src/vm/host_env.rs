@@ -10,14 +10,15 @@ use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::internal::HostEnvResult;
-use crate::types::key::ed25519::{verify_signature_raw, PublicKey, Signature};
+use crate::types::key::ed25519::{verify_tx_sig, PublicKey, Signature};
 use crate::types::storage::Key;
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::types::KeyVal;
-use crate::vm::{EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper};
+use crate::vm::{EnvHostWrapper, MutEnvHostWrapper};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -45,6 +46,9 @@ where
     /// The verifiers whose validity predicates should be triggered.
     /// Not thread-safe, assuming single-threaded Tx runner
     pub verifiers: MutEnvHostWrapper<'a, &'a HashSet<Address>>,
+    /// Cache for 2-step reads from host environment.
+    /// Not thread-safe, assuming single-threaded Tx runner
+    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 
 impl<MEM, DB, H> Clone for TxEnv<'_, MEM, DB, H>
@@ -61,6 +65,7 @@ where
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
             verifiers: self.verifiers.clone(),
+            result_buffer: self.result_buffer.clone(),
         }
     }
 }
@@ -92,9 +97,13 @@ where
     /// is no shared access
     pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
-    pub tx_code: EnvHostSliceWrapper<'a, &'a [u8]>,
+    pub tx: EnvHostWrapper<'a, &'a Tx>,
     /// The runner of the [`vp_eval`] function
     pub eval_runner: EnvHostWrapper<'a, &'a EVAL>,
+    /// Cache for 2-step reads from host environment.
+    /// This is not thread-safe, but because each VP has its own instance there
+    /// is no shared access
+    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -118,8 +127,9 @@ where
             write_log: self.write_log.clone(),
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
-            tx_code: self.tx_code.clone(),
+            tx: self.tx.clone(),
             eval_runner: self.eval_runner.clone(),
+            result_buffer: self.result_buffer.clone(),
         }
     }
 }
@@ -288,7 +298,6 @@ pub fn tx_read<MEM, DB, H>(
     env: &TxEnv<MEM, DB, H>,
     key_ptr: u64,
     key_len: u64,
-    result_ptr: u64,
 ) -> i64
 where
     MEM: VmMemory,
@@ -298,12 +307,7 @@ where
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     tx_add_gas(env, gas);
 
-    tracing::debug!(
-        "tx_read {}, key {}, result_ptr {}",
-        key,
-        key_ptr,
-        result_ptr,
-    );
+    tracing::debug!("tx_read {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -315,8 +319,8 @@ where
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let gas = env.memory.write_bytes(result_ptr, value);
-            tx_add_gas(env, gas);
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(value.clone());
             len
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -328,8 +332,8 @@ where
         }) => {
             // read the VP of a new account
             let len: i64 = vp.len() as _;
-            let gas = env.memory.write_bytes(result_ptr, vp);
-            tx_add_gas(env, gas);
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(vp.clone());
             len
         }
         None => {
@@ -341,14 +345,34 @@ where
                 Some(value) => {
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
-                    let gas = env.memory.write_bytes(result_ptr, value);
-                    tx_add_gas(env, gas);
+                    let result_buffer = unsafe { env.result_buffer.get() };
+                    result_buffer.replace(value);
                     len
                 }
                 None => HostEnvResult::Fail.to_i64(),
             }
         }
     }
+}
+
+/// This function is a helper to handle the first step of reading var-len
+/// values from the host.
+///
+/// In cases where we're reading a value from the host in the guest and
+/// we don't know the byte size up-front, we have to read it in 2-steps. The
+/// first step reads the value into a result buffer and returns the size (if
+/// any) back to the guest, the second step reads the value from cache into a
+/// pre-allocated buffer with the obtained size.
+pub fn tx_result_buffer<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, result_ptr: u64)
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let result_buffer = unsafe { env.result_buffer.get() };
+    let value = result_buffer.take().unwrap();
+    let gas = env.memory.write_bytes(result_ptr, value);
+    tx_add_gas(env, gas);
 }
 
 /// Storage prefix iterator function exposed to the wasm VM Tx environment.
@@ -384,21 +408,13 @@ where
 ///
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
-pub fn tx_iter_next<MEM, DB, H>(
-    env: &TxEnv<MEM, DB, H>,
-    iter_id: u64,
-    result_ptr: u64,
-) -> i64
+pub fn tx_iter_next<MEM, DB, H>(env: &TxEnv<MEM, DB, H>, iter_id: u64) -> i64
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    tracing::debug!(
-        "tx_iter_next iter_id {}, result_ptr {}",
-        iter_id,
-        result_ptr,
-    );
+    tracing::debug!("tx_iter_next iter_id {}", iter_id,);
 
     let write_log = unsafe { env.write_log.get() };
     let iterators = unsafe { env.iterators.get() };
@@ -418,8 +434,8 @@ where
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let gas = env.memory.write_bytes(result_ptr, key_val);
-                tx_add_gas(env, gas);
+                let result_buffer = unsafe { env.result_buffer.get() };
+                result_buffer.replace(key_val);
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -436,8 +452,8 @@ where
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let gas = env.memory.write_bytes(result_ptr, key_val);
-                tx_add_gas(env, gas);
+                let result_buffer = unsafe { env.result_buffer.get() };
+                result_buffer.replace(key_val);
                 return len;
             }
         }
@@ -463,7 +479,7 @@ pub fn tx_write<MEM, DB, H>(
     let (value, gas) = env.memory.read_bytes(val_ptr, val_len as _);
     tx_add_gas(env, gas);
 
-    tracing::debug!("tx_update {}, {:#?}", key, value);
+    tracing::debug!("tx_update {}, {:?}", key, value);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
@@ -530,7 +546,6 @@ pub fn vp_read_pre<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
     key_len: u64,
-    result_ptr: u64,
 ) -> i64
 where
     MEM: VmMemory,
@@ -547,7 +562,7 @@ where
     let (value, gas) = storage.read(&key).expect("storage read failed");
     vp_add_gas(env, gas);
     tracing::debug!(
-        "vp_read_pre addr {}, key {}, value {:#?}",
+        "vp_read_pre addr {}, key {}, value {:?}",
         env.address,
         key,
         value,
@@ -556,8 +571,8 @@ where
         Some(value) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let gas = env.memory.write_bytes(result_ptr, value);
-            vp_add_gas(env, gas);
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(value);
             len
         }
         None => HostEnvResult::Fail.to_i64(),
@@ -574,7 +589,6 @@ pub fn vp_read_post<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
     key_len: u64,
-    result_ptr: u64,
 ) -> i64
 where
     MEM: VmMemory,
@@ -585,12 +599,7 @@ where
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
 
-    tracing::debug!(
-        "vp_read_post {}, key {}, result_ptr {}",
-        key,
-        key_ptr,
-        result_ptr,
-    );
+    tracing::debug!("vp_read_post {}, key {}", key, key_ptr,);
 
     // try to read from the write log first
     let key = Key::parse(key).expect("Cannot parse the key string");
@@ -601,8 +610,8 @@ where
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let gas = env.memory.write_bytes(result_ptr, value);
-            vp_add_gas(env, gas);
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(value.clone());
             len
         }
         Some(&write_log::StorageModification::Delete) => {
@@ -614,8 +623,8 @@ where
         }) => {
             // read the VP of a new account
             let len: i64 = vp.len() as _;
-            let gas = env.memory.write_bytes(result_ptr, vp);
-            vp_add_gas(env, gas);
+            let result_buffer = unsafe { env.result_buffer.get() };
+            result_buffer.replace(vp.clone());
             len
         }
         None => {
@@ -627,14 +636,37 @@ where
                 Some(value) => {
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
-                    let gas = env.memory.write_bytes(result_ptr, value);
-                    vp_add_gas(env, gas);
+                    let result_buffer = unsafe { env.result_buffer.get() };
+                    result_buffer.replace(value);
                     len
                 }
                 None => HostEnvResult::Fail.to_i64(),
             }
         }
     }
+}
+
+/// This function is a helper to handle the first step of reading var-len
+/// values from the host.
+///
+/// In cases where we're reading a value from the host in the guest and
+/// we don't know the byte size up-front, we have to read it in 2-steps. The
+/// first step reads the value into a result buffer and returns the size (if
+/// any) back to the guest, the second step reads the value from cache into a
+/// pre-allocated buffer with the obtained size.
+pub fn vp_result_buffer<MEM, DB, H, EVAL>(
+    env: &VpEnv<MEM, DB, H, EVAL>,
+    result_ptr: u64,
+) where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvalRunner,
+{
+    let result_buffer = unsafe { env.result_buffer.get() };
+    let value = result_buffer.take().unwrap();
+    let gas = env.memory.write_bytes(result_ptr, value);
+    vp_add_gas(env, gas);
 }
 
 /// Storage `has_key` in prior state (before tx execution) function exposed to
@@ -746,7 +778,6 @@ where
 pub fn vp_iter_pre_next<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     iter_id: u64,
-    result_ptr: u64,
 ) -> i64
 where
     MEM: VmMemory,
@@ -754,11 +785,7 @@ where
     H: StorageHasher,
     EVAL: VpEvalRunner,
 {
-    tracing::debug!(
-        "vp_iter_pre_next iter_id {}, result_ptr {}",
-        iter_id,
-        result_ptr,
-    );
+    tracing::debug!("vp_iter_pre_next iter_id {}", iter_id,);
 
     let iterators = unsafe { env.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
@@ -768,8 +795,8 @@ where
             .try_to_vec()
             .expect("cannot serialize the key value pair");
         let len: i64 = key_val.len().try_into().expect("data length overflow");
-        let gas = env.memory.write_bytes(result_ptr, key_val);
-        vp_add_gas(env, gas);
+        let result_buffer = unsafe { env.result_buffer.get() };
+        result_buffer.replace(key_val);
         return len;
     }
     HostEnvResult::Fail.to_i64()
@@ -784,7 +811,6 @@ where
 pub fn vp_iter_post_next<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     iter_id: u64,
-    result_ptr: u64,
 ) -> i64
 where
     MEM: VmMemory,
@@ -792,11 +818,7 @@ where
     H: StorageHasher,
     EVAL: VpEvalRunner,
 {
-    tracing::debug!(
-        "vp_iter_post_next iter_id {}, result_ptr {}",
-        iter_id,
-        result_ptr,
-    );
+    tracing::debug!("vp_iter_post_next iter_id {}", iter_id,);
 
     let write_log = unsafe { env.write_log.get() };
     let iterators = unsafe { env.iterators.get() };
@@ -816,8 +838,8 @@ where
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let gas = env.memory.write_bytes(result_ptr, key_val);
-                vp_add_gas(env, gas);
+                let result_buffer = unsafe { env.result_buffer.get() };
+                result_buffer.replace(key_val);
                 return len;
             }
             Some(&write_log::StorageModification::Delete) => {
@@ -834,8 +856,8 @@ where
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let gas = env.memory.write_bytes(result_ptr, key_val);
-                vp_add_gas(env, gas);
+                let result_buffer = unsafe { env.result_buffer.get() };
+                result_buffer.replace(key_val);
                 return len;
             }
         }
@@ -910,8 +932,7 @@ pub fn tx_init_account<MEM, DB, H>(
     code_ptr: u64,
     code_len: u64,
     result_ptr: u64,
-) -> u64
-where
+) where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
@@ -936,11 +957,9 @@ where
     let (addr, gas) = write_log.init_account(&storage.address_gen, code);
     let addr_bytes =
         addr.try_to_vec().expect("Encoding address shouldn't fail");
-    let result_len = addr_bytes.len() as u64;
     tx_add_gas(env, gas);
     let gas = env.memory.write_bytes(result_ptr, addr_bytes);
     tx_add_gas(env, gas);
-    result_len
 }
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
@@ -1045,8 +1064,6 @@ pub fn vp_verify_tx_signature<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     pk_ptr: u64,
     pk_len: u64,
-    data_ptr: u64,
-    data_len: u64,
     sig_ptr: u64,
     sig_len: u64,
 ) -> i64
@@ -1061,23 +1078,14 @@ where
     let pk: PublicKey =
         BorshDeserialize::try_from_slice(&pk).expect("Canot decode public key");
 
-    let (data, gas) = env.memory.read_bytes(data_ptr, data_len as _);
-    vp_add_gas(env, gas);
-
     let (sig, gas) = env.memory.read_bytes(sig_ptr, sig_len as _);
     vp_add_gas(env, gas);
     let sig: Signature =
         BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
 
-    let tx_code = unsafe { env.tx_code.get() };
-    vp_add_gas(env, (data.len() + tx_code.len()) as _);
-    let signature_data = [&data[..], tx_code].concat();
-
     vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
-    HostEnvResult::from(
-        verify_signature_raw(&pk, &signature_data, &sig).is_ok(),
-    )
-    .to_i64()
+    let tx = unsafe { env.tx.get() };
+    HostEnvResult::from(verify_tx_sig(&pk, tx, &sig).is_ok()).to_i64()
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
@@ -1232,6 +1240,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut HashSet<Address>,
         gas_meter: &mut BlockGasMeter,
+        result_buffer: &mut Option<Vec<u8>>,
     ) -> TxEnv<'static, NativeMemory, DB, H>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1242,6 +1251,7 @@ pub mod testing {
         let iterators = unsafe { MutEnvHostWrapper::new(iterators) };
         let verifiers = unsafe { MutEnvHostWrapper::new(verifiers) };
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
+        let result_buffer = unsafe { MutEnvHostWrapper::new(result_buffer) };
         TxEnv {
             memory: NativeMemory,
             storage,
@@ -1249,6 +1259,7 @@ pub mod testing {
             iterators,
             verifiers,
             gas_meter,
+            result_buffer,
         }
     }
 
@@ -1260,8 +1271,9 @@ pub mod testing {
         write_log: &WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut VpGasMeter,
-        tx_code: &[u8],
+        tx: &Tx,
         eval_runner: &EVAL,
+        result_buffer: &mut Option<Vec<u8>>,
     ) -> VpEnv<'static, NativeMemory, DB, H, EVAL>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1272,8 +1284,9 @@ pub mod testing {
         let write_log = unsafe { EnvHostWrapper::new(write_log) };
         let iterators = unsafe { MutEnvHostWrapper::new(iterators) };
         let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
-        let tx_code = unsafe { EnvHostSliceWrapper::new(tx_code) };
+        let tx = unsafe { EnvHostWrapper::new(tx) };
         let eval_runner = unsafe { EnvHostWrapper::new(eval_runner) };
+        let result_buffer = unsafe { MutEnvHostWrapper::new(result_buffer) };
         VpEnv {
             memory: NativeMemory,
             address,
@@ -1281,8 +1294,9 @@ pub mod testing {
             write_log,
             iterators,
             gas_meter,
-            tx_code,
+            tx,
             eval_runner,
+            result_buffer,
         }
     }
 }

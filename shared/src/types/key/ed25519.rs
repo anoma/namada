@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::proto::Tx;
 use crate::types::address::{self, Address};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -106,34 +107,42 @@ pub fn verify_signature_raw(
 /// which is can then be checked by a validity predicate wasm.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SignedTxData {
-    /// The tx data bytes
-    pub data: Vec<u8>,
-    /// The signature is produced on the tx data concatenated with the tx code.
+    /// The original tx data bytes, if any
+    pub data: Option<Vec<u8>>,
+    /// The signature is produced on the tx data concatenated with the tx code
+    /// and the timestamp.
     pub sig: Signature,
 }
 
-impl SignedTxData {
-    /// Initialize a new signed transaction data.
-    pub fn new(
-        keypair: &Keypair,
-        data: Vec<u8>,
-        tx_code: impl AsRef<[u8]>,
-    ) -> Self {
-        let to_sign = [&data[..], tx_code.as_ref()].concat();
-        let sig = sign(keypair, &to_sign);
-        Self { data, sig }
+/// Sign a transaction using [`SignedTxData`].
+pub fn sign_tx(keypair: &Keypair, tx: Tx) -> Tx {
+    let to_sign = tx.to_bytes();
+    let sig = sign(keypair, &to_sign);
+    let signed = SignedTxData { data: tx.data, sig }
+        .try_to_vec()
+        .expect("Encoding transaction data shouldn't fail");
+    Tx {
+        code: tx.code,
+        data: Some(signed),
+        timestamp: tx.timestamp,
     }
+}
 
-    /// Verify that the transaction has been signed by the secret key
-    /// counterpart of the given public key.
-    pub fn verify(
-        &self,
-        pk: &PublicKey,
-        tx_code: impl AsRef<[u8]>,
-    ) -> Result<(), VerifySigError> {
-        let data = [&self.data, tx_code.as_ref()].concat();
-        verify_signature_raw(pk, &data, &self.sig)
-    }
+/// Verify that the transaction has been signed by the secret key
+/// counterpart of the given public key.
+pub fn verify_tx_sig(
+    pk: &PublicKey,
+    tx: &Tx,
+    sig: &Signature,
+) -> Result<(), VerifySigError> {
+    // revert the transaction data
+    let mut tx = tx.clone();
+    let tx_data = tx.data.expect("signed data should exist");
+    let signed_tx_data = SignedTxData::try_from_slice(&tx_data[..])
+        .expect("Decoding transaction data shouldn't fail");
+    tx.data = Some(signed_tx_data.data.expect("data should exist"));
+    let data = tx.to_bytes();
+    verify_signature_raw(pk, &data, sig)
 }
 
 /// A generic signed data wrapper for Borsh encode-able data.
@@ -297,5 +306,49 @@ impl From<PublicKey> for PublicKeyHash {
             hasher.finalize(),
             width = address::HASH_LEN
         ))
+    }
+}
+
+/// Run `cargo test gen_keypair -- --nocapture` to generate a keypair.
+#[cfg(test)]
+#[test]
+fn gen_keypair() {
+    use rand::prelude::ThreadRng;
+    use rand::thread_rng;
+
+    let mut rng: ThreadRng = thread_rng();
+    let keypair = Keypair::generate(&mut rng);
+    println!("keypair {:?}", keypair.to_bytes());
+}
+
+/// Helpers for testing with keys.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use super::*;
+
+    /// A keypair for tests
+    pub fn keypair_1() -> Keypair {
+        // generated from `cargo test gen_keypair -- --nocapture`
+        let bytes = [
+            33, 82, 91, 186, 100, 168, 220, 158, 185, 140, 63, 172, 3, 88, 52,
+            113, 94, 30, 213, 84, 175, 184, 235, 169, 70, 175, 36, 252, 45,
+            190, 138, 79, 210, 187, 198, 90, 69, 83, 156, 77, 199, 63, 208, 63,
+            137, 102, 22, 229, 110, 195, 38, 174, 142, 127, 157, 224, 139, 212,
+            239, 204, 58, 80, 108, 184,
+        ];
+        Keypair::from_bytes(&bytes).unwrap()
+    }
+
+    /// A keypair for tests
+    pub fn keypair_2() -> Keypair {
+        // generated from `cargo test gen_keypair -- --nocapture`
+        let bytes = [
+            27, 238, 157, 32, 131, 242, 184, 142, 146, 189, 24, 249, 68, 165,
+            205, 71, 213, 158, 25, 253, 52, 217, 87, 52, 171, 225, 110, 131,
+            238, 58, 94, 56, 218, 133, 189, 80, 14, 157, 68, 124, 151, 37, 127,
+            173, 117, 91, 248, 234, 34, 13, 77, 148, 10, 75, 30, 191, 172, 85,
+            175, 8, 36, 233, 18, 203,
+        ];
+        Keypair::from_bytes(&bytes).unwrap()
     }
 }

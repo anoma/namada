@@ -3,7 +3,7 @@ use std::io::Write;
 
 use anoma::client::tx;
 use anoma::proto::services::rpc_service_client::RpcServiceClient;
-use anoma::proto::{self, services, RpcMessage};
+use anoma::proto::{services, RpcMessage};
 use anoma::{cli, wallet};
 use anoma_shared::types::address::Address;
 use anoma_shared::types::intent::Intent;
@@ -98,7 +98,7 @@ pub async fn main() -> Result<()> {
 async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let data = std::fs::read(data_path).expect("data file IO error");
-    let intent = proto::Intent::new(data);
+    let intent = anoma_shared::proto::Intent::new(data);
     let message: services::RpcMessage =
         RpcMessage::new_intent(intent, topic).into();
     let response = client
