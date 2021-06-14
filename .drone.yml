@@ -209,7 +209,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-wasm-scripts, sh scripts/update-wasm.sh]
+- commands: [make build-wasm-scripts, sh scripts/ci/update-wasm.sh]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -567,6 +567,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 8e05f8875724d457a2db4916734aa7b36fdc6d5974d6c12d6d9828af815ad05c
+hmac: d05833d2d6972c848369fd14e99638a733f46a5018995d69ebda10efa882572c
 
 ...
