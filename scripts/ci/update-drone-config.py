@@ -29,12 +29,12 @@ files_to_check = [
     'wasm/matchmaker_template/Makefile',
     'wasm/filter_template/Makefile',
     'tech-specs/Makefile',
-    'scripts/update-wasm.sh',
-    'scripts/pre-run.sh'
+    'scripts/ci/update-wasm.sh',
+    'scripts/ci/pre-run.sh'
 ]
 
 scripts_to_run = [
-    'scripts/pre-run.sh'
+    'scripts/ci/pre-run.sh'
 ]
 
 check_command_template = 'echo "{}  {}" | sha256sum -c -'
