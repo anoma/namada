@@ -4,7 +4,7 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "1a91af9c701bf67e269c02c92c9554ee90a524a21e1b16b3eadc42b7de8ce7be  Makefile"
+- commands: [echo "f0dcc2c7bcb6418223f9f0323c67bc3acd832967d95ae39350df442a305a45b8  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -15,7 +15,9 @@ steps:
       | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
+      | sha256sum -c -, echo "19cf55e2f392708c42da75e0f7437bfa26ec8466a20282c042df79cf00e72377  scripts/ci/pre-run.sh"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -34,18 +36,8 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make -C wasm/txs/tx_template deps, make build-wasm-scripts]
-  depends_on: [restore-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build-wasm
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: build-wasm
-  pull: if-not-exists
 - commands: [sccache --start-server, make build]
-  depends_on: [build-wasm]
+  depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -98,7 +90,7 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "1a91af9c701bf67e269c02c92c9554ee90a524a21e1b16b3eadc42b7de8ce7be  Makefile"
+- commands: [echo "f0dcc2c7bcb6418223f9f0323c67bc3acd832967d95ae39350df442a305a45b8  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -109,7 +101,9 @@ steps:
       | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
+      | sha256sum -c -, echo "19cf55e2f392708c42da75e0f7437bfa26ec8466a20282c042df79cf00e72377  scripts/ci/pre-run.sh"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -180,10 +174,10 @@ workspace: {path: /usr/local/rust/project}
 ---
 environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
-name: anoma-ci-audit-pr
+name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [echo "1a91af9c701bf67e269c02c92c9554ee90a524a21e1b16b3eadc42b7de8ce7be  Makefile"
+- commands: [echo "f0dcc2c7bcb6418223f9f0323c67bc3acd832967d95ae39350df442a305a45b8  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -194,7 +188,81 @@ steps:
       | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
+      | sha256sum -c -, echo "19cf55e2f392708c42da75e0f7437bfa26ec8466a20282c042df79cf00e72377  scripts/ci/pre-run.sh"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+  image: alpine/git:v2.30.1
+  name: check-scripts-integrity
+  pull: if-not-exists
+- depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+  image: meltwater/drone-cache
+  name: restore-cache
+  pull: if-not-exists
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: '{{ checksum "Cargo.lock" }}'
+    mount: [.cargo]
+    region: eu-west-1
+    restore: true
+- commands: [make build-wasm-scripts, sh scripts/ci/update-wasm.sh]
+  depends_on: [restore-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    GITHUB_TOKEN: {from_secret: github_token}
+    SCCACHE_BUCKET: heliax-drone-cache-v2s
+    SCCACHE_S3_KEY_PREFIX: sccache-build-wasm
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  name: build-wasm
+  pull: if-not-exists
+- depends_on: [build-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    BACKEND_OPERATION_TIMEOUT: 8m
+  image: meltwater/drone-cache
+  name: rebuild-cache
+  pull: if-not-exists
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: '{{ checksum "Cargo.lock" }}'
+    mount: [.cargo]
+    override: false
+    rebuild: true
+    region: eu-west-1
+  when:
+    status: [success, failure]
+trigger:
+  event: [pull_request]
+type: docker
+workspace: {path: /usr/local/rust/project}
+---
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+kind: pipeline
+name: anoma-ci-audit-pr
+node: {project: anoma}
+steps:
+- commands: [echo "f0dcc2c7bcb6418223f9f0323c67bc3acd832967d95ae39350df442a305a45b8  Makefile"
+      | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
+      | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
+      | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
+      | sha256sum -c -, echo "0ffac9aeaaa22c679de32c32f96d4f799eac1b2d95dcf805ac811e03cd8a273f  wasm/txs/tx_template/Makefile"
+      | sha256sum -c -, echo "7afb743d825d6232932c23b73a1a1558b24ff6edda70ac094d404ffbe5d63681  wasm/txs/tx_transfer/Makefile"
+      | sha256sum -c -, echo "29fcc33d481b7cebb61759d455e27e7b39ca08451b57a32ca5ccaa8a29a9fdfa  wasm/txs/tx_from_intent/Makefile"
+      | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  wasm/txs/tx_update_vp/Makefile"
+      | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
+      | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
+      | sha256sum -c -, echo "19cf55e2f392708c42da75e0f7437bfa26ec8466a20282c042df79cf00e72377  scripts/ci/pre-run.sh"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -218,7 +286,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: audit
   pull: if-not-exists
-- depends_on: [restore-cache]
+- depends_on: [audit]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -243,13 +311,12 @@ trigger:
 type: docker
 workspace: {path: /drone/workspace}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1',
-  GIT_TERMINAL_PROMP: '1'}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
-name: anoma-ci-docs-master
+name: anoma-ci-miri-pr
 node: {project: anoma}
 steps:
-- commands: [echo "1a91af9c701bf67e269c02c92c9554ee90a524a21e1b16b3eadc42b7de8ce7be  Makefile"
+- commands: [echo "f0dcc2c7bcb6418223f9f0323c67bc3acd832967d95ae39350df442a305a45b8  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -260,7 +327,82 @@ steps:
       | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
+      | sha256sum -c -, echo "19cf55e2f392708c42da75e0f7437bfa26ec8466a20282c042df79cf00e72377  scripts/ci/pre-run.sh"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+  image: alpine/git:v2.30.1
+  name: check-scripts-integrity
+  pull: if-not-exists
+- depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+  image: meltwater/drone-cache
+  name: restore-cache
+  pull: if-not-exists
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: miri/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    region: eu-west-1
+    restore: true
+- commands: [sccache --start-server, make test-miri || true]
+  depends_on: [restore-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-miri
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: test-miri
+  pull: if-not-exists
+- depends_on: [test-miri]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    BACKEND_OPERATION_TIMEOUT: 8m
+  image: meltwater/drone-cache
+  name: rebuild-cache
+  pull: if-not-exists
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: miri/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    override: false
+    rebuild: true
+    region: eu-west-1
+  when:
+    status: [success, failure]
+trigger:
+  branch: [develop, master]
+  event: [pull_request, push]
+type: docker
+workspace: {path: /drone/workspace}
+---
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1',
+  GIT_TERMINAL_PROMP: '1'}
+kind: pipeline
+name: anoma-ci-docs-master
+node: {project: anoma}
+steps:
+- commands: [echo "f0dcc2c7bcb6418223f9f0323c67bc3acd832967d95ae39350df442a305a45b8  Makefile"
+      | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
+      | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
+      | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
+      | sha256sum -c -, echo "0ffac9aeaaa22c679de32c32f96d4f799eac1b2d95dcf805ac811e03cd8a273f  wasm/txs/tx_template/Makefile"
+      | sha256sum -c -, echo "7afb743d825d6232932c23b73a1a1558b24ff6edda70ac094d404ffbe5d63681  wasm/txs/tx_transfer/Makefile"
+      | sha256sum -c -, echo "29fcc33d481b7cebb61759d455e27e7b39ca08451b57a32ca5ccaa8a29a9fdfa  wasm/txs/tx_from_intent/Makefile"
+      | sha256sum -c -, echo "ed0fb5057ece681b85d0f6f863759f528cc868e381c7a6e483545f46a8e5e658  wasm/txs/tx_update_vp/Makefile"
+      | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
+      | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
+      | sha256sum -c -, echo "19cf55e2f392708c42da75e0f7437bfa26ec8466a20282c042df79cf00e72377  scripts/ci/pre-run.sh"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -293,6 +435,7 @@ steps:
 - depends_on: [generate-docs]
   image: plugins/gh-pages
   name: publish-gh-pages
+  pull: if-not-exists
   settings:
     pages_directory: ./tech-specs/book
     password: {from_secret: github_token}
@@ -327,7 +470,7 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [echo "1a91af9c701bf67e269c02c92c9554ee90a524a21e1b16b3eadc42b7de8ce7be  Makefile"
+- commands: [echo "f0dcc2c7bcb6418223f9f0323c67bc3acd832967d95ae39350df442a305a45b8  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -338,7 +481,9 @@ steps:
       | sha256sum -c -, echo "e278381956d689eb067f9b21eb20147d07fe6f830520e0aedcc71af294f0bdfb  wasm/matchmaker_template/Makefile"
       | sha256sum -c -, echo "59e9e964decd171140b965c79c379c0d615eef7847238335c9e79ebe35f67751  wasm/filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
-      | sha256sum -c -]
+      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
+      | sha256sum -c -, echo "19cf55e2f392708c42da75e0f7437bfa26ec8466a20282c042df79cf00e72377  scripts/ci/pre-run.sh"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -422,6 +567,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 752ec30b6f4482072520e00369d98eb7ece0a0761a3a4669c73ec41f2dd6ae50
+hmac: d05833d2d6972c848369fd14e99638a733f46a5018995d69ebda10efa882572c
 
 ...
