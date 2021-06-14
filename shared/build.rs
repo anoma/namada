@@ -39,6 +39,7 @@ fn main() {
         // TODO try to add json encoding to simplify use for user
         // .type_attribute("types.Intent", "#[derive(serde::Serialize,
         // serde::Deserialize)]")
+        .protoc_arg("--experimental_allow_proto3_optional")
         .compile(&[format!("{}/types.proto", PROTO_SRC)], &[PROTO_SRC.into()])
         .unwrap();
 }

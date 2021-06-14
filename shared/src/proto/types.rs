@@ -50,7 +50,7 @@ impl TryFrom<&[u8]> for Tx {
         };
         Ok(Tx {
             code: tx.code,
-            data: tx.data.map(|tx_data| tx_data.data),
+            data: tx.data,
             timestamp,
         })
     }
@@ -62,8 +62,8 @@ impl From<Tx> for types::Tx {
             .expect("conversion shouldn't fail");
         let st: std::time::SystemTime = dt.into();
         types::Tx {
-            code: tx.code.clone(),
-            data: tx.data.map(|data| types::TxData { data }),
+            code: tx.code,
+            data: tx.data,
             timestamp: Some(st.into()),
         }
     }
@@ -292,7 +292,7 @@ mod tests {
 
         let types_tx = types::Tx {
             code,
-            data: Some(types::TxData { data }),
+            data: Some(data),
             timestamp: None,
         };
         let mut bytes = vec![];

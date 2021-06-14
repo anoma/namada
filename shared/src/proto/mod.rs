@@ -7,7 +7,7 @@ pub use types::{Dkg, Error, Intent, IntentGossipMessage, IntentId, Tx};
 
 #[cfg(test)]
 mod tests {
-    use generated::types::{Tx, TxData};
+    use generated::types::Tx;
     use prost::Message;
 
     use super::*;
@@ -16,9 +16,7 @@ mod tests {
     fn encoding_round_trip() {
         let tx = Tx {
             code: "wasm code".as_bytes().to_owned(),
-            data: Some(TxData {
-                data: "arbitrary data".as_bytes().to_owned(),
-            }),
+            data: Some("arbitrary data".as_bytes().to_owned()),
             timestamp: Some(std::time::SystemTime::now().into()),
         };
         let mut tx_bytes = vec![];

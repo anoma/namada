@@ -2,15 +2,10 @@
 pub struct Tx {
     #[prost(bytes = "vec", tag = "1")]
     pub code: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, optional, tag = "2")]
-    pub data: ::core::option::Option<TxData>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub data: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(message, optional, tag = "3")]
     pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TxData {
-    #[prost(bytes = "vec", tag = "1")]
-    pub data: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Intent {
