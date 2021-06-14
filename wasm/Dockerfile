@@ -11,3 +11,6 @@ RUN rustup toolchain install 1.52.1 --component rustc cargo rust-std rust-docs r
 RUN rustup target add wasm32-unknown-unknown
 
 WORKDIR /usr/local/rust/project
+
+# Tell anoma_shared build.rs not to compile proto files inside the docker
+ENV COMPILE_PROTO=false

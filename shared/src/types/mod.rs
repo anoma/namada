@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
-use crate::types::key::ed25519::{Keypair, SignedTxData};
 
 pub mod address;
 pub mod intent;
@@ -378,21 +377,6 @@ pub struct UpdateVp {
     pub addr: Address,
     /// The new VP code
     pub vp_code: Vec<u8>,
-}
-
-impl UpdateVp {
-    /// Sign data for transaction with a given keypair.
-    pub fn sign(
-        self,
-        tx_code: impl AsRef<[u8]>,
-        keypair: &Keypair,
-    ) -> SignedTxData {
-        let bytes = self.try_to_vec().expect(
-            "Encoding transfer data to update a validity predicate shouldn't \
-             fail",
-        );
-        SignedTxData::new(keypair, bytes, tx_code)
-    }
 }
 
 #[cfg(test)]

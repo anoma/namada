@@ -15,15 +15,14 @@ use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::proto::Tx;
 use crate::types::Address;
 use crate::vm::host_env::{
     FilterEnv, MatchmakerEnv, TxEnv, VpEnv, VpEvalRunner,
 };
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::wasm::memory::WasmMemory;
-use crate::vm::{
-    host_env, EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
-};
+use crate::vm::{host_env, EnvHostWrapper, MutEnvHostWrapper};
 
 impl<DB, H> WasmerEnv for TxEnv<'_, WasmMemory, DB, H>
 where
@@ -132,7 +131,7 @@ pub fn prepare_vp_env<DB, H, EVAL>(
     write_log: EnvHostWrapper<'static, &WriteLog>,
     iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
     gas_meter: MutEnvHostWrapper<'static, &VpGasMeter>,
-    tx_code: EnvHostSliceWrapper<'static, &[u8]>,
+    tx: EnvHostWrapper<'static, &Tx>,
     eval_runner: EnvHostWrapper<'static, &'static EVAL>,
     result_buffer: MutEnvHostWrapper<'static, &Option<Vec<u8>>>,
     initial_memory: Memory,
@@ -149,7 +148,7 @@ where
         write_log,
         iterators,
         gas_meter,
-        tx_code,
+        tx,
         eval_runner,
         result_buffer,
     };
