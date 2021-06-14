@@ -1,7 +1,7 @@
 //! Write log is temporary storage for modifications performed by a transaction.
 //! before they are committed to the ledger's storage.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 
@@ -230,6 +230,44 @@ impl WriteLog {
         }
         self.block_write_log.clear();
         Ok(())
+    }
+
+    /// Get the storage keys that have been changed in the write log, grouped by
+    /// their verifiers, whose VPs will be triggered by the changes.
+    ///
+    /// Note that some storage keys may comprise of multiple addresses, in which
+    /// case every address will be the verifier of the key.
+    pub fn verifiers_changed_keys(
+        &self,
+        verifiers_from_tx: &HashSet<Address>,
+    ) -> HashMap<Address, Vec<Key>> {
+        let mut verifiers =
+            verifiers_from_tx
+                .iter()
+                .fold(HashMap::new(), |mut acc, addr| {
+                    acc.insert(addr.clone(), vec![]);
+                    acc
+                });
+
+        let (changed_keys, initialized_accounts) = self.get_partitioned_keys();
+        // get changed keys grouped by the address
+        for key in changed_keys {
+            for addr in &key.find_addresses() {
+                match verifiers.get_mut(&addr) {
+                    Some(keys) => keys.push(key.clone()),
+                    None => {
+                        verifiers.insert(addr.clone(), vec![key.clone()]);
+                    }
+                }
+            }
+        }
+        // The new accounts should be validated by every verifier's VP
+        for key in initialized_accounts {
+            for (_verifier, keys) in verifiers.iter_mut() {
+                keys.push(key.clone());
+            }
+        }
+        verifiers
     }
 }
 

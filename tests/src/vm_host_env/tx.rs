@@ -25,6 +25,7 @@ pub struct TestTxEnv {
     pub iterators: PrefixIterators<'static, MockDB>,
     pub verifiers: HashSet<Address>,
     pub gas_meter: BlockGasMeter,
+    pub result_buffer: Option<Vec<u8>>,
 }
 
 impl Default for TestTxEnv {
@@ -35,6 +36,7 @@ impl Default for TestTxEnv {
             iterators: PrefixIterators::default(),
             verifiers: HashSet::default(),
             gas_meter: BlockGasMeter::default(),
+            result_buffer: None,
         }
     }
 }
@@ -54,12 +56,18 @@ pub fn init_tx_env(
         iterators,
         verifiers,
         gas_meter,
+        result_buffer,
     }: &mut TestTxEnv,
 ) {
     tx_host_env::ENV.with(|env| {
         *env.borrow_mut() = Some({
             vm::host_env::testing::tx_env(
-                storage, write_log, iterators, verifiers, gas_meter,
+                storage,
+                write_log,
+                iterators,
+                verifiers,
+                gas_meter,
+                result_buffer,
             )
         })
     });
@@ -122,7 +130,8 @@ mod native_tx_host_env {
 
     // Implement all the exported functions from
     // [`anoma_vm_env::imports::tx`] `extern "C"` section.
-    native_host_fn!(tx_read(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
+    native_host_fn!(tx_read(key_ptr: u64, key_len: u64) -> i64);
+    native_host_fn!(tx_result_buffer(result_ptr: u64));
     native_host_fn!(tx_has_key(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(tx_write(
         key_ptr: u64,
@@ -132,7 +141,7 @@ mod native_tx_host_env {
     ));
     native_host_fn!(tx_delete(key_ptr: u64, key_len: u64));
     native_host_fn!(tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
-    native_host_fn!(tx_iter_next(iter_id: u64, result_ptr: u64) -> i64);
+    native_host_fn!(tx_iter_next(iter_id: u64) -> i64);
     native_host_fn!(tx_insert_verifier(addr_ptr: u64, addr_len: u64));
     native_host_fn!(tx_update_validity_predicate(
         addr_ptr: u64,
@@ -140,7 +149,11 @@ mod native_tx_host_env {
         code_ptr: u64,
         code_len: u64,
     ));
-    native_host_fn!(tx_init_account(code_ptr: u64, code_len: u64, result_ptr: u64) -> u64);
+    native_host_fn!(tx_init_account(
+        code_ptr: u64,
+        code_len: u64,
+        result_ptr: u64
+    ));
     native_host_fn!(tx_get_chain_id(result_ptr: u64));
     native_host_fn!(tx_get_block_height() -> u64);
     native_host_fn!(tx_get_block_hash(result_ptr: u64));

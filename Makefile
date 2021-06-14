@@ -102,7 +102,12 @@ clean-wasm-scripts:
 dev-deps:
 	$(rustup) toolchain install $(nightly)
 	$(rustup) target add wasm32-unknown-unknown
-	$(rustup) component add rustfmt clippy --toolchain $(nightly)
+	$(rustup) component add rustfmt clippy miri --toolchain $(nightly)
 	$(cargo) install cargo-watch
+
+test-miri:
+	$(cargo) +$(nightly) miri setup
+	$(cargo) +$(nightly) clean
+	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 .PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps

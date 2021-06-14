@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
+use anoma_shared::proto::{self, Intent, IntentGossipMessage};
 use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
@@ -20,7 +21,6 @@ use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::intent_gossiper;
-use crate::proto::{self, Intent, IntentGossipMessage};
 use crate::types::MatchmakerMessage;
 
 #[derive(Error, Debug)]
