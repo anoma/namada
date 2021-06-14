@@ -328,10 +328,7 @@ impl VmMemory for WasmMemory {
     }
 
     /// Write bytes into memory at the given offset and return the gas cost
-    fn write_bytes<T>(&self, offset: u64, bytes: T) -> u64
-    where
-        T: AsRef<[u8]>,
-    {
+    fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> u64 {
         let gas = bytes.as_ref().len();
         let memory =
             self.inner.get_ref().expect("Memory should be initialized");

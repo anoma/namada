@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 use std::time::Duration;
 
+use anoma_shared::proto::IntentGossipMessage;
 use libp2p::core::connection::ConnectionLimits;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
@@ -10,13 +11,13 @@ use libp2p::identity::Keypair;
 use libp2p::swarm::SwarmBuilder;
 use libp2p::tcp::TcpConfig;
 use libp2p::websocket::WsConfig;
-use libp2p::{core, mplex, noise, yamux, PeerId, Transport, TransportError};
+use libp2p::{core, mplex, noise, PeerId, Transport, TransportError};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
 use super::behaviour::Behaviour;
 use crate::proto::services::{rpc_message, RpcResponse};
-use crate::proto::{IntentGossipMessage, IntentMessage, SubscribeTopicMessage};
+use crate::proto::{IntentMessage, SubscribeTopicMessage};
 use crate::types::MatchmakerMessage;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;

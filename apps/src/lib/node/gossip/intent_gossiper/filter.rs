@@ -1,9 +1,8 @@
 use std::path::Path;
 
+use anoma_shared::proto::Intent;
 use anoma_shared::vm::wasm::runner::{self, MmFilterRunner};
 use thiserror::Error;
-
-use crate::proto::Intent;
 
 #[derive(Error, Debug)]
 pub enum Error {

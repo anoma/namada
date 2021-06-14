@@ -47,15 +47,17 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--lib=anoma_integration_tests",
+                    "--lib=anoma_tests",
                 ],
                 "filter": {
-                    "name": "anoma_integration_tests",
+                    "name": "anoma_tests",
                     "kind": "lib"
                 }
             },
-            "args": [],
-            "cwd": "${workspaceFolder}"
+            "args": [
+                "--nocapture"
+            ],
+            "cwd": "${workspaceFolder}/tests"
         },
         {
             "type": "lldb",

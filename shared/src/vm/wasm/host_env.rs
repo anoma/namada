@@ -15,15 +15,14 @@ use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::proto::Tx;
 use crate::types::Address;
 use crate::vm::host_env::{
     FilterEnv, MatchmakerEnv, TxEnv, VpEnv, VpEvalRunner,
 };
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::wasm::memory::WasmMemory;
-use crate::vm::{
-    host_env, EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
-};
+use crate::vm::{host_env, EnvHostWrapper, MutEnvHostWrapper};
 
 impl<DB, H> WasmerEnv for TxEnv<'_, WasmMemory, DB, H>
 where
@@ -75,6 +74,7 @@ impl WasmerEnv for FilterEnv<WasmMemory> {
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_tx_imports<DB, H>(
     wasm_store: &Store,
     storage: EnvHostWrapper<'static, &'static Storage<DB, H>>,
@@ -82,6 +82,7 @@ pub fn prepare_tx_imports<DB, H>(
     iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
     verifiers: MutEnvHostWrapper<'static, &HashSet<Address>>,
     gas_meter: MutEnvHostWrapper<'static, &BlockGasMeter>,
+    result_buffer: MutEnvHostWrapper<'static, &Option<Vec<u8>>>,
     initial_memory: Memory,
 ) -> ImportObject
 where
@@ -95,6 +96,7 @@ where
         iterators,
         verifiers,
         gas_meter,
+        result_buffer,
     };
     wasmer::imports! {
         // default namespace
@@ -102,6 +104,7 @@ where
             "memory" => initial_memory,
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             "anoma_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
+            "anoma_tx_result_buffer" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_result_buffer),
             "anoma_tx_has_key" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_has_key),
             "anoma_tx_write" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_write),
             "anoma_tx_delete" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_delete),
@@ -128,9 +131,10 @@ pub fn prepare_vp_env<DB, H, EVAL>(
     write_log: EnvHostWrapper<'static, &WriteLog>,
     iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
     gas_meter: MutEnvHostWrapper<'static, &VpGasMeter>,
-    tx_code: EnvHostSliceWrapper<'static, &[u8]>,
-    initial_memory: Memory,
+    tx: EnvHostWrapper<'static, &Tx>,
     eval_runner: EnvHostWrapper<'static, &'static EVAL>,
+    result_buffer: MutEnvHostWrapper<'static, &Option<Vec<u8>>>,
+    initial_memory: Memory,
 ) -> ImportObject
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -144,8 +148,9 @@ where
         write_log,
         iterators,
         gas_meter,
-        tx_code,
+        tx,
         eval_runner,
+        result_buffer,
     };
     prepare_vp_imports(wasm_store, initial_memory, &env)
 }
@@ -169,6 +174,7 @@ where
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
             "anoma_vp_read_pre" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_pre),
             "anoma_vp_read_post" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_post),
+            "anoma_vp_result_buffer" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_result_buffer),
             "anoma_vp_has_key_pre" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_has_key_pre),
             "anoma_vp_has_key_post" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_has_key_post),
             "anoma_vp_iter_prefix" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_iter_prefix),

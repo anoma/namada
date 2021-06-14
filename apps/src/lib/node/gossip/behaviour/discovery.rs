@@ -18,7 +18,6 @@ use libp2p::kad::handler::KademliaHandlerProto;
 use libp2p::kad::store::MemoryStore;
 use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, QueryId};
 use libp2p::mdns::{Mdns, MdnsConfig, MdnsEvent};
-use libp2p::multiaddr::Protocol;
 use libp2p::swarm::toggle::{Toggle, ToggleIntoProtoHandler};
 use libp2p::swarm::{
     IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,

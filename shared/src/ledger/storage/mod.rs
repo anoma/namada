@@ -216,6 +216,7 @@ where
 
     /// Returns a value from the specified subspace and the gas cost
     pub fn read(&self, key: &Key) -> Result<(Option<Vec<u8>>, u64)> {
+        tracing::debug!("storage read key {}", key,);
         let (present, gas) = self.has_key(key)?;
         if !present {
             return Ok((None, gas));
@@ -249,6 +250,7 @@ where
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
     pub fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(u64, i64)> {
+        tracing::debug!("storage write key {}", key,);
         self.update_tree(H::hash_key(key), H::hash_value(&value))?;
 
         let len = value.len();
@@ -403,6 +405,8 @@ pub mod testing {
 
     impl Default for TestStorage {
         fn default() -> Self {
+            let chain_id = "Testing-chain-000000".to_string();
+            assert_eq!(chain_id.len(), CHAIN_ID_LENGTH);
             let tree = MerkleTree::default();
             let subspaces = HashMap::new();
             let block = BlockStorage {
@@ -413,7 +417,7 @@ pub mod testing {
             };
             Self {
                 db: MockDB::default(),
-                chain_id: "Testing-chain".to_string(),
+                chain_id,
                 block,
                 current_height: BlockHeight(0),
                 address_gen: EstablishedAddressGen::new(
