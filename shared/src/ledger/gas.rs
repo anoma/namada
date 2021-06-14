@@ -16,7 +16,6 @@ pub enum Error {
     GasOverflow,
 }
 
-const TX_GAS_PER_BYTE: u64 = 2;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
@@ -82,8 +81,7 @@ impl BlockGasMeter {
     /// charged the moment we try to apply the transaction.
     pub fn add_base_transaction_fee(&mut self, bytes_len: usize) -> Result<()> {
         tracing::info!("add_base_transaction_fee {}", bytes_len);
-        self.add(BASE_TRANSACTION_FEE)?;
-        self.add(bytes_len as u64 * TX_GAS_PER_BYTE)
+        self.add(BASE_TRANSACTION_FEE)
     }
 
     /// Add the compiling cost proportionate to the code length
