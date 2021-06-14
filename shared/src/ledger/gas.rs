@@ -19,7 +19,7 @@ pub enum Error {
 const TX_GAS_PER_BYTE: u64 = 2;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
-const PARALLEL_GAS_MULTIPLIER: f64 = 0.1;
+const PARALLEL_GAS_DIVIDER: u64 = 10;
 
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
@@ -216,8 +216,7 @@ impl VpsGas {
 
     /// Get the gas consumed by the parallelized VPs
     fn get_current_gas(&self) -> Result<u64> {
-        let parallel_gas =
-            self.rest.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLIER;
+        let parallel_gas = self.rest.iter().sum::<u64>() / PARALLEL_GAS_DIVIDER;
         self.max
             .unwrap_or_default()
             .checked_add(parallel_gas as u64)
