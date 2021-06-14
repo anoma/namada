@@ -74,6 +74,14 @@ impl P2P {
         Ok((Self { swarm }, matchmaker_event_receiver))
     }
 
+    pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
+        self.swarm
+            .behaviour_mut()
+            .intent_gossip_app
+            .handle_mm_message(mm_message)
+            .await
+    }
+
     pub async fn handle_rpc_event(
         &mut self,
         event: rpc_message::Message,

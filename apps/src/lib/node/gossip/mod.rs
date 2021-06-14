@@ -50,15 +50,7 @@ pub async fn dispatcher(
                         inject_response.send(response).expect("failed to send response to rpc server")
                     },
                     swarm_event = gossip.swarm.next() => {
-                        AnomaBehaviourEvent::PeerConnected(peer_id) => {
-                            tracing::info!("Peer connected, {:?}", peer_id);
-                        }
-                        AnomaBehaviourEvent::PeerDisconnected(peer_id) => {
-                            tracing::info!("Peer disconnected, {:?}", peer_id);
-                        }
-                        e => {
-                            tracing::info!("event, {:?}", e);
-                        }
+                        tracing::info!("event, {:?}", swarm_event);
                     },
                 };
             }
@@ -71,15 +63,7 @@ pub async fn dispatcher(
                     inject_response.send(response).expect("failed to send response to rpc server")
                 },
                 swarm_event = gossip.swarm.next() => {
-                    AnomaBehaviourEvent::PeerConnected(peer_id) => {
-                        tracing::info!("Peer connected, {:?}", peer_id);
-                    }
-                    AnomaBehaviourEvent::PeerDisconnected(peer_id) => {
-                        tracing::info!("Peer disconnected, {:?}", peer_id);
-                    }
-                    e => {
-                        tracing::info!("event, {:?}", e);
-                    }
+                    tracing::info!("event, {:?}", swarm_event);
                 },
             };
         },
@@ -90,32 +74,14 @@ pub async fn dispatcher(
                     gossip.handle_mm_message(message).await
                 },
                 swarm_event = gossip.swarm.next() => {
-                    AnomaBehaviourEvent::PeerConnected(peer_id) => {
-                        tracing::info!("Peer connected, {:?}", peer_id);
-                    }
-                    AnomaBehaviourEvent::PeerDisconnected(peer_id) => {
-                        tracing::info!("Peer disconnected, {:?}", peer_id);
-                    }
-                    e => {
-                        tracing::info!("event, {:?}", e);
-                    }
+                    tracing::info!("event, {:?}", swarm_event);
                 },
             };
         },
         (None, None) => loop {
             tokio::select! {
                 swarm_event = gossip.swarm.next() => {
-                    match swarm_event {
-                        AnomaBehaviourEvent::PeerConnected(peer_id) => {
-                            tracing::info!("Peer connected, {:?}", peer_id);
-                        }
-                        AnomaBehaviourEvent::PeerDisconnected(peer_id) => {
-                            tracing::info!("Peer disconnected, {:?}", peer_id);
-                        }
-                        e => {
-                            tracing::info!("event, {:?}", e);
-                        }
-                    }
+                    tracing::info!("event, {:?}", swarm_event);
                 },
             }
         },

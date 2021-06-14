@@ -49,27 +49,28 @@ fn get_cfg(home: String) -> Config {
     match Config::read(&home) {
         Ok(config) => config,
         Err(err) => {
-            tracing::error!(
-                "Tried to read config in {} but failed with: {}",
-                home,
-                err
-            );
-            // generate(home,true) replace current config if it exists
-            match config::Config::generate(&home, true) {
-                Ok(config) => {
-                    tracing::warn!("Generated default config in {}", home,);
-                    config
-                }
-                Err(err) => {
-                    tracing::error!(
-                        "Tried to generate config in {} but failed with: {}. \
-                         Using default config (with new generated key)",
-                        home,
-                        err
-                    );
-                    config::Config::default()
-                }
-            }
+            panic!("{}", err.to_string())
+            // tracing::error!(
+            //     "Tried to read config in {} but failed with: {}",
+            //     home,
+            //     err
+            // );
+            // // generate(home,true) replace current config if it exists
+            // match config::Config::generate(&home, true) {
+            //     Ok(config) => {
+            //         tracing::warn!("Generated default config in {}", home,);
+            //         config
+            //     }
+            //     Err(err) => {
+            //         tracing::error!(
+            //             "Tried to generate config in {} but failed with: {}. \
+            //              Using default config (with new generated key)",
+            //             home,
+            //             err
+            //         );
+            //         config::Config::default()
+            //     }
+            // }
         }
     }
 }

@@ -1,14 +1,17 @@
 //! Node and client configuration
 use std::collections::HashSet;
+use std::fmt::Display;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use libp2p::multiaddr::Multiaddr;
+use libp2p::multiaddr::{Multiaddr, Protocol};
+use libp2p::multihash::Multihash;
+use libp2p::PeerId;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 use tendermint::net;
 use thiserror::Error;
 
@@ -28,6 +31,23 @@ pub enum Error {
     FileError(std::io::Error),
     #[error("A config file already exists in {0}")]
     AlreadyExistingConfig(PathBuf),
+    #[error(
+        "Bootstrap peer {0} is not valid. Format needs to be \
+         {{protocol}}/{{ip}}/tcp/{{port}}/p2p/{{peerid}}"
+    )]
+    BadBootstrapPeerFormat(String),
+}
+
+#[derive(Error, Debug)]
+pub enum SerdeError {
+    // This is needed for serde https://serde.rs/error-handling.html
+    #[error(
+        "Bootstrap peer {0} is not valid. Format needs to be \
+         {{protocol}}/{{ip}}/tcp/{{port}}/p2p/{{peerid}}"
+    )]
+    BadBootstrapPeerFormat(String),
+    #[error("{0}")]
+    Message(String),
 }
 
 pub const BASEDIR: &str = ".anoma";
@@ -118,14 +138,59 @@ pub enum SubscriptionFilter {
     RegexFilter(#[serde(with = "serde_regex")] Regex),
     WhitelistFilter(Vec<String>),
 }
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+pub struct PeerAddress {
+    pub address: Multiaddr,
+    pub peer_id: PeerId,
+}
+
+impl Serialize for PeerAddress {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut address = self.address.clone();
+        address.push(Protocol::P2p(Multihash::from(self.peer_id)));
+        address.serialize(serializer)
+    }
+}
+
+impl de::Error for SerdeError {
+    fn custom<T: Display>(msg: T) -> Self {
+        SerdeError::Message(msg.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for PeerAddress {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let mut address = Multiaddr::deserialize(deserializer)
+            .map_err(|err| SerdeError::BadBootstrapPeerFormat(err.to_string()))
+            .map_err(D::Error::custom)?;
+        if let Some(Protocol::P2p(mh)) = address.pop() {
+            let peer_id = PeerId::from_multihash(mh).unwrap();
+            Ok(Self { address, peer_id })
+        } else {
+            Err(SerdeError::BadBootstrapPeerFormat(address.to_string()))
+                .map_err(D::Error::custom)
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiscoverPeer {
     pub max_discovery_peers: u64,
     pub kademlia: bool,
     pub mdns: bool,
-    pub bootstrap_peers: HashSet<Multiaddr>, /* TODO add reserved_peers(explicit peers for gossipsub network, to not
-                                              * be added to kademlia) */
+    pub bootstrap_peers: HashSet<PeerAddress>, /* TODO add reserved_peers(explicit peers for gossipsub network, to not
+                                                * be added to kademlia) */
 }
 
 impl Default for DiscoverPeer {

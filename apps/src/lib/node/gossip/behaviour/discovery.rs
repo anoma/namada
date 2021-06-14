@@ -27,6 +27,8 @@ use libp2p::swarm::{
 use libp2p::{Multiaddr, PeerId};
 use thiserror::Error;
 
+use crate::config::PeerAddress;
+
 #[derive(Error, Debug)]
 pub enum Error {
     // TODO, it seems that NoKnownPeer is not exposed, could not find it
@@ -53,7 +55,7 @@ pub enum DiscoveryEvent {
 /// `DiscoveryBehaviour` configuration.
 #[derive(Clone)]
 pub struct DiscoveryConfig {
-    user_defined: Vec<Multiaddr>,
+    user_defined: Vec<PeerAddress>,
     discovery_max: u64,
     enable_kademlia: bool,
     enable_mdns: bool,
@@ -86,7 +88,7 @@ impl DiscoveryConfigBuilder {
     /// Set custom nodes which never expire, e.g. bootstrap or reserved nodes.
     pub fn with_user_defined<I>(&mut self, user_defined: I) -> &mut Self
     where
-        I: IntoIterator<Item = Multiaddr>,
+        I: IntoIterator<Item = PeerAddress>,
     {
         self.config.user_defined.extend(user_defined);
         self
@@ -122,7 +124,7 @@ impl DiscoveryConfigBuilder {
 pub struct DiscoveryBehaviour {
     /// User-defined list of nodes and their addresses. Typically includes
     /// bootstrap nodes and reserved nodes.
-    user_defined: Vec<(PeerId, Multiaddr)>,
+    user_defined: Vec<PeerAddress>,
     /// Kademlia discovery.
     kademlia: Toggle<Kademlia<MemoryStore>>,
     /// Discovers nodes on the local network.
@@ -178,19 +180,6 @@ impl DiscoveryBehaviour {
         } = config;
 
         let mut peers = HashSet::new();
-        // TODO this parsing should probably be done when parsing config,
-        // not initializing node
-        let user_defined: Vec<(PeerId, Multiaddr)> = user_defined
-            .into_iter()
-            .filter_map(|mut multiaddr| {
-                if let Some(Protocol::P2p(mh)) = multiaddr.pop() {
-                    let peer_id = PeerId::from_multihash(mh).unwrap();
-                    Some((peer_id, multiaddr))
-                } else {
-                    None
-                }
-            })
-            .collect();
 
         let kademlia_opt = if enable_kademlia {
             // Kademlia config
@@ -206,10 +195,12 @@ impl DiscoveryBehaviour {
             let mut kademlia =
                 Kademlia::with_config(local_peer_id, store, kad_config);
 
-            for (peer_id, addr) in user_defined.iter() {
-                kademlia.add_address(&peer_id, addr.clone());
-                peers.insert(*peer_id);
-            }
+            user_defined
+                .iter()
+                .for_each(|PeerAddress { address, peer_id }| {
+                    kademlia.add_address(&peer_id, address.clone());
+                    peers.insert(*peer_id);
+                });
 
             if let Err(err) = kademlia.bootstrap() {
                 tracing::error!("failed to bootstrap kad : {:?}", err);
@@ -256,9 +247,13 @@ impl NetworkBehaviour for DiscoveryBehaviour {
         let mut list = self
             .user_defined
             .iter()
-            .filter_map(
-                |(p, a)| if p == peer_id { Some(a.clone()) } else { None },
-            )
+            .filter_map(|peer_address| {
+                if &peer_address.peer_id == peer_id {
+                    Some(peer_address.address.clone())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>();
 
         list.extend(self.kademlia.addresses_of_peer(peer_id));
