@@ -16,9 +16,12 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
+    use anoma_shared::proto::Tx;
     use anoma_shared::types::key::ed25519::SignedTxData;
     use anoma_shared::types::{address, key, Key, KeySeg};
-    use anoma_vm_env::tx_prelude::{BorshSerialize, KeyValIterator};
+    use anoma_vm_env::tx_prelude::{
+        BorshDeserialize, BorshSerialize, KeyValIterator,
+    };
     use anoma_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
     use itertools::Itertools;
     use test_env_log::test;
@@ -366,27 +369,26 @@ mod tests {
             .unwrap();
 
         // Use some arbitrary bytes for tx code
-        env.tx_code = vec![4, 3, 2, 1, 0];
+        let code = vec![4, 3, 2, 1, 0];
+        // Use some arbitrary data
+        let data = vec![1, 2, 3, 4].repeat(10);
+
+        env.tx = Tx::new(code, Some(data.clone())).sign(&keypair);
         // Initialize the environment
         init_vp_env(&mut env);
 
-        // Use some arbitrary data
-        let data = vec![1, 2, 3, 4].repeat(10);
-        let signed_tx_data =
-            SignedTxData::new(&keypair, data.clone(), &env.tx_code);
-
-        assert_eq!(signed_tx_data.data, data);
-        assert!(vp_host_env::verify_tx_signature(
-            &pk,
-            &data[..],
-            &signed_tx_data.sig
-        ));
+        let tx_data = env.tx.data.expect("data should exist");
+        let signed_tx_data = match SignedTxData::try_from_slice(&tx_data[..]) {
+            Ok(data) => data,
+            _ => panic!("decoding failed"),
+        };
+        assert_eq!(signed_tx_data.data, Some(data));
+        assert!(vp_host_env::verify_tx_signature(&pk, &signed_tx_data.sig));
 
         let other_keypair = key::ed25519::testing::keypair_2();
         let other_pk = key::ed25519::PublicKey::from(other_keypair.public);
         assert!(!vp_host_env::verify_tx_signature(
             &other_pk,
-            &data[..],
             &signed_tx_data.sig
         ));
     }

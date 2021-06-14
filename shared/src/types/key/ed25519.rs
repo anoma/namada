@@ -134,6 +134,12 @@ pub fn verify_tx_sig(
     tx: &Tx,
     sig: &Signature,
 ) -> Result<(), VerifySigError> {
+    // revert the transaction data
+    let mut tx = tx.clone();
+    let tx_data = tx.data.expect("signed data should exist");
+    let signed_tx_data = SignedTxData::try_from_slice(&tx_data[..])
+        .expect("Decoding transaction data shouldn't fail");
+    tx.data = Some(signed_tx_data.data.expect("data should exist"));
     let data = tx.to_bytes();
     verify_signature_raw(pk, &data, sig)
 }
