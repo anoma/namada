@@ -12,6 +12,8 @@ use anoma_shared::vm::{
     EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
 };
 
+use crate::tx::{init_tx_env, TestTxEnv};
+
 /// This module combines the native host function implementations from
 /// `native_vp_host_env` with the functions exposed to the vp wasm
 /// that will call to the native functions, instead of interfacing via a
@@ -33,32 +35,25 @@ pub struct TestVpEnv {
     pub keys_changed: Vec<Key>,
     pub verifiers: HashSet<Address>,
     pub eval_runner: Option<native_vp_host_env::VpEval>,
+    pub result_buffer: Option<Vec<u8>>,
 }
 
 impl Default for TestVpEnv {
     fn default() -> Self {
-        let addr = address::testing::established_address_1();
-        let storage = TestStorage::default();
-        let write_log = WriteLog::default();
-        let iterators = PrefixIterators::default();
-        let gas_meter = VpGasMeter::new(0);
-        let tx_code = vec![];
-        let keys_changed = vec![];
-        let verifiers = HashSet::default();
-
         // Because the `eval_runner`'s references must point to the data inside
         // the `env`, we have to initialize `env` with the other fields first,
         // and then add `eval_runner` in.
         let mut env = Self {
-            addr,
-            storage,
-            write_log,
-            iterators,
-            gas_meter,
-            tx_code,
-            keys_changed,
-            verifiers,
+            addr: address::testing::established_address_1(),
+            storage: TestStorage::default(),
+            write_log: WriteLog::default(),
+            iterators: PrefixIterators::default(),
+            gas_meter: VpGasMeter::new(0),
+            tx_code: vec![],
+            keys_changed: vec![],
+            verifiers: HashSet::default(),
             eval_runner: None,
+            result_buffer: None,
         };
 
         #[cfg(feature = "wasm-runtime")]
@@ -74,6 +69,8 @@ impl Default for TestVpEnv {
             let env_keys_changed =
                 unsafe { EnvHostSliceWrapper::new(&env.keys_changed[..]) };
             let env_verifiers = unsafe { EnvHostWrapper::new(&env.verifiers) };
+            let env_result_buffer =
+                unsafe { MutEnvHostWrapper::new(&mut env.result_buffer) };
 
             anoma_shared::vm::wasm::runner::VpEval {
                 address: env.addr.clone(),
@@ -84,6 +81,7 @@ impl Default for TestVpEnv {
                 tx_code: env_tx_code,
                 keys_changed: env_keys_changed,
                 verifiers: env_verifiers,
+                result_buffer: env_result_buffer,
             }
         };
         #[cfg(not(feature = "wasm-runtime"))]
@@ -94,8 +92,52 @@ impl Default for TestVpEnv {
     }
 }
 
+/// Initialize the host environment inside the [`vp_host_env`] module by running
+/// a transaction. The transaction is expected to modify the given address
+/// `addr` or to add it to the set of verifiers using
+/// [`tx_host_env::insert_verifier`].
+pub fn init_vp_env_from_tx<F>(
+    addr: Address,
+    mut tx_env: TestTxEnv,
+    mut apply_tx: F,
+) -> TestVpEnv
+where
+    F: FnMut(&Address),
+{
+    // Write an empty validity predicate for the address, because it's used to
+    // check if the address exists when we write into its storage
+    let vp_key = Key::validity_predicate(&addr).unwrap();
+    tx_env.storage.write(&vp_key, vec![]).unwrap();
+
+    init_tx_env(&mut tx_env);
+    apply_tx(&addr);
+
+    let verifiers_from_tx = &tx_env.verifiers;
+    let verifiers_changed_keys =
+        tx_env.write_log.verifiers_changed_keys(verifiers_from_tx);
+    let verifiers = verifiers_changed_keys.keys().collect();
+    let keys_changed = verifiers_changed_keys
+        .get(&addr)
+        .expect(
+            "The VP for the given address has not been triggered by the \
+             transaction",
+        )
+        .to_owned();
+
+    let mut vp_env = TestVpEnv {
+        addr,
+        storage: tx_env.storage,
+        write_log: tx_env.write_log,
+        keys_changed,
+        verifiers,
+        ..Default::default()
+    };
+
+    init_vp_env(&mut vp_env);
+    vp_env
+}
+
 /// Initialize the host environment inside the [`vp_host_env`] module.
-#[allow(dead_code)]
 pub fn init_vp_env(
     TestVpEnv {
         addr,
@@ -107,6 +149,7 @@ pub fn init_vp_env(
         keys_changed: _,
         verifiers: _,
         eval_runner,
+        result_buffer,
     }: &mut TestVpEnv,
 ) {
     vp_host_env::ENV.with(|env| {
@@ -121,6 +164,7 @@ pub fn init_vp_env(
                 eval_runner
                     .as_ref()
                     .expect("the eval_runner should be initialized"),
+                result_buffer,
             )
         })
     });
@@ -205,14 +249,14 @@ mod native_vp_host_env {
 
     // Implement all the exported functions from
     // [`anoma_vm_env::imports::vp`] `extern "C"` section.
-    native_host_fn!(vp_read_pre(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
-    native_host_fn!(vp_read_post(key_ptr: u64, key_len: u64, result_ptr: u64) -> i64);
+    native_host_fn!(vp_read_pre(key_ptr: u64, key_len: u64) -> i64);
+    native_host_fn!(vp_read_post(key_ptr: u64, key_len: u64) -> i64);
+    native_host_fn!(vp_result_buffer(result_ptr: u64));
     native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
-    native_host_fn!(vp_iter_pre_next(iter_id: u64, result_ptr: u64) ->
-i64);
-    native_host_fn!(vp_iter_post_next(iter_id: u64, result_ptr: u64) -> i64);
+    native_host_fn!(vp_iter_pre_next(iter_id: u64) -> i64);
+    native_host_fn!(vp_iter_post_next(iter_id: u64) -> i64);
     native_host_fn!(vp_get_chain_id(result_ptr: u64));
     native_host_fn!(vp_get_block_height() -> u64);
     native_host_fn!(vp_get_block_hash(result_ptr: u64));

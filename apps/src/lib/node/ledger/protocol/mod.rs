@@ -1,6 +1,6 @@
 //! The ledger's protocol
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -124,7 +124,7 @@ fn check_vps(
     write_log: &WriteLog,
     verifiers_from_tx: &HashSet<Address>,
 ) -> Result<VpsResult> {
-    let verifiers = get_verifiers(write_log, verifiers_from_tx);
+    let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
     let tx_data = tx.data.clone().unwrap_or_default();
     let tx_code = tx.code.clone();
@@ -164,40 +164,6 @@ fn check_vps(
         .map_err(Error::GasError)?;
 
     Ok(vps_result)
-}
-
-/// Get verifiers from storage changes written to a write log
-fn get_verifiers(
-    write_log: &WriteLog,
-    verifiers_from_tx: &HashSet<Address>,
-) -> HashMap<Address, Vec<Key>> {
-    let mut verifiers =
-        verifiers_from_tx
-            .iter()
-            .fold(HashMap::new(), |mut acc, addr| {
-                acc.insert(addr.clone(), vec![]);
-                acc
-            });
-
-    let (changed_keys, initialized_accounts) = write_log.get_partitioned_keys();
-    // get changed keys grouped by the address
-    for key in changed_keys {
-        for addr in &key.find_addresses() {
-            match verifiers.get_mut(&addr) {
-                Some(keys) => keys.push(key.clone()),
-                None => {
-                    verifiers.insert(addr.clone(), vec![key.clone()]);
-                }
-            }
-        }
-    }
-    // The new accounts should be validated by every verifier's VP
-    for key in initialized_accounts {
-        for (_verifier, keys) in verifiers.iter_mut() {
-            keys.push(key.clone());
-        }
-    }
-    verifiers
 }
 
 /// Execute verifiers' validity predicates

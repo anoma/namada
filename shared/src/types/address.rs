@@ -15,6 +15,11 @@ use thiserror::Error;
 
 use crate::types::key;
 
+/// The length of [`Address`] encoded with Borsh.
+pub const RAW_ADDRESS_LEN: usize = 45;
+/// The length of [`Address`] encoded with Bech32m.
+pub const ADDRESS_LEN: usize = 80;
+
 /// human-readable part of Bech32m encoded address
 const ADDRESS_HRP: &str = "a";
 const ADDRESS_BECH32_VARIANT: bech32::Variant = Variant::Bech32m;
@@ -287,6 +292,14 @@ pub mod tests {
             .join("");
         let address = key_gen.generate_address(rng_source);
         println!("address {}", address);
+    }
+
+    #[test]
+    fn test_address_len() {
+        let addr = testing::established_address_1();
+        let bytes = addr.try_to_vec().unwrap();
+        assert_eq!(bytes.len(), RAW_ADDRESS_LEN);
+        assert_eq!(addr.encode().len(), ADDRESS_LEN);
     }
 }
 
