@@ -1350,16 +1350,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "txs_and_vps"
-version = "0.1.0"
-dependencies = [
- "anoma_tests",
- "anoma_vm_env",
- "borsh",
- "wee_alloc",
-]
-
-[[package]]
 name = "typenum"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1388,6 +1378,16 @@ name = "wasi"
 version = "0.10.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
+
+[[package]]
+name = "wasm_source"
+version = "0.1.0"
+dependencies = [
+ "anoma_tests",
+ "anoma_vm_env",
+ "borsh",
+ "wee_alloc",
+]
 
 [[package]]
 name = "wasmer"

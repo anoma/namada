@@ -2,7 +2,7 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2018"
 license = "GPL-3.0"
-name = "txs_and_vps"
+name = "wasm_source"
 resolver = "2"
 version = "0.1.0"
 

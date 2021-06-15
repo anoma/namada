@@ -16,7 +16,7 @@ all: $(wasms)
 
 $(wasms): %:
 	$(cargo) build --release --target wasm32-unknown-unknown --features $@ && \
-	cp "./target/wasm32-unknown-unknown/release/txs_and_vps.wasm" ../$@.wasm
+	cp "./target/wasm32-unknown-unknown/release/wasm_source.wasm" ../$@.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_no_op`
 $(patsubst %,check_%,$(wasms)): check_%:
