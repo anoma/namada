@@ -13,7 +13,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::proto::Tx;
-use crate::types::{address, Address, DbKeySeg, Key, KeySeg};
+use crate::types::address::{self, Address};
+use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
 

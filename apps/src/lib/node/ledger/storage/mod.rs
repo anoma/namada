@@ -12,7 +12,9 @@ use anoma_shared::ledger::storage::{
     types, BlockStorage, Storage, StorageHasher,
 };
 use anoma_shared::types::address::EstablishedAddressGen;
-use anoma_shared::types::{BlockHash, BlockHeight, Key, CHAIN_ID_LENGTH};
+use anoma_shared::types::storage::{
+    BlockHash, BlockHeight, Key, CHAIN_ID_LENGTH,
+};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::traits::Hasher;

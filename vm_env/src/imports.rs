@@ -54,10 +54,11 @@ pub mod tx {
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::address;
+    use anoma_shared::types::address::Address;
     use anoma_shared::types::internal::HostEnvResult;
-    use anoma_shared::types::{
-        address, Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH,
-        CHAIN_ID_LENGTH,
+    use anoma_shared::types::storage::{
+        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -273,7 +274,7 @@ pub mod vp {
 
     use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::key::ed25519::{PublicKey, Signature};
-    use anoma_shared::types::{
+    use anoma_shared::types::storage::{
         BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};

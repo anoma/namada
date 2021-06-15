@@ -5,9 +5,10 @@ use std::collections::{HashMap, HashSet};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-use super::DbKeySeg;
+use crate::types::address::Address;
 use crate::types::key::ed25519::Signed;
-use crate::types::{token, Address, Key, KeySeg};
+use crate::types::storage::{DbKeySeg, Key, KeySeg};
+use crate::types::token;
 #[derive(
     Debug,
     Clone,

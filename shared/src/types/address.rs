@@ -1,10 +1,8 @@
 //! Implements transparent addresses as described in [Accounts
 //! Addresses](tech-specs/src/explore/design/ledger/accounts.md#addresses).
 
-use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::iter::FromIterator;
 use std::string;
 
 use bech32::{self, FromBase32, ToBase32, Variant};
@@ -256,16 +254,6 @@ pub fn kartoffel() -> Address {
 /// Temporary helper for testing
 pub fn matchmaker() -> Address {
     Address::decode("a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td").expect("The token address decoding shouldn't fail")
-}
-
-impl<'a> FromIterator<&'a Address> for HashSet<Address> {
-    fn from_iter<T: IntoIterator<Item = &'a Address>>(iter: T) -> Self {
-        let mut set = HashSet::new();
-        for addr in iter {
-            set.insert(addr.clone());
-        }
-        set
-    }
 }
 
 #[cfg(test)]

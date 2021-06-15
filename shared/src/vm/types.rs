@@ -13,7 +13,8 @@ use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::types::{Address, Key};
+use crate::types::address::Address;
+use crate::types::storage::Key;
 
 /// Input for transaction wasm module call
 pub type TxInput = Vec<u8>;

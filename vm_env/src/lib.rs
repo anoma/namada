@@ -7,6 +7,7 @@ pub mod key;
 mod token;
 
 pub mod tx_prelude {
+    pub use anoma_shared::types::address::Address;
     pub use anoma_shared::types::*;
     pub use anoma_vm_macro::transaction;
 
@@ -26,6 +27,7 @@ pub mod tx_prelude {
 }
 
 pub mod vp_prelude {
+    pub use anoma_shared::types::address::Address;
     pub use anoma_shared::types::*;
     pub use anoma_vm_macro::validity_predicate;
 
@@ -53,6 +55,7 @@ pub mod vp_prelude {
 }
 
 pub mod matchmaker_prelude {
+    pub use anoma_shared::types::address::Address;
     pub use anoma_shared::types::*;
     pub use anoma_vm_macro::matchmaker;
 
@@ -60,6 +63,7 @@ pub mod matchmaker_prelude {
 }
 
 pub mod filter_prelude {
+    pub use anoma_shared::types::address::Address;
     pub use anoma_shared::types::*;
     pub use anoma_vm_macro::filter;
 
