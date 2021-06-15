@@ -6,8 +6,9 @@ rustup = $(env) rustup
 wasms := tx_memory_limit
 wasms += tx_no_op
 wasms += tx_read_storage_key
-wasms += vp_always_true
 wasms += vp_always_false
+wasms += vp_always_true
+wasms += vp_eval
 wasms += vp_memory_limit
 wasms += vp_read_storage_key
 

@@ -17,6 +17,7 @@ tx_no_op = []
 tx_read_storage_key = []
 vp_always_false = []
 vp_always_true = []
+vp_eval = []
 vp_memory_limit = []
 vp_read_storage_key = []
 

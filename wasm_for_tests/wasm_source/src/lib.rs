@@ -68,7 +68,28 @@ pub mod main {
     }
 }
 
+/// A VP that runs the VP given in `tx_data` via `eval`. It returns the result
+/// of `eval`.
+#[cfg(feature = "vp_eval")]
+pub mod main {
+    use anoma_vm_env::vp_prelude::*;
+
+    #[validity_predicate]
+    fn validate_tx(
+        tx_data: Vec<u8>,
+        _addr: Address,
+        _keys_changed: Vec<storage::Key>,
+        _verifiers: HashSet<Address>,
+    ) -> bool {
+        use validity_predicate::EvalVp;
+        let EvalVp { vp_code, input }: EvalVp =
+            EvalVp::try_from_slice(&tx_data[..]).unwrap();
+        eval(vp_code, input)
+    }
+}
+
 // A VP that allocates a memory of size given from the `tx_data: usize`.
+// Returns `true`, if the allocation is within memory limits.
 #[cfg(feature = "vp_memory_limit")]
 pub mod main {
     use anoma_vm_env::vp_prelude::*;
@@ -90,7 +111,7 @@ pub mod main {
 }
 
 /// A VP that attempts to read the given key from storage (state prior to tx
-/// execution).
+/// execution). Returns `true`, if the allocation is within memory limits.
 #[cfg(feature = "vp_read_storage_key")]
 pub mod main {
     use anoma_vm_env::vp_prelude::*;
