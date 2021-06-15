@@ -2,9 +2,12 @@ cargo = $(env) cargo
 rustup = $(env) rustup
 
 # All the wasms that can be built from this source, switched via Cargo features
-wasms := tx_no_op 
-wasms += vp_always_true 
+# Wasms can be added via the Cargo.toml `[features]` list.
+wasms := tx_memory_limit
+wasms += tx_no_op
+wasms += vp_always_true
 wasms += vp_always_false
+wasms += vp_memory_limit
 
 
 all: $(wasms)

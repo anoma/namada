@@ -9,10 +9,14 @@ version = "0.1.0"
 [lib]
 crate-type = ["cdylib"]
 
+# The features should be used individually to build the selected wasm.
+# Newly added wasms should also be added into the Makefile `$(wasms)` list.
 [features]
+tx_memory_limit = []
 tx_no_op = []
 vp_always_false = []
 vp_always_true = []
+vp_memory_limit = []
 
 [dependencies]
 anoma_vm_env = {path = "../../vm_env"}
