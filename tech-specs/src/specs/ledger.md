@@ -127,9 +127,10 @@ cargo test test_vp_stack_limiter
 
 ##### Transaction host environment functions
 
-The following functions from the host ledger are made available in transaction's WASM code. They MAY be imported in the WASM module as shown bellow and MUST be provided by the ledger's WASM runtime.
+The following functions from the host ledger are made available in transaction's WASM code. They MAY be imported in the WASM module as shown bellow and MUST be provided by the ledger's WASM runtime:
 
 ```wat
+(import "env" "gas" (func (param i32)))
 (import "env" "anoma_tx_read" (func (param i64 i64) (result i64)))
 (import "env" "anoma_tx_result_buffer" (func (param i64)))
 (import "env" "anoma_tx_has_key" (func (param i64 i64) (result i64)))
@@ -146,6 +147,12 @@ The following functions from the host ledger are made available in transaction's
 (import "env" "anoma_tx_log_string" (func (param i64 i64)))
 ```
 
+Additionally, the WASM module MUST export its memory as shown:
+
+```wat
+(export "memory" (memory 0))
+```
+
 - `anoma_tx_init_account` TODO newly created accounts' validity predicates aren't used until the block is committed (i.e. only the transaction that created the account may write into its storage in the block in which its being applied).
 - TODO describe functions in detail
 
@@ -154,6 +161,7 @@ The following functions from the host ledger are made available in transaction's
 The following functions from the host ledger are made available in validity predicate's WASM code. They MAY be imported in the WASM module as shown bellow and MUST be provided by the ledger's WASM runtime.
 
 ```wat
+(import "env" "gas" (func (param i32)))
 (import "env" "anoma_vp_read_pre" (func (param i64 i64) (result i64)))
 (import "env" "anoma_vp_read_post" (func (param i64 i64) (result i64)))
 (import "env" "anoma_vp_result_buffer" (func (param i64)))
@@ -170,6 +178,12 @@ The following functions from the host ledger are made available in validity pred
 ```
 
 - TODO describe functions in detail
+
+Additionally, the WASM module MUST export its memory as shown:
+
+```wat
+(export "memory" (memory 0))
+```
 
 ### Storage
 
