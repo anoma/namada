@@ -93,8 +93,6 @@ pub mod main {
 /// execution).
 #[cfg(feature = "vp_read_storage_key")]
 pub mod main {
-    use std::collections::HashSet;
-
     use anoma_vm_env::vp_prelude::*;
 
     #[validity_predicate]
