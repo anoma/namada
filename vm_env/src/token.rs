@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
+use anoma_shared::types::address::Address;
+use anoma_shared::types::storage::Key;
 use anoma_shared::types::token::{self, Amount, Change};
-use anoma_shared::types::{Address, Key};
 
 /// A token validity predicate.
 pub fn vp(

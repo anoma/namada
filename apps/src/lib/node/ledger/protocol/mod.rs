@@ -7,7 +7,8 @@ use std::fmt;
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::proto::{self, Tx};
-use anoma_shared::types::{Address, Key};
+use anoma_shared::types::address::Address;
+use anoma_shared::types::storage::Key;
 use anoma_shared::vm;
 use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -168,6 +169,7 @@ fn execute_vps(
     let addresses = verifiers
         .iter()
         .map(|(addr, _, _)| addr)
+        .cloned()
         .collect::<HashSet<_>>();
 
     verifiers
@@ -194,8 +196,8 @@ fn merge_vp_results(
     mut b: VpsResult,
     initial_gas: u64,
 ) -> Result<VpsResult> {
-    let accepted_vps = a.accepted_vps.union(&b.accepted_vps).collect();
-    let rejected_vps = a.rejected_vps.union(&b.rejected_vps).collect();
+    let accepted_vps = a.accepted_vps.union(&b.accepted_vps).cloned().collect();
+    let rejected_vps = a.rejected_vps.union(&b.rejected_vps).cloned().collect();
     let mut errors = a.errors;
     errors.append(&mut b.errors);
     let mut gas_used = a.gas_used;

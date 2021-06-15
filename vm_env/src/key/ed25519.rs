@@ -1,5 +1,5 @@
+use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::{self, PublicKey};
-use anoma_shared::types::Address;
 
 use crate::imports::vp;
 

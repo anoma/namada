@@ -1,8 +1,10 @@
 use std::str::FromStr;
 
 use anoma_shared::proto::Tx;
+use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::Keypair;
-use anoma_shared::types::{token, Address, UpdateVp};
+use anoma_shared::types::token;
+use anoma_shared::types::transaction::UpdateVp;
 use borsh::BorshSerialize;
 use tendermint_rpc::{Client, HttpClient};
 

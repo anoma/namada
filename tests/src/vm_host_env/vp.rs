@@ -6,7 +6,7 @@ use anoma_shared::ledger::storage::testing::TestStorage;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::proto::Tx;
 use anoma_shared::types::address::{self, Address};
-use anoma_shared::types::Key;
+use anoma_shared::types::storage::Key;
 use anoma_shared::vm;
 use anoma_shared::vm::prefix_iter::PrefixIterators;
 use anoma_shared::vm::{
@@ -115,7 +115,7 @@ where
     let verifiers_from_tx = &tx_env.verifiers;
     let verifiers_changed_keys =
         tx_env.write_log.verifiers_changed_keys(verifiers_from_tx);
-    let verifiers = verifiers_changed_keys.keys().collect();
+    let verifiers = verifiers_changed_keys.keys().cloned().collect();
     let keys_changed = verifiers_changed_keys
         .get(&addr)
         .expect(
