@@ -10,4 +10,10 @@ make deps
 
 # Build - this will output .wasm files in the parent dir
 make all
+
+# Each source that is included here can also be build and checked individually, e.g. for "tx_no_op" source:
+
+make tx_no_op         # build
+make check_tx_no_op   # cargo check
+make watch_tx_no_op   # cargo watch
 ```

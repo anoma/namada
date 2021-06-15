@@ -15,6 +15,7 @@ wasms += vp_read_storage_key
 
 all: $(wasms)
 
+# Build a selected wasm
 $(wasms): %:
 	$(cargo) build --release --target wasm32-unknown-unknown --features $@ && \
 	cp "./target/wasm32-unknown-unknown/release/wasm_source.wasm" ../$@.wasm
