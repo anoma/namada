@@ -651,18 +651,70 @@ mod tests {
     /// execution is aborted.
     #[test]
     fn test_tx_stack_limiter() {
-        // Because each call into `$loop` inside the wasm consumes 4 stack
-        // heights, this should trigger stack limiter. If we were to subtract
+        // Because each call into `$loop` inside the wasm consumes 3 stack
+        // heights, this should hit the stack limit. If we were to subtract
         // one from this value, we should be just under the limit.
-        let loops = WASM_STACK_LIMIT / 4;
+        let loops = WASM_STACK_LIMIT / 3 - 1;
+
+        let error = loop_in_tx_wasm(loops).expect_err(&format!(
+            "Expecting runtime error \"unreachable\" caused by stack-height \
+             overflow, loops {}. Got",
+            loops,
+        ));
+        if let Error::RuntimeError(err) = &error {
+            if let Some(trap_code) = err.clone().to_trap() {
+                assert_eq!(
+                    trap_code,
+                    wasmer_vm::TrapCode::UnreachableCodeReached,
+                    "Failed with unexpected error: {}",
+                    error
+                );
+            }
+        }
+
+        // one less loop shouldn't go over the limit
+        let result = loop_in_tx_wasm(loops - 1);
+        assert!(result.is_ok(), "Expected success. Got {:?}", result);
+    }
+
+    /// Test that when a VP wasm goes over the stack-height limit, the execution
+    /// is aborted.
+    #[test]
+    fn test_vp_stack_limiter() {
+        // Because each call into `$loop` inside the wasm consumes 3 stack
+        // heights, this should hit the stack limit. If we were to subtract
+        // one from this value, we should be just under the limit.
+        let loops = WASM_STACK_LIMIT / 3 - 1;
+
+        let error = loop_in_vp_wasm(loops).expect_err(
+            "Expecting runtime error \"unreachable\" caused by stack-height \
+             overflow. Got",
+        );
+        if let Error::RuntimeError(err) = &error {
+            if let Some(trap_code) = err.clone().to_trap() {
+                assert_eq!(
+                    trap_code,
+                    wasmer_vm::TrapCode::UnreachableCodeReached,
+                    "Failed with unexpected error: {}",
+                    error
+                );
+            }
+        }
+
+        // one less loop shouldn't go over the limit
+        let result = loop_in_vp_wasm(loops - 1);
+        assert!(result.is_ok(), "Expected success. Got {:?}", result);
+    }
+
+    fn loop_in_tx_wasm(loops: u32) -> Result<HashSet<Address>> {
         // A transaction with a recursive loop.
-        // The boilerplate code is generated from tx.wasm using `wasm2wat` and
-        // the loop code is hand-written.
+        // The boilerplate code is generated from tx_template.wasm using
+        // `wasm2wat` and the loop code is hand-written.
         let tx_code = wasmer::wat2wasm(
             format!(
                 r#"
             (module
-                (type (;0;) (func (param i64 i64) (result i64)))
+                (type (;0;) (func (param i64 i64)))
 
                 ;; recursive loop, the param is the number of loops
                 (func $loop (param i64) (result i64)
@@ -672,14 +724,15 @@ mod tests {
                 (then (get_local 0))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
-                (func $apply_tx (type 0) (param i64 i64) (result i64)
-                (call $loop (i64.const {})))
+                (func $_apply_tx (type 0) (param i64 i64)
+                (call $loop (i64.const {}))
+                drop)
 
                 (table (;0;) 1 1 funcref)
                 (memory (;0;) 16)
                 (global (;0;) (mut i32) (i32.const 1048576))
                 (export "memory" (memory 0))
-                (export "apply_tx" (func $apply_tx)))
+                (export "_apply_tx" (func $_apply_tx)))
             "#,
                 loops
             )
@@ -693,38 +746,17 @@ mod tests {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
-        let error = runner
-            .run(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
-            .expect_err(
-                "Expecting runtime error \"unreachable\" caused by \
-                 stack-height overflow",
-            );
-        if let Error::RuntimeError(err) = &error {
-            if let Some(trap_code) = err.clone().to_trap() {
-                return assert_eq!(
-                    trap_code,
-                    wasmer_vm::TrapCode::UnreachableCodeReached
-                );
-            }
-        }
-        println!("Failed with unexpected error: {}", error);
+        runner.run(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
     }
 
-    /// Test that when a VP wasm goes over the stack-height limit, the execution
-    /// is aborted.
-    #[test]
-    fn test_vp_stack_limiter() {
-        // Because each call into `$loop` inside the wasm consumes 4 stack
-        // heights, this should trigger stack limiter. If we were to subtract
-        // one from this value, we should be just under the limit.
-        let loops = WASM_STACK_LIMIT / 4;
+    fn loop_in_vp_wasm(loops: u32) -> Result<bool> {
         // A validity predicate with a recursive loop.
-        // The boilerplate code is generated from vp.wasm using `wasm2wat` and
-        // the loop code is hand-written.
+        // The boilerplate code is generated from vp_template.wasm using
+        // `wasm2wat` and the loop code is hand-written.
         let vp_code = wasmer::wat2wasm(format!(
             r#"
             (module
-                (type (;0;) (func (param i64 i64 i64 i64 i64 i64) (result i64)))
+                (type (;0;) (func (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)))
 
                 ;; recursive loop, the param is the number of loops
                 (func $loop (param i64) (result i64)
@@ -734,14 +766,14 @@ mod tests {
                 (then (get_local 0))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
-                (func $validate_tx (type 0) (param i64 i64 i64 i64 i64 i64) (result i64)
+                (func $_validate_tx (type 0) (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)
                 (call $loop (i64.const {})))
 
                 (table (;0;) 1 1 funcref)
                 (memory (;0;) 16)
                 (global (;0;) (mut i32) (i32.const 1048576))
                 (export "memory" (memory 0))
-                (export "validate_tx" (func $validate_tx)))
+                (export "_validate_tx" (func $_validate_tx)))
             "#, loops).as_bytes(),
         )
         .expect("unexpected error converting wat2wasm").into_owned();
@@ -754,29 +786,15 @@ mod tests {
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = vec![];
         let verifiers = HashSet::new();
-        let error = runner
-            .run(
-                vp_code,
-                &tx,
-                &addr,
-                &storage,
-                &write_log,
-                &mut gas_meter,
-                &keys_changed[..],
-                &verifiers,
-            )
-            .expect_err(
-                "Expecting runtime error \"unreachable\" caused by \
-                 stack-height overflow",
-            );
-        if let Error::RuntimeError(err) = &error {
-            if let Some(trap_code) = err.clone().to_trap() {
-                return assert_eq!(
-                    trap_code,
-                    wasmer_vm::TrapCode::UnreachableCodeReached
-                );
-            }
-        }
-        println!("Failed with unexpected error: {}", error);
+        runner.run(
+            vp_code,
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed[..],
+            &verifiers,
+        )
     }
 }
