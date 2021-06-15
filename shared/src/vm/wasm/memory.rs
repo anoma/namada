@@ -30,15 +30,20 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 // The bounds are set in number of pages, the actual size is multiplied by
-// `wasmer::WASM_PAGE_SIZE = 64kiB`. The wasm code also occupies the memory
-// space.
+// `wasmer::WASM_PAGE_SIZE = 64kiB`.
 // TODO set bounds to accommodate for wasm env size
-const TX_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
-const TX_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
-const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
-const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
-const MATCHMAKER_MEMORY_INIT_PAGES: u32 = 400; // 12.8 MiB
-const FILTER_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
+/// Initial pages in tx memory
+pub const TX_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
+/// Mamixmum pages in tx memory
+pub const TX_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
+/// Initial pages in VP memory
+pub const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
+/// Mamixmum pages in VP memory
+pub const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
+/// Initial pages in matchmaker memory
+pub const MATCHMAKER_MEMORY_INIT_PAGES: u32 = 400; // 25.6 MiB
+/// Initial pages in matchmaker filter memory
+pub const FILTER_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 
 /// Prepare memory for instantiating a transaction module
 pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
