@@ -1350,7 +1350,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tx_template"
+name = "txs_and_vps"
 version = "0.1.0"
 dependencies = [
  "anoma_tests",
