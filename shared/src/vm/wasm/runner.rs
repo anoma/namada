@@ -644,6 +644,7 @@ fn get_gas_rules() -> rules::Set {
 
 #[cfg(test)]
 mod tests {
+    use test_env_log::test;
     use super::*;
     use crate::ledger::storage::testing::TestStorage;
 
