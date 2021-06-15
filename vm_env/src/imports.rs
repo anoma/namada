@@ -415,6 +415,9 @@ pub mod vp {
     /// Evaluate a validity predicate with given data. The address, changed
     /// storage keys and verifiers will have the same values as the input to
     /// caller's validity predicate.
+    ///
+    /// If the execution fails for whatever reason, this will return `false`.
+    /// Otherwise returns the result of evaluation.
     pub fn eval(vp_code: Vec<u8>, input_data: Vec<u8>) -> bool {
         let result = unsafe {
             anoma_vp_eval(

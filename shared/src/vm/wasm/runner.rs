@@ -651,12 +651,14 @@ mod tests {
 
     use super::*;
     use crate::ledger::storage::testing::TestStorage;
+    use crate::types::validity_predicate::EvalVp;
 
     const TX_MEMORY_LIMIT_WASM: &str = "../wasm_for_tests/tx_memory_limit.wasm";
     const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
     const TX_READ_STORAGE_KEY_WASM: &str =
         "../wasm_for_tests/tx_read_storage_key.wasm";
     const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
+    const VP_EVAL_WASM: &str = "../wasm_for_tests/vp_eval.wasm";
     const VP_MEMORY_LIMIT_WASM: &str = "../wasm_for_tests/vp_memory_limit.wasm";
     const VP_READ_STORAGE_KEY_WASM: &str =
         "../wasm_for_tests/vp_read_storage_key.wasm";
@@ -746,6 +748,81 @@ mod tests {
             get_trap_code(&error),
             Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
         );
+    }
+
+    /// Test that when a validity predicate wasm goes over the memory limit
+    /// inside the wasm execution when calling `eval` host function, the `eval`
+    /// fails and hence returns `false`.
+    #[test]
+    fn test_vp_memory_limiter_in_guest_calling_eval() {
+        let runner = VpRunner::new();
+        let mut storage = TestStorage::default();
+        let addr = storage.address_gen.generate_address("rng seed");
+        let write_log = WriteLog::default();
+        let mut gas_meter = VpGasMeter::new(0);
+        let keys_changed = vec![];
+        let verifiers = HashSet::new();
+
+        // This code will call `eval` with the other VP below
+        let vp_eval = std::fs::read(VP_EVAL_WASM).expect("cannot load wasm");
+        // This code will allocate memory of the given size
+        let vp_memory_limit =
+            std::fs::read(VP_MEMORY_LIMIT_WASM).expect("cannot load wasm");
+
+        // Assuming 200 pages, 12.8 MiB limit
+        assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
+
+        // Allocating `2^23` (8 MiB) should be below the memory limit and
+        // shouldn't fail
+        let input = 2_usize.pow(23).try_to_vec().unwrap();
+        let eval_vp = EvalVp {
+            vp_code: vp_memory_limit.clone(),
+            input,
+        };
+        let tx_data = eval_vp.try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        // When the `eval`ed VP doesn't run out of memory, it should return
+        // `true`
+        let passed = runner
+            .run(
+                vp_eval.clone(),
+                &tx,
+                &addr,
+                &storage,
+                &write_log,
+                &mut gas_meter,
+                &keys_changed[..],
+                &verifiers,
+            )
+            .unwrap();
+        assert!(passed);
+
+        // Allocating `2^24` (16 MiB) should be above the memory limit and
+        // should fail
+        let input = 2_usize.pow(24).try_to_vec().unwrap();
+        let eval_vp = EvalVp {
+            vp_code: vp_memory_limit,
+            input,
+        };
+        let tx_data = eval_vp.try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        // When the `eval`ed VP runs out of memory, its result should be
+        // `false`, hence we should also get back `false` from the VP that
+        // called `eval`.
+        let passed = runner
+            .run(
+                vp_eval,
+                &tx,
+                &addr,
+                &storage,
+                &write_log,
+                &mut gas_meter,
+                &keys_changed[..],
+                &verifiers,
+            )
+            .unwrap();
+
+        assert!(!passed);
     }
 
     /// Test that when a validity predicate wasm goes over the memory limit
@@ -865,7 +942,7 @@ mod tests {
         let tx_data: Vec<u8> = vec![6_u8; len];
         let tx = Tx::new(vec![], Some(tx_data));
         let result = runner.run(
-            vp_code.clone(),
+            vp_code,
             &tx,
             &addr,
             &storage,
@@ -969,6 +1046,59 @@ mod tests {
             get_trap_code(&error),
             Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
         );
+    }
+
+    /// Test that when a validity predicate wasm goes over the wasm memory limit
+    /// in the value returned from host environment call during wasm execution,
+    /// inside the wasm execution calling `eval` host function, the `eval` fails
+    /// and hence returns `false`.
+    #[test]
+    fn test_vp_memory_limiter_in_host_env_inside_guest_calling_eval() {
+        let runner = VpRunner::new();
+        let mut storage = TestStorage::default();
+        let addr = storage.address_gen.generate_address("rng seed");
+        let write_log = WriteLog::default();
+        let mut gas_meter = VpGasMeter::new(0);
+        let keys_changed = vec![];
+        let verifiers = HashSet::new();
+
+        // This code will call `eval` with the other VP below
+        let vp_eval = std::fs::read(VP_EVAL_WASM).expect("cannot load wasm");
+        // This code will read value from the storage
+        let vp_read_key =
+            std::fs::read(VP_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
+
+        // Allocating `2^24` (16 MiB) for a value in storage that the tx
+        // attempts to read should be above the memory limit and should
+        // fail
+        let len = 2_usize.pow(24);
+        let value: Vec<u8> = vec![6_u8; len];
+        let key_raw = "key";
+        let key = Key::parse(key_raw.to_string()).unwrap();
+        // Write the value that should be read by the tx into the storage. When
+        // writing directly to storage, the value has to be encoded with
+        // Borsh.
+        storage.write(&key, value.try_to_vec().unwrap()).unwrap();
+        let input = 2_usize.pow(23).try_to_vec().unwrap();
+        let eval_vp = EvalVp {
+            vp_code: vp_read_key,
+            input,
+        };
+        let tx_data = eval_vp.try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        let passed = runner
+            .run(
+                vp_eval,
+                &tx,
+                &addr,
+                &storage,
+                &write_log,
+                &mut gas_meter,
+                &keys_changed[..],
+                &verifiers,
+            )
+            .unwrap();
+        assert!(!passed);
     }
 
     fn loop_in_tx_wasm(loops: u32) -> Result<HashSet<Address>> {
