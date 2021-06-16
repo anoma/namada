@@ -86,11 +86,14 @@ impl TxRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let limit = memory::tx_limit();
         // TODO Could we pass the modified accounts sub-spaces via WASM store
         // directly to VPs' wasm scripts to avoid passing it through the
         // host?
-        let wasm_store =
-            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        let wasm_store = wasmer::Store::new_with_tunables(
+            &wasmer_engine_jit::JIT::new(compiler).engine(),
+            limit,
+        );
         Self { wasm_store }
     }
 
@@ -197,9 +200,12 @@ impl VpRunner {
     pub fn new() -> Self {
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let limit = memory::vp_limit();
         // TODO: Maybe refactor wasm_store: not necessary to do in two steps
-        let wasm_store =
-            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        let wasm_store = wasmer::Store::new_with_tunables(
+            &wasmer_engine_jit::JIT::new(compiler).engine(),
+            limit,
+        );
         Self { wasm_store }
     }
 
@@ -395,8 +401,11 @@ where
 
         // Use Singlepass compiler with the default settings
         let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let wasm_store =
-            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
+        let limit = memory::vp_limit();
+        let wasm_store = wasmer::Store::new_with_tunables(
+            &wasmer_engine_jit::JIT::new(compiler).engine(),
+            limit,
+        );
 
         let eval_runner = VpEval {
             address: self.address.clone(),
@@ -635,25 +644,472 @@ fn get_gas_rules() -> rules::Set {
 
 #[cfg(test)]
 mod tests {
+    use borsh::BorshSerialize;
+    use itertools::Either;
+    use test_env_log::test;
+    use wasmer_vm::TrapCode;
+
     use super::*;
     use crate::ledger::storage::testing::TestStorage;
+    use crate::types::validity_predicate::EvalVp;
+
+    const TX_MEMORY_LIMIT_WASM: &str = "../wasm_for_tests/tx_memory_limit.wasm";
+    const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
+    const TX_READ_STORAGE_KEY_WASM: &str =
+        "../wasm_for_tests/tx_read_storage_key.wasm";
+    const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
+    const VP_EVAL_WASM: &str = "../wasm_for_tests/vp_eval.wasm";
+    const VP_MEMORY_LIMIT_WASM: &str = "../wasm_for_tests/vp_memory_limit.wasm";
+    const VP_READ_STORAGE_KEY_WASM: &str =
+        "../wasm_for_tests/vp_read_storage_key.wasm";
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
     #[test]
     fn test_tx_stack_limiter() {
-        // Because each call into `$loop` inside the wasm consumes 4 stack
-        // heights, this should trigger stack limiter. If we were to subtract
+        // Because each call into `$loop` inside the wasm consumes 3 stack
+        // heights, this should hit the stack limit. If we were to subtract
         // one from this value, we should be just under the limit.
-        let loops = WASM_STACK_LIMIT / 4;
+        let loops = WASM_STACK_LIMIT / 3 - 1;
+
+        let error = loop_in_tx_wasm(loops).expect_err(&format!(
+            "Expecting runtime error \"unreachable\" caused by stack-height \
+             overflow, loops {}. Got",
+            loops,
+        ));
+        assert_eq!(
+            get_trap_code(&error),
+            Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
+        );
+
+        // one less loop shouldn't go over the limit
+        let result = loop_in_tx_wasm(loops - 1);
+        assert!(result.is_ok(), "Expected success. Got {:?}", result);
+    }
+
+    /// Test that when a VP wasm goes over the stack-height limit, the execution
+    /// is aborted.
+    #[test]
+    fn test_vp_stack_limiter() {
+        // Because each call into `$loop` inside the wasm consumes 3 stack
+        // heights, this should hit the stack limit. If we were to subtract
+        // one from this value, we should be just under the limit.
+        let loops = WASM_STACK_LIMIT / 3 - 1;
+
+        let error = loop_in_vp_wasm(loops).expect_err(
+            "Expecting runtime error \"unreachable\" caused by stack-height \
+             overflow. Got",
+        );
+        assert_eq!(
+            get_trap_code(&error),
+            Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
+        );
+
+        // one less loop shouldn't go over the limit
+        let result = loop_in_vp_wasm(loops - 1);
+        assert!(result.is_ok(), "Expected success. Got {:?}", result);
+    }
+
+    /// Test that when a transaction wasm goes over the memory limit inside the
+    /// wasm execution, the execution is aborted.
+    #[test]
+    fn test_tx_memory_limiter_in_guest() {
+        let runner = TxRunner::new();
+        let storage = TestStorage::default();
+        let mut write_log = WriteLog::default();
+        let mut gas_meter = BlockGasMeter::default();
+
+        // This code will allocate memory of the given size
+        let tx_code =
+            std::fs::read(TX_MEMORY_LIMIT_WASM).expect("cannot load wasm");
+
+        // Assuming 200 pages, 12.8 MiB limit
+        assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
+
+        // Allocating `2^23` (8 MiB) should be below the memory limit and
+        // shouldn't fail
+        let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
+        let result = runner.run(
+            &storage,
+            &mut write_log,
+            &mut gas_meter,
+            tx_code.clone(),
+            tx_data,
+        );
+        assert!(result.is_ok(), "Expected success, got {:?}", result);
+
+        // Allocating `2^24` (16 MiB) should be above the memory limit and
+        // should fail
+        let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
+        let error = runner
+            .run(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
+            .expect_err("Expected to run out of memory");
+        assert_eq!(
+            get_trap_code(&error),
+            Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
+        );
+    }
+
+    /// Test that when a validity predicate wasm goes over the memory limit
+    /// inside the wasm execution when calling `eval` host function, the `eval`
+    /// fails and hence returns `false`.
+    #[test]
+    fn test_vp_memory_limiter_in_guest_calling_eval() {
+        let runner = VpRunner::new();
+        let mut storage = TestStorage::default();
+        let addr = storage.address_gen.generate_address("rng seed");
+        let write_log = WriteLog::default();
+        let mut gas_meter = VpGasMeter::new(0);
+        let keys_changed = vec![];
+        let verifiers = HashSet::new();
+
+        // This code will call `eval` with the other VP below
+        let vp_eval = std::fs::read(VP_EVAL_WASM).expect("cannot load wasm");
+        // This code will allocate memory of the given size
+        let vp_memory_limit =
+            std::fs::read(VP_MEMORY_LIMIT_WASM).expect("cannot load wasm");
+
+        // Assuming 200 pages, 12.8 MiB limit
+        assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
+
+        // Allocating `2^23` (8 MiB) should be below the memory limit and
+        // shouldn't fail
+        let input = 2_usize.pow(23).try_to_vec().unwrap();
+        let eval_vp = EvalVp {
+            vp_code: vp_memory_limit.clone(),
+            input,
+        };
+        let tx_data = eval_vp.try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        // When the `eval`ed VP doesn't run out of memory, it should return
+        // `true`
+        let passed = runner
+            .run(
+                vp_eval.clone(),
+                &tx,
+                &addr,
+                &storage,
+                &write_log,
+                &mut gas_meter,
+                &keys_changed[..],
+                &verifiers,
+            )
+            .unwrap();
+        assert!(passed);
+
+        // Allocating `2^24` (16 MiB) should be above the memory limit and
+        // should fail
+        let input = 2_usize.pow(24).try_to_vec().unwrap();
+        let eval_vp = EvalVp {
+            vp_code: vp_memory_limit,
+            input,
+        };
+        let tx_data = eval_vp.try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        // When the `eval`ed VP runs out of memory, its result should be
+        // `false`, hence we should also get back `false` from the VP that
+        // called `eval`.
+        let passed = runner
+            .run(
+                vp_eval,
+                &tx,
+                &addr,
+                &storage,
+                &write_log,
+                &mut gas_meter,
+                &keys_changed[..],
+                &verifiers,
+            )
+            .unwrap();
+
+        assert!(!passed);
+    }
+
+    /// Test that when a validity predicate wasm goes over the memory limit
+    /// inside the wasm execution, the execution is aborted.
+    #[test]
+    fn test_vp_memory_limiter_in_guest() {
+        let runner = VpRunner::new();
+        let mut storage = TestStorage::default();
+        let addr = storage.address_gen.generate_address("rng seed");
+        let write_log = WriteLog::default();
+        let mut gas_meter = VpGasMeter::new(0);
+        let keys_changed = vec![];
+        let verifiers = HashSet::new();
+
+        // This code will allocate memory of the given size
+        let vp_code =
+            std::fs::read(VP_MEMORY_LIMIT_WASM).expect("cannot load wasm");
+
+        // Assuming 200 pages, 12.8 MiB limit
+        assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
+
+        // Allocating `2^23` (8 MiB) should be below the memory limit and
+        // shouldn't fail
+        let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        let result = runner.run(
+            vp_code.clone(),
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed[..],
+            &verifiers,
+        );
+        assert!(result.is_ok(), "Expected success, got {:?}", result);
+
+        // Allocating `2^24` (16 MiB) should be above the memory limit and
+        // should fail
+        let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        let error = runner
+            .run(
+                vp_code,
+                &tx,
+                &addr,
+                &storage,
+                &write_log,
+                &mut gas_meter,
+                &keys_changed[..],
+                &verifiers,
+            )
+            .expect_err("Expected to run out of memory");
+
+        assert_eq!(
+            get_trap_code(&error),
+            Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
+        );
+    }
+
+    /// Test that when a transaction wasm goes over the wasm memory limit in the
+    /// host input, the execution fails.
+    #[test]
+    fn test_tx_memory_limiter_in_host_input() {
+        let runner = TxRunner::new();
+        let storage = TestStorage::default();
+        let mut write_log = WriteLog::default();
+        let mut gas_meter = BlockGasMeter::default();
+
+        let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
+
+        // Assuming 200 pages, 12.8 MiB limit
+        assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
+
+        // Allocating `2^24` (16 MiB) for the input should be above the memory
+        // limit and should fail
+        let len = 2_usize.pow(24);
+        let tx_data: Vec<u8> = vec![6_u8; len];
+        let result = runner.run(
+            &storage,
+            &mut write_log,
+            &mut gas_meter,
+            tx_no_op,
+            tx_data,
+        );
+        match result {
+            Err(Error::MemoryError(memory::Error::MemoryOutOfBounds(
+                wasmer::MemoryError::CouldNotGrow { .. },
+            ))) => {
+                // as expected
+            }
+            _ => panic!("Expected to run out of memory, got {:?}", result),
+        }
+    }
+
+    /// Test that when a validity predicate wasm goes over the wasm memory limit
+    /// in the host input, the execution fails.
+    #[test]
+    fn test_vp_memory_limiter_in_host_input() {
+        let runner = VpRunner::new();
+        let mut storage = TestStorage::default();
+        let addr = storage.address_gen.generate_address("rng seed");
+        let write_log = WriteLog::default();
+        let mut gas_meter = VpGasMeter::new(0);
+        let keys_changed = vec![];
+        let verifiers = HashSet::new();
+
+        let vp_code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+
+        // Assuming 200 pages, 12.8 MiB limit
+        assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
+
+        // Allocating `2^24` (16 MiB) for the input should be above the memory
+        // limit and should fail
+        let len = 2_usize.pow(24);
+        let tx_data: Vec<u8> = vec![6_u8; len];
+        let tx = Tx::new(vec![], Some(tx_data));
+        let result = runner.run(
+            vp_code,
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed[..],
+            &verifiers,
+        );
+        match result {
+            Err(Error::MemoryError(memory::Error::MemoryOutOfBounds(
+                wasmer::MemoryError::CouldNotGrow { .. },
+            ))) => {
+                // as expected
+            }
+            _ => panic!("Expected to run out of memory, got {:?}", result),
+        }
+    }
+
+    /// Test that when a transaction wasm goes over the wasm memory limit in the
+    /// value returned from host environment call during wasm execution, the
+    /// execution is aborted.
+    #[test]
+    fn test_tx_memory_limiter_in_host_env() {
+        let runner = TxRunner::new();
+        let mut storage = TestStorage::default();
+        let mut write_log = WriteLog::default();
+        let mut gas_meter = BlockGasMeter::default();
+
+        let tx_read_key =
+            std::fs::read(TX_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
+
+        // Allocating `2^24` (16 MiB) for a value in storage that the tx
+        // attempts to read should be above the memory limit and should
+        // fail
+        let len = 2_usize.pow(24);
+        let value: Vec<u8> = vec![6_u8; len];
+        let key_raw = "key";
+        let key = Key::parse(key_raw.to_string()).unwrap();
+        // Write the value that should be read by the tx into the storage. When
+        // writing directly to storage, the value has to be encoded with
+        // Borsh.
+        storage.write(&key, value.try_to_vec().unwrap()).unwrap();
+        let tx_data = key.try_to_vec().unwrap();
+        let error = runner
+            .run(
+                &storage,
+                &mut write_log,
+                &mut gas_meter,
+                tx_read_key,
+                tx_data,
+            )
+            .expect_err("Expected to run out of memory");
+        assert_eq!(
+            get_trap_code(&error),
+            Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
+        );
+    }
+
+    /// Test that when a validity predicate wasm goes over the wasm memory limit
+    /// in the value returned from host environment call during wasm
+    /// execution, the execution is aborted.
+    #[test]
+    fn test_vp_memory_limiter_in_host_env() {
+        let runner = VpRunner::new();
+        let mut storage = TestStorage::default();
+        let addr = storage.address_gen.generate_address("rng seed");
+        let write_log = WriteLog::default();
+        let mut gas_meter = VpGasMeter::new(0);
+        let keys_changed = vec![];
+        let verifiers = HashSet::new();
+
+        let vp_read_key =
+            std::fs::read(VP_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
+
+        // Allocating `2^24` (16 MiB) for a value in storage that the tx
+        // attempts to read should be above the memory limit and should
+        // fail
+        let len = 2_usize.pow(24);
+        let value: Vec<u8> = vec![6_u8; len];
+        let key_raw = "key";
+        let key = Key::parse(key_raw.to_string()).unwrap();
+        // Write the value that should be read by the tx into the storage. When
+        // writing directly to storage, the value has to be encoded with
+        // Borsh.
+        storage.write(&key, value.try_to_vec().unwrap()).unwrap();
+        let tx_data = key.try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        let error = runner
+            .run(
+                vp_read_key,
+                &tx,
+                &addr,
+                &storage,
+                &write_log,
+                &mut gas_meter,
+                &keys_changed[..],
+                &verifiers,
+            )
+            .expect_err("Expected to run out of memory");
+        assert_eq!(
+            get_trap_code(&error),
+            Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
+        );
+    }
+
+    /// Test that when a validity predicate wasm goes over the wasm memory limit
+    /// in the value returned from host environment call during wasm execution,
+    /// inside the wasm execution calling `eval` host function, the `eval` fails
+    /// and hence returns `false`.
+    #[test]
+    fn test_vp_memory_limiter_in_host_env_inside_guest_calling_eval() {
+        let runner = VpRunner::new();
+        let mut storage = TestStorage::default();
+        let addr = storage.address_gen.generate_address("rng seed");
+        let write_log = WriteLog::default();
+        let mut gas_meter = VpGasMeter::new(0);
+        let keys_changed = vec![];
+        let verifiers = HashSet::new();
+
+        // This code will call `eval` with the other VP below
+        let vp_eval = std::fs::read(VP_EVAL_WASM).expect("cannot load wasm");
+        // This code will read value from the storage
+        let vp_read_key =
+            std::fs::read(VP_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
+
+        // Allocating `2^24` (16 MiB) for a value in storage that the tx
+        // attempts to read should be above the memory limit and should
+        // fail
+        let len = 2_usize.pow(24);
+        let value: Vec<u8> = vec![6_u8; len];
+        let key_raw = "key";
+        let key = Key::parse(key_raw.to_string()).unwrap();
+        // Write the value that should be read by the tx into the storage. When
+        // writing directly to storage, the value has to be encoded with
+        // Borsh.
+        storage.write(&key, value.try_to_vec().unwrap()).unwrap();
+        let input = 2_usize.pow(23).try_to_vec().unwrap();
+        let eval_vp = EvalVp {
+            vp_code: vp_read_key,
+            input,
+        };
+        let tx_data = eval_vp.try_to_vec().unwrap();
+        let tx = Tx::new(vec![], Some(tx_data));
+        let passed = runner
+            .run(
+                vp_eval,
+                &tx,
+                &addr,
+                &storage,
+                &write_log,
+                &mut gas_meter,
+                &keys_changed[..],
+                &verifiers,
+            )
+            .unwrap();
+        assert!(!passed);
+    }
+
+    fn loop_in_tx_wasm(loops: u32) -> Result<HashSet<Address>> {
         // A transaction with a recursive loop.
-        // The boilerplate code is generated from tx.wasm using `wasm2wat` and
-        // the loop code is hand-written.
+        // The boilerplate code is generated from tx_template.wasm using
+        // `wasm2wat` and the loop code is hand-written.
         let tx_code = wasmer::wat2wasm(
             format!(
                 r#"
             (module
-                (type (;0;) (func (param i64 i64) (result i64)))
+                (type (;0;) (func (param i64 i64)))
 
                 ;; recursive loop, the param is the number of loops
                 (func $loop (param i64) (result i64)
@@ -663,14 +1119,15 @@ mod tests {
                 (then (get_local 0))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
-                (func $apply_tx (type 0) (param i64 i64) (result i64)
-                (call $loop (i64.const {})))
+                (func $_apply_tx (type 0) (param i64 i64)
+                (call $loop (i64.const {}))
+                drop)
 
                 (table (;0;) 1 1 funcref)
                 (memory (;0;) 16)
                 (global (;0;) (mut i32) (i32.const 1048576))
                 (export "memory" (memory 0))
-                (export "apply_tx" (func $apply_tx)))
+                (export "_apply_tx" (func $_apply_tx)))
             "#,
                 loops
             )
@@ -684,38 +1141,17 @@ mod tests {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
-        let error = runner
-            .run(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
-            .expect_err(
-                "Expecting runtime error \"unreachable\" caused by \
-                 stack-height overflow",
-            );
-        if let Error::RuntimeError(err) = &error {
-            if let Some(trap_code) = err.clone().to_trap() {
-                return assert_eq!(
-                    trap_code,
-                    wasmer_vm::TrapCode::UnreachableCodeReached
-                );
-            }
-        }
-        println!("Failed with unexpected error: {}", error);
+        runner.run(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
     }
 
-    /// Test that when a VP wasm goes over the stack-height limit, the execution
-    /// is aborted.
-    #[test]
-    fn test_vp_stack_limiter() {
-        // Because each call into `$loop` inside the wasm consumes 4 stack
-        // heights, this should trigger stack limiter. If we were to subtract
-        // one from this value, we should be just under the limit.
-        let loops = WASM_STACK_LIMIT / 4;
+    fn loop_in_vp_wasm(loops: u32) -> Result<bool> {
         // A validity predicate with a recursive loop.
-        // The boilerplate code is generated from vp.wasm using `wasm2wat` and
-        // the loop code is hand-written.
+        // The boilerplate code is generated from vp_template.wasm using
+        // `wasm2wat` and the loop code is hand-written.
         let vp_code = wasmer::wat2wasm(format!(
             r#"
             (module
-                (type (;0;) (func (param i64 i64 i64 i64 i64 i64) (result i64)))
+                (type (;0;) (func (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)))
 
                 ;; recursive loop, the param is the number of loops
                 (func $loop (param i64) (result i64)
@@ -725,14 +1161,14 @@ mod tests {
                 (then (get_local 0))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
-                (func $validate_tx (type 0) (param i64 i64 i64 i64 i64 i64) (result i64)
+                (func $_validate_tx (type 0) (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)
                 (call $loop (i64.const {})))
 
                 (table (;0;) 1 1 funcref)
                 (memory (;0;) 16)
                 (global (;0;) (mut i32) (i32.const 1048576))
                 (export "memory" (memory 0))
-                (export "validate_tx" (func $validate_tx)))
+                (export "_validate_tx" (func $_validate_tx)))
             "#, loops).as_bytes(),
         )
         .expect("unexpected error converting wat2wasm").into_owned();
@@ -745,29 +1181,27 @@ mod tests {
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = vec![];
         let verifiers = HashSet::new();
-        let error = runner
-            .run(
-                vp_code,
-                &tx,
-                &addr,
-                &storage,
-                &write_log,
-                &mut gas_meter,
-                &keys_changed[..],
-                &verifiers,
-            )
-            .expect_err(
-                "Expecting runtime error \"unreachable\" caused by \
-                 stack-height overflow",
-            );
-        if let Error::RuntimeError(err) = &error {
+        runner.run(
+            vp_code,
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed[..],
+            &verifiers,
+        )
+    }
+
+    fn get_trap_code(error: &Error) -> Either<TrapCode, String> {
+        if let Error::RuntimeError(err) = error {
             if let Some(trap_code) = err.clone().to_trap() {
-                return assert_eq!(
-                    trap_code,
-                    wasmer_vm::TrapCode::UnreachableCodeReached
-                );
+                Either::Left(trap_code)
+            } else {
+                Either::Right(format!("Missing trap code {}", err))
             }
+        } else {
+            Either::Right(format!("Unexpected error {}", error))
         }
-        println!("Failed with unexpected error: {}", error);
     }
 }

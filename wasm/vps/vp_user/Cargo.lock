@@ -44,6 +44,7 @@ dependencies = [
  "wasmer",
  "wasmer-compiler-singlepass",
  "wasmer-engine-jit",
+ "wasmer-vm",
  "wasmparser 0.78.2",
 ]
 
