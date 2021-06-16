@@ -294,7 +294,10 @@ pub mod tests {
 /// Helpers for testing with addresses.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use proptest::prelude::*;
+
     use super::*;
+    use crate::types::key::ed25519;
 
     /// A sampled established address for tests
     pub fn established_address_1() -> Address {
@@ -304,5 +307,39 @@ pub mod testing {
     /// A sampled established address for tests
     pub fn established_address_2() -> Address {
         Address::decode("a1qq5qqqqqgcuyxv2pxgcrzdecx4prq3pexccr2vj9xse5gvf3gvmnv3f3xqcyyvjyxv6yvv34e393x7").expect("The token address decoding shouldn't fail")
+    }
+
+    /// Generate an arbitrary [`Address`].
+    pub fn arb_address() -> impl Strategy<Value = Address> {
+        prop_oneof![
+            arb_established_address().prop_map(Address::Established),
+            arb_implicit_address().prop_map(Address::Implicit),
+        ]
+    }
+
+    /// Generate an arbitrary [`EstablishedAddress`].
+    pub fn arb_established_address() -> impl Strategy<Value = EstablishedAddress>
+    {
+        any::<Vec<u8>>().prop_map(|rng_source| {
+            let mut key_gen = EstablishedAddressGen::new("seed");
+            match key_gen.generate_address(rng_source) {
+                Address::Established(addr) => addr,
+                _ => {
+                    panic!(
+                        "Assuming key gen to only generated established \
+                         addresses"
+                    )
+                }
+            }
+        })
+    }
+
+    /// Generate an arbitrary [`ImplicitAddress`].
+    pub fn arb_implicit_address() -> impl Strategy<Value = ImplicitAddress> {
+        ed25519::testing::arb_keypair().prop_map(|keypair| {
+            let pk = ed25519::PublicKey::from(keypair.public);
+            let pkh = ed25519::PublicKeyHash::from(pk);
+            ImplicitAddress::Ed25519(pkh)
+        })
     }
 }

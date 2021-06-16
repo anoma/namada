@@ -241,20 +241,28 @@ impl WriteLog {
         &self,
         verifiers_from_tx: &HashSet<Address>,
     ) -> HashMap<Address, Vec<Key>> {
+        let (changed_keys, initialized_accounts) = self.get_partitioned_keys();
         let mut verifiers =
             verifiers_from_tx
                 .iter()
                 .fold(HashMap::new(), |mut acc, addr| {
-                    acc.insert(addr.clone(), vec![]);
+                    let changed_keys: Vec<Key> =
+                        changed_keys.iter().map(|&key| key.clone()).collect();
+                    acc.insert(addr.clone(), changed_keys);
                     acc
                 });
 
-        let (changed_keys, initialized_accounts) = self.get_partitioned_keys();
         // get changed keys grouped by the address
         for key in changed_keys {
             for addr in &key.find_addresses() {
-                match verifiers.get_mut(&addr) {
-                    Some(keys) => keys.push(key.clone()),
+                match verifiers.get(&addr) {
+                    Some(_keys) => {
+                        // We can skip this, because it's been added from the Tx
+                        // above, which associates with this address all the
+                        // changed storage keys, even if their address is not
+                        // included in the key.
+                        continue;
+                    }
                     None => {
                         verifiers.insert(addr.clone(), vec![key.clone()]);
                     }
@@ -273,6 +281,9 @@ impl WriteLog {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
+
     use super::*;
 
     #[test]
@@ -446,5 +457,91 @@ mod tests {
         assert!(value.is_none());
         let (value, _) = storage.read(&key3).expect("read failed");
         assert_eq!(value.expect("no read value"), val3);
+    }
+
+    proptest! {
+        /// Test [`WriteLog::verifiers_changed_keys`] that:
+        /// 1. Every address from `verifiers_from_tx` is associated with all the
+        ///    changed storage keys.
+        /// 2. Every changed storage key except for keys to initialized accounts
+        ///    is associated with all the addresses included in the key.
+        /// 3. Every address is associated with all the newly initialized
+        ///    accounts.
+        #[test]
+        fn verifiers_changed_key_tx_all_key(
+            verifiers_from_tx in testing::arb_verifiers_from_tx(),
+            tx_write_log in testing::arb_tx_write_log(),
+        ) {
+            let write_log = WriteLog { tx_write_log, ..WriteLog::default() };
+            let mut all_keys = write_log.get_keys();
+            // Sort for comparison
+            all_keys.sort();
+
+            let result = write_log.verifiers_changed_keys(&verifiers_from_tx);
+
+            for verifier_from_tx in verifiers_from_tx {
+                assert!(result.contains_key(&verifier_from_tx));
+                let mut keys = result.get(&verifier_from_tx).unwrap().clone();
+                // Sort for comparison
+                keys.sort();
+                // Test for 1.
+                assert_eq!(&keys, &all_keys);
+            }
+
+            let (_changed_keys, initialized_accounts) = write_log.get_partitioned_keys();
+            for (_addr, keys) in result.iter() {
+                for key in keys {
+                    if !initialized_accounts.contains(&key) {
+                        for addr in &key.find_addresses() {
+                            let keys = result.get(addr).unwrap();
+                            // Test for 2.
+                            assert!(keys.contains(key));
+                        }
+                    }
+                }
+            }
+
+            for initialized_account in initialized_accounts {
+                for (_addr, keys) in result.iter() {
+                    // Test for 3.
+                    assert!(keys.contains(initialized_account));
+                }
+            }
+        }
+    }
+}
+
+/// Helpers for testing with write log.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use proptest::collection;
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::types::address::testing::arb_address;
+    use crate::types::storage::testing::arb_key;
+
+    /// Generate an arbitrary tx write log of [`HashMap<Key,
+    /// StorageModification>`].
+    pub fn arb_tx_write_log()
+    -> impl Strategy<Value = HashMap<Key, StorageModification>> {
+        collection::hash_map(arb_key(), arb_storage_modification(), 0..100)
+    }
+
+    /// Generate arbitrary verifiers from tx of [`HashSet<Address>>`].
+    pub fn arb_verifiers_from_tx() -> impl Strategy<Value = HashSet<Address>> {
+        collection::hash_set(arb_address(), 0..10)
+    }
+
+    /// Generate an arbitrary [`StorageModification`].
+    pub fn arb_storage_modification()
+    -> impl Strategy<Value = StorageModification> {
+        prop_oneof![
+            any::<Vec<u8>>()
+                .prop_map(|value| StorageModification::Write { value }),
+            Just(StorageModification::Delete),
+            any::<Vec<u8>>()
+                .prop_map(|vp| StorageModification::InitAccount { vp }),
+        ]
     }
 }
