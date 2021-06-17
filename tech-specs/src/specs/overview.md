@@ -1,6 +1,6 @@
 # Overview
 
-At high level, Anoma is composed of two main components: distributed ledger and intent gossip with matching system. While they are designed to complement each other, they can be operated separately.
+At a high level, Anoma is composed of two main components: the distributed ledger and the intent gossip / matchmaking system. While they are designed to complement each other, they can be operated separately.
 
 ## The ledger
 
@@ -17,4 +17,3 @@ To prevent transaction front-running, the ledger employs a DKG scheme as impleme
 ## The intent gossip with matchmaking system
 
 - TODO add an overview
-
