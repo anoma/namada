@@ -38,7 +38,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Debug)]
 pub struct TxResult {
     pub gas_used: u64,
-    pub changed_keys: Vec<Key>,
+    pub changed_keys: HashSet<Key>,
     pub vps_result: VpsResult,
 }
 
@@ -128,7 +128,7 @@ fn check_vps(
     let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
     // collect the changed storage keys and VPs for the verifiers
-    let verifiers: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers
+    let verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
             let (vp, gas) = storage
@@ -160,7 +160,7 @@ fn check_vps(
 
 /// Execute verifiers' validity predicates
 fn execute_vps(
-    verifiers: Vec<(Address, Vec<Key>, Vec<u8>)>,
+    verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)>,
     tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
@@ -227,7 +227,7 @@ fn execute_vp(
     write_log: &WriteLog,
     addresses: HashSet<Address>,
     vp_gas_meter: &mut VpGasMeter,
-    (addr, keys, vp): (&Address, &[Key], &[u8]),
+    (addr, keys, vp): (&Address, &HashSet<Key>, &[u8]),
 ) -> Result<VpsResult> {
     let vp_runner = VpRunner::new();
 

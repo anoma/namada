@@ -45,7 +45,7 @@ pub mod main {
     fn validate_tx(
         _tx_data: Vec<u8>,
         _addr: Address,
-        _keys_changed: Vec<storage::Key>,
+        _keys_changed: HashSet<storage::Key>,
         _verifiers: HashSet<Address>,
     ) -> bool {
         true
@@ -61,7 +61,7 @@ pub mod main {
     fn validate_tx(
         _tx_data: Vec<u8>,
         _addr: Address,
-        _keys_changed: Vec<storage::Key>,
+        _keys_changed: HashSet<storage::Key>,
         _verifiers: HashSet<Address>,
     ) -> bool {
         false
@@ -78,7 +78,7 @@ pub mod main {
     fn validate_tx(
         tx_data: Vec<u8>,
         _addr: Address,
-        _keys_changed: Vec<storage::Key>,
+        _keys_changed: HashSet<storage::Key>,
         _verifiers: HashSet<Address>,
     ) -> bool {
         use validity_predicate::EvalVp;
@@ -98,7 +98,7 @@ pub mod main {
     fn validate_tx(
         tx_data: Vec<u8>,
         _addr: Address,
-        _keys_changed: Vec<storage::Key>,
+        _keys_changed: HashSet<storage::Key>,
         _verifiers: HashSet<Address>,
     ) -> bool {
         let len = usize::try_from_slice(&tx_data[..]).unwrap();
@@ -120,7 +120,7 @@ pub mod main {
     fn validate_tx(
         tx_data: Vec<u8>,
         _addr: Address,
-        _keys_changed: Vec<storage::Key>,
+        _keys_changed: HashSet<storage::Key>,
         _verifiers: HashSet<Address>,
     ) -> bool {
         // Allocates a memory of size given from the `tx_data (usize)`

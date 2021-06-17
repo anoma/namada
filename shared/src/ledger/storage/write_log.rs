@@ -161,7 +161,7 @@ impl WriteLog {
     /// Get the storage keys changed and accounts keys initialized in the
     /// current transaction. The account keys point to the validity predicates
     /// of the newly created accounts.
-    pub fn get_keys(&self) -> Vec<Key> {
+    pub fn get_keys(&self) -> HashSet<Key> {
         self.tx_write_log.keys().cloned().collect()
     }
 
@@ -171,7 +171,7 @@ impl WriteLog {
     /// initialized accounts, but may include keys of other data written
     /// into newly initialized accounts. The accounts keys point to the validity
     /// predicates of the newly created accounts.
-    pub fn get_partitioned_keys(&self) -> (Vec<&Key>, Vec<&Key>) {
+    pub fn get_partitioned_keys(&self) -> (HashSet<&Key>, HashSet<&Key>) {
         use itertools::{Either, Itertools};
         self.tx_write_log
             .iter()
@@ -240,13 +240,13 @@ impl WriteLog {
     pub fn verifiers_changed_keys(
         &self,
         verifiers_from_tx: &HashSet<Address>,
-    ) -> HashMap<Address, Vec<Key>> {
+    ) -> HashMap<Address, HashSet<Key>> {
         let (changed_keys, initialized_accounts) = self.get_partitioned_keys();
         let mut verifiers =
             verifiers_from_tx
                 .iter()
                 .fold(HashMap::new(), |mut acc, addr| {
-                    let changed_keys: Vec<Key> =
+                    let changed_keys: HashSet<Key> =
                         changed_keys.iter().map(|&key| key.clone()).collect();
                     acc.insert(addr.clone(), changed_keys);
                     acc
@@ -263,9 +263,13 @@ impl WriteLog {
                     continue;
                 }
                 match verifiers.get_mut(&addr) {
-                    Some(keys) => keys.push(key.clone()),
+                    Some(keys) => {
+                        keys.insert(key.clone());
+                    }
                     None => {
-                        verifiers.insert(addr.clone(), vec![key.clone()]);
+                        let keys: HashSet<Key> =
+                            [key].iter().map(|&key| key.clone()).collect();
+                        verifiers.insert(addr.clone(), keys);
                     }
                 }
             }
@@ -273,7 +277,7 @@ impl WriteLog {
         // The new accounts should be validated by every verifier's VP
         for key in initialized_accounts {
             for (_verifier, keys) in verifiers.iter_mut() {
-                keys.push(key.clone());
+                keys.insert(key.clone());
             }
         }
         verifiers
@@ -474,17 +478,13 @@ mod tests {
             tx_write_log in testing::arb_tx_write_log(),
         ) {
             let write_log = WriteLog { tx_write_log, ..WriteLog::default() };
-            let mut all_keys = write_log.get_keys();
-            // Sort for comparison
-            all_keys.sort();
+            let all_keys = write_log.get_keys();
 
             let result = write_log.verifiers_changed_keys(&verifiers_from_tx);
 
             for verifier_from_tx in verifiers_from_tx {
                 assert!(result.contains_key(&verifier_from_tx));
-                let mut keys = result.get(&verifier_from_tx).unwrap().clone();
-                // Sort for comparison
-                keys.sort();
+                let keys = result.get(&verifier_from_tx).unwrap().clone();
                 // Test for 1.
                 assert_eq!(&keys, &all_keys);
             }

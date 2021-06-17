@@ -24,10 +24,7 @@ use crate::vm::host_env::VpEvalRunner;
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::types::{TxInput, VpInput};
 use crate::vm::wasm::memory;
-use crate::vm::{
-    validate_untrusted_wasm, EnvHostSliceWrapper, EnvHostWrapper,
-    MutEnvHostWrapper,
-};
+use crate::vm::{validate_untrusted_wasm, EnvHostWrapper, MutEnvHostWrapper};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -222,7 +219,7 @@ impl VpRunner {
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
         vp_gas_meter: &mut VpGasMeter,
-        keys_changed: &[Key],
+        keys_changed: &HashSet<Key>,
         verifiers: &HashSet<Address>,
     ) -> Result<bool>
     where
@@ -247,8 +244,7 @@ impl VpRunner {
         // there is no shared access
         let gas_meter = unsafe { MutEnvHostWrapper::new(vp_gas_meter) };
         // Read-only access from parallel Vp runners
-        let env_keys_changed =
-            unsafe { EnvHostSliceWrapper::new(keys_changed) };
+        let env_keys_changed = unsafe { EnvHostWrapper::new(keys_changed) };
         // Read-only access from parallel Vp runners
         let env_verifiers = unsafe { EnvHostWrapper::new(verifiers) };
         // This is not thread-safe, but because each VP has its own instance
@@ -367,7 +363,7 @@ where
     /// The transaction code.
     pub tx: EnvHostWrapper<'a, &'a Tx>,
     /// The storage keys that have been changed.
-    pub keys_changed: EnvHostSliceWrapper<'a, &'a [Key]>,
+    pub keys_changed: EnvHostWrapper<'a, &'a HashSet<Key>>,
     /// The verifiers whose validity predicates should be triggered.
     pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
     /// Cache for 2-step reads from host environment.
@@ -760,7 +756,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = vec![];
+        let keys_changed = HashSet::new();
         let verifiers = HashSet::new();
 
         // This code will call `eval` with the other VP below
@@ -791,7 +787,7 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                &keys_changed[..],
+                &keys_changed,
                 &verifiers,
             )
             .unwrap();
@@ -817,7 +813,7 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                &keys_changed[..],
+                &keys_changed,
                 &verifiers,
             )
             .unwrap();
@@ -834,7 +830,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = vec![];
+        let keys_changed = HashSet::new();
         let verifiers = HashSet::new();
 
         // This code will allocate memory of the given size
@@ -855,7 +851,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
-            &keys_changed[..],
+            &keys_changed,
             &verifiers,
         );
         assert!(result.is_ok(), "Expected success, got {:?}", result);
@@ -872,7 +868,7 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                &keys_changed[..],
+                &keys_changed,
                 &verifiers,
             )
             .expect_err("Expected to run out of memory");
@@ -927,7 +923,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = vec![];
+        let keys_changed = HashSet::new();
         let verifiers = HashSet::new();
 
         let vp_code =
@@ -948,7 +944,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
-            &keys_changed[..],
+            &keys_changed,
             &verifiers,
         );
         match result {
@@ -1011,7 +1007,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = vec![];
+        let keys_changed = HashSet::new();
         let verifiers = HashSet::new();
 
         let vp_read_key =
@@ -1038,7 +1034,7 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                &keys_changed[..],
+                &keys_changed,
                 &verifiers,
             )
             .expect_err("Expected to run out of memory");
@@ -1059,7 +1055,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = vec![];
+        let keys_changed = HashSet::new();
         let verifiers = HashSet::new();
 
         // This code will call `eval` with the other VP below
@@ -1094,7 +1090,7 @@ mod tests {
                 &storage,
                 &write_log,
                 &mut gas_meter,
-                &keys_changed[..],
+                &keys_changed,
                 &verifiers,
             )
             .unwrap();
@@ -1179,7 +1175,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = vec![];
+        let keys_changed = HashSet::new();
         let verifiers = HashSet::new();
         runner.run(
             vp_code,
@@ -1188,7 +1184,7 @@ mod tests {
             &storage,
             &write_log,
             &mut gas_meter,
-            &keys_changed[..],
+            &keys_changed,
             &verifiers,
         )
     }
