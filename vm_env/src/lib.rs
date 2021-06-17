@@ -27,6 +27,9 @@ pub mod tx_prelude {
 }
 
 pub mod vp_prelude {
+    // used in the VP input
+    pub use std::collections::HashSet;
+
     pub use anoma_shared::types::address::Address;
     pub use anoma_shared::types::*;
     pub use anoma_vm_macro::validity_predicate;
