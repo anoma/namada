@@ -166,7 +166,7 @@ fn execute_vps(
     write_log: &WriteLog,
     initial_gas: u64,
 ) -> Result<VpsResult> {
-    let addresses = verifiers
+    let verifiers_addr = verifiers
         .iter()
         .map(|(addr, _, _)| addr)
         .cloned()
@@ -180,7 +180,7 @@ fn execute_vps(
                 tx,
                 storage,
                 write_log,
-                addresses.clone(),
+                &verifiers_addr,
                 &mut VpGasMeter::new(initial_gas),
                 (addr, keys, vp),
             )
@@ -225,7 +225,7 @@ fn execute_vp(
     tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
-    addresses: HashSet<Address>,
+    verifiers: &HashSet<Address>,
     vp_gas_meter: &mut VpGasMeter,
     (addr, keys, vp): (&Address, &HashSet<Key>, &[u8]),
 ) -> Result<VpsResult> {
@@ -240,7 +240,7 @@ fn execute_vp(
             write_log,
             vp_gas_meter,
             keys,
-            &addresses,
+            verifiers,
         )
         .map_err(Error::VpRunnerError);
 
