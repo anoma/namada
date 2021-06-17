@@ -15,13 +15,15 @@ A transaction [encoded with proto3](./encoding.md#transactions) received from AB
 
 For any error encountered in any of the following steps of transaction execution, the protocol MUST charge the gas used by the transaction and discard any storage changes that the transaction attempted to perform.
 
-1. Charge a base transaction [gas](#gas): \\[ \verb|BASE_TRANSACTION_FEE| \\]
+1. Charge a base transaction [gas](#gas):
+   \\[ \verb|BASE_TRANSACTION_FEE| \\]
 1. Decode the transaction bytes and validate the data. The field `timestamp` is required.
-1. Charge WASM compilation gas, proportional to the bytes `length` of the `code` field of the transaction (this is because the WASM code is compiled with a single-pass compiler): \\[ \verb|length| * \verb|COMPILE_GAS_PER_BYTE| \\].
+1. Charge WASM compilation gas, proportional to the bytes `length` of the `code` field of the transaction (this is because the WASM code is compiled with a single-pass compiler):
+   \\[ \verb|length| * \verb|COMPILE_GAS_PER_BYTE| \\]
 1. [Validate the WASM code](#wasm-validation) from the `code` field of the transaction.
 1. Inject a [gas counter](#gas) into the `code`.
 1. Inject a [stack height](#stack-height-limiter) limiter into the `code`.
-1. Compile the transaction `code` with single-pass compiler. The compilation computational complexity MUST be linear in proportion to the `code` size.
+1. Compile the transaction `code` with a single-pass compiler (for example, [the Wasmer runtime single-pass compiler](https://medium.com/wasmer/a-webassembly-compiler-tale-9ef37aa3b537)). The compilation computational complexity MUST be linear in proportion to the `code` size.
 1. Initialize the WASM linear memory with descriptor having the initial memory size equal to [`TX_MEMORY_INIT_PAGES`](#wasm-constants) and maximum memory size to [`TX_MEMORY_MAX_PAGES`](#wasm-constants).
 1. Instantiate the WASM module with imported [transaction host environment functions](#transaction-host-environment-functions) and the instantiated WASM memory.
 1. Write the transaction's `data` into the memory exported from the WASM module instance.
