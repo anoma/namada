@@ -157,7 +157,7 @@ where
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
-pub fn prepare_vp_imports<DB, H, EVAL>(
+fn prepare_vp_imports<DB, H, EVAL>(
     wasm_store: &Store,
     initial_memory: Memory,
     env: &VpEnv<'static, WasmMemory, DB, H, EVAL>,

@@ -70,7 +70,7 @@ impl Default for TestVpEnv {
             let env_result_buffer =
                 unsafe { MutEnvHostWrapper::new(&mut env.result_buffer) };
 
-            anoma_shared::vm::wasm::runner::VpEval {
+            anoma_shared::vm::wasm::run::WasmEval {
                 address: env.addr.clone(),
                 storage: env_storage,
                 write_log: env_write_log,
@@ -186,7 +186,7 @@ mod native_vp_host_env {
 
     #[cfg(feature = "wasm-runtime")]
     pub type VpEval =
-        anoma_shared::vm::wasm::runner::VpEval<'static, MockDB, Sha256Hasher>;
+        anoma_shared::vm::wasm::run::WasmEval<'static, MockDB, Sha256Hasher>;
     #[cfg(not(feature = "wasm-runtime"))]
     pub struct VpEval;
 
