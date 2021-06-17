@@ -16,7 +16,7 @@ A transaction [encoded with proto3](./encoding.md#transactions) received from AB
 For any error encountered in any of the following steps of transaction execution, the protocol MUST charge the gas used by the transaction and discard any storage changes that the transaction attempted to perform.
 
 1. Charge a base transaction [gas](#gas): \\[ \verb|BASE_TRANSACTION_FEE| \\]
-1. Decode the transaction bytes and validate the data.
+1. Decode the transaction bytes and validate the data. The field `timestamp` is required.
 1. Charge WASM compilation gas, proportional to the bytes `length` of the `code` field of the transaction (this is because the WASM code is compiled with a single-pass compiler): \\[ \verb|length| * \verb|COMPILE_GAS_PER_BYTE| \\].
 1. [Validate the WASM code](#wasm-validation) from the `code` field of the transaction.
 1. Inject a [gas counter](#gas) into the `code`.
