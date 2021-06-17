@@ -201,7 +201,7 @@ mod tests {
 
         let tx_data: Vec<u8> = vec![];
         let addr: Address = env.addr.clone();
-        let keys_changed: Vec<storage::Key> = vec![];
+        let keys_changed: Vec<storage::Key> = HashSet::default();
         let verifiers: HashSet<Address> = HashSet::default();
 
         let valid = validate_tx(tx_data, addr, keys_changed, verifiers);
