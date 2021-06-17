@@ -127,7 +127,7 @@ fn check_vps(
 ) -> Result<VpsResult> {
     let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
-    // collect the changed storage keys and VPs for the verifiers
+    // collect the VPs for the verifiers
     let verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
