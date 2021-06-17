@@ -6,7 +6,7 @@ At high level, Anoma is composed of two main components: distributed ledger and 
 
 The ledger is a distributed state machine, relying on functionality provided by [Tendermint](https://docs.tendermint.com/master/spec/) such as its BFT consensus algorithm with instant finality, P2P networking capabilities, transaction mempool and more. The ledger state machine is built on top the [ABCI](https://docs.tendermint.com/master/spec/abci/).
 
-For proposer selection, the ledger employs a proof-of-stake system.
+For block validator voting power assignment, the ledger employs a proof-of-stake system.
 
 The ledger's key-value storage is organized into blocks and user specific state is organized into accounts. The state machine executes transactions, which can apply arbitrary changes to the state that are validated by validity predicates associated with the accounts involved in the transaction.
 
