@@ -255,14 +255,15 @@ impl WriteLog {
         // get changed keys grouped by the address
         for key in changed_keys {
             for addr in &key.find_addresses() {
-                match verifiers.get(&addr) {
-                    Some(_keys) => {
-                        // We can skip this, because it's been added from the Tx
-                        // above, which associates with this address all the
-                        // changed storage keys, even if their address is not
-                        // included in the key.
-                        continue;
-                    }
+                if verifiers_from_tx.contains(addr) {
+                    // We can skip this, because it's been added from the Tx
+                    // above, which associates with this address all the
+                    // changed storage keys, even if their address is not
+                    // included in the key.
+                    continue;
+                }
+                match verifiers.get_mut(&addr) {
+                    Some(keys) => keys.push(key.clone()),
                     None => {
                         verifiers.insert(addr.clone(), vec![key.clone()]);
                     }
