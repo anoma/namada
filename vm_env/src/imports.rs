@@ -127,7 +127,12 @@ pub mod tx {
         }
     }
 
-    /// Insert a verifier
+    /// Insert a verifier address. This address must exist on chain, otherwise
+    /// the transaction will be rejected.
+    ///
+    /// Validity predicates of each verifier addresses inserted in the
+    /// transaction will validate the transaction and will received all the
+    /// changed storage keys and initialized accounts in their inputs.
     pub fn insert_verifier(addr: Address) {
         let addr = addr.encode();
         unsafe { anoma_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _) }
