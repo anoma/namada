@@ -4270,7 +4270,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/config-opt-values#eacdc2a0e4547f55af22870188a2ce0149feafa2"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -4301,7 +4301,7 @@ dependencies = [
 [[package]]
 name = "tendermint-abci"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/config-opt-values#eacdc2a0e4547f55af22870188a2ce0149feafa2"
 dependencies = [
  "bytes 1.0.1",
  "eyre",
@@ -4314,7 +4314,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/config-opt-values#eacdc2a0e4547f55af22870188a2ce0149feafa2"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",
@@ -4332,7 +4332,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/config-opt-values#eacdc2a0e4547f55af22870188a2ce0149feafa2"
 dependencies = [
  "async-trait",
  "bytes 1.0.1",
