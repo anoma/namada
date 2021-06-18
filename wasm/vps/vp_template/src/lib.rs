@@ -4,7 +4,7 @@ use anoma_vm_env::vp_prelude::*;
 fn validate_tx(
     tx_data: Vec<u8>,
     addr: Address,
-    keys_changed: Vec<storage::Key>,
+    keys_changed: HashSet<storage::Key>,
     verifiers: HashSet<Address>,
 ) -> bool {
     log_string(format!(

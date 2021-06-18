@@ -24,7 +24,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
 fn validate_tx(
     tx_data: Vec<u8>,
     addr: Address,
-    keys_changed: Vec<storage::Key>,
+    keys_changed: HashSet<storage::Key>,
     verifiers: HashSet<Address>,
 ) -> bool {
     log_string(format!(
@@ -201,7 +201,7 @@ mod tests {
 
         let tx_data: Vec<u8> = vec![];
         let addr: Address = env.addr.clone();
-        let keys_changed: Vec<storage::Key> = vec![];
+        let keys_changed: HashSet<storage::Key> = HashSet::default();
         let verifiers: HashSet<Address> = HashSet::default();
 
         let valid = validate_tx(tx_data, addr, keys_changed, verifiers);

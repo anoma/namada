@@ -27,7 +27,7 @@ pub struct VpInput<'a> {
     pub data: &'a [u8],
     /// The storage changed keys from the write log of storage updates
     /// performed by the transaction for the account associated with the VP
-    pub keys_changed: &'a [Key],
+    pub keys_changed: &'a HashSet<Key>,
     /// The verifiers to trigger VPs
     pub verifiers: &'a HashSet<Address>,
 }
