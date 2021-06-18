@@ -18,7 +18,7 @@ use crate::types::storage::Key;
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::types::KeyVal;
-use crate::vm::{EnvHostWrapper, MutEnvHostWrapper};
+use crate::vm::{HostRef, MutHostRef};
 
 const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
 const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
@@ -33,22 +33,22 @@ where
     /// The VM memory for bi-directional data passing
     pub memory: MEM,
     /// Read-only access to the storage
-    pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
+    pub storage: HostRef<'a, &'a Storage<DB, H>>,
     /// Read/write access to the write log.
     /// Not thread-safe, assuming single-threaded Tx runner
-    pub write_log: MutEnvHostWrapper<'a, &'a WriteLog>,
+    pub write_log: MutHostRef<'a, &'a WriteLog>,
     /// Storage prefix iterators.
     /// Not thread-safe, assuming single-threaded Tx runner
-    pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
+    pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// Transaction gas meter.
     /// Not thread-safe, assuming single-threaded Tx runner
-    pub gas_meter: MutEnvHostWrapper<'a, &'a BlockGasMeter>,
+    pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
     /// The verifiers whose validity predicates should be triggered.
     /// Not thread-safe, assuming single-threaded Tx runner
-    pub verifiers: MutEnvHostWrapper<'a, &'a HashSet<Address>>,
+    pub verifiers: MutHostRef<'a, &'a HashSet<Address>>,
     /// Cache for 2-step reads from host environment.
     /// Not thread-safe, assuming single-threaded Tx runner
-    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
+    pub result_buffer: MutHostRef<'a, &'a Option<Vec<u8>>>,
 }
 
 impl<MEM, DB, H> Clone for TxEnv<'_, MEM, DB, H>
@@ -84,26 +84,26 @@ where
     pub address: Address,
     /// Read-only access to the storage.
     /// Thread-safe read-only access from parallel Vp runners
-    pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
+    pub storage: HostRef<'a, &'a Storage<DB, H>>,
     /// Read-only access to the write log.
     /// Thread-safe read-only access from parallel Vp runners
-    pub write_log: EnvHostWrapper<'a, &'a WriteLog>,
+    pub write_log: HostRef<'a, &'a WriteLog>,
     /// Storage prefix iterators.
     /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
-    pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
+    pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// VP gas meter.
     /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
-    pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
+    pub gas_meter: MutHostRef<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
-    pub tx: EnvHostWrapper<'a, &'a Tx>,
+    pub tx: HostRef<'a, &'a Tx>,
     /// The runner of the [`vp_eval`] function
-    pub eval_runner: EnvHostWrapper<'a, &'a EVAL>,
+    pub eval_runner: HostRef<'a, &'a EVAL>,
     /// Cache for 2-step reads from host environment.
     /// This is not thread-safe, but because each VP has its own instance there
     /// is no shared access
-    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
+    pub result_buffer: MutHostRef<'a, &'a Option<Vec<u8>>>,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -1246,12 +1246,12 @@ pub mod testing {
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher,
     {
-        let storage = unsafe { EnvHostWrapper::new(storage) };
-        let write_log = unsafe { MutEnvHostWrapper::new(write_log) };
-        let iterators = unsafe { MutEnvHostWrapper::new(iterators) };
-        let verifiers = unsafe { MutEnvHostWrapper::new(verifiers) };
-        let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
-        let result_buffer = unsafe { MutEnvHostWrapper::new(result_buffer) };
+        let storage = unsafe { HostRef::new(storage) };
+        let write_log = unsafe { MutHostRef::new(write_log) };
+        let iterators = unsafe { MutHostRef::new(iterators) };
+        let verifiers = unsafe { MutHostRef::new(verifiers) };
+        let gas_meter = unsafe { MutHostRef::new(gas_meter) };
+        let result_buffer = unsafe { MutHostRef::new(result_buffer) };
         TxEnv {
             memory: NativeMemory,
             storage,
@@ -1280,13 +1280,13 @@ pub mod testing {
         H: StorageHasher,
         EVAL: VpEvalRunner,
     {
-        let storage = unsafe { EnvHostWrapper::new(storage) };
-        let write_log = unsafe { EnvHostWrapper::new(write_log) };
-        let iterators = unsafe { MutEnvHostWrapper::new(iterators) };
-        let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
-        let tx = unsafe { EnvHostWrapper::new(tx) };
-        let eval_runner = unsafe { EnvHostWrapper::new(eval_runner) };
-        let result_buffer = unsafe { MutEnvHostWrapper::new(result_buffer) };
+        let storage = unsafe { HostRef::new(storage) };
+        let write_log = unsafe { HostRef::new(write_log) };
+        let iterators = unsafe { MutHostRef::new(iterators) };
+        let gas_meter = unsafe { MutHostRef::new(gas_meter) };
+        let tx = unsafe { HostRef::new(tx) };
+        let eval_runner = unsafe { HostRef::new(eval_runner) };
+        let result_buffer = unsafe { MutHostRef::new(result_buffer) };
         VpEnv {
             memory: NativeMemory,
             address,

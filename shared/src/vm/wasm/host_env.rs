@@ -22,7 +22,7 @@ use crate::vm::host_env::{
 };
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::wasm::memory::WasmMemory;
-use crate::vm::{host_env, EnvHostWrapper, MutEnvHostWrapper};
+use crate::vm::{host_env, HostRef, MutHostRef};
 
 impl<DB, H> WasmerEnv for TxEnv<'_, WasmMemory, DB, H>
 where
@@ -77,12 +77,12 @@ impl WasmerEnv for FilterEnv<WasmMemory> {
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_tx_imports<DB, H>(
     wasm_store: &Store,
-    storage: EnvHostWrapper<'static, &'static Storage<DB, H>>,
-    write_log: MutEnvHostWrapper<'static, &WriteLog>,
-    iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
-    verifiers: MutEnvHostWrapper<'static, &HashSet<Address>>,
-    gas_meter: MutEnvHostWrapper<'static, &BlockGasMeter>,
-    result_buffer: MutEnvHostWrapper<'static, &Option<Vec<u8>>>,
+    storage: HostRef<'static, &'static Storage<DB, H>>,
+    write_log: MutHostRef<'static, &WriteLog>,
+    iterators: MutHostRef<'static, &PrefixIterators<'static, DB>>,
+    verifiers: MutHostRef<'static, &HashSet<Address>>,
+    gas_meter: MutHostRef<'static, &BlockGasMeter>,
+    result_buffer: MutHostRef<'static, &Option<Vec<u8>>>,
     initial_memory: Memory,
 ) -> ImportObject
 where
@@ -127,13 +127,13 @@ where
 pub fn prepare_vp_env<DB, H, EVAL>(
     wasm_store: &Store,
     addr: Address,
-    storage: EnvHostWrapper<'static, &'static Storage<DB, H>>,
-    write_log: EnvHostWrapper<'static, &WriteLog>,
-    iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
-    gas_meter: MutEnvHostWrapper<'static, &VpGasMeter>,
-    tx: EnvHostWrapper<'static, &Tx>,
-    eval_runner: EnvHostWrapper<'static, &'static EVAL>,
-    result_buffer: MutEnvHostWrapper<'static, &Option<Vec<u8>>>,
+    storage: HostRef<'static, &'static Storage<DB, H>>,
+    write_log: HostRef<'static, &WriteLog>,
+    iterators: MutHostRef<'static, &PrefixIterators<'static, DB>>,
+    gas_meter: MutHostRef<'static, &VpGasMeter>,
+    tx: HostRef<'static, &Tx>,
+    eval_runner: HostRef<'static, &'static EVAL>,
+    result_buffer: MutHostRef<'static, &Option<Vec<u8>>>,
     initial_memory: Memory,
 ) -> ImportObject
 where

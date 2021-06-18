@@ -9,7 +9,7 @@ use anoma_shared::types::address::{self, Address};
 use anoma_shared::types::storage::{self, Key};
 use anoma_shared::vm;
 use anoma_shared::vm::prefix_iter::PrefixIterators;
-use anoma_shared::vm::{EnvHostWrapper, MutEnvHostWrapper};
+use anoma_shared::vm::{HostRef, MutHostRef};
 
 use crate::tx::{init_tx_env, TestTxEnv};
 
@@ -57,18 +57,15 @@ impl Default for TestVpEnv {
 
         #[cfg(feature = "wasm-runtime")]
         let eval_runner = {
-            let env_storage = unsafe { EnvHostWrapper::new(&env.storage) };
-            let env_write_log = unsafe { EnvHostWrapper::new(&env.write_log) };
-            let env_iterators =
-                unsafe { MutEnvHostWrapper::new(&mut env.iterators) };
-            let env_gas_meter =
-                unsafe { MutEnvHostWrapper::new(&mut env.gas_meter) };
-            let env_tx = unsafe { EnvHostWrapper::new(&env.tx) };
-            let env_keys_changed =
-                unsafe { EnvHostWrapper::new(&env.keys_changed) };
-            let env_verifiers = unsafe { EnvHostWrapper::new(&env.verifiers) };
+            let env_storage = unsafe { HostRef::new(&env.storage) };
+            let env_write_log = unsafe { HostRef::new(&env.write_log) };
+            let env_iterators = unsafe { MutHostRef::new(&mut env.iterators) };
+            let env_gas_meter = unsafe { MutHostRef::new(&mut env.gas_meter) };
+            let env_tx = unsafe { HostRef::new(&env.tx) };
+            let env_keys_changed = unsafe { HostRef::new(&env.keys_changed) };
+            let env_verifiers = unsafe { HostRef::new(&env.verifiers) };
             let env_result_buffer =
-                unsafe { MutEnvHostWrapper::new(&mut env.result_buffer) };
+                unsafe { MutHostRef::new(&mut env.result_buffer) };
 
             anoma_shared::vm::wasm::run::WasmEval {
                 address: env.addr.clone(),
