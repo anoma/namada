@@ -7,11 +7,15 @@ mod tests {
     use rexpect::session::spawn_command;
     use tempfile::tempdir;
 
-    // timeout for commands (may include Cargo build when ran via Cargo)
-    const TIMEOUT_MS: u64 = 100_000;
+    // timeout for commands
+    const TIMEOUT_MS: u64 = 10_000;
 
+    /// Test that when we "run-ledger" from fresh state, the node starts-up
+    /// successfully.
     #[test]
     fn run_ledger() {
+        setup();
+
         let base_dir = tempdir().unwrap();
 
         std::env::set_current_dir("..").unwrap();
@@ -28,5 +32,9 @@ mod tests {
         let mut p = spawn_command(cmd, Some(TIMEOUT_MS)).unwrap();
         p.exp_string("anoma::node::ledger: No state could be found")
             .unwrap();
+    }
+
+    fn setup() {
+        Command::new("cargo").arg("build").output().unwrap();
     }
 }
