@@ -3,6 +3,7 @@
 ## The protocol
 
 - TODO describe DKG transactions
+- TODO DKG transactions will include replay protection (this is because we can simply check a counter against the source (i.e. gas payer) of the transaction before the transactions order is committed to by the DKG protocol, which could affect the expected counter order for sources with multiple queued transactions)
 
 ### Transactions
 
