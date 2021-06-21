@@ -148,7 +148,6 @@ where
 /// Execute a validity predicate code. Returns whether the validity
 /// predicate accepted storage modifications performed by the transaction
 /// that triggered the execution.
-// TODO consider using a wrapper object for all the host env references
 #[allow(clippy::too_many_arguments)]
 pub fn vp<DB, H>(
     vp_code: impl AsRef<[u8]>,
@@ -176,7 +175,6 @@ where
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
     let mut result_buffer: Option<Vec<u8>> = None;
-
     let eval_runner = VpEvalWasm {
         db: PhantomData,
         hasher: PhantomData,
