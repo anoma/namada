@@ -9,6 +9,9 @@ use tracing_subscriber::fmt::Subscriber;
 
 pub const ENV_KEY: &str = "ANOMA_LOG";
 
+// Env var to enable/disable color log
+const COLOR_ENV_KEY: &str = "ANOMA_LOG_COLOR";
+
 pub fn init_from_env_or(default: impl Into<Directive>) -> Result<()> {
     let filter = filter_from_env_or(default);
     set_subscriber(filter)?;
@@ -22,7 +25,16 @@ pub fn filter_from_env_or(default: impl Into<Directive>) -> EnvFilter {
 }
 
 pub fn set_subscriber(filter: EnvFilter) -> Result<()> {
-    let my_collector = Subscriber::builder().with_env_filter(filter).finish();
+    let with_color = if let Ok(val) = env::var(COLOR_ENV_KEY) {
+        val.to_ascii_lowercase() != "false"
+    } else {
+        true
+    };
+
+    let my_collector = Subscriber::builder()
+        .with_ansi(with_color)
+        .with_env_filter(filter)
+        .finish();
     tracing::subscriber::set_global_default(my_collector)
         .wrap_err("Failed to set log subscriber")
 }
