@@ -61,7 +61,7 @@ impl Default for TestVpEnv {
 /// Initialize the host environment inside the [`vp_host_env`] module by running
 /// a transaction. The transaction is expected to modify the given address
 /// `addr` or to add it to the set of verifiers using
-/// [`tx_host_env::insert_verifier`].
+/// [`super::tx::tx_host_env::insert_verifier`].
 pub fn init_vp_env_from_tx<F>(
     addr: Address,
     mut tx_env: TestTxEnv,

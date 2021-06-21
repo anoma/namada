@@ -391,7 +391,7 @@ pub mod vp {
     }
 
     /// Verify a transaction signature. The signature is expected to have been
-    /// produced on the encoded transaction [`anoma_shared::proto::types::Tx`]
+    /// produced on the encoded transaction [`anoma_shared::proto::Tx`]
     /// using [`anoma_shared::types::key::ed25519::sign_tx`].
     pub fn verify_tx_signature(pk: &PublicKey, sig: &Signature) -> bool {
         let pk = BorshSerialize::try_to_vec(pk).unwrap();
