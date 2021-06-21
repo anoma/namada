@@ -281,8 +281,8 @@ fn run_vp(
 #[derive(Default)]
 pub struct VpEvalWasm<DB, H>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
 {
     db: PhantomData<*const DB>,
     hasher: PhantomData<*const H>,
