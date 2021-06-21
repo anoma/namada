@@ -32,23 +32,69 @@ where
 {
     /// The VM memory for bi-directional data passing
     pub memory: MEM,
-    /// Read-only access to the storage
+    /// The tx context contains references to host structures.
+    pub ctx: TxCtx<'a, DB, H>,
+}
+
+/// A transaction's host context
+pub struct TxCtx<'a, DB, H>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Read-only access to the storage.
     pub storage: HostRef<'a, &'a Storage<DB, H>>,
     /// Read/write access to the write log.
-    /// Not thread-safe, assuming single-threaded Tx runner
     pub write_log: MutHostRef<'a, &'a WriteLog>,
     /// Storage prefix iterators.
-    /// Not thread-safe, assuming single-threaded Tx runner
     pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// Transaction gas meter.
-    /// Not thread-safe, assuming single-threaded Tx runner
     pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
     /// The verifiers whose validity predicates should be triggered.
-    /// Not thread-safe, assuming single-threaded Tx runner
     pub verifiers: MutHostRef<'a, &'a HashSet<Address>>,
     /// Cache for 2-step reads from host environment.
-    /// Not thread-safe, assuming single-threaded Tx runner
     pub result_buffer: MutHostRef<'a, &'a Option<Vec<u8>>>,
+}
+
+impl<'a, MEM, DB, H> TxEnv<'a, MEM, DB, H>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Create a new environment for transaction execution.
+    ///
+    /// # Safety
+    ///
+    /// The way the arguments to this function are used is not thread-safe,
+    /// we're assuming single-threaded tx execution with exclusive access to the
+    /// mutable references.
+    pub fn new(
+        memory: MEM,
+        storage: &Storage<DB, H>,
+        write_log: &mut WriteLog,
+        iterators: &mut PrefixIterators<'a, DB>,
+        gas_meter: &mut BlockGasMeter,
+        verifiers: &mut HashSet<Address>,
+        result_buffer: &mut Option<Vec<u8>>,
+    ) -> Self {
+        let storage = unsafe { HostRef::new(storage) };
+        let write_log = unsafe { MutHostRef::new(write_log) };
+        let iterators = unsafe { MutHostRef::new(iterators) };
+        let gas_meter = unsafe { MutHostRef::new(gas_meter) };
+        let verifiers = unsafe { MutHostRef::new(verifiers) };
+        let result_buffer = unsafe { MutHostRef::new(result_buffer) };
+        let ctx = TxCtx {
+            storage,
+            write_log,
+            iterators,
+            gas_meter,
+            verifiers,
+            result_buffer,
+        };
+
+        Self { memory, ctx }
+    }
 }
 
 impl<MEM, DB, H> Clone for TxEnv<'_, MEM, DB, H>
@@ -60,6 +106,18 @@ where
     fn clone(&self) -> Self {
         Self {
             memory: self.memory.clone(),
+            ctx: self.ctx.clone(),
+        }
+    }
+}
+
+impl<'a, DB, H> Clone for TxCtx<'a, DB, H>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn clone(&self) -> Self {
+        Self {
             storage: self.storage.clone(),
             write_log: self.write_log.clone(),
             iterators: self.iterators.clone(),
@@ -76,40 +134,135 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     /// The VM memory for bi-directional data passing
     pub memory: MEM,
+    /// The VP context contains references to host structures.
+    pub ctx: VpCtx<'a, DB, H, EVAL>,
+}
+
+/// A validity predicate's host context
+pub struct VpCtx<'a, DB, H, EVAL>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
     /// The address of the account that owns the VP
-    pub address: Address,
+    pub address: HostRef<'a, &'a Address>,
     /// Read-only access to the storage.
-    /// Thread-safe read-only access from parallel Vp runners
     pub storage: HostRef<'a, &'a Storage<DB, H>>,
     /// Read-only access to the write log.
-    /// Thread-safe read-only access from parallel Vp runners
     pub write_log: HostRef<'a, &'a WriteLog>,
     /// Storage prefix iterators.
-    /// This is not thread-safe, but because each VP has its own instance there
-    /// is no shared access
     pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// VP gas meter.
-    /// This is not thread-safe, but because each VP has its own instance there
-    /// is no shared access
     pub gas_meter: MutHostRef<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
     pub tx: HostRef<'a, &'a Tx>,
     /// The runner of the [`vp_eval`] function
     pub eval_runner: HostRef<'a, &'a EVAL>,
     /// Cache for 2-step reads from host environment.
-    /// This is not thread-safe, but because each VP has its own instance there
-    /// is no shared access
     pub result_buffer: MutHostRef<'a, &'a Option<Vec<u8>>>,
+    /// The storage keys that have been changed. Used for calls to `eval`.
+    pub keys_changed: HostRef<'a, &'a HashSet<Key>>,
+    /// The verifiers whose validity predicates should be triggered. Used for
+    /// calls to `eval`.
+    pub verifiers: HostRef<'a, &'a HashSet<Address>>,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
-pub trait VpEvalRunner {
+pub trait VpEvaluator {
+    /// Storage DB type
+    type Db: storage::DB + for<'iter> storage::DBIter<'iter>;
+    /// Storage hasher type
+    type H: StorageHasher;
+    /// Recursive VP evaluator type
+    type Eval: VpEvaluator;
+
     /// Evaluate a given validity predicate code with the given input data.
-    fn eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> HostEnvResult;
+    /// Currently, we can only evaluate VPs using WASM runner with WASM memory.
+    ///
+    /// Invariant: Calling `VpEvalRunner::eval` from the VP is synchronous as it
+    /// shares mutable access to the host context with the VP.
+    fn eval(
+        &self,
+        ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval>,
+        vp_code: Vec<u8>,
+        input_data: Vec<u8>,
+    ) -> HostEnvResult;
+}
+
+impl<'a, MEM, DB, H, EVAL> VpEnv<'a, MEM, DB, H, EVAL>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+{
+    /// Create a new environment for validity predicate execution.
+    ///
+    /// # Safety
+    ///
+    /// The way the arguments to this function are used is not thread-safe,
+    /// we're assuming multi-threaded VP execution, but with with exclusive
+    /// access to the mutable references (no shared access).
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        memory: MEM,
+        address: &Address,
+        storage: &Storage<DB, H>,
+        write_log: &WriteLog,
+        gas_meter: &mut VpGasMeter,
+        tx: &Tx,
+        iterators: &mut PrefixIterators<'a, DB>,
+        verifiers: &HashSet<Address>,
+        result_buffer: &mut Option<Vec<u8>>,
+        keys_changed: &HashSet<Key>,
+        eval_runner: &EVAL,
+    ) -> Self {
+        let address = unsafe { HostRef::new(address) };
+        let storage = unsafe { HostRef::new(storage) };
+        let write_log = unsafe { HostRef::new(write_log) };
+        let tx = unsafe { HostRef::new(tx) };
+        let iterators = unsafe { MutHostRef::new(iterators) };
+        let gas_meter = unsafe { MutHostRef::new(gas_meter) };
+        let verifiers = unsafe { HostRef::new(verifiers) };
+        let result_buffer = unsafe { MutHostRef::new(result_buffer) };
+        let keys_changed = unsafe { HostRef::new(keys_changed) };
+        let eval_runner = unsafe { HostRef::new(eval_runner) };
+
+        let ctx = VpCtx {
+            address,
+            storage,
+            write_log,
+            iterators,
+            gas_meter,
+            tx,
+            eval_runner,
+            result_buffer,
+            keys_changed,
+            verifiers,
+        };
+
+        Self { memory, ctx }
+    }
+
+    /// Clone VP's context.
+    pub fn clone_ctx(&self) -> VpCtx<'a, DB, H, EVAL> {
+        VpCtx {
+            address: self.ctx.address.clone(),
+            storage: self.ctx.storage.clone(),
+            write_log: self.ctx.write_log.clone(),
+            iterators: self.ctx.iterators.clone(),
+            gas_meter: self.ctx.gas_meter.clone(),
+            tx: self.ctx.tx.clone(),
+            eval_runner: self.ctx.eval_runner.clone(),
+            result_buffer: self.ctx.result_buffer.clone(),
+            keys_changed: self.ctx.keys_changed.clone(),
+            verifiers: self.ctx.verifiers.clone(),
+        }
+    }
 }
 
 impl<MEM, DB, H, EVAL> Clone for VpEnv<'_, MEM, DB, H, EVAL>
@@ -117,11 +270,24 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     fn clone(&self) -> Self {
         Self {
             memory: self.memory.clone(),
+            ctx: self.ctx.clone(),
+        }
+    }
+}
+
+impl<'a, DB, H, EVAL> Clone for VpCtx<'a, DB, H, EVAL>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+{
+    fn clone(&self) -> Self {
+        Self {
             address: self.address.clone(),
             storage: self.storage.clone(),
             write_log: self.write_log.clone(),
@@ -130,6 +296,8 @@ where
             tx: self.tx.clone(),
             eval_runner: self.eval_runner.clone(),
             result_buffer: self.result_buffer.clone(),
+            keys_changed: self.keys_changed.clone(),
+            verifiers: self.verifiers.clone(),
         }
     }
 }
@@ -200,7 +368,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let gas_meter: &mut BlockGasMeter = unsafe { &mut *(env.gas_meter.get()) };
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     // if we run out of gas, we need to stop the execution
     if let Err(err) = gas_meter.add(used_gas) {
         tracing::warn!(
@@ -219,7 +387,7 @@ pub fn vp_charge_gas<MEM, DB, H, EVAL>(
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     vp_add_gas(env, used_gas as _)
 }
@@ -232,9 +400,9 @@ pub fn vp_add_gas<MEM, DB, H, EVAL>(
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
-    let gas_meter: &mut VpGasMeter = unsafe { &mut *(env.gas_meter.get()) };
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     if let Err(err) = gas_meter.add(used_gas) {
         tracing::warn!(
             "Stopping transaction execution because of gas error: {}",
@@ -264,7 +432,7 @@ where
     let key = Key::parse(key).expect("Cannot parse the key string");
 
     // try to read from the write log first
-    let write_log = unsafe { env.write_log.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
     tx_add_gas(env, gas);
     match log_val {
@@ -280,7 +448,7 @@ where
         }
         None => {
             // when not found in write log, try to check the storage
-            let storage = unsafe { env.storage.get() };
+            let storage = unsafe { env.ctx.storage.get() };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             tx_add_gas(env, gas);
@@ -312,14 +480,14 @@ where
     let key = Key::parse(key).expect("Cannot parse the key string");
 
     // try to read from the write log first
-    let write_log = unsafe { env.write_log.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
     tx_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let result_buffer = unsafe { env.result_buffer.get() };
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value.clone());
             len
         }
@@ -332,20 +500,20 @@ where
         }) => {
             // read the VP of a new account
             let len: i64 = vp.len() as _;
-            let result_buffer = unsafe { env.result_buffer.get() };
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(vp.clone());
             len
         }
         None => {
             // when not found in write log, try to read from the storage
-            let storage = unsafe { env.storage.get() };
+            let storage = unsafe { env.ctx.storage.get() };
             let (value, gas) = storage.read(&key).expect("storage read failed");
             tx_add_gas(env, gas);
             match value {
                 Some(value) => {
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
-                    let result_buffer = unsafe { env.result_buffer.get() };
+                    let result_buffer = unsafe { env.ctx.result_buffer.get() };
                     result_buffer.replace(value);
                     len
                 }
@@ -369,7 +537,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let result_buffer = unsafe { env.result_buffer.get() };
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
     let value = result_buffer.take().unwrap();
     let gas = env.memory.write_bytes(result_ptr, value);
     tx_add_gas(env, gas);
@@ -395,8 +563,8 @@ where
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
-    let storage = unsafe { env.storage.get() };
-    let iterators = unsafe { env.iterators.get() };
+    let storage = unsafe { env.ctx.storage.get() };
+    let iterators = unsafe { env.ctx.iterators.get() };
     let (iter, gas) = storage.iter_prefix(&prefix);
     tx_add_gas(env, gas);
     iterators.insert(iter).id()
@@ -416,8 +584,8 @@ where
 {
     tracing::debug!("tx_iter_next iter_id {}", iter_id,);
 
-    let write_log = unsafe { env.write_log.get() };
-    let iterators = unsafe { env.iterators.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let iterators = unsafe { env.ctx.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
         let (log_val, log_gas) = write_log.read(
@@ -434,7 +602,7 @@ where
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let result_buffer = unsafe { env.result_buffer.get() };
+                let result_buffer = unsafe { env.ctx.result_buffer.get() };
                 result_buffer.replace(key_val);
                 return len;
             }
@@ -452,7 +620,7 @@ where
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let result_buffer = unsafe { env.result_buffer.get() };
+                let result_buffer = unsafe { env.ctx.result_buffer.get() };
                 result_buffer.replace(key_val);
                 return len;
             }
@@ -484,8 +652,8 @@ pub fn tx_write<MEM, DB, H>(
     let key = Key::parse(key).expect("Cannot parse the key string");
 
     // check address existence
-    let write_log = unsafe { env.write_log.get() };
-    let storage = unsafe { env.storage.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     for addr in key.find_addresses() {
         let vp_key = Key::validity_predicate(&addr)
             .expect("Unable to create a validity predicate key");
@@ -531,7 +699,7 @@ pub fn tx_delete<MEM, DB, H>(
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
-    let write_log = unsafe { env.write_log.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log.delete(&key);
     tx_add_gas(env, gas);
     // TODO: charge the size diff
@@ -551,19 +719,19 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
 
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
-    let storage = unsafe { env.storage.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     let (value, gas) = storage.read(&key).expect("storage read failed");
     vp_add_gas(env, gas);
     tracing::debug!(
         "vp_read_pre addr {}, key {}, value {:?}",
-        env.address,
+        unsafe { env.ctx.address.get() },
         key,
         value,
     );
@@ -571,7 +739,7 @@ where
         Some(value) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let result_buffer = unsafe { env.result_buffer.get() };
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value);
             len
         }
@@ -594,7 +762,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
@@ -603,14 +771,14 @@ where
 
     // try to read from the write log first
     let key = Key::parse(key).expect("Cannot parse the key string");
-    let write_log = unsafe { env.write_log.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
     vp_add_gas(env, gas);
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
-            let result_buffer = unsafe { env.result_buffer.get() };
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value.clone());
             len
         }
@@ -623,20 +791,20 @@ where
         }) => {
             // read the VP of a new account
             let len: i64 = vp.len() as _;
-            let result_buffer = unsafe { env.result_buffer.get() };
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(vp.clone());
             len
         }
         None => {
             // when not found in write log, try to read from the storage
-            let storage = unsafe { env.storage.get() };
+            let storage = unsafe { env.ctx.storage.get() };
             let (value, gas) = storage.read(&key).expect("storage read failed");
             vp_add_gas(env, gas);
             match value {
                 Some(value) => {
                     let len: i64 =
                         value.len().try_into().expect("data length overflow");
-                    let result_buffer = unsafe { env.result_buffer.get() };
+                    let result_buffer = unsafe { env.ctx.result_buffer.get() };
                     result_buffer.replace(value);
                     len
                 }
@@ -661,9 +829,9 @@ pub fn vp_result_buffer<MEM, DB, H, EVAL>(
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
-    let result_buffer = unsafe { env.result_buffer.get() };
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
     let value = result_buffer.take().unwrap();
     let gas = env.memory.write_bytes(result_ptr, value);
     vp_add_gas(env, gas);
@@ -680,7 +848,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
@@ -689,7 +857,7 @@ where
 
     let key = Key::parse(key).expect("Cannot parse the key string");
 
-    let storage = unsafe { env.storage.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
     vp_add_gas(env, gas);
     HostEnvResult::from(present).to_i64()
@@ -707,7 +875,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     vp_add_gas(env, gas);
@@ -717,7 +885,7 @@ where
     let key = Key::parse(key).expect("Cannot parse the key string");
 
     // try to read from the write log first
-    let write_log = unsafe { env.write_log.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
     vp_add_gas(env, gas);
     match log_val {
@@ -733,7 +901,7 @@ where
         }
         None => {
             // when not found in write log, try to check the storage
-            let storage = unsafe { env.storage.get() };
+            let storage = unsafe { env.ctx.storage.get() };
             let (present, gas) =
                 storage.has_key(&key).expect("storage has_key failed");
             vp_add_gas(env, gas);
@@ -754,7 +922,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     let (prefix, gas) = env.memory.read_string(prefix_ptr, prefix_len as _);
     vp_add_gas(env, gas);
@@ -763,8 +931,8 @@ where
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
 
-    let storage = unsafe { env.storage.get() };
-    let iterators = unsafe { env.iterators.get() };
+    let storage = unsafe { env.ctx.storage.get() };
+    let iterators = unsafe { env.ctx.iterators.get() };
     let (iter, gas) = (*storage).iter_prefix(&prefix);
     vp_add_gas(env, gas);
     iterators.insert(iter).id()
@@ -783,11 +951,11 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     tracing::debug!("vp_iter_pre_next iter_id {}", iter_id,);
 
-    let iterators = unsafe { env.iterators.get() };
+    let iterators = unsafe { env.ctx.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
     if let Some((key, val, gas)) = iterators.next(iter_id) {
         vp_add_gas(env, gas);
@@ -795,7 +963,7 @@ where
             .try_to_vec()
             .expect("cannot serialize the key value pair");
         let len: i64 = key_val.len().try_into().expect("data length overflow");
-        let result_buffer = unsafe { env.result_buffer.get() };
+        let result_buffer = unsafe { env.ctx.result_buffer.get() };
         result_buffer.replace(key_val);
         return len;
     }
@@ -816,12 +984,12 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     tracing::debug!("vp_iter_post_next iter_id {}", iter_id,);
 
-    let write_log = unsafe { env.write_log.get() };
-    let iterators = unsafe { env.iterators.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let iterators = unsafe { env.ctx.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
         let (log_val, log_gas) = write_log.read(
@@ -838,7 +1006,7 @@ where
                 .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let result_buffer = unsafe { env.result_buffer.get() };
+                let result_buffer = unsafe { env.ctx.result_buffer.get() };
                 result_buffer.replace(key_val);
                 return len;
             }
@@ -856,7 +1024,7 @@ where
                     .expect("cannot serialize the key value pair");
                 let len: i64 =
                     key_val.len().try_into().expect("data length overflow");
-                let result_buffer = unsafe { env.result_buffer.get() };
+                let result_buffer = unsafe { env.ctx.result_buffer.get() };
                 result_buffer.replace(key_val);
                 return len;
             }
@@ -882,7 +1050,7 @@ pub fn tx_insert_verifier<MEM, DB, H>(
 
     let addr = Address::decode(&addr).expect("Cannot parse the address string");
 
-    let verifiers = unsafe { env.verifiers.get() };
+    let verifiers = unsafe { env.ctx.verifiers.get() };
     verifiers.insert(addr);
     tx_add_gas(env, addr_len);
 }
@@ -920,7 +1088,7 @@ pub fn tx_update_validity_predicate<MEM, DB, H>(
         unreachable!()
     }
 
-    let write_log = unsafe { env.write_log.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log.write(&key, code);
     tx_add_gas(env, gas);
     // TODO: charge the size diff
@@ -952,8 +1120,8 @@ pub fn tx_init_account<MEM, DB, H>(
 
     tracing::debug!("tx_init_account");
 
-    let storage = unsafe { env.storage.get() };
-    let write_log = unsafe { env.write_log.get() };
+    let storage = unsafe { env.ctx.storage.get() };
+    let write_log = unsafe { env.ctx.write_log.get() };
     let (addr, gas) = write_log.init_account(&storage.address_gen, code);
     let addr_bytes =
         addr.try_to_vec().expect("Encoding address shouldn't fail");
@@ -969,7 +1137,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let storage = unsafe { env.storage.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     let (chain_id, gas) = storage.get_chain_id();
     tx_add_gas(env, gas);
     let gas = env.memory.write_string(result_ptr, chain_id);
@@ -985,7 +1153,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let storage = unsafe { env.storage.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     let (height, gas) = storage.get_block_height();
     tx_add_gas(env, gas);
     height.0
@@ -999,7 +1167,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let storage = unsafe { env.storage.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     let (hash, gas) = storage.get_block_hash();
     tx_add_gas(env, gas);
     let gas = env.memory.write_bytes(result_ptr, hash.0);
@@ -1014,9 +1182,9 @@ pub fn vp_get_chain_id<MEM, DB, H, EVAL>(
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
-    let storage = unsafe { env.storage.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     let (chain_id, gas) = storage.get_chain_id();
     vp_add_gas(env, gas);
     let gas = env.memory.write_string(result_ptr, chain_id);
@@ -1033,9 +1201,9 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
-    let storage = unsafe { env.storage.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     let (height, gas) = storage.get_block_height();
     vp_add_gas(env, gas);
     height.0
@@ -1050,9 +1218,9 @@ pub fn vp_get_block_hash<MEM, DB, H, EVAL>(
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
-    let storage = unsafe { env.storage.get() };
+    let storage = unsafe { env.ctx.storage.get() };
     let (hash, gas) = storage.get_block_hash();
     vp_add_gas(env, gas);
     let gas = env.memory.write_bytes(result_ptr, hash.0);
@@ -1071,7 +1239,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     let (pk, gas) = env.memory.read_bytes(pk_ptr, pk_len as _);
     vp_add_gas(env, gas);
@@ -1084,7 +1252,7 @@ where
         BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
 
     vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
-    let tx = unsafe { env.tx.get() };
+    let tx = unsafe { env.ctx.tx.get() };
     HostEnvResult::from(verify_tx_sig(&pk, tx, &sig).is_ok()).to_i64()
 }
 
@@ -1107,7 +1275,7 @@ pub fn tx_log_string<MEM, DB, H>(
 
 /// Evaluate a validity predicate with the given input data.
 pub fn vp_eval<MEM, DB, H, EVAL>(
-    env: &VpEnv<MEM, DB, H, EVAL>,
+    env: &VpEnv<'static, MEM, DB, H, EVAL>,
     vp_code_ptr: u64,
     vp_code_len: u64,
     input_data_ptr: u64,
@@ -1117,7 +1285,7 @@ where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL>,
 {
     let (vp_code, gas) = env.memory.read_bytes(vp_code_ptr, vp_code_len as _);
     vp_add_gas(env, gas);
@@ -1126,8 +1294,10 @@ where
         env.memory.read_bytes(input_data_ptr, input_data_len as _);
     vp_add_gas(env, gas);
 
-    let eval_runner = unsafe { env.eval_runner.get() };
-    eval_runner.eval(vp_code, input_data).to_i64()
+    let eval_runner = unsafe { env.ctx.eval_runner.get() };
+    eval_runner
+        .eval(env.clone_ctx(), vp_code, input_data)
+        .to_i64()
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be
@@ -1141,7 +1311,7 @@ pub fn vp_log_string<MEM, DB, H, EVAL>(
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     let (str, _gas) = env.memory.read_string(str_ptr, str_len as _);
 
@@ -1246,57 +1416,48 @@ pub mod testing {
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher,
     {
-        let storage = unsafe { HostRef::new(storage) };
-        let write_log = unsafe { MutHostRef::new(write_log) };
-        let iterators = unsafe { MutHostRef::new(iterators) };
-        let verifiers = unsafe { MutHostRef::new(verifiers) };
-        let gas_meter = unsafe { MutHostRef::new(gas_meter) };
-        let result_buffer = unsafe { MutHostRef::new(result_buffer) };
-        TxEnv {
-            memory: NativeMemory,
+        TxEnv::new(
+            NativeMemory::default(),
             storage,
             write_log,
             iterators,
-            verifiers,
             gas_meter,
+            verifiers,
             result_buffer,
-        }
+        )
     }
 
     /// Setup a validity predicate environment
     #[allow(clippy::too_many_arguments)]
     pub fn vp_env<DB, H, EVAL>(
-        address: Address,
+        address: &Address,
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut VpGasMeter,
         tx: &Tx,
-        eval_runner: &EVAL,
+        verifiers: &HashSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
+        keys_changed: &HashSet<Key>,
+        eval_runner: &EVAL,
     ) -> VpEnv<'static, NativeMemory, DB, H, EVAL>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher,
-        EVAL: VpEvalRunner,
+        EVAL: VpEvaluator,
     {
-        let storage = unsafe { HostRef::new(storage) };
-        let write_log = unsafe { HostRef::new(write_log) };
-        let iterators = unsafe { MutHostRef::new(iterators) };
-        let gas_meter = unsafe { MutHostRef::new(gas_meter) };
-        let tx = unsafe { HostRef::new(tx) };
-        let eval_runner = unsafe { HostRef::new(eval_runner) };
-        let result_buffer = unsafe { MutHostRef::new(result_buffer) };
-        VpEnv {
-            memory: NativeMemory,
+        VpEnv::new(
+            NativeMemory::default(),
             address,
             storage,
             write_log,
-            iterators,
             gas_meter,
             tx,
-            eval_runner,
+            iterators,
+            verifiers,
             result_buffer,
-        }
+            keys_changed,
+            eval_runner,
+        )
     }
 }

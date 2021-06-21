@@ -1,6 +1,7 @@
 //! Wasm runners
 
 use std::collections::HashSet;
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use parity_wasm::elements;
@@ -8,11 +9,7 @@ use pwasm_utils::{self, rules};
 use thiserror::Error;
 use wasmer::BaseTunables;
 
-use super::host_env::{
-    prepare_mm_filter_imports, prepare_mm_imports, prepare_tx_imports,
-    prepare_vp_env,
-};
-use super::memory::Limit;
+use super::memory::{Limit, WasmMemory};
 use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
@@ -21,11 +18,14 @@ use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::internal::HostEnvResult;
 use crate::types::storage::Key;
-use crate::vm::host_env::VpEvalRunner;
+use crate::vm::host_env::{TxEnv, VpCtx, VpEnv, VpEvaluator};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::types::VpInput;
+use crate::vm::validate_untrusted_wasm;
+use crate::vm::wasm::host_env::{
+    mm_filter_imports, mm_imports, tx_imports, vp_imports,
+};
 use crate::vm::wasm::memory;
-use crate::vm::{validate_untrusted_wasm, HostRef, MutHostRef};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -89,47 +89,32 @@ where
 
     validate_untrusted_wasm(&tx_code).map_err(Error::ValidationError)?;
 
-    // This is not thread-safe, we're assuming single-threaded Tx runner.
-    let storage = unsafe { HostRef::new(storage) };
-    // This is also not thread-safe, we're assuming single-threaded Tx
-    // runner.
-    let write_log = unsafe { MutHostRef::new(write_log) };
-    // This is also not thread-safe, we're assuming single-threaded Tx
-    // runner.
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
-    let iterators = unsafe { MutHostRef::new(&mut iterators) };
     let mut verifiers = HashSet::new();
-    // This is also not thread-safe, we're assuming single-threaded Tx
-    // runner.
-    let env_verifiers = unsafe { MutHostRef::new(&mut verifiers) };
-    // This is also not thread-safe, we're assuming single-threaded Tx
-    // runner.
-    let gas_meter = unsafe { MutHostRef::new(gas_meter) };
-    // This is also not thread-safe, we're assuming single-threaded Tx
-    // runner.
     let mut result_buffer: Option<Vec<u8>> = None;
-    let env_result_buffer = unsafe { MutHostRef::new(&mut result_buffer) };
+
+    let env = TxEnv::new(
+        WasmMemory::default(),
+        storage,
+        write_log,
+        &mut iterators,
+        gas_meter,
+        &mut verifiers,
+        &mut result_buffer,
+    );
 
     let tx_code = prepare_wasm_code(&tx_code)?;
+
+    let initial_memory =
+        memory::prepare_tx_memory(&wasm_store).map_err(Error::MemoryError)?;
+    let imports = tx_imports(&wasm_store, initial_memory, env);
 
     // Compile the wasm module
     let module = wasmer::Module::new(&wasm_store, &tx_code)
         .map_err(Error::CompileError)?;
-    let initial_memory =
-        memory::prepare_tx_memory(&wasm_store).map_err(Error::MemoryError)?;
-    let tx_imports = prepare_tx_imports(
-        &wasm_store,
-        storage,
-        write_log,
-        iterators,
-        env_verifiers,
-        gas_meter,
-        env_result_buffer,
-        initial_memory,
-    );
 
     // Instantiate the wasm module
-    let instance = wasmer::Instance::new(&module, &tx_imports)
+    let instance = wasmer::Instance::new(&module, &imports)
         .map_err(Error::InstantiationError)?;
 
     // We need to write the inputs in the memory exported from the wasm
@@ -171,7 +156,7 @@ pub fn vp<DB, H>(
     address: &Address,
     storage: &Storage<DB, H>,
     write_log: &WriteLog,
-    vp_gas_meter: &mut VpGasMeter,
+    gas_meter: &mut VpGasMeter,
     keys_changed: &HashSet<Key>,
     verifiers: &HashSet<Address>,
 ) -> Result<bool>
@@ -189,61 +174,35 @@ where
 
     validate_untrusted_wasm(vp_code).map_err(Error::ValidationError)?;
 
-    // Read-only access from parallel Vp runners
-    let storage = unsafe { HostRef::new(storage) };
-    // Read-only access from parallel Vp runners
-    let write_log = unsafe { HostRef::new(write_log) };
-    // Read-only access from parallel Vp runners
-    let tx = unsafe { HostRef::new(tx) };
-    // This is not thread-safe, but because each VP has its own instance
-    // there is no shared access.
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
-    let iterators = unsafe { MutHostRef::new(&mut iterators) };
-    // This is not thread-safe, but because each VP has its own instance
-    // there is no shared access
-    let gas_meter = unsafe { MutHostRef::new(vp_gas_meter) };
-    // Read-only access from parallel Vp runners
-    let env_keys_changed = unsafe { HostRef::new(keys_changed) };
-    // Read-only access from parallel Vp runners
-    let env_verifiers = unsafe { HostRef::new(verifiers) };
-    // This is not thread-safe, but because each VP has its own instance
-    // there is no shared access
     let mut result_buffer: Option<Vec<u8>> = None;
-    let env_result_buffer = unsafe { MutHostRef::new(&mut result_buffer) };
 
-    let eval_runner = WasmEval {
-        address: address.clone(),
-        storage: storage.clone(),
-        write_log: write_log.clone(),
-        // Invariant: Calling `VpEvalRunner::eval` from the VP is synchronous.
-        iterators: iterators.clone(),
-        gas_meter: gas_meter.clone(),
-        tx: tx.clone(),
-        keys_changed: env_keys_changed.clone(),
-        verifiers: env_verifiers.clone(),
-        // Invariant: Calling `VpEvalRunner::eval` from the VP is synchronous.
-        result_buffer: env_result_buffer.clone(),
+    let eval_runner = VpEvalWasm {
+        db: PhantomData,
+        hasher: PhantomData,
     };
-    // Assuming single-threaded VP wasm runner
-    let eval_runner = unsafe { HostRef::new(&eval_runner) };
-    let initial_memory =
-        memory::prepare_vp_memory(&wasm_store).map_err(Error::MemoryError)?;
-    let vp_imports = prepare_vp_env(
-        &wasm_store,
-        address.clone(),
+
+    let env = VpEnv::new(
+        WasmMemory::default(),
+        address,
         storage,
         write_log,
-        iterators,
         gas_meter,
         tx,
-        eval_runner,
-        env_result_buffer,
-        initial_memory,
+        &mut iterators,
+        verifiers,
+        &mut result_buffer,
+        keys_changed,
+        &eval_runner,
     );
+
+    let initial_memory =
+        memory::prepare_vp_memory(&wasm_store).map_err(Error::MemoryError)?;
+    let imports = vp_imports(&wasm_store, initial_memory, env);
 
     run_vp(
         wasm_store,
-        vp_imports,
+        imports,
         vp_code,
         input_data,
         address,
@@ -320,55 +279,50 @@ fn run_vp(
     Ok(is_valid == 1)
 }
 
-/// Validity predicate wasm runner from `eval` function calls.
-pub struct WasmEval<'a, DB, H>
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-{
-    /// The address of the validity predicate that called the `eval`
-    pub address: Address,
-    /// Read-only access to the storage.
-    pub storage: HostRef<'a, &'a Storage<DB, H>>,
-    /// Read-only access to the write log.
-    pub write_log: HostRef<'a, &'a WriteLog>,
-    /// Storage prefix iterators.
-    pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
-    /// VP gas meter.
-    pub gas_meter: MutHostRef<'a, &'a VpGasMeter>,
-    /// The transaction code.
-    pub tx: HostRef<'a, &'a Tx>,
-    /// The storage keys that have been changed.
-    pub keys_changed: HostRef<'a, &'a HashSet<Key>>,
-    /// The verifiers whose validity predicates should be triggered.
-    pub verifiers: HostRef<'a, &'a HashSet<Address>>,
-    /// Cache for 2-step reads from host environment.
-    pub result_buffer: MutHostRef<'a, &'a Option<Vec<u8>>>,
-}
-
-impl<DB, H> VpEvalRunner for WasmEval<'static, DB, H>
+/// Validity predicate wasm evaluator for `eval` host function calls.
+#[derive(Default)]
+pub struct VpEvalWasm<DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    fn eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> HostEnvResult {
-        match self.eval_native_result(vp_code, input_data) {
+    db: PhantomData<*const DB>,
+    hasher: PhantomData<*const H>,
+}
+
+impl<DB, H> VpEvaluator for VpEvalWasm<DB, H>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    type Db = DB;
+    type Eval = Self;
+    type H = H;
+
+    fn eval(
+        &self,
+        ctx: VpCtx<'static, DB, H, Self>,
+        vp_code: Vec<u8>,
+        input_data: Vec<u8>,
+    ) -> HostEnvResult {
+        match self.eval_native_result(ctx, vp_code, input_data) {
             Ok(ok) => HostEnvResult::from(ok),
             Err(err) => {
-                tracing::error!("VP eval error {}", err);
+                tracing::warn!("VP eval error {}", err);
                 HostEnvResult::Fail
             }
         }
     }
 }
 
-impl<DB, H> WasmEval<'static, DB, H>
+impl<DB, H> VpEvalWasm<DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
     fn eval_native_result(
         &self,
+        ctx: VpCtx<'static, DB, H, Self>,
         vp_code: Vec<u8>,
         input_data: Vec<u8>,
     ) -> Result<bool> {
@@ -376,45 +330,22 @@ where
 
         validate_untrusted_wasm(&vp_code).map_err(Error::ValidationError)?;
 
-        let address = &self.address;
-        let keys_changed = unsafe { self.keys_changed.get() };
-        let verifiers = unsafe { self.verifiers.get() };
-
-        let eval_runner = WasmEval {
-            address: self.address.clone(),
-            storage: self.storage.clone(),
-            write_log: self.write_log.clone(),
-            iterators: self.iterators.clone(),
-            gas_meter: self.gas_meter.clone(),
-            tx: self.tx.clone(),
-            keys_changed: self.keys_changed.clone(),
-            verifiers: self.verifiers.clone(),
-            result_buffer: self.result_buffer.clone(),
-        };
-        // Assuming single-threaded VP wasm runner
-        let eval_runner = unsafe { HostRef::new(&eval_runner) };
         let initial_memory = memory::prepare_vp_memory(&wasm_store)
             .map_err(Error::MemoryError)?;
-        let vp_imports = prepare_vp_env(
-            &wasm_store,
-            address.clone(),
-            self.storage.clone(),
-            self.write_log.clone(),
-            // Invariant: Calling `VpEvalRunner::eval` from the VP is
-            // synchronous.
-            self.iterators.clone(),
-            self.gas_meter.clone(),
-            self.tx.clone(),
-            eval_runner,
-            // Invariant: Calling `VpEvalRunner::eval` from the VP is
-            // synchronous.
-            self.result_buffer.clone(),
-            initial_memory,
-        );
+
+        let address = unsafe { ctx.address.get() };
+        let keys_changed = unsafe { ctx.keys_changed.get() };
+        let verifiers = unsafe { ctx.verifiers.get() };
+        let env = VpEnv {
+            memory: WasmMemory::default(),
+            ctx,
+        };
+
+        let imports = vp_imports(&wasm_store, initial_memory, env);
 
         run_vp(
             wasm_store,
-            vp_imports,
+            imports,
             &vp_code[..],
             &input_data[..],
             address,
@@ -445,8 +376,7 @@ where
     let initial_memory = memory::prepare_matchmaker_memory(&wasm_store)
         .map_err(Error::MemoryError)?;
 
-    let matchmaker_imports =
-        prepare_mm_imports(&wasm_store, initial_memory, mm);
+    let matchmaker_imports = mm_imports(&wasm_store, initial_memory, mm);
 
     // Instantiate the wasm module
     let instance = wasmer::Instance::new(&module, &matchmaker_imports)
@@ -504,7 +434,7 @@ pub fn matchmaker_filter(
     let initial_memory = memory::prepare_filter_memory(&wasm_store)
         .map_err(Error::MemoryError)?;
 
-    let filter_imports = prepare_mm_filter_imports(&wasm_store, initial_memory);
+    let filter_imports = mm_filter_imports(&wasm_store, initial_memory);
 
     // Instantiate the wasm module
     let instance = wasmer::Instance::new(&module, &filter_imports)

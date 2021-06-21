@@ -310,7 +310,7 @@ where
 }
 
 /// The wasm memory
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WasmMemory {
     inner: LazyInit<wasmer::Memory>,
 }
@@ -366,14 +366,6 @@ impl VmMemory for WasmMemory {
     #[allow(dead_code)]
     fn write_string(&self, offset: u64, string: String) -> u64 {
         self.write_bytes(offset, string.as_bytes())
-    }
-}
-
-impl Default for WasmMemory {
-    fn default() -> Self {
-        Self {
-            inner: LazyInit::default(),
-        }
     }
 }
 

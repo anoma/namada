@@ -22,7 +22,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
         #[no_mangle]
         extern "C" fn _apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
             let slice = unsafe {
-                slice::from_raw_parts(
+                core::slice::from_raw_parts(
                     tx_data_ptr as *const u8,
                     tx_data_len as _,
                 )
@@ -73,12 +73,12 @@ pub fn validity_predicate(
             verifiers_len: u64,
         ) -> u64 {
             let slice = unsafe {
-                slice::from_raw_parts(addr_ptr as *const u8, addr_len as _)
+                core::slice::from_raw_parts(addr_ptr as *const u8, addr_len as _)
             };
             let addr = Address::try_from_slice(slice).unwrap();
 
             let slice = unsafe {
-                slice::from_raw_parts(
+                core::slice::from_raw_parts(
                     tx_data_ptr as *const u8,
                     tx_data_len as _,
                 )
@@ -86,7 +86,7 @@ pub fn validity_predicate(
             let tx_data = slice.to_vec();
 
             let slice = unsafe {
-                slice::from_raw_parts(
+                core::slice::from_raw_parts(
                     keys_changed_ptr as *const u8,
                     keys_changed_len as _,
                 )
@@ -94,7 +94,7 @@ pub fn validity_predicate(
             let keys_changed: HashSet<storage::Key> = HashSet::try_from_slice(slice).unwrap();
 
             let slice = unsafe {
-                slice::from_raw_parts(
+                core::slice::from_raw_parts(
                     verifiers_ptr as *const u8,
                     verifiers_len as _,
                 )
@@ -140,7 +140,7 @@ pub fn matchmaker(_attr: TokenStream, input: TokenStream) -> TokenStream {
         ) -> u64 {
             let get_data = |ptr, len| {
                 let slice = unsafe {
-                    slice::from_raw_parts(ptr as *const u8, len as _)
+                    core::slice::from_raw_parts(ptr as *const u8, len as _)
                 };
                 slice.to_vec()
             };
@@ -183,7 +183,7 @@ pub fn filter(_attr: TokenStream, input: TokenStream) -> TokenStream {
         ) -> u64 {
             let get_data = |ptr, len| {
                 let slice = unsafe {
-                    slice::from_raw_parts(ptr as *const u8, len as _)
+                    core::slice::from_raw_parts(ptr as *const u8, len as _)
                 };
                 slice.to_vec()
             };
