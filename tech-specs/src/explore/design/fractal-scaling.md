@@ -1,3 +1,5 @@
 # Fractal scaling
 
-tracking issue <https://github.com/heliaxdev/rd-pm/issues/29>
+[Tracking Issue](https://github.com/anomanetwork/anoma/issues/41)
+
+---
