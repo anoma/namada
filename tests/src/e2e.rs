@@ -18,7 +18,6 @@ mod tests {
 
         let base_dir = tempdir().unwrap();
 
-        std::env::set_current_dir("..").unwrap();
         let mut cmd = Command::new("cargo");
         cmd.env("ANOMA_LOG_COLOR", "false").args(&[
             "run",
@@ -35,6 +34,7 @@ mod tests {
     }
 
     fn setup() {
+        std::env::set_current_dir("..").unwrap();
         Command::new("cargo").arg("build").output().unwrap();
     }
 }
