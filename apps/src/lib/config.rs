@@ -232,7 +232,7 @@ impl Default for IntentGossiper {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 impl IntentGossiper {
     pub fn default_with_address(ip: String, port: u32) -> Self {
         let mut gossiper_config = IntentGossiper::default();
