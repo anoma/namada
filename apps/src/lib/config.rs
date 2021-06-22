@@ -218,7 +218,6 @@ pub struct IntentGossiper {
 impl Default for IntentGossiper {
     fn default() -> Self {
         Self {
-            // TODO there must be a better option here
             address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/20201").unwrap(),
             rpc: None,
             subscription_filter: SubscriptionFilter::RegexFilter(
@@ -234,10 +233,13 @@ impl Default for IntentGossiper {
 }
 
 impl IntentGossiper {
-    pub fn set_address(mut self, ip: String, port: u32) {
-        self.address =
-            Multiaddr::from_str(format!("/ip4/{}/tcp/{}", ip, port).as_str())
-                .unwrap();
+    pub fn default_with_address(ip: String, port: u32) -> Self {
+        let mut gossiper_config = IntentGossiper::default();
+        gossiper_config.address = Multiaddr::from_str(
+            &format!("/ip4/{}/tcp/{}", ip, port).to_string(),
+        )
+        .unwrap();
+        gossiper_config
     }
 }
 
