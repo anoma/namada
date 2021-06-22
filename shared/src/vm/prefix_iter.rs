@@ -7,6 +7,7 @@ use crate::ledger::storage;
 
 /// A temporary iterators storage, used during a wasm run after which it's
 /// dropped. Each iterator is assigned a [`PrefixIteratorId`].
+#[derive(Debug)]
 pub struct PrefixIterators<'iter, DB>
 where
     DB: storage::DBIter<'iter>,

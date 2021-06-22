@@ -8,6 +8,7 @@ use std::sync::mpsc;
 
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
+use anoma_shared::ledger::native_vp;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::proto::{self, Tx};
@@ -277,7 +278,10 @@ impl Shell {
     pub fn init_chain(&mut self, chain_id: String) -> Result<()> {
         self.storage
             .set_chain_id(&chain_id)
-            .map_err(Error::StorageError)
+            .map_err(Error::StorageError)?;
+        // TODO pass in the genesis object
+        native_vp::init_genesis_storage(&mut self.storage);
+        Ok(())
     }
 
     /// Validate a transaction request. On success, the transaction will
