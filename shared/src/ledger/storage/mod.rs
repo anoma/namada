@@ -130,7 +130,6 @@ pub trait DBIter<'iter> {
 
 /// The root hash of the merkle tree as bytes
 pub struct MerkleRoot(pub Vec<u8>);
-use std::ops::Deref;
 
 impl Display for MerkleRoot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

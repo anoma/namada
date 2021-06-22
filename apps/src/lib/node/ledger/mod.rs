@@ -6,7 +6,6 @@ use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
 
-use anoma_shared::bytes::ByteBuf;
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::storage::MerkleRoot;
@@ -377,7 +376,7 @@ impl Shell {
             root,
             self.storage.current_height,
         );
-        MerkleRoot(root.as_slice().to_vec())
+        root
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
