@@ -62,7 +62,8 @@ fn get_cfg(home: String) -> Config {
                 }
                 Err(err) => {
                     tracing::error!(
-                        "Tried to generate config in {} but failed with: {}. Using default config (with new generated key)", 
+                        "Tried to generate config in {} but failed with: \
+                         {}.Using default config (with new generated key)",
                         home,
                         err
                     );
