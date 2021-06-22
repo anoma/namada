@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use anoma_vm_env::vp_prelude::intent::{Intent, IntentTransfers};
 use anoma_vm_env::vp_prelude::key::ed25519::{Signed, SignedTxData};
 use anoma_vm_env::vp_prelude::*;
@@ -10,8 +8,8 @@ enum KeyType<'a> {
     Unknown,
 }
 
-impl<'a> From<&'a Key> for KeyType<'a> {
-    fn from(key: &'a Key) -> KeyType<'a> {
+impl<'a> From<&'a storage::Key> for KeyType<'a> {
+    fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some(address) = token::is_any_token_balance_key(key) {
             Self::Token(address)
         } else if let Some(address) = intent::is_invalid_intent_key(key) {
@@ -26,7 +24,7 @@ impl<'a> From<&'a Key> for KeyType<'a> {
 fn validate_tx(
     tx_data: Vec<u8>,
     addr: Address,
-    keys_changed: Vec<Key>,
+    keys_changed: HashSet<storage::Key>,
     verifiers: HashSet<Address>,
 ) -> bool {
     log_string(format!(
@@ -203,7 +201,7 @@ mod tests {
 
         let tx_data: Vec<u8> = vec![];
         let addr: Address = env.addr.clone();
-        let keys_changed: Vec<Key> = vec![];
+        let keys_changed: HashSet<storage::Key> = HashSet::default();
         let verifiers: HashSet<Address> = HashSet::default();
 
         let valid = validate_tx(tx_data, addr, keys_changed, verifiers);

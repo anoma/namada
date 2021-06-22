@@ -15,10 +15,10 @@ pub mod vp;
 
 #[cfg(test)]
 mod tests {
-
     use anoma_shared::proto::Tx;
     use anoma_shared::types::key::ed25519::SignedTxData;
-    use anoma_shared::types::{address, key, Key, KeySeg};
+    use anoma_shared::types::storage::{Key, KeySeg};
+    use anoma_shared::types::{address, key};
     use anoma_vm_env::tx_prelude::{
         BorshDeserialize, BorshSerialize, KeyValIterator,
     };
@@ -28,6 +28,10 @@ mod tests {
 
     use super::tx::*;
     use super::vp::*;
+
+    // paths to the WASMs used for tests
+    const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
+    const VP_ALWAYS_FALSE_WASM: &str = "../wasm_for_tests/vp_always_false.wasm";
 
     #[test]
     fn test_tx_read_write() {
@@ -179,8 +183,8 @@ mod tests {
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
 
-        let code = std::fs::read("res/wasm/vp_template.wasm")
-            .expect("cannot load user VP");
+        let code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
         tx_host_env::init_account(code);
     }
 
@@ -423,10 +427,18 @@ mod tests {
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
-        let vp_template = std::fs::read("res/wasm/vp_template.wasm")
-            .expect("cannot load user VP");
+        let code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
         let input_data = vec![];
-        let result = vp_host_env::eval(vp_template, input_data);
+        let result = vp_host_env::eval(code, input_data);
         assert!(result);
+
+        // evaluating the VP template which always returns `false` shouldn't
+        // pass
+        let code =
+            std::fs::read(VP_ALWAYS_FALSE_WASM).expect("cannot load wasm");
+        let input_data = vec![];
+        let result = vp_host_env::eval(code, input_data);
+        assert!(!result);
     }
 }

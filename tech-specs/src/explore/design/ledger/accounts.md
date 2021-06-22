@@ -1,6 +1,6 @@
 # Accounts
 
-[Tracking Issue](https://github.com/heliaxdev/rd-pm/issues/25)
+[Tracking Issue](https://github.com/anomanetwork/anoma/issues/45)
 
 ---
 

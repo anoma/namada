@@ -3,7 +3,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Address, DbKeySeg, Key, KeySeg};
+use crate::types::address::Address;
+use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.

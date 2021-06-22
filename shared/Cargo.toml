@@ -11,13 +11,18 @@ version = "0.1.0"
 [features]
 default = []
 # for integration tests and test utilies
-testing = []
+testing = [
+  "proptest",
+  "rand",
+  "rand_core",
+]
 wasm-runtime = [
-  "wasmer",
-  "wasmer-compiler-singlepass",
-  "wasmer-engine-jit",
   "parity-wasm",
   "pwasm-utils",
+  "wasmer-compiler-singlepass",
+  "wasmer-engine-jit",
+  "wasmer-vm",
+  "wasmer",
 ]
 
 [dependencies]
@@ -28,9 +33,13 @@ ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand"
 hex = "0.4.2"
 itertools = "0.10.0"
 parity-wasm = {version = "0.42.2", optional = true}
+proptest = {version = "1.0.0", optional = true}
 prost = "0.7.0"
 prost-types = "0.7.0"
 pwasm-utils = {version = "0.18.0", optional = true}
+# TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
+rand = {version = "0.7", optional = true}
+rand_core = {version = "0.5", optional = true}
 serde = {version = "1.0.125", features = ["derive"]}
 sha2 = "0.9.3"
 # We switch off "blake2b" because it cannot be compiled to wasm
@@ -40,14 +49,14 @@ tracing = "0.1.26"
 wasmer = {version = "1.0.2", optional = true}
 wasmer-compiler-singlepass = {version = "1.0.2", optional = true}
 wasmer-engine-jit = {version = "1.0.2", optional = true}
+wasmer-vm = {version = "1.0.2", optional = true}
 wasmparser = "0.78.2"
 
 [dev-dependencies]
+pretty_assertions = "0.7.2"
 proptest = "1.0.0"
-wasmer-vm = "1.0.2"
-# TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
-rand = {version = "0.7"}
-rand_core = {version = "0.5"}
+test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
+tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
 
 [build-dependencies]
 tonic-build = "0.4.0"

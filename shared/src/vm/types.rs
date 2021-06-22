@@ -13,7 +13,8 @@ use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::types::{Address, Key};
+use crate::types::address::Address;
+use crate::types::storage::Key;
 
 /// Input for transaction wasm module call
 pub type TxInput = Vec<u8>;
@@ -26,7 +27,7 @@ pub struct VpInput<'a> {
     pub data: &'a [u8],
     /// The storage changed keys from the write log of storage updates
     /// performed by the transaction for the account associated with the VP
-    pub keys_changed: &'a [Key],
+    pub keys_changed: &'a HashSet<Key>,
     /// The verifiers to trigger VPs
     pub verifiers: &'a HashSet<Address>,
 }

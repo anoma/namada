@@ -26,6 +26,11 @@ build:
 build-release:
 	$(cargo) build --release
 
+check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
+check:
+	$(cargo) check && \
+	$(foreach wasm,$(wasms),$(check-wasm) && ) true
+
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml
 clippy:
 	$(cargo) +$(nightly) clippy && \
@@ -110,4 +115,4 @@ test-miri:
 	$(cargo) +$(nightly) clean
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
-.PHONY : build build-release clippy install run-anoma run-gossip test test-debug fmt watch clean doc build-wasm-scripts dev-deps
+.PHONY : build check build-release clippy clippy-check install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker build-wasm-scripts clean-wasm-scripts dev-deps test-miri

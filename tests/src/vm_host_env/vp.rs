@@ -6,12 +6,10 @@ use anoma_shared::ledger::storage::testing::TestStorage;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::proto::Tx;
 use anoma_shared::types::address::{self, Address};
-use anoma_shared::types::Key;
+use anoma_shared::types::storage::{self, Key};
 use anoma_shared::vm;
 use anoma_shared::vm::prefix_iter::PrefixIterators;
-use anoma_shared::vm::{
-    EnvHostSliceWrapper, EnvHostWrapper, MutEnvHostWrapper,
-};
+use anoma_shared::vm::{EnvHostWrapper, MutEnvHostWrapper};
 
 use crate::tx::{init_tx_env, TestTxEnv};
 
@@ -33,7 +31,7 @@ pub struct TestVpEnv {
     pub iterators: PrefixIterators<'static, MockDB>,
     pub gas_meter: VpGasMeter,
     pub tx: Tx,
-    pub keys_changed: Vec<Key>,
+    pub keys_changed: HashSet<storage::Key>,
     pub verifiers: HashSet<Address>,
     pub eval_runner: Option<native_vp_host_env::VpEval>,
     pub result_buffer: Option<Vec<u8>>,
@@ -51,7 +49,7 @@ impl Default for TestVpEnv {
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::new(0),
             tx: Tx::new(vec![], None),
-            keys_changed: vec![],
+            keys_changed: HashSet::default(),
             verifiers: HashSet::default(),
             eval_runner: None,
             result_buffer: None,
@@ -67,7 +65,7 @@ impl Default for TestVpEnv {
                 unsafe { MutEnvHostWrapper::new(&mut env.gas_meter) };
             let env_tx = unsafe { EnvHostWrapper::new(&env.tx) };
             let env_keys_changed =
-                unsafe { EnvHostSliceWrapper::new(&env.keys_changed[..]) };
+                unsafe { EnvHostWrapper::new(&env.keys_changed) };
             let env_verifiers = unsafe { EnvHostWrapper::new(&env.verifiers) };
             let env_result_buffer =
                 unsafe { MutEnvHostWrapper::new(&mut env.result_buffer) };
@@ -115,7 +113,7 @@ where
     let verifiers_from_tx = &tx_env.verifiers;
     let verifiers_changed_keys =
         tx_env.write_log.verifiers_changed_keys(verifiers_from_tx);
-    let verifiers = verifiers_changed_keys.keys().collect();
+    let verifiers = verifiers_changed_keys.keys().cloned().collect();
     let keys_changed = verifiers_changed_keys
         .get(&addr)
         .expect(

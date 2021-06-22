@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 
+use anoma_shared::types::address::Address;
+use anoma_shared::types::storage::Key;
 use anoma_shared::types::token::{self, Amount, Change};
-use anoma_shared::types::{Address, Key};
 
 /// A token validity predicate.
 pub fn vp(
     token: &Address,
-    keys_changed: &[Key],
+    keys_changed: &HashSet<Key>,
     verifiers: &HashSet<Address>,
 ) -> bool {
     use crate::imports::vp;
