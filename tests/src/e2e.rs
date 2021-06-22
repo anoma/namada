@@ -2,6 +2,8 @@
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::PathBuf;
     use std::process::Command;
 
     use assert_cmd::cargo::CommandCargoExt;
@@ -11,9 +13,14 @@ mod tests {
     use tempfile::tempdir;
 
     /// A helper that should be ran on start of every e2e test case.
-    fn setup() {
-        std::env::set_current_dir("..").unwrap();
-        Command::new("cargo").arg("build").output().unwrap();
+    fn setup() -> PathBuf {
+        let working_dir = fs::canonicalize("..").unwrap();
+        Command::new("cargo")
+            .arg("build")
+            .current_dir(&working_dir)
+            .output()
+            .unwrap();
+        working_dir
     }
 
     /// Test that when we "run-ledger" from fresh state, the node starts-up
@@ -21,13 +28,13 @@ mod tests {
     /// previous state.
     #[test]
     fn run_ledger() -> Result<()> {
-        setup();
+        let dir = setup();
 
         let base_dir = tempdir().unwrap();
 
         // Start the ledger
         let mut cmd = Command::cargo_bin("anoman")?;
-        cmd.args(&[
+        cmd.current_dir(&dir).args(&[
             "--base-dir",
             &base_dir.path().to_string_lossy(),
             "run-ledger",
@@ -52,7 +59,7 @@ mod tests {
 
         // Start the ledger again, in the same directory
         let mut cmd = Command::cargo_bin("anoman")?;
-        cmd.args(&[
+        cmd.current_dir(&dir).args(&[
             "--base-dir",
             &base_dir.path().to_string_lossy(),
             "run-ledger",
