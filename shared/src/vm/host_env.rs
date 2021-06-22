@@ -247,22 +247,6 @@ where
 
         Self { memory, ctx }
     }
-
-    /// Clone VP's context.
-    pub fn clone_ctx(&self) -> VpCtx<'a, DB, H, EVAL> {
-        VpCtx {
-            address: self.ctx.address.clone(),
-            storage: self.ctx.storage.clone(),
-            write_log: self.ctx.write_log.clone(),
-            iterators: self.ctx.iterators.clone(),
-            gas_meter: self.ctx.gas_meter.clone(),
-            tx: self.ctx.tx.clone(),
-            eval_runner: self.ctx.eval_runner.clone(),
-            result_buffer: self.ctx.result_buffer.clone(),
-            keys_changed: self.ctx.keys_changed.clone(),
-            verifiers: self.ctx.verifiers.clone(),
-        }
-    }
 }
 
 impl<MEM, DB, H, EVAL> Clone for VpEnv<'_, MEM, DB, H, EVAL>
