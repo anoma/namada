@@ -1296,7 +1296,7 @@ where
 
     let eval_runner = unsafe { env.ctx.eval_runner.get() };
     eval_runner
-        .eval(env.clone_ctx(), vp_code, input_data)
+        .eval(env.ctx.clone(), vp_code, input_data)
         .to_i64()
 }
 
