@@ -56,7 +56,7 @@ Because VPs are stateless, everything that is exposed in the VPs environment sho
 
 - storage write access for all public state via the [storage write log](#storage-write-log)
 
-Some exceptions as to what can be written are given under [transaction code](./tx-execution.md#tx-code).
+Some exceptions as to what can be written are given under [transaction execution](./tx.md#tx-execution).
 
 
 ## Wasm memory
