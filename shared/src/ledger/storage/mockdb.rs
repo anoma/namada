@@ -9,10 +9,9 @@ use super::{BlockState, DBIter, Error, Result, StorageHasher, DB};
 use crate::ledger::storage::types::{
     self, KVBytes, MerkleTree, PrefixIterator,
 };
-use crate::types::address::EstablishedAddressGen;
-use crate::types::{
-    Address, BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
-    RESERVED_VP_KEY,
+use crate::types::address::{Address, EstablishedAddressGen};
+use crate::types::storage::{
+    BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR, RESERVED_VP_KEY,
 };
 
 /// An in-memory DB for testing.

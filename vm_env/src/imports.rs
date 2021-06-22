@@ -54,10 +54,11 @@ pub mod tx {
     use std::marker::PhantomData;
     pub use std::mem::size_of;
 
+    use anoma_shared::types::address;
+    use anoma_shared::types::address::Address;
     use anoma_shared::types::internal::HostEnvResult;
-    use anoma_shared::types::{
-        address, Address, BlockHash, BlockHeight, BLOCK_HASH_LENGTH,
-        CHAIN_ID_LENGTH,
+    use anoma_shared::types::storage::{
+        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -126,7 +127,12 @@ pub mod tx {
         }
     }
 
-    /// Insert a verifier
+    /// Insert a verifier address. This address must exist on chain, otherwise
+    /// the transaction will be rejected.
+    ///
+    /// Validity predicates of each verifier addresses inserted in the
+    /// transaction will validate the transaction and will receive all the
+    /// changed storage keys and initialized accounts in their inputs.
     pub fn insert_verifier(addr: Address) {
         let addr = addr.encode();
         unsafe { anoma_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _) }
@@ -273,7 +279,7 @@ pub mod vp {
 
     use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::key::ed25519::{PublicKey, Signature};
-    use anoma_shared::types::{
+    use anoma_shared::types::storage::{
         BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};
@@ -414,6 +420,9 @@ pub mod vp {
     /// Evaluate a validity predicate with given data. The address, changed
     /// storage keys and verifiers will have the same values as the input to
     /// caller's validity predicate.
+    ///
+    /// If the execution fails for whatever reason, this will return `false`.
+    /// Otherwise returns the result of evaluation.
     pub fn eval(vp_code: Vec<u8>, input_data: Vec<u8>) -> bool {
         let result = unsafe {
             anoma_vp_eval(

@@ -11,7 +11,7 @@ use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
 
 use anoma_shared::ledger::storage::MerkleRoot;
-use anoma_shared::types::{BlockHash, BlockHeight};
+use anoma_shared::types::storage::{BlockHash, BlockHeight};
 use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;

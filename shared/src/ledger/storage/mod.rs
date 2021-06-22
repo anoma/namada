@@ -6,16 +6,17 @@ pub mod types;
 pub mod write_log;
 
 use std::collections::HashMap;
-use std::ops::Deref;
+use std::fmt::Display;
 
 use sparse_merkle_tree::H256;
 use thiserror::Error;
 use types::MerkleTree;
 
+use crate::bytes::ByteBuf;
 use crate::ledger::gas::MIN_STORAGE_GAS;
-use crate::types::address::EstablishedAddressGen;
-use crate::types::{
-    Address, BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+use crate::types::address::{Address, EstablishedAddressGen};
+use crate::types::storage::{
+    BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
 
 /// A result of a function that may fail
@@ -60,8 +61,8 @@ pub enum Error {
     Temporary { error: String },
     #[error("Found an unknown key: {key}")]
     UnknownKey { key: String },
-    #[error("Key error {0}")]
-    KeyError(crate::types::Error),
+    #[error("Storage key error {0}")]
+    KeyError(crate::types::storage::Error),
     #[error("Coding error: {0}")]
     CodingError(types::Error),
     #[error("Merkle tree error: {0}")]
@@ -130,6 +131,12 @@ pub trait DBIter<'iter> {
 /// The root hash of the merkle tree as bytes
 pub struct MerkleRoot(pub Vec<u8>);
 
+impl Display for MerkleRoot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", ByteBuf(&self.0))
+    }
+}
+
 impl<D, H> Storage<D, H>
 where
     D: DB + for<'iter> DBIter<'iter>,
@@ -156,9 +163,7 @@ where
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
             return Ok(Some((
-                MerkleRoot(
-                    self.block.tree.0.root().as_slice().deref().to_vec(),
-                ),
+                MerkleRoot(self.block.tree.0.root().as_slice().to_vec()),
                 self.block.height.0,
             )));
         }
@@ -180,8 +185,8 @@ where
     }
 
     /// Find the root hash of the merkle tree
-    pub fn merkle_root(&self) -> &H256 {
-        self.block.tree.0.root()
+    pub fn merkle_root(&self) -> MerkleRoot {
+        MerkleRoot(self.block.tree.0.root().as_slice().to_vec())
     }
 
     /// Update the merkle tree with a storage key-value.

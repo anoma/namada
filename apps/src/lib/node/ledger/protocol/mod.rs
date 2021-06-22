@@ -7,7 +7,8 @@ use std::fmt;
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::proto::{self, Tx};
-use anoma_shared::types::{Address, Key};
+use anoma_shared::types::address::Address;
+use anoma_shared::types::storage::Key;
 use anoma_shared::vm;
 use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -37,7 +38,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Debug)]
 pub struct TxResult {
     pub gas_used: u64,
-    pub changed_keys: Vec<Key>,
+    pub changed_keys: HashSet<Key>,
     pub vps_result: VpsResult,
 }
 
@@ -126,8 +127,8 @@ fn check_vps(
 ) -> Result<VpsResult> {
     let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
-    // collect the changed storage keys and VPs for the verifiers
-    let verifiers: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers
+    // collect the VPs for the verifiers
+    let verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
             let (vp, gas) = storage
@@ -159,15 +160,16 @@ fn check_vps(
 
 /// Execute verifiers' validity predicates
 fn execute_vps(
-    verifiers: Vec<(Address, Vec<Key>, Vec<u8>)>,
+    verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)>,
     tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
     initial_gas: u64,
 ) -> Result<VpsResult> {
-    let addresses = verifiers
+    let verifiers_addr = verifiers
         .iter()
         .map(|(addr, _, _)| addr)
+        .cloned()
         .collect::<HashSet<_>>();
 
     verifiers
@@ -178,7 +180,7 @@ fn execute_vps(
                 tx,
                 storage,
                 write_log,
-                addresses.clone(),
+                &verifiers_addr,
                 &mut VpGasMeter::new(initial_gas),
                 (addr, keys, vp),
             )
@@ -194,8 +196,8 @@ fn merge_vp_results(
     mut b: VpsResult,
     initial_gas: u64,
 ) -> Result<VpsResult> {
-    let accepted_vps = a.accepted_vps.union(&b.accepted_vps).collect();
-    let rejected_vps = a.rejected_vps.union(&b.rejected_vps).collect();
+    let accepted_vps = a.accepted_vps.union(&b.accepted_vps).cloned().collect();
+    let rejected_vps = a.rejected_vps.union(&b.rejected_vps).cloned().collect();
     let mut errors = a.errors;
     errors.append(&mut b.errors);
     let mut gas_used = a.gas_used;
@@ -223,9 +225,9 @@ fn execute_vp(
     tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
-    addresses: HashSet<Address>,
+    verifiers: &HashSet<Address>,
     vp_gas_meter: &mut VpGasMeter,
-    (addr, keys, vp): (&Address, &[Key], &[u8]),
+    (addr, keys, vp): (&Address, &HashSet<Key>, &[u8]),
 ) -> Result<VpsResult> {
     let vp_runner = VpRunner::new();
 
@@ -238,7 +240,7 @@ fn execute_vp(
             write_log,
             vp_gas_meter,
             keys,
-            &addresses,
+            verifiers,
         )
         .map_err(Error::VpRunnerError);
 

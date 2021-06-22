@@ -13,7 +13,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::proto::Tx;
-use crate::types::{address, Address, DbKeySeg, Key, KeySeg};
+use crate::types::address::{self, Address};
+use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
 
@@ -323,6 +324,10 @@ fn gen_keypair() {
 /// Helpers for testing with keys.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use proptest::prelude::*;
+    use rand::prelude::StdRng;
+    use rand::SeedableRng;
+
     use super::*;
 
     /// A keypair for tests
@@ -349,5 +354,13 @@ pub mod testing {
             175, 8, 36, 233, 18, 203,
         ];
         Keypair::from_bytes(&bytes).unwrap()
+    }
+
+    /// Generate an arbitrary [`Keypair`].
+    pub fn arb_keypair() -> impl Strategy<Value = Keypair> {
+        any::<[u8; 32]>().prop_map(|seed| {
+            let mut rng = StdRng::from_seed(seed);
+            Keypair::generate(&mut rng)
+        })
     }
 }

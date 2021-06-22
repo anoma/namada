@@ -16,10 +16,9 @@ pub enum Error {
     GasOverflow,
 }
 
-const TX_GAS_PER_BYTE: u64 = 2;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
-const PARALLEL_GAS_MULTIPLIER: f64 = 0.1;
+const PARALLEL_GAS_DIVIDER: u64 = 10;
 
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
@@ -82,8 +81,7 @@ impl BlockGasMeter {
     /// charged the moment we try to apply the transaction.
     pub fn add_base_transaction_fee(&mut self, bytes_len: usize) -> Result<()> {
         tracing::info!("add_base_transaction_fee {}", bytes_len);
-        self.add(BASE_TRANSACTION_FEE)?;
-        self.add(bytes_len as u64 * TX_GAS_PER_BYTE)
+        self.add(BASE_TRANSACTION_FEE)
     }
 
     /// Add the compiling cost proportionate to the code length
@@ -216,8 +214,7 @@ impl VpsGas {
 
     /// Get the gas consumed by the parallelized VPs
     fn get_current_gas(&self) -> Result<u64> {
-        let parallel_gas =
-            self.rest.iter().sum::<u64>() as f64 * PARALLEL_GAS_MULTIPLIER;
+        let parallel_gas = self.rest.iter().sum::<u64>() / PARALLEL_GAS_DIVIDER;
         self.max
             .unwrap_or_default()
             .checked_add(parallel_gas as u64)
