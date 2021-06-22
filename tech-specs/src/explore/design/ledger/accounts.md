@@ -40,7 +40,7 @@ Established addresses are created by a ledger transaction, which can create any 
 
 #### Internal transparent addresses
 
-There will be a static set of internal addresses that integrate certain functionality into the ledger via a dedicated module, such as proof-of-stake module and IBC module. The internal accounts use [native validity predicates](vp.md#native-vps) to validate transactions that interact with their module. A native module will use the [dynamic storage sub-space](#dynamic-storage-sub-space) to store all the data relevant to their functionality (e.g. PoS parameters, bond pool, IBC state and proofs).
+There will be a static set of internal addresses that integrate certain functionality into the ledger via a dedicated module, such as the proof-of-stake module and the IBC module. The internal accounts use [native validity predicates](vp.md#native-vps) to validate transactions that interact with their module. A native module will use the [dynamic storage sub-space](#dynamic-storage-sub-space) to store all the data relevant to their functionality (e.g. PoS parameters, bond pool, IBC state and proofs).
 
 ### Shielded addresses
 
