@@ -479,13 +479,6 @@ pub fn update_gossip_config(
     args: &ArgMatches,
     config: &mut config::IntentGossiper,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
-    //     config.bootstrap_peers = peers
-    //         .iter()
-    //         .map(|p| Multiaddr::from_str(p).expect("error while parsing
-    // peer"))         .collect()
-    // }
-
     if let Some(addr) = parse_opt(args, ADDRESS_ARG) {
         config.address = addr
     }
