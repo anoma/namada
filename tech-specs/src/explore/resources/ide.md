@@ -23,6 +23,29 @@ vscode-org-mode.org-mode
 publicus.org-checkbox
 ```
 
+Add these to your settings.json to get rustfmt and clippy with the nightly version that we use:
+
+```json
+"rust-analyzer.checkOnSave.overrideCommand": [
+    "cargo",
+    "+nightly-2021-03-09",
+    "clippy",
+    "--workspace",
+    "--message-format=json",
+    "--all-targets"
+],
+"rust-analyzer.rustfmt.overrideCommand": [
+    "rustup",
+    "run",
+    "nightly-2021-03-09",
+    "--",
+    "rustfmt",
+    "--edition",
+    "2018",
+    "--"
+],
+```
+
 
 # Emacs
 

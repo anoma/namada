@@ -1,6 +1,9 @@
+mod discovery;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use anoma_shared::proto::{self, Intent, IntentGossipMessage};
@@ -14,13 +17,18 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::identity::Keypair;
-use libp2p::mdns::{Mdns, MdnsConfig, MdnsEvent};
-use libp2p::swarm::{NetworkBehaviour, NetworkBehaviourEventProcess};
+use libp2p::swarm::{
+    NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters,
+};
 use libp2p::{NetworkBehaviour, PeerId};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
+use self::discovery::DiscoveryEvent;
 use super::intent_gossiper;
+use crate::node::gossip::behaviour::discovery::{
+    DiscoveryBehaviour, DiscoveryConfigBuilder,
+};
 use crate::types::MatchmakerMessage;
 
 #[derive(Error, Debug)]
@@ -31,13 +39,17 @@ pub enum Error {
     GossipIntentError(intent_gossiper::Error),
     #[error("Failed initializing the topic filter: {0}")]
     Filter(String),
-    #[error("Failed initializing the gossip network: {0}")]
+    #[error("Failed initializing the gossip behaviour: {0}")]
     GossipConfig(String),
+    #[error("Failed on the the discovery behaviour config: {0}")]
+    DiscoveryConfig(String),
+    #[error("Failed initializing the discovery behaviour: {0}")]
+    Discovery(discovery::Error),
     #[error("Failed initializing mdns: {0}")]
     Mdns(std::io::Error),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+// pub type Result<T> = std::result::Result<T, Error>;
 
 pub type Gossipsub = libp2p::gossipsub::Gossipsub<
     IdentityTransform,
@@ -100,15 +112,27 @@ impl TopicSubscriptionFilter for IntentGossipSubscriptionFilter {
 }
 
 #[derive(NetworkBehaviour)]
+#[behaviour(out_event = "AnomaBehaviourEvent", poll_method = "poll")]
 pub struct Behaviour {
     pub intent_gossip_behaviour: libp2p::gossipsub::Gossipsub<
         IdentityTransform,
         IntentGossipSubscriptionFilter,
     >,
-    local_discovery: Mdns,
+    pub discovery: DiscoveryBehaviour,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
     pub intent_gossip_app: intent_gossiper::GossipIntent,
+    #[behaviour(ignore)]
+    events: VecDeque<AnomaBehaviourEvent>,
+}
+
+#[derive(Debug)]
+pub enum AnomaBehaviourEvent {
+    PeerConnected(PeerId),
+    PeerDisconnected(PeerId),
+    Message(GossipsubMessage, PeerId, MessageId),
+    Subscribed(PeerId, TopicHash),
+    Unsubscribed(PeerId, TopicHash),
 }
 
 pub fn message_id(message: &GossipsubMessage) -> MessageId {
@@ -118,10 +142,25 @@ pub fn message_id(message: &GossipsubMessage) -> MessageId {
 }
 
 impl Behaviour {
+    fn poll<TBehaviourIn>(
+        &mut self,
+        _: &mut Context,
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<TBehaviourIn, AnomaBehaviourEvent>> {
+        if !self.events.is_empty() {
+            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+                self.events.pop_front().unwrap(),
+            ));
+        }
+        Poll::Pending
+    }
+
     pub fn new(
         key: Keypair,
         config: &crate::config::IntentGossiper,
-    ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
+    ) -> (Self, Option<Receiver<MatchmakerMessage>>) {
+        let peer_id = PeerId::from_public_key(key.public());
+
         // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_gossip")
@@ -134,7 +173,7 @@ impl Behaviour {
             .mesh_n(3)
             .mesh_n_high(6)
             .build()
-            .map_err(|s| Error::GossipConfig(s.to_string()))?;
+            .unwrap();
 
         let filter = match &config.subscription_filter {
             crate::config::SubscriptionFilter::RegexFilter(regex) => {
@@ -162,11 +201,10 @@ impl Behaviour {
                 gossipsub_config,
                 filter,
             )
-            .map_err(|s| Error::Filter(s.to_string()))?;
+            .unwrap();
 
         let (intent_gossip_app, matchmaker_event_receiver) =
-            intent_gossiper::GossipIntent::new(&config)
-                .map_err(Error::GossipIntentError)?;
+            intent_gossiper::GossipIntent::new(&config).unwrap();
 
         config
             .topics
@@ -182,19 +220,33 @@ impl Behaviour {
             })
             .expect("failed to subscribe to topic");
 
-        let local_discovery = {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(Mdns::new(MdnsConfig::default()))
-                .map_err(Error::Mdns)?
+        // TODO: check silent fail if not bootstrap_peers is not multiaddr
+        let discovery_opt = if let Some(dis_config) = &config.discover_peer {
+            let discovery_config = DiscoveryConfigBuilder::default()
+                .with_user_defined(dis_config.bootstrap_peers.clone())
+                .discovery_limit(dis_config.max_discovery_peers)
+                .with_kademlia(dis_config.kademlia)
+                .with_mdns(dis_config.mdns)
+                .use_kademlia_disjoint_query_paths(true)
+                .build()
+                .unwrap();
+
+            DiscoveryBehaviour::new(peer_id, discovery_config)
+        } else {
+            let discovery_config =
+                DiscoveryConfigBuilder::default().build().unwrap();
+            DiscoveryBehaviour::new(peer_id, discovery_config)
         };
-        Ok((
+
+        (
             Self {
                 intent_gossip_behaviour,
-                local_discovery,
+                discovery: discovery_opt.unwrap(),
                 intent_gossip_app,
+                events: VecDeque::new(),
             },
             matchmaker_event_receiver,
-        ))
+        )
     }
 
     fn handle_intent(&mut self, intent: Intent) -> MessageAcceptance {
@@ -274,28 +326,15 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
     }
 }
 
-impl NetworkBehaviourEventProcess<MdnsEvent> for Behaviour {
-    // Called when `mdns` produces an event.
-    fn inject_event(&mut self, event: MdnsEvent) {
+impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
+    fn inject_event(&mut self, event: DiscoveryEvent) {
         match event {
-            MdnsEvent::Discovered(list) => {
-                for (peer, addr) in list {
-                    tracing::debug!("discovering peer {} : {} ", peer, addr);
-                    self.intent_gossip_behaviour.inject_connected(&peer);
-                }
-            }
-            MdnsEvent::Expired(list) => {
-                for (peer, addr) in list {
-                    if self.local_discovery.has_node(&peer) {
-                        tracing::debug!(
-                            "disconnecting peer {} : {} ",
-                            peer,
-                            addr
-                        );
-                        self.intent_gossip_behaviour.inject_disconnected(&peer);
-                    }
-                }
-            }
+            DiscoveryEvent::Connected(peer_id) => self
+                .events
+                .push_back(AnomaBehaviourEvent::PeerConnected(peer_id)),
+            DiscoveryEvent::Disconnected(peer_id) => self
+                .events
+                .push_back(AnomaBehaviourEvent::PeerDisconnected(peer_id)),
         }
     }
 }

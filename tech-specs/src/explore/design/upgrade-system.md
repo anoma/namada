@@ -1,3 +1,5 @@
 # Upgrade system
 
-tracking issue <https://github.com/heliaxdev/rd-pm/issues/30>
+[Tracking Issue](https://github.com/anomanetwork/anoma/issues/40)
+
+---

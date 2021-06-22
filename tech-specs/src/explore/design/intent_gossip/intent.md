@@ -1,6 +1,8 @@
 # Intents
 
-tracking issue [#36](https://github.com/heliaxdev/rd-pm/issues/36)
+[Tracking Issue](https://github.com/anomanetwork/anoma/issues/36)
+
+---
 
 There is only a single intent type that is composed of arbitrary data and a
 possible schema definition.

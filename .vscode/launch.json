@@ -26,7 +26,23 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug Anoma tests",
+            "name": "Debug 'anoman run-gossip'",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=anoman",
+                ],
+                "filter": {
+                    "name": "anoman",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "run-gossip"
+            ],
+        },
+        {
+            "name": "Debug integration tests",
             "cargo": {
                 "args": [
                     "test",

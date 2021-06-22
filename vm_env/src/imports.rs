@@ -130,7 +130,7 @@ pub mod tx {
     /// the transaction will be rejected.
     ///
     /// Validity predicates of each verifier addresses inserted in the
-    /// transaction will validate the transaction and will received all the
+    /// transaction will validate the transaction and will receive all the
     /// changed storage keys and initialized accounts in their inputs.
     pub fn insert_verifier(addr: Address) {
         let addr = addr.encode();
