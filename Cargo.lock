@@ -72,6 +72,7 @@ name = "anoma"
 version = "0.1.0"
 dependencies = [
  "anoma_shared",
+ "async-std",
  "base64 0.13.0",
  "bech32",
  "blake2b-rs",
@@ -136,11 +137,9 @@ dependencies = [
  "serde 1.0.125",
  "sha2 0.9.3",
  "sparse-merkle-tree",
- "test-env-log",
  "thiserror",
  "tonic-build",
  "tracing",
- "tracing-subscriber",
  "wasmer",
  "wasmer-compiler-singlepass",
  "wasmer-engine-jit",
@@ -152,10 +151,12 @@ dependencies = [
 name = "anoma_tests"
 version = "0.1.0"
 dependencies = [
+ "anoma",
  "anoma_shared",
  "anoma_vm_env",
  "concat-idents",
  "itertools 0.10.0",
+ "libp2p",
  "pretty_assertions",
  "rexpect",
  "tempfile",
@@ -231,6 +232,16 @@ name = "asn1_der"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d6e24d2cce90c53b948c46271bfb053e4bdc2db9b5d3f65e20f8cf28a1b7fc3"
+
+[[package]]
+name = "async-attributes"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3203e79f4dd9bdda415ed03cf14dae5a2bf775c683a00f94e9cd1faf0f596e5"
+dependencies = [
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "async-channel"
@@ -312,15 +323,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-process"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8f38756dd9ac84671c428afbf7c9f7495feff9ec5b0710f17100098e5b354ac"
+dependencies = [
+ "async-io",
+ "blocking",
+ "cfg-if 1.0.0",
+ "event-listener",
+ "futures-lite",
+ "libc",
+ "once_cell",
+ "signal-hook",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "async-std"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9f06685bad74e0570f5213741bea82158279a4103d988e57bfada11ad230341"
 dependencies = [
+ "async-attributes",
  "async-channel",
  "async-global-executor",
  "async-io",
  "async-lock",
+ "async-process",
  "crossbeam-utils",
  "futures-channel",
  "futures-core",
@@ -4307,7 +4337,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/config-opt-values#eacdc2a0e4547f55af22870188a2ce0149feafa2"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -4338,7 +4368,7 @@ dependencies = [
 [[package]]
 name = "tendermint-abci"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/config-opt-values#eacdc2a0e4547f55af22870188a2ce0149feafa2"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "bytes 1.0.1",
  "eyre",
@@ -4351,7 +4381,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/config-opt-values#eacdc2a0e4547f55af22870188a2ce0149feafa2"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",
@@ -4369,7 +4399,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.19.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/config-opt-values#eacdc2a0e4547f55af22870188a2ce0149feafa2"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-tendermint-config#83d282470280588dbe3479ec1c3c0b3552e625c7"
 dependencies = [
  "async-trait",
  "bytes 1.0.1",

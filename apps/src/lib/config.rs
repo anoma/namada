@@ -102,7 +102,7 @@ impl Default for Ledger {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RpcServer {
     pub address: SocketAddr,
 }
@@ -117,7 +117,7 @@ impl Default for RpcServer {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Matchmaker {
     pub matchmaker: PathBuf,
     pub tx_code: PathBuf,
@@ -132,7 +132,7 @@ pub struct Matchmaker {
 // enum with nested data, unless with the untagged flag. This might be a source
 // of confusion in the future... Another approach would be to have multiple
 // field for each filter possibility but it's less nice.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum SubscriptionFilter {
     RegexFilter(#[serde(with = "serde_regex")] Regex),
@@ -184,7 +184,7 @@ impl<'de> Deserialize<'de> for PeerAddress {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiscoverPeer {
     pub max_discovery_peers: u64,
     pub kademlia: bool,
@@ -204,7 +204,7 @@ impl Default for DiscoverPeer {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IntentGossiper {
     pub address: Multiaddr,
     pub topics: HashSet<String>,
@@ -230,6 +230,14 @@ impl Default for IntentGossiper {
             matchmaker: None,
             discover_peer: Some(DiscoverPeer::default()),
         }
+    }
+}
+
+impl IntentGossiper {
+    pub fn set_address(mut self, ip: String, port: u32) {
+        self.address =
+            Multiaddr::from_str(format!("/ip4/{}/tcp/{}", ip, port).as_str())
+                .unwrap();
     }
 }
 
@@ -276,7 +284,7 @@ impl Config {
     }
 
     // TODO add format in config instead and serialize it to that format
-    fn write(&self, base_dir: PathBuf, replace: bool) -> Result<()> {
+    pub fn write(&self, base_dir: PathBuf, replace: bool) -> Result<()> {
         create_dir_all(&base_dir).map_err(Error::FileError)?;
         let file_path = base_dir.join(FILENAME);
         if file_path.exists() && !replace {

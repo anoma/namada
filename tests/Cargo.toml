@@ -14,10 +14,12 @@ wasm-runtime = ["anoma_shared/wasm-runtime"]
 [dependencies]
 anoma_shared = {path = "../shared", features = ["testing"]}
 anoma_vm_env = {path = "../vm_env"}
+anoma = { path = "../apps" }
 concat-idents = "1.1.2"
 test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing = "0.1.26"
 tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
+libp2p = "0.38.0"
 
 [dev-dependencies]
 itertools = "0.10.0"

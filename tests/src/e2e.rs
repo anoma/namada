@@ -2,8 +2,9 @@
 
 #[cfg(test)]
 mod tests {
-    use std::process::Command;
+    use std::{path::PathBuf, process::Command};
 
+    use anoma::config::{Config, IntentGossiper};
     use rexpect::session::spawn_command;
     use tempfile::tempdir;
 
@@ -18,7 +19,6 @@ mod tests {
 
         let base_dir = tempdir().unwrap();
 
-        std::env::set_current_dir("..").unwrap();
         let mut cmd = Command::new("cargo");
         cmd.env("ANOMA_LOG_COLOR", "false").args(&[
             "run",
@@ -34,7 +34,28 @@ mod tests {
             .unwrap();
     }
 
+    #[test]
+    fn gossip() {
+        let base_dir = tempdir().unwrap();
+
+        generate_network_of(base_dir.into_path(), 4);
+    }
+
     fn setup() {
+        std::env::set_current_dir("..").unwrap();
         Command::new("cargo").arg("build").output().unwrap();
+    }
+
+    pub fn generate_network_of(path: PathBuf, n_of_peers: u32) {
+        let mut index = 0;
+        while index < n_of_peers {
+            let node_path = path.join(format!("anoma-{}", index));
+            let mut config = Config::default();
+            let mut gossiper_config = IntentGossiper::default();
+            gossiper_config.set_address("0.0.0.0".to_string(), 20201 + index);
+            config.intent_gossiper = Some(gossiper_config);
+            config.write(node_path.clone(), true);
+            index += 1;
+        }
     }
 }
