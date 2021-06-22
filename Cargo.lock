@@ -127,6 +127,7 @@ dependencies = [
  "hex",
  "itertools 0.10.0",
  "parity-wasm",
+ "pretty_assertions",
  "proptest",
  "prost",
  "prost-types",

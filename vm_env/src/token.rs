@@ -7,7 +7,7 @@ use anoma_shared::types::token::{self, Amount, Change};
 /// A token validity predicate.
 pub fn vp(
     token: &Address,
-    keys_changed: &[Key],
+    keys_changed: &HashSet<Key>,
     verifiers: &HashSet<Address>,
 ) -> bool {
     use crate::imports::vp;

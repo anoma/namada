@@ -1,7 +1,5 @@
-// TODO proto3 requires all value to be optional, it's a bit annoying
 syntax = "proto3";
 
-// TODO Tonic generate an empty file for this import, can it be removed or clean ?
 import "google/protobuf/timestamp.proto";
 
 package types;

@@ -450,3 +450,34 @@ mod tests {
         }
     }
 }
+
+/// Helpers for testing with storage types.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use proptest::collection;
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::types::address::testing::arb_address;
+
+    /// Generate an arbitrary [`Key`].
+    pub fn arb_key() -> impl Strategy<Value = Key> {
+        prop_oneof![
+            // a key for a validity predicate
+            arb_address()
+                .prop_map(|addr| Key::validity_predicate(&addr).unwrap()),
+            // a key from key segments
+            collection::vec(arb_key_seg(), 1..5)
+                .prop_map(|segments| { Key { segments } }),
+        ]
+    }
+
+    /// Generate an arbitrary [`DbKeyKey`].
+    pub fn arb_key_seg() -> impl Strategy<Value = DbKeySeg> {
+        prop_oneof![
+            // the string segment is 5 time more likely to be generated
+            5 => "[a-zA-Z0-9_]{1,100}".prop_map(DbKeySeg::StringSeg),
+            1 => arb_address().prop_map(DbKeySeg::AddressSeg),
+        ]
+    }
+}

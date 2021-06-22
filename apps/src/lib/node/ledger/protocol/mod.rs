@@ -38,7 +38,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Debug)]
 pub struct TxResult {
     pub gas_used: u64,
-    pub changed_keys: Vec<Key>,
+    pub changed_keys: HashSet<Key>,
     pub vps_result: VpsResult,
 }
 
@@ -127,8 +127,8 @@ fn check_vps(
 ) -> Result<VpsResult> {
     let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
-    // collect the changed storage keys and VPs for the verifiers
-    let verifiers: Vec<(Address, Vec<Key>, Vec<u8>)> = verifiers
+    // collect the VPs for the verifiers
+    let verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)> = verifiers
         .iter()
         .map(|(addr, keys)| {
             let (vp, gas) = storage
@@ -160,13 +160,13 @@ fn check_vps(
 
 /// Execute verifiers' validity predicates
 fn execute_vps(
-    verifiers: Vec<(Address, Vec<Key>, Vec<u8>)>,
+    verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)>,
     tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
     initial_gas: u64,
 ) -> Result<VpsResult> {
-    let addresses = verifiers
+    let verifiers_addr = verifiers
         .iter()
         .map(|(addr, _, _)| addr)
         .cloned()
@@ -180,7 +180,7 @@ fn execute_vps(
                 tx,
                 storage,
                 write_log,
-                addresses.clone(),
+                &verifiers_addr,
                 &mut VpGasMeter::new(initial_gas),
                 (addr, keys, vp),
             )
@@ -225,9 +225,9 @@ fn execute_vp(
     tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
-    addresses: HashSet<Address>,
+    verifiers: &HashSet<Address>,
     vp_gas_meter: &mut VpGasMeter,
-    (addr, keys, vp): (&Address, &[Key], &[u8]),
+    (addr, keys, vp): (&Address, &HashSet<Key>, &[u8]),
 ) -> Result<VpsResult> {
     let vp_runner = VpRunner::new();
 
@@ -240,7 +240,7 @@ fn execute_vp(
             write_log,
             vp_gas_meter,
             keys,
-            &addresses,
+            verifiers,
         )
         .map_err(Error::VpRunnerError);
 

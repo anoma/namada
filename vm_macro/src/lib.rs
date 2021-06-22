@@ -37,7 +37,12 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// This macro expects a function with signature:
 ///
 /// ```compiler_fail
-/// fn validate_tx(tx_data: Vec<u8>, addr: Address, keys_changed: Vec<storage::Key>, verifiers: HashSet<Address>) -> bool
+/// fn validate_tx(
+///     tx_data: Vec<u8>,
+///     addr: Address,
+///     keys_changed: HashSet<storage::Key>,
+///     verifiers: HashSet<Address>
+/// ) -> bool
 /// ```
 #[proc_macro_attribute]
 pub fn validity_predicate(
@@ -86,7 +91,7 @@ pub fn validity_predicate(
                     keys_changed_len as _,
                 )
             };
-            let keys_changed: Vec<storage::Key> = Vec::try_from_slice(slice).unwrap();
+            let keys_changed: HashSet<storage::Key> = HashSet::try_from_slice(slice).unwrap();
 
             let slice = unsafe {
                 slice::from_raw_parts(

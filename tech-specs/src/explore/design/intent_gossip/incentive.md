@@ -1,6 +1,8 @@
 # Incentive
 
-tracking issue [#35](https://github.com/heliaxdev/rd-pm/issues/35)
+[Tracking Issue](https://github.com/anomanetwork/anoma/issues/37)
+
+---
 
 TODO
 - describe incentive function
