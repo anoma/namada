@@ -57,6 +57,12 @@ pub const RESERVED_VP_KEY: &str = "?";
 )]
 pub struct BlockHeight(pub u64);
 
+impl Display for BlockHeight {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Hash of a block as fixed-size byte array
 #[derive(
     Clone,

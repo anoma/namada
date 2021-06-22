@@ -54,6 +54,7 @@ pub fn run(config: config::Ledger) -> Result<()> {
             sender.send(AbciMsg::Terminate).unwrap();
         }
     });
+    tracing::info!("Anoma ledger node started.");
     shell.run()
 }
 
@@ -371,6 +372,11 @@ impl Shell {
             )
         });
         let root = self.storage.merkle_root();
+        tracing::info!(
+            "Committed block hash: {}, height: {}",
+            root,
+            self.storage.current_height,
+        );
         MerkleRoot(root.as_slice().to_vec())
     }
 
@@ -389,7 +395,7 @@ impl Shell {
             Some((root, height)) => {
                 tracing::info!(
                     "Last state root hash: {}, height: {}",
-                    ByteBuf(&root.0),
+                    root,
                     height
                 )
             }

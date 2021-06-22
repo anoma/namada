@@ -20,6 +20,9 @@ tracing = "0.1.26"
 tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
 
 [dev-dependencies]
+assert_cmd = "1.0.5"
+color-eyre = "0.5.11"
+eyre = "0.6.5"
 itertools = "0.10.0"
 pretty_assertions = "0.7.2"
 rexpect = "0.4.0"

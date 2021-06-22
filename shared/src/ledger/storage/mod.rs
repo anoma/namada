@@ -6,12 +6,13 @@ pub mod types;
 pub mod write_log;
 
 use std::collections::HashMap;
-use std::ops::Deref;
+use std::fmt::Display;
 
 use sparse_merkle_tree::H256;
 use thiserror::Error;
 use types::MerkleTree;
 
+use crate::bytes::ByteBuf;
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::storage::{
@@ -130,6 +131,12 @@ pub trait DBIter<'iter> {
 /// The root hash of the merkle tree as bytes
 pub struct MerkleRoot(pub Vec<u8>);
 
+impl Display for MerkleRoot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", ByteBuf(&self.0))
+    }
+}
+
 impl<D, H> Storage<D, H>
 where
     D: DB + for<'iter> DBIter<'iter>,
@@ -156,9 +163,7 @@ where
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
             return Ok(Some((
-                MerkleRoot(
-                    self.block.tree.0.root().as_slice().deref().to_vec(),
-                ),
+                MerkleRoot(self.block.tree.0.root().as_slice().to_vec()),
                 self.block.height.0,
             )));
         }
@@ -180,8 +185,8 @@ where
     }
 
     /// Find the root hash of the merkle tree
-    pub fn merkle_root(&self) -> &H256 {
-        self.block.tree.0.root()
+    pub fn merkle_root(&self) -> MerkleRoot {
+        MerkleRoot(self.block.tree.0.root().as_slice().to_vec())
     }
 
     /// Update the merkle tree with a storage key-value.
