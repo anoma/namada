@@ -1,14 +1,21 @@
 use std::convert::TryFrom;
+use std::time::Duration;
 
 use anoma_shared::proto::IntentGossipMessage;
+use libp2p::core::connection::ConnectionLimits;
+use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::transport::Boxed;
+use libp2p::dns::DnsConfig;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identity::Keypair;
-use libp2p::identity::Keypair::Ed25519;
-use libp2p::{PeerId, TransportError};
+use libp2p::swarm::SwarmBuilder;
+use libp2p::tcp::TcpConfig;
+use libp2p::websocket::WsConfig;
+use libp2p::{core, mplex, noise, PeerId, Transport, TransportError};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 
-use super::network_behaviour::Behaviour;
+use super::behaviour::Behaviour;
 use crate::proto::services::{rpc_message, RpcResponse};
 use crate::proto::{IntentMessage, SubscribeTopicMessage};
 use crate::types::MatchmakerMessage;
@@ -20,11 +27,13 @@ pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     TransportError(std::io::Error),
     #[error("Error with the network behavior: {0}")]
-    Behavior(super::network_behaviour::Error),
+    Behavior(super::behaviour::Error),
     #[error("Error while dialing: {0}")]
     Dialing(libp2p::swarm::DialError),
     #[error("Error while starting to listing: {0}")]
     Listening(TransportError<std::io::Error>),
+    #[error("Error decoding peer identity")]
+    BadPeerIdentity(TransportError<std::io::Error>),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -36,29 +45,33 @@ impl P2P {
     pub fn new(
         config: &crate::config::IntentGossiper,
     ) -> Result<(Self, Option<Receiver<MatchmakerMessage>>)> {
-        let local_key: Keypair = Ed25519(config.gossiper.key.clone());
-        let local_peer_id: PeerId = PeerId::from(local_key.public());
+        let peer_key = Keypair::Ed25519(config.gossiper.key.clone());
+        let peer_id = PeerId::from(peer_key.public());
+
+        tracing::info!("Peer id: {:?}", peer_id.clone());
 
         let transport = {
             let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(libp2p::development_transport(local_key.clone()))
-                .map_err(Error::TransportError)?
+            rt.block_on(build_transport(peer_key.clone()))
         };
 
         let (gossipsub, matchmaker_event_receiver) =
-            Behaviour::new(local_key, config).map_err(Error::Behavior)?;
+            Behaviour::new(peer_key, config);
 
-        let mut swarm = libp2p::Swarm::new(transport, gossipsub, local_peer_id);
+        let connection_limits = build_p2p_connections_limit();
 
-        Swarm::listen_on(&mut swarm, config.address.clone())
+        let mut swarm = SwarmBuilder::new(transport, gossipsub, peer_id)
+            .connection_limits(connection_limits)
+            .notify_handler_buffer_size(
+                std::num::NonZeroUsize::new(20).expect("Not zero"),
+            )
+            .connection_event_buffer_size(64)
+            .build();
+
+        swarm
+            .listen_on(config.address.clone())
             .map_err(Error::Listening)?;
 
-        for to_dial in &config.peers {
-            Swarm::dial_addr(&mut swarm, to_dial.clone())
-                .map_err(Error::Dialing)?;
-            tracing::info!("Dialed {:?}", to_dial.clone());
-        }
-        tracing::info!("network info {:?}", Swarm::network_info(&swarm));
         Ok((Self { swarm }, matchmaker_event_receiver))
     }
 
@@ -74,7 +87,6 @@ impl P2P {
         &mut self,
         event: rpc_message::Message,
     ) -> RpcResponse {
-        tracing::info!("network info {:?}", Swarm::network_info(&self.swarm));
         match event {
             rpc_message::Message::Intent(message) => {
                 match IntentMessage::try_from(message) {
@@ -197,4 +209,54 @@ impl P2P {
             }
         }
     }
+}
+
+pub async fn build_transport(
+    peer_key: Keypair,
+) -> Boxed<(PeerId, StreamMuxerBox)> {
+    let transport = {
+        let tcp_transport = TcpConfig::new().nodelay(true);
+        let dns_tcp_transport = DnsConfig::system(tcp_transport).await.unwrap();
+        let ws_dns_tcp_transport = WsConfig::new(dns_tcp_transport.clone());
+        dns_tcp_transport.or_transport(ws_dns_tcp_transport)
+    };
+
+    let auth_config = {
+        let dh_keys = noise::Keypair::<noise::X25519Spec>::new()
+            .into_authentic(&peer_key)
+            .expect("Noise key generation failed. Should never happen.");
+
+        noise::NoiseConfig::xx(dh_keys).into_authenticated()
+    };
+
+    let mplex_config = {
+        let mut mplex_config = mplex::MplexConfig::new();
+        mplex_config.set_max_buffer_behaviour(mplex::MaxBufferBehaviour::Block);
+        mplex_config.set_max_buffer_size(usize::MAX);
+
+        let mut yamux_config = libp2p::yamux::YamuxConfig::default();
+        yamux_config
+            .set_window_update_mode(libp2p::yamux::WindowUpdateMode::on_read());
+        // TODO: check if its enought
+        yamux_config.set_max_buffer_size(16 * 1024 * 1024);
+        yamux_config.set_receive_window_size(16 * 1024 * 1024);
+
+        core::upgrade::SelectUpgrade::new(yamux_config, mplex_config)
+    };
+
+    transport
+        .upgrade(core::upgrade::Version::V1)
+        .authenticate(auth_config)
+        .multiplex(mplex_config)
+        .timeout(Duration::from_secs(20))
+        .boxed()
+}
+
+pub fn build_p2p_connections_limit() -> ConnectionLimits {
+    ConnectionLimits::default()
+        .with_max_pending_incoming(Some(10))
+        .with_max_pending_outgoing(Some(30))
+        .with_max_established_incoming(Some(25))
+        .with_max_established_outgoing(Some(25))
+        .with_max_established_per_peer(Some(5))
 }
