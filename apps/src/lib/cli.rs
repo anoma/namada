@@ -11,7 +11,6 @@ use std::fmt::Debug;
 use std::str::FromStr;
 
 use clap::{Arg, ArgMatches};
-use libp2p::Multiaddr;
 
 use super::config;
 
@@ -444,11 +443,8 @@ pub fn parse_hashset_opt(
     args: &ArgMatches,
     field: &str,
 ) -> Option<HashSet<String>> {
-    args.values_of(field).map(|peers| {
-        peers
-            .map(|peer| peer.to_string())
-            .collect::<HashSet<String>>()
-    })
+    args.values_of(field)
+        .map(|vs| vs.map(str::to_string).collect::<HashSet<String>>())
 }
 
 pub fn parse_opt<F>(args: &ArgMatches, field: &str) -> Option<F>
@@ -483,13 +479,6 @@ pub fn update_gossip_config(
     args: &ArgMatches,
     config: &mut config::IntentGossiper,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(peers) = parse_hashset_opt(args, PEERS_ARG) {
-        config.peers = peers
-            .iter()
-            .map(|p| Multiaddr::from_str(p).expect("error while parsing peer"))
-            .collect()
-    }
-
     if let Some(addr) = parse_opt(args, ADDRESS_ARG) {
         config.address = addr
     }

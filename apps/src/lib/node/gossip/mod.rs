@@ -1,5 +1,5 @@
+mod behaviour;
 mod intent_gossiper;
-mod network_behaviour;
 mod p2p;
 mod rpc;
 
@@ -49,62 +49,40 @@ pub async fn dispatcher(
                         inject_response.send(response).expect("failed to send response to rpc server")
                     },
                     swarm_event = gossip.swarm.next() => {
-                        // All events are handled by the
-                        // `NetworkBehaviourEventProcess`es.  I.e. the
-                        // `swarm.next()` future drives the `Swarm` without ever
-                        // terminating.
-                        panic!("Unexpected event: {:?}", swarm_event);
+                        tracing::info!("event, {:?}", swarm_event);
                     },
                 };
             }
         }
-        (Some(mut rpc_event_receiver), None) => {
-            loop {
-                tokio::select! {
-                    Some((event, inject_response)) = rpc_event_receiver.recv() =>
-                    {
-                        let response = gossip.handle_rpc_event(event).await;
-                        inject_response.send(response).expect("failed to send response to rpc server")
-                    },
-                    swarm_event = gossip.swarm.next() => {
-                        // All events are handled by the
-                        // `NetworkBehaviourEventProcess`es.  I.e. the
-                        // `swarm.next()` future drives the `Swarm` without ever
-                        // terminating.
-                        panic!("Unexpected event: {:?}", swarm_event);
-                    },
-                };
+        (Some(mut rpc_event_receiver), None) => loop {
+            tokio::select! {
+                Some((event, inject_response)) = rpc_event_receiver.recv() =>
+                {
+                    let response = gossip.handle_rpc_event(event).await;
+                    inject_response.send(response).expect("failed to send response to rpc server")
+                },
+                swarm_event = gossip.swarm.next() => {
+                    tracing::info!("event, {:?}", swarm_event);
+                },
+            };
+        },
+        (None, Some(mut matchmaker_event_receiver)) => loop {
+            tokio::select! {
+                Some(message) = matchmaker_event_receiver.recv() =>
+                {
+                    gossip.handle_mm_message(message).await
+                },
+                swarm_event = gossip.swarm.next() => {
+                    tracing::info!("event, {:?}", swarm_event);
+                },
+            };
+        },
+        (None, None) => loop {
+            tokio::select! {
+                swarm_event = gossip.swarm.next() => {
+                    tracing::info!("event, {:?}", swarm_event);
+                },
             }
-        }
-        (None, Some(mut matchmaker_event_receiver)) => {
-            loop {
-                tokio::select! {
-                    Some(message) = matchmaker_event_receiver.recv() =>
-                    {
-                        gossip.handle_mm_message(message).await
-                    },
-                    swarm_event = gossip.swarm.next() => {
-                        // All events are handled by the
-                        // `NetworkBehaviourEventProcess`es.  I.e. the
-                        // `swarm.next()` future drives the `Swarm` without ever
-                        // terminating.
-                        panic!("Unexpected event: {:?}", swarm_event);
-                    },
-                };
-            }
-        }
-        (None, None) => {
-            loop {
-                tokio::select! {
-                    swarm_event = gossip.swarm.next() => {
-                        // All events are handled by the
-                        // `NetworkBehaviourEventProcess`es.  I.e. the
-                        // `swarm.next()` future drives the `Swarm` without ever
-                        // terminating.
-                        panic!("Unexpected event: {:?}", swarm_event);
-                    },
-                }
-            }
-        }
+        },
     }
 }
