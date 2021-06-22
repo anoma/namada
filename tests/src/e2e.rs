@@ -46,7 +46,7 @@ mod tests {
 
         // Wait to commit a block and shut down the ledger
         session
-            .exp_string("committed state")
+            .exp_string("Committed block hash")
             .map_err(|e| eyre!(format!("{}", e)))?;
         drop(session);
 
