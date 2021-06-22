@@ -36,7 +36,7 @@ pub trait NativeVp {
 
     /// Run the validity predicate
     fn validate_tx<DB, H>(
-        ctx: Ctx<DB, H>,
+        ctx: &mut Ctx<DB, H>,
         tx_data: &[u8],
         keys_changed: &HashSet<Key>,
         verifiers: &HashSet<Address>,

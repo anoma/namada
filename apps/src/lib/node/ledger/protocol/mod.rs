@@ -202,7 +202,7 @@ fn execute_vps(
                         InternalAddress::PoS => {
                             // TODO:
                             // debug_assert_eq!(internal_addr, PoS::ADDR);
-                            // PoS::validate_tx(ctx, &tx.data[..], keys,
+                            // PoS::validate_tx(&mut ctx, &tx.data[..], keys,
                             // &verifiers_addr, &mut gas_meter)
                             true
                         }
