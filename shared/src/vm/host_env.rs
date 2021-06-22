@@ -10,6 +10,7 @@ use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::ledger::vp_env;
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::internal::HostEnvResult;
@@ -147,6 +148,7 @@ pub struct VpCtx<'a, DB, H, EVAL>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
+    EVAL: VpEvaluator,
 {
     /// The address of the account that owns the VP
     pub address: HostRef<'a, &'a Address>,
@@ -373,27 +375,8 @@ pub fn vp_charge_gas<MEM, DB, H, EVAL>(
     H: StorageHasher,
     EVAL: VpEvaluator,
 {
-    vp_add_gas(env, used_gas as _)
-}
-
-/// Add a gas cost incured in a validity predicate
-pub fn vp_add_gas<MEM, DB, H, EVAL>(
-    env: &VpEnv<MEM, DB, H, EVAL>,
-    used_gas: u64,
-) where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator,
-{
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    if let Err(err) = gas_meter.add(used_gas) {
-        tracing::warn!(
-            "Stopping transaction execution because of gas error: {}",
-            err
-        );
-        unreachable!()
-    }
+    vp_env::vp_add_gas(gas_meter, used_gas as _)
 }
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
@@ -706,13 +689,13 @@ where
     EVAL: VpEvaluator,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
-    vp_add_gas(env, gas);
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::vp_add_gas(gas_meter, gas);
 
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage = unsafe { env.ctx.storage.get() };
-    let (value, gas) = storage.read(&key).expect("storage read failed");
-    vp_add_gas(env, gas);
+    let value = vp_env::vp_read_pre(gas_meter, storage, &key);
     tracing::debug!(
         "vp_read_pre addr {}, key {}, value {:?}",
         unsafe { env.ctx.address.get() },
@@ -749,52 +732,25 @@ where
     EVAL: VpEvaluator,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
-    vp_add_gas(env, gas);
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::vp_add_gas(gas_meter, gas);
 
     tracing::debug!("vp_read_post {}, key {}", key, key_ptr,);
 
     // try to read from the write log first
     let key = Key::parse(key).expect("Cannot parse the key string");
+    let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (log_val, gas) = write_log.read(&key);
-    vp_add_gas(env, gas);
-    match log_val {
-        Some(&write_log::StorageModification::Write { ref value }) => {
+    let value = vp_env::vp_read_post(gas_meter, storage, write_log, &key);
+    match value {
+        Some(value) => {
             let len: i64 =
                 value.len().try_into().expect("data length overflow");
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(value.clone());
+            result_buffer.replace(value);
             len
         }
-        Some(&write_log::StorageModification::Delete) => {
-            // fail, given key has been deleted
-            HostEnvResult::Fail.to_i64()
-        }
-        Some(&write_log::StorageModification::InitAccount {
-            ref vp, ..
-        }) => {
-            // read the VP of a new account
-            let len: i64 = vp.len() as _;
-            let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(vp.clone());
-            len
-        }
-        None => {
-            // when not found in write log, try to read from the storage
-            let storage = unsafe { env.ctx.storage.get() };
-            let (value, gas) = storage.read(&key).expect("storage read failed");
-            vp_add_gas(env, gas);
-            match value {
-                Some(value) => {
-                    let len: i64 =
-                        value.len().try_into().expect("data length overflow");
-                    let result_buffer = unsafe { env.ctx.result_buffer.get() };
-                    result_buffer.replace(value);
-                    len
-                }
-                None => HostEnvResult::Fail.to_i64(),
-            }
-        }
+        None => HostEnvResult::Fail.to_i64(),
     }
 }
 
@@ -818,7 +774,8 @@ pub fn vp_result_buffer<MEM, DB, H, EVAL>(
     let result_buffer = unsafe { env.ctx.result_buffer.get() };
     let value = result_buffer.take().unwrap();
     let gas = env.memory.write_bytes(result_ptr, value);
-    vp_add_gas(env, gas);
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::vp_add_gas(gas_meter, gas);
 }
 
 /// Storage `has_key` in prior state (before tx execution) function exposed to
@@ -835,21 +792,20 @@ where
     EVAL: VpEvaluator,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
-    vp_add_gas(env, gas);
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::vp_add_gas(gas_meter, gas);
 
     tracing::debug!("vp_has_key_pre {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
-
     let storage = unsafe { env.ctx.storage.get() };
-    let (present, gas) = storage.has_key(&key).expect("storage has_key failed");
-    vp_add_gas(env, gas);
+    let present = vp_env::vp_has_key_pre(gas_meter, storage, &key);
     HostEnvResult::from(present).to_i64()
 }
 
 /// Storage `has_key` in posterior state (after tx execution) function exposed
-/// to the wasm VM VP environment. It will
-/// try to check the write log first and if no entry found then the storage.
+/// to the wasm VM VP environment. It will try to check the write log first and
+/// if no entry found then the storage.
 pub fn vp_has_key_post<MEM, DB, H, EVAL>(
     env: &VpEnv<MEM, DB, H, EVAL>,
     key_ptr: u64,
@@ -862,36 +818,16 @@ where
     EVAL: VpEvaluator,
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
-    vp_add_gas(env, gas);
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::vp_add_gas(gas_meter, gas);
 
     tracing::debug!("vp_has_key_post {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
-
-    // try to read from the write log first
+    let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (log_val, gas) = write_log.read(&key);
-    vp_add_gas(env, gas);
-    match log_val {
-        Some(&write_log::StorageModification::Write { .. }) => {
-            HostEnvResult::Success.to_i64()
-        }
-        Some(&write_log::StorageModification::Delete) => {
-            // the given key has been deleted
-            HostEnvResult::Fail.to_i64()
-        }
-        Some(&write_log::StorageModification::InitAccount { .. }) => {
-            HostEnvResult::Success.to_i64()
-        }
-        None => {
-            // when not found in write log, try to check the storage
-            let storage = unsafe { env.ctx.storage.get() };
-            let (present, gas) =
-                storage.has_key(&key).expect("storage has_key failed");
-            vp_add_gas(env, gas);
-            HostEnvResult::from(present).to_i64()
-        }
-    }
+    let present = vp_env::vp_has_key_post(gas_meter, storage, write_log, &key);
+    HostEnvResult::from(present).to_i64()
 }
 
 /// Storage prefix iterator function exposed to the wasm VM VP environment.
@@ -909,7 +845,8 @@ where
     EVAL: VpEvaluator,
 {
     let (prefix, gas) = env.memory.read_string(prefix_ptr, prefix_len as _);
-    vp_add_gas(env, gas);
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::vp_add_gas(gas_meter, gas);
 
     tracing::debug!("vp_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
@@ -918,7 +855,7 @@ where
     let storage = unsafe { env.ctx.storage.get() };
     let iterators = unsafe { env.ctx.iterators.get() };
     let (iter, gas) = (*storage).iter_prefix(&prefix);
-    vp_add_gas(env, gas);
+    vp_env::vp_add_gas(gas_meter, gas);
     iterators.insert(iter).id()
 }
 
@@ -942,7 +879,8 @@ where
     let iterators = unsafe { env.ctx.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
     if let Some((key, val, gas)) = iterators.next(iter_id) {
-        vp_add_gas(env, gas);
+        let gas_meter = unsafe { env.ctx.gas_meter.get() };
+        vp_env::vp_add_gas(gas_meter, gas);
         let key_val = KeyVal { key, val }
             .try_to_vec()
             .expect("cannot serialize the key value pair");
@@ -979,7 +917,8 @@ where
         let (log_val, log_gas) = write_log.read(
             &Key::parse(key.clone()).expect("Cannot parse the key string"),
         );
-        vp_add_gas(env, iter_gas + log_gas);
+        let gas_meter = unsafe { env.ctx.gas_meter.get() };
+        vp_env::vp_add_gas(gas_meter, iter_gas + log_gas);
         match log_val {
             Some(&write_log::StorageModification::Write { ref value }) => {
                 let key_val = KeyVal {
@@ -1168,11 +1107,11 @@ pub fn vp_get_chain_id<MEM, DB, H, EVAL>(
     H: StorageHasher,
     EVAL: VpEvaluator,
 {
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let (chain_id, gas) = storage.get_chain_id();
-    vp_add_gas(env, gas);
+    let chain_id = vp_env::vp_get_chain_id(gas_meter, storage);
     let gas = env.memory.write_string(result_ptr, chain_id);
-    vp_add_gas(env, gas);
+    vp_env::vp_add_gas(gas_meter, gas);
 }
 
 /// Getting the block height function exposed to the wasm VM VP
@@ -1187,9 +1126,9 @@ where
     H: StorageHasher,
     EVAL: VpEvaluator,
 {
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let (height, gas) = storage.get_block_height();
-    vp_add_gas(env, gas);
+    let height = vp_env::vp_get_block_height(gas_meter, storage);
     height.0
 }
 
@@ -1204,11 +1143,11 @@ pub fn vp_get_block_hash<MEM, DB, H, EVAL>(
     H: StorageHasher,
     EVAL: VpEvaluator,
 {
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let (hash, gas) = storage.get_block_hash();
-    vp_add_gas(env, gas);
+    let hash = vp_env::vp_get_block_hash(gas_meter, storage);
     let gas = env.memory.write_bytes(result_ptr, hash.0);
-    vp_add_gas(env, gas);
+    vp_env::vp_add_gas(gas_meter, gas);
 }
 
 /// Verify a transaction signature.
@@ -1226,16 +1165,17 @@ where
     EVAL: VpEvaluator,
 {
     let (pk, gas) = env.memory.read_bytes(pk_ptr, pk_len as _);
-    vp_add_gas(env, gas);
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::vp_add_gas(gas_meter, gas);
     let pk: PublicKey =
         BorshDeserialize::try_from_slice(&pk).expect("Canot decode public key");
 
     let (sig, gas) = env.memory.read_bytes(sig_ptr, sig_len as _);
-    vp_add_gas(env, gas);
+    vp_env::vp_add_gas(gas_meter, gas);
     let sig: Signature =
         BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
 
-    vp_add_gas(env, VERIFY_TX_SIG_GAS_COST);
+    vp_env::vp_add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST);
     let tx = unsafe { env.ctx.tx.get() };
     HostEnvResult::from(verify_tx_sig(&pk, tx, &sig).is_ok()).to_i64()
 }
@@ -1272,11 +1212,12 @@ where
     EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL>,
 {
     let (vp_code, gas) = env.memory.read_bytes(vp_code_ptr, vp_code_len as _);
-    vp_add_gas(env, gas);
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::vp_add_gas(gas_meter, gas);
 
     let (input_data, gas) =
         env.memory.read_bytes(input_data_ptr, input_data_len as _);
-    vp_add_gas(env, gas);
+    vp_env::vp_add_gas(gas_meter, gas);
 
     let eval_runner = unsafe { env.ctx.eval_runner.get() };
     eval_runner

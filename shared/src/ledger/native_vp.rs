@@ -34,7 +34,9 @@ pub trait NativeVp {
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher;
 
-    /// Run the validity predicate
+    /// Run the validity predicate. This function can call functions exposed
+    /// from the [`crate::ledger::vp_env`] module using the fields from the
+    /// `ctx` argument.
     fn validate_tx<DB, H>(
         ctx: &mut Ctx<DB, H>,
         tx_data: &[u8],
@@ -49,8 +51,8 @@ pub trait NativeVp {
 /// A validity predicate's host context.
 ///
 /// This is similar to [`anoma_shared::vm::host_env::VpCtx`], but without the VM
-/// wrapper types and `eval_runner` field. References are intentionally private
-/// to enforce immutability when [`Ctx`] is mutable.
+/// wrapper types and `eval_runner` field. The references must not be changed
+/// when [`Ctx`] is mutable.
 #[derive(Debug)]
 pub struct Ctx<'a, DB, H>
 where
@@ -62,11 +64,11 @@ where
     /// VP gas meter.
     pub gas_meter: VpGasMeter,
     /// Read-only access to the storage.
-    storage: &'a Storage<DB, H>,
+    pub storage: &'a Storage<DB, H>,
     /// Read-only access to the write log.
-    write_log: &'a WriteLog,
+    pub write_log: &'a WriteLog,
     /// The transaction code is used for signature verification
-    tx: &'a Tx,
+    pub tx: &'a Tx,
 }
 
 impl<'a, DB, H> Ctx<'a, DB, H>

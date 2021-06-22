@@ -196,7 +196,7 @@ fn execute_vps(
                     (addr, keys, vp),
                 ),
                 Vp::Native(internal_addr) => {
-                    let ctx =
+                    let _ctx =
                         native_vp::Ctx::new(storage, write_log, tx, gas_meter);
                     let accepted: bool = match internal_addr {
                         InternalAddress::PoS => {
@@ -209,6 +209,7 @@ fn execute_vps(
                         InternalAddress::Ibc => todo!(),
                     };
                     gas_meter = ctx.gas_meter;
+
                     Ok(accepted)
                 }
             };
