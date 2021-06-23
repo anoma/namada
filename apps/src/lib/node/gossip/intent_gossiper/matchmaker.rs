@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use anoma_shared::gossip::mm::MmHost;
 use anoma_shared::proto::{Intent, IntentId, Tx};
-use anoma_shared::vm::wasm::runner::{self, MmRunner};
+use anoma_shared::vm::wasm;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
@@ -35,7 +35,7 @@ pub enum Error {
     #[error("Failed to add intent to mempool: {0}")]
     MempoolFailed(mempool::Error),
     #[error("Failed to run matchmaker prog: {0}")]
-    RunnerFailed(runner::Error),
+    RunnerFailed(wasm::run::Error),
     #[error("Failed to read file: {0}")]
     FileFailed(std::io::Error),
     #[error("Failed to create filter: {0}")]
@@ -113,17 +113,15 @@ impl Matchmaker {
             self.mempool
                 .put(intent.clone())
                 .map_err(Error::MempoolFailed)?;
-            let matchmaker_runner = MmRunner::new();
-            Ok(matchmaker_runner
-                .run(
-                    &self.matchmaker_code.clone(),
-                    &self.data,
-                    &intent.id().0,
-                    &intent.data,
-                    self.wasm_host.clone(),
-                )
-                .map_err(Error::RunnerFailed)
-                .unwrap())
+            Ok(wasm::run::matchmaker(
+                &self.matchmaker_code.clone(),
+                &self.data,
+                &intent.id().0,
+                &intent.data,
+                self.wasm_host.clone(),
+            )
+            .map_err(Error::RunnerFailed)
+            .unwrap())
         } else {
             Ok(false)
         }

@@ -49,10 +49,9 @@ fn read_key_val_from_cache<T: BorshDeserialize>(
 
 /// Transaction environment imports
 pub mod tx {
-    pub use core::slice;
+    use core::slice;
     use std::convert::TryFrom;
     use std::marker::PhantomData;
-    pub use std::mem::size_of;
 
     use anoma_shared::types::address;
     use anoma_shared::types::address::Address;
@@ -272,10 +271,9 @@ pub mod tx {
 
 /// Validity predicate environment imports
 pub mod vp {
-    pub use core::slice;
+    use core::slice;
     use std::convert::TryFrom;
     use std::marker::PhantomData;
-    pub use std::mem::size_of;
 
     use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::key::ed25519::{PublicKey, Signature};
@@ -393,7 +391,7 @@ pub mod vp {
     }
 
     /// Verify a transaction signature. The signature is expected to have been
-    /// produced on the encoded transaction [`anoma_shared::proto::types::Tx`]
+    /// produced on the encoded transaction [`anoma_shared::proto::Tx`]
     /// using [`anoma_shared::types::key::ed25519::sign_tx`].
     pub fn verify_tx_signature(pk: &PublicKey, sig: &Signature) -> bool {
         let pk = BorshSerialize::try_to_vec(pk).unwrap();
@@ -509,7 +507,6 @@ pub mod vp {
 
 /// Matchmaker environment imports
 pub mod matchmaker {
-    pub use core::slice;
     use std::collections::HashSet;
 
     pub use borsh::{BorshDeserialize, BorshSerialize};
@@ -566,8 +563,6 @@ pub mod matchmaker {
 
 /// Filter environment imports
 pub mod filter {
-    pub use core::slice;
-
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     /// Log a string. The message will be printed at the `tracing::Level::Info`.
