@@ -38,6 +38,14 @@ where
             None => None,
         }
     }
+
+    /// Get prefix iterator with the given ID.
+    pub fn get_mut(
+        &mut self,
+        id: PrefixIteratorId,
+    ) -> Option<&mut DB::PrefixIter> {
+        self.iterators.get_mut(&id)
+    }
 }
 
 impl<'iter, DB> Default for PrefixIterators<'iter, DB>
