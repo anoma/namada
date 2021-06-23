@@ -2,7 +2,7 @@
 //! as the PoS and IBC modules.
 use std::collections::HashSet;
 
-use crate::ledger::gas::VpGasMeter;
+use crate::ledger::gas::{Result, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{Storage, StorageHasher};
 use crate::ledger::{storage, vp_env};
@@ -41,7 +41,7 @@ pub trait NativeVp {
         tx_data: &[u8],
         keys_changed: &HashSet<Key>,
         verifiers: &HashSet<Address>,
-    ) -> bool
+    ) -> Result<bool>
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher;
@@ -92,20 +92,20 @@ where
     }
 
     /// Add a gas cost incured in a validity predicate
-    pub fn add_gas(&mut self, used_gas: u64) {
+    pub fn add_gas(&mut self, used_gas: u64) -> Result<()> {
         vp_env::add_gas(&mut self.gas_meter, used_gas)
     }
 
     /// Storage read prior state (before tx execution). It will try to read from
     /// the storage.
-    pub fn read_pre(&mut self, key: &Key) -> Option<Vec<u8>> {
+    pub fn read_pre(&mut self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_env::read_pre(&mut self.gas_meter, self.storage, key)
     }
 
     /// Storage read posterior state (after tx execution). It will try to read
     /// from the write log first and if no entry found then from the
     /// storage.
-    pub fn read_post(&mut self, key: &Key) -> Option<Vec<u8>> {
+    pub fn read_post(&mut self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_env::read_post(
             &mut self.gas_meter,
             self.storage,
@@ -116,13 +116,13 @@ where
 
     /// Storage `has_key` in prior state (before tx execution). It will try to
     /// read from the storage.
-    pub fn has_key_pre(&mut self, key: &Key) -> bool {
+    pub fn has_key_pre(&mut self, key: &Key) -> Result<bool> {
         vp_env::has_key_pre(&mut self.gas_meter, self.storage, key)
     }
 
     /// Storage `has_key` in posterior state (after tx execution). It will try
     /// to check the write log first and if no entry found then the storage.
-    pub fn has_key_post(&mut self, key: &Key) -> bool {
+    pub fn has_key_post(&mut self, key: &Key) -> Result<bool> {
         vp_env::has_key_post(
             &mut self.gas_meter,
             self.storage,
@@ -132,19 +132,19 @@ where
     }
 
     /// Getting the chain ID.
-    pub fn get_chain_id(&mut self) -> String {
+    pub fn get_chain_id(&mut self) -> Result<String> {
         vp_env::get_chain_id(&mut self.gas_meter, self.storage)
     }
 
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
-    pub fn get_block_height(&mut self) -> BlockHeight {
+    pub fn get_block_height(&mut self) -> Result<BlockHeight> {
         vp_env::get_block_height(&mut self.gas_meter, self.storage)
     }
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.
-    pub fn get_block_hash(&mut self) -> BlockHash {
+    pub fn get_block_hash(&mut self) -> Result<BlockHash> {
         vp_env::get_block_hash(&mut self.gas_meter, self.storage)
     }
 
@@ -153,7 +153,7 @@ where
     pub fn iter_prefix(
         &mut self,
         prefix: &Key,
-    ) -> <DB as storage::DBIter<'a>>::PrefixIter {
+    ) -> Result<<DB as storage::DBIter<'a>>::PrefixIter> {
         vp_env::iter_prefix(&mut self.gas_meter, self.storage, prefix)
     }
 
@@ -162,7 +162,7 @@ where
     pub fn iter_pre_next(
         &mut self,
         iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
-    ) -> Option<(String, Vec<u8>)> {
+    ) -> Result<Option<(String, Vec<u8>)>> {
         vp_env::iter_pre_next::<DB>(&mut self.gas_meter, iter)
     }
 
@@ -172,7 +172,7 @@ where
     pub fn iter_post_next(
         &mut self,
         iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
-    ) -> Option<(String, Vec<u8>)> {
+    ) -> Result<Option<(String, Vec<u8>)>> {
         vp_env::iter_post_next::<DB>(&mut self.gas_meter, self.write_log, iter)
     }
 

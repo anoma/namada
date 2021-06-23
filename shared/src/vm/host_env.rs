@@ -416,7 +416,20 @@ pub fn vp_charge_gas<MEM, DB, H, EVAL>(
     EVAL: VpEvaluator,
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, used_gas as _)
+    vp_gas_check(vp_env::add_gas(gas_meter, used_gas as _))
+}
+
+fn vp_gas_check<T>(result: vp_env::Result<T>) -> T {
+    match result {
+        Ok(ok) => ok,
+        Err(err) => {
+            tracing::warn!(
+                "Stopping transaction execution because of gas error: {}",
+                err
+            );
+            unreachable!()
+        }
+    }
 }
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
@@ -730,12 +743,12 @@ where
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 
     // try to read from the storage
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage = unsafe { env.ctx.storage.get() };
-    let value = vp_env::read_pre(gas_meter, storage, &key);
+    let value = vp_gas_check(vp_env::read_pre(gas_meter, storage, &key));
     tracing::debug!(
         "vp_read_pre addr {}, key {}, value {:?}",
         unsafe { env.ctx.address.get() },
@@ -773,7 +786,7 @@ where
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 
     tracing::debug!("vp_read_post {}, key {}", key, key_ptr,);
 
@@ -781,7 +794,8 @@ where
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
-    let value = vp_env::read_post(gas_meter, storage, write_log, &key);
+    let value =
+        vp_gas_check(vp_env::read_post(gas_meter, storage, write_log, &key));
     match value {
         Some(value) => {
             let len: i64 =
@@ -815,7 +829,7 @@ pub fn vp_result_buffer<MEM, DB, H, EVAL>(
     let value = result_buffer.take().unwrap();
     let gas = env.memory.write_bytes(result_ptr, value);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 }
 
 /// Storage `has_key` in prior state (before tx execution) function exposed to
@@ -833,13 +847,13 @@ where
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 
     tracing::debug!("vp_has_key_pre {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage = unsafe { env.ctx.storage.get() };
-    let present = vp_env::has_key_pre(gas_meter, storage, &key);
+    let present = vp_gas_check(vp_env::has_key_pre(gas_meter, storage, &key));
     HostEnvResult::from(present).to_i64()
 }
 
@@ -859,14 +873,15 @@ where
 {
     let (key, gas) = env.memory.read_string(key_ptr, key_len as _);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 
     tracing::debug!("vp_has_key_post {}, key {}", key, key_ptr,);
 
     let key = Key::parse(key).expect("Cannot parse the key string");
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
-    let present = vp_env::has_key_post(gas_meter, storage, write_log, &key);
+    let present =
+        vp_gas_check(vp_env::has_key_post(gas_meter, storage, write_log, &key));
     HostEnvResult::from(present).to_i64()
 }
 
@@ -886,13 +901,13 @@ where
 {
     let (prefix, gas) = env.memory.read_string(prefix_ptr, prefix_len as _);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 
     let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
     tracing::debug!("vp_iter_prefix {}", prefix);
 
     let storage = unsafe { env.ctx.storage.get() };
-    let iter = vp_env::iter_prefix(gas_meter, storage, &prefix);
+    let iter = vp_gas_check(vp_env::iter_prefix(gas_meter, storage, &prefix));
     let iterators = unsafe { env.ctx.iterators.get() };
     iterators.insert(iter).id()
 }
@@ -918,7 +933,9 @@ where
     let iter_id = PrefixIteratorId::new(iter_id);
     if let Some(iter) = iterators.get_mut(iter_id) {
         let gas_meter = unsafe { env.ctx.gas_meter.get() };
-        if let Some((key, val)) = vp_env::iter_pre_next::<DB>(gas_meter, iter) {
+        if let Some((key, val)) =
+            vp_gas_check(vp_env::iter_pre_next::<DB>(gas_meter, iter))
+        {
             let key_val = KeyVal { key, val }
                 .try_to_vec()
                 .expect("cannot serialize the key value pair");
@@ -956,9 +973,9 @@ where
     if let Some(iter) = iterators.get_mut(iter_id) {
         let gas_meter = unsafe { env.ctx.gas_meter.get() };
         let write_log = unsafe { env.ctx.write_log.get() };
-        if let Some((key, val)) =
-            vp_env::iter_post_next::<DB>(gas_meter, write_log, iter)
-        {
+        if let Some((key, val)) = vp_gas_check(vp_env::iter_post_next::<DB>(
+            gas_meter, write_log, iter,
+        )) {
             let key_val = KeyVal { key, val }
                 .try_to_vec()
                 .expect("cannot serialize the key value pair");
@@ -1125,9 +1142,9 @@ pub fn vp_get_chain_id<MEM, DB, H, EVAL>(
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let chain_id = vp_env::get_chain_id(gas_meter, storage);
+    let chain_id = vp_gas_check(vp_env::get_chain_id(gas_meter, storage));
     let gas = env.memory.write_string(result_ptr, chain_id);
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 }
 
 /// Getting the block height function exposed to the wasm VM VP
@@ -1144,7 +1161,7 @@ where
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let height = vp_env::get_block_height(gas_meter, storage);
+    let height = vp_gas_check(vp_env::get_block_height(gas_meter, storage));
     height.0
 }
 
@@ -1161,9 +1178,9 @@ pub fn vp_get_block_hash<MEM, DB, H, EVAL>(
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let hash = vp_env::get_block_hash(gas_meter, storage);
+    let hash = vp_gas_check(vp_env::get_block_hash(gas_meter, storage));
     let gas = env.memory.write_bytes(result_ptr, hash.0);
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 }
 
 /// Verify a transaction signature.
@@ -1182,16 +1199,16 @@ where
 {
     let (pk, gas) = env.memory.read_bytes(pk_ptr, pk_len as _);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
     let pk: PublicKey =
         BorshDeserialize::try_from_slice(&pk).expect("Canot decode public key");
 
     let (sig, gas) = env.memory.read_bytes(sig_ptr, sig_len as _);
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
     let sig: Signature =
         BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
 
-    vp_env::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST);
+    vp_gas_check(vp_env::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST));
     let tx = unsafe { env.ctx.tx.get() };
     HostEnvResult::from(verify_tx_sig(&pk, tx, &sig).is_ok()).to_i64()
 }
@@ -1229,11 +1246,11 @@ where
 {
     let (vp_code, gas) = env.memory.read_bytes(vp_code_ptr, vp_code_len as _);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 
     let (input_data, gas) =
         env.memory.read_bytes(input_data_ptr, input_data_len as _);
-    vp_env::add_gas(gas_meter, gas);
+    vp_gas_check(vp_env::add_gas(gas_meter, gas));
 
     let eval_runner = unsafe { env.ctx.eval_runner.get() };
     eval_runner

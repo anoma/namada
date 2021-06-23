@@ -198,20 +198,21 @@ fn execute_vps(
                 Vp::Native(internal_addr) => {
                     let ctx =
                         native_vp::Ctx::new(storage, write_log, tx, gas_meter);
-                    let accepted: bool = match internal_addr {
+                    let accepted: Result<bool> = match internal_addr {
                         InternalAddress::PoS => {
+                            // TODO: handle out of gas
                             // TODO:
                             // debug_assert_eq!(internal_addr, PoS::ADDR);
                             // PoS::validate_tx(&mut ctx, &tx.data[..], keys,
                             // &verifiers_addr, &mut gas_meter)
-                            true
+                            Ok(false)
                         }
                         InternalAddress::Ibc => todo!(),
                     };
                     // Take the gas meter back out of the context
                     gas_meter = ctx.gas_meter;
 
-                    Ok(accepted)
+                    accepted
                 }
             };
             match accept {
