@@ -3,7 +3,6 @@
 //! Here, we expose the host functions into wasm's
 //! imports, so they can be called from inside the wasm.
 
-use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use wasmer::{
@@ -12,17 +11,12 @@ use wasmer::{
 };
 
 use crate::gossip::mm::MmHost;
-use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
-use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::proto::Tx;
-use crate::types::address::Address;
+use crate::ledger::storage::{self, StorageHasher};
+use crate::vm::host_env;
 use crate::vm::host_env::{
-    FilterEnv, MatchmakerEnv, TxEnv, VpEnv, VpEvalRunner,
+    FilterEnv, MatchmakerEnv, TxEnv, VpEnv, VpEvaluator,
 };
-use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::wasm::memory::WasmMemory;
-use crate::vm::{host_env, EnvHostWrapper, MutEnvHostWrapper};
 
 impl<DB, H> WasmerEnv for TxEnv<'_, WasmMemory, DB, H>
 where
@@ -41,7 +35,7 @@ impl<DB, H, EVAL> WasmerEnv for VpEnv<'_, WasmMemory, DB, H, EVAL>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator,
 {
     fn init_with_instance(
         &mut self,
@@ -75,29 +69,15 @@ impl WasmerEnv for FilterEnv<WasmMemory> {
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
 #[allow(clippy::too_many_arguments)]
-pub fn prepare_tx_imports<DB, H>(
+pub fn tx_imports<DB, H>(
     wasm_store: &Store,
-    storage: EnvHostWrapper<'static, &'static Storage<DB, H>>,
-    write_log: MutEnvHostWrapper<'static, &WriteLog>,
-    iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
-    verifiers: MutEnvHostWrapper<'static, &HashSet<Address>>,
-    gas_meter: MutEnvHostWrapper<'static, &BlockGasMeter>,
-    result_buffer: MutEnvHostWrapper<'static, &Option<Vec<u8>>>,
     initial_memory: Memory,
+    env: TxEnv<'static, WasmMemory, DB, H>,
 ) -> ImportObject
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let env = TxEnv {
-        memory: WasmMemory::default(),
-        storage,
-        write_log,
-        iterators,
-        verifiers,
-        gas_meter,
-        result_buffer,
-    };
     wasmer::imports! {
         // default namespace
         "env" => {
@@ -123,49 +103,15 @@ where
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
-#[allow(clippy::too_many_arguments)]
-pub fn prepare_vp_env<DB, H, EVAL>(
+pub fn vp_imports<DB, H, EVAL>(
     wasm_store: &Store,
-    addr: Address,
-    storage: EnvHostWrapper<'static, &'static Storage<DB, H>>,
-    write_log: EnvHostWrapper<'static, &WriteLog>,
-    iterators: MutEnvHostWrapper<'static, &PrefixIterators<'static, DB>>,
-    gas_meter: MutEnvHostWrapper<'static, &VpGasMeter>,
-    tx: EnvHostWrapper<'static, &Tx>,
-    eval_runner: EnvHostWrapper<'static, &'static EVAL>,
-    result_buffer: MutEnvHostWrapper<'static, &Option<Vec<u8>>>,
     initial_memory: Memory,
+    env: VpEnv<'static, WasmMemory, DB, H, EVAL>,
 ) -> ImportObject
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvalRunner,
-{
-    let env = VpEnv {
-        memory: WasmMemory::default(),
-        address: addr,
-        storage,
-        write_log,
-        iterators,
-        gas_meter,
-        tx,
-        eval_runner,
-        result_buffer,
-    };
-    prepare_vp_imports(wasm_store, initial_memory, &env)
-}
-
-/// Prepare imports (memory and host functions) exposed to the vm guest running
-/// validity predicate code
-pub fn prepare_vp_imports<DB, H, EVAL>(
-    wasm_store: &Store,
-    initial_memory: Memory,
-    env: &VpEnv<'static, WasmMemory, DB, H, EVAL>,
-) -> ImportObject
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvalRunner,
+    EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL>,
 {
     wasmer::imports! {
         // default namespace
@@ -192,7 +138,7 @@ where
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// matchmaker code
-pub fn prepare_mm_imports<MM>(
+pub fn mm_imports<MM>(
     wasm_store: &Store,
     initial_memory: Memory,
     mm: Arc<Mutex<MM>>,
@@ -218,7 +164,7 @@ where
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// filter code
-pub fn prepare_mm_filter_imports(
+pub fn mm_filter_imports(
     wasm_store: &Store,
     initial_memory: Memory,
 ) -> ImportObject {

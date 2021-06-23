@@ -20,14 +20,14 @@ pub mod wasm;
 /// reference conversion, care must be taken that while this reference is
 /// borrowed, no other process can modify it.
 #[derive(Clone)]
-pub struct EnvHostWrapper<'a, T: 'a> {
+pub struct HostRef<'a, T: 'a> {
     data: *const c_void,
     phantom: PhantomData<&'a T>,
 }
-unsafe impl<T> Send for EnvHostWrapper<'_, T> {}
-unsafe impl<T> Sync for EnvHostWrapper<'_, T> {}
+unsafe impl<T> Send for HostRef<'_, T> {}
+unsafe impl<T> Sync for HostRef<'_, T> {}
 
-impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
+impl<'a, T: 'a> HostRef<'a, &T> {
     /// Wrap a reference for VM environment.
     ///
     /// # Safety
@@ -58,15 +58,15 @@ impl<'a, T: 'a> EnvHostWrapper<'a, &T> {
 /// conversion, care must be taken that while this slice is borrowed, no other
 /// process can modify it.
 #[derive(Clone)]
-pub struct EnvHostSliceWrapper<'a, T: 'a> {
+pub struct HostSlice<'a, T: 'a> {
     data: *const c_void,
     len: usize,
     phantom: PhantomData<&'a T>,
 }
-unsafe impl<T> Send for EnvHostSliceWrapper<'_, T> {}
-unsafe impl<T> Sync for EnvHostSliceWrapper<'_, T> {}
+unsafe impl<T> Send for HostSlice<'_, T> {}
+unsafe impl<T> Sync for HostSlice<'_, T> {}
 
-impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
+impl<'a, T: 'a> HostSlice<'a, &[T]> {
     /// Wrap a slice for VM environment.
     ///
     /// # Safety
@@ -97,14 +97,14 @@ impl<'a, T: 'a> EnvHostSliceWrapper<'a, &[T]> {
 /// not thread-safe. Also, care must be taken that while this reference is
 /// borrowed, no other process can read or modify it.
 #[derive(Clone)]
-pub struct MutEnvHostWrapper<'a, T: 'a> {
+pub struct MutHostRef<'a, T: 'a> {
     data: *mut c_void,
     phantom: PhantomData<&'a T>,
 }
-unsafe impl<T> Send for MutEnvHostWrapper<'_, T> {}
-unsafe impl<T> Sync for MutEnvHostWrapper<'_, T> {}
+unsafe impl<T> Send for MutHostRef<'_, T> {}
+unsafe impl<T> Sync for MutHostRef<'_, T> {}
 
-impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
+impl<'a, T: 'a> MutHostRef<'a, &T> {
     /// Wrap a mutable reference for VM environment.
     ///
     /// # Safety
@@ -137,15 +137,15 @@ impl<'a, T: 'a> MutEnvHostWrapper<'a, &T> {
 /// conversion, care must be taken that while this slice is borrowed, no other
 /// process can modify it.
 #[derive(Clone)]
-pub struct MutEnvHostSliceWrapper<'a, T: 'a> {
+pub struct MutHostSlice<'a, T: 'a> {
     data: *mut c_void,
     len: usize,
     phantom: PhantomData<&'a T>,
 }
-unsafe impl<T> Send for MutEnvHostSliceWrapper<'_, T> {}
-unsafe impl<T> Sync for MutEnvHostSliceWrapper<'_, T> {}
+unsafe impl<T> Send for MutHostSlice<'_, T> {}
+unsafe impl<T> Sync for MutHostSlice<'_, T> {}
 
-impl<'a, T: 'a> MutEnvHostSliceWrapper<'a, &[T]> {
+impl<'a, T: 'a> MutHostSlice<'a, &[T]> {
     /// Wrap a slice for VM environment.
     ///
     /// # Safety

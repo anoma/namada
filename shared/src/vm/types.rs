@@ -16,9 +16,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use crate::types::address::Address;
 use crate::types::storage::Key;
 
-/// Input for transaction wasm module call
-pub type TxInput = Vec<u8>;
-
 /// Input for validity predicate wasm module call
 pub struct VpInput<'a> {
     /// The address of the validity predicate's owning account

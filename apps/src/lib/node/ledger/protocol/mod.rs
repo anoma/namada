@@ -9,8 +9,7 @@ use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::Address;
 use anoma_shared::types::storage::Key;
-use anoma_shared::vm;
-use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
+use anoma_shared::vm::{self, wasm};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -23,11 +22,11 @@ pub enum Error {
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
-    TxRunnerError(vm::wasm::runner::Error),
+    TxRunnerError(vm::wasm::run::Error),
     #[error("Gas error: {0}")]
     GasError(gas::Error),
     #[error("Error executing VP for addresses: {0:?}")]
-    VpRunnerError(vm::wasm::runner::Error),
+    VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
 }
@@ -110,10 +109,7 @@ fn execute_tx(
         .add_compiling_fee(tx_code.len())
         .map_err(Error::GasError)?;
     let tx_data = tx.data.clone().unwrap_or_default();
-    let tx_runner = TxRunner::new();
-
-    tx_runner
-        .run(storage, write_log, gas_meter, tx_code, tx_data)
+    wasm::run::tx(storage, write_log, gas_meter, tx_code, tx_data)
         .map_err(Error::TxRunnerError)
 }
 
@@ -229,20 +225,17 @@ fn execute_vp(
     vp_gas_meter: &mut VpGasMeter,
     (addr, keys, vp): (&Address, &HashSet<Key>, &[u8]),
 ) -> Result<VpsResult> {
-    let vp_runner = VpRunner::new();
-
-    let accept = vp_runner
-        .run(
-            vp,
-            tx,
-            addr,
-            storage,
-            write_log,
-            vp_gas_meter,
-            keys,
-            verifiers,
-        )
-        .map_err(Error::VpRunnerError);
+    let accept = wasm::run::vp(
+        vp,
+        tx,
+        addr,
+        storage,
+        write_log,
+        vp_gas_meter,
+        keys,
+        verifiers,
+    )
+    .map_err(Error::VpRunnerError);
 
     match accept {
         Ok(accepted) => {
