@@ -162,10 +162,7 @@ where
             self.current_height = height;
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
-            return Ok(Some((
-                MerkleRoot(self.block.tree.0.root().as_slice().to_vec()),
-                self.block.height.0,
-            )));
+            return Ok(Some((self.merkle_root(), self.block.height.0)));
         }
         Ok(None)
     }

@@ -18,7 +18,6 @@ concat-idents = "1.1.2"
 test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing = "0.1.26"
 tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
-libp2p = "0.38.0"
 
 [dev-dependencies]
 anoma = { path = "../apps", features = ["testing"]}
@@ -29,3 +28,4 @@ itertools = "0.10.0"
 pretty_assertions = "0.7.2"
 rexpect = "0.4.0"
 tempfile = "3.2.0"
+libp2p = "0.38.0"
