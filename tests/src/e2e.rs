@@ -30,7 +30,7 @@ mod tests {
     /// Test that when we "run-ledger" from fresh state, the node starts-up
     /// successfully. When we shut it down and run again, it should load its
     /// previous state.
-    // #[test]
+    #[test]
     fn run_ledger() -> Result<()> {
         let dir = setup();
 
