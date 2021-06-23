@@ -12,9 +12,7 @@ use anoma_shared::ledger::storage::{
     types, BlockStorage, Storage, StorageHasher,
 };
 use anoma_shared::types::address::EstablishedAddressGen;
-use anoma_shared::types::storage::{
-    BlockHash, BlockHeight, Key, CHAIN_ID_LENGTH,
-};
+use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::traits::Hasher;
@@ -27,6 +25,13 @@ pub type PersistentDB = rocksdb::RocksDB;
 pub type PersistentStorage = Storage<PersistentDB, PersistentStorageHasher>;
 
 pub fn open(db_path: impl AsRef<Path>) -> PersistentStorage {
+    let chain_id = db_path
+        .as_ref()
+        .file_name()
+        .expect("the DB dir should exist")
+        .to_owned()
+        .into_string()
+        .expect("the conversion shouldn't fail");
     let tree = MerkleTree::default();
     let subspaces = HashMap::new();
     let block = BlockStorage {
@@ -37,7 +42,7 @@ pub fn open(db_path: impl AsRef<Path>) -> PersistentStorage {
     };
     PersistentStorage {
         db: rocksdb::open(db_path).expect("cannot open the DB"),
-        chain_id: String::with_capacity(CHAIN_ID_LENGTH),
+        chain_id,
         block,
         current_height: BlockHeight(0),
         address_gen: EstablishedAddressGen::new(
@@ -147,10 +152,6 @@ mod tests {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
         let mut storage = open(db_path.path());
-        let chain_id = "test_chain_id_000000";
-        storage
-            .set_chain_id(chain_id)
-            .expect("setting a chain ID failed");
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -179,7 +180,6 @@ mod tests {
             .expect("no block exists");
         assert_eq!(loaded_root.0, root);
         assert_eq!(height, 100);
-        assert_eq!(storage.get_chain_id().0, chain_id);
         assert_eq!(storage.get_block_hash().0, hash);
         assert_eq!(storage.address_gen, address_gen);
         let (val, _) = storage.read(&key).expect("read failed");

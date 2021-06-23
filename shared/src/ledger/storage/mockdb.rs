@@ -3,15 +3,11 @@
 use std::collections::{btree_map, BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
 
-use sparse_merkle_tree::SparseMerkleTree;
-
-use super::{BlockState, DBIter, Error, Result, StorageHasher, DB};
-use crate::ledger::storage::types::{
-    self, KVBytes, MerkleTree, PrefixIterator,
-};
-use crate::types::address::{Address, EstablishedAddressGen};
+use super::{BlockState, DBIter, Error, Result, DB};
+use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
+use crate::types::address::Address;
 use crate::types::storage::{
-    BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR, RESERVED_VP_KEY,
+    BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR, RESERVED_VP_KEY,
 };
 
 /// An in-memory DB for testing.
@@ -29,15 +25,8 @@ impl DB for MockDB {
         Ok(())
     }
 
-    fn write_block<H: StorageHasher>(
-        &mut self,
-        tree: &MerkleTree<H>,
-        hash: &BlockHash,
-        height: BlockHeight,
-        subspaces: &HashMap<Key, Vec<u8>>,
-        address_gen: &EstablishedAddressGen,
-    ) -> Result<()> {
-        let prefix_key = Key::from(height.to_db_key());
+    fn write_block(&mut self, state: BlockState) -> Result<()> {
+        let prefix_key = Key::from(state.height.to_db_key());
         // Merkle tree
         {
             let prefix_key = prefix_key
@@ -48,7 +37,7 @@ impl DB for MockDB {
                 let key = prefix_key
                     .push(&"root".to_owned())
                     .map_err(Error::KeyError)?;
-                let value = tree.0.root();
+                let value = &state.root;
                 self.0.insert(key.to_string(), types::encode(value));
             }
             // Tree's store
@@ -56,7 +45,7 @@ impl DB for MockDB {
                 let key = prefix_key
                     .push(&"store".to_owned())
                     .map_err(Error::KeyError)?;
-                let value = tree.0.store();
+                let value = &state.store;
                 self.0.insert(key.to_string(), types::encode(value));
             }
         }
@@ -65,7 +54,7 @@ impl DB for MockDB {
             let key = prefix_key
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
-            let value = hash;
+            let value = &state.hash;
             self.0.insert(key.to_string(), types::encode(value));
         }
         // SubSpace
@@ -73,7 +62,7 @@ impl DB for MockDB {
             let subspace_prefix = prefix_key
                 .push(&"subspace".to_owned())
                 .map_err(Error::KeyError)?;
-            subspaces.iter().for_each(|(key, value)| {
+            state.subspaces.iter().for_each(|(key, value)| {
                 let key = subspace_prefix.join(key);
                 self.0.insert(key.to_string(), value.clone());
             });
@@ -83,16 +72,11 @@ impl DB for MockDB {
             let key = prefix_key
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
-            let value = address_gen;
+            let value = &state.address_gen;
             self.0.insert(key.to_string(), types::encode(value));
         }
-        self.0.insert("height".to_owned(), types::encode(&height));
-        Ok(())
-    }
-
-    fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
         self.0
-            .insert("chain_id".to_owned(), types::encode(chain_id));
+            .insert("height".to_owned(), types::encode(&state.height));
         Ok(())
     }
 
@@ -107,19 +91,9 @@ impl DB for MockDB {
         }
     }
 
-    fn read_last_block<H: StorageHasher>(
-        &mut self,
-    ) -> Result<Option<BlockState<H>>> {
-        let chain_id;
-        let height: BlockHeight;
-        // Chain ID
-        match self.0.get("chain_id") {
-            Some(bytes) => {
-                chain_id = types::decode(bytes).map_err(Error::CodingError)?;
-            }
-            None => return Ok(None),
-        }
+    fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         // Block height
+        let height: BlockHeight;
         match self.0.get("height") {
             Some(bytes) => {
                 height = types::decode(bytes).map_err(Error::CodingError)?;
@@ -212,10 +186,9 @@ impl DB for MockDB {
         }
         match (root, store, hash, address_gen) {
             (Some(root), Some(store), Some(hash), Some(address_gen)) => {
-                let tree = MerkleTree(SparseMerkleTree::new(root, store));
                 Ok(Some(BlockState {
-                    chain_id,
-                    tree,
+                    root,
+                    store,
                     hash,
                     height,
                     subspaces,

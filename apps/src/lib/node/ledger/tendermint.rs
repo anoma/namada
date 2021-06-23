@@ -5,7 +5,7 @@
 
 use std::convert::{TryFrom, TryInto};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, BufReader, Write};
 use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc::{self, channel, Sender};
@@ -40,6 +40,8 @@ pub enum Error {
     TendermintInit(std::io::Error),
     #[error("Failed to write Tendermint validator key: {0}")]
     TendermintValidatorKey(std::io::Error),
+    #[error("Failed to overwrite Tendermint chain ID: {0}")]
+    TendermintChainId(std::io::Error),
     #[error("Failed to load Tendermint config file: {0}")]
     TendermintLoadConfig(tendermint::error::Error),
     #[error("Failed to open Tendermint config for writing: {0}")]
@@ -125,6 +127,8 @@ pub fn run(sender: AbciSender, config: config::Ledger) -> Result<()> {
         // override the validator key file
         write_validator_key(&home_dir, &genesis::genesis().validator)
             .map_err(Error::TendermintValidatorKey)?;
+        write_chain_id(&home_dir, config::DEFAULT_CHAIN_ID.to_owned())
+            .map_err(Error::TendermintChainId)?;
     }
 
     update_tendermint_config(&home_dir)?;
@@ -504,4 +508,27 @@ fn write_validator_key(
       }
     });
     file.write(key.to_string().as_bytes()).map(|_| ())
+}
+
+#[cfg(feature = "dev")]
+fn write_chain_id(
+    home_dir: impl AsRef<Path>,
+    chain_id: String,
+) -> io::Result<()> {
+    let home_dir = home_dir.as_ref();
+    let path = home_dir.join("config").join("genesis.json");
+
+    // TODO: Don't use `config.load_genesis_file()` because tendermint 0.34.x needs `block.TimeIotaMs`. It doesn't exist in tendermint-rs. In the master of Tendermint (go), it was also removed at [#5987](https://github.com/tendermint/tendermint/pull/5987))
+    let file = File::open(path.clone())?;
+    let mut reader = BufReader::new(file);
+    let mut genesis = String::new();
+    std::io::Read::read_to_string(&mut reader, &mut genesis)?;
+    let re =
+        regex::Regex::new("\"chain_id\":.*,").expect("regex initiation failed");
+    let genesis =
+        re.replace(&genesis, format!("\"chain_id\": \"{}\",", chain_id));
+
+    let mut file = OpenOptions::new().write(true).truncate(true).open(path)?;
+    tracing::info!("genesis.json {}", genesis);
+    file.write(genesis.as_bytes()).map(|_| ())
 }

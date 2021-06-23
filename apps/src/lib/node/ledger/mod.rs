@@ -26,8 +26,8 @@ use crate::{config, wallet};
 pub enum Error {
     #[error("Error removing the DB data: {0}")]
     RemoveDB(std::io::Error),
-    #[error("Storage error: {0}")]
-    StorageError(anoma_shared::ledger::storage::Error),
+    #[error("chain ID mismatch: {0}")]
+    ChainIdError(String),
     #[error("Shell ABCI channel receiver error: {0}")]
     AbciChannelRecvError(mpsc::RecvError),
     #[error("Shell ABCI channel sender error: {0}")]
@@ -275,9 +275,14 @@ impl Shell {
 
 impl Shell {
     pub fn init_chain(&mut self, chain_id: String) -> Result<()> {
-        self.storage
-            .set_chain_id(&chain_id)
-            .map_err(Error::StorageError)
+        let (current_chain_id, _) = self.storage.get_chain_id();
+        if current_chain_id != chain_id {
+            return Err(Error::ChainIdError(format!(
+                "Current chain ID: {}, Tendermint chain ID: {}",
+                current_chain_id, chain_id
+            )));
+        }
+        Ok(())
     }
 
     /// Validate a transaction request. On success, the transaction will
