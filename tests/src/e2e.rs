@@ -3,10 +3,9 @@
 #[cfg(test)]
 mod tests {
     use core::time;
-    use std::fs;
     use std::path::PathBuf;
     use std::process::Command;
-    use std::thread;
+    use std::{fs, thread};
 
     use anoma::config::{Config, IntentGossiper};
     use assert_cmd::cargo::CommandCargoExt;
@@ -84,8 +83,9 @@ mod tests {
         Ok(())
     }
 
-    /// Test that when we "run-gossip" a peer with no seeds should fail bootstrapping kademlia.
-    /// A peer with a seed should be able to bootstrap kademia and connect to the other peer.
+    /// Test that when we "run-gossip" a peer with no seeds should fail
+    /// bootstrapping kademlia. A peer with a seed should be able to
+    /// bootstrap kademia and connect to the other peer.
     #[test]
     fn run_gossip() -> Result<()> {
         setup();
