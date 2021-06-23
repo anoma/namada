@@ -234,12 +234,34 @@ impl Default for IntentGossiper {
 
 #[cfg(any(test, feature = "testing"))]
 impl IntentGossiper {
-    pub fn default_with_address(ip: String, port: u32) -> Self {
+    pub fn default_with_address(
+        ip: String,
+        port: u32,
+        peers_info: Vec<(String, u32, PeerId)>,
+    ) -> Self {
         let mut gossiper_config = IntentGossiper::default();
+        let mut discover_config = DiscoverPeer::default();
+
         gossiper_config.address = Multiaddr::from_str(
             &format!("/ip4/{}/tcp/{}", ip, port).to_string(),
         )
         .unwrap();
+
+        let bootstrap_peers: HashSet<PeerAddress> = peers_info
+            .iter()
+            .map(|info| PeerAddress {
+                address: Multiaddr::from_str(
+                    &format!("/ip4/{}/tcp/{}", info.0, info.1).to_string(),
+                )
+                .unwrap(),
+                peer_id: info.2,
+            })
+            .collect();
+        discover_config.bootstrap_peers = bootstrap_peers;
+        discover_config.mdns = false;
+
+        gossiper_config.discover_peer = Some(discover_config);
+
         gossiper_config
     }
 }
