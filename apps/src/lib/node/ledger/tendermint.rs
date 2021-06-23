@@ -5,9 +5,10 @@
 
 use std::convert::{TryFrom, TryInto};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, Write};
+use std::io::{BufReader, Write};
 use std::path::Path;
 use std::process::Command;
+use std::str::FromStr;
 use std::sync::mpsc::{self, channel, Sender};
 
 use anoma_shared::ledger::storage::MerkleRoot;
@@ -38,10 +39,6 @@ use crate::node::ledger::MempoolTxType;
 pub enum Error {
     #[error("Failed to initialize Tendermint: {0}")]
     TendermintInit(std::io::Error),
-    #[error("Failed to write Tendermint validator key: {0}")]
-    TendermintValidatorKey(std::io::Error),
-    #[error("Failed to overwrite Tendermint chain ID: {0}")]
-    TendermintChainId(std::io::Error),
     #[error("Failed to load Tendermint config file: {0}")]
     TendermintLoadConfig(tendermint::error::Error),
     #[error("Failed to open Tendermint config for writing: {0}")]
@@ -125,10 +122,8 @@ pub fn run(sender: AbciSender, config: config::Ledger) -> Result<()> {
 
     if cfg!(feature = "dev") {
         // override the validator key file
-        write_validator_key(&home_dir, &genesis::genesis().validator)
-            .map_err(Error::TendermintValidatorKey)?;
-        write_chain_id(&home_dir, config::DEFAULT_CHAIN_ID.to_owned())
-            .map_err(Error::TendermintChainId)?;
+        write_validator_key(&home_dir, &genesis::genesis().validator);
+        write_chain_id(&home_dir, config::DEFAULT_CHAIN_ID);
     }
 
     update_tendermint_config(&home_dir)?;
@@ -487,13 +482,11 @@ fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
 }
 
 #[cfg(feature = "dev")]
-fn write_validator_key(
-    home_dir: impl AsRef<Path>,
-    account: &Validator,
-) -> io::Result<()> {
+fn write_validator_key(home_dir: impl AsRef<Path>, account: &Validator) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
-    let mut file = File::create(path)?;
+    let file =
+        File::create(path).expect("Couldn't create private validator key file");
     let pk = base64::encode(account.keypair.public.as_bytes());
     let sk = base64::encode(account.keypair.to_bytes());
     let key = json!({
@@ -507,30 +500,36 @@ fn write_validator_key(
          "value": sk,
       }
     });
-    file.write(key.to_string().as_bytes()).map(|_| ())
+    serde_json::to_writer_pretty(file, &key)
+        .expect("Couldn't write private validator key file");
 }
 
 #[cfg(feature = "dev")]
-fn write_chain_id(
-    home_dir: impl AsRef<Path>,
-    chain_id: String,
-) -> io::Result<()> {
+fn write_chain_id(home_dir: impl AsRef<Path>, chain_id: impl AsRef<str>) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
+    let file = File::open(&path).unwrap_or_else(|err| {
+        panic!(
+            "Couldn't open the genesis file at {:?}, error: {}",
+            path, err
+        )
+    });
+    let reader = BufReader::new(file);
+    let mut genesis: tendermint::Genesis = serde_json::from_reader(reader)
+        .expect("Couldn't deserialize the genesis file");
+    genesis.chain_id =
+        FromStr::from_str(chain_id.as_ref()).expect("Invalid chain ID");
 
-    // Don't use `TendermintConfig::load_genesis_file()` because tendermint
-    // 0.34.x requires `block.TimeIotaMs`. It doesn't exist in tendermint-rs.
-    // In the master of Tendermint (go), it was also removed at
-    // [#5987](https://github.com/tendermint/tendermint/pull/5987))
-    let file = File::open(path.clone())?;
-    let mut reader = BufReader::new(file);
-    let mut genesis = String::new();
-    std::io::Read::read_to_string(&mut reader, &mut genesis)?;
-    let re =
-        regex::Regex::new("\"chain_id\":.*,").expect("regex initiation failed");
-    let genesis =
-        re.replace(&genesis, format!("\"chain_id\": \"{}\",", chain_id));
-
-    let mut file = OpenOptions::new().write(true).truncate(true).open(path)?;
-    file.write(genesis.as_bytes()).map(|_| ())
+    let file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .unwrap_or_else(|err| {
+            panic!(
+                "Couldn't open the genesis file at {:?} for writing, error: {}",
+                path, err
+            )
+        });
+    serde_json::to_writer_pretty(file, &genesis)
+        .expect("Couldn't write the genesis file");
 }
