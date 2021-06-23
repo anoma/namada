@@ -1,10 +1,10 @@
 //! Validity predicate environment contains functions that can be called from
 //! inside validity predicates.
 
+use crate::ledger::gas::VpGasMeter;
 // The only possible fail condition for functions here should be out of gas
 // errors
-pub use crate::ledger::gas::Result;
-use crate::ledger::gas::VpGasMeter;
+pub use crate::ledger::gas::{Error, Result};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
 use crate::types::storage::{BlockHash, BlockHeight, Key};

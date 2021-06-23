@@ -3,6 +3,8 @@
 use std::collections::HashSet;
 
 use crate::ledger::gas::{Result, VpGasMeter};
+use crate::ledger::ibc::Ibc;
+use crate::ledger::pos::PoS;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{Storage, StorageHasher};
 use crate::ledger::{storage, vp_env};
@@ -12,14 +14,13 @@ use crate::types::storage::{BlockHash, BlockHeight, Key};
 use crate::vm::prefix_iter::PrefixIterators;
 
 /// Initialize genesis storage for all the [`NativeVp`]s.
-pub fn init_genesis_storage<DB, H>(_storage: &mut Storage<DB, H>)
+pub fn init_genesis_storage<DB, H>(storage: &mut Storage<DB, H>)
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    // TODO
-    // PoS::init_genesis_storage(storage);
-    // Ibc::init_genesis_storage(storage);
+    PoS::init_genesis_storage(storage);
+    Ibc::init_genesis_storage(storage);
 }
 
 /// A native VP module should implement this module and add its initialization
