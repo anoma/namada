@@ -125,7 +125,7 @@ where
 {
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
-    pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
+    pub fn load_last_state(&mut self) -> Result<()> {
         if let Some(BlockState {
             root,
             store,
@@ -142,14 +142,25 @@ where
             self.current_height = height;
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
-            return Ok(Some((
+        } else {
+            tracing::info!("No state could be found");
+        }
+        Ok(())
+    }
+
+    /// Returns the Merkle root hash and the height of the committed block. If
+    /// no block exists, returns None.
+    pub fn get_state(&self) -> Option<(MerkleRoot, u64)> {
+        if self.block.height.0 != 0 {
+            Some((
                 MerkleRoot(
                     self.block.tree.0.root().as_slice().deref().to_vec(),
                 ),
                 self.block.height.0,
-            )));
+            ))
+        } else {
+            None
         }
-        Ok(None)
     }
 
     /// Persist the current block's state to the database

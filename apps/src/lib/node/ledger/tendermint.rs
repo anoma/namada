@@ -518,7 +518,10 @@ fn write_chain_id(
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
 
-    // TODO: Don't use `config.load_genesis_file()` because tendermint 0.34.x needs `block.TimeIotaMs`. It doesn't exist in tendermint-rs. In the master of Tendermint (go), it was also removed at [#5987](https://github.com/tendermint/tendermint/pull/5987))
+    // Don't use `TendermintConfig::load_genesis_file()` because tendermint
+    // 0.34.x requires `block.TimeIotaMs`. It doesn't exist in tendermint-rs.
+    // In the master of Tendermint (go), it was also removed at
+    // [#5987](https://github.com/tendermint/tendermint/pull/5987))
     let file = File::open(path.clone())?;
     let mut reader = BufReader::new(file);
     let mut genesis = String::new();
@@ -529,6 +532,5 @@ fn write_chain_id(
         re.replace(&genesis, format!("\"chain_id\": \"{}\",", chain_id));
 
     let mut file = OpenOptions::new().write(true).truncate(true).open(path)?;
-    tracing::info!("genesis.json {}", genesis);
     file.write(genesis.as_bytes()).map(|_| ())
 }

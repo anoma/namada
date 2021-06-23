@@ -32,13 +32,11 @@ pub fn open(db_path: impl AsRef<Path>) -> PersistentStorage {
         .to_owned()
         .into_string()
         .expect("the conversion shouldn't fail");
-    let tree = MerkleTree::default();
-    let subspaces = HashMap::new();
     let block = BlockStorage {
-        tree,
+        tree: MerkleTree::default(),
         hash: BlockHash::default(),
         height: BlockHeight(0),
-        subspaces,
+        subspaces: HashMap::new(),
     };
     PersistentStorage {
         db: rocksdb::open(db_path).expect("cannot open the DB"),
@@ -174,10 +172,11 @@ mod tests {
 
         // load the last state
         let mut storage = open(db_path.path());
-        let (loaded_root, height) = storage
+        storage
             .load_last_state()
-            .expect("loading the last state failed")
-            .expect("no block exists");
+            .expect("loading the last state failed");
+        let (loaded_root, height) =
+            storage.get_state().expect("no block exists");
         assert_eq!(loaded_root.0, root);
         assert_eq!(height, 100);
         assert_eq!(storage.get_block_hash().0, hash);
