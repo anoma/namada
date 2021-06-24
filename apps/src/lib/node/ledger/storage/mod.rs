@@ -12,9 +12,7 @@ use anoma_shared::ledger::storage::{
     types, BlockStorage, Storage, StorageHasher,
 };
 use anoma_shared::types::address::EstablishedAddressGen;
-use anoma_shared::types::storage::{
-    BlockHash, BlockHeight, Key, CHAIN_ID_LENGTH,
-};
+use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::traits::Hasher;
@@ -26,18 +24,16 @@ pub type PersistentDB = rocksdb::RocksDB;
 
 pub type PersistentStorage = Storage<PersistentDB, PersistentStorageHasher>;
 
-pub fn open(db_path: impl AsRef<Path>) -> PersistentStorage {
-    let tree = MerkleTree::default();
-    let subspaces = HashMap::new();
+pub fn open(db_path: impl AsRef<Path>, chain_id: String) -> PersistentStorage {
     let block = BlockStorage {
-        tree,
+        tree: MerkleTree::default(),
         hash: BlockHash::default(),
         height: BlockHeight(0),
-        subspaces,
+        subspaces: HashMap::new(),
     };
     PersistentStorage {
         db: rocksdb::open(db_path).expect("cannot open the DB"),
-        chain_id: String::with_capacity(CHAIN_ID_LENGTH),
+        chain_id,
         block,
         current_height: BlockHeight(0),
         address_gen: EstablishedAddressGen::new(
@@ -98,12 +94,13 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::config::DEFAULT_CHAIN_ID;
 
     #[test]
     fn test_crud_value() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path());
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
@@ -146,11 +143,7 @@ mod tests {
     fn test_commit_block() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path());
-        let chain_id = "test_chain_id_000000";
-        storage
-            .set_chain_id(chain_id)
-            .expect("setting a chain ID failed");
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -172,14 +165,14 @@ mod tests {
         drop(storage);
 
         // load the last state
-        let mut storage = open(db_path.path());
-        let (loaded_root, height) = storage
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
+        storage
             .load_last_state()
-            .expect("loading the last state failed")
-            .expect("no block exists");
+            .expect("loading the last state failed");
+        let (loaded_root, height) =
+            storage.get_state().expect("no block exists");
         assert_eq!(loaded_root.0, root);
         assert_eq!(height, 100);
-        assert_eq!(storage.get_chain_id().0, chain_id);
         assert_eq!(storage.get_block_hash().0, hash);
         assert_eq!(storage.address_gen, address_gen);
         let (val, _) = storage.read(&key).expect("read failed");
@@ -190,7 +183,7 @@ mod tests {
     fn test_iter() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path());
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -230,7 +223,7 @@ mod tests {
     fn test_validity_predicate() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path());
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
