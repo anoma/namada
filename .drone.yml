@@ -56,7 +56,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-test
   pull: if-not-exists
-- commands: [sccache --start-server, make test]
+- commands: [sccache --start-server, make test-unit]
   depends_on: [build-test]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -598,6 +598,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 3980246db050527cd75fef3edbd2bc97f94dd8dbaba93251bf522185c685c7e8
+hmac: 67679c0326c00c9efd33ca6a8805fc55951d114c3142cf05b0938f444b32086e
 
 ...
