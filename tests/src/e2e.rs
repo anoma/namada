@@ -81,8 +81,8 @@ mod tests {
         let base_dir = tempdir().unwrap();
 
         // Start the ledger
-        let mut cmd = Command::cargo_bin("anoma")?;
-        cmd.current_dir(&dir).args(&[
+        let mut cmd = Command::cargo_bin("anoman")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             &base_dir.path().to_string_lossy(),
             "run-ledger",
@@ -101,13 +101,13 @@ mod tests {
 
         // Wait to commit a block and shut down the ledger
         session
-            .exp_string("Committed block hash")
+            .exp_regex(r"Committed block hash.*, height: 2")
             .map_err(|e| eyre!(format!("{}", e)))?;
         drop(session);
 
         // Start the ledger again, in the same directory
-        let mut cmd = Command::cargo_bin("anoma")?;
-        cmd.current_dir(&dir).args(&[
+        let mut cmd = Command::cargo_bin("anoman")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             &base_dir.path().to_string_lossy(),
             "run-ledger",
