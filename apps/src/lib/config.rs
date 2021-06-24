@@ -54,6 +54,8 @@ pub const BASEDIR: &str = ".anoma";
 pub const FILENAME: &str = "config.toml";
 pub const TENDERMINT_DIR: &str = "tendermint";
 pub const DB_DIR: &str = "db";
+// TODO: change the ID for the production chain
+pub const DEFAULT_CHAIN_ID: &str = "anoma-devchain-00000";
 
 pub type Result<T> = std::result::Result<T, Error>;
 const VALUE_AFTER_TABLE_ERROR_MSG: &str = r#"
@@ -93,7 +95,7 @@ impl Default for Ledger {
             // this two value are override when generating a default config in
             // config::generate(base_dir). There must be a better way ?
             tendermint: PathBuf::from(BASEDIR).join(TENDERMINT_DIR),
-            db: PathBuf::from(BASEDIR).join(DB_DIR),
+            db: PathBuf::from(BASEDIR).join(DB_DIR).join(DEFAULT_CHAIN_ID),
             address: SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                 26658,
@@ -269,7 +271,7 @@ impl Config {
             .ledger
             .as_mut()
             .expect("safe because default has ledger");
-        ledger_cfg.db = base_dir.join(DB_DIR);
+        ledger_cfg.db = base_dir.join(DB_DIR).join(DEFAULT_CHAIN_ID);
         ledger_cfg.tendermint = base_dir.join(TENDERMINT_DIR);
         config.write(base_dir, replace)?;
         Ok(config)
