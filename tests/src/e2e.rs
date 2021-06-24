@@ -31,17 +31,57 @@ mod tests {
         working_dir
     }
 
-    /// Test that when we "run-ledger" from fresh state, the node starts-up
-    /// successfully. When we shut it down and run again, it should load its
-    /// previous state.
+    /// Test that when we "run-ledger" with all the possible command
+    /// combinations from fresh state, the node starts-up successfully.
     #[test]
     fn run_ledger() -> Result<()> {
         let dir = setup();
 
         let base_dir = tempdir().unwrap();
 
+        let cmd_combinations = vec![
+            ("anoma", vec![]),
+            ("anoma", vec!["node"]),
+            ("anoman", vec![]),
+        ];
+
         // Start the ledger
-        let mut cmd = Command::cargo_bin("anoman")?;
+        for (cmd_name, args) in cmd_combinations {
+            let mut cmd = Command::cargo_bin(cmd_name)?;
+
+            cmd.current_dir(&dir)
+                .env("ANOMA_LOG", "debug")
+                .args(&["--base-dir", &base_dir.path().to_string_lossy()])
+                .args(args)
+                .arg("run-ledger");
+
+            let cmd_str = format!("{:?}", cmd);
+
+            let mut session =
+                spawn_command(cmd, Some(30_000)).map_err(|e| {
+                    eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+                })?;
+
+            session
+                .exp_string("Anoma ledger node started")
+                .map_err(|e| {
+                    eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+                })?;
+        }
+
+        Ok(())
+    }
+
+    /// Test that when we "run-ledger", shut it down and run again, it should
+    /// load its previous state.
+    #[test]
+    fn run_ledger_load_state() -> Result<()> {
+        let dir = setup();
+
+        let base_dir = tempdir().unwrap();
+
+        // Start the ledger
+        let mut cmd = Command::cargo_bin("anoma")?;
         cmd.current_dir(&dir).args(&[
             "--base-dir",
             &base_dir.path().to_string_lossy(),
@@ -66,7 +106,7 @@ mod tests {
         drop(session);
 
         // Start the ledger again, in the same directory
-        let mut cmd = Command::cargo_bin("anoman")?;
+        let mut cmd = Command::cargo_bin("anoma")?;
         cmd.current_dir(&dir).args(&[
             "--base-dir",
             &base_dir.path().to_string_lossy(),
