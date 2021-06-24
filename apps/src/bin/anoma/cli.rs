@@ -24,8 +24,18 @@ fn handle_command(app: App, cmd: &str) -> Result<()> {
 
     let is_node_or_client = vec![cli::NODE_CMD, cli::CLIENT_CMD].contains(&cmd);
 
-    let sub_args: Vec<String> =
-        args.skip(if is_node_or_client { 2 } else { 1 }).collect();
+    // Skip the first arg, which is the name of the binary
+    let mut sub_args: Vec<String> = args.skip(1).collect();
+
+    if is_node_or_client {
+        // Because there may be global args before the `cmd`, we have to find it
+        // before removing it.
+        sub_args
+            .iter()
+            .position(|arg| arg == cmd)
+            .map(|e| sub_args.remove(e));
+    }
+
     tracing::debug!("command {} sub args {:?}", cmd, sub_args);
 
     let is_node_command = cmd == cli::NODE_CMD
