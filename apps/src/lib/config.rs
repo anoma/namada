@@ -263,8 +263,8 @@ impl Config {
         config.try_into().map_err(Error::DeserializationError)
     }
 
-    pub fn generate(base_dir_path: &str, replace: bool) -> Result<Self> {
-        let base_dir = PathBuf::from(base_dir_path);
+    pub fn generate(base_dir: &str, replace: bool) -> Result<Self> {
+        let base_dir = PathBuf::from(base_dir);
         let mut config = Config::default();
         let mut ledger_cfg = config
             .ledger

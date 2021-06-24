@@ -9,7 +9,7 @@ use clap::App;
 use eyre::{eyre, Context, Result};
 
 pub fn main() -> Result<()> {
-    let app = cli::anoma_inline_cli();
+    let app = cli::anoma_cli();
     let matches = app.clone().get_matches();
 
     if let Some(cmd) = matches.subcommand_name() {
@@ -22,26 +22,26 @@ pub fn main() -> Result<()> {
 fn handle_command(app: App, cmd: &str) -> Result<()> {
     let args = env::args();
 
-    let is_node_or_client =
-        vec![cli::NODE_COMMAND, cli::CLIENT_COMMAND].contains(&cmd);
+    let is_node_or_client = vec![cli::NODE_CMD, cli::CLIENT_CMD].contains(&cmd);
 
     let sub_args: Vec<String> =
         args.skip(if is_node_or_client { 2 } else { 1 }).collect();
+    tracing::debug!("command {} sub args {:?}", cmd, sub_args);
 
-    let is_node_command = cmd == cli::NODE_COMMAND
+    let is_node_command = cmd == cli::NODE_CMD
         ||
         // inlined node commands
         vec![
-            cli::RUN_GOSSIP_COMMAND,
-            cli::RUN_LEDGER_COMMAND,
-            cli::RESET_LEDGER_COMMAND,
+            cli::RUN_GOSSIP_CMD,
+            cli::RUN_LEDGER_CMD,
+            cli::RESET_LEDGER_CMD,
         ]
         .contains(&cmd);
 
-    let is_client_command = cmd == cli::CLIENT_COMMAND
+    let is_client_command = cmd == cli::CLIENT_CMD
         ||
         // inlined client commands
-        vec![cli::TX_COMMAND, cli::INTENT_COMMAND].contains(&cmd);
+        vec![cli::TX_CUSTOM_CMD, cli::TX_TRANSFER_CMD, cli::INTENT_CMD].contains(&cmd);
 
     if is_node_command {
         handle_subcommand("anoman", sub_args)

@@ -1,6 +1,9 @@
 use std::fs::File;
 use std::io::Write;
 
+use anoma::cli::{
+    ArgMatchesExt, CraftIntentArgs, IntentArgs, SubscribeTopicArgs,
+};
 use anoma::client::tx;
 use anoma::proto::services::rpc_service_client::RpcServiceClient;
 use anoma::proto::{services, RpcMessage};
@@ -19,83 +22,42 @@ pub async fn main() -> Result<()> {
     let matches = app.clone().get_matches();
 
     match matches.subcommand() {
-        Some((cli::TX_COMMAND, args)) => {
-            let tx_code_path = cli::parse_string_req(args, cli::CODE_ARG);
-            let data = args.value_of(cli::DATA_ARG);
-            let dry_run = args.is_present(cli::DRY_RUN_TX_ARG);
-            let ledger_address =
-                cli::parse_string_req(args, cli::LEDGER_ADDRESS_ARG);
-            tx::submit_custom(tx_code_path, data, dry_run, ledger_address)
-                .await;
-            Ok(())
+        Some((cli::TX_CUSTOM_CMD, args)) => {
+            let args = args.tx_custom();
+            tx::submit_custom(args).await;
         }
-        Some((cli::TX_TRANSFER_COMMAND, args)) => {
-            let source = cli::parse_string_req(args, cli::SOURCE_ARG);
-            let target = cli::parse_string_req(args, cli::TARGET_ARG);
-            let token = cli::parse_string_req(args, cli::TOKEN_ARG);
-            let amount: f64 = cli::parse_req(args, cli::AMOUNT_ARG);
-            let tx_code_path = cli::parse_string_req(args, cli::CODE_ARG);
-            let dry_run = args.is_present(cli::DRY_RUN_TX_ARG);
-            let ledger_address =
-                cli::parse_string_req(args, cli::LEDGER_ADDRESS_ARG);
-            tx::submit_transfer(
-                source,
-                target,
-                token,
-                amount,
-                tx_code_path,
-                dry_run,
-                ledger_address,
-            )
-            .await;
-            Ok(())
+        Some((cli::TX_TRANSFER_CMD, args)) => {
+            let args = args.tx_transfer();
+            tx::submit_transfer(args).await;
         }
-        Some((cli::TX_UPDATE_COMMAND, args)) => {
-            let addr = cli::parse_string_req(args, cli::ADDRESS_ARG);
-            let vp_code_path = cli::parse_string_req(args, cli::CODE_ARG);
-            let dry_run = args.is_present(cli::DRY_RUN_TX_ARG);
-            let ledger_address =
-                cli::parse_string_req(args, cli::LEDGER_ADDRESS_ARG);
-            tx::submit_update_vp(addr, vp_code_path, dry_run, ledger_address)
-                .await;
-            Ok(())
+        Some((cli::TX_UPDATE_CMD, args)) => {
+            let args = args.tx_update_vp();
+            tx::submit_update_vp(args).await;
         }
-        Some((cli::INTENT_COMMAND, args)) => {
-            let node = cli::parse_string_req(args, cli::NODE_INTENT_ARG);
-            let data = cli::parse_string_req(args, cli::DATA_INTENT_ARG);
-            let topic = cli::parse_string_req(args, cli::TOPIC_ARG);
-            gossip_intent(node, data, topic).await;
-            Ok(())
+        Some((cli::INTENT_CMD, args)) => {
+            let args = args.intent();
+            gossip_intent(args).await;
         }
-        Some((cli::SUBSCRIBE_TOPIC_COMMAND, args)) => {
-            // here unwrap is safe as the arguments are required
-            let node = cli::parse_string_req(args, cli::NODE_INTENT_ARG);
-            let topic = cli::parse_string_req(args, cli::TOPIC_ARG);
-            subscribe_topic(node, topic).await;
-            Ok(())
+        Some((cli::CRAFT_INTENT_CMD, args)) => {
+            let args = args.craft_intent();
+            craft_intent(args);
         }
-        Some((cli::CRAFT_INTENT_COMMAND, args)) => {
-            let addr = cli::parse_string_req(args, cli::ADDRESS_ARG);
-            let token_sell = cli::parse_string_req(args, cli::TOKEN_SELL_ARG);
-            let amount_sell = cli::parse_req(args, cli::AMOUNT_SELL_ARG);
-            let token_buy = cli::parse_string_req(args, cli::TOKEN_BUY_ARG);
-            let amount_buy = cli::parse_req(args, cli::AMOUNT_BUY_ARG);
-            let file = cli::parse_string_req(args, cli::FILE_ARG);
-            craft_intent(
-                addr,
-                token_sell,
-                amount_sell,
-                token_buy,
-                amount_buy,
-                file,
-            );
-            Ok(())
+        Some((cli::SUBSCRIBE_TOPIC_CMD, args)) => {
+            let args = args.subscribe_topic();
+            subscribe_topic(args).await;
         }
-        _ => app.print_help().wrap_err("Can't display help."),
+        _ => app.print_help().wrap_err("Can't display help.")?,
     }
+    Ok(())
 }
 
-async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
+async fn gossip_intent(
+    IntentArgs {
+        node_addr,
+        data_path,
+        topic,
+    }: IntentArgs,
+) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let data = std::fs::read(data_path).expect("data file IO error");
     let intent = anoma_shared::proto::Intent::new(data);
@@ -108,7 +70,9 @@ async fn gossip_intent(node_addr: String, data_path: String, topic: String) {
     println!("{:#?}", response);
 }
 
-async fn subscribe_topic(node_addr: String, topic: String) {
+async fn subscribe_topic(
+    SubscribeTopicArgs { node_addr, topic }: SubscribeTopicArgs,
+) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let message: services::RpcMessage = RpcMessage::new_topic(topic).into();
     let response = client
@@ -119,12 +83,14 @@ async fn subscribe_topic(node_addr: String, topic: String) {
 }
 
 fn craft_intent(
-    addr: String,
-    token_sell: String,
-    amount_sell: f64,
-    token_buy: String,
-    amount_buy: f64,
-    file: String,
+    CraftIntentArgs {
+        addr,
+        token_sell,
+        amount_sell,
+        token_buy,
+        amount_buy,
+        file,
+    }: CraftIntentArgs,
 ) {
     let source_keypair = wallet::key_of(&addr);
     let addr = Address::decode(addr).expect("Source address is not valid");

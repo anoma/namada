@@ -1,5 +1,6 @@
 //! The docstrings on types and their fields with `derive(Clap)` are displayed
 //! in the CLI `--help`.
+use anoma::cli::ArgMatchesExt;
 use anoma::config::Config;
 use anoma::node::{gossip, ledger};
 use anoma::{cli, config};
@@ -10,30 +11,29 @@ pub fn main() -> Result<()> {
 
     let matches = &app.get_matches_mut();
 
-    // here unwrap is safe to use req as the argument even it's not mandatory
-    // because it has a default
-    let home = cli::parse_string_req(&matches, cli::BASE_ARG);
+    let global_args = matches.global();
+    let base_dir = &global_args.base_dir;
 
     match matches.subcommand() {
-        Some((cli::RUN_GOSSIP_COMMAND, args)) => {
-            let config = get_cfg(home);
+        Some((cli::RUN_GOSSIP_CMD, args)) => {
+            let config = get_cfg(base_dir);
             let mut gossip_cfg = config.intent_gossiper.unwrap_or_default();
             cli::update_gossip_config(args, &mut gossip_cfg)
                 .expect("failed to update config with cli option");
             gossip::run(gossip_cfg).wrap_err("Failed to run gossip service")
         }
-        Some((cli::RUN_LEDGER_COMMAND, _)) => {
-            let config = get_cfg(home);
+        Some((cli::RUN_LEDGER_CMD, _)) => {
+            let config = get_cfg(base_dir);
             let ledger_cfg = config.ledger.unwrap_or_default();
             ledger::run(ledger_cfg).wrap_err("Failed to run Anoma node")
         }
-        Some((cli::RESET_LEDGER_COMMAND, _)) => {
-            let config = get_cfg(home);
+        Some((cli::RESET_LEDGER_CMD, _)) => {
+            let config = get_cfg(base_dir);
             let ledger_cfg = config.ledger.unwrap_or_default();
             ledger::reset(ledger_cfg).wrap_err("Failed to reset Anoma node")
         }
-        Some((cli::GENERATE_CONFIG_COMMAND, _args)) => {
-            let gen_config = config::Config::generate(&home, false)
+        Some((cli::GENERATE_CONFIG_CMD, _args)) => {
+            let gen_config = config::Config::generate(base_dir, false)
                 .wrap_err("failed to generate default config")?;
             tracing::debug!("generated config {:?}", gen_config);
             Ok(())
@@ -45,26 +45,26 @@ pub fn main() -> Result<()> {
 // for dev purpose this is useful so if the config change it automatically
 // generate the default one
 #[cfg(feature = "dev")]
-fn get_cfg(home: String) -> Config {
-    match Config::read(&home) {
+fn get_cfg(base_dir: &str) -> Config {
+    match Config::read(base_dir) {
         Ok(config) => config,
         Err(err) => {
             tracing::error!(
                 "Tried to read config in {} but failed with: {}",
-                home,
+                base_dir,
                 err
             );
             // generate(home,true) replace current config if it exists
-            match config::Config::generate(&home, true) {
+            match config::Config::generate(base_dir, true) {
                 Ok(config) => {
-                    tracing::warn!("Generated default config in {}", home,);
+                    tracing::warn!("Generated default config in {}", base_dir,);
                     config
                 }
                 Err(err) => {
                     tracing::error!(
                         "Tried to generate config in {} but failed with: \
                          {}.Using default config (with new generated key)",
-                        home,
+                        base_dir,
                         err
                     );
                     config::Config::default()
