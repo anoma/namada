@@ -12,7 +12,7 @@ use borsh::BorshDeserialize;
 /// first step reads the value into a result buffer and returns the size (if
 /// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
-fn read_from_cache<T: BorshDeserialize>(
+fn read_from_buffer<T: BorshDeserialize>(
     read_result: i64,
     result_buffer: unsafe extern "C" fn(u64),
 ) -> Option<T> {
@@ -34,11 +34,11 @@ fn read_from_cache<T: BorshDeserialize>(
 
 /// This function is a helper to handle the second step of reading var-len
 /// values in a key-value pair from the host.
-fn read_key_val_from_cache<T: BorshDeserialize>(
+fn read_key_val_from_buffer<T: BorshDeserialize>(
     read_result: i64,
     result_buffer: unsafe extern "C" fn(u64),
 ) -> Option<(String, T)> {
-    let key_val: Option<KeyVal> = read_from_cache(read_result, result_buffer);
+    let key_val: Option<KeyVal> = read_from_buffer(read_result, result_buffer);
     key_val.and_then(|key_val| {
         // decode the value
         T::try_from_slice(&key_val.val)
@@ -69,7 +69,7 @@ pub mod tx {
         let key = key.as_ref();
         let read_result =
             unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
-        super::read_from_cache(read_result, anoma_tx_result_buffer)
+        super::read_from_buffer(read_result, anoma_tx_result_buffer)
     }
 
     /// Check if the given key is present in storage.
@@ -122,7 +122,7 @@ pub mod tx {
 
         fn next(&mut self) -> Option<(String, T)> {
             let read_result = unsafe { anoma_tx_iter_next(self.0) };
-            super::read_key_val_from_cache(read_result, anoma_tx_result_buffer)
+            super::read_key_val_from_buffer(read_result, anoma_tx_result_buffer)
         }
     }
 
@@ -292,7 +292,7 @@ pub mod vp {
         let key = key.as_ref();
         let read_result =
             unsafe { anoma_vp_read_pre(key.as_ptr() as _, key.len() as _) };
-        super::read_from_cache(read_result, anoma_vp_result_buffer)
+        super::read_from_buffer(read_result, anoma_vp_result_buffer)
     }
 
     /// Try to read a variable-length value at the given key from storage after
@@ -301,7 +301,7 @@ pub mod vp {
         let key = key.as_ref();
         let read_result =
             unsafe { anoma_vp_read_post(key.as_ptr() as _, key.len() as _) };
-        super::read_from_cache(read_result, anoma_vp_result_buffer)
+        super::read_from_buffer(read_result, anoma_vp_result_buffer)
     }
 
     /// Check if the given key was present in storage before transaction
@@ -338,7 +338,7 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let read_result = unsafe { anoma_vp_iter_pre_next(self.0) };
-            super::read_key_val_from_cache(read_result, anoma_vp_result_buffer)
+            super::read_key_val_from_buffer(read_result, anoma_vp_result_buffer)
         }
     }
 
@@ -358,7 +358,7 @@ pub mod vp {
 
         fn next(&mut self) -> Option<(String, T)> {
             let read_result = unsafe { anoma_vp_iter_post_next(self.0) };
-            super::read_key_val_from_cache(read_result, anoma_vp_result_buffer)
+            super::read_key_val_from_buffer(read_result, anoma_vp_result_buffer)
         }
     }
 
