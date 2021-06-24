@@ -219,6 +219,7 @@ impl<'iter> DBIter<'iter> for MockDB {
 }
 
 /// A prefix iterator base for the [`MockPrefixIterator`].
+#[derive(Debug)]
 pub struct MockIterator<'a> {
     prefix: String,
     /// The concrete iterator

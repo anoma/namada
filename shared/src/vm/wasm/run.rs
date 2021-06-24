@@ -284,8 +284,10 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    db: PhantomData<*const DB>,
-    hasher: PhantomData<*const H>,
+    /// Phantom type for DB
+    pub db: PhantomData<*const DB>,
+    /// Phantom type for DB Hasher
+    pub hasher: PhantomData<*const H>,
 }
 
 impl<DB, H> VpEvaluator for VpEvalWasm<DB, H>
@@ -318,7 +320,8 @@ where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    fn eval_native_result(
+    /// Evaluate the given VP.
+    pub fn eval_native_result(
         &self,
         ctx: VpCtx<'static, DB, H, Self>,
         vp_code: Vec<u8>,

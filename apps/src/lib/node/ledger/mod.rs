@@ -8,6 +8,7 @@ use std::sync::mpsc;
 
 use anoma_shared::bytes::ByteBuf;
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
+use anoma_shared::ledger::native_vp;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::proto::{self, Tx};
@@ -298,6 +299,8 @@ impl Shell {
                 current_chain_id, chain_id
             )));
         }
+        // TODO pass in the genesis object
+        native_vp::init_genesis_storage(&mut self.storage);
         Ok(())
     }
 

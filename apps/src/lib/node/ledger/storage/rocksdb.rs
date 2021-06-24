@@ -340,6 +340,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
     }
 }
 
+#[derive(Debug)]
 pub struct PersistentPrefixIterator<'a>(
     PrefixIterator<rocksdb::DBIterator<'a>>,
 );

@@ -7,6 +7,7 @@ use crate::ledger::storage;
 
 /// A temporary iterators storage, used during a wasm run after which it's
 /// dropped. Each iterator is assigned a [`PrefixIteratorId`].
+#[derive(Debug)]
 pub struct PrefixIterators<'iter, DB>
 where
     DB: storage::DBIter<'iter>,
@@ -36,6 +37,14 @@ where
             Some(iter) => iter.next(),
             None => None,
         }
+    }
+
+    /// Get prefix iterator with the given ID.
+    pub fn get_mut(
+        &mut self,
+        id: PrefixIteratorId,
+    ) -> Option<&mut DB::PrefixIter> {
+        self.iterators.get_mut(&id)
     }
 }
 

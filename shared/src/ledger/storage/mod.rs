@@ -5,6 +5,7 @@ pub mod mockdb;
 pub mod types;
 pub mod write_log;
 
+use core::fmt::Debug;
 use std::collections::HashMap;
 use std::ops::Deref;
 
@@ -105,7 +106,7 @@ pub trait DB: std::fmt::Debug {
 /// A database prefix iterator.
 pub trait DBIter<'iter> {
     /// The concrete type of the iterator
-    type PrefixIter: Iterator<Item = (String, Vec<u8>, u64)>;
+    type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
     /// Read key value pairs with the given prefix from the DB
     fn iter_prefix(
