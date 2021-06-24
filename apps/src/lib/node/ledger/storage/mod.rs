@@ -24,14 +24,7 @@ pub type PersistentDB = rocksdb::RocksDB;
 
 pub type PersistentStorage = Storage<PersistentDB, PersistentStorageHasher>;
 
-pub fn open(db_path: impl AsRef<Path>) -> PersistentStorage {
-    let chain_id = db_path
-        .as_ref()
-        .file_name()
-        .expect("the DB dir should exist")
-        .to_owned()
-        .into_string()
-        .expect("the conversion shouldn't fail");
+pub fn open(db_path: impl AsRef<Path>, chain_id: String) -> PersistentStorage {
     let block = BlockStorage {
         tree: MerkleTree::default(),
         hash: BlockHash::default(),
@@ -101,12 +94,13 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::config::DEFAULT_CHAIN_ID;
 
     #[test]
     fn test_crud_value() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path());
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
@@ -149,7 +143,7 @@ mod tests {
     fn test_commit_block() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path());
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -171,7 +165,7 @@ mod tests {
         drop(storage);
 
         // load the last state
-        let mut storage = open(db_path.path());
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         storage
             .load_last_state()
             .expect("loading the last state failed");
@@ -189,7 +183,7 @@ mod tests {
     fn test_iter() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path());
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -229,7 +223,7 @@ mod tests {
     fn test_validity_predicate() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path());
+        let mut storage = open(db_path.path(), DEFAULT_CHAIN_ID.to_owned());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");

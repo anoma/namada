@@ -43,7 +43,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn run(config: config::Ledger) -> Result<()> {
     // open a channel between ABCI (the sender) and the shell (the receiver)
     let (sender, receiver) = mpsc::channel();
-    let shell = Shell::new(receiver, &config.db);
+    let shell =
+        Shell::new(receiver, &config.db, config::DEFAULT_CHAIN_ID.to_owned());
     // Run Tendermint ABCI server in another thread
     let _tendermint_handle = std::thread::spawn(move || {
         if let Err(err) = tendermint::run(sender.clone(), config) {
@@ -87,8 +88,12 @@ pub enum MempoolTxType {
 }
 
 impl Shell {
-    pub fn new(abci: AbciReceiver, db_path: impl AsRef<Path>) -> Self {
-        let mut storage = storage::open(db_path);
+    pub fn new(
+        abci: AbciReceiver,
+        db_path: impl AsRef<Path>,
+        chain_id: String,
+    ) -> Self {
+        let mut storage = storage::open(db_path, chain_id);
         storage
             .load_last_state()
             .map_err(|e| {
