@@ -24,7 +24,7 @@ build:
 	$(cargo) build
 
 build-test:
-	$(cargo) build --test
+	$(cargo) build --tests
 
 build-release:
 	$(cargo) build --release
