@@ -23,6 +23,9 @@ audit-ignores += RUSTSEC-2020-0016
 build:
 	$(cargo) build
 
+build-test:
+	$(cargo) build --test
+
 build-release:
 	$(cargo) build --release
 
@@ -62,7 +65,18 @@ audit:
 
 test-wasm = $(cargo) test --manifest-path $(wasm)/Cargo.toml
 test:
-	$(cargo) test && \
+	make test-unit && \
+    make test-e2e && \
+	make test-wasm
+
+test-e2e:
+	$(cargo) test e2e -- --test-threads=1
+
+test-unit:
+	$(cargo) test -- --skip e2e
+
+test-wasm = $(cargo) test --manifest-path $(wasm)/Cargo.toml
+test-wasm:
 	$(foreach wasm,$(wasms),$(test-wasm) && ) true
 
 test-debug:
