@@ -1,17 +1,15 @@
 //! Wasm runners
 
 use std::collections::HashSet;
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
-use wasmer::Instance;
+use wasmer::BaseTunables;
 
-use super::host_env::{
-    prepare_mm_filter_imports, prepare_mm_imports, prepare_tx_imports,
-    prepare_vp_env,
-};
+use super::memory::{Limit, WasmMemory};
 use crate::gossip::mm::MmHost;
 use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
@@ -20,11 +18,14 @@ use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::internal::HostEnvResult;
 use crate::types::storage::Key;
-use crate::vm::host_env::VpEvalRunner;
+use crate::vm::host_env::{TxEnv, VpCtx, VpEnv, VpEvaluator};
 use crate::vm::prefix_iter::PrefixIterators;
-use crate::vm::types::{TxInput, VpInput};
+use crate::vm::types::VpInput;
+use crate::vm::validate_untrusted_wasm;
+use crate::vm::wasm::host_env::{
+    mm_filter_imports, mm_imports, tx_imports, vp_imports,
+};
 use crate::vm::wasm::memory;
-use crate::vm::{validate_untrusted_wasm, EnvHostWrapper, MutEnvHostWrapper};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -71,241 +72,197 @@ pub enum Error {
 /// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Transaction wasm runner
-#[derive(Clone, Debug)]
-pub struct TxRunner {
+/// Execute a transaction code. Returns the set verifiers addresses requested by
+/// the transaction.
+pub fn tx<DB, H>(
+    storage: &Storage<DB, H>,
+    write_log: &mut WriteLog,
+    gas_meter: &mut BlockGasMeter,
+    tx_code: Vec<u8>,
+    tx_data: Vec<u8>,
+) -> Result<HashSet<Address>>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    let wasm_store = untrusted_wasm_store(memory::tx_limit());
+
+    validate_untrusted_wasm(&tx_code).map_err(Error::ValidationError)?;
+
+    let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
+    let mut verifiers = HashSet::new();
+    let mut result_buffer: Option<Vec<u8>> = None;
+
+    let env = TxEnv::new(
+        WasmMemory::default(),
+        storage,
+        write_log,
+        &mut iterators,
+        gas_meter,
+        &mut verifiers,
+        &mut result_buffer,
+    );
+
+    let tx_code = prepare_wasm_code(&tx_code)?;
+
+    let initial_memory =
+        memory::prepare_tx_memory(&wasm_store).map_err(Error::MemoryError)?;
+    let imports = tx_imports(&wasm_store, initial_memory, env);
+
+    // Compile the wasm module
+    let module = wasmer::Module::new(&wasm_store, &tx_code)
+        .map_err(Error::CompileError)?;
+
+    // Instantiate the wasm module
+    let instance = wasmer::Instance::new(&module, &imports)
+        .map_err(Error::InstantiationError)?;
+
+    // We need to write the inputs in the memory exported from the wasm
+    // module
+    let memory = instance
+        .exports
+        .get_memory("memory")
+        .map_err(Error::MissingModuleMemory)?;
+    let memory::TxCallInput {
+        tx_data_ptr,
+        tx_data_len,
+    } = memory::write_tx_inputs(memory, tx_data).map_err(Error::MemoryError)?;
+
+    // Get the module's entrypoint to be called
+    let apply_tx = instance
+        .exports
+        .get_function(TX_ENTRYPOINT)
+        .map_err(Error::MissingModuleEntrypoint)?
+        .native::<(u64, u64), ()>()
+        .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+            entrypoint: TX_ENTRYPOINT,
+            error,
+        })?;
+    apply_tx
+        .call(tx_data_ptr, tx_data_len)
+        .map_err(Error::RuntimeError)?;
+
+    Ok(verifiers)
+}
+
+/// Execute a validity predicate code. Returns whether the validity
+/// predicate accepted storage modifications performed by the transaction
+/// that triggered the execution.
+#[allow(clippy::too_many_arguments)]
+pub fn vp<DB, H>(
+    vp_code: impl AsRef<[u8]>,
+    tx: &Tx,
+    address: &Address,
+    storage: &Storage<DB, H>,
+    write_log: &WriteLog,
+    gas_meter: &mut VpGasMeter,
+    keys_changed: &HashSet<Key>,
+    verifiers: &HashSet<Address>,
+) -> Result<bool>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    let vp_code = vp_code.as_ref();
+    let input_data = match tx.data.as_ref() {
+        Some(data) => &data[..],
+        None => &[],
+    };
+
+    let wasm_store = untrusted_wasm_store(memory::tx_limit());
+
+    validate_untrusted_wasm(vp_code).map_err(Error::ValidationError)?;
+
+    let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
+    let mut result_buffer: Option<Vec<u8>> = None;
+    let eval_runner = VpEvalWasm {
+        db: PhantomData,
+        hasher: PhantomData,
+    };
+
+    let env = VpEnv::new(
+        WasmMemory::default(),
+        address,
+        storage,
+        write_log,
+        gas_meter,
+        tx,
+        &mut iterators,
+        verifiers,
+        &mut result_buffer,
+        keys_changed,
+        &eval_runner,
+    );
+
+    let initial_memory =
+        memory::prepare_vp_memory(&wasm_store).map_err(Error::MemoryError)?;
+    let imports = vp_imports(&wasm_store, initial_memory, env);
+
+    run_vp(
+        wasm_store,
+        imports,
+        vp_code,
+        input_data,
+        address,
+        keys_changed,
+        verifiers,
+    )
+}
+
+fn run_vp(
     wasm_store: wasmer::Store,
-}
+    vp_imports: wasmer::ImportObject,
+    vp_code: &[u8],
+    input_data: &[u8],
+    address: &Address,
+    keys_changed: &HashSet<Key>,
+    verifiers: &HashSet<Address>,
+) -> Result<bool> {
+    let vp_code = prepare_wasm_code(vp_code)?;
 
-impl TxRunner {
-    /// TODO remove the `new`, it's not very useful
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        // Use Singlepass compiler with the default settings
-        let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let limit = memory::tx_limit();
-        // TODO Could we pass the modified accounts sub-spaces via WASM store
-        // directly to VPs' wasm scripts to avoid passing it through the
-        // host?
-        let wasm_store = wasmer::Store::new_with_tunables(
-            &wasmer_engine_jit::JIT::new(compiler).engine(),
-            limit,
-        );
-        Self { wasm_store }
-    }
+    // Compile the wasm module
+    let module = wasmer::Module::new(&wasm_store, &vp_code)
+        .map_err(Error::CompileError)?;
+    let input: VpInput = VpInput {
+        addr: address,
+        data: input_data,
+        keys_changed,
+        verifiers,
+    };
 
-    /// Execute a transaction code. Returns verifiers requested by the
-    /// transaction.
-    pub fn run<DB, H>(
-        &self,
-        storage: &Storage<DB, H>,
-        write_log: &mut WriteLog,
-        gas_meter: &mut BlockGasMeter,
-        tx_code: Vec<u8>,
-        tx_data: Vec<u8>,
-    ) -> Result<HashSet<Address>>
-    where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: 'static + StorageHasher,
-    {
-        validate_untrusted_wasm(&tx_code).map_err(Error::ValidationError)?;
+    // Instantiate the wasm module
+    let instance = wasmer::Instance::new(&module, &vp_imports)
+        .map_err(Error::InstantiationError)?;
 
-        // This is not thread-safe, we're assuming single-threaded Tx runner.
-        let storage = unsafe { EnvHostWrapper::new(storage) };
-        // This is also not thread-safe, we're assuming single-threaded Tx
-        // runner.
-        let write_log = unsafe { MutEnvHostWrapper::new(write_log) };
-        // This is also not thread-safe, we're assuming single-threaded Tx
-        // runner.
-        let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
-        let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
-        let mut verifiers = HashSet::new();
-        // This is also not thread-safe, we're assuming single-threaded Tx
-        // runner.
-        let env_verifiers = unsafe { MutEnvHostWrapper::new(&mut verifiers) };
-        // This is also not thread-safe, we're assuming single-threaded Tx
-        // runner.
-        let gas_meter = unsafe { MutEnvHostWrapper::new(gas_meter) };
-        // This is also not thread-safe, we're assuming single-threaded Tx
-        // runner.
-        let mut result_buffer: Option<Vec<u8>> = None;
-        let env_result_buffer =
-            unsafe { MutEnvHostWrapper::new(&mut result_buffer) };
+    // We need to write the inputs in the memory exported from the wasm
+    // module
+    let memory = instance
+        .exports
+        .get_memory("memory")
+        .map_err(Error::MissingModuleMemory)?;
+    let memory::VpCallInput {
+        addr_ptr,
+        addr_len,
+        data_ptr,
+        data_len,
+        keys_changed_ptr,
+        keys_changed_len,
+        verifiers_ptr,
+        verifiers_len,
+    } = memory::write_vp_inputs(memory, input).map_err(Error::MemoryError)?;
 
-        let tx_code = prepare_wasm_code(&tx_code)?;
-
-        let tx_module = wasmer::Module::new(&self.wasm_store, &tx_code)
-            .map_err(Error::CompileError)?;
-        let initial_memory = memory::prepare_tx_memory(&self.wasm_store)
-            .map_err(Error::MemoryError)?;
-        let tx_imports = prepare_tx_imports(
-            &self.wasm_store,
-            storage,
-            write_log,
-            iterators,
-            env_verifiers,
-            gas_meter,
-            env_result_buffer,
-            initial_memory,
-        );
-
-        // compile and run the transaction wasm code
-        let tx_code = wasmer::Instance::new(&tx_module, &tx_imports)
-            .map_err(Error::InstantiationError)?;
-        Self::run_with_input(tx_code, tx_data)?;
-        Ok(verifiers)
-    }
-
-    fn run_with_input(tx_code: Instance, tx_data: TxInput) -> Result<()> {
-        // We need to write the inputs in the memory exported from the wasm
-        // module
-        let memory = tx_code
-            .exports
-            .get_memory("memory")
-            .map_err(Error::MissingModuleMemory)?;
-        let memory::TxCallInput {
-            tx_data_ptr,
-            tx_data_len,
-        } = memory::write_tx_inputs(memory, tx_data)
-            .map_err(Error::MemoryError)?;
-
-        // Get the module's entrypoint to be called
-        let apply_tx = tx_code
-            .exports
-            .get_function(TX_ENTRYPOINT)
-            .map_err(Error::MissingModuleEntrypoint)?
-            .native::<(u64, u64), ()>()
-            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-                entrypoint: TX_ENTRYPOINT,
-                error,
-            })?;
-        apply_tx
-            .call(tx_data_ptr, tx_data_len)
-            .map_err(Error::RuntimeError)
-    }
-}
-
-/// Validity predicate wasm runner
-#[derive(Clone, Debug)]
-pub struct VpRunner {
-    wasm_store: wasmer::Store,
-}
-
-impl VpRunner {
-    /// TODO remove the `new`, it's not very useful
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        // Use Singlepass compiler with the default settings
-        let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let limit = memory::vp_limit();
-        // TODO: Maybe refactor wasm_store: not necessary to do in two steps
-        let wasm_store = wasmer::Store::new_with_tunables(
-            &wasmer_engine_jit::JIT::new(compiler).engine(),
-            limit,
-        );
-        Self { wasm_store }
-    }
-
-    /// Execute a validity predicate code. Returns whether the validity
-    /// predicate accepted storage modifications performed by the transaction
-    /// that triggered the execution.
-    // TODO consider using a wrapper object for all the host env references
-    #[allow(clippy::too_many_arguments)]
-    pub fn run<DB, H>(
-        &self,
-        vp_code: impl AsRef<[u8]>,
-        tx: &Tx,
-        address: &Address,
-        storage: &Storage<DB, H>,
-        write_log: &WriteLog,
-        vp_gas_meter: &mut VpGasMeter,
-        keys_changed: &HashSet<Key>,
-        verifiers: &HashSet<Address>,
-    ) -> Result<bool>
-    where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: 'static + StorageHasher,
-    {
-        validate_untrusted_wasm(vp_code.as_ref())
-            .map_err(Error::ValidationError)?;
-        let tx_data = tx.data.clone().unwrap_or_default();
-
-        // Read-only access from parallel Vp runners
-        let storage = unsafe { EnvHostWrapper::new(storage) };
-        // Read-only access from parallel Vp runners
-        let write_log = unsafe { EnvHostWrapper::new(write_log) };
-        // Read-only access from parallel Vp runners
-        let tx = unsafe { EnvHostWrapper::new(tx) };
-        // This is not thread-safe, but because each VP has its own instance
-        // there is no shared access
-        let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
-        let iterators = unsafe { MutEnvHostWrapper::new(&mut iterators) };
-        // This is not thread-safe, but because each VP has its own instance
-        // there is no shared access
-        let gas_meter = unsafe { MutEnvHostWrapper::new(vp_gas_meter) };
-        // Read-only access from parallel Vp runners
-        let env_keys_changed = unsafe { EnvHostWrapper::new(keys_changed) };
-        // Read-only access from parallel Vp runners
-        let env_verifiers = unsafe { EnvHostWrapper::new(verifiers) };
-        // This is not thread-safe, but because each VP has its own instance
-        // there is no shared access
-        let mut result_buffer: Option<Vec<u8>> = None;
-        let env_result_buffer =
-            unsafe { MutEnvHostWrapper::new(&mut result_buffer) };
-
-        let eval_runner = VpEval {
-            address: address.clone(),
-            storage: storage.clone(),
-            write_log: write_log.clone(),
-            iterators: iterators.clone(),
-            gas_meter: gas_meter.clone(),
-            tx: tx.clone(),
-            keys_changed: env_keys_changed.clone(),
-            verifiers: env_verifiers.clone(),
-            result_buffer: env_result_buffer.clone(),
-        };
-        // Assuming single-threaded VP wasm runner
-        let eval_runner = unsafe { EnvHostWrapper::new(&eval_runner) };
-
-        let vp_code = prepare_wasm_code(vp_code)?;
-
-        let vp_module = wasmer::Module::new(&self.wasm_store, &vp_code)
-            .map_err(Error::CompileError)?;
-        let initial_memory = memory::prepare_vp_memory(&self.wasm_store)
-            .map_err(Error::MemoryError)?;
-        let input: VpInput = VpInput {
-            addr: &address,
-            data: tx_data.as_ref(),
-            keys_changed,
-            verifiers,
-        };
-        let vp_imports = prepare_vp_env(
-            &self.wasm_store,
-            address.clone(),
-            storage,
-            write_log,
-            iterators,
-            gas_meter,
-            tx,
-            eval_runner,
-            env_result_buffer,
-            initial_memory,
-        );
-
-        // compile and run the transaction wasm code
-        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
-            .map_err(Error::InstantiationError)?;
-        VpRunner::run_with_input(vp_instance, input)
-    }
-
-    fn run_with_input(vp_code: Instance, input: VpInput) -> Result<bool> {
-        // We need to write the inputs in the memory exported from the wasm
-        // module
-        let memory = vp_code
-            .exports
-            .get_memory("memory")
-            .map_err(Error::MissingModuleMemory)?;
-        let memory::VpCallInput {
+    // Get the module's entrypoint to be called
+    let validate_tx = instance
+        .exports
+        .get_function(VP_ENTRYPOINT)
+        .map_err(Error::MissingModuleEntrypoint)?
+        .native::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>()
+        .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+            entrypoint: VP_ENTRYPOINT,
+            error,
+        })?;
+    let is_valid = validate_tx
+        .call(
             addr_ptr,
             addr_len,
             data_ptr,
@@ -314,310 +271,218 @@ impl VpRunner {
             keys_changed_len,
             verifiers_ptr,
             verifiers_len,
-        } = memory::write_vp_inputs(memory, input)
-            .map_err(Error::MemoryError)?;
-
-        // Get the module's entrypoint to be called
-        let validate_tx = vp_code
-            .exports
-            .get_function(VP_ENTRYPOINT)
-            .map_err(Error::MissingModuleEntrypoint)?
-            .native::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>()
-            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-                entrypoint: VP_ENTRYPOINT,
-                error,
-            })?;
-        let is_valid = validate_tx
-            .call(
-                addr_ptr,
-                addr_len,
-                data_ptr,
-                data_len,
-                keys_changed_ptr,
-                keys_changed_len,
-                verifiers_ptr,
-                verifiers_len,
-            )
-            .map_err(Error::RuntimeError)?;
-        tracing::debug!("is_valid {}", is_valid);
-        Ok(is_valid == 1)
-    }
+        )
+        .map_err(Error::RuntimeError)?;
+    tracing::debug!("is_valid {}", is_valid);
+    Ok(is_valid == 1)
 }
 
-/// Validity predicate wasm runner from `eval` function calls.
-pub struct VpEval<'a, DB, H>
+/// Validity predicate wasm evaluator for `eval` host function calls.
+#[derive(Default)]
+pub struct VpEvalWasm<DB, H>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    /// The address of the validity predicate that called the `eval`
-    pub address: Address,
-    /// Read-only access to the storage.
-    pub storage: EnvHostWrapper<'a, &'a Storage<DB, H>>,
-    /// Read-only access to the write log.
-    pub write_log: EnvHostWrapper<'a, &'a WriteLog>,
-    /// Storage prefix iterators.
-    pub iterators: MutEnvHostWrapper<'a, &'a PrefixIterators<'a, DB>>,
-    /// VP gas meter.
-    pub gas_meter: MutEnvHostWrapper<'a, &'a VpGasMeter>,
-    /// The transaction code.
-    pub tx: EnvHostWrapper<'a, &'a Tx>,
-    /// The storage keys that have been changed.
-    pub keys_changed: EnvHostWrapper<'a, &'a HashSet<Key>>,
-    /// The verifiers whose validity predicates should be triggered.
-    pub verifiers: EnvHostWrapper<'a, &'a HashSet<Address>>,
-    /// Cache for 2-step reads from host environment.
-    pub result_buffer: MutEnvHostWrapper<'a, &'a Option<Vec<u8>>>,
+    /// Phantom type for DB
+    pub db: PhantomData<*const DB>,
+    /// Phantom type for DB Hasher
+    pub hasher: PhantomData<*const H>,
 }
 
-impl<DB, H> VpEvalRunner for VpEval<'static, DB, H>
+impl<DB, H> VpEvaluator for VpEvalWasm<DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    fn eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> HostEnvResult {
-        match self.run_eval(vp_code, input_data) {
+    type Db = DB;
+    type Eval = Self;
+    type H = H;
+
+    fn eval(
+        &self,
+        ctx: VpCtx<'static, DB, H, Self>,
+        vp_code: Vec<u8>,
+        input_data: Vec<u8>,
+    ) -> HostEnvResult {
+        match self.eval_native_result(ctx, vp_code, input_data) {
             Ok(ok) => HostEnvResult::from(ok),
             Err(err) => {
-                tracing::error!("VP eval error {}", err);
+                tracing::warn!("VP eval error {}", err);
                 HostEnvResult::Fail
             }
         }
     }
 }
 
-impl<DB, H> VpEval<'static, DB, H>
+impl<DB, H> VpEvalWasm<DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    fn run_eval(&self, vp_code: Vec<u8>, input_data: Vec<u8>) -> Result<bool> {
-        // TODO more code re-use with VpRunner
+    /// Evaluate the given VP.
+    pub fn eval_native_result(
+        &self,
+        ctx: VpCtx<'static, DB, H, Self>,
+        vp_code: Vec<u8>,
+        input_data: Vec<u8>,
+    ) -> Result<bool> {
+        let wasm_store = untrusted_wasm_store(memory::tx_limit());
+
         validate_untrusted_wasm(&vp_code).map_err(Error::ValidationError)?;
 
-        // Use Singlepass compiler with the default settings
-        let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let limit = memory::vp_limit();
-        let wasm_store = wasmer::Store::new_with_tunables(
-            &wasmer_engine_jit::JIT::new(compiler).engine(),
-            limit,
-        );
-
-        let eval_runner = VpEval {
-            address: self.address.clone(),
-            storage: self.storage.clone(),
-            write_log: self.write_log.clone(),
-            iterators: self.iterators.clone(),
-            gas_meter: self.gas_meter.clone(),
-            tx: self.tx.clone(),
-            keys_changed: self.keys_changed.clone(),
-            verifiers: self.verifiers.clone(),
-            result_buffer: self.result_buffer.clone(),
-        };
-        // Assuming single-threaded VP wasm runner
-        let eval_runner = unsafe { EnvHostWrapper::new(&eval_runner) };
-
-        let vp_code = prepare_wasm_code(vp_code)?;
-
-        let vp_module = wasmer::Module::new(&wasm_store, &vp_code)
-            .map_err(Error::CompileError)?;
         let initial_memory = memory::prepare_vp_memory(&wasm_store)
             .map_err(Error::MemoryError)?;
-        let addr = &self.address;
-        let keys_changed = unsafe { self.keys_changed.get() };
-        let verifiers = unsafe { self.verifiers.get() };
-        let input: VpInput = VpInput {
-            addr,
-            data: &input_data[..],
+
+        let address = unsafe { ctx.address.get() };
+        let keys_changed = unsafe { ctx.keys_changed.get() };
+        let verifiers = unsafe { ctx.verifiers.get() };
+        let env = VpEnv {
+            memory: WasmMemory::default(),
+            ctx,
+        };
+
+        let imports = vp_imports(&wasm_store, initial_memory, env);
+
+        run_vp(
+            wasm_store,
+            imports,
+            &vp_code[..],
+            &input_data[..],
+            address,
             keys_changed,
             verifiers,
-        };
-        let vp_imports = prepare_vp_env(
-            &wasm_store,
-            addr.clone(),
-            self.storage.clone(),
-            self.write_log.clone(),
-            self.iterators.clone(),
-            self.gas_meter.clone(),
-            self.tx.clone(),
-            eval_runner,
-            self.result_buffer.clone(),
-            initial_memory,
-        );
-
-        // compile and run the transaction wasm code
-        let vp_instance = wasmer::Instance::new(&vp_module, &vp_imports)
-            .map_err(Error::InstantiationError)?;
-        VpRunner::run_with_input(vp_instance, input)
+        )
     }
 }
 
-/// Matchmaker wasm runner.
-#[derive(Clone, Debug)]
-pub struct MmRunner {
-    wasm_store: wasmer::Store,
-}
+/// Execute a matchmaker code.
+pub fn matchmaker<MM>(
+    matchmaker_code: impl AsRef<[u8]>,
+    data: impl AsRef<[u8]>,
+    intent_id: impl AsRef<[u8]>,
+    intent_data: impl AsRef<[u8]>,
+    mm: Arc<Mutex<MM>>,
+) -> Result<bool>
+where
+    MM: 'static + MmHost,
+{
+    let wasm_store = trusted_wasm_store();
 
-impl MmRunner {
-    /// TODO remove the `new`, it's not very useful
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        // TODO for the matchmaker we could use a compiler that does more
-        // optimisation.
-        let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let wasm_store =
-            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
-        Self { wasm_store }
-    }
+    // Compile the wasm module
+    let module: wasmer::Module =
+        wasmer::Module::new(&wasm_store, &matchmaker_code)
+            .map_err(Error::CompileError)?;
 
-    /// Execute a matchmaker code.
-    pub fn run<MM>(
-        &self,
-        matchmaker_code: impl AsRef<[u8]>,
-        data: impl AsRef<[u8]>,
-        intent_id: impl AsRef<[u8]>,
-        intent_data: impl AsRef<[u8]>,
-        mm: Arc<Mutex<MM>>,
-    ) -> Result<bool>
-    where
-        MM: 'static + MmHost,
-    {
-        let matchmaker_module: wasmer::Module =
-            wasmer::Module::new(&self.wasm_store, &matchmaker_code)
-                .map_err(Error::CompileError)?;
+    let initial_memory = memory::prepare_matchmaker_memory(&wasm_store)
+        .map_err(Error::MemoryError)?;
 
-        let initial_memory =
-            memory::prepare_matchmaker_memory(&self.wasm_store)
-                .map_err(Error::MemoryError)?;
+    let matchmaker_imports = mm_imports(&wasm_store, initial_memory, mm);
 
-        let matchmaker_imports =
-            prepare_mm_imports(&self.wasm_store, initial_memory, mm);
+    // Instantiate the wasm module
+    let instance = wasmer::Instance::new(&module, &matchmaker_imports)
+        .map_err(Error::InstantiationError)?;
 
-        // compile and run the matchmaker wasm code
-        let matchmaker_code =
-            wasmer::Instance::new(&matchmaker_module, &matchmaker_imports)
-                .map_err(Error::InstantiationError)?;
-
-        Self::run_with_input(&matchmaker_code, data, intent_id, intent_data)
-    }
-
-    fn run_with_input(
-        code: &Instance,
-        data: impl AsRef<[u8]>,
-        intent_id: impl AsRef<[u8]>,
-        intent_data: impl AsRef<[u8]>,
-    ) -> Result<bool> {
-        let memory = code
-            .exports
-            .get_memory("memory")
-            .map_err(Error::MissingModuleMemory)?;
-        let memory::MatchmakerCallInput {
+    let memory = instance
+        .exports
+        .get_memory("memory")
+        .map_err(Error::MissingModuleMemory)?;
+    let memory::MatchmakerCallInput {
+        data_ptr,
+        data_len,
+        intent_id_ptr,
+        intent_id_len,
+        intent_data_ptr,
+        intent_data_len,
+    }: memory::MatchmakerCallInput =
+        memory::write_matchmaker_inputs(&memory, data, intent_id, intent_data)
+            .map_err(Error::MemoryError)?;
+    let apply_matchmaker = instance
+        .exports
+        .get_function(MATCHMAKER_ENTRYPOINT)
+        .map_err(Error::MissingModuleEntrypoint)?
+        .native::<(u64, u64, u64, u64, u64, u64), u64>()
+        .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+            entrypoint: MATCHMAKER_ENTRYPOINT,
+            error,
+        })?;
+    let found_match = apply_matchmaker
+        .call(
             data_ptr,
             data_len,
             intent_id_ptr,
             intent_id_len,
             intent_data_ptr,
             intent_data_len,
-        }: memory::MatchmakerCallInput = memory::write_matchmaker_inputs(
-            &memory,
-            data,
-            intent_id,
-            intent_data,
         )
+        .map_err(Error::RuntimeError)?;
+    Ok(found_match == 0)
+}
+
+/// Execute a matchmaker filter code to check if it accepts the given
+/// intent.
+pub fn matchmaker_filter(
+    code: impl AsRef<[u8]>,
+    intent_data: impl AsRef<[u8]>,
+) -> Result<bool> {
+    let wasm_store = trusted_wasm_store();
+
+    validate_untrusted_wasm(code.as_ref()).map_err(Error::ValidationError)?;
+
+    // Compile the wasm module
+    let module: wasmer::Module =
+        wasmer::Module::new(&wasm_store, &code).map_err(Error::CompileError)?;
+    let initial_memory = memory::prepare_filter_memory(&wasm_store)
         .map_err(Error::MemoryError)?;
-        let apply_matchmaker = code
-            .exports
-            .get_function(MATCHMAKER_ENTRYPOINT)
-            .map_err(Error::MissingModuleEntrypoint)?
-            .native::<(u64, u64, u64, u64, u64, u64), u64>()
-            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-                entrypoint: MATCHMAKER_ENTRYPOINT,
-                error,
-            })?;
-        let found_match = apply_matchmaker
-            .call(
-                data_ptr,
-                data_len,
-                intent_id_ptr,
-                intent_id_len,
-                intent_data_ptr,
-                intent_data_len,
-            )
-            .map_err(Error::RuntimeError)?;
-        Ok(found_match == 0)
-    }
-}
 
-/// Matchmaker's filter wasm runner
-#[derive(Clone, Debug)]
-pub struct MmFilterRunner {
-    wasm_store: wasmer::Store,
-}
+    let filter_imports = mm_filter_imports(&wasm_store, initial_memory);
 
-impl MmFilterRunner {
-    /// TODO remove the `new`, it's not very useful
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        // TODO replace to use a better compiler because this program is local
-        let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let wasm_store =
-            wasmer::Store::new(&wasmer_engine_jit::JIT::new(compiler).engine());
-        Self { wasm_store }
-    }
+    // Instantiate the wasm module
+    let instance = wasmer::Instance::new(&module, &filter_imports)
+        .map_err(Error::InstantiationError)?;
 
-    /// Execute a matchmaker filter code to check if it accepts the given
-    /// intent.
-    pub fn run(
-        &self,
-        code: impl AsRef<[u8]>,
-        intent_data: impl AsRef<[u8]>,
-    ) -> Result<bool> {
-        validate_untrusted_wasm(code.as_ref())
-            .map_err(Error::ValidationError)?;
-        let code = prepare_wasm_code(code)?;
-        let filter_module: wasmer::Module =
-            wasmer::Module::new(&self.wasm_store, &code)
-                .map_err(Error::CompileError)?;
-        let initial_memory = memory::prepare_filter_memory(&self.wasm_store)
+    let memory = instance
+        .exports
+        .get_memory("memory")
+        .map_err(Error::MissingModuleMemory)?;
+    let memory::FilterCallInput {
+        intent_data_ptr,
+        intent_data_len,
+    }: memory::FilterCallInput =
+        memory::write_filter_inputs(&memory, intent_data)
             .map_err(Error::MemoryError)?;
+    let apply_filter = instance
+        .exports
+        .get_function(FILTER_ENTRYPOINT)
+        .map_err(Error::MissingModuleEntrypoint)?
+        .native::<(u64, u64), u64>()
+        .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+            entrypoint: FILTER_ENTRYPOINT,
+            error,
+        })?;
+    let found_match = apply_filter
+        .call(intent_data_ptr, intent_data_len)
+        .map_err(Error::RuntimeError)?;
+    Ok(found_match == 0)
+}
 
-        let filter_imports =
-            prepare_mm_filter_imports(&self.wasm_store, initial_memory);
-        let filter_code =
-            wasmer::Instance::new(&filter_module, &filter_imports)
-                .map_err(Error::InstantiationError)?;
+/// Prepare a wasm store for untrusted code.
+fn untrusted_wasm_store(limit: Limit<BaseTunables>) -> wasmer::Store {
+    // Use Singlepass compiler with the default settings
+    let compiler = wasmer_compiler_singlepass::Singlepass::default();
+    wasmer::Store::new_with_tunables(
+        &wasmer_engine_universal::Universal::new(compiler).engine(),
+        limit,
+    )
+}
 
-        Self::run_with_input(&filter_code, intent_data)
-    }
-
-    fn run_with_input(
-        code: &Instance,
-        intent_data: impl AsRef<[u8]>,
-    ) -> Result<bool> {
-        let memory = code
-            .exports
-            .get_memory("memory")
-            .map_err(Error::MissingModuleMemory)?;
-        let memory::FilterCallInput {
-            intent_data_ptr,
-            intent_data_len,
-        }: memory::FilterCallInput =
-            memory::write_filter_inputs(&memory, intent_data)
-                .map_err(Error::MemoryError)?;
-        let apply_filter = code
-            .exports
-            .get_function(FILTER_ENTRYPOINT)
-            .map_err(Error::MissingModuleEntrypoint)?
-            .native::<(u64, u64), u64>()
-            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-                entrypoint: FILTER_ENTRYPOINT,
-                error,
-            })?;
-        let found_match = apply_filter
-            .call(intent_data_ptr, intent_data_len)
-            .map_err(Error::RuntimeError)?;
-        Ok(found_match == 0)
-    }
+/// Prepare a wasm store for trusted code.
+fn trusted_wasm_store() -> wasmer::Store {
+    // TODO use LLVM compiler with native engine
+    let compiler = wasmer_compiler_cranelift::Cranelift::default();
+    wasmer::Store::new(
+        &wasmer_engine_universal::Universal::new(compiler).engine(),
+    )
 }
 
 /// Inject gas counter and stack-height limiter into the given wasm code
@@ -710,7 +575,6 @@ mod tests {
     /// wasm execution, the execution is aborted.
     #[test]
     fn test_tx_memory_limiter_in_guest() {
-        let runner = TxRunner::new();
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
@@ -725,7 +589,7 @@ mod tests {
         // Allocating `2^23` (8 MiB) should be below the memory limit and
         // shouldn't fail
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
-        let result = runner.run(
+        let result = tx(
             &storage,
             &mut write_log,
             &mut gas_meter,
@@ -737,9 +601,9 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
-        let error = runner
-            .run(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
-            .expect_err("Expected to run out of memory");
+        let error =
+            tx(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
+                .expect_err("Expected to run out of memory");
         assert_eq!(
             get_trap_code(&error),
             Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
@@ -751,7 +615,6 @@ mod tests {
     /// fails and hence returns `false`.
     #[test]
     fn test_vp_memory_limiter_in_guest_calling_eval() {
-        let runner = VpRunner::new();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
@@ -779,18 +642,17 @@ mod tests {
         let tx = Tx::new(vec![], Some(tx_data));
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
-        let passed = runner
-            .run(
-                vp_eval.clone(),
-                &tx,
-                &addr,
-                &storage,
-                &write_log,
-                &mut gas_meter,
-                &keys_changed,
-                &verifiers,
-            )
-            .unwrap();
+        let passed = vp(
+            vp_eval.clone(),
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed,
+            &verifiers,
+        )
+        .unwrap();
         assert!(passed);
 
         // Allocating `2^24` (16 MiB) should be above the memory limit and
@@ -805,18 +667,17 @@ mod tests {
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
-        let passed = runner
-            .run(
-                vp_eval,
-                &tx,
-                &addr,
-                &storage,
-                &write_log,
-                &mut gas_meter,
-                &keys_changed,
-                &verifiers,
-            )
-            .unwrap();
+        let passed = vp(
+            vp_eval,
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed,
+            &verifiers,
+        )
+        .unwrap();
 
         assert!(!passed);
     }
@@ -825,7 +686,6 @@ mod tests {
     /// inside the wasm execution, the execution is aborted.
     #[test]
     fn test_vp_memory_limiter_in_guest() {
-        let runner = VpRunner::new();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
@@ -844,7 +704,7 @@ mod tests {
         // shouldn't fail
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
         let tx = Tx::new(vec![], Some(tx_data));
-        let result = runner.run(
+        let result = vp(
             vp_code.clone(),
             &tx,
             &addr,
@@ -860,18 +720,17 @@ mod tests {
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
         let tx = Tx::new(vec![], Some(tx_data));
-        let error = runner
-            .run(
-                vp_code,
-                &tx,
-                &addr,
-                &storage,
-                &write_log,
-                &mut gas_meter,
-                &keys_changed,
-                &verifiers,
-            )
-            .expect_err("Expected to run out of memory");
+        let error = vp(
+            vp_code,
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed,
+            &verifiers,
+        )
+        .expect_err("Expected to run out of memory");
 
         assert_eq!(
             get_trap_code(&error),
@@ -883,7 +742,6 @@ mod tests {
     /// host input, the execution fails.
     #[test]
     fn test_tx_memory_limiter_in_host_input() {
-        let runner = TxRunner::new();
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
@@ -897,13 +755,8 @@ mod tests {
         // limit and should fail
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
-        let result = runner.run(
-            &storage,
-            &mut write_log,
-            &mut gas_meter,
-            tx_no_op,
-            tx_data,
-        );
+        let result =
+            tx(&storage, &mut write_log, &mut gas_meter, tx_no_op, tx_data);
         match result {
             Err(Error::MemoryError(memory::Error::MemoryOutOfBounds(
                 wasmer::MemoryError::CouldNotGrow { .. },
@@ -918,7 +771,6 @@ mod tests {
     /// in the host input, the execution fails.
     #[test]
     fn test_vp_memory_limiter_in_host_input() {
-        let runner = VpRunner::new();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
@@ -937,7 +789,7 @@ mod tests {
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
         let tx = Tx::new(vec![], Some(tx_data));
-        let result = runner.run(
+        let result = vp(
             vp_code,
             &tx,
             &addr,
@@ -962,7 +814,6 @@ mod tests {
     /// execution is aborted.
     #[test]
     fn test_tx_memory_limiter_in_host_env() {
-        let runner = TxRunner::new();
         let mut storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
@@ -982,15 +833,14 @@ mod tests {
         // Borsh.
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let tx_data = key.try_to_vec().unwrap();
-        let error = runner
-            .run(
-                &storage,
-                &mut write_log,
-                &mut gas_meter,
-                tx_read_key,
-                tx_data,
-            )
-            .expect_err("Expected to run out of memory");
+        let error = tx(
+            &storage,
+            &mut write_log,
+            &mut gas_meter,
+            tx_read_key,
+            tx_data,
+        )
+        .expect_err("Expected to run out of memory");
         assert_eq!(
             get_trap_code(&error),
             Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
@@ -1002,7 +852,6 @@ mod tests {
     /// execution, the execution is aborted.
     #[test]
     fn test_vp_memory_limiter_in_host_env() {
-        let runner = VpRunner::new();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
@@ -1026,18 +875,17 @@ mod tests {
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let tx_data = key.try_to_vec().unwrap();
         let tx = Tx::new(vec![], Some(tx_data));
-        let error = runner
-            .run(
-                vp_read_key,
-                &tx,
-                &addr,
-                &storage,
-                &write_log,
-                &mut gas_meter,
-                &keys_changed,
-                &verifiers,
-            )
-            .expect_err("Expected to run out of memory");
+        let error = vp(
+            vp_read_key,
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed,
+            &verifiers,
+        )
+        .expect_err("Expected to run out of memory");
         assert_eq!(
             get_trap_code(&error),
             Either::Left(wasmer_vm::TrapCode::UnreachableCodeReached),
@@ -1050,7 +898,6 @@ mod tests {
     /// and hence returns `false`.
     #[test]
     fn test_vp_memory_limiter_in_host_env_inside_guest_calling_eval() {
-        let runner = VpRunner::new();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
@@ -1082,18 +929,17 @@ mod tests {
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = Tx::new(vec![], Some(tx_data));
-        let passed = runner
-            .run(
-                vp_eval,
-                &tx,
-                &addr,
-                &storage,
-                &write_log,
-                &mut gas_meter,
-                &keys_changed,
-                &verifiers,
-            )
-            .unwrap();
+        let passed = vp(
+            vp_eval,
+            &tx,
+            &addr,
+            &storage,
+            &write_log,
+            &mut gas_meter,
+            &keys_changed,
+            &verifiers,
+        )
+        .unwrap();
         assert!(!passed);
     }
 
@@ -1132,12 +978,11 @@ mod tests {
         .expect("unexpected error converting wat2wasm")
         .into_owned();
 
-        let runner = TxRunner::new();
         let tx_data = vec![];
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
-        runner.run(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
+        tx(&storage, &mut write_log, &mut gas_meter, tx_code, tx_data)
     }
 
     fn loop_in_vp_wasm(loops: u32) -> Result<bool> {
@@ -1169,7 +1014,6 @@ mod tests {
         )
         .expect("unexpected error converting wat2wasm").into_owned();
 
-        let runner = VpRunner::new();
         let tx = Tx::new(vec![], None);
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
@@ -1177,7 +1021,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = HashSet::new();
         let verifiers = HashSet::new();
-        runner.run(
+        vp(
             vp_code,
             &tx,
             &addr,

@@ -5,6 +5,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 
 use borsh::BorshSerialize;
+use loupe::MemoryUsage;
 use thiserror::Error;
 use wasmer::{
     vm, BaseTunables, HostEnvInitError, LazyInit, Memory, MemoryError,
@@ -309,7 +310,7 @@ where
 }
 
 /// The wasm memory
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WasmMemory {
     inner: LazyInit<wasmer::Memory>,
 }
@@ -368,17 +369,10 @@ impl VmMemory for WasmMemory {
     }
 }
 
-impl Default for WasmMemory {
-    fn default() -> Self {
-        Self {
-            inner: LazyInit::default(),
-        }
-    }
-}
-
 /// A custom [`Tunables`] to set a WASM memory limits.
 ///
-/// Adapted from <https://github.com/wasmerio/wasmer/blob/0a9a5f4dd1b517b992c2a4d07b2cb292087a8709/examples/tunables_limit_memory.rs>.
+/// Adapted from <https://github.com/wasmerio/wasmer/blob/29d7b4a5f1c401d9a1e95086ed85878c8407ec16/examples/tunables_limit_memory.rs>.
+#[derive(MemoryUsage)]
 pub struct Limit<T: Tunables> {
     /// The maximum a linear memory is allowed to be (in Wasm pages, 64 KiB
     /// each). Since Wasmer ensures there is only none or one memory, this
@@ -535,7 +529,7 @@ pub mod tests {
 
         // Any compiler and any engine do the job here
         let compiler = Cranelift::default();
-        let engine = wasmer_engine_jit::JIT::new(compiler).engine();
+        let engine = wasmer_engine_universal::Universal::new(compiler).engine();
 
         let base = BaseTunables::for_target(&Target::default());
         let limit = Pages(24);

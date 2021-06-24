@@ -529,7 +529,7 @@ pub mod testing {
         collection::hash_map(arb_key(), arb_storage_modification(), 0..100)
     }
 
-    /// Generate arbitrary verifiers from tx of [`HashSet<Address>>`].
+    /// Generate arbitrary verifiers from tx of [`HashSet<Address>`].
     pub fn arb_verifiers_from_tx() -> impl Strategy<Value = HashSet<Address>> {
         collection::hash_set(arb_address(), 0..10)
     }

@@ -67,6 +67,8 @@ pub enum Address {
     Established(EstablishedAddress),
     /// An implicit address is derived from a cryptographic key
     Implicit(ImplicitAddress),
+    /// An internal address represents a module with a native VP
+    Internal(InternalAddress),
 }
 
 impl Address {
@@ -112,24 +114,23 @@ impl Address {
                     return Err(Error::UnexpectedHashLength(pkh.0.len()));
                 }
             }
+            Address::Internal(_) => {}
         }
         Ok(address)
     }
 
     fn pretty_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}: {}",
-            match self {
-                Address::Established(_) => {
-                    "Established"
-                }
-                Address::Implicit(_) => {
-                    "Implicit"
-                }
-            },
-            self.encode(),
-        )
+        match self {
+            Address::Established(_) => {
+                write!(f, "Established: {}", self.encode(),)
+            }
+            Address::Implicit(_) => {
+                write!(f, "Implicit: {}", self.encode(),)
+            }
+            Address::Internal(kind) => {
+                write!(f, "Internal {}: {}", kind, self.encode())
+            }
+        }
     }
 }
 
@@ -214,6 +215,40 @@ impl EstablishedAddressGen {
 pub enum ImplicitAddress {
     /// Address derived from [`key::ed25519::PublicKeyHash`]
     Ed25519(key::ed25519::PublicKeyHash),
+}
+
+/// An internal address represents a module with a native VP
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+)]
+pub enum InternalAddress {
+    /// Proof-of-stake
+    PoS,
+    /// Inter-blockchain communication
+    Ibc,
+}
+
+impl Display for InternalAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::PoS => "PoS",
+                Self::Ibc => "IBC",
+            }
+        )
+    }
 }
 
 /// Temporary helper for testing

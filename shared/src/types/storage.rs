@@ -472,7 +472,7 @@ pub mod testing {
         ]
     }
 
-    /// Generate an arbitrary [`DbKeyKey`].
+    /// Generate an arbitrary [`DbKeySeg`].
     pub fn arb_key_seg() -> impl Strategy<Value = DbKeySeg> {
         prop_oneof![
             // the string segment is 5 time more likely to be generated

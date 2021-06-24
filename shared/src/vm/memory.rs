@@ -24,7 +24,7 @@ pub mod testing {
 
     /// Native memory implementation may be used for testing VM host environment
     /// natively, without compiling to wasm.
-    #[derive(Clone)]
+    #[derive(Clone, Default)]
     pub struct NativeMemory;
 
     impl VmMemory for NativeMemory {

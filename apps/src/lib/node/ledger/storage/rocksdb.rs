@@ -17,19 +17,16 @@ use std::path::Path;
 
 use anoma_shared::ledger::storage::types::PrefixIterator;
 use anoma_shared::ledger::storage::{
-    types, BlockState, DBIter, Error, Result, StorageHasher, DB,
+    types, BlockState, DBIter, Error, Result, DB,
 };
-use anoma_shared::types::address::{Address, EstablishedAddressGen};
+use anoma_shared::types::address::Address;
 use anoma_shared::types::storage::{
-    BlockHash, BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR, RESERVED_VP_KEY,
+    BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR, RESERVED_VP_KEY,
 };
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
 };
-use sparse_merkle_tree::SparseMerkleTree;
-
-use crate::node::ledger::storage::types::MerkleTree;
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -105,17 +102,10 @@ impl DB for RocksDB {
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
-    fn write_block<H: StorageHasher>(
-        &mut self,
-        tree: &MerkleTree<H>,
-        hash: &BlockHash,
-        height: BlockHeight,
-        subspaces: &HashMap<Key, Vec<u8>>,
-        address_gen: &EstablishedAddressGen,
-    ) -> Result<()> {
+    fn write_block(&mut self, state: BlockState) -> Result<()> {
         let mut batch = WriteBatch::default();
 
-        let prefix_key = Key::from(height.to_db_key());
+        let prefix_key = Key::from(state.height.to_db_key());
         // Merkle tree
         {
             let prefix_key = prefix_key
@@ -126,7 +116,7 @@ impl DB for RocksDB {
                 let key = prefix_key
                     .push(&"root".to_owned())
                     .map_err(Error::KeyError)?;
-                let value = tree.0.root();
+                let value = &state.root;
                 batch.put(key.to_string(), value.as_slice());
             }
             // Tree's store
@@ -134,7 +124,7 @@ impl DB for RocksDB {
                 let key = prefix_key
                     .push(&"store".to_owned())
                     .map_err(Error::KeyError)?;
-                let value = tree.0.store();
+                let value = &state.store;
                 batch.put(key.to_string(), types::encode(value));
             }
         }
@@ -143,7 +133,7 @@ impl DB for RocksDB {
             let key = prefix_key
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
-            let value = hash;
+            let value = &state.hash;
             batch.put(key.to_string(), types::encode(value));
         }
         // SubSpace
@@ -151,7 +141,7 @@ impl DB for RocksDB {
             let subspace_prefix = prefix_key
                 .push(&"subspace".to_owned())
                 .map_err(Error::KeyError)?;
-            subspaces.iter().for_each(|(key, value)| {
+            state.subspaces.iter().for_each(|(key, value)| {
                 let key = subspace_prefix.join(key);
                 batch.put(key.to_string(), value);
             });
@@ -161,7 +151,7 @@ impl DB for RocksDB {
             let key = prefix_key
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
-            let value = address_gen;
+            let value = &state.address_gen;
             batch.put(key.to_string(), types::encode(value));
         }
         let mut write_opts = WriteOptions::default();
@@ -173,15 +163,7 @@ impl DB for RocksDB {
         // NOTE for async writes, we need to take care that all previous heights
         // are known when updating this
         self.0
-            .put_opt("height", types::encode(&height), &write_opts)
-            .map_err(|e| Error::DBError(e.into_string()))
-    }
-
-    fn write_chain_id(&mut self, chain_id: &String) -> Result<()> {
-        let mut write_opts = WriteOptions::default();
-        write_opts.disable_wal(true);
-        self.0
-            .put_opt("chain_id", types::encode(chain_id), &write_opts)
+            .put_opt("height", types::encode(&state.height), &write_opts)
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
@@ -200,23 +182,9 @@ impl DB for RocksDB {
         }
     }
 
-    fn read_last_block<H: StorageHasher>(
-        &mut self,
-    ) -> Result<Option<BlockState<H>>> {
-        let chain_id;
-        let height: BlockHeight;
-        // Chain ID
-        match self
-            .0
-            .get("chain_id")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => {
-                chain_id = types::decode(bytes).map_err(Error::CodingError)?;
-            }
-            None => return Ok(None),
-        }
+    fn read_last_block(&mut self) -> Result<Option<BlockState>> {
         // Block height
+        let height: BlockHeight;
         match self
             .0
             .get("height")
@@ -327,12 +295,9 @@ impl DB for RocksDB {
         }
         match (root, store, hash, address_gen) {
             (Some(root), Some(store), Some(hash), Some(address_gen)) => {
-                let tree = anoma_shared::ledger::storage::types::MerkleTree(
-                    SparseMerkleTree::new(root, store),
-                );
                 Ok(Some(BlockState {
-                    chain_id,
-                    tree,
+                    root,
+                    store,
                     hash,
                     height,
                     subspaces,
@@ -375,6 +340,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
     }
 }
 
+#[derive(Debug)]
 pub struct PersistentPrefixIterator<'a>(
     PrefixIterator<rocksdb::DBIterator<'a>>,
 );

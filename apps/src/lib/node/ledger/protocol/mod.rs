@@ -5,12 +5,15 @@ use std::convert::TryFrom;
 use std::fmt;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
+use anoma_shared::ledger::ibc::Ibc;
+use anoma_shared::ledger::native_vp::{self, NativeVp};
+use anoma_shared::ledger::pos::PoS;
 use anoma_shared::ledger::storage::write_log::WriteLog;
+use anoma_shared::ledger::vp_env;
 use anoma_shared::proto::{self, Tx};
-use anoma_shared::types::address::Address;
+use anoma_shared::types::address::{Address, InternalAddress};
 use anoma_shared::types::storage::Key;
-use anoma_shared::vm;
-use anoma_shared::vm::wasm::runner::{TxRunner, VpRunner};
+use anoma_shared::vm::{self, wasm};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -23,13 +26,15 @@ pub enum Error {
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
-    TxRunnerError(vm::wasm::runner::Error),
+    TxRunnerError(vm::wasm::run::Error),
     #[error("Gas error: {0}")]
     GasError(gas::Error),
     #[error("Error executing VP for addresses: {0:?}")]
-    VpRunnerError(vm::wasm::runner::Error),
+    VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
+    #[error("Error executing native VP: {0}")]
+    NativeVpError(vp_env::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -110,11 +115,14 @@ fn execute_tx(
         .add_compiling_fee(tx_code.len())
         .map_err(Error::GasError)?;
     let tx_data = tx.data.clone().unwrap_or_default();
-    let tx_runner = TxRunner::new();
-
-    tx_runner
-        .run(storage, write_log, gas_meter, tx_code, tx_data)
+    wasm::run::tx(storage, write_log, gas_meter, tx_code, tx_data)
         .map_err(Error::TxRunnerError)
+}
+
+/// A validity predicate
+enum Vp<'a> {
+    Wasm(Vec<u8>),
+    Native(&'a InternalAddress),
 }
 
 /// Check the acceptance of a transaction by validity predicates
@@ -128,18 +136,25 @@ fn check_vps(
     let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
     // collect the VPs for the verifiers
-    let verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)> = verifiers
+    let verifiers: Vec<(Address, HashSet<Key>, Vp)> = verifiers
         .iter()
         .map(|(addr, keys)| {
-            let (vp, gas) = storage
-                .validity_predicate(&addr)
-                .map_err(Error::StorageError)?;
-            gas_meter.add(gas).map_err(Error::GasError)?;
-            let vp = vp.ok_or_else(|| Error::MissingAddress(addr.clone()))?;
+            let vp = match addr {
+                Address::Internal(addr) => Vp::Native(&addr),
+                Address::Established(_) | Address::Implicit(_) => {
+                    let (vp, gas) = storage
+                        .validity_predicate(&addr)
+                        .map_err(Error::StorageError)?;
+                    gas_meter.add(gas).map_err(Error::GasError)?;
+                    let vp =
+                        vp.ok_or_else(|| Error::MissingAddress(addr.clone()))?;
 
-            gas_meter
-                .add_compiling_fee(vp.len())
-                .map_err(Error::GasError)?;
+                    gas_meter
+                        .add_compiling_fee(vp.len())
+                        .map_err(Error::GasError)?;
+                    Vp::Wasm(vp)
+                }
+            };
 
             Ok((addr.clone(), keys.clone(), vp))
         })
@@ -160,7 +175,7 @@ fn check_vps(
 
 /// Execute verifiers' validity predicates
 fn execute_vps(
-    verifiers: Vec<(Address, HashSet<Key>, Vec<u8>)>,
+    verifiers: Vec<(Address, HashSet<Key>, Vp)>,
     tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
@@ -174,16 +189,76 @@ fn execute_vps(
 
     verifiers
         .par_iter()
-        .try_fold(VpsResult::default, |result, (addr, keys, vp)| {
-            execute_vp(
-                result,
-                tx,
-                storage,
-                write_log,
-                &verifiers_addr,
-                &mut VpGasMeter::new(initial_gas),
-                (addr, keys, vp),
-            )
+        .try_fold(VpsResult::default, |mut result, (addr, keys, vp)| {
+            let mut gas_meter = VpGasMeter::new(initial_gas);
+            let accept = match &vp {
+                Vp::Wasm(vp) => execute_wasm_vp(
+                    tx,
+                    storage,
+                    write_log,
+                    &verifiers_addr,
+                    &mut gas_meter,
+                    (addr, keys, vp),
+                ),
+                Vp::Native(internal_addr) => {
+                    let mut ctx =
+                        native_vp::Ctx::new(storage, write_log, tx, gas_meter);
+                    let tx_data = match tx.data.as_ref() {
+                        Some(data) => &data[..],
+                        None => &[],
+                    };
+
+                    let accepted: Result<bool> = match internal_addr {
+                        InternalAddress::PoS => {
+                            debug_assert_eq!(*internal_addr, &PoS::ADDR);
+                            PoS::validate_tx(
+                                &mut ctx,
+                                tx_data,
+                                keys,
+                                &verifiers_addr,
+                            )
+                            .map_err(Error::NativeVpError)
+                        }
+                        InternalAddress::Ibc => {
+                            debug_assert_eq!(*internal_addr, &Ibc::ADDR);
+                            Ibc::validate_tx(
+                                &mut ctx,
+                                tx_data,
+                                keys,
+                                &verifiers_addr,
+                            )
+                            .map_err(Error::NativeVpError)
+                        }
+                    };
+                    // Take the gas meter back out of the context
+                    gas_meter = ctx.gas_meter;
+
+                    accepted
+                }
+            };
+            match accept {
+                Ok(accepted) => {
+                    if !accepted {
+                        result.rejected_vps.insert(addr.clone());
+                    } else {
+                        result.accepted_vps.insert(addr.clone());
+                    }
+                }
+                Err(err) => {
+                    result.rejected_vps.insert(addr.clone());
+                    result.errors.push((addr.clone(), err.to_string()));
+                }
+            }
+
+            // Returning error from here will short-circuit the VP parallel
+            // execution. It's important that we only short-circuit gas
+            // errors to get deterministic gas costs
+            tracing::debug!("VP {} used gas {}", addr, gas_meter.current_gas);
+            result.gas_used.set(&gas_meter).map_err(Error::GasError)?;
+            match &gas_meter.error {
+                Some(err) => Err(Error::GasError(err.clone())),
+                None => Ok(result),
+            }
         })
         .try_reduce(VpsResult::default, |a, b| {
             merge_vp_results(a, b, initial_gas)
@@ -218,55 +293,27 @@ fn merge_vp_results(
     })
 }
 
-/// Execute a validity predicates
+/// Execute a WASM validity predicates
 #[allow(clippy::too_many_arguments)]
-fn execute_vp(
-    mut result: VpsResult,
+fn execute_wasm_vp(
     tx: &Tx,
     storage: &PersistentStorage,
     write_log: &WriteLog,
     verifiers: &HashSet<Address>,
     vp_gas_meter: &mut VpGasMeter,
     (addr, keys, vp): (&Address, &HashSet<Key>, &[u8]),
-) -> Result<VpsResult> {
-    let vp_runner = VpRunner::new();
-
-    let accept = vp_runner
-        .run(
-            vp,
-            tx,
-            addr,
-            storage,
-            write_log,
-            vp_gas_meter,
-            keys,
-            verifiers,
-        )
-        .map_err(Error::VpRunnerError);
-
-    match accept {
-        Ok(accepted) => {
-            if !accepted {
-                result.rejected_vps.insert(addr.clone());
-            } else {
-                result.accepted_vps.insert(addr.clone());
-            }
-        }
-        Err(err) => {
-            result.rejected_vps.insert(addr.clone());
-            result.errors.push((addr.clone(), err.to_string()));
-        }
-    }
-
-    // Returning error from here will short-circuit the VP parallel
-    // execution. It's important that we only short-circuit gas
-    // errors to get deterministic gas costs
-    tracing::debug!("VP {} used gas {}", addr, vp_gas_meter.current_gas);
-    result.gas_used.set(vp_gas_meter).map_err(Error::GasError)?;
-    match &vp_gas_meter.error {
-        Some(err) => Err(Error::GasError(err.clone())),
-        None => Ok(result),
-    }
+) -> Result<bool> {
+    wasm::run::vp(
+        vp,
+        tx,
+        addr,
+        storage,
+        write_log,
+        vp_gas_meter,
+        keys,
+        verifiers,
+    )
+    .map_err(Error::VpRunnerError)
 }
 
 impl fmt::Display for TxResult {

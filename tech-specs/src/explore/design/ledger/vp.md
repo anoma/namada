@@ -8,7 +8,28 @@ Each [account](accounts.md) is associated with exactly one validity predicate (V
 
 Conceptually, a VP is a function from the transaction's data and the storage state prior and posterior to a transaction execution returning a boolean value. A transaction may modify any data in the [accounts' dynamic storage sub-space](accounts.md#dynamic-storage-sub-space). Upon [execution](tx-execution.md), the VPs associated with the accounts whose storage has been modified are invoked to verify the transaction. If any of them reject the transaction, all of its storage modifications are discarded.
 
-VPs are implemented as [WASM programs](wasm-vm.md). One can build a custom VP using the [VP template](https://github.com/anomanetwork/anoma/tree/master/vps/vp_template) or use one of the pre-defined VPs.
+There are some native VPs for [internal transparent addresses](accounts.md#internal-transparent-addresses) that are built into the ledger. All the other VPs are implemented as [WASM programs](wasm-vm.md). One can build a custom VP using the [VP template](https://github.com/anomanetwork/anoma/tree/master/vps/vp_template) or use one of the pre-defined VPs.
+
+The VPs must implement the following interface that will be invoked by the protocol:
+
+```rust
+fn validate_tx(
+    // Data of the transaction that triggered this VP call
+    tx_data: Vec<u8>,
+    // Address of this VP
+    addr: Address,
+    // Storage keys that have been modified by the transation, relevant to this VP
+    keys_changed: HashSet<storage::Key>,
+    // Set of all the addresses whose VP was triggered by the transaction
+    verifiers: HashSet<Address>,
+) -> bool;
+```
+
+The host functions available to call from inside the VP code can be found in [docs generated from code](https://anomanetwork.github.io/anoma/rustdoc/anoma_vm_env/imports/vp/index.html#functions).
+
+## Native VPs
+
+The native VPs follow the same interface as WASM VPs and rules for how they are [triggered by a transaction](tx.md#tx-execution). They can also call the same host functions as those provided in [WASM VPs environment](wasm-vm.md#vps-environment) and must also account any computation for gas usage.
 
 ## Fungible token VP
 
