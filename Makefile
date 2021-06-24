@@ -66,7 +66,7 @@ audit:
 test-wasm = $(cargo) test --manifest-path $(wasm)/Cargo.toml
 test:
 	make test-unit && \
-    make test-e2e && \
+	make test-e2e && \
 	make test-wasm
 
 test-e2e:
