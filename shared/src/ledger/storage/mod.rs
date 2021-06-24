@@ -5,10 +5,12 @@ pub mod mockdb;
 pub mod types;
 pub mod write_log;
 
+use core::fmt::Debug;
 use std::collections::HashMap;
 use std::fmt::Display;
 
-use sparse_merkle_tree::H256;
+use sparse_merkle_tree::default_store::DefaultStore;
+use sparse_merkle_tree::{SparseMerkleTree, H256};
 use thiserror::Error;
 use types::MerkleTree;
 
@@ -72,11 +74,11 @@ pub enum Error {
 }
 
 /// The block's state as stored in the database.
-pub struct BlockState<H: StorageHasher> {
-    /// ID of the chain
-    pub chain_id: String,
-    /// Merkle tree
-    pub tree: MerkleTree<H>,
+pub struct BlockState {
+    /// Merkle tree root
+    pub root: H256,
+    /// Merkle tree store
+    pub store: DefaultStore<H256>,
     /// Hash of the block
     pub hash: BlockHash,
     /// Height of the block
@@ -93,32 +95,19 @@ pub trait DB: std::fmt::Debug {
     fn flush(&self) -> Result<()>;
 
     /// Write a block
-    fn write_block<H: StorageHasher>(
-        &mut self,
-        tree: &MerkleTree<H>,
-        hash: &BlockHash,
-        height: BlockHeight,
-        subspaces: &HashMap<Key, Vec<u8>>,
-        address_gen: &EstablishedAddressGen,
-    ) -> Result<()>;
-
-    /// Write the chain ID
-    #[allow(clippy::ptr_arg)]
-    fn write_chain_id(&mut self, chain_id: &String) -> Result<()>;
+    fn write_block(&mut self, state: BlockState) -> Result<()>;
 
     /// Read the value with the given height and the key from the DB
     fn read(&self, height: BlockHeight, key: &Key) -> Result<Option<Vec<u8>>>;
 
     /// Read the last committed block
-    fn read_last_block<H: StorageHasher>(
-        &mut self,
-    ) -> Result<Option<BlockState<H>>>;
+    fn read_last_block(&mut self) -> Result<Option<BlockState>>;
 }
 
 /// A database prefix iterator.
 pub trait DBIter<'iter> {
     /// The concrete type of the iterator
-    type PrefixIter: Iterator<Item = (String, Vec<u8>, u64)>;
+    type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
     /// Read key value pairs with the given prefix from the DB
     fn iter_prefix(
@@ -144,39 +133,53 @@ where
 {
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
-    pub fn load_last_state(&mut self) -> Result<Option<(MerkleRoot, u64)>> {
+    pub fn load_last_state(&mut self) -> Result<()> {
         if let Some(BlockState {
-            chain_id,
-            tree,
+            root,
+            store,
             hash,
             height,
             subspaces,
             address_gen,
         }) = self.db.read_last_block()?
         {
-            self.chain_id = chain_id;
-            self.block.tree = tree;
+            self.block.tree = MerkleTree(SparseMerkleTree::new(root, store));
             self.block.hash = hash;
             self.block.height = height;
             self.block.subspaces = subspaces;
             self.current_height = height;
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
-            return Ok(Some((self.merkle_root(), self.block.height.0)));
+        } else {
+            tracing::info!("No state could be found");
         }
-        Ok(None)
+        Ok(())
+    }
+
+    /// Returns the Merkle root hash and the height of the committed block. If
+    /// no block exists, returns None.
+    pub fn get_state(&self) -> Option<(MerkleRoot, u64)> {
+        if self.block.height.0 != 0 {
+            Some((
+                MerkleRoot(self.block.tree.0.root().as_slice().to_vec()),
+                self.block.height.0,
+            ))
+        } else {
+            None
+        }
     }
 
     /// Persist the current block's state to the database
     pub fn commit(&mut self) -> Result<()> {
-        // TODO DB sub-dir with chain ID?
-        self.db.write_block(
-            &self.block.tree,
-            &self.block.hash,
-            self.block.height,
-            &self.block.subspaces,
-            &self.address_gen,
-        )?;
+        let state = BlockState {
+            root: *self.block.tree.0.root(),
+            store: self.block.tree.0.store().clone(),
+            hash: self.block.hash.clone(),
+            height: self.block.height,
+            subspaces: self.block.subspaces.clone(),
+            address_gen: self.address_gen.clone(),
+        };
+        self.db.write_block(state)?;
         self.current_height = self.block.height;
         Ok(())
     }
@@ -285,11 +288,7 @@ where
     /// Chain ID is not in the Merkle tree as it's tracked by Tendermint in the
     /// block header. Hence, we don't update the tree when this is set.
     pub fn set_chain_id(&mut self, chain_id: &str) -> Result<()> {
-        if self.chain_id == chain_id {
-            return Ok(());
-        }
         self.chain_id = chain_id.to_owned();
-        self.db.write_chain_id(&self.chain_id)?;
         Ok(())
     }
 
