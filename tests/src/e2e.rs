@@ -14,8 +14,11 @@ mod tests {
     use eyre::eyre;
     use libp2p::identity::Keypair;
     use libp2p::PeerId;
+    use rexpect::process::wait::WaitStatus;
     use rexpect::session::spawn_command;
     use tempfile::tempdir;
+
+    use super::constants::*;
 
     /// A helper that should be ran on start of every e2e test case.
     fn setup() -> PathBuf {
@@ -58,7 +61,7 @@ mod tests {
             let cmd_str = format!("{:?}", cmd);
 
             let mut session =
-                spawn_command(cmd, Some(30_000)).map_err(|e| {
+                spawn_command(cmd, Some(10_000)).map_err(|e| {
                     eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
                 })?;
 
@@ -94,7 +97,7 @@ mod tests {
             "run-ledger",
         ]);
         println!("Running {:?}", cmd);
-        let mut session = spawn_command(cmd, Some(30_000))
+        let mut session = spawn_command(cmd, Some(10_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session
@@ -124,7 +127,7 @@ mod tests {
             "run-ledger",
         ]);
         println!("Running {:?}", cmd);
-        let mut session = spawn_command(cmd, Some(30_000))
+        let mut session = spawn_command(cmd, Some(10_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session
@@ -157,7 +160,7 @@ mod tests {
             &base_dir.path().to_string_lossy(),
             "run-ledger",
         ]);
-        let mut session = spawn_command(cmd, Some(30_000))
+        let mut session = spawn_command(cmd, Some(10_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session
@@ -168,6 +171,113 @@ mod tests {
         session
             .exp_string("No state could be found")
             .map_err(|e| eyre!(format!("{}", e)))?;
+
+        Ok(())
+    }
+
+    /// In this test we:
+    /// 1. Run the ledger node
+    /// 2. Submit a token transfer tx
+    /// 3. Submit a transaction to update an account's validity predicate
+    /// 4. Submit a custom tx
+    #[test]
+    fn ledger_txs() -> Result<()> {
+        let dir = setup();
+
+        let base_dir = tempdir().unwrap();
+        let base_dir_arg = &base_dir.path().to_string_lossy();
+
+        // 1. Run the ledger node
+        let mut cmd = Command::cargo_bin("anoma")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
+            "--base-dir",
+            base_dir_arg,
+            "run-ledger",
+        ]);
+        println!("Running {:?}", cmd);
+        let mut session = spawn_command(cmd, Some(10_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session
+            .exp_string("Anoma ledger node started")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+        session
+            .exp_string("Started node")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        let txs_args = vec![
+            // 2. Submit a token transfer tx
+            vec![
+                "transfer",
+                "--source",
+                BERTHA,
+                "--target",
+                ALBERT,
+                "--token",
+                XAN,
+                "--amount",
+                "10.1",
+                "--code-path",
+                TX_TRANSFER_WASM,
+            ],
+            // 3. Submit a transaction to update an account's validity
+            // predicate
+            vec![
+                "update",
+                "--address",
+                BERTHA,
+                "--code-path",
+                TX_UPDATE_VP_WASM,
+            ],
+            // 4. Submit a custom tx
+            vec![
+                "tx",
+                "--code-path",
+                TX_NO_OP_WASM,
+                "--data-path",
+                "README.md",
+            ],
+        ];
+        for tx_args in &txs_args {
+            for &dry_run in &[true, false] {
+                let mut cmd = Command::cargo_bin("anomac")?;
+                cmd.current_dir(&dir)
+                    .env("ANOMA_LOG", "debug")
+                    .args(&["--base-dir", base_dir_arg])
+                    .args(tx_args);
+                if dry_run {
+                    cmd.arg("--dry-run");
+                }
+                let cmd_str = format!("{:?}", cmd);
+
+                let mut session =
+                    spawn_command(cmd, Some(10_000)).map_err(|e| {
+                        eyre!(format!(
+                            "in command: {}\n\nReason: {}",
+                            cmd_str, e
+                        ))
+                    })?;
+                if !dry_run {
+                    session.exp_string("Mempool validation passed").map_err(
+                        |e| {
+                            eyre!(format!(
+                                "in command: {}\n\nReason: {}",
+                                cmd_str, e
+                            ))
+                        },
+                    )?;
+                }
+                session.exp_string("Transaction is valid.").map_err(|e| {
+                    eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+                })?;
+
+                let status = session.process.wait().unwrap();
+                assert_eq!(
+                    WaitStatus::Exited(session.process.child_pid, 0),
+                    status
+                );
+            }
+        }
 
         Ok(())
     }
@@ -260,7 +370,7 @@ mod tests {
         Ok(())
     }
 
-    pub fn generate_network_of(
+    fn generate_network_of(
         path: PathBuf,
         n_of_peers: u32,
         with_mdns: bool,
@@ -314,4 +424,29 @@ mod tests {
         }
         return vec![];
     }
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+mod constants {
+    // User addresses
+    pub const ALBERT: &str = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx";
+    pub const BERTHA: &str = "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9";
+    pub const CHRISTEL: &str = "a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s";
+
+    // Fungible token addresses
+    pub const XAN: &str = "a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3";
+    pub const BTC: &str = "a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc";
+    pub const ETH: &str = "a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9";
+    pub const DOT: &str = "a1qq5qqqqqxq652v3sxap523fs8pznjse5g3pyydf3xqurws6ygvc5gdfcxyuy2deeggenjsjrjrl2ph";
+
+    // Bite-sized tokens
+    pub const SCHNITZEL: &str = "a1qq5qqqqq8prrzv6xxcury3p4xucygdp5gfprzdfex9prz3jyg56rxv69gvenvsj9g5enswpcl8npyz";
+    pub const APFEL: &str = "a1qq5qqqqqgfp52de4x56nqd3ex56y2wph8pznssjzx5ersw2pxfznsd3jxeqnjd3cxapnqsjz2fyt3j";
+    pub const KARTOFFEL: &str = "a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn233sgccnjs3eak5wwh";
+
+    // Paths to the WASMs used for tests
+    pub const TX_TRANSFER_WASM: &str = "wasm/txs/tx_transfer/tx.wasm";
+    pub const TX_UPDATE_VP_WASM: &str = "wasm_for_tests/vp_always_true.wasm";
+    pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
 }
