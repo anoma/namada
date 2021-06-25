@@ -239,6 +239,7 @@ impl AppExt for App {
         App::new(TX_TRANSFER_CMD)
             .about("Send a transfer transaction with a signature")
             .tx_args()
+            .tx_code_path_arg()
             .arg(
                 Arg::new(SOURCE_ARG)
                     .long(SOURCE_ARG)
