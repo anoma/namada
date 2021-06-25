@@ -95,7 +95,8 @@ mod tests {
         setup();
 
         let base_dir = tempdir().unwrap();
-        let node_dirs = generate_network_of(base_dir.path().to_path_buf(), 2);
+        let node_dirs =
+            generate_network_of(base_dir.path().to_path_buf(), 2, false, true);
 
         let first_node_dir = node_dirs[0].0.to_str().unwrap();
         let first_node_peer_id = node_dirs[0].1.to_string();
@@ -177,6 +178,8 @@ mod tests {
     pub fn generate_network_of(
         path: PathBuf,
         n_of_peers: u32,
+        with_mdns: bool,
+        with_kademlia: bool,
     ) -> Vec<(PathBuf, PeerId)> {
         let mut index = 0;
 
@@ -192,6 +195,8 @@ mod tests {
                 "127.0.0.1".to_string(),
                 20201 + index,
                 info,
+                with_mdns,
+                with_kademlia,
             );
             let peer_key =
                 Keypair::Ed25519(gossiper_config.gossiper.key.clone());

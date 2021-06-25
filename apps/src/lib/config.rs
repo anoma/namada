@@ -301,6 +301,8 @@ impl IntentGossiper {
         ip: String,
         port: u32,
         peers_info: Vec<(String, u32, PeerId)>,
+        mdns: bool,
+        kademlia: bool,
     ) -> Self {
         let mut gossiper_config = IntentGossiper::default();
         let mut discover_config = DiscoverPeer::default();
@@ -321,7 +323,8 @@ impl IntentGossiper {
             })
             .collect();
         discover_config.bootstrap_peers = bootstrap_peers;
-        discover_config.mdns = false;
+        discover_config.mdns = mdns;
+        discover_config.kademlia = kademlia;
 
         gossiper_config.discover_peer = Some(discover_config);
 
