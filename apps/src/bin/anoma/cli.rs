@@ -7,6 +7,8 @@ use std::process::Command;
 use anoma::cli;
 use clap::App;
 use eyre::{eyre, Context, Result};
+use signal_hook::consts::TERM_SIGNALS;
+use signal_hook::iterator::Signals;
 
 pub fn main() -> Result<()> {
     let app = cli::anoma_cli();
@@ -81,16 +83,30 @@ fn handle_subcommand(program: &str, mut sub_args: Vec<String>) -> Result<()> {
     #[cfg(not(feature = "dev"))]
     let cmd = program;
 
-    let result = Command::new(cmd)
+    let mut process = Command::new(cmd)
         .args(sub_args)
         .envs(env_vars)
-        .status()
+        .spawn()
         .unwrap_or_else(|_| panic!("Couldn't run {} command.", cmd));
-    if result.success() {
-        Ok(())
-    } else {
-        Err(eyre!("{} command failed.", cmd))
+
+    let mut signals = Signals::new(TERM_SIGNALS).unwrap();
+    loop {
+        if let Ok(Some(exit_status)) = process.try_wait() {
+            if exit_status.success() {
+                break;
+            } else {
+                return Err(eyre!("{} command failed.", cmd));
+            }
+        }
+        for sig in signals.pending() {
+            if TERM_SIGNALS.contains(&sig) {
+                tracing::info!("Anoma received termination signal");
+                unsafe { libc::kill(process.id() as i32, libc::SIGTERM) };
+                break;
+            }
+        }
     }
+    Ok(())
 }
 
 fn print_help(mut app: App) -> Result<()> {

@@ -128,7 +128,7 @@ pub fn run(sender: AbciSender, config: config::Ledger) -> Result<()> {
 
     update_tendermint_config(&home_dir)?;
 
-    let mut tendermint_node = Command::new("tendermint")
+    let tendermint_node = Command::new("tendermint")
         .args(&["node", "--home", &home_dir_string])
         .spawn()
         .map_err(Error::TendermintStartUp)?;
@@ -156,9 +156,7 @@ pub fn run(sender: AbciSender, config: config::Ledger) -> Result<()> {
             tracing::info!(
                 "Received termination signal, shutting down Tendermint node"
             );
-            tendermint_node
-                .kill()
-                .expect("Tendermint node termination failed");
+            unsafe { libc::kill(tendermint_node.id() as i32, libc::SIGTERM) };
             break;
         }
     }

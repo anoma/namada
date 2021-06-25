@@ -54,6 +54,7 @@ config = "0.11.0"
 ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend", "serde"]}
 eyre = "0.6.5"
 futures = "0.3"
+libc = "0.2.97"
 libp2p = "0.38.0"
 prost = "0.7.0"
 prost-types = "0.7.0"
