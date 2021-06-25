@@ -6,7 +6,6 @@ use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
 
-use anoma_shared::bytes::ByteBuf;
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
 use anoma_shared::ledger::native_vp;
 use anoma_shared::ledger::storage::write_log::WriteLog;
@@ -56,6 +55,7 @@ pub fn run(config: config::Ledger) -> Result<()> {
             sender.send(AbciMsg::Terminate).unwrap();
         }
     });
+    tracing::info!("Anoma ledger node started.");
     shell.run()
 }
 
@@ -395,7 +395,12 @@ impl Shell {
             )
         });
         let root = self.storage.merkle_root();
-        MerkleRoot(root.as_slice().to_vec())
+        tracing::info!(
+            "Committed block hash: {}, height: {}",
+            root,
+            self.storage.current_height,
+        );
+        root
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
@@ -406,7 +411,7 @@ impl Shell {
             Some((root, height)) => {
                 tracing::info!(
                     "Last state root hash: {}, height: {}",
-                    ByteBuf(&root.0),
+                    root,
                     height
                 )
             }
