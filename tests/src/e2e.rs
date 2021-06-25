@@ -8,6 +8,7 @@ mod tests {
     use std::{fs, thread};
 
     use anoma::config::{Config, IntentGossiper};
+    use assert_cmd::assert::OutputAssertExt;
     use assert_cmd::cargo::CommandCargoExt;
     use color_eyre::eyre::Result;
     use eyre::eyre;
@@ -19,11 +20,14 @@ mod tests {
     /// A helper that should be ran on start of every e2e test case.
     fn setup() -> PathBuf {
         let working_dir = fs::canonicalize("..").unwrap();
+        // Build the workspace
         Command::new("cargo")
             .arg("build")
             .current_dir(&working_dir)
             .output()
             .unwrap();
+        // Check that tendermint is on $PATH
+        Command::new("which").arg("tendermint").assert().success();
         working_dir
     }
 
