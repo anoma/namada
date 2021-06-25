@@ -72,16 +72,86 @@ mod tests {
         Ok(())
     }
 
-    /// Test that when we "run-ledger", shut it down and run again, it should
-    /// load its previous state.
+    /// In this test we:
+    /// 1. Run the ledger node
+    /// 2. Shut it down
+    /// 3. Run the ledger again, it should load its previous state
+    /// 4. Shut it down
+    /// 5. Reset the ledger's state
+    /// 6. Run the ledger again, it should start from fresh state
     #[test]
-    fn run_ledger_load_state() -> Result<()> {
+    fn run_ledger_load_state_and_reset() -> Result<()> {
         let dir = setup();
 
         let base_dir = tempdir().unwrap();
+        let base_dir_arg = &base_dir.path().to_string_lossy();
 
-        // Start the ledger
-        let mut cmd = Command::cargo_bin("anoman")?;
+        // 1. Run the ledger node
+        let mut cmd = Command::cargo_bin("anoma")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
+            "--base-dir",
+            base_dir_arg,
+            "run-ledger",
+        ]);
+        println!("Running {:?}", cmd);
+        let mut session = spawn_command(cmd, Some(30_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session
+            .exp_string("Anoma ledger node started")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // There should be no previous state
+        session
+            .exp_string("No state could be found")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // Wait to commit a block
+        session
+            .exp_regex(r"Committed block hash.*, height: 2")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+        // 2. Shut it down
+        session
+            .send_control('c')
+            .map_err(|e| eyre!(format!("{}", e)))?;
+        drop(session);
+
+        // 3. Run the ledger again, it should load its previous state
+        let mut cmd = Command::cargo_bin("anoma")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
+            "--base-dir",
+            base_dir_arg,
+            "run-ledger",
+        ]);
+        println!("Running {:?}", cmd);
+        let mut session = spawn_command(cmd, Some(30_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session
+            .exp_string("Anoma ledger node started")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // There should be previous state now
+        session
+            .exp_string("Last state root hash:")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+        // 4. Shut it down
+        session
+            .send_control('c')
+            .map_err(|e| eyre!(format!("{}", e)))?;
+        drop(session);
+
+        // 5. Reset the ledger's state
+        let mut cmd = Command::cargo_bin("anoma")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
+            "--base-dir",
+            base_dir_arg,
+            "reset-ledger",
+        ]);
+        cmd.assert().success();
+
+        // 6. Run the ledger again, it should start from fresh state
+        let mut cmd = Command::cargo_bin("anoma")?;
         cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             &base_dir.path().to_string_lossy(),
@@ -97,31 +167,6 @@ mod tests {
         // There should be no previous state
         session
             .exp_string("No state could be found")
-            .map_err(|e| eyre!(format!("{}", e)))?;
-
-        // Wait to commit a block and shut down the ledger
-        session
-            .exp_regex(r"Committed block hash.*, height: 2")
-            .map_err(|e| eyre!(format!("{}", e)))?;
-        drop(session);
-
-        // Start the ledger again, in the same directory
-        let mut cmd = Command::cargo_bin("anoman")?;
-        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
-            "--base-dir",
-            &base_dir.path().to_string_lossy(),
-            "run-ledger",
-        ]);
-        let mut session = spawn_command(cmd, Some(30_000))
-            .map_err(|e| eyre!(format!("{}", e)))?;
-
-        session
-            .exp_string("Anoma ledger node started")
-            .map_err(|e| eyre!(format!("{}", e)))?;
-
-        // There should be previous state now
-        session
-            .exp_string("Last state root hash:")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
