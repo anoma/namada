@@ -278,6 +278,13 @@ impl AppExt for App {
             .about("Send a transaction to update account's validity predicate")
             .tx_args()
             .arg(
+                Arg::new(CODE_PATH_ARG)
+                    .long(CODE_PATH_ARG)
+                    .takes_value(true)
+                    .required(true)
+                    .about("The path to the new validity predicate WASM code."),
+            )
+            .arg(
                 Arg::new(ADDRESS_ARG)
                     .long(ADDRESS_ARG)
                     .takes_value(true)
