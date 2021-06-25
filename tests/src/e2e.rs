@@ -99,9 +99,6 @@ mod tests {
         let second_node_dir = node_dirs[1].0.to_str().unwrap();
         let second_node_peer_id = node_dirs[1].1.to_string();
 
-        tracing::debug!("{}, {}", first_node_dir, second_node_dir);
-        tracing::debug!("{}, {}", first_node_peer_id, second_node_peer_id);
-
         let mut base_node = Command::cargo_bin("anoman")?;
         base_node.env("ANOMA_LOG", "debug");
         base_node.args(&["--base-dir", first_node_dir, "run-gossip"]);
@@ -143,7 +140,14 @@ mod tests {
             .exp_string(&format!("Peer id: PeerId(\"{}\")", first_node_peer_id))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        thread::sleep(time::Duration::from_secs(2));
+        session
+            .exp_regex(&format!(
+                ".*(PeerConnected(PeerId(\"{}\")))*",
+                second_node_peer_id
+            ))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        sleep(2);
 
         let mut session_two = spawn_command(peer_node, Some(20_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
@@ -197,6 +201,10 @@ mod tests {
             index += 1;
         }
         node_dirs
+    }
+
+    fn sleep(seconds: u64) {
+        thread::sleep(time::Duration::from_secs(seconds));
     }
 
     fn build_peers(
