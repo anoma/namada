@@ -104,7 +104,7 @@ impl Default for Ledger {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RpcServer {
     pub address: SocketAddr,
 }
@@ -119,7 +119,7 @@ impl Default for RpcServer {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Matchmaker {
     pub matchmaker: PathBuf,
     pub tx_code: PathBuf,
@@ -134,7 +134,7 @@ pub struct Matchmaker {
 // enum with nested data, unless with the untagged flag. This might be a source
 // of confusion in the future... Another approach would be to have multiple
 // field for each filter possibility but it's less nice.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum SubscriptionFilter {
     RegexFilter(#[serde(with = "serde_regex")] Regex),
@@ -186,7 +186,7 @@ impl<'de> Deserialize<'de> for PeerAddress {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiscoverPeer {
     pub max_discovery_peers: u64,
     pub kademlia: bool,
@@ -206,7 +206,7 @@ impl Default for DiscoverPeer {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IntentGossiper {
     pub address: Multiaddr,
     pub topics: HashSet<String>,
@@ -220,7 +220,6 @@ pub struct IntentGossiper {
 impl Default for IntentGossiper {
     fn default() -> Self {
         Self {
-            // TODO there must be a better option here
             address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/20201").unwrap(),
             rpc: None,
             subscription_filter: SubscriptionFilter::RegexFilter(
@@ -278,7 +277,7 @@ impl Config {
     }
 
     // TODO add format in config instead and serialize it to that format
-    fn write(&self, base_dir: PathBuf, replace: bool) -> Result<()> {
+    pub fn write(&self, base_dir: PathBuf, replace: bool) -> Result<()> {
         create_dir_all(&base_dir).map_err(Error::FileError)?;
         let file_path = base_dir.join(FILENAME);
         if file_path.exists() && !replace {
@@ -293,5 +292,42 @@ impl Config {
             })?;
             file.write_all(toml.as_bytes()).map_err(Error::WriteError)
         }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl IntentGossiper {
+    pub fn default_with_address(
+        ip: String,
+        port: u32,
+        peers_info: Vec<(String, u32, PeerId)>,
+        mdns: bool,
+        kademlia: bool,
+    ) -> Self {
+        let mut gossiper_config = IntentGossiper::default();
+        let mut discover_config = DiscoverPeer::default();
+
+        gossiper_config.address = Multiaddr::from_str(
+            &format!("/ip4/{}/tcp/{}", ip, port).to_string(),
+        )
+        .unwrap();
+
+        let bootstrap_peers: HashSet<PeerAddress> = peers_info
+            .iter()
+            .map(|info| PeerAddress {
+                address: Multiaddr::from_str(
+                    &format!("/ip4/{}/tcp/{}", info.0, info.1).to_string(),
+                )
+                .unwrap(),
+                peer_id: info.2,
+            })
+            .collect();
+        discover_config.bootstrap_peers = bootstrap_peers;
+        discover_config.mdns = mdns;
+        discover_config.kademlia = kademlia;
+
+        gossiper_config.discover_peer = Some(discover_config);
+
+        gossiper_config
     }
 }

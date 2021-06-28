@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 // TODO use conditional compilation to not write private key to file
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Gossiper {
     pub address: String,
     #[serde(with = "keypair_serde")]

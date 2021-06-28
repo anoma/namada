@@ -88,8 +88,6 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
     use anoma_shared::ledger::storage::types;
     use tempfile::TempDir;
 
@@ -159,7 +157,7 @@ mod tests {
         storage.commit().expect("commit failed");
 
         // save the last state and drop the storage
-        let root = storage.merkle_root().as_slice().deref().to_vec();
+        let root = storage.merkle_root().0;
         let hash = storage.get_block_hash().0;
         let address_gen = storage.address_gen.clone();
         drop(storage);

@@ -1,7 +1,7 @@
 mod cli;
 
 use anoma::logging;
-use eyre::Result;
+use color_eyre::eyre::Result;
 use tracing_subscriber::filter::LevelFilter;
 
 fn main() -> Result<()> {

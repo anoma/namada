@@ -39,6 +39,7 @@ scripts_to_run = [
 
 check_command_template = 'echo "{}  {}" | sha256sum -c -'
 run_command_template = 'sh {}'
+run_command_template_always = 'sh {} false'
 
 boto_config = Config(
     region_name='eu-west-1',
@@ -111,6 +112,7 @@ def main():
 
     for config in drone_config:
         if 'steps' in config:
+            always_run_step = config['name'] == 'anoma-ci-build-pr'
             config_steps = config['steps'][0]
             if config_steps and config_steps['name'] == STEP_NAME:
                 commands = []
@@ -118,7 +120,7 @@ def main():
                     new_command = check_command_template.format(hashes[file], file)
                     commands.append(new_command)
                 for file in scripts_to_run:
-                    new_command = run_command_template.format(file)
+                    new_command = run_command_template.format(file) if not always_run_step else run_command_template_always.format(file)
                     commands.append(new_command)
                 config_steps['commands'] = commands
             new_configs.append(config)
