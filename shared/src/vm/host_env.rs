@@ -675,6 +675,10 @@ pub fn tx_write<MEM, DB, H>(
     let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
     for addr in key.find_addresses() {
+        // skip the check for implicit and internal addresses
+        if let Address::Implicit(_) | Address::Internal(_) = &addr {
+            continue;
+        }
         let vp_key = Key::validity_predicate(&addr)
             .expect("Unable to create a validity predicate key");
         let (vp, gas) = write_log.read(&vp_key);
