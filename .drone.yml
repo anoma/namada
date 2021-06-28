@@ -494,7 +494,7 @@ trigger:
   branch: [master]
   event: [push]
 type: docker
-workspace: {path: /drone/workspace}
+workspace: {path: /usr/local/rust/project}
 ---
 environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
@@ -557,18 +557,38 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build
   pull: if-not-exists
-- commands: [sccache --start-server, make test]
+- commands: [sccache --start-server, make build-test]
   depends_on: [build]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-test
+    SCCACHE_S3_KEY_PREFIX: sccache-build-test
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: build-test
+  pull: if-not-exists
+- commands: [sccache --start-server, make test-unit]
+  depends_on: [build-test]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-test-unit
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test
   pull: if-not-exists
+- commands: [sccache --start-server, make test-e2e]
+  depends_on: [build-test]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-test-e2e
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: test-e2e
+  pull: if-not-exists
 - commands: [cargo-cache]
-  depends_on: [test]
+  depends_on: [test, test-e2e]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
   pull: if-not-exists
@@ -598,6 +618,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 6557ccbcf7116009f60833d20aefd342d81e02c54b1d95197719c36d1a9f8ef7
+hmac: b4ba3e6848a0ae1be0d1f9d09c680592170b50dcaaf0631f1de63ad196ff371e
 
 ...
