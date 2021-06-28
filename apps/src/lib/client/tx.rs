@@ -11,7 +11,8 @@ use tendermint_rpc::{Client, HttpClient};
 use crate::cli::{TxArgs, TxCustomArgs, TxTransferArgs, TxUpdateVpArgs};
 use crate::wallet;
 
-const TX_UPDATE_VP: &str = "wasm/txs/tx_update_vp/tx.wasm";
+const TX_UPDATE_VP_WASM: &str = "wasm/txs/tx_update_vp/tx.wasm";
+const TX_TRANSFER_WASM: &str = "wasm/txs/tx_transfer/tx.wasm";
 
 pub async fn submit_custom(args: TxCustomArgs) {
     let tx_code = std::fs::read(args.code_path)
@@ -29,7 +30,7 @@ pub async fn submit_update_vp(args: TxUpdateVpArgs) {
     let addr = Address::decode(&args.addr).expect("The address is not valid");
     let vp_code = std::fs::read(args.vp_code_path)
         .expect("Expected a file at given code path");
-    let tx_code = std::fs::read(TX_UPDATE_VP)
+    let tx_code = std::fs::read(TX_UPDATE_VP_WASM)
         .expect("Expected a file at given code path");
 
     let update_vp = UpdateVp { addr, vp_code };
@@ -50,7 +51,7 @@ pub async fn submit_transfer(args: TxTransferArgs) {
     let token =
         Address::decode(&args.token).expect("Token address is not valid");
     let amount = token::Amount::from(args.amount);
-    let tx_code = std::fs::read(&args.code_path).unwrap();
+    let tx_code = std::fs::read(TX_TRANSFER_WASM).unwrap();
 
     let transfer = token::Transfer {
         source,

@@ -87,8 +87,6 @@ pub struct TxCustomArgs {
 pub struct TxTransferArgs {
     /// Common tx arguments
     pub tx: TxArgs,
-    /// Path to the tx WASM code file
-    pub code_path: String,
     /// Transfer source address
     // TODO use `Address`
     pub source: String,
@@ -239,7 +237,6 @@ impl AppExt for App {
         App::new(TX_TRANSFER_CMD)
             .about("Send a transfer transaction with a signature")
             .tx_args()
-            .tx_code_path_arg()
             .arg(
                 Arg::new(SOURCE_ARG)
                     .long(SOURCE_ARG)
@@ -425,14 +422,12 @@ impl ArgMatchesExt for ArgMatches {
 
     fn tx_transfer(&self) -> TxTransferArgs {
         let tx = self.tx();
-        let code_path = self.tx_code_path();
         let source = parse_req(self, SOURCE_ARG);
         let target = parse_req(self, TARGET_ARG);
         let token = parse_req(self, TOKEN_ARG);
         let amount: f64 = parse_req(self, AMOUNT_ARG);
         TxTransferArgs {
             tx,
-            code_path,
             source,
             target,
             token,

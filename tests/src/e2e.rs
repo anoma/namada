@@ -208,17 +208,8 @@ mod tests {
         let txs_args = vec![
             // 2. Submit a token transfer tx
             vec![
-                "transfer",
-                "--source",
-                BERTHA,
-                "--target",
-                ALBERT,
-                "--token",
-                XAN,
-                "--amount",
-                "10.1",
-                "--code-path",
-                TX_TRANSFER_WASM,
+                "transfer", "--source", BERTHA, "--target", ALBERT, "--token",
+                XAN, "--amount", "10.1",
             ],
             // 3. Submit a transaction to update an account's validity
             // predicate
