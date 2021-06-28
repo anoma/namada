@@ -61,7 +61,7 @@ mod tests {
             let cmd_str = format!("{:?}", cmd);
 
             let mut session =
-                spawn_command(cmd, Some(10_000)).map_err(|e| {
+                spawn_command(cmd, Some(20_000)).map_err(|e| {
                     eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
                 })?;
 
@@ -97,7 +97,7 @@ mod tests {
             "run-ledger",
         ]);
         println!("Running {:?}", cmd);
-        let mut session = spawn_command(cmd, Some(10_000))
+        let mut session = spawn_command(cmd, Some(20_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session
@@ -127,7 +127,7 @@ mod tests {
             "run-ledger",
         ]);
         println!("Running {:?}", cmd);
-        let mut session = spawn_command(cmd, Some(10_000))
+        let mut session = spawn_command(cmd, Some(20_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session
@@ -160,7 +160,7 @@ mod tests {
             &base_dir.path().to_string_lossy(),
             "run-ledger",
         ]);
-        let mut session = spawn_command(cmd, Some(10_000))
+        let mut session = spawn_command(cmd, Some(20_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session
@@ -195,7 +195,7 @@ mod tests {
             "run-ledger",
         ]);
         println!("Running {:?}", cmd);
-        let mut session = spawn_command(cmd, Some(10_000))
+        let mut session = spawn_command(cmd, Some(20_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session
@@ -251,7 +251,7 @@ mod tests {
                 let cmd_str = format!("{:?}", cmd);
 
                 let mut session =
-                    spawn_command(cmd, Some(10_000)).map_err(|e| {
+                    spawn_command(cmd, Some(20_000)).map_err(|e| {
                         eyre!(format!(
                             "in command: {}\n\nReason: {}",
                             cmd_str, e
