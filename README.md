@@ -86,10 +86,10 @@ cargo run --bin anomac -- transfer --source $BERTHA --target $ALBERT --token $XA
 cargo run --bin anomac -- update --address $BERTHA --code-path wasm/vps/vp_user/vp.wasm
 
 # run gossip node with intent gossip system and rpc server (use default config)
-cargo run --bin anoma -- run-gossip --rpc "127.0.0.1:39111"
+cargo run --bin anoma -- gossip --rpc "127.0.0.1:39111"
 
 # run gossip node with intent gossip system, matchmaker and rpc (use default config)
-cargo run --bin anoman -- run-gossip --rpc "127.0.0.1:39111" --matchmaker-path wasm/matchmaker_template/matchmaker.wasm --tx-code-path wasm/txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
+cargo run --bin anoman -- gossip --rpc "127.0.0.1:39111" --matchmaker-path wasm/matchmaker_template/matchmaker.wasm --tx-code-path wasm/txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
 
 # craft intents
 cargo run --bin anomac -- craft-intent --address $ALBERT    --token-buy $ETH --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_A.data
