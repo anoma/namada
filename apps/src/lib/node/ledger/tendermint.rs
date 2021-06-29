@@ -467,6 +467,10 @@ fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
     // again in the future.
     config.mempool.keep_invalid_txs_in_cache = false;
 
+    // Bumped from the default `1_000_000`, because some WASMs can be
+    // quite large
+    config.rpc.max_body_bytes = 2_000_000;
+
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
