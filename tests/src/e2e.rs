@@ -215,13 +215,7 @@ mod tests {
             ],
             // 3. Submit a transaction to update an account's validity
             // predicate
-            vec![
-                "update",
-                "--address",
-                BERTHA,
-                "--code-path",
-                TX_UPDATE_VP_WASM,
-            ],
+            vec!["update", "--address", BERTHA, "--code-path", VP_USER_WASM],
             // 4. Submit a custom tx
             vec![
                 "tx",
@@ -439,8 +433,7 @@ mod tests {
 
         // Paths to the WASMs used for tests
         pub const TX_TRANSFER_WASM: &str = "wasm/txs/tx_transfer/tx.wasm";
-        pub const TX_UPDATE_VP_WASM: &str =
-            "wasm_for_tests/vp_always_true.wasm";
+        pub const VP_USER_WASM: &str = "wasm/vps/vp_user/vp.wasm";
         pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
     }
 }
