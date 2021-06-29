@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use libp2p::multiaddr::{Multiaddr, Protocol};
@@ -252,8 +252,8 @@ impl Default for Config {
 
 impl Config {
     // TODO try to check from any "config.*" file instead of only .toml
-    pub fn read(base_dir_path: &str) -> Result<Self> {
-        let file_path = PathBuf::from(base_dir_path).join(FILENAME);
+    pub fn read(base_dir_path: &Path) -> Result<Self> {
+        let file_path = base_dir_path.join(FILENAME);
         let mut config = config::Config::new();
         config
             .merge(config::File::with_name(
@@ -263,8 +263,7 @@ impl Config {
         config.try_into().map_err(Error::DeserializationError)
     }
 
-    pub fn generate(base_dir: &str, replace: bool) -> Result<Self> {
-        let base_dir = PathBuf::from(base_dir);
+    pub fn generate(base_dir: &Path, replace: bool) -> Result<Self> {
         let mut config = Config::default();
         let mut ledger_cfg = config
             .ledger
@@ -277,7 +276,7 @@ impl Config {
     }
 
     // TODO add format in config instead and serialize it to that format
-    pub fn write(&self, base_dir: PathBuf, replace: bool) -> Result<()> {
+    pub fn write(&self, base_dir: &Path, replace: bool) -> Result<()> {
         create_dir_all(&base_dir).map_err(Error::FileError)?;
         let file_path = base_dir.join(FILENAME);
         if file_path.exists() && !replace {
