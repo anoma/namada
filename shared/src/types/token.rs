@@ -1,7 +1,10 @@
 //! A basic fungible token
 
+use std::str::FromStr;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
@@ -25,6 +28,8 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
 pub struct Amount {
     micro: u64,
 }
+
+const MAX_SCALE: u32 = 6;
 
 /// A change in tokens amount
 pub type Change = i128;
@@ -65,10 +70,37 @@ impl From<u64> for Amount {
     }
 }
 
-impl From<f64> for Amount {
-    fn from(decimal: f64) -> Self {
-        Self {
-            micro: (decimal * 1_000_000.0).round() as u64,
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum AmountParseError {
+    #[error("Error decoding token amount: {0}")]
+    InvalidDecimal(rust_decimal::Error),
+    #[error(
+        "Error decoding token amount, scale too large: {0}. Maximum \
+         {MAX_SCALE}"
+    )]
+    ScaleTooLarge(u32),
+    #[error("Error decoding token amount, the value is within invalid range.")]
+    InvalidRange,
+}
+
+impl FromStr for Amount {
+    type Err = AmountParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match rust_decimal::Decimal::from_str(s) {
+            Ok(decimal) => {
+                let scale = decimal.scale();
+                if scale > 6 {
+                    return Err(AmountParseError::ScaleTooLarge(scale));
+                }
+                let whole = decimal * rust_decimal::Decimal::new(1_000_000, 0);
+                let micro: u64 =
+                    rust_decimal::prelude::ToPrimitive::to_u64(&whole)
+                        .ok_or(AmountParseError::InvalidRange)?;
+                Ok(Self { micro })
+            }
+            Err(err) => Err(AmountParseError::InvalidDecimal(err)),
         }
     }
 }
