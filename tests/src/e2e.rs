@@ -11,14 +11,13 @@ mod tests {
     use assert_cmd::assert::OutputAssertExt;
     use assert_cmd::cargo::CommandCargoExt;
     use color_eyre::eyre::Result;
+    use constants::*;
     use eyre::eyre;
     use libp2p::identity::Keypair;
     use libp2p::PeerId;
     use rexpect::process::wait::WaitStatus;
     use rexpect::session::spawn_command;
     use tempfile::tempdir;
-
-    use super::constants::*;
 
     /// A helper that should be ran on start of every e2e test case.
     fn setup() -> PathBuf {
@@ -43,9 +42,12 @@ mod tests {
         let base_dir = tempdir().unwrap();
 
         let cmd_combinations = vec![
-            ("anoma", vec![]),
-            ("anoma", vec!["node"]),
-            ("anoman", vec![]),
+            ("anoma", vec!["ledger"]),
+            ("anoma", vec!["ledger", "run"]),
+            ("anoma", vec!["node", "ledger"]),
+            ("anoma", vec!["node", "ledger", "run"]),
+            ("anoman", vec!["ledger"]),
+            ("anoman", vec!["ledger", "run"]),
         ];
 
         // Start the ledger
@@ -55,8 +57,7 @@ mod tests {
             cmd.current_dir(&dir)
                 .env("ANOMA_LOG", "debug")
                 .args(&["--base-dir", &base_dir.path().to_string_lossy()])
-                .args(args)
-                .arg("run-ledger");
+                .args(args);
 
             let cmd_str = format!("{:?}", cmd);
 
@@ -94,7 +95,7 @@ mod tests {
         cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             base_dir_arg,
-            "run-ledger",
+            "ledger",
         ]);
         println!("Running {:?}", cmd);
         let mut session = spawn_command(cmd, Some(20_000))
@@ -124,7 +125,7 @@ mod tests {
         cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             base_dir_arg,
-            "run-ledger",
+            "ledger",
         ]);
         println!("Running {:?}", cmd);
         let mut session = spawn_command(cmd, Some(20_000))
@@ -149,7 +150,8 @@ mod tests {
         cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             base_dir_arg,
-            "reset-ledger",
+            "ledger",
+            "reset",
         ]);
         cmd.assert().success();
 
@@ -158,7 +160,7 @@ mod tests {
         cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             &base_dir.path().to_string_lossy(),
-            "run-ledger",
+            "ledger",
         ]);
         let mut session = spawn_command(cmd, Some(20_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
@@ -192,7 +194,7 @@ mod tests {
         cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             base_dir_arg,
-            "run-ledger",
+            "ledger",
         ]);
         println!("Running {:?}", cmd);
         let mut session = spawn_command(cmd, Some(20_000))
@@ -292,7 +294,7 @@ mod tests {
 
         let mut base_node = Command::cargo_bin("anoman")?;
         base_node.env("ANOMA_LOG", "debug");
-        base_node.args(&["--base-dir", first_node_dir, "run-gossip"]);
+        base_node.args(&["--base-dir", first_node_dir, "gossip", "run"]);
 
         //  Node without peers
         let mut session = spawn_command(base_node, Some(20_000))
@@ -319,10 +321,10 @@ mod tests {
         drop(session);
 
         let mut base_node = Command::cargo_bin("anoman")?;
-        base_node.args(&["--base-dir", first_node_dir, "run-gossip"]);
+        base_node.args(&["--base-dir", first_node_dir, "gossip"]);
 
         let mut peer_node = Command::cargo_bin("anoman")?;
-        peer_node.args(&["--base-dir", second_node_dir, "run-gossip"]);
+        peer_node.args(&["--base-dir", second_node_dir, "gossip"]);
 
         let mut session = spawn_command(base_node, Some(20_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
@@ -392,7 +394,7 @@ mod tests {
 
             config.intent_gossiper = Some(gossiper_config);
 
-            config.write(node_path.clone(), false).unwrap();
+            config.write(&node_path, false).unwrap();
             index += 1;
         }
         node_dirs
@@ -415,29 +417,30 @@ mod tests {
         }
         return vec![];
     }
-}
 
-#[cfg(test)]
-#[allow(dead_code)]
-mod constants {
-    // User addresses
-    pub const ALBERT: &str = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx";
-    pub const BERTHA: &str = "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9";
-    pub const CHRISTEL: &str = "a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s";
+    #[cfg(test)]
+    #[allow(dead_code)]
+    mod constants {
+        // User addresses
+        pub const ALBERT: &str = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx";
+        pub const BERTHA: &str = "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9";
+        pub const CHRISTEL: &str = "a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s";
 
-    // Fungible token addresses
-    pub const XAN: &str = "a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3";
-    pub const BTC: &str = "a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc";
-    pub const ETH: &str = "a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9";
-    pub const DOT: &str = "a1qq5qqqqqxq652v3sxap523fs8pznjse5g3pyydf3xqurws6ygvc5gdfcxyuy2deeggenjsjrjrl2ph";
+        // Fungible token addresses
+        pub const XAN: &str = "a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3";
+        pub const BTC: &str = "a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc";
+        pub const ETH: &str = "a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9";
+        pub const DOT: &str = "a1qq5qqqqqxq652v3sxap523fs8pznjse5g3pyydf3xqurws6ygvc5gdfcxyuy2deeggenjsjrjrl2ph";
 
-    // Bite-sized tokens
-    pub const SCHNITZEL: &str = "a1qq5qqqqq8prrzv6xxcury3p4xucygdp5gfprzdfex9prz3jyg56rxv69gvenvsj9g5enswpcl8npyz";
-    pub const APFEL: &str = "a1qq5qqqqqgfp52de4x56nqd3ex56y2wph8pznssjzx5ersw2pxfznsd3jxeqnjd3cxapnqsjz2fyt3j";
-    pub const KARTOFFEL: &str = "a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn233sgccnjs3eak5wwh";
+        // Bite-sized tokens
+        pub const SCHNITZEL: &str = "a1qq5qqqqq8prrzv6xxcury3p4xucygdp5gfprzdfex9prz3jyg56rxv69gvenvsj9g5enswpcl8npyz";
+        pub const APFEL: &str = "a1qq5qqqqqgfp52de4x56nqd3ex56y2wph8pznssjzx5ersw2pxfznsd3jxeqnjd3cxapnqsjz2fyt3j";
+        pub const KARTOFFEL: &str = "a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn233sgccnjs3eak5wwh";
 
-    // Paths to the WASMs used for tests
-    pub const TX_TRANSFER_WASM: &str = "wasm/txs/tx_transfer/tx.wasm";
-    pub const TX_UPDATE_VP_WASM: &str = "wasm_for_tests/vp_always_true.wasm";
-    pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
+        // Paths to the WASMs used for tests
+        pub const TX_TRANSFER_WASM: &str = "wasm/txs/tx_transfer/tx.wasm";
+        pub const TX_UPDATE_VP_WASM: &str =
+            "wasm_for_tests/vp_always_true.wasm";
+        pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
+    }
 }
