@@ -3,6 +3,7 @@
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use std::str::FromStr;
 use std::string;
 
 use bech32::{self, FromBase32, ToBase32, Variant};
@@ -143,6 +144,14 @@ impl Display for Address {
 impl Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.pretty_fmt(f)
+    }
+}
+
+impl FromStr for Address {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Address::decode(s)
     }
 }
 
