@@ -1,62 +1,49 @@
+//! Anoma client CLI.
+
 use std::fs::File;
 use std::io::Write;
 
-use anoma::cli::{
-    ArgMatchesExt, CraftIntentArgs, IntentArgs, SubscribeTopicArgs,
-};
+use anoma::cli::{args, cmds};
 use anoma::client::tx;
 use anoma::proto::services::rpc_service_client::RpcServiceClient;
 use anoma::proto::{services, RpcMessage};
 use anoma::{cli, wallet};
-use anoma_shared::types::address::Address;
 use anoma_shared::types::intent::Intent;
 use anoma_shared::types::key::ed25519::Signed;
-use anoma_shared::types::token;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
-use eyre::Context;
 
 pub async fn main() -> Result<()> {
-    let mut app = cli::anoma_client_cli();
-
-    let matches = app.clone().get_matches();
-
-    match matches.subcommand() {
-        Some((cli::TX_CUSTOM_CMD, args)) => {
-            let args = args.tx_custom();
+    let (cmd, _global_args) = cli::anoma_client_cli();
+    match cmd {
+        cmds::AnomaClient::TxCustom(cmds::TxCustom(args)) => {
             tx::submit_custom(args).await;
         }
-        Some((cli::TX_TRANSFER_CMD, args)) => {
-            let args = args.tx_transfer();
+        cmds::AnomaClient::TxTransfer(cmds::TxTransfer(args)) => {
             tx::submit_transfer(args).await;
         }
-        Some((cli::TX_UPDATE_CMD, args)) => {
-            let args = args.tx_update_vp();
+        cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
             tx::submit_update_vp(args).await;
         }
-        Some((cli::INTENT_CMD, args)) => {
-            let args = args.intent();
+        cmds::AnomaClient::Intent(cmds::Intent(args)) => {
             gossip_intent(args).await;
         }
-        Some((cli::CRAFT_INTENT_CMD, args)) => {
-            let args = args.craft_intent();
+        cmds::AnomaClient::CraftIntent(cmds::CraftIntent(args)) => {
             craft_intent(args);
         }
-        Some((cli::SUBSCRIBE_TOPIC_CMD, args)) => {
-            let args = args.subscribe_topic();
+        cmds::AnomaClient::SubscribeTopic(cmds::SubscribeTopic(args)) => {
             subscribe_topic(args).await;
         }
-        _ => app.print_help().wrap_err("Can't display help.")?,
     }
     Ok(())
 }
 
 async fn gossip_intent(
-    IntentArgs {
+    args::Intent {
         node_addr,
         data_path,
         topic,
-    }: IntentArgs,
+    }: args::Intent,
 ) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let data = std::fs::read(data_path).expect("data file IO error");
@@ -71,7 +58,7 @@ async fn gossip_intent(
 }
 
 async fn subscribe_topic(
-    SubscribeTopicArgs { node_addr, topic }: SubscribeTopicArgs,
+    args::SubscribeTopic { node_addr, topic }: args::SubscribeTopic,
 ) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let message: services::RpcMessage = RpcMessage::new_topic(topic).into();
@@ -83,23 +70,16 @@ async fn subscribe_topic(
 }
 
 fn craft_intent(
-    CraftIntentArgs {
+    args::CraftIntent {
         addr,
         token_sell,
         amount_sell,
         token_buy,
         amount_buy,
-        file,
-    }: CraftIntentArgs,
+        file_path,
+    }: args::CraftIntent,
 ) {
-    let source_keypair = wallet::key_of(&addr);
-    let addr = Address::decode(addr).expect("Source address is not valid");
-    let token_sell = Address::decode(token_sell)
-        .expect("Token to sell address is not valid");
-    let amount_sell = token::Amount::from(amount_sell);
-    let token_buy =
-        Address::decode(token_buy).expect("Token to buy address is not valid");
-    let amount_buy = token::Amount::from(amount_buy);
+    let source_keypair = wallet::key_of(&addr.encode());
 
     let intent = Intent {
         addr,
@@ -111,6 +91,6 @@ fn craft_intent(
     let signed: Signed<Intent> = Signed::new(&source_keypair, intent);
     let data_bytes = signed.try_to_vec().unwrap();
 
-    let mut file = File::create(file).unwrap();
+    let mut file = File::create(file_path).unwrap();
     file.write_all(&data_bytes).unwrap();
 }

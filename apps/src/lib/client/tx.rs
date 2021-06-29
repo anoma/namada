@@ -1,20 +1,19 @@
 use std::str::FromStr;
 
 use anoma_shared::proto::Tx;
-use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::Keypair;
 use anoma_shared::types::token;
 use anoma_shared::types::transaction::UpdateVp;
 use borsh::BorshSerialize;
 use tendermint_rpc::{Client, HttpClient};
 
-use crate::cli::{TxArgs, TxCustomArgs, TxTransferArgs, TxUpdateVpArgs};
+use crate::cli::args;
 use crate::wallet;
 
 const TX_UPDATE_VP_WASM: &str = "wasm/txs/tx_update_vp/tx.wasm";
 const TX_TRANSFER_WASM: &str = "wasm/txs/tx_transfer/tx.wasm";
 
-pub async fn submit_custom(args: TxCustomArgs) {
+pub async fn submit_custom(args: args::TxCustom) {
     let tx_code = std::fs::read(args.code_path)
         .expect("Expected a file at given code path");
     let data = args.data_path.map(|data_path| {
@@ -25,9 +24,9 @@ pub async fn submit_custom(args: TxCustomArgs) {
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_update_vp(args: TxUpdateVpArgs) {
-    let source_key: Keypair = wallet::key_of(&args.addr);
-    let addr = Address::decode(&args.addr).expect("The address is not valid");
+pub async fn submit_update_vp(args: args::TxUpdateVp) {
+    let addr = args.addr;
+    let source_key: Keypair = wallet::key_of(addr.encode());
     let vp_code = std::fs::read(args.vp_code_path)
         .expect("Expected a file at given code path");
     let tx_code = std::fs::read(TX_UPDATE_VP_WASM)
@@ -42,23 +41,17 @@ pub async fn submit_update_vp(args: TxUpdateVpArgs) {
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_transfer(args: TxTransferArgs) {
-    let source_key: Keypair = wallet::key_of(&args.source);
-    let source =
-        Address::decode(&args.source).expect("Source address is not valid");
-    let target =
-        Address::decode(&args.target).expect("Target address is not valid");
-    let token =
-        Address::decode(&args.token).expect("Token address is not valid");
-    let amount = token::Amount::from(args.amount);
+pub async fn submit_transfer(args: args::TxTransfer) {
+    let source_key: Keypair = wallet::key_of(args.source.encode());
     let tx_code = std::fs::read(TX_TRANSFER_WASM).unwrap();
 
     let transfer = token::Transfer {
-        source,
-        target,
-        token,
-        amount,
+        source: args.source,
+        target: args.target,
+        token: args.token,
+        amount: args.amount,
     };
+    tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
@@ -67,7 +60,7 @@ pub async fn submit_transfer(args: TxTransferArgs) {
     submit_tx(args.tx, tx).await
 }
 
-async fn submit_tx(args: TxArgs, tx: Tx) {
+async fn submit_tx(args: args::Tx, tx: Tx) {
     let tx_bytes = tx.to_bytes();
 
     // NOTE: use this to print the request JSON body:
@@ -80,9 +73,7 @@ async fn submit_tx(args: TxArgs, tx: Tx) {
     // let request_body = request.into_json();
     // println!("HTTP request body: {}", request_body);
 
-    let address: tendermint::net::Address =
-        FromStr::from_str(&format!("tcp://{}", args.ledger_address)).unwrap();
-    let client = HttpClient::new(address).unwrap();
+    let client = HttpClient::new(args.ledger_address).unwrap();
     // TODO broadcast_tx_commit shouldn't be used live;
     if args.dry_run {
         let path = FromStr::from_str("dry_run_tx").unwrap();
