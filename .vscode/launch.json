@@ -42,6 +42,8 @@
             ],
         },
         {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug integration tests",
             "cargo": {
                 "args": [

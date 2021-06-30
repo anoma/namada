@@ -50,15 +50,15 @@ install:
 
 run-ledger:
 	# runs the node
-	$(cargo) run --bin anoman -- run-ledger
+	$(cargo) run --bin anoman -- ledger run
 
 run-gossip:
 	# runs the node gossip node
-	$(cargo) run --bin anoman -- run-gossip
+	$(cargo) run --bin anoman -- gossip run
 
 reset-ledger:
 	# runs the node
-	$(cargo) run --bin anoman -- reset-ledger
+	$(cargo) run --bin anoman -- ledger reset
 
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
