@@ -705,8 +705,7 @@ where
         if let Address::Implicit(_) | Address::Internal(_) = &addr {
             continue;
         }
-        let vp_key = Key::validity_predicate(&addr)
-            .expect("Unable to create a validity predicate key");
+        let vp_key = Key::validity_predicate(&addr);
         let (vp, gas) = write_log.read(&vp_key);
         tx_add_gas(env, gas)?;
         // just check the existence because the write log should not have the
@@ -1061,8 +1060,7 @@ where
     let addr = Address::decode(addr).expect("Failed to decode the address");
     tracing::debug!("tx_update_validity_predicate for addr {}", addr);
 
-    let key =
-        Key::validity_predicate(&addr).expect("Cannot make the key for the VP");
+    let key = Key::validity_predicate(&addr);
     let (code, gas) = env.memory.read_bytes(code_ptr, code_len as _);
     tx_add_gas(env, gas)?;
 

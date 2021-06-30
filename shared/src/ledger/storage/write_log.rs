@@ -150,8 +150,7 @@ impl WriteLog {
             self.address_gen.get_or_insert(storage_address_gen.clone());
         let addr =
             address_gen.generate_address("TODO more randomness".as_bytes());
-        let key = Key::validity_predicate(&addr)
-            .expect("Unable to create a validity predicate key");
+        let key = Key::validity_predicate(&addr);
         let gas = (key.len() + vp.len()) as _;
         self.tx_write_log
             .insert(key, StorageModification::InitAccount { vp });
@@ -362,8 +361,7 @@ mod tests {
         // init
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, gas) = write_log.init_account(&address_gen, init_vp.clone());
-        let vp_key =
-            Key::validity_predicate(&addr).expect("cannot create the vp key");
+        let vp_key = Key::validity_predicate(&addr);
         assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
 
         // read
@@ -388,8 +386,7 @@ mod tests {
 
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, _) = write_log.init_account(&address_gen, init_vp);
-        let vp_key =
-            Key::validity_predicate(&addr).expect("cannot create the vp key");
+        let vp_key = Key::validity_predicate(&addr);
 
         // update should fail
         let updated_vp = "updated".as_bytes().to_vec();
@@ -404,8 +401,7 @@ mod tests {
 
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, _) = write_log.init_account(&address_gen, init_vp);
-        let vp_key =
-            Key::validity_predicate(&addr).expect("cannot create the vp key");
+        let vp_key = Key::validity_predicate(&addr);
 
         // delete should fail
         write_log.delete(&vp_key);

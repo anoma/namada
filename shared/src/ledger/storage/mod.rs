@@ -310,14 +310,14 @@ where
         &self,
         addr: &Address,
     ) -> Result<(Option<Vec<u8>>, u64)> {
-        let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
+        let key = Key::validity_predicate(addr);
         self.read(&key)
     }
 
     #[allow(dead_code)]
     /// Check if the given address exists on chain and return the gas cost.
     pub fn exists(&self, addr: &Address) -> Result<(bool, u64)> {
-        let key = Key::validity_predicate(addr).map_err(Error::KeyError)?;
+        let key = Key::validity_predicate(addr);
         self.has_key(&key)
     }
 
