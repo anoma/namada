@@ -18,6 +18,7 @@ fn main() -> Result<()> {
     // Ledger dependencies
     let filter = reduce_log_level("tendermint_abci", filter, &log_env_var)?;
     // Gossip dependencies
+    let filter = reduce_log_level("libp2p", filter, &log_env_var)?;
     let filter = reduce_log_level("regalloc", filter, &log_env_var)?;
     let filter =
         reduce_log_level("wasmer_compiler_cranelift", filter, &log_env_var)?;
