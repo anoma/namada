@@ -287,7 +287,7 @@ mod tests {
         let second_node_peer_id = node_dirs[1].1.to_string();
 
         let mut base_node = Command::cargo_bin("anoman")?;
-        base_node.env("ANOMA_LOG", "debug");
+        base_node.env("ANOMA_LOG", "debug,libp2p=debug");
         base_node.args(&["--base-dir", first_node_dir, "gossip", "run"]);
 
         //  Node without peers
