@@ -21,11 +21,11 @@ use crate::types::storage::Key;
 use crate::vm::host_env::{TxEnv, VpCtx, VpEnv, VpEvaluator};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::types::VpInput;
-use crate::vm::validate_untrusted_wasm;
 use crate::vm::wasm::host_env::{
     mm_filter_imports, mm_imports, tx_imports, vp_imports,
 };
 use crate::vm::wasm::memory;
+use crate::vm::{validate_untrusted_wasm, WasmValidationError};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -66,7 +66,7 @@ pub enum Error {
         error: wasmer::RuntimeError,
     },
     #[error("Wasm validation error: {0}")]
-    ValidationError(wasmparser::BinaryReaderError),
+    ValidationError(WasmValidationError),
 }
 
 /// Result for functions that may fail

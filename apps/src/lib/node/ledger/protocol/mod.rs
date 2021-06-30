@@ -34,7 +34,7 @@ pub enum Error {
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("Error executing native VP: {0}")]
-    NativeVpError(vp_env::Error),
+    NativeVpError(vp_env::RuntimeError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

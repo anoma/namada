@@ -1,17 +1,32 @@
 //! Validity predicate environment contains functions that can be called from
 //! inside validity predicates.
 
+use thiserror::Error;
+
+use crate::ledger::gas;
 use crate::ledger::gas::VpGasMeter;
-// The only possible fail condition for functions here should be out of gas
-// errors
-pub use crate::ledger::gas::{Error, Result};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
 use crate::types::storage::{BlockHash, BlockHeight, Key};
 
+/// These runtime errors will abort VP execution immediately
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum RuntimeError {
+    #[error("Out of gas: {0}")]
+    OutOfGas(gas::Error),
+}
+
+/// VP environment function result
+pub type Result<T> = std::result::Result<T, RuntimeError>;
+
 /// Add a gas cost incured in a validity predicate
 pub fn add_gas(gas_meter: &mut VpGasMeter, used_gas: u64) -> Result<()> {
-    gas_meter.add(used_gas)
+    let result = gas_meter.add(used_gas).map_err(RuntimeError::OutOfGas);
+    if let Err(err) = &result {
+        tracing::info!("Stopping VP execution because of gas error: {}", err);
+    }
+    result
 }
 
 /// Storage read prior state (before tx execution). It will try to read from the
