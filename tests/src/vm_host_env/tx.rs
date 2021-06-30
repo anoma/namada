@@ -107,7 +107,9 @@ mod native_tx_host_env {
                             let env = env.borrow_mut();
                             let env = env.as_ref().expect("Did you forget to initialize the ENV?");
 
-                            $fn( &env, $($arg),* )
+                            // Call the `host_env` function and unwrap any
+                            // runtime errors
+                            $fn( &env, $($arg),* ).unwrap()
                         })
                     }
                 });
@@ -122,7 +124,9 @@ mod native_tx_host_env {
                             let env = env.borrow_mut();
                             let env = env.as_ref().expect("Did you forget to initialize the ENV?");
 
-                            $fn( &env, $($arg),* )
+                            // Call the `host_env` function and unwrap any
+                            // runtime errors
+                            $fn( &env, $($arg),* ).unwrap()
                         })
                     }
                 });
