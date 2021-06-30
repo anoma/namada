@@ -80,16 +80,16 @@ export KARTOFFEL=a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn2
 
 ```shell
 # Submit a token transfer
-cargo run --bin anomac -- transfer --source $BERTHA --target $ALBERT --token $XAN --amount 10.1 --code-path wasm/txs/tx_transfer/tx.wasm
+cargo run --bin anomac -- transfer --source $BERTHA --target $ALBERT --token $XAN --amount 10.1
 
 # Submit a transaction to update an account's validity predicate
 cargo run --bin anomac -- update --address $BERTHA --code-path wasm/vps/vp_user/vp.wasm
 
 # run gossip node with intent gossip system and rpc server (use default config)
-cargo run --bin anoma -- run-gossip --rpc "127.0.0.1:39111"
+cargo run --bin anoma -- gossip --rpc "127.0.0.1:39111"
 
 # run gossip node with intent gossip system, matchmaker and rpc (use default config)
-cargo run --bin anoman -- run-gossip --rpc "127.0.0.1:39111" --matchmaker-path matchmaker_template/matchmaker.wasm --tx-code-path wasm/txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
+cargo run --bin anoman -- gossip --rpc "127.0.0.1:39111" --matchmaker-path wasm/matchmaker_template/matchmaker.wasm --tx-code-path wasm/txs/tx_from_intent/tx.wasm --ledger-address "127.0.0.1:26657"
 
 # craft intents
 cargo run --bin anomac -- craft-intent --address $ALBERT    --token-buy $ETH --amount-buy 10 --token-sell $BTC --amount-sell 20 --file-path intent_A.data

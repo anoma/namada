@@ -6,13 +6,11 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
-use std::collections::HashSet;
-use std::fmt::Debug;
-use std::str::FromStr;
-
-use clap::{Arg, ArgMatches};
+use clap::ArgMatches;
 
 use super::config;
+mod utils;
+use utils::*;
 
 const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
 const APP_NAME: &str = "Anoma";
@@ -20,473 +18,908 @@ const CLI_VERSION: &str = "0.1.0";
 const NODE_VERSION: &str = "0.1.0";
 const CLIENT_VERSION: &str = "0.1.0";
 
-pub const NODE_COMMAND: &str = "node";
-pub const CLIENT_COMMAND: &str = "client";
-pub const RUN_GOSSIP_COMMAND: &str = "run-gossip";
-pub const RUN_LEDGER_COMMAND: &str = "run-ledger";
-pub const RESET_LEDGER_COMMAND: &str = "reset-ledger";
-pub const GENERATE_CONFIG_COMMAND: &str = "generate-config";
-pub const INTENT_COMMAND: &str = "intent";
-pub const SUBSCRIBE_TOPIC_COMMAND: &str = "subscribe-topic";
-pub const CRAFT_INTENT_COMMAND: &str = "craft-intent";
-pub const TX_COMMAND: &str = "tx";
-pub const TX_TRANSFER_COMMAND: &str = "transfer";
-pub const TX_UPDATE_COMMAND: &str = "update";
+// Main Anoma sub-commands
+const NODE_CMD: &str = "node";
+const CLIENT_CMD: &str = "client";
 
-// gossip args
-pub const BASE_ARG: &str = "base-dir";
-pub const PEERS_ARG: &str = "peers";
-pub const ADDRESS_ARG: &str = "address";
-pub const TOPIC_ARG: &str = "topic";
-pub const RPC_ARG: &str = "rpc";
-pub const MATCHMAKER_ARG: &str = "matchmaker-path";
-pub const TX_CODE_ARG: &str = "tx-code-path";
-pub const LEDGER_ADDRESS_ARG: &str = "ledger-address";
-pub const FILTER_ARG: &str = "filter";
+pub mod cmds {
+    use super::utils::*;
+    use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD};
 
-// client args
-pub const DATA_ARG: &str = "data-path";
-pub const CODE_ARG: &str = "code-path";
-pub const DATA_INTENT_ARG: &str = "data-path";
-pub const NODE_INTENT_ARG: &str = "node";
-pub const DRY_RUN_TX_ARG: &str = "dry-run";
-pub const TOKEN_SELL_ARG: &str = "token-sell";
-pub const TOKEN_BUY_ARG: &str = "token-buy";
-pub const AMOUNT_SELL_ARG: &str = "amount-sell";
-pub const AMOUNT_BUY_ARG: &str = "amount-buy";
-pub const FILE_ARG: &str = "file-path";
-pub const SOURCE_ARG: &str = "source";
-pub const TARGET_ARG: &str = "target";
-pub const TOKEN_ARG: &str = "token";
-pub const AMOUNT_ARG: &str = "amount";
+    /// Commands for `anoma` binary.
+    #[derive(Debug)]
+    pub enum Anoma {
+        Node(AnomaNode),
+        Client(AnomaClient),
+        // Inlined commands from the node and the client.
+        Ledger(Ledger),
+        Gossip(Gossip),
+        TxCustom(TxCustom),
+        TxTransfer(TxTransfer),
+        TxUpdateVp(TxUpdateVp),
+        Intent(Intent),
+    }
+    impl Cmd for Anoma {
+        fn add_sub(app: App) -> App {
+            app.subcommand(AnomaNode::def())
+                .subcommand(AnomaClient::def())
+                .subcommand(Ledger::def())
+                .subcommand(Gossip::def())
+                .subcommand(TxCustom::def())
+                .subcommand(TxTransfer::def())
+                .subcommand(TxUpdateVp::def())
+                .subcommand(Intent::def())
+        }
 
-type App = clap::App<'static>;
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            let node = SubCmd::parse(matches).map_fst(Self::Node);
+            let client = SubCmd::parse(matches).map_fst(Self::Client);
+            let ledger = SubCmd::parse(matches).map_fst(Self::Ledger);
+            let gossip = SubCmd::parse(matches).map_fst(Self::Gossip);
+            let tx_custom = SubCmd::parse(matches).map_fst(Self::TxCustom);
+            let tx_transfer = SubCmd::parse(matches).map_fst(Self::TxTransfer);
+            let tx_update_vp = SubCmd::parse(matches).map_fst(Self::TxUpdateVp);
+            let intent = SubCmd::parse(matches).map_fst(Self::Intent);
+            node.or(client)
+                .or(ledger)
+                .or(gossip)
+                .or(tx_custom)
+                .or(tx_transfer)
+                .or(tx_update_vp)
+                .or(intent)
+        }
+    }
 
-pub fn anoma_inline_cli() -> App {
-    App::new(APP_NAME)
+    /// Used as top-level commands ([`Cmd`] instance) in `anoman` binary.
+    /// Used as sub-commands ([`SubCmd`] instance) in `anoma` binary.
+    #[derive(Debug)]
+    pub enum AnomaNode {
+        Ledger(Ledger),
+        // Boxed, because it's larger than other variants
+        Gossip(Box<Gossip>),
+        Config(Config),
+    }
+    impl Cmd for AnomaNode {
+        fn add_sub(app: App) -> App {
+            app.subcommand(Ledger::def())
+                .subcommand(Gossip::def())
+                .subcommand(Config::def())
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            let ledger = SubCmd::parse(matches).map_fst(Self::Ledger);
+            let gossip = SubCmd::parse(matches)
+                .map_fst(|gossip| Self::Gossip(Box::new(gossip)));
+            let config = SubCmd::parse(matches).map_fst(Self::Config);
+            ledger.or(gossip).or(config)
+        }
+    }
+    impl SubCmd for AnomaNode {
+        const CMD: &'static str = NODE_CMD;
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .and_then(|matches| <Self as Cmd>::parse(matches))
+        }
+
+        fn def() -> App {
+            <Self as Cmd>::add_sub(
+                App::new(Self::CMD).about("Node sub-commands"),
+            )
+        }
+    }
+
+    /// Used as top-level commands ([`Cmd`] instance) in `anomac` binary.
+    /// Used as sub-commands ([`SubCmd`] instance) in `anoma` binary.
+    #[derive(Debug)]
+    pub enum AnomaClient {
+        TxCustom(TxCustom),
+        TxTransfer(TxTransfer),
+        TxUpdateVp(TxUpdateVp),
+        Intent(Intent),
+        CraftIntent(CraftIntent),
+        SubscribeTopic(SubscribeTopic),
+    }
+    impl Cmd for AnomaClient {
+        fn add_sub(app: App) -> App {
+            app.subcommand(TxCustom::def())
+                .subcommand(TxTransfer::def())
+                .subcommand(TxUpdateVp::def())
+                .subcommand(Intent::def())
+                .subcommand(CraftIntent::def())
+                .subcommand(SubscribeTopic::def())
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            let tx_custom = SubCmd::parse(matches).map_fst(Self::TxCustom);
+            let tx_transfer = SubCmd::parse(matches).map_fst(Self::TxTransfer);
+            let tx_update_vp = SubCmd::parse(matches).map_fst(Self::TxUpdateVp);
+            let intent = SubCmd::parse(matches).map_fst(Self::Intent);
+            let craft_intent =
+                SubCmd::parse(matches).map_fst(Self::CraftIntent);
+            let subscribe_topic =
+                SubCmd::parse(matches).map_fst(Self::SubscribeTopic);
+            tx_custom
+                .or(tx_transfer)
+                .or(tx_update_vp)
+                .or(intent)
+                .or(craft_intent)
+                .or(subscribe_topic)
+        }
+    }
+    impl SubCmd for AnomaClient {
+        const CMD: &'static str = CLIENT_CMD;
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .and_then(|matches| <Self as Cmd>::parse(matches))
+        }
+
+        fn def() -> App {
+            <Self as Cmd>::add_sub(
+                App::new(Self::CMD).about("Client sub-commands"),
+            )
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum Ledger {
+        Run(LedgerRun),
+        Reset(LedgerReset),
+    }
+    impl SubCmd for Ledger {
+        const CMD: &'static str = "ledger";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let run = SubCmd::parse(matches).map_fst(Ledger::Run);
+                let reset = SubCmd::parse(matches).map_fst(Ledger::Reset);
+                run.or(reset)
+                    // The `run` command is the default if no sub-command given
+                    .or(Some((Ledger::Run(LedgerRun), matches)))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Ledger node sub-commands. If no sub-command specified, \
+                     defaults to run the node.",
+                )
+                .subcommand(LedgerRun::def())
+                .subcommand(LedgerReset::def())
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct LedgerRun;
+    impl SubCmd for LedgerRun {
+        const CMD: &'static str = "run";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (LedgerRun, matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD).about("Run Anoma ledger node.")
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct LedgerReset;
+    impl SubCmd for LedgerReset {
+        const CMD: &'static str = "reset";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (LedgerReset, matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD).about(
+                "Delete Anoma ledger node's and Tendermint node's storage \
+                 data.",
+            )
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum Gossip {
+        Run(GossipRun),
+    }
+    impl SubCmd for Gossip {
+        const CMD: &'static str = "gossip";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let run = SubCmd::parse(matches).map_fst(Gossip::Run);
+                run
+                    // The `run` command is the default if no sub-command given
+                    .or_else(|| {
+                        Some((
+                            Gossip::Run(GossipRun(args::GossipRun::parse(
+                                matches,
+                            ))),
+                            matches,
+                        ))
+                    })
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Gossip node sub-commands. If no sub-command specified, \
+                     defaults to run the node.",
+                )
+                .subcommand(GossipRun::def())
+                .add_args::<args::GossipRun>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct GossipRun(pub args::GossipRun);
+    impl SubCmd for GossipRun {
+        const CMD: &'static str = "run";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (GossipRun(args::GossipRun::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Run a gossip node")
+                .add_args::<args::GossipRun>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum Config {
+        Gen(ConfigGen),
+    }
+    impl SubCmd for Config {
+        const CMD: &'static str = "config";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let gen = SubCmd::parse(matches).map_fst(Self::Gen);
+                gen
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Configuration sub-commands")
+                .subcommand(ConfigGen::def())
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct ConfigGen;
+    impl SubCmd for ConfigGen {
+        const CMD: &'static str = "gen";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self, matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD).about("Generate the default configuration file")
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct TxCustom(pub args::TxCustom);
+    impl SubCmd for TxCustom {
+        const CMD: &'static str = "tx";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (TxCustom(args::TxCustom::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Send a transaction with custom WASM code")
+                .add_args::<args::TxCustom>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct TxTransfer(pub args::TxTransfer);
+    impl SubCmd for TxTransfer {
+        const CMD: &'static str = "transfer";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (TxTransfer(args::TxTransfer::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Send a signed transfer transaction")
+                .add_args::<args::TxTransfer>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct TxUpdateVp(pub args::TxUpdateVp);
+    impl SubCmd for TxUpdateVp {
+        const CMD: &'static str = "update";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (TxUpdateVp(args::TxUpdateVp::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to update account's validity \
+                     predicate",
+                )
+                .add_args::<args::TxUpdateVp>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Intent(pub args::Intent);
+    impl SubCmd for Intent {
+        const CMD: &'static str = "intent";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Intent(args::Intent::parse(matches)), matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Send an intent.")
+                .add_args::<args::Intent>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct CraftIntent(pub args::CraftIntent);
+    impl SubCmd for CraftIntent {
+        const CMD: &'static str = "craft-intent";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (CraftIntent(args::CraftIntent::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Craft an intent.")
+                .add_args::<args::CraftIntent>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct SubscribeTopic(pub args::SubscribeTopic);
+    impl SubCmd for SubscribeTopic {
+        const CMD: &'static str = "subscribe-topic";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (
+                    SubscribeTopic(args::SubscribeTopic::parse(matches)),
+                    matches,
+                )
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("subscribe to a topic.")
+                .add_args::<args::SubscribeTopic>()
+        }
+    }
+}
+
+pub mod args {
+    use std::net::SocketAddr;
+    use std::path::PathBuf;
+    use std::str::FromStr;
+
+    use anoma_shared::types::address::Address;
+    use anoma_shared::types::token;
+    use libp2p::Multiaddr;
+
+    use super::utils::*;
+    use super::ArgMatches;
+
+    const BASE_DIR: ArgDefault<PathBuf> =
+        arg_default("base-dir", DefaultFn(|| ".anoma".into()));
+    const DRY_RUN_TX: ArgFlag = flag("dry-run");
+    const LEDGER_ADDRESS: Arg<tendermint::net::Address> = arg("ledger-address");
+    const LEDGER_ADDRESS_DEFAULT: ArgDefault<tendermint::net::Address> =
+        LEDGER_ADDRESS.default(DefaultFn(|| {
+            let raw = "127.0.0.1:26657";
+            tendermint::net::Address::from_str(raw).unwrap()
+        }));
+    const LEDGER_ADDRESS_OPT: ArgOpt<tendermint::net::Address> =
+        LEDGER_ADDRESS.opt();
+    const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
+    const CODE_PATH: Arg<PathBuf> = arg("code-path");
+    const PEERS: ArgMulti<String> = arg_multi("peers");
+    const TOPIC: Arg<String> = arg("topic");
+    const TOPICS: ArgMulti<String> = TOPIC.multi();
+    const ADDRESS: Arg<Address> = arg("address");
+    const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
+    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
+    const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
+    const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
+    const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
+    const NODE: Arg<String> = arg("node");
+    const TOKEN_SELL: Arg<Address> = arg("token-sell");
+    const TOKEN_BUY: Arg<Address> = arg("token-buy");
+    const AMOUNT_SELL: Arg<token::Amount> = arg("amount-sell");
+    const AMOUNT_BUY: Arg<token::Amount> = arg("amount-buy");
+    const FILE_PATH: ArgDefault<String> =
+        arg_default("file-path", DefaultFn(|| "intent.data".into()));
+    const SOURCE: Arg<Address> = arg("source");
+    const TARGET: Arg<Address> = arg("target");
+    const TOKEN: Arg<Address> = arg("token");
+    const AMOUNT: Arg<token::Amount> = arg("amount");
+
+    /// Global command arguments
+    #[derive(Debug)]
+    pub struct Global {
+        pub base_dir: PathBuf,
+    }
+
+    impl Args for Global {
+        fn parse(matches: &ArgMatches) -> Self {
+            let base_dir = BASE_DIR.parse(matches);
+            Global { base_dir }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(BASE_DIR.def().about(
+                "The base directory is where the client and nodes \
+                 configuration and state is stored.",
+            ))
+        }
+    }
+
+    /// Custom transaction arguments
+    #[derive(Debug)]
+    pub struct TxCustom {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Path to the tx WASM code file
+        pub code_path: PathBuf,
+        /// Path to the data file
+        pub data_path: Option<PathBuf>,
+    }
+
+    impl Args for TxCustom {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let code_path = CODE_PATH.parse(matches);
+            let data_path = DATA_PATH_OPT.parse(matches);
+            Self {
+                tx,
+                code_path,
+                data_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(
+                    CODE_PATH
+                        .def()
+                        .about("The path to the transaction's WASM code."),
+                )
+                .arg(DATA_PATH_OPT.def().about(
+                    "The data file at this path containing arbitrary bytes \
+                     will be passed to the transaction code when it's \
+                     executed.",
+                ))
+        }
+    }
+
+    /// Transfer transaction arguments
+    #[derive(Debug)]
+    pub struct TxTransfer {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Transfer source address
+        pub source: Address,
+        /// Transfer target address
+        pub target: Address,
+        /// Transferred token address
+        pub token: Address,
+        /// Transferred token amount
+        pub amount: token::Amount,
+    }
+
+    impl Args for TxTransfer {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SOURCE.parse(matches);
+            let target = TARGET.parse(matches);
+            let token = TOKEN.parse(matches);
+            let amount = AMOUNT.parse(matches);
+            Self {
+                tx,
+                source,
+                target,
+                token,
+                amount,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(SOURCE.def().about(
+                    "The source account address. The source's key is used to \
+                     produce the signature.",
+                ))
+                .arg(TARGET.def().about("The target account address."))
+                .arg(TOKEN.def().about("The transfer token."))
+                .arg(AMOUNT.def().about("The amount to transfer in decimal."))
+        }
+    }
+
+    /// Transaction to update a VP arguments
+    #[derive(Debug)]
+    pub struct TxUpdateVp {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Path to the VP WASM code file
+        pub vp_code_path: PathBuf,
+        /// Address of the account whose VP is to be updated
+        pub addr: Address,
+    }
+
+    impl Args for TxUpdateVp {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let vp_code_path = CODE_PATH.parse(matches);
+            let addr = ADDRESS.parse(matches);
+            Self {
+                tx,
+                vp_code_path,
+                addr,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(
+                    CODE_PATH.def().about(
+                        "The path to the new validity predicate WASM code.",
+                    ),
+                )
+                .arg(ADDRESS.def().about(
+                    "The account's address. It's key is used to produce the \
+                     signature.",
+                ))
+        }
+    }
+
+    /// Intent arguments
+    #[derive(Debug)]
+    pub struct Intent {
+        /// Gossip node address
+        pub node_addr: String,
+        /// Path to the intent file
+        pub data_path: PathBuf,
+        /// Intent topic
+        pub topic: String,
+    }
+
+    impl Args for Intent {
+        fn parse(matches: &ArgMatches) -> Self {
+            let node_addr = NODE.parse(matches);
+            let data_path = DATA_PATH.parse(matches);
+            let topic = TOPIC.parse(matches);
+            Self {
+                node_addr,
+                data_path,
+                topic,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(NODE.def().about("The gossip node address."))
+                .arg(DATA_PATH.def().about(
+                    "The data of the intent, that contains all value \
+                     necessary for the matchmaker.",
+                ))
+                .arg(
+                    TOPIC.def().about(
+                        "The subnetwork where the intent should be sent to",
+                    ),
+                )
+        }
+    }
+
+    /// Craft intent for token exchange arguments
+    #[derive(Debug)]
+    pub struct CraftIntent {
+        /// Source address
+        pub addr: Address,
+        /// Token to sell
+        pub token_sell: Address,
+        /// Amount of token to sell
+        pub amount_sell: token::Amount,
+        /// Token to buy
+        pub token_buy: Address,
+        /// Amount of token to buy
+        pub amount_buy: token::Amount,
+        /// Target file path
+        pub file_path: String,
+    }
+    impl Args for CraftIntent {
+        fn parse(matches: &ArgMatches) -> Self {
+            let addr = ADDRESS.parse(matches);
+            let token_sell = TOKEN_SELL.parse(matches);
+            let amount_sell = AMOUNT_SELL.parse(matches);
+            let token_buy = TOKEN_BUY.parse(matches);
+            let amount_buy = AMOUNT_BUY.parse(matches);
+            let file_path = FILE_PATH.parse(matches);
+            Self {
+                addr,
+                token_sell,
+                amount_sell,
+                token_buy,
+                amount_buy,
+                file_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(ADDRESS.def().about("The account address."))
+                .arg(TOKEN_SELL.def().about("The selling token."))
+                .arg(AMOUNT_SELL.def().about("The amount selling."))
+                .arg(TOKEN_BUY.def().about("The buying token."))
+                .arg(AMOUNT_BUY.def().about("The amount buying."))
+                .arg(FILE_PATH.def().about("The output file"))
+        }
+    }
+
+    /// Subscribe intent topic arguments
+    #[derive(Debug)]
+    pub struct SubscribeTopic {
+        /// Gossip node address
+        pub node_addr: String,
+        /// Intent topic
+        pub topic: String,
+    }
+    impl Args for SubscribeTopic {
+        fn parse(matches: &ArgMatches) -> Self {
+            let node_addr = NODE.parse(matches);
+            let topic = TOPIC.parse(matches);
+            Self { node_addr, topic }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(NODE.def().about("The gossip node address.")).arg(
+                TOPIC
+                    .def()
+                    .about("The new topic of interest for that node."),
+            )
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct GossipRun {
+        pub addr: Option<Multiaddr>,
+        pub peers: Vec<String>,
+        pub topics: Vec<String>,
+        pub rpc: Option<SocketAddr>,
+        pub matchmaker_path: Option<PathBuf>,
+        pub tx_code_path: Option<PathBuf>,
+        pub ledger_addr: Option<tendermint::net::Address>,
+        pub filter_path: Option<PathBuf>,
+    }
+    impl Args for GossipRun {
+        fn parse(matches: &ArgMatches) -> Self {
+            let addr = MULTIADDR_OPT.parse(matches);
+            let peers = PEERS.parse(matches);
+            let topics = TOPICS.parse(matches);
+            let rpc = RPC_SOCKET_ADDR.parse(matches);
+            let matchmaker_path = MATCHMAKER_PATH.parse(matches);
+            let tx_code_path = TX_CODE_PATH.parse(matches);
+            let ledger_addr = LEDGER_ADDRESS_OPT.parse(matches);
+            let filter_path = FILTER_PATH.parse(matches);
+            Self {
+                addr,
+                peers,
+                topics,
+                rpc,
+                matchmaker_path,
+                tx_code_path,
+                ledger_addr,
+                filter_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                MULTIADDR_OPT
+                    .def()
+                    .about("Gossip service address as host:port."),
+            )
+            .arg(PEERS.def().about("List of peers to connect to."))
+            .arg(TOPICS.def().about("Enable a new gossip topic."))
+            .arg(RPC_SOCKET_ADDR.def().about("Enable RPC service."))
+            .arg(MATCHMAKER_PATH.def().about("The matchmaker."))
+            .arg(
+                TX_CODE_PATH
+                    .def()
+                    .about("The transaction code to use with the matchmaker"),
+            )
+            .arg(LEDGER_ADDRESS_OPT.def().about(
+                "The address of the ledger as \"{scheme}://{host}:{port}\" \
+                 that the matchmaker must send transactions to. If the scheme \
+                 is not supplied, it is assumed to be TCP.",
+            ))
+            .arg(
+                FILTER_PATH
+                    .def()
+                    .about("The private filter for the matchmaker"),
+            )
+        }
+    }
+
+    /// Common transaction arguments
+    #[derive(Debug)]
+    pub struct Tx {
+        /// Simulate applying the transaction
+        pub dry_run: bool,
+        /// The address of the ledger node as host:port
+        pub ledger_address: tendermint::net::Address,
+    }
+
+    impl Args for Tx {
+        fn def(app: App) -> App {
+            app.arg(
+                DRY_RUN_TX
+                    .def()
+                    .about("Simulate the transaction application."),
+            )
+            .arg(LEDGER_ADDRESS_DEFAULT.def().about(
+                "Address of a ledger node as \"{scheme}://{host}:{port}\". If \
+                 the scheme is not supplied, it is assumed to be TCP.",
+            ))
+        }
+
+        fn parse(matches: &ArgMatches) -> Self {
+            let dry_run = DRY_RUN_TX.parse(matches);
+            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
+            Self {
+                dry_run,
+                ledger_address,
+            }
+        }
+    }
+}
+pub fn anoma_cli() -> (cmds::Anoma, String) {
+    let app = anoma_app();
+    let matches = app.get_matches();
+    let raw_sub_cmd =
+        matches.subcommand().map(|(raw, _matches)| raw.to_string());
+    let result = cmds::Anoma::parse(&matches);
+    match (result, raw_sub_cmd) {
+        (Some((cmd, _)), Some(raw_sub)) => return (cmd, raw_sub),
+        (None, Some(raw_sub)) if raw_sub == NODE_CMD => {
+            anoma_node_app().print_help().unwrap();
+        }
+        (None, Some(raw_sub)) if raw_sub == CLIENT_CMD => {
+            anoma_client_app().print_help().unwrap();
+        }
+        _ => {
+            anoma_app().print_help().unwrap();
+        }
+    }
+    safe_exit(2);
+}
+
+pub fn anoma_node_cli() -> (cmds::AnomaNode, args::Global) {
+    let app = anoma_node_app();
+    let (cmd, matches) = cmds::AnomaNode::parse_or_print_help(app);
+    (cmd, args::Global::parse(&matches))
+}
+
+pub fn anoma_client_cli() -> (cmds::AnomaClient, args::Global) {
+    let app = anoma_client_app();
+    let (cmd, matches) = cmds::AnomaClient::parse_or_print_help(app);
+    (cmd, args::Global::parse(&matches))
+}
+
+fn anoma_app() -> App {
+    let app = App::new(APP_NAME)
         .version(CLI_VERSION)
         .author(AUTHOR)
         .about("Anoma command line interface.")
-        // Inlined commands from the node and the client.
-        // NOTE: If these are changed, please also update the
-        // `handle_command` function in `src/bin/anoma/cli.rs`.
-        .subcommand(run_gossip_subcommand())
-        .subcommand(run_ledger_subcommand())
-        .subcommand(reset_ledger_subcommand())
-        .subcommand(client_tx_subcommand())
-        .subcommand(client_intent_subcommand())
-        // Node sub-commands
-        .subcommand(add_node_commands(
-            App::new(NODE_COMMAND).about("Node sub-commands"),
-        ))
-        // Client sub-commands
-        .subcommand(add_client_commands(
-            App::new(CLIENT_COMMAND).about("Client sub-commands"),
-        ))
+        .add_args::<args::Global>();
+    cmds::Anoma::add_sub(app)
 }
 
-pub fn anoma_client_cli() -> App {
-    add_client_commands(
-        App::new(APP_NAME)
-            .version(CLIENT_VERSION)
-            .author(AUTHOR)
-            .about("Anoma client command line interface."),
-    )
+fn anoma_node_app() -> App {
+    let app = App::new(APP_NAME)
+        .version(CLIENT_VERSION)
+        .author(AUTHOR)
+        .about("Anoma client command line interface.")
+        .add_args::<args::Global>();
+    cmds::AnomaNode::add_sub(app)
 }
 
-fn add_client_commands(app: App) -> App {
-    app.subcommand(client_tx_subcommand())
-        .subcommand(client_tx_transfer_subcommand())
-        .subcommand(client_tx_update_subcommand())
-        .subcommand(client_intent_subcommand())
-        .subcommand(client_craft_intent_subcommand())
-        .subcommand(client_subscribe_topic_subcommand())
-}
-
-pub fn anoma_node_cli() -> App {
-    add_node_commands(
-        App::new(APP_NAME)
-            .version(NODE_VERSION)
-            .author(AUTHOR)
-            .about("Anoma node command line interface.")
-            .arg(
-                Arg::new(BASE_ARG)
-                    .short('b')
-                    .long(BASE_ARG)
-                    .takes_value(true)
-                    .required(false)
-                    .default_value(".anoma")
-                    .about("Set the base directiory."),
-            ),
-    )
-}
-
-fn add_node_commands(app: App) -> App {
-    app.subcommand(run_gossip_subcommand())
-        .subcommand(run_ledger_subcommand())
-        .subcommand(reset_ledger_subcommand())
-        .subcommand(generate_config())
-}
-
-fn client_tx_subcommand() -> App {
-    App::new(TX_COMMAND)
-        .about("Send a transaction with arbitrary data and wasm code")
-        .arg(
-            Arg::new(DATA_ARG)
-                .long(DATA_ARG)
-                .takes_value(true)
-                .required(false)
-                .about(
-                    "The data is an arbitrary hex string that will be passed \
-                     to the code when it's executed.",
-                ),
-        )
-        .arg(
-            Arg::new(CODE_ARG)
-                .long(CODE_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The path to the wasm code to be executed."),
-        )
-        .arg(
-            Arg::new(DRY_RUN_TX_ARG)
-                .long(DRY_RUN_TX_ARG)
-                .takes_value(false)
-                .required(false)
-                .about("Dry run the transaction."),
-        )
-        .arg(
-            Arg::new(LEDGER_ADDRESS_ARG)
-                .long(LEDGER_ADDRESS_ARG)
-                .multiple(false)
-                .takes_value(true)
-                .required(false)
-                .default_value("127.0.0.1:26657")
-                .about("Address of a ledger node as host:port"),
-        )
-}
-
-fn client_intent_subcommand() -> App {
-    App::new(INTENT_COMMAND)
-        .about("Send an intent.")
-        .arg(
-            Arg::new(NODE_INTENT_ARG)
-                .long(NODE_INTENT_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The gossip node address."),
-        )
-        .arg(
-            Arg::new(DATA_INTENT_ARG)
-                .long(DATA_INTENT_ARG)
-                .takes_value(true)
-                .required(true)
-                .about(
-                    "The data of the intent, that contains all value \
-                     necessary for the matchmaker.",
-                ),
-        )
-        .arg(
-            Arg::new(TOPIC_ARG)
-                .long(TOPIC_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The subnetwork where the intent should be sent to"),
-        )
-}
-
-fn client_subscribe_topic_subcommand() -> App {
-    App::new(SUBSCRIBE_TOPIC_COMMAND)
-        .about("subscribe to a topic.")
-        .arg(
-            Arg::new(NODE_INTENT_ARG)
-                .long(NODE_INTENT_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The gossip node address."),
-        )
-        .arg(
-            Arg::new(TOPIC_ARG)
-                .long(TOPIC_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The new topic of interest for that node."),
-        )
-}
-
-fn client_craft_intent_subcommand() -> App {
-    App::new(CRAFT_INTENT_COMMAND)
-        .about("Craft an intent.")
-        .arg(
-            Arg::new(ADDRESS_ARG)
-                .long(ADDRESS_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The account address."),
-        )
-        .arg(
-            Arg::new(TOKEN_SELL_ARG)
-                .long(TOKEN_SELL_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The selling token."),
-        )
-        .arg(
-            Arg::new(AMOUNT_SELL_ARG)
-                .long(AMOUNT_SELL_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The amount selling."),
-        )
-        .arg(
-            Arg::new(TOKEN_BUY_ARG)
-                .long(TOKEN_BUY_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The buying token."),
-        )
-        .arg(
-            Arg::new(AMOUNT_BUY_ARG)
-                .long(AMOUNT_BUY_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The amount buying."),
-        )
-        .arg(
-            Arg::new(FILE_ARG)
-                .long(FILE_ARG)
-                .takes_value(true)
-                .required(false)
-                .default_value("intent.data")
-                .about("The output file"),
-        )
-}
-
-fn client_tx_transfer_subcommand() -> App {
-    App::new(TX_TRANSFER_COMMAND)
-        .about("Send a transfer transaction with a signature")
-        .arg(
-            Arg::new(CODE_ARG)
-                .long(CODE_ARG)
-                .takes_value(true)
-                .required(true)
-                .about(
-                    "The path to the transaction wasm code. It will be signed \
-                     together with the transaction data.",
-                ),
-        )
-        .arg(
-            Arg::new(SOURCE_ARG)
-                .long(SOURCE_ARG)
-                .takes_value(true)
-                .required(true)
-                .about(
-                    "The source account address. The source's key is used to \
-                     produce the signature.",
-                ),
-        )
-        .arg(
-            Arg::new(TARGET_ARG)
-                .long(TARGET_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The target account address."),
-        )
-        .arg(
-            Arg::new(TOKEN_ARG)
-                .long(TOKEN_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The transfer token."),
-        )
-        .arg(
-            Arg::new(AMOUNT_ARG)
-                .long(AMOUNT_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The amount to transfer in decimal."),
-        )
-        .arg(
-            Arg::new(DRY_RUN_TX_ARG)
-                .long(DRY_RUN_TX_ARG)
-                .takes_value(false)
-                .required(false)
-                .about("Dry run the transaction."),
-        )
-        .arg(
-            Arg::new(LEDGER_ADDRESS_ARG)
-                .long(LEDGER_ADDRESS_ARG)
-                .multiple(false)
-                .takes_value(true)
-                .required(false)
-                .default_value("127.0.0.1:26657")
-                .about("Address of a ledger node as host:port"),
-        )
-}
-
-fn client_tx_update_subcommand() -> App {
-    App::new(TX_UPDATE_COMMAND)
-        .about("Send a transaction to update account's validity predicate")
-        .arg(
-            Arg::new(ADDRESS_ARG)
-                .long(ADDRESS_ARG)
-                .takes_value(true)
-                .required(true)
-                .about(
-                    "The account's address. It's key is used to produce the \
-                     signature.",
-                ),
-        )
-        .arg(
-            Arg::new(CODE_ARG)
-                .long(CODE_ARG)
-                .takes_value(true)
-                .required(true)
-                .about("The path to the validity predicate wasm code."),
-        )
-        .arg(
-            Arg::new(DRY_RUN_TX_ARG)
-                .long(DRY_RUN_TX_ARG)
-                .takes_value(false)
-                .required(false)
-                .about("Dry run the transaction."),
-        )
-        .arg(
-            Arg::new(LEDGER_ADDRESS_ARG)
-                .long(LEDGER_ADDRESS_ARG)
-                .multiple(false)
-                .takes_value(true)
-                .required(false)
-                .default_value("127.0.0.1:26657")
-                .about("Address of a ledger node as host:port"),
-        )
-}
-
-fn run_gossip_subcommand() -> App {
-    App::new(RUN_GOSSIP_COMMAND)
-        .about("Run Anoma gossip service.")
-        .arg(
-            Arg::new(ADDRESS_ARG)
-                .short('a')
-                .long("address")
-                .takes_value(true)
-                .about("Gossip service address as host:port."),
-        )
-        .arg(
-            Arg::new(PEERS_ARG)
-                .short('p')
-                .long("peers")
-                .multiple(true)
-                .takes_value(true)
-                .about("List of peers to connect to."),
-        )
-        .arg(
-            Arg::new(TOPIC_ARG)
-                .long(TOPIC_ARG)
-                .multiple(true)
-                .takes_value(true)
-                .about("Enable a new gossip topic."),
-        )
-        .arg(
-            Arg::new(RPC_ARG)
-                .long(RPC_ARG)
-                .multiple(false)
-                .takes_value(true)
-                .about("Enable RPC service."),
-        )
-        .arg(
-            Arg::new(MATCHMAKER_ARG)
-                .long(MATCHMAKER_ARG)
-                .multiple(false)
-                .takes_value(true)
-                .about("The matchmaker."),
-        )
-        .arg(
-            Arg::new(TX_CODE_ARG)
-                .long(TX_CODE_ARG)
-                .multiple(false)
-                .takes_value(true)
-                .about("The transaction code to use with the matchmaker"),
-        )
-        .arg(
-            Arg::new(LEDGER_ADDRESS_ARG)
-                .long(LEDGER_ADDRESS_ARG)
-                .multiple(false)
-                .takes_value(true)
-                .about(
-                    "The address of the ledger as host:port that the \
-                     matchmaker must send transactions to.",
-                ),
-        )
-        .arg(
-            Arg::new(FILTER_ARG)
-                .long(FILTER_ARG)
-                .multiple(false)
-                .takes_value(true)
-                .about("The private filter for the matchmaker"),
-        )
-}
-
-fn run_ledger_subcommand() -> App {
-    App::new(RUN_LEDGER_COMMAND).about("Run Anoma node service.")
-}
-
-fn reset_ledger_subcommand() -> App {
-    App::new(RESET_LEDGER_COMMAND).about("Reset Anoma node state.")
-}
-
-fn generate_config() -> App {
-    App::new(GENERATE_CONFIG_COMMAND).about("Generate default node config.")
-}
-
-pub fn parse_hashset_opt(
-    args: &ArgMatches,
-    field: &str,
-) -> Option<HashSet<String>> {
-    args.values_of(field)
-        .map(|vs| vs.map(str::to_string).collect::<HashSet<String>>())
-}
-
-pub fn parse_opt<F>(args: &ArgMatches, field: &str) -> Option<F>
-where
-    F: FromStr,
-    F::Err: Debug,
-{
-    args.value_of(field).map(|arg| {
-        arg.parse().unwrap_or_else(|e| {
-            panic!("failed to parse the argument {}, error: {:?}", arg, e)
-        })
-    })
-}
-
-pub fn parse_req<F>(args: &ArgMatches, field: &str) -> F
-where
-    F: FromStr,
-    F::Err: Debug,
-{
-    parse_opt(args, field).expect("field is mandatory")
-}
-
-pub fn parse_string_opt(args: &ArgMatches, field: &str) -> Option<String> {
-    args.value_of(field).map(|s| s.to_string())
-}
-
-pub fn parse_string_req(args: &ArgMatches, field: &str) -> String {
-    parse_string_opt(args, field).expect("field is mandatory")
+fn anoma_client_app() -> App {
+    let app = App::new(APP_NAME)
+        .version(NODE_VERSION)
+        .author(AUTHOR)
+        .about("Anoma node command line interface.")
+        .add_args::<args::Global>();
+    cmds::AnomaClient::add_sub(app)
 }
 
 pub fn update_gossip_config(
-    args: &ArgMatches,
+    args: args::GossipRun,
     config: &mut config::IntentGossiper,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(addr) = parse_opt(args, ADDRESS_ARG) {
+    if let Some(addr) = args.addr {
         config.address = addr
     }
 
-    let matchmaker_arg = parse_opt(args, MATCHMAKER_ARG);
-    let tx_code_arg = parse_opt(args, TX_CODE_ARG);
-    let ledger_address_arg = parse_opt(args, LEDGER_ADDRESS_ARG);
-    let filter_arg = parse_opt(args, FILTER_ARG);
+    let matchmaker_arg = args.matchmaker_path;
+    let tx_code_arg = args.tx_code_path;
+    let ledger_address_arg = args.ledger_addr;
+    let filter_arg = args.filter_path;
     if let Some(mut matchmaker_cfg) = config.matchmaker.as_mut() {
         if let Some(matchmaker) = matchmaker_arg {
             matchmaker_cfg.matchmaker = matchmaker
@@ -503,13 +936,13 @@ pub fn update_gossip_config(
     } else if let (Some(matchmaker), Some(tx_code), Some(ledger_address)) = (
         matchmaker_arg.as_ref(),
         tx_code_arg.as_ref(),
-        &ledger_address_arg,
+        ledger_address_arg.as_ref(),
     ) {
         let matchmaker_cfg = Some(config::Matchmaker {
             matchmaker: matchmaker.clone(),
             tx_code: tx_code.clone(),
             ledger_address: ledger_address.clone(),
-            filter: filter_arg.clone(),
+            filter: filter_arg,
         });
         config.matchmaker = matchmaker_cfg
     } else if matchmaker_arg.is_some()
@@ -524,7 +957,7 @@ pub fn update_gossip_config(
              the matchmaker"
         );
     }
-    if let Some(address) = parse_opt(args, RPC_ARG) {
+    if let Some(address) = args.rpc {
         config.rpc = Some(config::RpcServer { address });
     }
     Ok(())

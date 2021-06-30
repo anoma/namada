@@ -1,54 +1,49 @@
-//! The docstrings on types and their fields with `derive(Clap)` are displayed
-//! in the CLI `--help`.
+//! Anoma CLI.
+//!
+//! This CLI groups together the most commonly used commands inlined from the
+//! node and the client. The other commands for the node or the client can be
+//! dispatched via `anoma node ...` or `anoma client ...`, respectively.
 
 use std::env;
 use std::process::Command;
 
 use anoma::cli;
-use clap::App;
-use eyre::{eyre, Context, Result};
+use eyre::{eyre, Result};
+use signal_hook::consts::TERM_SIGNALS;
+use signal_hook::iterator::Signals;
 
 pub fn main() -> Result<()> {
-    let app = cli::anoma_inline_cli();
-    let matches = app.clone().get_matches();
-
-    if let Some(cmd) = matches.subcommand_name() {
-        handle_command(app, cmd)
-    } else {
-        print_help(app)
-    }
+    let (cmd, raw_sub_cmd) = cli::anoma_cli();
+    handle_command(cmd, raw_sub_cmd)
 }
 
-fn handle_command(app: App, cmd: &str) -> Result<()> {
+fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
     let args = env::args();
 
     let is_node_or_client =
-        vec![cli::NODE_COMMAND, cli::CLIENT_COMMAND].contains(&cmd);
+        matches!(cmd, cli::cmds::Anoma::Node(_) | cli::cmds::Anoma::Client(_));
 
-    let sub_args: Vec<String> =
-        args.skip(if is_node_or_client { 2 } else { 1 }).collect();
+    // Skip the first arg, which is the name of the binary
+    let mut sub_args: Vec<String> = args.skip(1).collect();
 
-    let is_node_command = cmd == cli::NODE_COMMAND
-        ||
-        // inlined node commands
-        vec![
-            cli::RUN_GOSSIP_COMMAND,
-            cli::RUN_LEDGER_COMMAND,
-            cli::RESET_LEDGER_COMMAND,
-        ]
-        .contains(&cmd);
+    if is_node_or_client {
+        // Because there may be global args before the `cmd`, we have to find it
+        // before removing it.
+        sub_args
+            .iter()
+            .position(|arg| arg == &raw_sub_cmd)
+            .map(|e| sub_args.remove(e));
+    }
 
-    let is_client_command = cmd == cli::CLIENT_COMMAND
-        ||
-        // inlined client commands
-        vec![cli::TX_COMMAND, cli::INTENT_COMMAND].contains(&cmd);
-
-    if is_node_command {
-        handle_subcommand("anoman", sub_args)
-    } else if is_client_command {
-        handle_subcommand("anomac", sub_args)
-    } else {
-        print_help(app)
+    match cmd {
+        cli::cmds::Anoma::Node(_)
+        | cli::cmds::Anoma::Ledger(_)
+        | cli::cmds::Anoma::Gossip(_) => handle_subcommand("anoman", sub_args),
+        cli::cmds::Anoma::Client(_)
+        | cli::cmds::Anoma::TxCustom(_)
+        | cli::cmds::Anoma::TxTransfer(_)
+        | cli::cmds::Anoma::TxUpdateVp(_)
+        | cli::cmds::Anoma::Intent(_) => handle_subcommand("anomac", sub_args),
     }
 }
 
@@ -71,18 +66,28 @@ fn handle_subcommand(program: &str, mut sub_args: Vec<String>) -> Result<()> {
     #[cfg(not(feature = "dev"))]
     let cmd = program;
 
-    let result = Command::new(cmd)
+    let mut process = Command::new(cmd)
         .args(sub_args)
         .envs(env_vars)
-        .status()
+        .spawn()
         .unwrap_or_else(|_| panic!("Couldn't run {} command.", cmd));
-    if result.success() {
-        Ok(())
-    } else {
-        Err(eyre!("{} command failed.", cmd))
-    }
-}
 
-fn print_help(mut app: App) -> Result<()> {
-    app.print_help().wrap_err("Can't display help.")
+    let mut signals = Signals::new(TERM_SIGNALS).unwrap();
+    loop {
+        if let Ok(Some(exit_status)) = process.try_wait() {
+            if exit_status.success() {
+                break;
+            } else {
+                return Err(eyre!("{} command failed.", cmd));
+            }
+        }
+        for sig in signals.pending() {
+            if TERM_SIGNALS.contains(&sig) {
+                tracing::info!("Anoma received termination signal");
+                unsafe { libc::kill(process.id() as i32, libc::SIGTERM) };
+                break;
+            }
+        }
+    }
+    Ok(())
 }
