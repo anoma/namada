@@ -224,6 +224,17 @@ impl Key {
         segments.push(DbKeySeg::StringSeg(RESERVED_VP_KEY.to_owned()));
         Key { segments }
     }
+
+    /// Check if the given key is a key to a validity predicate.
+    pub fn is_validity_predicate(&self) -> bool {
+        match &self.segments[..] {
+            [DbKeySeg::AddressSeg(_), DbKeySeg::StringSeg(sub_key)]
+                if sub_key == RESERVED_VP_KEY =>
+            {
+                true
+            }
+            _ => false,
+        }
     }
 }
 

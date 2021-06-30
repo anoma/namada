@@ -217,7 +217,7 @@ mod tests {
         let key = Key::parse(key_raw.to_string()).unwrap();
         let value = "test".to_string();
         let value_raw = value.try_to_vec().unwrap();
-        env.write_log.write(&key, value_raw);
+        env.write_log.write(&key, value_raw).unwrap();
 
         let read_pre_value: Option<String> = vp_host_env::read_pre(key_raw);
         assert_eq!(None, read_pre_value);

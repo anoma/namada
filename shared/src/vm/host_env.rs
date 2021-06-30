@@ -42,6 +42,8 @@ pub enum TxRuntimeError {
          WASM {0}"
     )]
     InitAccountInvalidVpWasm(WasmValidationError),
+    #[error("Storage modification error: {0}")]
+    StorageModificationError(write_log::Error),
 }
 
 type TxResult<T> = std::result::Result<T, TxRuntimeError>;
@@ -727,7 +729,9 @@ where
         }
     }
 
-    let (gas, _size_diff) = write_log.write(&key, value);
+    let (gas, _size_diff) = write_log
+        .write(&key, value)
+        .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
     // TODO: charge the size diff
 }
@@ -752,7 +756,9 @@ where
     let key = Key::parse(key).expect("Cannot parse the key string");
 
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (gas, _size_diff) = write_log.delete(&key);
+    let (gas, _size_diff) = write_log
+        .delete(&key)
+        .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
     // TODO: charge the size diff
 }
@@ -1068,7 +1074,9 @@ where
     validate_untrusted_wasm(&code).map_err(TxRuntimeError::UpdateVpInvalid)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (gas, _size_diff) = write_log.write(&key, code);
+    let (gas, _size_diff) = write_log
+        .write(&key, code)
+        .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
     // TODO: charge the size diff
 }
