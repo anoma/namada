@@ -2,6 +2,7 @@
 //! within a virtual machine.
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::num::TryFromIntError;
 use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -13,7 +14,7 @@ use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_env;
 use crate::proto::Tx;
-use crate::types::address::Address;
+use crate::types::address::{self, Address};
 use crate::types::internal::HostEnvResult;
 use crate::types::key::ed25519::{verify_tx_sig, PublicKey, Signature};
 use crate::types::storage::Key;
@@ -44,6 +45,16 @@ pub enum TxRuntimeError {
     InitAccountInvalidVpWasm(WasmValidationError),
     #[error("Storage modification error: {0}")]
     StorageModificationError(write_log::Error),
+    #[error("Storage error: {0}")]
+    StorageError(storage::Error),
+    #[error("Storage data error: {0}")]
+    StorageDataError(crate::types::storage::Error),
+    #[error("Encoding error: {0}")]
+    EncodingError(std::io::Error),
+    #[error("Address error: {0}")]
+    AddressError(address::Error),
+    #[error("Numeric conversion error: {0}")]
+    NumConversionError(TryFromIntError),
 }
 
 type TxResult<T> = std::result::Result<T, TxRuntimeError>;
@@ -411,7 +422,12 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    tx_add_gas(env, used_gas as _)
+    tx_add_gas(
+        env,
+        used_gas
+            .try_into()
+            .map_err(TxRuntimeError::NumConversionError)?,
+    )
 }
 
 /// Add a gas cost incured in a transaction
@@ -426,9 +442,7 @@ where
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     // if we run out of gas, we need to stop the execution
-    let result = gas_meter
-        .add(used_gas as _)
-        .map_err(TxRuntimeError::OutOfGas);
+    let result = gas_meter.add(used_gas).map_err(TxRuntimeError::OutOfGas);
     if let Err(err) = &result {
         tracing::info!(
             "Stopping transaction execution because of gas error: {}",
@@ -450,7 +464,12 @@ where
     EVAL: VpEvaluator,
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_env::add_gas(gas_meter, used_gas as _)
+    vp_env::add_gas(
+        gas_meter,
+        used_gas
+            .try_into()
+            .map_err(vp_env::RuntimeError::NumConversionError)?,
+    )
 }
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
@@ -470,7 +489,7 @@ where
 
     tracing::debug!("tx_has_key {}, key {}", key, key_ptr,);
 
-    let key = Key::parse(key).expect("Cannot parse the key string");
+    let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
     // try to read from the write log first
     let write_log = unsafe { env.ctx.write_log.get() };
@@ -490,8 +509,9 @@ where
         None => {
             // when not found in write log, try to check the storage
             let storage = unsafe { env.ctx.storage.get() };
-            let (present, gas) =
-                storage.has_key(&key).expect("storage has_key failed");
+            let (present, gas) = storage
+                .has_key(&key)
+                .map_err(TxRuntimeError::StorageError)?;
             tx_add_gas(env, gas)?;
             HostEnvResult::from(present).to_i64()
         }
@@ -518,7 +538,7 @@ where
 
     tracing::debug!("tx_read {}, key {}", key, key_ptr,);
 
-    let key = Key::parse(key).expect("Cannot parse the key string");
+    let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
     // try to read from the write log first
     let write_log = unsafe { env.ctx.write_log.get() };
@@ -526,8 +546,10 @@ where
     tx_add_gas(env, gas)?;
     Ok(match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
-            let len: i64 =
-                value.len().try_into().expect("data length overflow");
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value.clone());
             len
@@ -540,7 +562,10 @@ where
             ref vp, ..
         }) => {
             // read the VP of a new account
-            let len: i64 = vp.len() as _;
+            let len: i64 = vp
+                .len()
+                .try_into()
+                .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(vp.clone());
             len
@@ -548,12 +573,15 @@ where
         None => {
             // when not found in write log, try to read from the storage
             let storage = unsafe { env.ctx.storage.get() };
-            let (value, gas) = storage.read(&key).expect("storage read failed");
+            let (value, gas) =
+                storage.read(&key).map_err(TxRuntimeError::StorageError)?;
             tx_add_gas(env, gas)?;
             match value {
                 Some(value) => {
-                    let len: i64 =
-                        value.len().try_into().expect("data length overflow");
+                    let len: i64 = value
+                        .len()
+                        .try_into()
+                        .map_err(TxRuntimeError::NumConversionError)?;
                     let result_buffer = unsafe { env.ctx.result_buffer.get() };
                     result_buffer.replace(value);
                     len
@@ -605,7 +633,8 @@ where
 
     tracing::debug!("tx_iter_prefix {}, prefix {}", prefix, prefix_ptr);
 
-    let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
+    let prefix =
+        Key::parse(prefix).map_err(TxRuntimeError::StorageDataError)?;
 
     let storage = unsafe { env.ctx.storage.get() };
     let iterators = unsafe { env.ctx.iterators.get() };
@@ -636,7 +665,8 @@ where
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
         let (log_val, log_gas) = write_log.read(
-            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+            &Key::parse(key.clone())
+                .map_err(TxRuntimeError::StorageDataError)?,
         );
         tx_add_gas(env, iter_gas + log_gas)?;
         match log_val {
@@ -646,9 +676,11 @@ where
                     val: value.clone(),
                 }
                 .try_to_vec()
-                .expect("cannot serialize the key value pair");
-                let len: i64 =
-                    key_val.len().try_into().expect("data length overflow");
+                .map_err(TxRuntimeError::EncodingError)?;
+                let len: i64 = key_val
+                    .len()
+                    .try_into()
+                    .map_err(TxRuntimeError::NumConversionError)?;
                 let result_buffer = unsafe { env.ctx.result_buffer.get() };
                 result_buffer.replace(key_val);
                 return Ok(len);
@@ -664,9 +696,11 @@ where
             None => {
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
-                    .expect("cannot serialize the key value pair");
-                let len: i64 =
-                    key_val.len().try_into().expect("data length overflow");
+                    .map_err(TxRuntimeError::EncodingError)?;
+                let len: i64 = key_val
+                    .len()
+                    .try_into()
+                    .map_err(TxRuntimeError::NumConversionError)?;
                 let result_buffer = unsafe { env.ctx.result_buffer.get() };
                 result_buffer.replace(key_val);
                 return Ok(len);
@@ -697,7 +731,7 @@ where
 
     tracing::debug!("tx_update {}, {:?}", key, value);
 
-    let key = Key::parse(key).expect("Cannot parse the key string");
+    let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
     // check address existence
     let write_log = unsafe { env.ctx.write_log.get() };
@@ -713,8 +747,9 @@ where
         // just check the existence because the write log should not have the
         // delete log of the VP
         if vp.is_none() {
-            let (is_present, gas) =
-                storage.has_key(&vp_key).expect("checking existence failed");
+            let (is_present, gas) = storage
+                .has_key(&vp_key)
+                .map_err(TxRuntimeError::StorageError)?;
             tx_add_gas(env, gas)?;
             if !is_present {
                 tracing::info!(
@@ -753,7 +788,7 @@ where
 
     tracing::debug!("tx_delete {}", key);
 
-    let key = Key::parse(key).expect("Cannot parse the key string");
+    let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
@@ -784,7 +819,8 @@ where
     vp_env::add_gas(gas_meter, gas)?;
 
     // try to read from the storage
-    let key = Key::parse(key).expect("Cannot parse the key string");
+    let key =
+        Key::parse(key).map_err(vp_env::RuntimeError::StorageDataError)?;
     let storage = unsafe { env.ctx.storage.get() };
     let value = vp_env::read_pre(gas_meter, storage, &key)?;
     tracing::debug!(
@@ -795,8 +831,10 @@ where
     );
     Ok(match value {
         Some(value) => {
-            let len: i64 =
-                value.len().try_into().expect("data length overflow");
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(vp_env::RuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value);
             len
@@ -829,14 +867,17 @@ where
     tracing::debug!("vp_read_post {}, key {}", key, key_ptr,);
 
     // try to read from the write log first
-    let key = Key::parse(key).expect("Cannot parse the key string");
+    let key =
+        Key::parse(key).map_err(vp_env::RuntimeError::StorageDataError)?;
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
     let value = vp_env::read_post(gas_meter, storage, write_log, &key)?;
     Ok(match value {
         Some(value) => {
-            let len: i64 =
-                value.len().try_into().expect("data length overflow");
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(vp_env::RuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value);
             len
@@ -889,7 +930,8 @@ where
 
     tracing::debug!("vp_has_key_pre {}, key {}", key, key_ptr,);
 
-    let key = Key::parse(key).expect("Cannot parse the key string");
+    let key =
+        Key::parse(key).map_err(vp_env::RuntimeError::StorageDataError)?;
     let storage = unsafe { env.ctx.storage.get() };
     let present = vp_env::has_key_pre(gas_meter, storage, &key)?;
     Ok(HostEnvResult::from(present).to_i64())
@@ -915,7 +957,8 @@ where
 
     tracing::debug!("vp_has_key_post {}, key {}", key, key_ptr,);
 
-    let key = Key::parse(key).expect("Cannot parse the key string");
+    let key =
+        Key::parse(key).map_err(vp_env::RuntimeError::StorageDataError)?;
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
     let present = vp_env::has_key_post(gas_meter, storage, write_log, &key)?;
@@ -940,7 +983,8 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_env::add_gas(gas_meter, gas)?;
 
-    let prefix = Key::parse(prefix).expect("Cannot parse the prefix string");
+    let prefix =
+        Key::parse(prefix).map_err(vp_env::RuntimeError::StorageDataError)?;
     tracing::debug!("vp_iter_prefix {}", prefix);
 
     let storage = unsafe { env.ctx.storage.get() };
@@ -974,9 +1018,11 @@ where
         {
             let key_val = KeyVal { key, val }
                 .try_to_vec()
-                .expect("cannot serialize the key value pair");
-            let len: i64 =
-                key_val.len().try_into().expect("data length overflow");
+                .map_err(vp_env::RuntimeError::EncodingError)?;
+            let len: i64 = key_val
+                .len()
+                .try_into()
+                .map_err(vp_env::RuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(key_val);
             return Ok(len);
@@ -1013,9 +1059,11 @@ where
         {
             let key_val = KeyVal { key, val }
                 .try_to_vec()
-                .expect("cannot serialize the key value pair");
-            let len: i64 =
-                key_val.len().try_into().expect("data length overflow");
+                .map_err(vp_env::RuntimeError::EncodingError)?;
+            let len: i64 = key_val
+                .len()
+                .try_into()
+                .map_err(vp_env::RuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(key_val);
             return Ok(len);
@@ -1040,7 +1088,7 @@ where
 
     tracing::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
-    let addr = Address::decode(&addr).expect("Cannot parse the address string");
+    let addr = Address::decode(&addr).map_err(TxRuntimeError::AddressError)?;
 
     let verifiers = unsafe { env.ctx.verifiers.get() };
     verifiers.insert(addr);
@@ -1063,7 +1111,7 @@ where
     let (addr, gas) = env.memory.read_string(addr_ptr, addr_len as _);
     tx_add_gas(env, gas)?;
 
-    let addr = Address::decode(addr).expect("Failed to decode the address");
+    let addr = Address::decode(addr).map_err(TxRuntimeError::AddressError)?;
     tracing::debug!("tx_update_validity_predicate for addr {}", addr);
 
     let key = Key::validity_predicate(&addr);
@@ -1106,7 +1154,7 @@ where
     let write_log = unsafe { env.ctx.write_log.get() };
     let (addr, gas) = write_log.init_account(&storage.address_gen, code);
     let addr_bytes =
-        addr.try_to_vec().expect("Encoding address shouldn't fail");
+        addr.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
     tx_add_gas(env, gas)?;
     let gas = env.memory.write_bytes(result_ptr, addr_bytes);
     tx_add_gas(env, gas)
@@ -1234,13 +1282,13 @@ where
     let (pk, gas) = env.memory.read_bytes(pk_ptr, pk_len as _);
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_env::add_gas(gas_meter, gas)?;
-    let pk: PublicKey =
-        BorshDeserialize::try_from_slice(&pk).expect("Canot decode public key");
+    let pk: PublicKey = BorshDeserialize::try_from_slice(&pk)
+        .map_err(vp_env::RuntimeError::EncodingError)?;
 
     let (sig, gas) = env.memory.read_bytes(sig_ptr, sig_len as _);
     vp_env::add_gas(gas_meter, gas)?;
-    let sig: Signature =
-        BorshDeserialize::try_from_slice(&sig).expect("Canot decode signature");
+    let sig: Signature = BorshDeserialize::try_from_slice(&sig)
+        .map_err(vp_env::RuntimeError::EncodingError)?;
 
     vp_env::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
     let tx = unsafe { env.ctx.tx.get() };

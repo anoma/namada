@@ -1,6 +1,8 @@
 //! Validity predicate environment contains functions that can be called from
 //! inside validity predicates.
 
+use std::num::TryFromIntError;
+
 use thiserror::Error;
 
 use crate::ledger::gas;
@@ -15,6 +17,14 @@ use crate::types::storage::{BlockHash, BlockHeight, Key};
 pub enum RuntimeError {
     #[error("Out of gas: {0}")]
     OutOfGas(gas::Error),
+    #[error("Storage error: {0}")]
+    StorageError(storage::Error),
+    #[error("Storage data error: {0}")]
+    StorageDataError(crate::types::storage::Error),
+    #[error("Encoding error: {0}")]
+    EncodingError(std::io::Error),
+    #[error("Numeric conversion error: {0}")]
+    NumConversionError(TryFromIntError),
 }
 
 /// VP environment function result
@@ -40,7 +50,8 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (value, gas) = storage.read(&key).expect("storage read failed");
+    let (value, gas) =
+        storage.read(&key).map_err(RuntimeError::StorageError)?;
     add_gas(gas_meter, gas)?;
     Ok(value)
 }
@@ -76,7 +87,8 @@ where
         }
         None => {
             // When not found in write log, try to read from the storage
-            let (value, gas) = storage.read(&key).expect("storage read failed");
+            let (value, gas) =
+                storage.read(&key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas)?;
             Ok(value)
         }
@@ -94,7 +106,8 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (present, gas) = storage.has_key(key).expect("storage has_key failed");
+    let (present, gas) =
+        storage.has_key(key).map_err(RuntimeError::StorageError)?;
     add_gas(gas_meter, gas)?;
     Ok(present)
 }
@@ -124,7 +137,7 @@ where
         None => {
             // When not found in write log, try to check the storage
             let (present, gas) =
-                storage.has_key(&key).expect("storage has_key failed");
+                storage.has_key(&key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas)?;
             Ok(present)
         }
@@ -219,7 +232,7 @@ where
 {
     for (key, val, iter_gas) in iter {
         let (log_val, log_gas) = write_log.read(
-            &Key::parse(key.clone()).expect("Cannot parse the key string"),
+            &Key::parse(key.clone()).map_err(RuntimeError::StorageDataError)?,
         );
         add_gas(gas_meter, iter_gas + log_gas)?;
         match log_val {
