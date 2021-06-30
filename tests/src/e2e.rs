@@ -190,7 +190,7 @@ mod tests {
         let base_dir_arg = &base_dir.path().to_string_lossy();
 
         // 1. Run the ledger node
-        let mut cmd = Command::cargo_bin("anoma")?;
+        let mut cmd = Command::cargo_bin("anoman")?;
         cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
             "--base-dir",
             base_dir_arg,
