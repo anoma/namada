@@ -33,7 +33,7 @@ pub struct RpcResponse {
     #[prost(string, tag = "1")]
     pub result: ::prost::alloc::string::String,
 }
-/// Generated client implementations.
+#[doc = r" Generated client implementations."]
 pub mod rpc_service_client {
     #![allow(unused_variables, dead_code, missing_docs)]
     use tonic::codegen::*;
@@ -41,7 +41,7 @@ pub mod rpc_service_client {
         inner: tonic::client::Grpc<T>,
     }
     impl RpcServiceClient<tonic::transport::Channel> {
-        /// Attempt to create a new client by connecting to a given endpoint.
+        #[doc = r" Attempt to create a new client by connecting to a given endpoint."]
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
             D: std::convert::TryInto<tonic::transport::Endpoint>,
@@ -62,7 +62,6 @@ pub mod rpc_service_client {
             let inner = tonic::client::Grpc::new(inner);
             Self { inner }
         }
-
         pub fn with_interceptor(
             inner: T,
             interceptor: impl Into<tonic::Interceptor>,
@@ -71,7 +70,6 @@ pub mod rpc_service_client {
                 tonic::client::Grpc::with_interceptor(inner, interceptor);
             Self { inner }
         }
-
         pub async fn send_message(
             &mut self,
             request: impl tonic::IntoRequest<super::RpcMessage>,
@@ -103,12 +101,11 @@ pub mod rpc_service_client {
         }
     }
 }
-/// Generated server implementations.
+#[doc = r" Generated server implementations."]
 pub mod rpc_service_server {
     #![allow(unused_variables, dead_code, missing_docs)]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for
-    /// use with RpcServiceServer.
+    #[doc = "Generated trait containing gRPC methods that should be implemented for use with RpcServiceServer."]
     #[async_trait]
     pub trait RpcService: Send + Sync + 'static {
         async fn send_message(
@@ -127,7 +124,6 @@ pub mod rpc_service_server {
             let inner = _Inner(inner, None);
             Self { inner }
         }
-
         pub fn with_interceptor(
             inner: T,
             interceptor: impl Into<tonic::Interceptor>,
@@ -143,17 +139,15 @@ pub mod rpc_service_server {
         B: HttpBody + Send + Sync + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
+        type Response = http::Response<tonic::body::BoxBody>;
         type Error = Never;
         type Future = BoxFuture<Self::Response, Self::Error>;
-        type Response = http::Response<tonic::body::BoxBody>;
-
         fn poll_ready(
             &mut self,
             _cx: &mut Context<'_>,
         ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
-
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
@@ -164,12 +158,11 @@ pub mod rpc_service_server {
                         tonic::server::UnaryService<super::RpcMessage>
                         for SendMessageSvc<T>
                     {
+                        type Response = super::RpcResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
-                        type Response = super::RpcResponse;
-
                         fn call(
                             &mut self,
                             request: tonic::Request<super::RpcMessage>,
