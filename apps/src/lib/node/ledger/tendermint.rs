@@ -10,6 +10,7 @@ use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::mpsc::{self, channel, Sender};
+use std::time::Duration;
 
 use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::types::storage::{BlockHash, BlockHeight};
@@ -470,6 +471,9 @@ fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
     config.rpc.max_body_bytes = 2_000_000;
+
+    // TODO broadcast_tx_commit shouldn't be used live;
+    config.rpc.timeout_broadcast_tx_commit = Duration::from_secs(20).into();
 
     let mut file = OpenOptions::new()
         .write(true)
