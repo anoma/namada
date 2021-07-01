@@ -230,34 +230,32 @@ fn execute_vps(
                             .map_err(Error::NativeVpError)
                         }
                     };
-                    // Take the gas meter back out of the context
-                    gas_meter = ctx.gas_meter;
 
                     accepted
                 }
             };
-            match accept {
-                Ok(accepted) => {
-                    if !accepted {
-                        result.rejected_vps.insert(addr.clone());
-                    } else {
-                        result.accepted_vps.insert(addr.clone());
-                    }
-                }
-                Err(err) => {
-                    result.rejected_vps.insert(addr.clone());
-                    result.errors.push((addr.clone(), err.to_string()));
-                }
-            }
 
             // Returning error from here will short-circuit the VP parallel
             // execution. It's important that we only short-circuit gas
             // errors to get deterministic gas costs
-            tracing::debug!("VP {} used gas {}", addr, gas_meter.current_gas);
-            result.gas_used.set(&gas_meter).map_err(Error::GasError)?;
-            match &gas_meter.error {
-                Some(err) => Err(Error::GasError(err.clone())),
-                None => Ok(result),
+            match accept {
+                Ok(accepted) => {
+                    if !accepted {
+                        result.rejected_vps.insert(addr.clone());
+                        Ok(result)
+                    } else {
+                        result.accepted_vps.insert(addr.clone());
+                        Ok(result)
+                    }
+                }
+                Err(err) => match err {
+                    Error::GasError(_) => Err(err),
+                    _ => {
+                        result.rejected_vps.insert(addr.clone());
+                        result.errors.push((addr.clone(), err.to_string()));
+                        Ok(result)
+                    }
+                },
             }
         })
         .try_reduce(VpsResult::default, |a, b| {
