@@ -269,13 +269,9 @@ fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
         let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
             / wasmer::WASM_PAGE_SIZE) as u32;
         tracing::info!("trying to grow memory by {} pages", req_pages);
-        memory
-            .grow(req_pages)
-            .map(|_pages| ())
-            .map_err(Error::MemoryOutOfBounds)
-    } else {
-        Ok(())
+        memory.grow(req_pages).map_err(Error::MemoryOutOfBounds)?;
     }
+    Ok(())
 }
 
 /// Read bytes from memory at the given offset and length
