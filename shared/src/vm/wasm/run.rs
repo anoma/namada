@@ -36,7 +36,6 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    // 1. Common error types
     #[error("Memory error: {0}")]
     MemoryError(memory::Error),
     #[error("Unable to inject gas meter")]
