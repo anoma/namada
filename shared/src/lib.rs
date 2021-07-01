@@ -8,3 +8,7 @@ pub mod ledger;
 pub mod proto;
 pub mod types;
 pub mod vm;
+
+#[cfg(test)]
+#[macro_use]
+extern crate assert_matches;

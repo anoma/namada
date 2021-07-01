@@ -13,6 +13,31 @@ pub mod prefix_iter;
 pub mod types;
 #[cfg(feature = "wasm-runtime")]
 pub mod wasm;
+use thiserror::Error;
+
+const UNTRUSTED_WASM_FEATURES: WasmFeatures = WasmFeatures {
+    reference_types: false,
+    multi_value: false,
+    bulk_memory: false,
+    module_linking: false,
+    simd: false,
+    threads: false,
+    tail_call: false,
+    deterministic_only: true,
+    multi_memory: false,
+    exceptions: false,
+    memory64: false,
+};
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum WasmValidationError {
+    #[error(
+        "Invalid WASM using forbidden features: {0}. Expected: \
+         {UNTRUSTED_WASM_FEATURES:?}"
+    )]
+    ForbiddenWasmFeatures(wasmparser::BinaryReaderError),
+}
 
 /// This is used to attach the Ledger's host structures to wasm environment,
 /// which is used for implementing some host calls. It wraps an immutable
@@ -176,23 +201,10 @@ impl<'a, T: 'a> MutHostSlice<'a, &[T]> {
 /// (e.g. transaction and validity predicates)
 pub fn validate_untrusted_wasm(
     wasm_code: impl AsRef<[u8]>,
-) -> Result<(), wasmparser::BinaryReaderError> {
+) -> Result<(), WasmValidationError> {
     let mut validator = Validator::new();
-
-    let features = WasmFeatures {
-        reference_types: false,
-        multi_value: false,
-        bulk_memory: false,
-        module_linking: false,
-        simd: false,
-        threads: false,
-        tail_call: false,
-        deterministic_only: true,
-        multi_memory: false,
-        exceptions: false,
-        memory64: false,
-    };
-    validator.wasm_features(features);
-
-    validator.validate_all(wasm_code.as_ref())
+    validator.wasm_features(UNTRUSTED_WASM_FEATURES);
+    validator
+        .validate_all(wasm_code.as_ref())
+        .map_err(WasmValidationError::ForbiddenWasmFeatures)
 }

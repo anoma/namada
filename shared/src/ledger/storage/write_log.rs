@@ -14,6 +14,13 @@ use crate::types::storage::Key;
 pub enum Error {
     #[error("Storage error applying a write log: {0}")]
     StorageError(storage::Error),
+    #[error(
+        "Trying to update a validity predicate that a new account that's not \
+         yet committed to storage"
+    )]
+    UpdateVpOfNewAccount,
+    #[error("Trying to delete a validity predicate")]
+    DeleteVp,
 }
 
 /// Result for functions that may fail
@@ -85,7 +92,9 @@ impl WriteLog {
     }
 
     /// Write a key and a value and return the gas cost and the size difference
-    pub fn write(&mut self, key: &Key, value: Vec<u8>) -> (u64, i64) {
+    /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
+    /// validity predicate of a new account that's not yet committed to storage.
+    pub fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(u64, i64)> {
         let len = value.len();
         let gas = key.len() + len;
         let size_diff = match self
@@ -98,23 +107,24 @@ impl WriteLog {
                 }
                 StorageModification::Delete => len as i64,
                 StorageModification::InitAccount { .. } => {
-                    tracing::info!(
-                        "Trying to update the validity predicate that is just \
-                         initialized"
-                    );
-                    unreachable!()
+                    return Err(Error::UpdateVpOfNewAccount);
                 }
             },
             // set just the length of the value because we don't know if
             // the previous value exists on the storage
             None => len as i64,
         };
-        (gas as _, size_diff)
+        Ok((gas as _, size_diff))
     }
 
     /// Delete a key and its value, and return the gas cost and the size
-    /// difference
-    pub fn delete(&mut self, key: &Key) -> (u64, i64) {
+    /// difference.
+    /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
+    /// not possible to delete.
+    pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
+        if key.is_validity_predicate() {
+            return Err(Error::DeleteVp);
+        }
         let size_diff = match self
             .tx_write_log
             .insert(key.clone(), StorageModification::Delete)
@@ -123,11 +133,7 @@ impl WriteLog {
                 StorageModification::Write { ref value } => value.len() as i64,
                 StorageModification::Delete => 0,
                 StorageModification::InitAccount { .. } => {
-                    tracing::info!(
-                        "Trying to delete the validity predicate that is just \
-                         initialized"
-                    );
-                    unreachable!()
+                    return Err(Error::DeleteVp);
                 }
             },
             // set 0 because we don't know if the previous value exists on the
@@ -135,7 +141,7 @@ impl WriteLog {
             None => 0,
         };
         let gas = key.len() + size_diff as usize;
-        (gas as _, -size_diff)
+        Ok((gas as _, -size_diff))
     }
 
     /// Initialize a new account and return the gas cost.
@@ -150,8 +156,7 @@ impl WriteLog {
             self.address_gen.get_or_insert(storage_address_gen.clone());
         let addr =
             address_gen.generate_address("TODO more randomness".as_bytes());
-        let key = Key::validity_predicate(&addr)
-            .expect("Unable to create a validity predicate key");
+        let key = Key::validity_predicate(&addr);
         let gas = (key.len() + vp.len()) as _;
         self.tx_write_log
             .insert(key, StorageModification::InitAccount { vp });
@@ -290,6 +295,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::types::address;
 
     #[test]
     fn test_crud_value() {
@@ -303,13 +309,13 @@ mod tests {
         assert_eq!(gas, key.len() as u64);
 
         // delete a non-existing key
-        let (gas, diff) = write_log.delete(&key);
+        let (gas, diff) = write_log.delete(&key).unwrap();
         assert_eq!(gas, key.len() as u64);
         assert_eq!(diff, 0);
 
         // insert a value
         let inserted = "inserted".as_bytes().to_vec();
-        let (gas, diff) = write_log.write(&key, inserted.clone());
+        let (gas, diff) = write_log.write(&key, inserted.clone()).unwrap();
         assert_eq!(gas, (key.len() + inserted.len()) as u64);
         assert_eq!(diff, inserted.len() as i64);
 
@@ -325,17 +331,17 @@ mod tests {
 
         // update the value
         let updated = "updated".as_bytes().to_vec();
-        let (gas, diff) = write_log.write(&key, updated.clone());
+        let (gas, diff) = write_log.write(&key, updated.clone()).unwrap();
         assert_eq!(gas, (key.len() + updated.len()) as u64);
         assert_eq!(diff, updated.len() as i64 - inserted.len() as i64);
 
         // delete the key
-        let (gas, diff) = write_log.delete(&key);
+        let (gas, diff) = write_log.delete(&key).unwrap();
         assert_eq!(gas, (key.len() + updated.len()) as u64);
         assert_eq!(diff, -(updated.len() as i64));
 
         // delete the deleted key again
-        let (gas, diff) = write_log.delete(&key);
+        let (gas, diff) = write_log.delete(&key).unwrap();
         assert_eq!(gas, key.len() as u64);
         assert_eq!(diff, 0);
 
@@ -349,7 +355,7 @@ mod tests {
 
         // insert again
         let reinserted = "reinserted".as_bytes().to_vec();
-        let (gas, diff) = write_log.write(&key, reinserted.clone());
+        let (gas, diff) = write_log.write(&key, reinserted.clone()).unwrap();
         assert_eq!(gas, (key.len() + reinserted.len()) as u64);
         assert_eq!(diff, reinserted.len() as i64);
     }
@@ -362,8 +368,7 @@ mod tests {
         // init
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, gas) = write_log.init_account(&address_gen, init_vp.clone());
-        let vp_key =
-            Key::validity_predicate(&addr).expect("cannot create the vp key");
+        let vp_key = Key::validity_predicate(&addr);
         assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
 
         // read
@@ -381,34 +386,43 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn test_update_initialized_account() {
+    fn test_update_initialized_account_should_fail() {
         let mut write_log = WriteLog::default();
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, _) = write_log.init_account(&address_gen, init_vp);
-        let vp_key =
-            Key::validity_predicate(&addr).expect("cannot create the vp key");
+        let vp_key = Key::validity_predicate(&addr);
 
         // update should fail
         let updated_vp = "updated".as_bytes().to_vec();
-        write_log.write(&vp_key, updated_vp);
+        let result = write_log.write(&vp_key, updated_vp).unwrap_err();
+        assert_matches!(result, Error::UpdateVpOfNewAccount);
     }
 
     #[test]
-    #[should_panic]
-    fn test_delete_initialized_account() {
+    fn test_delete_initialized_account_should_fail() {
         let mut write_log = WriteLog::default();
         let address_gen = EstablishedAddressGen::new("test");
 
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, _) = write_log.init_account(&address_gen, init_vp);
-        let vp_key =
-            Key::validity_predicate(&addr).expect("cannot create the vp key");
+        let vp_key = Key::validity_predicate(&addr);
 
         // delete should fail
-        write_log.delete(&vp_key);
+        let result = write_log.delete(&vp_key).unwrap_err();
+        assert_matches!(result, Error::DeleteVp);
+    }
+
+    #[test]
+    fn test_delete_vp_should_fail() {
+        let mut write_log = WriteLog::default();
+        let addr = address::testing::established_address_1();
+        let vp_key = Key::validity_predicate(&addr);
+
+        // delete should fail
+        let result = write_log.delete(&vp_key).unwrap_err();
+        assert_matches!(result, Error::DeleteVp);
     }
 
     #[test]
@@ -432,22 +446,22 @@ mod tests {
 
         // write values
         let val1 = "val1".as_bytes().to_vec();
-        write_log.write(&key1, val1.clone());
-        write_log.write(&key2, val1.clone());
-        write_log.write(&key3, val1.clone());
+        write_log.write(&key1, val1.clone()).unwrap();
+        write_log.write(&key2, val1.clone()).unwrap();
+        write_log.write(&key3, val1.clone()).unwrap();
         write_log.commit_tx();
 
         // these values are not written due to drop_tx
         let val2 = "val2".as_bytes().to_vec();
-        write_log.write(&key1, val2.clone());
-        write_log.write(&key2, val2.clone());
-        write_log.write(&key3, val2);
+        write_log.write(&key1, val2.clone()).unwrap();
+        write_log.write(&key2, val2.clone()).unwrap();
+        write_log.write(&key3, val2).unwrap();
         write_log.drop_tx();
 
         // deletes and updates values
         let val3 = "val3".as_bytes().to_vec();
-        write_log.delete(&key2);
-        write_log.write(&key3, val3.clone());
+        write_log.delete(&key2).unwrap();
+        write_log.write(&key3, val3.clone()).unwrap();
         write_log.commit_tx();
 
         // commit a block

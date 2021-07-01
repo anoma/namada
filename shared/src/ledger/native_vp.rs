@@ -2,11 +2,12 @@
 //! as the PoS and IBC modules.
 use std::collections::HashSet;
 
-use crate::ledger::gas::{Result, VpGasMeter};
+use crate::ledger::gas::VpGasMeter;
 use crate::ledger::ibc::Ibc;
 use crate::ledger::pos::PoS;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{Storage, StorageHasher};
+use crate::ledger::vp_env::Result;
 use crate::ledger::{storage, vp_env};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};

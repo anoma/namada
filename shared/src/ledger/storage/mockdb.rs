@@ -156,7 +156,6 @@ impl DB for MockDB {
                                     let addr = Address::decode(&addr_str)
                                         .expect("cannot decode the address");
                                     Key::validity_predicate(&addr)
-                                        .expect("failed to make the VP key")
                                 }
                                 _ => {
                                     Key::parse(segments.split_off(2).join(

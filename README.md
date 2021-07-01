@@ -124,7 +124,7 @@ The default is set to `info` for all the modules, expect for Tendermint ABCI, wh
 
 For more fine-grained logging levels settings, please refer to the [tracing subscriber docs](https://docs.rs/tracing-subscriber/0.2.18/tracing_subscriber/struct.EnvFilter.html#directives) for more information.
 
-To switch on logging in tests that use `#[test] macro from ``test_env_log::test`, use `RUST_LOG` with e.g. `RUST_LOG=info cargo test -- --nocapture`.
+To switch on logging in tests that use `#[test]` macro from `test_env_log::test`, use `RUST_LOG` with e.g. `RUST_LOG=info cargo test -- --nocapture`.
 
 ## How to contribute
 

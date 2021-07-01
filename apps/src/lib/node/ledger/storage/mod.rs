@@ -227,8 +227,7 @@ mod tests {
             .expect("begin_block failed");
 
         let addr = storage.address_gen.generate_address("test".as_bytes());
-        let key =
-            Key::validity_predicate(&addr).expect("cannot create a VP key");
+        let key = Key::validity_predicate(&addr);
 
         // not exist
         let (vp, gas) =

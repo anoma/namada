@@ -72,7 +72,7 @@ where
 {
     // Write an empty validity predicate for the address, because it's used to
     // check if the address exists when we write into its storage
-    let vp_key = Key::validity_predicate(&addr).unwrap();
+    let vp_key = Key::validity_predicate(&addr);
     tx_env.storage.write(&vp_key, vec![]).unwrap();
 
     init_tx_env(&mut tx_env);
@@ -195,7 +195,9 @@ mod native_vp_host_env {
                             let env = env.as_ref().expect("Did you forget to
     initialize the ENV?");
 
-                            $fn( &env, $($arg),* )
+                            // Call the `host_env` function and unwrap any
+                            // runtime errors
+                            $fn( &env, $($arg),* ).unwrap()
                         })
                     }
                 });
@@ -211,7 +213,9 @@ mod native_vp_host_env {
                             let env = env.as_ref().expect("Did you forget to
     initialize the ENV?");
 
-                            $fn( &env, $($arg),* )
+                            // Call the `host_env` function and unwrap any
+                            // runtime errors
+                            $fn( &env, $($arg),* ).unwrap()
                         })
                     }
                 });

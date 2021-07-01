@@ -5,7 +5,7 @@
 pub enum HostEnvResult {
     /// A success
     Success = 1,
-    /// A failure
+    /// A non-fatal failure does **not** interrupt WASM execution
     Fail = -1,
 }
 
@@ -20,7 +20,7 @@ impl HostEnvResult {
         int == Self::Success.to_i64()
     }
 
-    /// Check if the given result as `i64` is a failure
+    /// Check if the given result as `i64` is a non-fatal failure
     pub fn is_fail(int: i64) -> bool {
         int == Self::Fail.to_i64()
     }

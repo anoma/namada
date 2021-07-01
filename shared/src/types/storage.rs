@@ -219,10 +219,22 @@ impl Key {
 
     /// Returns a key of the validity predicate of the given address
     /// Only this function can push "?" segment for validity predicate
-    pub fn validity_predicate(addr: &Address) -> Result<Self> {
+    pub fn validity_predicate(addr: &Address) -> Self {
         let mut segments = Self::from(addr.to_db_key()).segments;
         segments.push(DbKeySeg::StringSeg(RESERVED_VP_KEY.to_owned()));
-        Ok(Key { segments })
+        Key { segments }
+    }
+
+    /// Check if the given key is a key to a validity predicate.
+    pub fn is_validity_predicate(&self) -> bool {
+        match &self.segments[..] {
+            [DbKeySeg::AddressSeg(_), DbKeySeg::StringSeg(sub_key)]
+                if sub_key == RESERVED_VP_KEY =>
+            {
+                true
+            }
+            _ => false,
+        }
     }
 }
 
@@ -464,8 +476,7 @@ pub mod testing {
     pub fn arb_key() -> impl Strategy<Value = Key> {
         prop_oneof![
             // a key for a validity predicate
-            arb_address()
-                .prop_map(|addr| Key::validity_predicate(&addr).unwrap()),
+            arb_address().prop_map(|addr| Key::validity_predicate(&addr)),
             // a key from key segments
             collection::vec(arb_key_seg(), 1..5)
                 .prop_map(|segments| { Key { segments } }),

@@ -134,8 +134,7 @@ impl Shell {
 
             for token in &tokens {
                 // default tokens VPs for testing
-                let key =
-                    Key::validity_predicate(&token).expect("expected VP key");
+                let key = Key::validity_predicate(&token);
                 storage
                     .write(&key, token_vp.to_vec())
                     .expect("Unable to write token VP");
@@ -143,8 +142,7 @@ impl Shell {
 
             for user in &users {
                 // default user VPs for testing
-                let vp_key =
-                    Key::validity_predicate(&user).expect("expected VP key");
+                let vp_key = Key::validity_predicate(&user);
                 storage
                     .write(&vp_key, user_vp.to_vec())
                     .expect("Unable to write user VP");
@@ -185,8 +183,7 @@ impl Shell {
                         .expect("encode public key"),
                 )
                 .expect("Unable to set genesis user public key");
-            let matchmaker_vp =
-                Key::validity_predicate(&matchmaker).expect("expected VP key");
+            let matchmaker_vp = Key::validity_predicate(&matchmaker);
             storage
                 .write(&matchmaker_vp, user_vp.to_vec())
                 .expect("Unable to write matchmaker VP");
