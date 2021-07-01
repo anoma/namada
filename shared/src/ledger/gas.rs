@@ -264,7 +264,7 @@ mod tests {
         let mut meter = VpGasMeter::new(1);
         match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
             Error::GasOverflow => {}
-            _ => panic!("unexpected error happened"),
+            _ => panic!("unexpected error happened."),
         }
     }
 
