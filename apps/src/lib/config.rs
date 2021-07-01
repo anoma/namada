@@ -306,10 +306,9 @@ impl IntentGossiper {
         let mut gossiper_config = IntentGossiper::default();
         let mut discover_config = DiscoverPeer::default();
 
-        gossiper_config.address = Multiaddr::from_str(
-            format!("/ip4/{}/tcp/{}", ip, port).as_str(),
-        )
-        .unwrap();
+        gossiper_config.address =
+            Multiaddr::from_str(format!("/ip4/{}/tcp/{}", ip, port).as_str())
+                .unwrap();
 
         let bootstrap_peers: HashSet<PeerAddress> = peers_info
             .iter()

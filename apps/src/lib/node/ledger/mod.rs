@@ -407,7 +407,9 @@ impl Shell {
                 )
             }
             None => {
-                tracing::info!("No state could be found, chain is not initialized")
+                tracing::info!(
+                    "No state could be found, chain is not initialized"
+                )
             }
         }
         result
