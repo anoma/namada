@@ -52,7 +52,7 @@ where
     fn default() -> Self {
         Self {
             index: PrefixIteratorId::default(),
-            iterators: HashMap::new(),
+            iterators: HashMap::default(),
         }
     }
 }
