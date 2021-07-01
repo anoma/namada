@@ -262,44 +262,42 @@ mod tests {
     #[test]
     fn test_vp_gas_overflow() {
         let mut meter = VpGasMeter::new(1);
-        match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
-            Error::GasOverflow => {}
-            _ => panic!("unexpected error happened."),
-        }
+        assert_matches!(
+            meter.add(u64::MAX).expect_err("unexpectedly succeeded"),
+            Error::GasOverflow
+        );
     }
 
     #[test]
     fn test_vp_gas_limit() {
         let mut meter = VpGasMeter::new(1);
-        match meter
-            .add(TRANSACTION_GAS_LIMIT)
-            .expect_err("unexpectedly succeeded")
-        {
-            Error::TransactionGasExceedededError => {}
-            _ => panic!("unexpected error happened"),
-        }
+        assert_matches!(
+            meter
+                .add(TRANSACTION_GAS_LIMIT)
+                .expect_err("unexpectedly succeeded"),
+            Error::TransactionGasExceedededError
+        );
     }
 
     #[test]
     fn test_tx_gas_overflow() {
         let mut meter = BlockGasMeter::default();
         meter.add(1).expect("cannot add the gas");
-        match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
-            Error::GasOverflow => {}
-            _ => panic!("unexpected error happened"),
-        }
+        assert_matches!(
+            meter.add(u64::MAX).expect_err("unexpectedly succeeded"),
+            Error::GasOverflow
+        );
     }
 
     #[test]
     fn test_tx_gas_limit() {
         let mut meter = BlockGasMeter::default();
-        match meter
-            .add(TRANSACTION_GAS_LIMIT + 1)
-            .expect_err("unexpectedly succeeded")
-        {
-            Error::TransactionGasExceedededError => {}
-            _ => panic!("unexpected error happened"),
-        }
+        assert_matches!(
+            meter
+                .add(TRANSACTION_GAS_LIMIT + 1)
+                .expect_err("unexpectedly succeeded"),
+            Error::TransactionGasExceedededError
+        );
     }
 
     #[test]
