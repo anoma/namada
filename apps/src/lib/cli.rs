@@ -6,7 +6,7 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
-use clap::ArgMatches;
+use clap::{AppSettings, ArgMatches};
 
 use super::config;
 mod utils;
@@ -23,6 +23,8 @@ const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
 
 pub mod cmds {
+    use clap::AppSettings;
+
     use super::utils::*;
     use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD};
 
@@ -108,7 +110,9 @@ pub mod cmds {
 
         fn def() -> App {
             <Self as Cmd>::add_sub(
-                App::new(Self::CMD).about("Node sub-commands"),
+                App::new(Self::CMD)
+                    .about("Node sub-commands")
+                    .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
     }
@@ -165,7 +169,9 @@ pub mod cmds {
 
         fn def() -> App {
             <Self as Cmd>::add_sub(
-                App::new(Self::CMD).about("Client sub-commands"),
+                App::new(Self::CMD)
+                    .about("Client sub-commands")
+                    .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
     }
@@ -311,6 +317,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
+                .setting(AppSettings::SubcommandRequiredElseHelp)
                 .about("Configuration sub-commands")
                 .subcommand(ConfigGen::def())
         }
@@ -856,12 +863,6 @@ pub fn anoma_cli() -> (cmds::Anoma, String) {
     let result = cmds::Anoma::parse(&matches);
     match (result, raw_sub_cmd) {
         (Some((cmd, _)), Some(raw_sub)) => return (cmd, raw_sub),
-        (None, Some(raw_sub)) if raw_sub == NODE_CMD => {
-            anoma_node_app().print_help().unwrap();
-        }
-        (None, Some(raw_sub)) if raw_sub == CLIENT_CMD => {
-            anoma_client_app().print_help().unwrap();
-        }
         _ => {
             anoma_app().print_help().unwrap();
         }
@@ -886,6 +887,7 @@ fn anoma_app() -> App {
         .version(CLI_VERSION)
         .author(AUTHOR)
         .about("Anoma command line interface.")
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .add_args::<args::Global>();
     cmds::Anoma::add_sub(app)
 }
@@ -895,6 +897,7 @@ fn anoma_node_app() -> App {
         .version(CLIENT_VERSION)
         .author(AUTHOR)
         .about("Anoma client command line interface.")
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .add_args::<args::Global>();
     cmds::AnomaNode::add_sub(app)
 }
@@ -904,6 +907,7 @@ fn anoma_client_app() -> App {
         .version(NODE_VERSION)
         .author(AUTHOR)
         .about("Anoma node command line interface.")
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .add_args::<args::Global>();
     cmds::AnomaClient::add_sub(app)
 }
