@@ -34,15 +34,10 @@ check:
 	$(cargo) check && \
 	$(foreach wasm,$(wasms),$(check-wasm) && ) true
 
-clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml
+clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 clippy:
-	$(cargo) +$(nightly) clippy && \
+	$(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	$(foreach wasm,$(wasms),$(clippy-wasm) && ) true
-
-clippy-check-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml -- -D warnings
-clippy-check:
-	$(cargo) +$(nightly) clippy -- -D warnings && \
-	$(foreach wasm,$(wasms),$(clippy-check-wasm) && ) true
 
 install:
 	# Warning: built in debug mode for now
@@ -129,4 +124,4 @@ test-miri:
 	$(cargo) +$(nightly) clean
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
-.PHONY : build check build-release clippy clippy-check install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker build-wasm-scripts clean-wasm-scripts dev-deps test-miri
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker build-wasm-scripts clean-wasm-scripts dev-deps test-miri
