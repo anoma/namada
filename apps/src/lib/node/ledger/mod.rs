@@ -111,13 +111,13 @@ impl Shell {
         }
     }
 
-    /// Run the shell in the current thread (blocking). This is the intended way to interact with
-    /// the shell. It will forward received commands to the appropriate internal methods which we
-    /// do not expose outward.
+    /// Run the shell in the current thread (blocking). This is the intended way
+    /// to interact with the shell. It will forward received commands to the
+    /// appropriate internal methods which we do not expose outward.
     ///
-    /// N.B. This is intended to be called by third party software whose correctness we assume, e.g.
-    /// the Tendermint ABCI. We thus do not duplicate checks on the validity of state transitions
-    /// here.
+    /// N.B. This is intended to be called by third party software whose
+    /// correctness we assume, e.g. the Tendermint ABCI. We thus do not
+    /// duplicate checks on the validity of state transitions here.
     pub fn run(mut self) -> Result<()> {
         loop {
             let msg = self.abci.recv().map_err(Error::AbciChannelRecvError)?;
@@ -206,11 +206,11 @@ impl Shell {
         Ok(())
     }
 
-    /// Create a new genesis for the chain with specified id. At present this includes
+    /// Create a new genesis for the chain with specified id. This includes
     /// 1. A set of initial users and tokens
     /// 2. Setting up the validity predicates for both users and tokens
     /// 3. A matchmaker
-     fn init_chain(&mut self, chain_id: String) -> Result<()> {
+    fn init_chain(&mut self, chain_id: String) -> Result<()> {
         let (current_chain_id, _) = self.storage.get_chain_id();
         if current_chain_id != chain_id {
             return Err(Error::ChainIdError(format!(
