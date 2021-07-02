@@ -200,7 +200,7 @@ mod tests {
         init_vp_env(&mut env);
 
         let tx_data: Vec<u8> = vec![];
-        let addr: Address = env.addr.clone();
+        let addr: Address = env.addr;
         let keys_changed: HashSet<storage::Key> = HashSet::default();
         let verifiers: HashSet<Address> = HashSet::default();
 
