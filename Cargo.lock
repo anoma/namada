@@ -86,6 +86,7 @@ dependencies = [
  "ed25519-dalek",
  "eyre",
  "futures",
+ "itertools 0.10.1",
  "libc",
  "libp2p",
  "proptest",
