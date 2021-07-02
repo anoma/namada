@@ -4,7 +4,7 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "5f49930241fc317b8c1efb460b2411b39fb6e9fbf5bb526c230b3b848bd76686  Makefile"
+- commands: [echo "4d5fe55612210b0859fc9849d45f3e41ffa303c75479ef0348c04712b5b3bf37  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -110,7 +110,7 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "5f49930241fc317b8c1efb460b2411b39fb6e9fbf5bb526c230b3b848bd76686  Makefile"
+- commands: [echo "4d5fe55612210b0859fc9849d45f3e41ffa303c75479ef0348c04712b5b3bf37  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -197,7 +197,7 @@ kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [echo "5f49930241fc317b8c1efb460b2411b39fb6e9fbf5bb526c230b3b848bd76686  Makefile"
+- commands: [echo "4d5fe55612210b0859fc9849d45f3e41ffa303c75479ef0348c04712b5b3bf37  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -280,7 +280,7 @@ kind: pipeline
 name: anoma-ci-audit-pr
 node: {project: anoma}
 steps:
-- commands: [echo "5f49930241fc317b8c1efb460b2411b39fb6e9fbf5bb526c230b3b848bd76686  Makefile"
+- commands: [echo "4d5fe55612210b0859fc9849d45f3e41ffa303c75479ef0348c04712b5b3bf37  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -347,7 +347,7 @@ kind: pipeline
 name: anoma-ci-miri-pr
 node: {project: anoma}
 steps:
-- commands: [echo "5f49930241fc317b8c1efb460b2411b39fb6e9fbf5bb526c230b3b848bd76686  Makefile"
+- commands: [echo "4d5fe55612210b0859fc9849d45f3e41ffa303c75479ef0348c04712b5b3bf37  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -420,7 +420,7 @@ kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [echo "5f49930241fc317b8c1efb460b2411b39fb6e9fbf5bb526c230b3b848bd76686  Makefile"
+- commands: [echo "4d5fe55612210b0859fc9849d45f3e41ffa303c75479ef0348c04712b5b3bf37  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -501,7 +501,7 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [echo "5f49930241fc317b8c1efb460b2411b39fb6e9fbf5bb526c230b3b848bd76686  Makefile"
+- commands: [echo "4d5fe55612210b0859fc9849d45f3e41ffa303c75479ef0348c04712b5b3bf37  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -618,6 +618,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 47de0bc680ef6a770b61f57044b827dcd40f8e813e92d59c679c6a0aa31dbe5d
+hmac: bc68029def99f5bdd86c3432b2d9ab79dc5b00a018a9c229f19186da879ee096
 
 ...

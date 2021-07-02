@@ -11,3 +11,9 @@ target/
 
 # Crafted data with transaction and intent payloads for testing
 *.data
+
+# generated if using pyenv to manage different python versions
+.python-version
+
+# generated if using IntelliJ IDEs
+/.idea

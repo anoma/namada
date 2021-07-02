@@ -39,9 +39,9 @@ clippy:
 	$(cargo) +$(nightly) clippy && \
 	$(foreach wasm,$(wasms),$(clippy-wasm) && ) true
 
-clippy-check-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml -- -D warnings
+clippy-check-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 clippy-check:
-	$(cargo) +$(nightly) clippy -- -D warnings && \
+	$(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	$(foreach wasm,$(wasms),$(clippy-check-wasm) && ) true
 
 install:
