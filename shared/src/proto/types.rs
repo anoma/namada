@@ -307,7 +307,7 @@ mod tests {
     fn test_intent_gossip_message() {
         let data = "arbitrary data".as_bytes().to_owned();
         let intent = Intent::new(data);
-        let message = IntentGossipMessage::new(intent.clone());
+        let message = IntentGossipMessage::new(intent);
 
         let bytes = message.to_bytes();
         let message_from_bytes = IntentGossipMessage::try_from(bytes.as_ref())
@@ -319,7 +319,7 @@ mod tests {
     fn test_dkg_gossip_message() {
         let data = "arbitrary string".to_owned();
         let dkg = Dkg::new(data);
-        let message = DkgGossipMessage::new(dkg.clone());
+        let message = DkgGossipMessage::new(dkg);
 
         let bytes = message.to_bytes();
         let message_from_bytes = DkgGossipMessage::try_from(bytes.as_ref())
@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn test_dkg() {
         let data = "arbitrary string".to_owned();
-        let dkg = Dkg::new(data.clone());
+        let dkg = Dkg::new(data);
 
         let types_dkg: types::Dkg = dkg.clone().into();
         let dkg_from_types = Dkg::from(types_dkg);
