@@ -4,7 +4,7 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3dc207ab7e5835cb11997fc2abd52f707aa4847beab1a83b4f946a418808e287  Makefile"
+- commands: [echo "6024944b58a5f176db43ca46247b182774f9601f038fdc3162dc24fe488d3fdd  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -110,7 +110,7 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3dc207ab7e5835cb11997fc2abd52f707aa4847beab1a83b4f946a418808e287  Makefile"
+- commands: [echo "6024944b58a5f176db43ca46247b182774f9601f038fdc3162dc24fe488d3fdd  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -142,7 +142,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make clippy-check]
+- commands: [sccache --start-server, make clippy]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -150,7 +150,7 @@ steps:
     SCCACHE_BUCKET: heliax-drone-cache-v2
     SCCACHE_S3_KEY_PREFIX: sccache-check
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clippy-check
+  name: clippy
   pull: if-not-exists
 - commands: [sccache --start-server, make fmt-check]
   depends_on: [restore-cache]
@@ -163,7 +163,7 @@ steps:
   name: fmt-check
   pull: if-not-exists
 - commands: [cargo-cache]
-  depends_on: [clippy-check, fmt-check]
+  depends_on: [clippy, fmt-check]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
   pull: if-not-exists
@@ -197,7 +197,7 @@ kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3dc207ab7e5835cb11997fc2abd52f707aa4847beab1a83b4f946a418808e287  Makefile"
+- commands: [echo "6024944b58a5f176db43ca46247b182774f9601f038fdc3162dc24fe488d3fdd  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -280,7 +280,7 @@ kind: pipeline
 name: anoma-ci-audit-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3dc207ab7e5835cb11997fc2abd52f707aa4847beab1a83b4f946a418808e287  Makefile"
+- commands: [echo "6024944b58a5f176db43ca46247b182774f9601f038fdc3162dc24fe488d3fdd  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -347,7 +347,7 @@ kind: pipeline
 name: anoma-ci-miri-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3dc207ab7e5835cb11997fc2abd52f707aa4847beab1a83b4f946a418808e287  Makefile"
+- commands: [echo "6024944b58a5f176db43ca46247b182774f9601f038fdc3162dc24fe488d3fdd  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -420,7 +420,7 @@ kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [echo "3dc207ab7e5835cb11997fc2abd52f707aa4847beab1a83b4f946a418808e287  Makefile"
+- commands: [echo "6024944b58a5f176db43ca46247b182774f9601f038fdc3162dc24fe488d3fdd  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -501,7 +501,7 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [echo "3dc207ab7e5835cb11997fc2abd52f707aa4847beab1a83b4f946a418808e287  Makefile"
+- commands: [echo "6024944b58a5f176db43ca46247b182774f9601f038fdc3162dc24fe488d3fdd  Makefile"
       | sha256sum -c -, echo "1f936cd80d5361b6e4d38a492133e13c3b80d613fac512d22c574f96b69a9d2a  wasm/vps/vp_template/Makefile"
       | sha256sum -c -, echo "fffb93df6818d9e7afe682bc1120e2068bde6224cb1c77edb3bb2710e3baed81  wasm/vps/vp_token/Makefile"
       | sha256sum -c -, echo "ff903ca4314f5a754ac887fde8c365379e70541c52b07e24e043da3afd54901b  wasm/vps/vp_user/Makefile"
@@ -618,6 +618,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 23c0a0c603d2365afed02663cdc886e96e621ddc861bb4a2f013da04f683f677
+hmac: 3cc71ac1cd21252dfce959dc58b66bbf1c341d538d251b5698bdade7483cac3a
 
 ...
