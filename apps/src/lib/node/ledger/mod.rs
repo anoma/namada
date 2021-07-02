@@ -111,7 +111,13 @@ impl Shell {
         }
     }
 
-    /// Run the shell in the current thread (blocking).
+    /// Run the shell in the current thread (blocking). This is the intended way to interact with
+    /// the shell. It will forward received commands to the appropriate internal methods which we
+    /// do not expose outward.
+    ///
+    /// N.B. This is intended to be called by third party software whose correctness we assume, e.g.
+    /// the Tendermint ABCI. We thus do not duplicate checks on the validity of state transitions
+    /// here.
     pub fn run(mut self) -> Result<()> {
         loop {
             let msg = self.abci.recv().map_err(Error::AbciChannelRecvError)?;
@@ -200,7 +206,11 @@ impl Shell {
         Ok(())
     }
 
-    pub fn init_chain(&mut self, chain_id: String) -> Result<()> {
+    /// Create a new genesis for the chain with specified id. At present this includes
+    /// 1. A set of initial users and tokens
+    /// 2. Setting up the validity predicates for both users and tokens
+    /// 3. A matchmaker
+     fn init_chain(&mut self, chain_id: String) -> Result<()> {
         let (current_chain_id, _) = self.storage.get_chain_id();
         if current_chain_id != chain_id {
             return Err(Error::ChainIdError(format!(
@@ -296,7 +306,7 @@ impl Shell {
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
-    pub fn mempool_validate(
+    fn mempool_validate(
         &self,
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
@@ -306,7 +316,7 @@ impl Shell {
     }
 
     /// Validate and apply a transaction.
-    pub fn apply_tx(
+    fn apply_tx(
         &mut self,
         tx_bytes: &[u8],
     ) -> (i64, Result<protocol::TxResult>) {
@@ -346,7 +356,7 @@ impl Shell {
     }
 
     /// Simulate validation and application of a transaction.
-    pub fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
+    fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> Result<String> {
         let mut gas_meter = BlockGasMeter::default();
         let mut write_log = self.write_log.clone();
         let result = protocol::apply_tx(
@@ -360,17 +370,17 @@ impl Shell {
     }
 
     /// Begin a new block.
-    pub fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
+    fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
         self.gas_meter.reset();
         self.storage.begin_block(hash, height).unwrap();
     }
 
     /// End a block.
-    pub fn end_block(&mut self, _height: BlockHeight) {}
+    fn end_block(&mut self, _height: BlockHeight) {}
 
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
-    pub fn commit(&mut self) -> MerkleRoot {
+    fn commit(&mut self) -> MerkleRoot {
         // commit changes from the write-log to storage
         self.write_log
             .commit_block(&mut self.storage)
@@ -394,7 +404,7 @@ impl Shell {
 
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any.
-    pub fn last_state(&mut self) -> Option<(MerkleRoot, u64)> {
+    fn last_state(&self) -> Option<(MerkleRoot, u64)> {
         let result = self.storage.get_state();
         match &result {
             Some((root, height)) => {
