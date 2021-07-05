@@ -25,6 +25,8 @@ pub enum RuntimeError {
     EncodingError(std::io::Error),
     #[error("Numeric conversion error: {0}")]
     NumConversionError(TryFromIntError),
+    #[error("Memory error: {0}")]
+    MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
 }
 
 /// VP environment function result
