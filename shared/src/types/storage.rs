@@ -40,6 +40,10 @@ pub const RESERVED_ADDRESS_PREFIX: char = '#';
 pub const VP_KEY_PREFIX: char = '?';
 /// The reserved storage key for validity predicates
 pub const RESERVED_VP_KEY: &str = "?";
+/// The reserved storage key prefix for IBC-related data
+pub const IBC_KEY_PREFIX: char = '^';
+/// The reserved storage key for IBC-related data
+pub const RESERVED_IBC_KEY: &str = "^";
 
 /// Height of a block, i.e. the level.
 #[derive(
@@ -235,6 +239,19 @@ impl Key {
             }
             _ => false,
         }
+    }
+
+    /// Check if the given key is a key to IBC-related data
+    pub fn is_ibc_key(&self) -> bool {
+        self.segments[0] == DbKeySeg::StringSeg(RESERVED_IBC_KEY.to_owned())
+    }
+
+    /// Returns a key of the IBC-related data
+    /// Only this function can push "^" segment for IBC
+    pub fn ibc_key(path: impl AsRef<str>) -> Result<Self> {
+        let path = Self::parse(path)?;
+        let prefix = Self::from(RESERVED_IBC_KEY.to_owned().to_db_key());
+        Ok(prefix.join(&path))
     }
 }
 

@@ -1,7 +1,20 @@
 //! Native validity predicate interface associated with internal accounts such
 //! as the PoS and IBC modules.
 use std::collections::HashSet;
+use std::convert::TryInto;
+use std::str::FromStr;
 
+use ibc::ics02_client::client_consensus::AnyConsensusState;
+use ibc::ics02_client::client_state::AnyClientState;
+use ibc::ics02_client::client_type::ClientType;
+use ibc::ics02_client::context::ClientReader;
+use ibc::ics02_client::height::Height;
+use ibc::ics24_host::identifier::ClientId;
+use ibc::ics24_host::Path;
+use prost::Message;
+use prost_types::Any;
+
+// use tendermint_proto::Protobuf;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::ibc::Ibc;
 use crate::ledger::pos::PoS;
@@ -45,8 +58,8 @@ pub trait NativeVp {
         verifiers: &HashSet<Address>,
     ) -> Result<bool>
     where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: StorageHasher;
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: 'static + StorageHasher;
 }
 
 /// A validity predicate's host context.
@@ -238,6 +251,92 @@ where
                 "The \"wasm-runtime\" feature must be enabled to use the \
                  `eval` function."
             )
+        }
+    }
+}
+
+impl<'a, DB, H> ClientReader for Ctx<'a, DB, H>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    fn client_type(&self, client_id: &ClientId) -> Option<ClientType> {
+        let path = Path::ClientType(client_id.clone()).to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client type shouldn't fail");
+        match self.read_pre(&key) {
+            Ok(Some(value)) => {
+                let s: String = storage::types::decode(&value)
+                    .expect("decoding shouldn't fail");
+                Some(
+                    ClientType::from_str(&s)
+                        .expect("conversion shouldn't fail"),
+                )
+            }
+            // returns None even if DB read fail
+            _ => None,
+        }
+    }
+
+    fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState> {
+        let path = Path::ClientState(client_id.clone()).to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client state shouldn't fail");
+        match self.read_pre(&key) {
+            Ok(Some(value)) => {
+                let state = Any::decode(&*value)
+                    .expect("decoding a client state failed");
+                Some(state.try_into().expect("client state conversion failed"))
+                // Some(AnyClientState::decode_vec(&value).expect("decoding a
+                // client state failed"))
+            }
+            // returns None even if DB read fail
+            _ => None,
+        }
+    }
+
+    fn consensus_state(
+        &self,
+        client_id: &ClientId,
+        height: Height,
+    ) -> Option<AnyConsensusState> {
+        let path = Path::ClientConsensusState {
+            client_id: client_id.clone(),
+            epoch: height.revision_number,
+            height: height.revision_height,
+        }
+        .to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a consensus state shouldn't fail");
+        match self.read_pre(&key) {
+            Ok(Some(value)) => {
+                let state = Any::decode(&*value)
+                    .expect("decoding a consensus state failed");
+                Some(
+                    state
+                        .try_into()
+                        .expect("consensus state conversion failed"),
+                )
+
+                // Some(AnyConsensusState::decode_vec(&value).expect("decoding a
+                // consensus state failed"))
+            }
+            // returns None even if DB read fail
+            _ => None,
+        }
+    }
+
+    fn client_counter(&self) -> u64 {
+        let path = "clients/counter".to_owned();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client counter failed");
+        match self.read_pre(&key) {
+            Ok(Some(value)) => storage::types::decode(&value)
+                .expect("converting a client counter failed"),
+            _ => {
+                tracing::error!("client counter doesn't exist");
+                unreachable!();
+            }
         }
     }
 }
