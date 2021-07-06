@@ -107,7 +107,7 @@ dependencies = [
  "tempfile",
  "tendermint 0.20.0",
  "tendermint-abci",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
+ "tendermint-proto 0.20.0",
  "tendermint-rpc",
  "thiserror",
  "tokio",
@@ -145,7 +145,7 @@ dependencies = [
  "serde 1.0.126",
  "sha2 0.9.5",
  "sparse-merkle-tree",
- "tendermint-proto 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tendermint-proto 0.19.0",
  "test-env-log",
  "thiserror",
  "tonic-build",
@@ -1783,6 +1783,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gumdrop"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46571f5d540478cf70d2a42dd0d6d8e9f4b9cc7531544b93311e657b86568a0b"
+dependencies = [
+ "gumdrop_derive",
+]
+
+[[package]]
+name = "gumdrop_derive"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "915ef07c710d84733522461de2a734d4d62a3fd39a4d4f404c2f385ef8618d05"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2021,9 +2041,11 @@ dependencies = [
  "serde 1.0.126",
  "serde_derive",
  "serde_json",
+ "sha2 0.9.5",
  "subtle-encoding",
  "tendermint 0.19.0",
  "tendermint-proto 0.19.0",
+ "tendermint-testgen",
  "thiserror",
  "tracing",
 ]
@@ -4358,6 +4380,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f0242b8e50dd9accdd56170e94ca1ebd223b098eb9c83539a6e367d0f36ae68"
 
 [[package]]
+name = "simple-error"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc47a29ce97772ca5c927f75bac34866b16d64e07f330c3248e2d7226623901b"
+
+[[package]]
 name = "slab"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4598,7 +4626,7 @@ dependencies = [
  "signature",
  "subtle 2.4.0",
  "subtle-encoding",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
+ "tendermint-proto 0.20.0",
  "thiserror",
  "toml",
  "url",
@@ -4613,7 +4641,7 @@ dependencies = [
  "bytes 1.0.1",
  "eyre",
  "prost",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
+ "tendermint-proto 0.20.0",
  "thiserror",
  "tracing",
 ]
@@ -4656,25 +4684,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tendermint-proto"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fadcaea1eecd91dbdd9636fe8ad38d2b41fc0ae814c176e51e00925cdda78a34"
-dependencies = [
- "anomaly",
- "bytes 1.0.1",
- "chrono",
- "num-derive",
- "num-traits 0.2.14",
- "prost",
- "prost-types",
- "serde 1.0.126",
- "serde_bytes",
- "subtle-encoding",
- "thiserror",
-]
-
-[[package]]
 name = "tendermint-rpc"
 version = "0.20.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#5ff96bdabd7eba02e2cdeea90799cc8d72effea5"
@@ -4694,13 +4703,28 @@ dependencies = [
  "serde_json",
  "subtle-encoding",
  "tendermint 0.20.0",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
+ "tendermint-proto 0.20.0",
  "thiserror",
  "tokio",
  "tracing",
  "url",
  "uuid",
  "walkdir",
+]
+
+[[package]]
+name = "tendermint-testgen"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bc19930d52024c6c061071a10f92caec0cb6416067e39264c6553eb6c6147f8"
+dependencies = [
+ "ed25519-dalek",
+ "gumdrop",
+ "serde 1.0.126",
+ "serde_json",
+ "simple-error",
+ "tempfile",
+ "tendermint 0.19.0",
 ]
 
 [[package]]

@@ -1,7 +1,8 @@
 //! Native validity predicate interface associated with internal accounts such
 //! as the PoS and IBC modules.
+use std::cell::RefCell;
 use std::collections::HashSet;
-use std::convert::TryInto;
+use std::rc::Rc;
 use std::str::FromStr;
 
 use ibc::ics02_client::client_consensus::AnyConsensusState;
@@ -11,10 +12,8 @@ use ibc::ics02_client::context::ClientReader;
 use ibc::ics02_client::height::Height;
 use ibc::ics24_host::identifier::ClientId;
 use ibc::ics24_host::Path;
-use prost::Message;
-use prost_types::Any;
+use tendermint_proto::Protobuf;
 
-// use tendermint_proto::Protobuf;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::ibc::Ibc;
 use crate::ledger::pos::PoS;
@@ -74,9 +73,9 @@ where
     H: StorageHasher,
 {
     /// Storage prefix iterators.
-    pub iterators: PrefixIterators<'a, DB>,
+    pub iterators: Rc<RefCell<PrefixIterators<'a, DB>>>,
     /// VP gas meter.
-    pub gas_meter: VpGasMeter,
+    pub gas_meter: Rc<RefCell<VpGasMeter>>,
     /// Read-only access to the storage.
     pub storage: &'a Storage<DB, H>,
     /// Read-only access to the write log.
@@ -98,8 +97,8 @@ where
         gas_meter: VpGasMeter,
     ) -> Self {
         Self {
-            iterators: PrefixIterators::default(),
-            gas_meter,
+            iterators: Rc::new(RefCell::new(PrefixIterators::default())),
+            gas_meter: Rc::new(RefCell::new(gas_meter)),
             storage,
             write_log,
             tx,
@@ -107,22 +106,22 @@ where
     }
 
     /// Add a gas cost incured in a validity predicate
-    pub fn add_gas(&mut self, used_gas: u64) -> Result<()> {
-        vp_env::add_gas(&mut self.gas_meter, used_gas)
+    pub fn add_gas(&self, used_gas: u64) -> Result<()> {
+        vp_env::add_gas(&mut *self.gas_meter.borrow_mut(), used_gas)
     }
 
     /// Storage read prior state (before tx execution). It will try to read from
     /// the storage.
-    pub fn read_pre(&mut self, key: &Key) -> Result<Option<Vec<u8>>> {
-        vp_env::read_pre(&mut self.gas_meter, self.storage, key)
+    pub fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
+        vp_env::read_pre(&mut *self.gas_meter.borrow_mut(), self.storage, key)
     }
 
     /// Storage read posterior state (after tx execution). It will try to read
     /// from the write log first and if no entry found then from the
     /// storage.
-    pub fn read_post(&mut self, key: &Key) -> Result<Option<Vec<u8>>> {
+    pub fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_env::read_post(
-            &mut self.gas_meter,
+            &mut *self.gas_meter.borrow_mut(),
             self.storage,
             self.write_log,
             key,
@@ -131,15 +130,19 @@ where
 
     /// Storage `has_key` in prior state (before tx execution). It will try to
     /// read from the storage.
-    pub fn has_key_pre(&mut self, key: &Key) -> Result<bool> {
-        vp_env::has_key_pre(&mut self.gas_meter, self.storage, key)
+    pub fn has_key_pre(&self, key: &Key) -> Result<bool> {
+        vp_env::has_key_pre(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+            key,
+        )
     }
 
     /// Storage `has_key` in posterior state (after tx execution). It will try
     /// to check the write log first and if no entry found then the storage.
-    pub fn has_key_post(&mut self, key: &Key) -> Result<bool> {
+    pub fn has_key_post(&self, key: &Key) -> Result<bool> {
         vp_env::has_key_post(
-            &mut self.gas_meter,
+            &mut *self.gas_meter.borrow_mut(),
             self.storage,
             self.write_log,
             key,
@@ -147,48 +150,59 @@ where
     }
 
     /// Getting the chain ID.
-    pub fn get_chain_id(&mut self) -> Result<String> {
-        vp_env::get_chain_id(&mut self.gas_meter, self.storage)
+    pub fn get_chain_id(&self) -> Result<String> {
+        vp_env::get_chain_id(&mut *self.gas_meter.borrow_mut(), self.storage)
     }
 
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
-    pub fn get_block_height(&mut self) -> Result<BlockHeight> {
-        vp_env::get_block_height(&mut self.gas_meter, self.storage)
+    pub fn get_block_height(&self) -> Result<BlockHeight> {
+        vp_env::get_block_height(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+        )
     }
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.
-    pub fn get_block_hash(&mut self) -> Result<BlockHash> {
-        vp_env::get_block_hash(&mut self.gas_meter, self.storage)
+    pub fn get_block_hash(&self) -> Result<BlockHash> {
+        vp_env::get_block_hash(&mut *self.gas_meter.borrow_mut(), self.storage)
     }
 
     /// Storage prefix iterator. It will try to get an iterator from the
     /// storage.
     pub fn iter_prefix(
-        &mut self,
+        &self,
         prefix: &Key,
     ) -> Result<<DB as storage::DBIter<'a>>::PrefixIter> {
-        vp_env::iter_prefix(&mut self.gas_meter, self.storage, prefix)
+        vp_env::iter_prefix(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+            prefix,
+        )
     }
 
     /// Storage prefix iterator for prior state (before tx execution). It will
     /// try to read from the storage.
     pub fn iter_pre_next(
-        &mut self,
+        &self,
         iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>> {
-        vp_env::iter_pre_next::<DB>(&mut self.gas_meter, iter)
+        vp_env::iter_pre_next::<DB>(&mut *self.gas_meter.borrow_mut(), iter)
     }
 
     /// Storage prefix iterator next for posterior state (after tx execution).
     /// It will try to read from the write log first and if no entry found
     /// then from the storage.
     pub fn iter_post_next(
-        &mut self,
+        &self,
         iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>> {
-        vp_env::iter_post_next::<DB>(&mut self.gas_meter, self.write_log, iter)
+        vp_env::iter_post_next::<DB>(
+            &mut *self.gas_meter.borrow_mut(),
+            self.write_log,
+            iter,
+        )
     }
 
     /// Evaluate a validity predicate with given data. The address, changed
@@ -198,7 +212,7 @@ where
     /// If the execution fails for whatever reason, this will return `false`.
     /// Otherwise returns the result of evaluation.
     pub fn eval(
-        &mut self,
+        &self,
         address: &Address,
         keys_changed: &HashSet<Key>,
         verifiers: &HashSet<Address>,
@@ -224,7 +238,7 @@ where
                 address,
                 self.storage,
                 self.write_log,
-                &mut self.gas_meter,
+                &mut *self.gas_meter.borrow_mut(),
                 self.tx,
                 &mut iterators,
                 verifiers,
@@ -264,7 +278,7 @@ where
         let path = Path::ClientType(client_id.clone()).to_string();
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client type shouldn't fail");
-        match self.read_pre(&key) {
+        match self.read_post(&key) {
             Ok(Some(value)) => {
                 let s: String = storage::types::decode(&value)
                     .expect("decoding shouldn't fail");
@@ -273,7 +287,7 @@ where
                         .expect("conversion shouldn't fail"),
                 )
             }
-            // returns None even if DB read fail
+            // returns None even if DB read fails
             _ => None,
         }
     }
@@ -282,15 +296,12 @@ where
         let path = Path::ClientState(client_id.clone()).to_string();
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client state shouldn't fail");
-        match self.read_pre(&key) {
-            Ok(Some(value)) => {
-                let state = Any::decode(&*value)
-                    .expect("decoding a client state failed");
-                Some(state.try_into().expect("client state conversion failed"))
-                // Some(AnyClientState::decode_vec(&value).expect("decoding a
-                // client state failed"))
-            }
-            // returns None even if DB read fail
+        match self.read_post(&key) {
+            Ok(Some(value)) => Some(
+                AnyClientState::decode_vec(&value)
+                    .expect("decoding a client state failed"),
+            ),
+            // returns None even if DB read fails
             _ => None,
         }
     }
@@ -308,20 +319,12 @@ where
         .to_string();
         let key = Key::ibc_key(path)
             .expect("Creating a key for a consensus state shouldn't fail");
-        match self.read_pre(&key) {
-            Ok(Some(value)) => {
-                let state = Any::decode(&*value)
-                    .expect("decoding a consensus state failed");
-                Some(
-                    state
-                        .try_into()
-                        .expect("consensus state conversion failed"),
-                )
-
-                // Some(AnyConsensusState::decode_vec(&value).expect("decoding a
-                // consensus state failed"))
-            }
-            // returns None even if DB read fail
+        match self.read_post(&key) {
+            Ok(Some(value)) => Some(
+                AnyConsensusState::decode_vec(&value)
+                    .expect("decoding a consensus state failed"),
+            ),
+            // returns None even if DB read fails
             _ => None,
         }
     }
@@ -330,7 +333,7 @@ where
         let path = "clients/counter".to_owned();
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client counter failed");
-        match self.read_pre(&key) {
+        match self.read_post(&key) {
             Ok(Some(value)) => storage::types::decode(&value)
                 .expect("converting a client counter failed"),
             _ => {
