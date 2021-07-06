@@ -176,19 +176,23 @@ The invariants for updates in both cases are that `m - n >= 0` and `m - n <= pip
 
 For the active validator set, we store all the active and inactive validators separately with their respective voting power:
 ```rust,ignore
+type VotingPower = u64;
+
+/// Validator's address with its voting power.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct WeighedValidator {
+  /// The `voting_power` field must be on top, because lexicographic ordering is
+  /// based on the top-to-bottom declaration order and in the `ValidatorSet`
+  /// the `WeighedValidator`s these need to be sorted by the `voting_power`.
+  voting_power: VotingPower,
+  address: Address,
+}
+
 struct ValidatorSet {
   /// Active validator set with maximum size equal to `max_active_validators`
-  active: HashMap<Address, VotingPower>,
+  active: BTreeSet<WeighedValidator>,
   /// All the other validators that are not active
-  inactive: HashMap<Address, VotingPower>,
-  /// Active validator with the lowest voting power
-  min_active: Address,
-  /// The lowest active validator's voting power
-  min_active_power: VotingPower,
-  /// Inactive validator with the greatest voting power
-  max_inactive: Address,
-  /// The greatest inactive validator's voting power
-  max_inactive_power: VotingPower,
+  inactive: BTreeSet<WeighedValidator>,
 }
 
 type ValidatorSets = Epoched<ValidatorSet>;
@@ -198,31 +202,24 @@ When any validator's voting power changes, we attempt to perform the following u
 
 1. let `validator` be the validator's address, `power_before` and `power_after` be the voting power before and after the change, respectively
 1. let `power_delta = power_after - power_before`
-1. find whether the validator is active, let `is_active = power_before >= max_inactive_power`
+1. let `min_active = inactive.first()`
+1. let `max_inactive = inactive.last()`
+1. find whether the validator is active, let `is_active = power_before >= max_inactive.voting_power`
    1. if `is_active`:
-      1. if `power_delta > 0 && power_after > max_inactive_power`:
-         1. update the validator in `active` set with `voting_power = power_after`
-         1. if `power_after < min_active`, set the `min_active = validator` and `min_active_power = power_after`
-      1. else:
-         1. remove the validator from `active`, insert it into `inactive` and remove `max_inactive` from `inactive` and insert it into `active`
-         1. if `power_after > max_inactive_power`, set `max_inactive = validator` and `max_inactive_power = power_after`
-         1. if `power_before == min_active_power`, find the validator with lowest voting power in `active` and update the `min_active` and `min_active_power` with its address and voting power, respectively
+      1. if `power_delta > 0 && power_after > max_inactive.voting_power`, update the validator in `active` set with `voting_power = power_after`
+      1. else, remove the validator from `active`, insert it into `inactive` and remove `max_inactive.address` from `inactive` and insert it into `active`
    1. else (`!is_active`):
-      1. if `power_delta < 0 && power_after < min_active_power`:
-         1. update the validator in `inactive` set with `voting_power = power_after`
-         1. if `power_after > max_inactive`, set the `max_inactive = validator` and `max_inactive_power = power_after`
-      1. else:
-         1. remove the validator from `inactive`, insert it into `active` and remove `min_active` from `active` and insert it into `inactive`
-         1. if `power_after < min_active_power`, set `min_active = validator` and `min_active_power = power_after`
-         1. if `power_before == max_inactive_power`, find the validator with greatest voting power in `inactive` and update the `max_inactive` and `max_inactive_power` with its address and voting power, respectively
+      1. if `power_delta < 0 && power_after < min_active.voting_power`, update the validator in `inactive` set with `voting_power = power_after`
+      1. else, remove the validator from `inactive`, insert it into `active` and remove `min_active.address` from `active` and insert it into `inactive`
 
-Within each validator's address space, we store public consensus key, state and total bonded token amount:
+Within each validator's address space, we store public consensus key, state, total bonded token amount and voting power calculated from the total bonded token amount (even though the voting power is stored in the `ValidatorSet`, we also need to have the `voting_power` here because we cannot look it up in the `ValidatorSet` without iterating the whole set):
 
 ```rust,ignore
 struct Validator {
   consensus_key: Epoched<PublicKey>,
   state: Epoched<ValidatorState>,
   total_deltas: Epoched<token::Amount>,
+  voting_power: Epoched<VotingPower>,
 }
 
 enum ValidatorState {
