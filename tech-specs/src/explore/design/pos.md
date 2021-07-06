@@ -127,8 +127,8 @@ Epoched data are stored in the following structure:
 struct Epoched<Data> {
   /// The epoch in which this data was last updated
   last_update: Epoch,
-  /// Fixed-size array in which the head is the data for epoch in which the 
-  /// `last_update` was performed and every consecutive array element is the 
+  /// Fixed-size array in which the head is the data for epoch in which the
+  /// `last_update` was performed and every consecutive array element is the
   /// successor epoch of the predecessor array element.
   data: [Option<Data>; PIPELINE_LENGTH + 1],
 }
@@ -148,6 +148,31 @@ To look-up a value for `Epoched` data with delta values in the current epoch `n`
 
 1. let `end = min(n - last_update, pipeline_length) + 1`
 1. sum all the values that are not `None` in the `0 .. end` range bounded inclusively below and exclusively above
+
+To update a value in `Epoched` data with independent values in epoch `n` with value `new` for epoch `m`:
+
+1. let `shift = min(n - last_update, pipeline_length)`
+1. if `shift == 0`:
+   1. `data[m - n] = new`
+1. else:
+   1. for `i in 0 .. shift` range bounded inclusively below and exclusively above, set `data[i] = None`
+   1. rotate `data` left by `shift`
+   1. set `data[m - n] = new`
+   1. set `last_update` to the current epoch
+
+To update a value in `Epoched` data with delta values in epoch `n` with value `delta` for epoch `m`:
+
+1. let `shift = min(n - last_update, pipeline_length)`
+1. if `shift == 0`:
+   1. set `data[m - n] = data[m - n].map_or_else(delta, |last_delta| last_delta + delta)` (add the `delta` to the previous value, if any, otherwise use the `delta` as the value)
+1. else:
+   1. let `sum` to be equal to the sum of all delta values in the `i in 0 .. shift` range bounded inclusively below and exclusively above and set `data[i] = None`
+   1. rotate `data` left by `shift`
+   1. set `data[0] = data[0].map_or_else(sum, |last_delta| last_delta + sum)`
+   1. set `data[m - n] = delta`
+   1. set `last_update` to the current epoch
+
+The invariants for updates in both cases are that `m - n >= 0` and `m - n <= pipeline_length`.
 
 For the active validator set, we store all the active and inactive validators separately with their respective voting power:
 ```rust,ignore
