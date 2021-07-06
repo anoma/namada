@@ -102,7 +102,7 @@ fn get_ibc_prefix(key: &Key) -> IbcPrefix {
 
 fn get_client_id(key: &Key) -> Result<ClientId> {
     ClientId::from_str(&key.segments[2].raw())
-        .map_err(|e| RuntimeError::IbcDecodingError(e.to_string()))
+        .map_err(|e| RuntimeError::IbcKeyError(e.to_string()))
 }
 
 fn get_client_state_change<DB, H>(
@@ -241,8 +241,8 @@ mod tests {
         // insert a mock client state
         let client_state_key = get_client_state_key();
         let height = Height::new(1, 10);
-        let header = MockHeader::new(height.clone());
-        let client_state = MockClientState(header.clone()).wrap_any();
+        let header = MockHeader::new(height);
+        let client_state = MockClientState(header).wrap_any();
         let bytes = client_state.encode_vec().expect("encoding failed");
         write_log
             .write(&client_state_key, bytes)
@@ -263,7 +263,7 @@ mod tests {
         let mut ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
 
         let mut keys_changed = HashSet::new();
-        keys_changed.insert(client_state_key.clone());
+        keys_changed.insert(client_state_key);
 
         let verifiers = HashSet::new();
 

@@ -27,8 +27,8 @@ pub enum RuntimeError {
     NumConversionError(TryFromIntError),
     #[error("Memory error: {0}")]
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
-    #[error("IBC data decoding error: {0}")]
-    IbcDecodingError(String),
+    #[error("IBC key error: {0}")]
+    IbcKeyError(String),
 }
 
 /// VP environment function result

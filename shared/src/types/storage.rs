@@ -322,6 +322,9 @@ impl KeySeg for DbKeySeg {
             Some(c) if c == VP_KEY_PREFIX && string == RESERVED_VP_KEY => {
                 Err(Error::InvalidKeySeg(string))
             }
+            Some(c) if c == IBC_KEY_PREFIX && string == RESERVED_IBC_KEY => {
+                Err(Error::InvalidKeySeg(string))
+            }
             _ => Ok(DbKeySeg::StringSeg(string)),
         }
     }
@@ -402,17 +405,17 @@ mod tests {
         /// This test excludes key segments starting with `#` or `?`
         /// because they are reserved for `Address` or a validity predicate.
         #[test]
-        fn test_key_parse(s in "[^#?/][^/]*/[^#?/][^/]*/[^#?/][^/]*") {
+        fn test_key_parse(s in "[^#?/^][^/]*/[^#?/^][^/]*/[^#?/^][^/]*") {
             let key = Key::parse(s.clone()).expect("cannnot parse the string");
             assert_eq!(key.to_string(), s);
         }
 
         /// Tests that any key that doesn't contain reserved prefixes and
         /// separators is valid. This test excludes key segments including `/`
-        /// or starting with `#` or `?` because they are reserved for separator,
-        /// `Address` or validity predicate.
+        /// or starting with `#`, `?` or `^` because they are reserved for
+        /// separator, `Address` or validity predicate.
         #[test]
-        fn test_key_push(s in "[^#?/][^/]*") {
+        fn test_key_push(s in "[^#?/^][^/]*") {
             let addr = address::testing::established_address_1();
             let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
             assert_eq!(key.segments[1].raw(), s);
@@ -429,6 +432,10 @@ mod tests {
         let target = "?test/test@".to_owned();
         let key = Key::parse(target.clone()).expect("cannot parse the string");
         assert_eq!(key.to_string(), target);
+
+        let target = "^test/test@".to_owned();
+        let key = Key::parse(target.clone()).expect("cannot parse the string");
+        assert_eq!(key.to_string(), target);
     }
 
     #[test]
@@ -436,6 +443,12 @@ mod tests {
         let target = "?/test".to_owned();
         match Key::parse(target).expect_err("unexpectedly succeeded") {
             Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
+            _ => panic!("unexpected error happens"),
+        }
+
+        let target = "^/test".to_owned();
+        match Key::parse(target).expect_err("unexpectedly succeeded") {
+            Error::InvalidKeySeg(s) => assert_eq!(s, "^"),
             _ => panic!("unexpected error happens"),
         }
     }
