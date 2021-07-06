@@ -114,7 +114,120 @@ The invariant is that the sum of amounts that may be withdrawn from a misbehavin
 
 ## Storage
 
-TODO
+The [system parameters](#system-parameters) are written into the storage to allow for their changes.
+
+The validators' data are keyed by the their addresses, conceptually:
+
+```rust,ignore
+type Validators = HashMap<Address, Validator>;
+```
+
+Epoched data are stored in the following structure:
+```rust,ignore
+struct Epoched<Data> {
+  /// The epoch in which this data was last updated
+  last_update: Epoch,
+  /// Fixed-size array in which the head is the data for epoch in which the 
+  /// `last_update` was performed and every consecutive array element is the 
+  /// successor epoch of the predecessor array element.
+  data: [Option<Data>; PIPELINE_LENGTH + 1],
+}
+```
+
+Note that not all epochs will have data set, only the ones in which some changes occurred.
+
+To try to look-up a value for `Epoched` data with independent values in each epoch (such as the active validator set) in the current epoch `n`:
+
+1. let `index = min(n - last_update, pipeline_length)`
+1. read the `data` field at `index`:
+   1. if there's a value at `index` return it
+   1. else if `index == 0`, return `None`
+   1. else decrement `index` and repeat this sub-step from 1.
+
+To look-up a value for `Epoched` data with delta values in the current epoch `n`:
+
+1. let `end = min(n - last_update, pipeline_length) + 1`
+1. sum all the values that are not `None` in the `0 .. end` range bounded inclusively below and exclusively above
+
+For the active validator set, we store all the active and inactive validators separately with their respective voting power:
+```rust,ignore
+struct ValidatorSet {
+  /// Active validator set with maximum size equal to `max_active_validators`
+  active: HashMap<Address, VotingPower>,
+  /// All the other validators that are not active
+  inactive: HashMap<Address, VotingPower>,
+  /// Active validator with the lowest voting power
+  min_active: Address,
+  /// The lowest active validator's voting power
+  min_active_power: VotingPower,
+  /// Inactive validator with the greatest voting power
+  max_inactive: Address,
+  /// The greatest inactive validator's voting power
+  max_inactive_power: VotingPower,
+}
+
+type ValidatorSets = Epoched<ValidatorSet>;
+```
+
+When any validator's voting power changes, we attempt to perform the following update on the `ActiveValidatorSet`:
+
+1. let `validator` be the validator's address, `power_before` and `power_after` be the voting power before and after the change, respectively
+1. let `power_delta = power_after - power_before`
+1. find whether the validator is active, let `is_active = power_before >= max_inactive_power`
+   1. if `is_active`:
+      1. if `power_delta > 0 && power_after > max_inactive_power`:
+         1. update the validator in `active` set with `voting_power = power_after`
+         1. if `power_after < min_active`, set the `min_active = validator` and `min_active_power = power_after`
+      1. else:
+         1. remove the validator from `active`, insert it into `inactive` and remove `max_inactive` from `inactive` and insert it into `active`
+         1. if `power_after > max_inactive_power`, set `max_inactive = validator` and `max_inactive_power = power_after`
+         1. if `power_before == min_active_power`, find the validator with lowest voting power in `active` and update the `min_active` and `min_active_power` with its address and voting power, respectively
+   1. else (`!is_active`):
+      1. if `power_delta < 0 && power_after < min_active_power`:
+         1. update the validator in `inactive` set with `voting_power = power_after`
+         1. if `power_after > max_inactive`, set the `max_inactive = validator` and `max_inactive_power = power_after`
+      1. else:
+         1. remove the validator from `inactive`, insert it into `active` and remove `min_active` from `active` and insert it into `inactive`
+         1. if `power_after < min_active_power`, set `min_active = validator` and `min_active_power = power_after`
+         1. if `power_before == max_inactive_power`, find the validator with greatest voting power in `inactive` and update the `max_inactive` and `max_inactive_power` with its address and voting power, respectively
+
+Within each validator's address space, we store public consensus key, state and total bonded token amount:
+
+```rust,ignore
+struct Validator {
+  consensus_key: Epoched<PublicKey>,
+  state: Epoched<ValidatorState>,
+  total_deltas: Epoched<token::Amount>,
+}
+
+enum ValidatorState {
+  Inactive,
+  Pending,
+  Candidate,
+}
+```
+
+The bonds and unbonds are keyed by their identifier:
+
+```rust,ignore
+type Bonds = HashMap<BondId, Epoched<Bond>>;
+type Unbonds = HashMap<BondId, Epoched<Unbond>>;
+
+struct BondId {
+  validator: Address,
+  delegator: Address,
+}
+
+struct Bond {
+  delta: token::Amount,
+}
+
+struct Unbond {
+  /// The epoch of the bond from which this unbond was created
+  bond_epoch: Epoch,
+  delta: token::Amount,
+}
+```
 
 ## Initialization
 
