@@ -2,7 +2,7 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2018"
 license = "GPL-3.0"
-name = "matchmaker"
+name = "mm_template"
 resolver = "2"
 version = "0.1.0"
 
@@ -12,9 +12,6 @@ crate-type = ["cdylib"]
 [dependencies]
 anoma_vm_env = {path = "../../vm_env"}
 borsh = "0.9.0"
-petgraph = {version = "0.5.1", features = ["serde-1"]}
-serde = "1.0.125"
-serde_json = "1.0.64"
 wee_alloc = "0.4.5"
 
 [profile.release]
