@@ -74,7 +74,7 @@ A bond locks-up tokens from validators' self-bonding and delegators' delegations
 
 For each epoch, bonds are uniquely identified by the pair of delegator's and validator's addresses. A bond created in epoch `n` is written into epoch `n + pipeline_length`. If there already is a bond in the epoch `n + pipeline_length` for this pair of delegator's and validator's addresses, its tokens are incremented by the newly bonded amount.
 
-Any bonds created in epoch `n` increment the bond's validator's total bonded tokens by the bond's token amount for epoch `n + pipeline_length`.
+Any bonds created in epoch `n` increment the bond's validator's total bonded tokens by the bond's token amount and update the voting power for epoch `n + pipeline_length`.
 
 The tokens put into a bond are immediately deducted from the source account.
 
@@ -82,7 +82,7 @@ The tokens put into a bond are immediately deducted from the source account.
 
 An unbonding action (validator *unbond* or delegator *undelegate*) requested by the bond's source account in epoch `n` creates an "unbond" with epoch set to `n + unbounding_length`. We also store the epoch of the bond(s) from which the unbond is created in order to determine if the unbond should be slashed if a fault occurred within the range of bond epoch (inclusive) and unbond epoch (exclusive).
 
-Any unbonds created in epoch `n` decrements the bond's validator's total bonded tokens by the bond's token amount for epoch `n + unbonding_length`.
+Any unbonds created in epoch `n` decrements the bond's validator's total bonded tokens by the bond's token amount and update the voting power for epoch `n + unbonding_length`.
 
 An "unbond" with epoch set to `n` may be withdrawn by the bond's source address in or any time after the epoch `n`. Once withdrawn, the unbond is deleted and the tokens are credited to the source account.
 
@@ -92,7 +92,7 @@ TODO
 
 ### Slashing
 
-Instead of absolute values, validators' total bonded token amounts and bonds' and unbonds' token amounts are stored as their deltas (i.e. the change of quantity from a previous epoch) to allow distinguishing changes for different epoch, which is essential for determining whether tokens be slashed. However, because slashes for a fault that occurred in epoch `n` may only be applied before the beginning of epoch `n + unbonding_length`, in epoch `m` we can sum all the deltas of total bonded token amounts and bonds and unbond with the same delegator and validator for epoch equal or less than `m - unboding_length` into a single total bonded token amount, single bond and single unbond record. This is to keep the total number of total bonded token amounts for a unique validator and bonds and unbonds for a unique pair of delegator and validator bound to a maximum number (equal to `unboding_length`).
+Instead of absolute values, validators' total bonded token amounts and bonds' and unbonds' token amounts are stored as their deltas (i.e. the change of quantity from a previous epoch) to allow distinguishing changes for different epoch, which is essential for determining whether tokens should be slashed. However, because slashes for a fault that occurred in epoch `n` may only be applied before the beginning of epoch `n + unbonding_length`, in epoch `m` we can sum all the deltas of total bonded token amounts and bonds and unbond with the same delegator and validator for epoch equal or less than `m - unboding_length` into a single total bonded token amount, single bond and single unbond record. This is to keep the total number of total bonded token amounts for a unique validator and bonds and unbonds for a unique pair of delegator and validator bound to a maximum number (equal to `unboding_length`).
 
 To disincentivize validators misbehaviour in the PoS system a validator may be slashed for any fault that it has done. An evidence of misbehaviour may be submitted by any account for a fault that occurred in epoch `n` anytime before the beginning of epoch `n + unbonding_length`.
 
@@ -100,7 +100,7 @@ Actions that count as validator misbehaviour are:
 - double signing two or more blocks at the same height
 - going offline for a longer period (i.e. not producing signatures when available)
 
-A valid evidence reduces the validator's total bonded token amount by the slash rate in and before the epoch in which the fault occurred. Additionally, a slash is stored with the misbehaving validator's address and the relevant epoch in which the fault occurred. When a bond is being unbonded or unbond withdrawn, we first look-up if any slash occurred within the range of epochs in which these were active and if so, reduce its token amount by the slash rate.
+A valid evidence reduces the validator's total bonded token amount by the slash rate in and before the epoch in which the fault occurred. The validator's voting power must also be adjusted to the slashed total bonded token amount. Additionally, a slash is stored with the misbehaving validator's address and the relevant epoch in which the fault occurred. When a bond is being unbonded or unbond withdrawn, we first look-up if any slash occurred within the range of epochs in which these were active and if so, reduce its token amount by the slash rate.
 
 The invariant is that the sum of amounts that may be withdrawn from a misbehaving validator must always add up to the total bonded token amount.
 
