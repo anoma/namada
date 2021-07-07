@@ -1,5 +1,7 @@
 cargo := $(env) cargo
 rustup := $(env) rustup
+# Nightly build is currently used for rustfmt and clippy.
+nightly := $(shell cat ../../rust-nightly-version)
 
 # All the wasms that can be built from this source, switched via Cargo features
 # Wasms can be added via the Cargo.toml `[features]` list.
@@ -20,6 +22,24 @@ all: $(wasms)
 check: 
 	$(foreach wasm,$(wasms),make check_$(wasm) && ) true
 
+# `cargo check` all wasms
+check: 
+	$(foreach wasm,$(wasms),make check_$(wasm) && ) true
+
+# `cargo test` all wasms
+test:
+	$(foreach wasm,$(wasms),make test_$(wasm) && ) true
+
+# `cargo clippy` all wasms
+clippy:
+	$(foreach wasm,$(wasms),make clippy_$(wasm) && ) true
+
+fmt:
+	$(cargo) +$(nightly) fmt --all
+
+fmt-check:
+	$(cargo) +$(nightly) fmt --all -- --check
+
 # Build a selected wasm
 $(wasms): %:
 	$(cargo) build --release --target wasm32-unknown-unknown --features $@ && \
@@ -28,6 +48,10 @@ $(wasms): %:
 # `cargo check` one of the wasms, e.g. `make check_tx_no_op`
 $(patsubst %,check_%,$(wasms)): check_%:
 	$(cargo) check --target wasm32-unknown-unknown --features $*
+
+# `cargo test` one of the wasms, e.g. `make test_tx_no_op`
+$(patsubst %,test_%,$(wasms)): test_%:
+	$(cargo) test --features $*
 
 # `cargo watch` one of the wasms, e.g. `make watch_tx_no_op`
 $(patsubst %,watch_%,$(wasms)): watch_%:
@@ -40,4 +64,4 @@ clean:
 deps:
 	$(rustup) target add wasm32-unknown-unknown
 
-.PHONY : all check clean deps
+.PHONY : all check test clippy fmt fmt-check clean deps

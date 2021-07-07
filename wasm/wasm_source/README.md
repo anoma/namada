@@ -15,5 +15,7 @@ make all
 
 make tx_transfer         # build
 make check_tx_transfer   # cargo check
+make test_tx_transfer    # cargo test
 make watch_tx_transfer   # cargo watch
+make clippy_tx_transfer  # cargo clippy
 ```
