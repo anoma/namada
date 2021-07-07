@@ -10,7 +10,7 @@
       - [Transactions](./explore/design/ledger/tx.md)
       - [WASM VM](./explore/design/ledger/wasm-vm.md)
       - [Front-running prevention](./explore/design/ledger/front-running.md)
-      - [PoS integration](./explore/design/ledger/integration.md)
+      - [PoS integration](./explore/design/ledger/pos-integration.md)
     - [Gossip network](./explore/design/gossip.md)
     - [Intent gossip](./explore/design/intent_gossip.md)
         - [intent](./explore/design/intent_gossip/intent.md)
