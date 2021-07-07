@@ -2,9 +2,7 @@
 
 ## Epoch
 
-An epoch is a range of blocks, whose length is set by the `epoch_duration` [parameter](#system-parameters). Epochs are identified by consecutive integers starting at 0. All the data relevant to PoS are [associated with epochs](#epoched-data).
-
-An epoch starts at the beginning of block height `n` and end at the end of block height `n + epoch_duration - 1`. Then the following epoch starts at the beginning of block height `epoch_duration`, etc.
+An epoch is a range of blocks or time that is defined by the base ledger and made available to the PoS system. This document assumes that epochs are identified by consecutive integers starting at 0. All the data relevant to PoS are [associated with epochs](#epoched-data).
 
 ### Epoched data
 
@@ -102,7 +100,8 @@ The invariant is that the sum of amounts that may be withdrawn from a misbehavin
 
 ## System parameters
 
-- `epoch_duration`: Epoch duration in number of block, default `8640` (24 hours per epoch at the rate of 1 block every 10 secs)
+The default values that are relative to epoch duration assume that an epoch last about 24 hours.
+
 - `max_active_validators`: Maximum active validators, default `128`
 - `pipeline_length`: Pipeline length in number of epochs, default `2`
 - `unboding_length`: Unbonding duration in number of epochs, default `6`
