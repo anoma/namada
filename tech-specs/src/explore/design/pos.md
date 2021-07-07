@@ -11,7 +11,7 @@ An epoch starts at the beginning of block height `n` and end at the end of block
 Epoched data are data associated with a specific epoch that are set in advance. The data relevant to the PoS system in the ledger's state are epoched. Each data can be uniquely identified. These are:
 - [Active validator set](#active-validator-set). A single value for each epoch.
 - [Validators' consensus key, state and total bonded tokens](#validator). Identified by the validator's address.
-- [Bonds](#bonds) are created by self-bonding and delegations. They are identified by the pair of delegator's address and the validator's address.
+- [Bonds](#bonds) are created by self-bonding and delegations. They are identified by the pair of source address and the validator's address.
 
 Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + unboding_length` for [unboding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` become immutable.
 
@@ -70,9 +70,9 @@ A delegator may have any number number of delegations. Delegations are stored in
 
 ## Bonds
 
-A bond locks-up tokens from validators' self-bonding and delegators' delegations. For self-bonding, the delegator's address is equal to the validator's address and the source of the bond is the validator's account. Only validators can self-bond. For a bond created from a delegation, the delegator's account is the bond's source.
+A bond locks-up tokens from validators' self-bonding and delegators' delegations. For self-bonding, the source address is equal to the validator's address. Only validators can self-bond. For a bond created from a delegation, the bond's source is the delegator's account.
 
-For each epoch, bonds are uniquely identified by the pair of delegator's and validator's addresses. A bond created in epoch `n` is written into epoch `n + pipeline_length`. If there already is a bond in the epoch `n + pipeline_length` for this pair of delegator's and validator's addresses, its tokens are incremented by the newly bonded amount.
+For each epoch, bonds are uniquely identified by the pair of source and validator's addresses. A bond created in epoch `n` is written into epoch `n + pipeline_length`. If there already is a bond in the epoch `n + pipeline_length` for this pair of source and validator's addresses, its tokens are incremented by the newly bonded amount.
 
 Any bonds created in epoch `n` increment the bond's validator's total bonded tokens by the bond's token amount and update the voting power for epoch `n + pipeline_length`.
 
@@ -92,7 +92,7 @@ TODO
 
 ### Slashing
 
-Instead of absolute values, validators' total bonded token amounts and bonds' and unbonds' token amounts are stored as their deltas (i.e. the change of quantity from a previous epoch) to allow distinguishing changes for different epoch, which is essential for determining whether tokens should be slashed. However, because slashes for a fault that occurred in epoch `n` may only be applied before the beginning of epoch `n + unbonding_length`, in epoch `m` we can sum all the deltas of total bonded token amounts and bonds and unbond with the same delegator and validator for epoch equal or less than `m - unboding_length` into a single total bonded token amount, single bond and single unbond record. This is to keep the total number of total bonded token amounts for a unique validator and bonds and unbonds for a unique pair of delegator and validator bound to a maximum number (equal to `unboding_length`).
+Instead of absolute values, validators' total bonded token amounts and bonds' and unbonds' token amounts are stored as their deltas (i.e. the change of quantity from a previous epoch) to allow distinguishing changes for different epoch, which is essential for determining whether tokens should be slashed. However, because slashes for a fault that occurred in epoch `n` may only be applied before the beginning of epoch `n + unbonding_length`, in epoch `m` we can sum all the deltas of total bonded token amounts and bonds and unbond with the same source and validator for epoch equal or less than `m - unboding_length` into a single total bonded token amount, single bond and single unbond record. This is to keep the total number of total bonded token amounts for a unique validator and bonds and unbonds for a unique pair of source and validator bound to a maximum number (equal to `unboding_length`).
 
 To disincentivize validators misbehaviour in the PoS system a validator may be slashed for any fault that it has done. An evidence of misbehaviour may be submitted by any account for a fault that occurred in epoch `n` anytime before the beginning of epoch `n + unbonding_length`.
 
@@ -233,7 +233,9 @@ type Unbonds = HashMap<BondId, Epoched<Unbond>>;
 
 struct BondId {
   validator: Address,
-  delegator: Address,
+  /// The delegator adddress for delegations, or the same as the `validator`
+  /// address for self-bonds.
+  source: Address,
 }
 
 struct Bond {
