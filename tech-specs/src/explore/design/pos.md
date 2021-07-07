@@ -2,7 +2,7 @@
 
 ## Epoch
 
-An epoch is a range of blocks or time that is defined by the base ledger and made available to the PoS system. This document assumes that epochs are identified by consecutive integers starting at 0. All the data relevant to PoS are [associated with epochs](#epoched-data).
+An epoch is a range of blocks or time that is defined by the base ledger and made available to the PoS system. This document assumes that epochs are identified by consecutive integers. All the data relevant to PoS are [associated with epochs](#epoched-data).
 
 ### Epoched data
 
@@ -61,7 +61,7 @@ A delegator may have any number number of delegations. Delegations are stored in
 
 - *delegate*:
   An account which is not a validator may delegate tokens to any number of validators. This will lock-up tokens into a [bond](#bonds).
-- *undelegate*
+- *undelegate*:
   Any delegated tokens may be partially or fully [unbonded](#unbond).
 - *withdraw unbond*:
   Unbonded tokens may be withdrawn in or after the [unbond's epoch](#unbond).
