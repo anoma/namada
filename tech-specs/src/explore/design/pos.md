@@ -2,18 +2,18 @@
 
 ## Epoch
 
-An epoch is a range of blocks, whose length is set by the `epoch_duration` [parameter](#system-parameters). Epochs are identified by consecutive integers starting at 0. For each epoch, we set the [relevant data](#epoched-data) in advance by the `pipeline_length` [parameter](#system-parameters).
+An epoch is a range of blocks, whose length is set by the `epoch_duration` [parameter](#system-parameters). Epochs are identified by consecutive integers starting at 0. All the data relevant to PoS are [associated with epochs](#epoched-data).
 
 An epoch starts at the beginning of block height `n` and end at the end of block height `n + epoch_duration - 1`. Then the following epoch starts at the beginning of block height `epoch_duration`, etc.
 
 ### Epoched data
 
-The data relevant to the PoS system in the ledger's state are epoched. Each data can be uniquely identified. These are:
+Epoched data are data associated with a specific epoch that are set in advance. The data relevant to the PoS system in the ledger's state are epoched. Each data can be uniquely identified. These are:
 - [Active validator set](#active-validator-set). A single value for each epoch.
 - [Validators' consensus key, state and total bonded tokens](#validator). Identified by the validator's address.
 - [Bonds](#bonds) are created by self-bonding and delegations. They are identified by the pair of delegator's address and the validator's address.
 
-Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length`. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` become immutable.
+Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + unboding_length` for [unboding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` become immutable.
 
 ## Entities
 
