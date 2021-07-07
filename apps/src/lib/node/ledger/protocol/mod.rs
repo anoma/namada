@@ -201,7 +201,7 @@ fn execute_vps(
                     (addr, keys, vp),
                 ),
                 Vp::Native(internal_addr) => {
-                    let mut ctx =
+                    let ctx =
                         native_vp::Ctx::new(storage, write_log, tx, gas_meter);
                     let tx_data = match tx.data.as_ref() {
                         Some(data) => &data[..],
@@ -210,24 +210,14 @@ fn execute_vps(
 
                     let accepted: Result<bool> = match internal_addr {
                         InternalAddress::PoS => {
-                            debug_assert_eq!(*internal_addr, &PoS::ADDR);
-                            PoS::validate_tx(
-                                &mut ctx,
-                                tx_data,
-                                keys,
-                                &verifiers_addr,
-                            )
-                            .map_err(Error::NativeVpError)
+                            let pos = PoS { ctx };
+                            pos.validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::NativeVpError)
                         }
                         InternalAddress::Ibc => {
-                            debug_assert_eq!(*internal_addr, &Ibc::ADDR);
-                            Ibc::validate_tx(
-                                &mut ctx,
-                                tx_data,
-                                keys,
-                                &verifiers_addr,
-                            )
-                            .map_err(Error::NativeVpError)
+                            let ibc = Ibc { ctx };
+                            ibc.validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::NativeVpError)
                         }
                     };
 

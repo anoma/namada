@@ -2,19 +2,9 @@
 //! as the PoS and IBC modules.
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::rc::Rc;
-use std::str::FromStr;
-
-use ibc::ics02_client::client_consensus::AnyConsensusState;
-use ibc::ics02_client::client_state::AnyClientState;
-use ibc::ics02_client::client_type::ClientType;
-use ibc::ics02_client::context::ClientReader;
-use ibc::ics02_client::height::Height;
-use ibc::ics24_host::identifier::ClientId;
-use ibc::ics24_host::Path;
-use tendermint_proto::Protobuf;
 
 use crate::ledger::gas::VpGasMeter;
+#[cfg(feature = "ibc-vp")]
 use crate::ledger::ibc::Ibc;
 use crate::ledger::pos::PoS;
 use crate::ledger::storage::write_log::WriteLog;
@@ -27,13 +17,14 @@ use crate::types::storage::{BlockHash, BlockHeight, Key};
 use crate::vm::prefix_iter::PrefixIterators;
 
 /// Initialize genesis storage for all the [`NativeVp`]s.
-pub fn init_genesis_storage<DB, H>(storage: &mut Storage<DB, H>)
+pub fn init_genesis_storage<'a, DB, H>(storage: &mut Storage<DB, H>)
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
-    PoS::init_genesis_storage(storage);
-    Ibc::init_genesis_storage(storage);
+    PoS::<'a, DB, H>::init_genesis_storage(storage);
+    #[cfg(feature = "ibc-vp")]
+    Ibc::<'a, DB, H>::init_genesis_storage(storage);
 }
 
 /// A native VP module should implement this module and add its initialization
@@ -48,17 +39,13 @@ pub trait NativeVp {
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher;
 
-    /// Run the validity predicate. This function can call methods on the
-    /// [`Ctx`] argument to interact with the host structures.
-    fn validate_tx<DB, H>(
-        ctx: &mut Ctx<DB, H>,
+    /// Run the validity predicate
+    fn validate_tx(
+        &self,
         tx_data: &[u8],
         keys_changed: &HashSet<Key>,
         verifiers: &HashSet<Address>,
-    ) -> Result<bool>
-    where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: 'static + StorageHasher;
+    ) -> Result<bool>;
 }
 
 /// A validity predicate's host context.
@@ -73,9 +60,9 @@ where
     H: StorageHasher,
 {
     /// Storage prefix iterators.
-    pub iterators: Rc<RefCell<PrefixIterators<'a, DB>>>,
+    pub iterators: RefCell<PrefixIterators<'a, DB>>,
     /// VP gas meter.
-    pub gas_meter: Rc<RefCell<VpGasMeter>>,
+    pub gas_meter: RefCell<VpGasMeter>,
     /// Read-only access to the storage.
     pub storage: &'a Storage<DB, H>,
     /// Read-only access to the write log.
@@ -97,8 +84,8 @@ where
         gas_meter: VpGasMeter,
     ) -> Self {
         Self {
-            iterators: Rc::new(RefCell::new(PrefixIterators::default())),
-            gas_meter: Rc::new(RefCell::new(gas_meter)),
+            iterators: RefCell::new(PrefixIterators::default()),
+            gas_meter: RefCell::new(gas_meter),
             storage,
             write_log,
             tx,
@@ -265,81 +252,6 @@ where
                 "The \"wasm-runtime\" feature must be enabled to use the \
                  `eval` function."
             )
-        }
-    }
-}
-
-impl<'a, DB, H> ClientReader for Ctx<'a, DB, H>
-where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-    fn client_type(&self, client_id: &ClientId) -> Option<ClientType> {
-        let path = Path::ClientType(client_id.clone()).to_string();
-        let key = Key::ibc_key(path)
-            .expect("Creating a key for a client type shouldn't fail");
-        match self.read_post(&key) {
-            Ok(Some(value)) => {
-                let s: String = storage::types::decode(&value)
-                    .expect("decoding shouldn't fail");
-                Some(
-                    ClientType::from_str(&s)
-                        .expect("conversion shouldn't fail"),
-                )
-            }
-            // returns None even if DB read fails
-            _ => None,
-        }
-    }
-
-    fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState> {
-        let path = Path::ClientState(client_id.clone()).to_string();
-        let key = Key::ibc_key(path)
-            .expect("Creating a key for a client state shouldn't fail");
-        match self.read_post(&key) {
-            Ok(Some(value)) => Some(
-                AnyClientState::decode_vec(&value)
-                    .expect("decoding a client state failed"),
-            ),
-            // returns None even if DB read fails
-            _ => None,
-        }
-    }
-
-    fn consensus_state(
-        &self,
-        client_id: &ClientId,
-        height: Height,
-    ) -> Option<AnyConsensusState> {
-        let path = Path::ClientConsensusState {
-            client_id: client_id.clone(),
-            epoch: height.revision_number,
-            height: height.revision_height,
-        }
-        .to_string();
-        let key = Key::ibc_key(path)
-            .expect("Creating a key for a consensus state shouldn't fail");
-        match self.read_post(&key) {
-            Ok(Some(value)) => Some(
-                AnyConsensusState::decode_vec(&value)
-                    .expect("decoding a consensus state failed"),
-            ),
-            // returns None even if DB read fails
-            _ => None,
-        }
-    }
-
-    fn client_counter(&self) -> u64 {
-        let path = "clients/counter".to_owned();
-        let key = Key::ibc_key(path)
-            .expect("Creating a key for a client counter failed");
-        match self.read_post(&key) {
-            Ok(Some(value)) => storage::types::decode(&value)
-                .expect("converting a client counter failed"),
-            _ => {
-                tracing::error!("client counter doesn't exist");
-                unreachable!();
-            }
         }
     }
 }

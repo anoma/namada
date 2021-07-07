@@ -3,9 +3,14 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
+use ibc::ics02_client::client_consensus::AnyConsensusState;
+use ibc::ics02_client::client_state::AnyClientState;
+use ibc::ics02_client::client_type::ClientType;
 use ibc::ics02_client::context::ClientReader;
+use ibc::ics02_client::height::Height;
 use ibc::ics24_host::identifier::ClientId;
 use ibc::ics24_host::Path;
+use tendermint_proto::Protobuf;
 
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -14,15 +19,26 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 
 /// IBC VP
-pub struct Ibc;
+pub struct Ibc<'a, DB, H>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Context to interact with the host structures.
+    pub ctx: Ctx<'a, DB, H>,
+}
 
-impl NativeVp for Ibc {
+impl<'a, DB, H> NativeVp for Ibc<'a, DB, H>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
     const ADDR: InternalAddress = InternalAddress::Ibc;
 
-    fn init_genesis_storage<DB, H>(storage: &mut Storage<DB, H>)
+    fn init_genesis_storage<D, SH>(storage: &mut Storage<D, SH>)
     where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: StorageHasher,
+        D: storage::DB + for<'iter> storage::DBIter<'iter>,
+        SH: StorageHasher,
     {
         // the client counter
         let path = "clients/counter".to_owned();
@@ -34,16 +50,12 @@ impl NativeVp for Ibc {
             .expect("Unable to write the initial client counter");
     }
 
-    fn validate_tx<DB, H>(
-        ctx: &mut Ctx<DB, H>,
+    fn validate_tx(
+        &self,
         _tx_data: &[u8],
         keys_changed: &HashSet<Key>,
         _verifiers: &HashSet<Address>,
-    ) -> Result<bool>
-    where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: 'static + StorageHasher,
-    {
+    ) -> Result<bool> {
         let mut clients = HashSet::new();
 
         for key in keys_changed {
@@ -51,19 +63,19 @@ impl NativeVp for Ibc {
                 continue;
             }
 
-            let accepted = match get_ibc_prefix(key) {
+            let accepted = match Self::get_ibc_prefix(key) {
                 IbcPrefix::Client => {
-                    let client_id = get_client_id(key)?;
+                    let client_id = Self::get_client_id(key)?;
                     if !clients.insert(client_id.clone()) {
                         // this client has been checked
                         continue;
                     }
-                    match get_client_state_change(ctx, &client_id)? {
+                    match self.get_client_state_change(&client_id)? {
                         StateChange::Created => {
-                            validate_created_client(ctx, &client_id)?
+                            self.validate_created_client(&client_id)?
                         }
                         StateChange::Updated => {
-                            validate_updated_client(ctx, &client_id)?
+                            self.validate_updated_client(&client_id)?
                         }
                         _ => {
                             tracing::info!(
@@ -105,95 +117,164 @@ enum IbcPrefix {
     Unknown,
 }
 
-fn get_ibc_prefix(key: &Key) -> IbcPrefix {
-    match &*key.segments[1].raw() {
-        "clients" => IbcPrefix::Client,
-        "connections" => IbcPrefix::Connection,
-        "channelEnds" => IbcPrefix::Channel,
-        "packets" => IbcPrefix::Packet,
-        _ => IbcPrefix::Unknown,
-    }
-}
-
-fn get_client_id(key: &Key) -> Result<ClientId> {
-    ClientId::from_str(&key.segments[2].raw())
-        .map_err(|e| RuntimeError::IbcKeyError(e.to_string()))
-}
-
-fn get_client_state_change<DB, H>(
-    ctx: &mut Ctx<DB, H>,
-    client_id: &ClientId,
-) -> Result<StateChange>
+impl<'a, DB, H> Ibc<'a, DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    let path = Path::ClientState(client_id.clone()).to_string();
-    let key =
-        Key::ibc_key(path).expect("Creating a key for a client type failed");
-    if ctx.has_key_pre(&key)? {
-        if ctx.has_key_post(&key)? {
-            Ok(StateChange::Updated)
+    fn get_ibc_prefix(key: &Key) -> IbcPrefix {
+        match key.segments.get(1) {
+            Some(prefix) => match &*prefix.raw() {
+                "clients" => IbcPrefix::Client,
+                "connections" => IbcPrefix::Connection,
+                "channelEnds" => IbcPrefix::Channel,
+                "packets" => IbcPrefix::Packet,
+                _ => IbcPrefix::Unknown,
+            },
+            None => IbcPrefix::Unknown,
+        }
+    }
+
+    fn get_client_id(key: &Key) -> Result<ClientId> {
+        match key.segments.get(2) {
+            Some(id) => ClientId::from_str(&id.raw())
+                .map_err(|e| RuntimeError::IbcKeyError(e.to_string())),
+            None => Err(RuntimeError::IbcKeyError(format!(
+                "Unexpected client key: {}",
+                key
+            ))),
+        }
+    }
+
+    fn get_client_state_change(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<StateChange> {
+        let path = Path::ClientState(client_id.clone()).to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client type failed");
+        if self.ctx.has_key_pre(&key)? {
+            if self.ctx.has_key_post(&key)? {
+                Ok(StateChange::Updated)
+            } else {
+                Ok(StateChange::Deleted)
+            }
+        } else if self.ctx.has_key_post(&key)? {
+            Ok(StateChange::Created)
         } else {
-            Ok(StateChange::Deleted)
+            Ok(StateChange::NotExists)
         }
-    } else if ctx.has_key_post(&key)? {
-        Ok(StateChange::Created)
-    } else {
-        Ok(StateChange::NotExists)
+    }
+
+    fn validate_created_client(&self, client_id: &ClientId) -> Result<bool>
+    where
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: 'static + StorageHasher,
+    {
+        let client_type = match self.client_type(client_id) {
+            Some(t) => t,
+            None => {
+                tracing::info!(
+                    "the client type of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        let client_state = match self.client_state(client_id) {
+            Some(s) => s,
+            None => {
+                tracing::info!(
+                    "the client state of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        let height = client_state.latest_height();
+        let consensus_state = match self.consensus_state(client_id, height) {
+            Some(c) => c,
+            None => {
+                tracing::info!(
+                    "the consensus state of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        Ok(client_type == client_state.client_type()
+            && client_type == consensus_state.client_type())
+    }
+
+    fn validate_updated_client(&self, _id: &ClientId) -> Result<bool> {
+        // TODO: validate UpdateClient and UpgradeClient
+        Ok(false)
     }
 }
 
-fn validate_created_client<DB, H>(
-    ctx: &mut Ctx<DB, H>,
-    client_id: &ClientId,
-) -> Result<bool>
+impl<'a, DB, H> ClientReader for Ibc<'a, DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    let client_type = match ctx.client_type(client_id) {
-        Some(t) => t,
-        None => {
-            tracing::info!("the client type of ID {} doesn't exist", client_id);
-            return Ok(false);
+    fn client_type(&self, client_id: &ClientId) -> Option<ClientType> {
+        let path = Path::ClientType(client_id.clone()).to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client type shouldn't fail");
+        match self.ctx.read_post(&key) {
+            Ok(Some(value)) => {
+                let s: String = storage::types::decode(&value).ok()?;
+                Some(ClientType::from_str(&s).ok()?)
+            }
+            // returns None even if DB read fails
+            _ => None,
         }
-    };
-    let client_state = match ctx.client_state(client_id) {
-        Some(s) => s,
-        None => {
-            tracing::info!(
-                "the client state of ID {} doesn't exist",
-                client_id
-            );
-            return Ok(false);
-        }
-    };
-    let height = client_state.latest_height();
-    let consensus_state = match ctx.consensus_state(client_id, height) {
-        Some(c) => c,
-        None => {
-            tracing::info!(
-                "the consensus state of ID {} doesn't exist",
-                client_id
-            );
-            return Ok(false);
-        }
-    };
-    Ok(client_type == client_state.client_type()
-        && client_type == consensus_state.client_type())
-}
+    }
 
-fn validate_updated_client<DB, H>(
-    _ctx: &mut Ctx<DB, H>,
-    _id: &ClientId,
-) -> Result<bool>
-where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-    // TODO: validate UpdateClient and UpgradeClient
-    Ok(false)
+    fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState> {
+        let path = Path::ClientState(client_id.clone()).to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client state shouldn't fail");
+        match self.ctx.read_post(&key) {
+            Ok(Some(value)) => AnyClientState::decode_vec(&value).ok(),
+            // returns None even if DB read fails
+            _ => None,
+        }
+    }
+
+    fn consensus_state(
+        &self,
+        client_id: &ClientId,
+        height: Height,
+    ) -> Option<AnyConsensusState> {
+        let path = Path::ClientConsensusState {
+            client_id: client_id.clone(),
+            epoch: height.revision_number,
+            height: height.revision_height,
+        }
+        .to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a consensus state shouldn't fail");
+        match self.ctx.read_post(&key) {
+            Ok(Some(value)) => AnyConsensusState::decode_vec(&value).ok(),
+            // returns None even if DB read fails
+            _ => None,
+        }
+    }
+
+    fn client_counter(&self) -> u64 {
+        let path = "clients/counter".to_owned();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client counter failed");
+        match self.ctx.read_post(&key) {
+            Ok(Some(value)) => storage::types::decode(&value)
+                .expect("converting a client counter shouldn't failed"),
+            _ => {
+                tracing::error!("client counter doesn't exist");
+                unreachable!();
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -275,16 +356,17 @@ mod tests {
         let tx_data = vec![];
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
-        let mut ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
 
         let mut keys_changed = HashSet::new();
         keys_changed.insert(client_state_key);
 
         let verifiers = HashSet::new();
 
+        let ibc = Ibc { ctx };
         // this should return true because state has been stored
         assert!(
-            Ibc::validate_tx(&mut ctx, &tx_data, &keys_changed, &verifiers)
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
                 .expect("validation failed")
         );
     }
@@ -297,16 +379,17 @@ mod tests {
         let tx_data = vec![];
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
-        let mut ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
 
         let mut keys_changed = HashSet::new();
         keys_changed.insert(get_client_state_key());
 
         let verifiers = HashSet::new();
 
+        let ibc = Ibc { ctx };
         // this should return false because no state is stored
         assert!(
-            !Ibc::validate_tx(&mut ctx, &tx_data, &keys_changed, &verifiers)
+            !ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
                 .expect("validation failed")
         );
     }

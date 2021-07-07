@@ -243,7 +243,12 @@ impl Key {
 
     /// Check if the given key is a key to IBC-related data
     pub fn is_ibc_key(&self) -> bool {
-        self.segments[0] == DbKeySeg::StringSeg(RESERVED_IBC_KEY.to_owned())
+        match self.segments.get(0) {
+            Some(seg) => {
+                *seg == DbKeySeg::StringSeg(RESERVED_IBC_KEY.to_owned())
+            }
+            None => false,
+        }
     }
 
     /// Returns a key of the IBC-related data

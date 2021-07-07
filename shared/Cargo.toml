@@ -17,17 +17,19 @@ testing = [
   "rand_core",
 ]
 wasm-runtime = [
-  "ibc",
-  "ibc-proto",
   "loupe",
   "parity-wasm",
   "pwasm-utils",
-  "tendermint-proto",
   "wasmer-compiler-singlepass",
   "wasmer-compiler-cranelift",
   "wasmer-engine-universal",
   "wasmer-vm",
   "wasmer",
+]
+ibc-vp = [
+  "ibc",
+  "ibc-proto",
+  "tendermint-proto",
 ]
 
 [dependencies]
