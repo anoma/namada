@@ -12,6 +12,8 @@ crate-type = ["cdylib"]
 # The features should be used individually to build the selected wasm.
 # Newly added wasms should also be added into the Makefile `$(wasms)` list.
 [features]
+mm_filter_token_exch = []
+mm_token_exch = ["petgraph", "serde", "serde_json"]
 tx_from_intent = []
 tx_transfer = []
 tx_update_vp = []
@@ -21,6 +23,9 @@ vp_user = []
 [dependencies]
 anoma_vm_env = {path = "../../vm_env"}
 borsh = "0.9.0"
+petgraph = {version = "0.5.1", features = ["serde-1"], optional = true}
+serde = {version = "1.0.125", optional = true}
+serde_json = {version = "1.0.64", optional = true}
 wee_alloc = "0.4.5"
 
 [dev-dependencies]

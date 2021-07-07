@@ -10,7 +10,7 @@ nightly := $(shell cat rust-nightly-version)
 # Path to the wasm source for the provided txs and VPs
 wasms := wasm/wasm_source
 # Paths for all the wasm templates
-wasm_templates := wasm/tx_template wasm/vp_template wasm/matchmaker_template wasm/filter_template
+wasm_templates := wasm/tx_template wasm/vp_template wasm/mm_template wasm/mm_filter_template
 
 # Transitive dependency of wasmer. It's safe to ignore as we don't use cranelift compiler. It should disseaper once the wasmer library updates its dependencies
 audit-ignores := RUSTSEC-2021-0067

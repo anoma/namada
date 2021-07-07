@@ -10,6 +10,8 @@ wasms += tx_transfer
 wasms += tx_update_vp
 wasms += vp_token
 wasms += vp_user
+wasms += mm_filter_token_exch
+wasms += mm_token_exch
 
 # Build all wasms
 all: $(wasms)
