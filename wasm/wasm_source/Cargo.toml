@@ -1,0 +1,33 @@
+[package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2018"
+license = "GPL-3.0"
+name = "anoma_wasm"
+resolver = "2"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+# The features should be used individually to build the selected wasm.
+# Newly added wasms should also be added into the Makefile `$(wasms)` list.
+[features]
+tx_from_intent = []
+tx_transfer = []
+tx_update_vp = []
+vp_token = []
+vp_user = []
+
+[dependencies]
+anoma_vm_env = {path = "../../vm_env"}
+borsh = "0.9.0"
+wee_alloc = "0.4.5"
+
+[dev-dependencies]
+anoma_tests = {path = "../../tests"}
+
+[profile.release]
+# smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto
+lto = true
+# simply terminate on panics, no unwinding
+panic = "abort"
