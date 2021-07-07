@@ -1,5 +1,5 @@
-cargo = $(env) cargo
-rustup = $(env) rustup
+cargo := $(env) cargo
+rustup := $(env) rustup
 
 # All the wasms that can be built from this source, switched via Cargo features
 # Wasms can be added via the Cargo.toml `[features]` list.
@@ -9,7 +9,12 @@ wasms += tx_update_vp
 wasms += vp_token
 wasms += vp_user
 
+# Build all wasms
 all: $(wasms)
+
+# `cargo check` all wasms
+check: 
+	$(foreach wasm,$(wasms),make check_$(wasm) && ) true
 
 # Build a selected wasm
 $(wasms): %:
@@ -31,4 +36,4 @@ clean:
 deps:
 	$(rustup) target add wasm32-unknown-unknown
 
-.PHONY : all clean deps
+.PHONY : all check clean deps
