@@ -1,6 +1,6 @@
 # Validity predicate wasm template
 
-This is just a template of a wasm module for VP. The functionality initially inlined in here will be modularized into Anoma wasm VM and a VP environment.
+This is a template of a wasm module for a validity predicate.
 
 ## Quick start
 
@@ -8,7 +8,7 @@ This is just a template of a wasm module for VP. The functionality initially inl
 # To be able to build this, make sure to have
 make deps
 
-# Build - this will create `vp.wasm` file
+# Build - this will create `.wasm` file
 make build-release
 ```
 

@@ -1,7 +1,6 @@
 # Transaction script wasm template
 
-This is just a template of a wasm module for transaction script. This template
-receives arbitrary bytes as its input.
+This is a template of a wasm module for transaction script.
 
 ## Quick start
 
@@ -9,7 +8,7 @@ receives arbitrary bytes as its input.
 # To be able to build this, make sure to have
 make deps
 
-# Build - this will create `tx.wasm` file
+# Build - this will create `.wasm` file
 make build-release
 ```
 

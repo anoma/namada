@@ -1,10 +1,9 @@
 cargo = $(env) cargo
 rustup = $(env) rustup
-wasm = vp.wasm
 
 build-release:
-	$(cargo) build --release --target wasm32-unknown-unknown && \
-	cp "./target/wasm32-unknown-unknown/release/vp_template.wasm" $(wasm)
+	# wasm is built into target/wasm32-unknown-unknown/release
+	$(cargo) build --release --target wasm32-unknown-unknown
 
 build:
 	$(cargo) build --target wasm32-unknown-unknown
