@@ -19,11 +19,19 @@ pub struct Ibc;
 impl NativeVp for Ibc {
     const ADDR: InternalAddress = InternalAddress::Ibc;
 
-    fn init_genesis_storage<DB, H>(_storage: &mut Storage<DB, H>)
+    fn init_genesis_storage<DB, H>(storage: &mut Storage<DB, H>)
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher,
     {
+        // the client counter
+        let path = "clients/counter".to_owned();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client counter failed");
+        let value = crate::ledger::storage::types::encode(&0);
+        storage
+            .write(&key, value)
+            .expect("Unable to write the initial client counter");
     }
 
     fn validate_tx<DB, H>(
@@ -36,6 +44,8 @@ impl NativeVp for Ibc {
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
         H: 'static + StorageHasher,
     {
+        let mut clients = HashSet::new();
+
         for key in keys_changed {
             if !key.is_ibc_key() {
                 continue;
@@ -44,6 +54,10 @@ impl NativeVp for Ibc {
             let accepted = match get_ibc_prefix(key) {
                 IbcPrefix::Client => {
                     let client_id = get_client_id(key)?;
+                    if !clients.insert(client_id.clone()) {
+                        // this client has been checked
+                        continue;
+                    }
                     match get_client_state_change(ctx, &client_id)? {
                         StateChange::Created => {
                             validate_created_client(ctx, &client_id)?
@@ -53,7 +67,8 @@ impl NativeVp for Ibc {
                         }
                         _ => {
                             tracing::info!(
-                                "unexpected state change for IBC: key {}",
+                                "unexpected state change for an IBC client: \
+                                 key {}",
                                 key
                             );
                             false

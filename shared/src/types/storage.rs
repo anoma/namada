@@ -253,6 +253,55 @@ impl Key {
         let prefix = Self::from(RESERVED_IBC_KEY.to_owned().to_db_key());
         Ok(prefix.join(&path))
     }
+
+    /// Returns a key from the given DB key path that has the height and
+    /// the space type
+    pub fn parse_db_key(db_key: &str) -> Result<Self> {
+        let mut segments: Vec<&str> =
+            db_key.split(KEY_SEGMENT_SEPARATOR).collect();
+        let key = match segments.get(2) {
+            Some(seg) if *seg == RESERVED_IBC_KEY => {
+                // the path of IBC-related data should start with
+                // height/subspace/^
+                Self::ibc_key(
+                    segments
+                        .split_off(3)
+                        .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                )
+                .map_err(|e| Error::Temporary {
+                    error: format!(
+                        "Cannot parse key segments {}: {}",
+                        db_key, e
+                    ),
+                })?
+            }
+            _ => match segments.get(3) {
+                Some(seg) if *seg == RESERVED_VP_KEY => {
+                    // the path of a validity predicate should be
+                    // height/subspace/{address}/?
+                    let mut addr_str =
+                        (*segments.get(2).expect("the address not found"))
+                            .to_owned();
+                    let _ = addr_str.remove(0);
+                    let addr = Address::decode(&addr_str)
+                        .expect("cannot decode the address");
+                    Self::validity_predicate(&addr)
+                }
+                _ => Self::parse(
+                    segments
+                        .split_off(2)
+                        .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                )
+                .map_err(|e| Error::Temporary {
+                    error: format!(
+                        "Cannot parse key segments {}: {}",
+                        db_key, e
+                    ),
+                })?,
+            },
+        };
+        Ok(key)
+    }
 }
 
 impl Display for Key {
