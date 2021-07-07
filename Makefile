@@ -5,8 +5,7 @@ rustup := $(env) rustup
 debug-env := RUST_BACKTRACE=1 RUST_LOG=$(package)=debug
 debug-cargo := $(env) $(debug-env) cargo
 # Nightly build is currently used for rustfmt and clippy.
-# NOTE On change also update `RUSTFMT_TOOLCHAIN` in `apps/build.rs`.
-nightly := nightly-2021-03-09
+nightly := $(shell cat rust-nightly-version)
 
 # Paths for all the wasm sources
 tx_wasms := $(dir $(wildcard wasm/txs/*/.))
