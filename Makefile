@@ -70,10 +70,12 @@ test-e2e:
 test-unit:
 	$(cargo) test -- --skip e2e
 
-test-wasm = $(cargo) test --manifest-path $(wasm)/Cargo.toml
 test-wasm:
-	make -C $(wasms) test && \
-	$(foreach wasm,$(wasm_templates),$(test-wasm) && ) true
+	make -C $(wasms) test
+
+test-wasm-template = $(cargo) test --manifest-path $(wasm)/Cargo.toml
+test-wasm-templates:
+	$(foreach wasm,$(wasm_templates),$(test-wasm-template) && ) true
 
 test-debug:
 	$(debug-cargo) test -- --nocapture
