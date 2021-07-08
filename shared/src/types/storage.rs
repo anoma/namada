@@ -244,17 +244,12 @@ impl Key {
     /// Check if the given key is a key to IBC-related data
     pub fn is_ibc_key(&self) -> bool {
         match self.segments.get(0) {
-            Some(seg)
-                if *seg
-                    == Address::Internal(InternalAddress::Ibc).to_db_key() =>
-            {
-                match self.segments.get(1) {
-                    Some(seg) => {
-                        *seg == DbKeySeg::StringSeg(RESERVED_IBC_KEY.to_owned())
-                    }
-                    None => false,
-                }
-            }
+            Some(DbKeySeg::AddressSeg(Address::Internal(
+                InternalAddress::Ibc,
+            ))) => match self.segments.get(1) {
+                Some(DbKeySeg::StringSeg(seg)) => seg == RESERVED_IBC_KEY,
+                _ => false,
+            },
             _ => false,
         }
     }
