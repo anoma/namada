@@ -29,7 +29,9 @@ pub mod vp_prelude {
 
     pub use crate::imports::vp::*;
     pub use crate::intent::vp as intent;
-    pub use crate::key::ed25519::vp as ed25519;
+    pub mod key {
+        pub use crate::key::ed25519::vp as ed25519;
+    }
     pub use crate::token::vp as token;
 }
 
