@@ -11,11 +11,24 @@ use ibc::ics02_client::height::Height;
 use ibc::ics24_host::identifier::ClientId;
 use ibc::ics24_host::Path;
 use tendermint_proto::Protobuf;
+use thiserror::Error;
 
-use crate::ledger::native_vp::{Ctx, Error, NativeVp, Result};
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Native VP error: {0}")]
+    NativeVpError(native_vp::Error),
+    #[error("Key error: {0}")]
+    KeyError(String),
+}
+
+/// IBC functions result
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// IBC VP
 pub struct Ibc<'a, DB, H>
@@ -32,6 +45,8 @@ where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
+    type Error = Error;
+
     const ADDR: InternalAddress = InternalAddress::Ibc;
 
     fn init_genesis_storage<D, SH>(storage: &mut Storage<D, SH>)
@@ -394,5 +409,11 @@ mod tests {
             !ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
                 .expect("validation failed")
         );
+    }
+}
+
+impl From<native_vp::Error> for Error {
+    fn from(err: native_vp::Error) -> Self {
+        Self::NativeVpError(err)
     }
 }

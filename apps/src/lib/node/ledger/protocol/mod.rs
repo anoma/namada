@@ -5,9 +5,9 @@ use std::convert::TryFrom;
 use std::fmt;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
-use anoma_shared::ledger::ibc::Ibc;
+use anoma_shared::ledger::ibc::{self, Ibc};
 use anoma_shared::ledger::native_vp::{self, NativeVp};
-use anoma_shared::ledger::pos::PoS;
+use anoma_shared::ledger::pos::{self, PoS};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::{Address, InternalAddress};
@@ -32,8 +32,10 @@ pub enum Error {
     VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
-    #[error("Error executing native VP: {0}")]
-    NativeVpError(native_vp::Error),
+    #[error("IBC native VP: {0}")]
+    IbcNativeVpError(ibc::Error),
+    #[error("PoS native VP: {0}")]
+    PosNativeVpError(pos::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -211,12 +213,12 @@ fn execute_vps(
                         InternalAddress::PoS => {
                             let pos = PoS { ctx };
                             pos.validate_tx(tx_data, keys, &verifiers_addr)
-                                .map_err(Error::NativeVpError)
+                                .map_err(Error::PosNativeVpError)
                         }
                         InternalAddress::Ibc => {
                             let ibc = Ibc { ctx };
                             ibc.validate_tx(tx_data, keys, &verifiers_addr)
-                                .map_err(Error::NativeVpError)
+                                .map_err(Error::IbcNativeVpError)
                         }
                     };
 

@@ -22,8 +22,6 @@ use crate::vm::prefix_iter::PrefixIterators;
 pub enum Error {
     #[error("Host context error: {0}")]
     ContextError(vp_env::RuntimeError),
-    #[error("Key error: {0}")]
-    KeyError(String),
 }
 
 /// Native VP function result
@@ -46,6 +44,9 @@ pub trait NativeVp {
     /// The address of this VP
     const ADDR: InternalAddress;
 
+    /// Error type for the methods' results.
+    type Error: std::error::Error;
+
     /// Initialize storage in the genesis block
     fn init_genesis_storage<DB, H>(storage: &mut Storage<DB, H>)
     where
@@ -58,7 +59,7 @@ pub trait NativeVp {
         tx_data: &[u8],
         keys_changed: &HashSet<Key>,
         verifiers: &HashSet<Address>,
-    ) -> Result<bool>;
+    ) -> std::result::Result<bool, Self::Error>;
 }
 
 /// A validity predicate's host context.

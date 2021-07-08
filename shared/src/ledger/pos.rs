@@ -2,10 +2,22 @@
 
 use std::collections::HashSet;
 
-use crate::ledger::native_vp::{Ctx, NativeVp, Result};
+use thiserror::Error;
+
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Native VP error: {0}")]
+    NativeVpError(native_vp::Error),
+}
+
+/// PoS functions result
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Proof-of-Stake VP
 pub struct PoS<'a, DB, H>
@@ -22,6 +34,8 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
+    type Error = Error;
+
     const ADDR: InternalAddress = InternalAddress::PoS;
 
     fn init_genesis_storage<D, SH>(_storage: &mut Storage<D, SH>)
@@ -38,5 +52,11 @@ where
         _verifiers: &HashSet<Address>,
     ) -> Result<bool> {
         Ok(false)
+    }
+}
+
+impl From<native_vp::Error> for Error {
+    fn from(err: native_vp::Error) -> Self {
+        Self::NativeVpError(err)
     }
 }
