@@ -2,9 +2,8 @@
 
 use std::collections::HashSet;
 
-use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::ledger::native_vp::{Ctx, NativeVp, Result};
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::ledger::vp_env::Result;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 

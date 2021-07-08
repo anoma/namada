@@ -3,18 +3,31 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 
+use thiserror::Error;
+
 use crate::ledger::gas::VpGasMeter;
 #[cfg(feature = "ibc-vp")]
 use crate::ledger::ibc::Ibc;
 use crate::ledger::pos::PoS;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{Storage, StorageHasher};
-use crate::ledger::vp_env::Result;
 use crate::ledger::{storage, vp_env};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{BlockHash, BlockHeight, Key};
 use crate::vm::prefix_iter::PrefixIterators;
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Host context error: {0}")]
+    ContextError(vp_env::RuntimeError),
+    #[error("Key error: {0}")]
+    KeyError(String),
+}
+
+/// Native VP function result
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Initialize genesis storage for all the [`NativeVp`]s.
 pub fn init_genesis_storage<'a, DB, H>(storage: &mut Storage<DB, H>)
@@ -95,12 +108,14 @@ where
     /// Add a gas cost incured in a validity predicate
     pub fn add_gas(&self, used_gas: u64) -> Result<()> {
         vp_env::add_gas(&mut *self.gas_meter.borrow_mut(), used_gas)
+            .map_err(Error::ContextError)
     }
 
     /// Storage read prior state (before tx execution). It will try to read from
     /// the storage.
     pub fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_env::read_pre(&mut *self.gas_meter.borrow_mut(), self.storage, key)
+            .map_err(Error::ContextError)
     }
 
     /// Storage read posterior state (after tx execution). It will try to read
@@ -113,6 +128,7 @@ where
             self.write_log,
             key,
         )
+        .map_err(Error::ContextError)
     }
 
     /// Storage `has_key` in prior state (before tx execution). It will try to
@@ -123,6 +139,7 @@ where
             self.storage,
             key,
         )
+        .map_err(Error::ContextError)
     }
 
     /// Storage `has_key` in posterior state (after tx execution). It will try
@@ -134,11 +151,13 @@ where
             self.write_log,
             key,
         )
+        .map_err(Error::ContextError)
     }
 
     /// Getting the chain ID.
     pub fn get_chain_id(&self) -> Result<String> {
         vp_env::get_chain_id(&mut *self.gas_meter.borrow_mut(), self.storage)
+            .map_err(Error::ContextError)
     }
 
     /// Getting the block height. The height is that of the block to which the
@@ -148,12 +167,14 @@ where
             &mut *self.gas_meter.borrow_mut(),
             self.storage,
         )
+        .map_err(Error::ContextError)
     }
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.
     pub fn get_block_hash(&self) -> Result<BlockHash> {
         vp_env::get_block_hash(&mut *self.gas_meter.borrow_mut(), self.storage)
+            .map_err(Error::ContextError)
     }
 
     /// Storage prefix iterator. It will try to get an iterator from the
@@ -167,6 +188,7 @@ where
             self.storage,
             prefix,
         )
+        .map_err(Error::ContextError)
     }
 
     /// Storage prefix iterator for prior state (before tx execution). It will
@@ -176,6 +198,7 @@ where
         iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>> {
         vp_env::iter_pre_next::<DB>(&mut *self.gas_meter.borrow_mut(), iter)
+            .map_err(Error::ContextError)
     }
 
     /// Storage prefix iterator next for posterior state (after tx execution).
@@ -190,6 +213,7 @@ where
             self.write_log,
             iter,
         )
+        .map_err(Error::ContextError)
     }
 
     /// Evaluate a validity predicate with given data. The address, changed

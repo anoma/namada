@@ -12,9 +12,8 @@ use ibc::ics24_host::identifier::ClientId;
 use ibc::ics24_host::Path;
 use tendermint_proto::Protobuf;
 
-use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::ledger::native_vp::{Ctx, Error, NativeVp, Result};
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::ledger::vp_env::{Result, RuntimeError};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 
@@ -91,7 +90,12 @@ where
                 IbcPrefix::Connection => false,
                 IbcPrefix::Channel => false,
                 IbcPrefix::Packet => false,
-                IbcPrefix::Unknown => false,
+                IbcPrefix::Unknown => {
+                    return Err(Error::KeyError(format!(
+                        "Invalid IBC-related key: {}",
+                        key
+                    )));
+                }
             };
             if !accepted {
                 return Ok(false);
@@ -140,9 +144,9 @@ where
     fn get_client_id(key: &Key) -> Result<ClientId> {
         match key.segments.get(3) {
             Some(id) => ClientId::from_str(&id.raw())
-                .map_err(|e| RuntimeError::IbcKeyError(e.to_string())),
-            None => Err(RuntimeError::IbcKeyError(format!(
-                "Unexpected client key: {}",
+                .map_err(|e| Error::KeyError(e.to_string())),
+            None => Err(Error::KeyError(format!(
+                "The client key doesn't have a client ID: {}",
                 key
             ))),
         }

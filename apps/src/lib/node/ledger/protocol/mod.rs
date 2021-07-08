@@ -9,7 +9,6 @@ use anoma_shared::ledger::ibc::Ibc;
 use anoma_shared::ledger::native_vp::{self, NativeVp};
 use anoma_shared::ledger::pos::PoS;
 use anoma_shared::ledger::storage::write_log::WriteLog;
-use anoma_shared::ledger::vp_env;
 use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::{Address, InternalAddress};
 use anoma_shared::types::storage::Key;
@@ -34,7 +33,7 @@ pub enum Error {
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("Error executing native VP: {0}")]
-    NativeVpError(vp_env::RuntimeError),
+    NativeVpError(native_vp::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
