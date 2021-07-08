@@ -141,9 +141,9 @@ where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    /// Returns the prefix after #IBC/^
+    /// Returns the prefix after #IBC
     fn get_ibc_prefix(key: &Key) -> IbcPrefix {
-        match key.segments.get(2) {
+        match key.segments.get(1) {
             Some(prefix) => match &*prefix.raw() {
                 "clients" => IbcPrefix::Client,
                 "connections" => IbcPrefix::Connection,
@@ -155,9 +155,9 @@ where
         }
     }
 
-    /// Returns the client ID after #IBC/^/clients
+    /// Returns the client ID after #IBC/clients
     fn get_client_id(key: &Key) -> Result<ClientId> {
-        match key.segments.get(3) {
+        match key.segments.get(2) {
             Some(id) => ClientId::from_str(&id.raw())
                 .map_err(|e| Error::KeyError(e.to_string())),
             None => Err(Error::KeyError(format!(
