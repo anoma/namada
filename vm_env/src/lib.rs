@@ -2,9 +2,9 @@
 //! from the `shared` crate.
 
 pub mod imports;
-mod intent;
+pub mod intent;
 pub mod key;
-mod token;
+pub mod token;
 
 pub mod tx_prelude {
     pub use anoma_shared::types::address::Address;
@@ -12,18 +12,8 @@ pub mod tx_prelude {
     pub use anoma_vm_macro::transaction;
 
     pub use super::imports::tx::*;
-
-    pub mod token {
-        pub use anoma_shared::types::token::*;
-
-        pub use crate::token::transfer;
-    }
-
-    pub mod intent {
-        pub use anoma_shared::types::intent::*;
-
-        pub use crate::intent::invalidate_intent;
-    }
+    pub use crate::intent::tx as intent;
+    pub use crate::token::tx as token;
 }
 
 pub mod vp_prelude {
@@ -35,26 +25,9 @@ pub mod vp_prelude {
     pub use anoma_vm_macro::validity_predicate;
 
     pub use crate::imports::vp::*;
-
-    pub mod key {
-        pub mod ed25519 {
-            pub use anoma_shared::types::key::ed25519::*;
-
-            pub use crate::key::ed25519::*;
-        }
-    }
-
-    pub mod token {
-        pub use anoma_shared::types::token::*;
-
-        pub use crate::token::vp;
-    }
-
-    pub mod intent {
-        pub use anoma_shared::types::intent::*;
-
-        pub use crate::intent::vp;
-    }
+    pub use crate::intent::vp as intent;
+    pub use crate::key::ed25519::vp as ed25519;
+    pub use crate::token::vp as token;
 }
 
 pub mod matchmaker_prelude {
