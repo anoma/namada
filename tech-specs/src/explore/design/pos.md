@@ -37,7 +37,7 @@ For each validator (in any state), the system also tracks total bonded tokens as
 #### Validator actions
 
 - *become validator*:
-  Any account that is not a validator already and that doesn't have any delegations may request to become a validator. It is required to only provide a public consensus key. For the action applied in epoch `n`, the validator's state will be immediately set to *pending* and it will be set to *candidate* for epoch `n + pipeline_length`.
+  Any account that is not a validator already and that doesn't have any delegations may request to become a validator. It is required to only provide a public consensus key. For the action applied in epoch `n`, the validator's state will be immediately set to *pending*, it will be set to *candidate* for epoch `n + pipeline_length` and the consensus key is set for epoch `n + pipeline_length`.
 - *deactivate*:
   Only a *pending* or *candidate* validator account may *deactivate*. For this action applied in epoch `n`, the validator's account is set to become *inactive* in the epoch `n + pipeline_length`.
 - *reactivate*:
@@ -48,6 +48,8 @@ For each validator (in any state), the system also tracks total bonded tokens as
   Any self-bonded tokens may be partially or fully [unbonded](#unbond).
 - *withdraw unbond*:
   Unbonded tokens may be withdrawn in or after the [unbond's epoch](#unbond).
+- *change consensus key*:
+  Set the new consensus key. When applied in epoch `n`, the key is set for epoch `n + pipeline_length`.
 
 #### Active validator set
 
