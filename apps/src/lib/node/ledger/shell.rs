@@ -1,16 +1,16 @@
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 
-use anoma_shared::ledger::gas::{self, BlockGasMeter};
-use anoma_shared::ledger::storage::write_log::WriteLog;
-use anoma_shared::ledger::{ibc, parameters, pos};
-use anoma_shared::proto::{self, Tx};
-use anoma_shared::types::address::Address;
-use anoma_shared::types::key::ed25519::PublicKey;
-use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
-use anoma_shared::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
-use anoma_shared::types::token::Amount;
-use anoma_shared::types::{address, key, token};
+use anoma::ledger::gas::{self, BlockGasMeter};
+use anoma::ledger::storage::write_log::WriteLog;
+use anoma::ledger::{ibc, parameters, pos};
+use anoma::proto::{self, Tx};
+use anoma::types::address::Address;
+use anoma::types::key::ed25519::PublicKey;
+use anoma::types::storage::{BlockHash, BlockHeight, Key};
+use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
+use anoma::types::token::Amount;
+use anoma::types::{address, key, token};
 use borsh::BorshSerialize;
 use itertools::Itertools;
 use tendermint::block::Header;

@@ -1,6 +1,6 @@
 //! The parameters used for the chain's genesis
 
-use anoma_shared::ledger::parameters::{EpochDuration, Parameters};
+use anoma::ledger::parameters::{EpochDuration, Parameters};
 #[cfg(feature = "dev")]
 use ed25519_dalek::Keypair;
 #[cfg(not(feature = "dev"))]
@@ -65,8 +65,7 @@ pub fn genesis() -> Genesis {
     let parameters = Parameters {
         epoch_duration: EpochDuration {
             min_num_of_blocks: 10,
-            min_duration: anoma_shared::types::time::Duration::minutes(1)
-                .into(),
+            min_duration: anoma::types::time::Duration::minutes(1).into(),
         },
     };
     Genesis {

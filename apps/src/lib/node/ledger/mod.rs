@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::sync::mpsc::channel;
 use std::task::{Context, Poll};
 
-use anoma_shared::types::storage::{BlockHash, BlockHeight};
+use anoma::types::storage::{BlockHash, BlockHeight};
 use futures::future::{AbortHandle, AbortRegistration, Abortable, FutureExt};
 use tendermint_proto::abci::CheckTxType;
 use tower::{Service, ServiceBuilder};

@@ -9,10 +9,10 @@ version = "0.1.0"
 
 [features]
 default = ["wasm-runtime"]
-wasm-runtime = ["anoma_shared/wasm-runtime"]
+wasm-runtime = ["anoma/wasm-runtime"]
 
 [dependencies]
-anoma_shared = {path = "../shared", features = ["testing"]}
+anoma = {path = "../shared", features = ["testing"]}
 anoma_vm_env = {path = "../vm_env"}
 concat-idents = "1.1.2"
 test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
