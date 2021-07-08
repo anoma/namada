@@ -1,6 +1,9 @@
 //! This crate contains library code for wasm. Some of the code is re-exported
 //! from the `shared` crate.
 
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+
 pub mod imports;
 pub mod intent;
 pub mod key;
