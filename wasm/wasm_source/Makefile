@@ -17,7 +17,7 @@ wasms += mm_token_exch
 all: $(wasms)
 
 # `cargo check` all wasms
-check: 
+check:
 	$(foreach wasm,$(wasms),make check_$(wasm) && ) true
 
 # `cargo test` all wasms
