@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
-use crate::types::address::{self, Address};
+use crate::types::address::{self, Address, InternalAddress};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -244,10 +244,18 @@ impl Key {
     /// Check if the given key is a key to IBC-related data
     pub fn is_ibc_key(&self) -> bool {
         match self.segments.get(0) {
-            Some(seg) => {
-                *seg == DbKeySeg::StringSeg(RESERVED_IBC_KEY.to_owned())
+            Some(seg)
+                if *seg
+                    == Address::Internal(InternalAddress::Ibc).to_db_key() =>
+            {
+                match self.segments.get(1) {
+                    Some(seg) => {
+                        *seg == DbKeySeg::StringSeg(RESERVED_IBC_KEY.to_owned())
+                    }
+                    None => false,
+                }
             }
-            None => false,
+            _ => false,
         }
     }
 
@@ -255,8 +263,11 @@ impl Key {
     /// Only this function can push "^" segment for IBC
     pub fn ibc_key(path: impl AsRef<str>) -> Result<Self> {
         let path = Self::parse(path)?;
-        let prefix = Self::from(RESERVED_IBC_KEY.to_owned().to_db_key());
-        Ok(prefix.join(&path))
+        let addr = Address::Internal(InternalAddress::Ibc);
+        let mut segments = Self::from(addr.to_db_key()).segments;
+        segments.push(RESERVED_IBC_KEY.to_owned().to_db_key());
+        let key = Key { segments };
+        Ok(key.join(&path))
     }
 
     /// Returns a key from the given DB key path that has the height and
@@ -264,13 +275,24 @@ impl Key {
     pub fn parse_db_key(db_key: &str) -> Result<Self> {
         let mut segments: Vec<&str> =
             db_key.split(KEY_SEGMENT_SEPARATOR).collect();
-        let key = match segments.get(2) {
+        let key = match segments.get(3) {
+            Some(seg) if *seg == RESERVED_VP_KEY => {
+                // the path of a validity predicate should be
+                // height/subspace/{address}/?
+                let mut addr_str =
+                    (*segments.get(2).expect("the address not found"))
+                        .to_owned();
+                let _ = addr_str.remove(0);
+                let addr = Address::decode(&addr_str)
+                    .expect("cannot decode the address");
+                Self::validity_predicate(&addr)
+            }
             Some(seg) if *seg == RESERVED_IBC_KEY => {
                 // the path of IBC-related data should start with
-                // height/subspace/^
+                // height/subspace/#IBC/^
                 Self::ibc_key(
                     segments
-                        .split_off(3)
+                        .split_off(4)
                         .join(&KEY_SEGMENT_SEPARATOR.to_string()),
                 )
                 .map_err(|e| Error::Temporary {
@@ -280,30 +302,14 @@ impl Key {
                     ),
                 })?
             }
-            _ => match segments.get(3) {
-                Some(seg) if *seg == RESERVED_VP_KEY => {
-                    // the path of a validity predicate should be
-                    // height/subspace/{address}/?
-                    let mut addr_str =
-                        (*segments.get(2).expect("the address not found"))
-                            .to_owned();
-                    let _ = addr_str.remove(0);
-                    let addr = Address::decode(&addr_str)
-                        .expect("cannot decode the address");
-                    Self::validity_predicate(&addr)
-                }
-                _ => Self::parse(
-                    segments
-                        .split_off(2)
-                        .join(&KEY_SEGMENT_SEPARATOR.to_string()),
-                )
-                .map_err(|e| Error::Temporary {
-                    error: format!(
-                        "Cannot parse key segments {}: {}",
-                        db_key, e
-                    ),
-                })?,
-            },
+            _ => Self::parse(
+                segments
+                    .split_off(2)
+                    .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+            )
+            .map_err(|e| Error::Temporary {
+                error: format!("Cannot parse key segments {}: {}", db_key, e),
+            })?,
         };
         Ok(key)
     }
