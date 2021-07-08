@@ -43,6 +43,7 @@ The validator transactions are assumed to be applied with an account address `va
   - if `bond` exist, update it with the new bond amount in epoch `n + pipeline_length`
   - else, create a new record with bond amount in epoch `n + pipeline_length`
   - debit the token `amount` from the `validator_address` and credit them to the `pos` account
+  - add the `amount` to `validator/{validator_address}/total_deltas` in epoch `n + pipeline_length`
 - `unbond(amount)`:
   - let `bond = read(bond/{validator_address}/{validator_address}/delta)`
   - if `bond` doesn't exist, panic
@@ -50,6 +51,7 @@ The validator transactions are assumed to be applied with an account address `va
   - if `total(bond) - total(pre_unbond) < amount`, panic
   - decrement the `bond` deltas starting from the rightmost value (a bond in a future-most epoch) until whole `amount` is decremented
   - for each decremented `bond` value write a new `unbond` with the key set to the epoch of the source value
+  - decrement the `amount` from `validator/{validator_address}/total_deltas` in epoch `n + unbonding_length`
 - `withdraw_unbonds`:
   - let `unbond = read(unbond/{validator_address}/{validator_address}/delta)`
   - if `unbond` doesn't exist, panic
@@ -57,27 +59,34 @@ The validator transactions are assumed to be applied with an account address `va
   - for each `((bond_start, bond_end), amount) in unbond where unbond.epoch <= n`
     - let `slashed_amount = amount`
     - for each `slash in read(slash/{validator_address})`:
-      - if `bond_start <= slash.epoch && slash.epoch <= bond_end)`, `slashed_amount *= (10_000 - slash.rate)`
+      - if `bond_start <= slash.epoch && slash.epoch <= bond_end)`, `slashed_amount *= (10_000 - slash.rate) / 10_000`
     - credit the `slashed_amount` to the `validator_address` and debit the whole `amount` (before slash, if any) from the `pos` account
 - `change_consensus_key`:
   - creates a record in `validator/{validator_address}/consensus_key` in epoch `n + pipeline_length`
+
+Additionally, `become_validator` and `change_consensus_key` must sign the transaction and attach the signature in the tx data field with the new consensus key to verify its ownership.
 
 ### Delegator transactions
 
 The delegator transactions are assumed to be applied with an account address `delegator_address`.
 
-- `delegate(validator_address)`:
+- `delegate(validator_address, amount)`:
   - let `bond = read(bond/{delegator_address}/{validator_address}/delta)`
   - if `bond` exist, update it with the new bond amount in epoch `n + pipeline_length`
   - else, create a new record with bond amount in epoch `n + pipeline_length`
   - debit the token `amount` from the `delegator_address`
-- `undelegate(validator_address)`:
+  - add the `amount` to `validator/{validator_address}/total_deltas` in epoch `n + pipeline_length`
+- `undelegate(validator_address, amount)`:
   - let `bond = read(bond/{delegator_address}/{validator_address}/delta)`
   - if `bond` doesn't exist, panic
   - let `pre_unbond = read(unbond/{delegator_address}/{validator_address}/delta)`
   - if `total(bond) - total(pre_unbond) < amount`, panic
   - decrement the `bond` deltas starting from the rightmost value (a bond in a future-most epoch) until whole `amount` is decremented
   - for each decremented `bond` value write a new `unbond` with the key set to the epoch of the source value
+  - decrement the `amount` from `validator/{validator_address}/total_deltas` in epoch `n + unbonding_length`
+- `redelegate(src_validator_address, dest_validator_address, amount)`:
+  - `undelegate(src_validator_address, amount)`
+  - `delegate(dest_validator_address, amount)` but set in epoch `n + unbonding_length` instead of `n + pipeline_length`
 - `withdraw_unbonds`:
   - for each `validator_address in iter_prefix(unbond/{delegator_address})`:
     - let `unbond = read(unbond/{validator_address}/{validator_address}/delta)`
@@ -85,7 +94,7 @@ The delegator transactions are assumed to be applied with an account address `de
     - for each `((bond_start, bond_end), amount)` in epochs <= `n`
       - let `slashed_amount = amount`
       - for each `slash in read(slash/{validator_address})`:
-        - if `bond_start <= slash.epoch && slash.epoch <= bond_end)`, `slashed_amount *= (10_000 - slash.rate)`
+        - if `bond_start <= slash.epoch && slash.epoch <= bond_end)`, `slashed_amount *= (10_000 - slash.rate) / 10_000`
       - credit the `slashed_amount` to the `delegator_address` and debit the whole `amount` (before slash, if any) from the `pos` account
 
 ### Other transactions
@@ -107,19 +116,20 @@ The validity predicate triggers a validation logic based on the storage keys mod
   ```rust,ignore
   match (pre_state, post_state) {
     (None, Some(post)) => {
+      // - verify signature from tx.data against the post consensus key
       // - check that any other sub-keys for this validator address didn't exist
       // in a pre-state
       // - check that the `state` sub-key for this validator address has been set
       // correctly
     },
     (Some(pre), Some(post)) => {
+      // - verify signature from tx.data against the post consensus key
       // - check that the new consensus key is different from the old consensus
       // key and that it has been set correctly
     },
     _ => false,
   }
   ```
-  - TODO verify consensus key ownership
 - `validator/{validator_address}/state`:
   ```rust,ignore
   match (pre_state, post_state) {
@@ -135,6 +145,12 @@ The validity predicate triggers a validation logic based on the storage keys mod
     _ => false,
   }
   ```
-- TODO other key changes
+- `validator/{validator_address}/total_deltas`:
+- `validator/{validator_address}/voting_power`:
+- `slash/{validator_address}`:
+- `bond/{bond_source}/{bond_validator}/delta`:
+- `unbond/{unbond_source}/{unbond_validator}/deltas`:
+- `validator_set/active`:
+- `validator_set/inactive`:
 
 No other storage key changes are permitted by the VP.
