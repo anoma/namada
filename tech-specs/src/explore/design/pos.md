@@ -46,7 +46,7 @@ For each validator (in any state), the system also tracks total bonded tokens as
   A validator may lock-up tokens into a [bond](#bonds) only for its own validator's address.
 - *unbond*:
   Any self-bonded tokens may be partially or fully [unbonded](#unbond).
-- *withdraw unbond*:
+- *withdraw unbonds*:
   Unbonded tokens may be withdrawn in or after the [unbond's epoch](#unbond).
 - *change consensus key*:
   Set the new consensus key. When applied in epoch `n`, the key is set for epoch `n + pipeline_length`.
@@ -65,7 +65,7 @@ A delegator may have any number number of delegations. Delegations are stored in
   An account which is not a validator may delegate tokens to any number of validators. This will lock-up tokens into a [bond](#bonds).
 - *undelegate*:
   Any delegated tokens may be partially or fully [unbonded](#unbond).
-- *withdraw unbond*:
+- *withdraw unbonds*:
   Unbonded tokens may be withdrawn in or after the [unbond's epoch](#unbond).
 
 ## Bonds
@@ -244,9 +244,20 @@ struct Bond {
 }
 
 struct Unbond {
-  /// The epoch of the bond from which this unbond was created
-  bond_epoch: Epoch,
-  delta: token::Amount,
+  /// A key is a pair of the epoch of the bond from which a unbond was created
+  /// the epoch of unboding
+  deltas: HashMap<(Epoch, Epoch), token::Amount>
+}
+```
+
+For slashes, we store the epoch, slash rate and the evidence:
+
+```rust,ignore
+struct Slash {
+  epoch: Epoch,
+  /// slash token amount ‱ (per ten thousand)
+  rate: u8,
+  evidence: Evidence,
 }
 ```
 
