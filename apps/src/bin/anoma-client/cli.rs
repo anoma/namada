@@ -3,11 +3,11 @@
 use std::fs::File;
 use std::io::Write;
 
-use anoma::cli::{args, cmds};
-use anoma::client::tx;
-use anoma::proto::services::rpc_service_client::RpcServiceClient;
-use anoma::proto::{services, RpcMessage};
-use anoma::{cli, wallet};
+use anoma_apps::cli::{args, cmds};
+use anoma_apps::client::tx;
+use anoma_apps::proto::services::rpc_service_client::RpcServiceClient;
+use anoma_apps::proto::{services, RpcMessage};
+use anoma_apps::{cli, wallet};
 use anoma_shared::types::intent::Intent;
 use anoma_shared::types::key::ed25519::Signed;
 use borsh::BorshSerialize;

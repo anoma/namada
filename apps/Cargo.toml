@@ -3,7 +3,7 @@ authors = ["Heliax AG <hello@heliax.dev>"]
 description = "Anoma apps"
 edition = "2018"
 license = "GPL-3.0"
-name = "anoma"
+name = "anoma_apps"
 readme = "../README.md"
 resolver = "2"
 version = "0.1.0"
@@ -11,7 +11,7 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "anoma"
+name = "anoma_apps"
 path = "src/lib/mod.rs"
 
 # Anoma CLI that aggregates some common commands for the node and the client

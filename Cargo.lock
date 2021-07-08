@@ -68,7 +68,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma"
+name = "anoma_apps"
 version = "0.1.0"
 dependencies = [
  "anoma_shared",
@@ -166,7 +166,7 @@ dependencies = [
 name = "anoma_tests"
 version = "0.1.0"
 dependencies = [
- "anoma",
+ "anoma_apps",
  "anoma_shared",
  "anoma_vm_env",
  "assert_cmd",

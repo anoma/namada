@@ -20,7 +20,7 @@ tracing = "0.1.26"
 tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
 
 [dev-dependencies]
-anoma = {path = "../apps", features = ["testing"]}
+anoma_apps = {path = "../apps", features = ["testing"]}
 assert_cmd = "1.0.7"
 color-eyre = "0.5.11"
 eyre = "0.6.5"
