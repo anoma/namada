@@ -177,7 +177,7 @@ type VotingPower = u64;
 
 /// Validator's address with its voting power.
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct WeighedValidator {
+struct WeightedValidator {
   /// The `voting_power` field must be on top, because lexicographic ordering is
   /// based on the top-to-bottom declaration order and in the `ValidatorSet`
   /// the `WeighedValidator`s these need to be sorted by the `voting_power`.
@@ -187,9 +187,9 @@ struct WeighedValidator {
 
 struct ValidatorSet {
   /// Active validator set with maximum size equal to `max_active_validators`
-  active: BTreeSet<WeighedValidator>,
+  active: BTreeSet<WeightedValidator>,
   /// All the other validators that are not active
-  inactive: BTreeSet<WeighedValidator>,
+  inactive: BTreeSet<WeightedValidator>,
 }
 
 type ValidatorSets = Epoched<ValidatorSet>;
