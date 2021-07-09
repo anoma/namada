@@ -199,8 +199,8 @@ When any validator's voting power changes, we attempt to perform the following u
 
 1. let `validator` be the validator's address, `power_before` and `power_after` be the voting power before and after the change, respectively
 1. let `power_delta = power_after - power_before`
-1. let `min_active = inactive.first()`
-1. let `max_inactive = inactive.last()`
+1. let `min_active = active.first()` (active validator with lowest voting power)
+1. let `max_inactive = inactive.last()` (inactive validator with greatest voting power)
 1. find whether the validator is active, let `is_active = power_before >= max_inactive.voting_power`
    1. if `is_active`:
       1. if `power_delta > 0 && power_after > max_inactive.voting_power`, update the validator in `active` set with `voting_power = power_after`
