@@ -240,12 +240,14 @@ struct BondId {
 }
 
 struct Bond {
-  delta: token::Amount,
+  /// A key is a the epoch set for the bond. This is used in unbonding, where
+  // it's needed for slash epoch range check.
+  delta: HashMap<Epoch, token::Amount>,
 }
 
 struct Unbond {
   /// A key is a pair of the epoch of the bond from which a unbond was created
-  /// the epoch of unboding
+  /// the epoch of unboding. This is needed for slash epoch range check.
   deltas: HashMap<(Epoch, Epoch), token::Amount>
 }
 ```
