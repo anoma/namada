@@ -4,19 +4,19 @@ The intent gossip network enables counterparty discovery for bartering. The
 users can express any sort of intents that might be matched and transformed into
 a fulfillable transaction on the Anoma ledger.
 
-An [intent](./intent.md) describe the desire of a user, from asset exchange to a
-green tax percent for selling shoes. These intent are picked up by a matchmaker
-that compose them into transactions to send to the ledger network. A matchmaker
+An [intent](./intent.md) describes the desire of a user, from asset exchange to a
+green tax percent for selling shoes. These intents are picked up by a matchmaker
+that composes them into transactions to send to the ledger network. A matchmaker
 is optionally included in the intent gossip node.
 
 Each node connects to a specified intent gossip network, either a public or a
 private one. Anyone can create their own network where they decide all aspects
-of it, which type of intents is propagated, which node can participate, the
-matchmaker logic,… It is possible for example to run the intent gossip system
+of it: which type of intents is propagated, which nodes can participate, the
+matchmaker logic, etc. It is possible, for example, to run the intent gossip system
 over bluetooth to have it off-line.
 
 An intent gossip node is a peer in the intent gossip network that has the role
-to propagate intents to all other connected nodes.
+of propagating intents to all other connected nodes.
 
 The network uses the
 [gossipsub](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub)
@@ -42,7 +42,7 @@ interaction](./example.svg "intent gossip network")
 
 # Flow diagram: life cycle of intent and global process
 
-This diagram shows the process flow for intents, from user expressing they
+This diagram shows the process flow for intents, from users expressing their
 desire to the ledger executing the validity predicate to check the crafted
 transaction.
 

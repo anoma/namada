@@ -1,30 +1,30 @@
 # Fungible token encoding and template
 
-The Heliax team implemented an intent encoding, a filter program template and a
+The Heliax team implemented an intent encoding, a filter program template, and a
 matchmaker program template that can be used to exchange fungible tokens between
 any number of participants.
 
 ## Intent encoding
-The intent encoding allows to express a desire to participate in an asset
-exchange. The encoding is define as follow :
+The intent encoding allows the expression of a desire to participate in an asset
+exchange. The encoding is defined as follows :
 
 ```rust
 struct FungibleToken {
-    address: Address
-    token_sell: Address
-    max_sell: Amount
-    rate_min: f64
-    token_buy: Address
-    min_buy: Amount
-    expire: Time::Instant
+    address: Address,
+    token_sell: Address,
+    max_sell: Amount,
+    rate_min: f64,
+    token_buy: Address,
+    min_buy: Amount,
+    expire: Time::Instant,
 }
 ```
 
 ## Matchmaker program
 
-The filter program attempts to decode the intent and if successful, it checks
+The filter program attempts to decode the intent and if successful, checks
 that it's not yet expired and that the account address has enough funds for the
-intended selled token.
+intended token to be sold.
 
 The main program can match intents for exchanging assets. It does that by
 creating a graph from all intents. When a cycle is found then it removes all
