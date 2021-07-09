@@ -4,6 +4,8 @@ The [PoS system](/explore/design/pos.md) is integrated into Anoma ledger via:
 - an account with an internal address and a [native VP](vp.md#native-vps) and that validates any changes applied by transactions to the PoS account
 - transaction WASMs to perform various PoS actions, also available as a library code for custom made transactions
 
+The `votes_per_token` PoS system parameter must be chosen to satisfy the [Tendermint requirement](https://github.com/tendermint/spec/blob/60395941214439339cc60040944c67893b5f8145/spec/abci/apps.md#validator-updates) of `MaxTotalVotingPower = MaxInt64 / 8`.
+
 All [the data relevant to the PoS system](/explore/design/pos.md#storage) are stored under the PoS account's storage sub-space, with the following key schema (the PoS address prefix is omitted for clarity):
 
 - `parameters`: the system parameters
@@ -20,22 +22,39 @@ All [the data relevant to the PoS system](/explore/design/pos.md#storage) are st
 - `validator_set/inactive`
 - `total_voting_power`
 
+- standard validator metadata (these are regular storage values, not epoched data):
+  - `validator/{validator_address}/staking_reward_address`: an address that should receive staking rewards, if not set, the rewards are sent to `validator_address`
+  - TBA (e.g. alias, website, description, delegation commission rate, etc.)
+
 Additionally, only XAN tokens can be staked. The tokens being staked (bonds and unbonds amounts) are kept in the XAN token account under `{xan_address}/balance/{pos_address}`.
 
 ## Initialization
 
 The PoS system is initialized via a native VP interface that is given the validator set for the genesis block.
 
+## Staking rewards and transaction fees
+
+Staking rewards for validators are rewarded in Tendermint's method `BeginBlock` in the base ledger. If a validator has specified `validator/{validator_address}/staking_reward_address` the rewards are credited to this address, otherwise, the validator's address is used.
+
+To a validator who proposed a block (`block.header.proposer_address`), the system rewards tokens based on the `block_proposer_reward` PoS parameter and each validator that voted on a block (`block.last_commit_info.validator` who `signed_last_block`) receives `block_vote_reward`.
+
+All the fees that are charged in a transaction execution (DKG transaction wrapper fee and transactions applied in a block) are transferred into a fee pool, which is another special account controlled by the PoS module.
+
+- TODO describe the fee pool, related to <https://github.com/anomanetwork/anoma/issues/48>, <https://github.com/anomanetwork/anoma/issues/51> and <https://github.com/anomanetwork/anoma/issues/72>
+
 ## Transactions
 
 The transactions are assumed to be applied in epoch `n`. Any transaction that modifies [epoched data](/explore/design/pos.md#epoched-data) updates the structure as described in [epoched data storage](/explore/design/pos.md#storage).
+
+For transactions that burn tokens, we implement a ["token burner" account](/explore/design/ledger/vp.md#token-burner-vp). Burnt tokens should be credited to this account and no token can be ever be debited by anyone.
 
 ### Validator transactions
 
 The validator transactions are assumed to be applied with an account address `validator_address`.
 
-- `become_validator(consensus_key)`:
+- `become_validator(consensus_key, staking_reward_address)`:
   - creates a record in `validator/{validator_address}/consensus_key` in epoch `n + pipeline_length`
+  - creates a record in `validator/{validator_address}/staking_reward_address`
   - sets `validator/{validator_address}/state` for to `pending` in the current epoch and `candidate` in epoch `n + pipeline_length`
 - `deactivate`:
   - sets `validator/{validator_address}/state` for to `inactive` in epoch `n + pipeline_length`
