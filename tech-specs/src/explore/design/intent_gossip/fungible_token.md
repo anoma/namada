@@ -1,6 +1,6 @@
 # Fungible token encoding and template
 
-At heliax we implemented an intent encoding, a filter program template and a
+The Heliax team implemented an intent encoding, a filter program template and a
 matchmaker program template that can be used to exchange fungible tokens between
 any number of participants.
 
@@ -30,7 +30,6 @@ The main program can match intents for exchanging assets. It does that by
 creating a graph from all intents. When a cycle is found then it removes all
 intents from that cycle of the mempool and crafts a transaction based on all the
 removed intents.
-
 
 ![matchmaker](matchmaker_graph.svg)
 [excalidraw link](https://excalidraw.com/#room=1db86ba6d5f0ccb7447c,2vvRd4X2Y3HDWHihJmy9zw)
