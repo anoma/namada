@@ -7,7 +7,9 @@ An epoch is a range of blocks or time that is defined by the base ledger and mad
 ### Epoched data
 
 Epoched data are data associated with a specific epoch that are set in advance. The data relevant to the PoS system in the ledger's state are epoched. Each data can be uniquely identified. These are:
+- [System parameters](#system-parameters). A single value for each epoch.
 - [Active validator set](#active-validator-set). A single value for each epoch.
+- Total voting power. A sum of all active and inactive validators' voting power. A single value for each epoch.
 - [Validators' consensus key, state and total bonded tokens](#validator). Identified by the validator's address.
 - [Bonds](#bonds) are created by self-bonding and delegations. They are identified by the pair of source address and the validator's address.
 
@@ -50,6 +52,10 @@ For each validator (in any state), the system also tracks total bonded tokens as
   Unbonded tokens may be withdrawn in or after the [unbond's epoch](#unbond).
 - *change consensus key*:
   Set the new consensus key. When applied in epoch `n`, the key is set for epoch `n + pipeline_length`.
+- *change system parameters*:
+  Set the wanted change of system parameters for this validator.
+- *remove system parameters change*:
+  Remove a previously wanted change of system parameters for this validator.
 
 #### Active validator set
 
@@ -111,7 +117,7 @@ The default values that are relative to epoch duration assume that an epoch last
 
 ## Storage
 
-The [system parameters](#system-parameters) are written into the storage to allow for their changes.
+The [system parameters](#system-parameters) are written into the storage to allow for their changes. Additionally, each validator may record a new parameters value under their sub-key that they wish to change to, which would override the systems parameters when more than 2/3 voting power are in agreement on all the parameters values.
 
 The validators' data are keyed by the their addresses, conceptually:
 
@@ -127,7 +133,9 @@ struct Epoched<Data> {
   /// Fixed-size array in which the head is the data for epoch in which the
   /// `last_update` was performed and every consecutive array element is the
   /// successor epoch of the predecessor array element.
-  data: [Option<Data>; PIPELINE_LENGTH + 1],
+  /// For system parameters, validator's consensus key and state,
+  /// `LENGTH = pipeline_length`. For all others, `LENGTH = unbonding_length`.
+  data: [Option<Data>; LENGTH + 1],
 }
 ```
 
@@ -193,6 +201,9 @@ struct ValidatorSet {
 }
 
 type ValidatorSets = Epoched<ValidatorSet>;
+
+/// The sum of all active and inactive validators' voting power
+type TotalVotingPower = Epoched<VotingPower>;
 ```
 
 When any validator's voting power changes, we attempt to perform the following update on the `ActiveValidatorSet`:
