@@ -94,7 +94,7 @@ An "unbond" with epoch set to `n` may be withdrawn by the bond's source address 
 
 ### Staking rewards
 
-TODO
+To a validator who proposed a block, the system rewards tokens based on the `block_proposer_reward` [system parameter](#system-parameters) and each validator that voted on a block receives `block_vote_reward`.
 
 ### Slashing
 
@@ -114,6 +114,8 @@ The default values that are relative to epoch duration assume that an epoch last
 - `pipeline_length`: Pipeline length in number of epochs, default `2`
 - `unboding_length`: Unbonding duration in number of epochs, default `6`
 - `votes_per_token`: Used in validators' voting power calculation
+- `block_proposer_reward`: Amount of tokens rewarded to a validator for proposing a block
+- `block_vote_reward`: Amount of tokens rewarded to each validator that voted on a block proposal
 
 ## Storage
 
