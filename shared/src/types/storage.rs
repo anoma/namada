@@ -391,6 +391,19 @@ impl KeySeg for Address {
 )]
 pub struct Epoch(u64);
 
+impl Display for Epoch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Epoch {
+    /// Change to the next epoch
+    pub fn next(&mut self) {
+        self.0 += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;

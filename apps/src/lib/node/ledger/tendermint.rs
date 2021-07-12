@@ -86,6 +86,7 @@ pub enum AbciMsg {
         reply: Sender<()>,
         hash: BlockHash,
         height: BlockHeight,
+        time: DateTimeUtc,
     },
     /// Apply a transaction in a block
     ApplyTx {
@@ -337,8 +338,8 @@ impl tendermint_abci::Application for AbciWrapper {
                 tracing::error!("{:#?}", err);
             }
             Ok(hash) => {
-                let raw_height =
-                    req.header.expect("missing block's header").height;
+                let header = req.header.expect("missing block's header");
+                let raw_height = header.height;
                 match raw_height.try_into() {
                     Err(_) => {
                         tracing::error!(
@@ -347,12 +348,17 @@ impl tendermint_abci::Application for AbciWrapper {
                         )
                     }
                     Ok(height) => {
+                        let ts: tendermint_proto::google::protobuf::Timestamp =
+                            header.time.expect("Missing block time");
+                        let time: DateTimeUtc =
+                            (Utc.timestamp(ts.seconds, ts.nanos as u32)).into();
                         let (reply, reply_receiver) = channel();
                         self.sender
                             .send(AbciMsg::BeginBlock {
                                 reply,
                                 hash,
                                 height,
+                                time,
                             })
                             .expect("failed to send BeginBlock request");
                         reply_receiver
