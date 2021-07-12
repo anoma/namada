@@ -360,6 +360,11 @@ where
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
+
+    /// Get the current (yet to be committed) block epoch
+    pub fn get_block_epoch(&self) -> (Epoch, u64) {
+        (self.block.epoch, MIN_STORAGE_GAS)
+    }
 }
 
 /// The storage hasher used for the merkle tree.

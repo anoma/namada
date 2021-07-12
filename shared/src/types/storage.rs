@@ -389,7 +389,7 @@ impl KeySeg for Address {
     BorshSerialize,
     BorshDeserialize,
 )]
-pub struct Epoch(u64);
+pub struct Epoch(pub u64);
 
 impl Display for Epoch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

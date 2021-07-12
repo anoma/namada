@@ -57,7 +57,7 @@ pub mod tx {
     use anoma_shared::types::address::Address;
     use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::storage::{
-        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+        BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -197,6 +197,11 @@ pub mod tx {
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
+    /// Get epoch of the current block
+    pub fn get_block_epoch() -> Epoch {
+        Epoch(unsafe { anoma_tx_get_block_epoch() })
+    }
+
     /// Log a string. The message will be printed at the `tracing::Level::Info`.
     pub fn log_string<T: AsRef<str>>(msg: T) {
         let msg = msg.as_ref();
@@ -264,6 +269,9 @@ pub mod tx {
         // Get the current block hash
         fn anoma_tx_get_block_hash(result_ptr: u64);
 
+        // Get the current block epoch
+        fn anoma_tx_get_block_epoch() -> u64;
+
         // Requires a node running with "Info" log level
         fn anoma_tx_log_string(str_ptr: u64, str_len: u64);
     }
@@ -278,7 +286,7 @@ pub mod vp {
     use anoma_shared::types::internal::HostEnvResult;
     use anoma_shared::types::key::ed25519::{PublicKey, Signature};
     use anoma_shared::types::storage::{
-        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+        BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -390,6 +398,11 @@ pub mod vp {
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
+    /// Get epoch of the current block
+    pub fn get_block_epoch() -> Epoch {
+        Epoch(unsafe { anoma_vp_get_block_epoch() })
+    }
+
     /// Verify a transaction signature. The signature is expected to have been
     /// produced on the encoded transaction [`anoma_shared::proto::Tx`]
     /// using [`anoma_shared::types::key::ed25519::sign_tx`].
@@ -484,6 +497,9 @@ pub mod vp {
 
         // Get the current block hash
         fn anoma_vp_get_block_hash(result_ptr: u64);
+
+        // Get the current block epoch
+        fn anoma_vp_get_block_epoch() -> u64;
 
         // Verify a transaction signature
         fn anoma_vp_verify_tx_signature(
