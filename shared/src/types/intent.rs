@@ -1,6 +1,7 @@
 //! Intent data definitions and transaction and validity-predicate helpers.
 
 use std::collections::{HashMap, HashSet};
+use thiserror::Error;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,16 @@ use crate::types::address::Address;
 use crate::types::key::ed25519::Signed;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Failed to serialize intent")]
+    SerializeFailed(),
+}
+
+type Result<T> = std::result::Result<T, Error>;
+
+/// A simple intent for fungible token trade
 #[derive(
     Debug,
     Clone,
@@ -18,20 +29,54 @@ use crate::types::token;
     Serialize,
     Deserialize,
 )]
-
-/// A simple intent for fungible token trade
 pub struct Intent {
+    /// Wasm program defining the spending conditions
+    pub code: Vec<u8>,
+    /// List of exchange definitions
+    pub exchanges: Vec<Exchange>,
+    /// The fee
+    pub fee: u64,
+}
+
+impl Intent {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        let serialized_exchanges = self
+            .exchanges
+            .into_iter()
+            .map(|exchage| exchage.serialize())
+            .collect();
+        return self.code.concat(serialized_exchanges);
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+)]
+
+/// The definition of an intent exchange
+pub struct Exchange {
     /// The source address
     pub addr: Address,
     /// The token to be sold
     pub token_sell: Address,
-    /// The amount of token to be sold
-    pub amount_sell: token::Amount,
+    /// The minimum amount of token to be sold
+    pub min_amount_sell: token::Amount,
+    /// The maximum amount of token to be sold
+    pub max_amount_sell: token::Amount,
     /// The token to be bought
     pub token_buy: Address,
     /// The amount of token to be bought
     pub amount_buy: token::Amount,
 }
+
+// (token_sell, min_amount,max_amount) ->[(token_buy, rate)]
 
 /// These are transfers crafted from matched [`Intent`]s.
 #[derive(

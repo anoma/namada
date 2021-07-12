@@ -3,6 +3,7 @@ use anoma_vm_env::filter_prelude::*;
 
 #[filter]
 fn validate_intent(intent: Vec<u8>) -> bool {
+    // TODO: check if signature is valid
     let intent = decode_intent_data(intent);
     if intent.is_some() {
         log_string(format!(r#"intent {:#?} is valid"#, intent));
