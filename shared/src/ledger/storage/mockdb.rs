@@ -9,6 +9,7 @@ use crate::types::address::Address;
 use crate::types::storage::{
     BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR, RESERVED_VP_KEY,
 };
+use crate::types::time::DateTimeUtc;
 
 /// An in-memory DB for testing.
 #[derive(Debug)]
@@ -26,6 +27,16 @@ impl DB for MockDB {
     }
 
     fn write_block(&mut self, state: BlockState) -> Result<()> {
+        // Epoch start height and time
+        self.0.insert(
+            "epoch_start_height".into(),
+            types::encode(&state.epoch_start_height),
+        );
+        self.0.insert(
+            "epoch_start_height".into(),
+            types::encode(&state.epoch_start_height),
+        );
+
         let prefix_key = Key::from(state.height.to_db_key());
         // Merkle tree
         {
@@ -108,6 +119,21 @@ impl DB for MockDB {
             }
             None => return Ok(None),
         }
+
+        // Epoch start height and time
+        let epoch_start_height: BlockHeight = match self
+            .0
+            .get("epoch_start_height")
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => return Ok(None),
+        };
+        let epoch_start_time: DateTimeUtc = match self.0.get("epoch_start_time")
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => return Ok(None),
+        };
+
         // Load data at the height
         let prefix = format!("{}/", height.raw());
         let upper_prefix = format!("{}/", height.next_height().raw());
@@ -211,6 +237,8 @@ impl DB for MockDB {
                 hash,
                 height,
                 epoch,
+                epoch_start_height,
+                epoch_start_time,
                 subspaces,
                 address_gen,
             })),

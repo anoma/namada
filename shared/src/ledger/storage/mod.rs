@@ -20,6 +20,7 @@ use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
+use crate::types::time::DateTimeUtc;
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -41,6 +42,10 @@ where
     pub current_height: BlockHeight,
     /// The epoch of the current block
     pub current_epoch: Epoch,
+    /// Block height at which the current epoch started
+    pub epoch_start_height: BlockHeight,
+    /// Block time at which the current epoch started
+    pub epoch_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
 }
@@ -89,6 +94,10 @@ pub struct BlockState {
     pub height: BlockHeight,
     /// Epoch of the block
     pub epoch: Epoch,
+    /// Block height at which the current epoch started
+    pub epoch_start_height: BlockHeight,
+    /// Block time at which the current epoch started
+    pub epoch_start_time: DateTimeUtc,
     /// Accounts' subspaces storage for arbitrary key-values
     pub subspaces: HashMap<Key, Vec<u8>>,
     /// Established address generator
@@ -146,6 +155,8 @@ where
             hash,
             height,
             epoch,
+            epoch_start_height,
+            epoch_start_time,
             subspaces,
             address_gen,
         }) = self.db.read_last_block()?
@@ -157,6 +168,8 @@ where
             self.block.subspaces = subspaces;
             self.current_height = height;
             self.current_epoch = epoch;
+            self.epoch_start_height = epoch_start_height;
+            self.epoch_start_time = epoch_start_time;
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
         } else {
@@ -186,6 +199,8 @@ where
             hash: self.block.hash.clone(),
             height: self.block.height,
             epoch: self.block.epoch,
+            epoch_start_height: self.epoch_start_height,
+            epoch_start_time: self.epoch_start_time.clone(),
             subspaces: self.block.subspaces.clone(),
             address_gen: self.address_gen.clone(),
         };
@@ -433,6 +448,8 @@ pub mod testing {
                 block,
                 current_height: BlockHeight::default(),
                 current_epoch: Epoch::default(),
+                epoch_start_height: BlockHeight::default(),
+                epoch_start_time: DateTimeUtc::now(),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),

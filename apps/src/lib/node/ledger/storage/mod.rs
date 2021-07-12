@@ -13,6 +13,7 @@ use anoma_shared::ledger::storage::{
 };
 use anoma_shared::types::address::EstablishedAddressGen;
 use anoma_shared::types::storage::{BlockHash, BlockHeight, Epoch, Key};
+use anoma_shared::types::time::DateTimeUtc;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::traits::Hasher;
@@ -38,6 +39,8 @@ pub fn open(db_path: impl AsRef<Path>, chain_id: String) -> PersistentStorage {
         block,
         current_height: BlockHeight::default(),
         current_epoch: Epoch::default(),
+        epoch_start_height: BlockHeight::default(),
+        epoch_start_time: DateTimeUtc::now(),
         address_gen: EstablishedAddressGen::new(
             "Privacy is a function of liberty.",
         ),
