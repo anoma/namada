@@ -18,7 +18,7 @@ use crate::bytes::ByteBuf;
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::storage::{
-    BlockHash, BlockHeight, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+    BlockHash, BlockHeight, Epoch, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
 };
 
 /// A result of a function that may fail
@@ -39,6 +39,8 @@ where
     pub block: BlockStorage<H>,
     /// The height of the current block
     pub current_height: BlockHeight,
+    /// The epoch of the current block
+    pub current_epoch: Epoch,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
 }
@@ -52,6 +54,8 @@ pub struct BlockStorage<H: StorageHasher> {
     pub hash: BlockHash,
     /// Height of the block (i.e. the level)
     pub height: BlockHeight,
+    /// Epoch of the block
+    pub epoch: Epoch,
     /// Accounts' subspaces storage for arbitrary key-values
     pub subspaces: HashMap<Key, Vec<u8>>,
 }
@@ -83,6 +87,8 @@ pub struct BlockState {
     pub hash: BlockHash,
     /// Height of the block
     pub height: BlockHeight,
+    /// Epoch of the block
+    pub epoch: Epoch,
     /// Accounts' subspaces storage for arbitrary key-values
     pub subspaces: HashMap<Key, Vec<u8>>,
     /// Established address generator
@@ -139,6 +145,7 @@ where
             store,
             hash,
             height,
+            epoch,
             subspaces,
             address_gen,
         }) = self.db.read_last_block()?
@@ -146,8 +153,10 @@ where
             self.block.tree = MerkleTree(SparseMerkleTree::new(root, store));
             self.block.hash = hash;
             self.block.height = height;
+            self.block.epoch = epoch;
             self.block.subspaces = subspaces;
             self.current_height = height;
+            self.current_epoch = epoch;
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
         } else {
@@ -176,6 +185,7 @@ where
             store: self.block.tree.0.store().clone(),
             hash: self.block.hash.clone(),
             height: self.block.height,
+            epoch: self.block.epoch,
             subspaces: self.block.subspaces.clone(),
             address_gen: self.address_gen.clone(),
         };
@@ -413,14 +423,16 @@ pub mod testing {
             let block = BlockStorage {
                 tree,
                 hash: BlockHash::default(),
-                height: BlockHeight(0),
+                height: BlockHeight::default(),
+                epoch: Epoch::default(),
                 subspaces,
             };
             Self {
                 db: MockDB::default(),
                 chain_id,
                 block,
-                current_height: BlockHeight(0),
+                current_height: BlockHeight::default(),
+                current_epoch: Epoch::default(),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),

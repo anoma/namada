@@ -43,6 +43,7 @@ pub const RESERVED_VP_KEY: &str = "?";
 
 /// Height of a block, i.e. the level.
 #[derive(
+    Default,
     Clone,
     Copy,
     BorshSerialize,
@@ -373,6 +374,22 @@ impl KeySeg for Address {
         DbKeySeg::AddressSeg(self.clone())
     }
 }
+
+/// Epoch identifier. Epochs are identified by consecutive numbers.
+#[derive(
+    Clone,
+    Copy,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct Epoch(u64);
 
 #[cfg(test)]
 mod tests {

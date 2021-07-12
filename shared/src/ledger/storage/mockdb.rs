@@ -57,6 +57,14 @@ impl DB for MockDB {
             let value = &state.hash;
             self.0.insert(key.to_string(), types::encode(value));
         }
+        // Block epoch
+        {
+            let key = prefix_key
+                .push(&"epoch".to_owned())
+                .map_err(Error::KeyError)?;
+            let value = &state.epoch;
+            self.0.insert(key.to_string(), types::encode(value));
+        }
         // SubSpace
         {
             let subspace_prefix = prefix_key
@@ -106,6 +114,7 @@ impl DB for MockDB {
         let mut root = None;
         let mut store = None;
         let mut hash = None;
+        let mut epoch = None;
         let mut address_gen = None;
         let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
         for (path, bytes) in
@@ -136,6 +145,12 @@ impl DB for MockDB {
                         },
                         "hash" => {
                             hash = Some(
+                                types::decode(bytes)
+                                    .map_err(Error::CodingError)?,
+                            )
+                        }
+                        "epoch" => {
+                            epoch = Some(
                                 types::decode(bytes)
                                     .map_err(Error::CodingError)?,
                             )
@@ -183,17 +198,22 @@ impl DB for MockDB {
                 None => unknown_key_error(path)?,
             }
         }
-        match (root, store, hash, address_gen) {
-            (Some(root), Some(store), Some(hash), Some(address_gen)) => {
-                Ok(Some(BlockState {
-                    root,
-                    store,
-                    hash,
-                    height,
-                    subspaces,
-                    address_gen,
-                }))
-            }
+        match (root, store, hash, epoch, address_gen) {
+            (
+                Some(root),
+                Some(store),
+                Some(hash),
+                Some(epoch),
+                Some(address_gen),
+            ) => Ok(Some(BlockState {
+                root,
+                store,
+                hash,
+                height,
+                epoch,
+                subspaces,
+                address_gen,
+            })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
                     .to_string(),
