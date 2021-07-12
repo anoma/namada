@@ -180,12 +180,12 @@ pub mod tx {
         String::from_utf8(slice.to_vec()).expect("Cannot convert the ID string")
     }
 
-    /// Get the committed block height
+    /// Get height of the current block
     pub fn get_block_height() -> BlockHeight {
         BlockHeight(unsafe { anoma_tx_get_block_height() })
     }
 
-    /// Get a block hash
+    /// Get hash of the current block
     pub fn get_block_hash() -> BlockHash {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
@@ -373,7 +373,7 @@ pub mod vp {
         String::from_utf8(slice.to_vec()).expect("Cannot convert the ID string")
     }
 
-    /// Get the committed block height
+    /// Get height of the current block
     pub fn get_block_height() -> BlockHeight {
         BlockHeight(unsafe { anoma_vp_get_block_height() })
     }
