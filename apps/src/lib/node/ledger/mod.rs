@@ -15,6 +15,7 @@ use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::PublicKey;
 use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
+use anoma_shared::types::time::DateTimeUtc;
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{address, key, token};
 use borsh::BorshSerialize;
@@ -129,8 +130,12 @@ impl Shell {
                         Error::AbciChannelSendError(format!("GetInfo {}", e))
                     })?
                 }
-                AbciMsg::InitChain { reply, chain_id } => {
-                    self.init_chain(chain_id)?;
+                AbciMsg::InitChain {
+                    reply,
+                    chain_id,
+                    genesis_time,
+                } => {
+                    self.init_chain(chain_id, genesis_time)?;
                     reply.send(()).map_err(|e| {
                         Error::AbciChannelSendError(format!("InitChain {}", e))
                     })?
@@ -211,7 +216,11 @@ impl Shell {
     /// 1. A set of initial users and tokens
     /// 2. Setting up the validity predicates for both users and tokens
     /// 3. A matchmaker
-    fn init_chain(&mut self, chain_id: String) -> Result<()> {
+    fn init_chain(
+        &mut self,
+        chain_id: String,
+        genesis_time: DateTimeUtc,
+    ) -> Result<()> {
         let (current_chain_id, _) = self.storage.get_chain_id();
         if current_chain_id != chain_id {
             return Err(Error::ChainIdError(format!(
@@ -310,6 +319,10 @@ impl Shell {
             },
         };
         parameters::init_genesis_storage(&mut self.storage, &parameters);
+
+        // The first epoch begins at genesis time
+        self.storage.epoch_start_time = genesis_time;
+
         Ok(())
     }
 

@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::types::storage::{BlockHash, BlockHeight};
+use anoma_shared::types::time::{DateTimeUtc, TimeZone, Utc};
 use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
@@ -72,6 +73,7 @@ pub enum AbciMsg {
     InitChain {
         reply: Sender<()>,
         chain_id: String,
+        genesis_time: DateTimeUtc,
     },
     /// Validate a given transaction for inclusion in the mempool
     MempoolValidate {
@@ -227,9 +229,17 @@ impl tendermint_abci::Application for AbciWrapper {
 
         // Initialize the chain in shell
         let chain_id = req.chain_id;
+        let ts: tendermint_proto::google::protobuf::Timestamp =
+            req.time.expect("Missing genesis time");
+        let genesis_time: DateTimeUtc =
+            (Utc.timestamp(ts.seconds, ts.nanos as u32)).into();
         let (reply, reply_receiver) = channel();
         self.sender
-            .send(AbciMsg::InitChain { reply, chain_id })
+            .send(AbciMsg::InitChain {
+                reply,
+                chain_id,
+                genesis_time,
+            })
             .expect("failed to send InitChain request");
         reply_receiver
             .recv()

@@ -1,8 +1,7 @@
 //! Types for dealing with time and durations.
 
 use borsh::{BorshDeserialize, BorshSerialize};
-pub use chrono::Duration;
-use chrono::{DateTime, Utc};
+pub use chrono::{DateTime, Duration, TimeZone, Utc};
 
 /// Check if the given `duration` has passed since the given `start.
 pub fn duration_passed(
@@ -76,5 +75,18 @@ impl BorshDeserialize for DateTimeUtc {
         let actual = DateTime::parse_from_rfc3339(&raw)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
         Ok(Self(actual.into()))
+    }
+}
+
+impl From<DateTime<Utc>> for DateTimeUtc {
+    fn from(dt: DateTime<Utc>) -> Self {
+        Self(dt)
+    }
+}
+
+impl From<prost_types::Timestamp> for DateTimeUtc {
+    fn from(timestamp: prost_types::Timestamp) -> Self {
+        let system_time: std::time::SystemTime = timestamp.into();
+        Self(system_time.into())
     }
 }
