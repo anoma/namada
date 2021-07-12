@@ -7,6 +7,7 @@ use std::fmt;
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::ledger::ibc::Ibc;
 use anoma_shared::ledger::native_vp::{self, NativeVp};
+use anoma_shared::ledger::parameters::Parameters;
 use anoma_shared::ledger::pos::PoS;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::vp_env;
@@ -222,6 +223,16 @@ fn execute_vps(
                         InternalAddress::Ibc => {
                             debug_assert_eq!(*internal_addr, &Ibc::ADDR);
                             Ibc::validate_tx(
+                                &mut ctx,
+                                tx_data,
+                                keys,
+                                &verifiers_addr,
+                            )
+                            .map_err(Error::NativeVpError)
+                        }
+                        InternalAddress::Parameters => {
+                            debug_assert_eq!(*internal_addr, &Parameters::ADDR);
+                            Parameters::validate_tx(
                                 &mut ctx,
                                 tx_data,
                                 keys,

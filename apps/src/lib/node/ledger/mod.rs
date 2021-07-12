@@ -7,9 +7,10 @@ use std::path::Path;
 use std::sync::mpsc;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
-use anoma_shared::ledger::native_vp;
+use anoma_shared::ledger::parameters::{EpochDuration, Parameters};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::storage::MerkleRoot;
+use anoma_shared::ledger::{native_vp, parameters};
 use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::PublicKey;
@@ -300,6 +301,15 @@ impl Shell {
 
         // TODO pass in the genesis object
         native_vp::init_genesis_storage(&mut self.storage);
+        // TODO put this into genesis
+        let parameters = Parameters {
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 2,
+                min_duration: anoma_shared::types::time::Duration::minutes(1)
+                    .into(),
+            },
+        };
+        parameters::init_genesis_storage(&mut self.storage, &parameters);
         Ok(())
     }
 
