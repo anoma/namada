@@ -402,6 +402,11 @@ impl Epoch {
     pub fn next(&mut self) {
         self.0 += 1;
     }
+
+    /// Get the epoch at index `n + offset`, where `n` is `self`.
+    pub fn offset(&self, offset: u64) -> Self {
+        Self(self.0 + offset)
+    }
 }
 
 #[cfg(test)]
