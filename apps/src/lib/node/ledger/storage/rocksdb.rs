@@ -114,10 +114,7 @@ impl DB for RocksDB {
             "epoch_start_height",
             types::encode(&state.epoch_start_height),
         );
-        batch.put(
-            "epoch_start_height",
-            types::encode(&state.epoch_start_height),
-        );
+        batch.put("epoch_start_time", types::encode(&state.epoch_start_time));
 
         let prefix_key = Key::from(state.height.to_db_key());
         // Merkle tree

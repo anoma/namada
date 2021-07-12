@@ -33,8 +33,8 @@ impl DB for MockDB {
             types::encode(&state.epoch_start_height),
         );
         self.0.insert(
-            "epoch_start_height".into(),
-            types::encode(&state.epoch_start_height),
+            "epoch_start_time".into(),
+            types::encode(&state.epoch_start_time),
         );
 
         let prefix_key = Key::from(state.height.to_db_key());
