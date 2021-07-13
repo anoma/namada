@@ -34,9 +34,8 @@ Each sub-matchmaker has a database and an arbitrary state.
 The database contains intents received by the node from the topics list that
 passed the filter.
 
-The state is arbitrary data that is managed by the main program. The state
-must be maintained by the main program. That state is given to all calls in the
-main program.
+The state is arbitrary data that is managed by the main program. That state is
+given to all calls in the main program.
 
 The database is persistent but the state is not. When a node is started the
 state is recovered by giving all intents from the database to the main program.
@@ -49,8 +48,8 @@ The filter is an optional wasm program given in parameters. This filter is used
 to check each intent received by that sub-matchmaker. If it's not defined,
 intents are directly passed to the main program.
 
- The entrypoint `filter_intent` takes an intent and returns a boolean. The filter
-has the ability to query the state of the ledger for any given key.
+ The entrypoint `filter_intent` takes an intent and returns a boolean. The
+filter has the ability to query the state of the ledger for any given key.
 
 ## Main program
 
@@ -65,15 +64,17 @@ the ledger composed of the code template given in the matchmaker parameter and
 the data given to this function. Finally the matchmaker must update its state so
 the next run will have up to date values.
 
+The main program is called on two specific occasion; when intent gossip node is
+started, on all intent from database and whenever a new intent is received from
+the network.
+
 ## Transaction
 
 The transaction code given in parameters is used when the main program matches a
 group of intents. The main program returns arbitrary data that is attached to
 the transaction which is then injected into a ledger node.
 
-The transaction
-
-## Flow diagram:
+## Flow diagram: Matchmaker process
 ![matchmaker process](./matchmaker_process.svg "matchmaker process")
 
 [excalidraw link](https://excalidraw.com/#room=92b291c13cfab8fb22a4,OvHfWIrL0jeDzPI-EFZMaw)
