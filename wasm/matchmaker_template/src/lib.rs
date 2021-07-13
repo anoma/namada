@@ -8,21 +8,25 @@ use anoma_vm_env::matchmaker_prelude::*;
 use petgraph::graph::{node_index, DiGraph, NodeIndex};
 use petgraph::visit::{depth_first_search, Control, DfsEvent};
 use petgraph::Graph;
+use rust_decimal::prelude::Decimal;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ExchangeNode {
     id: Vec<u8>,
-    exchange: Exchange,
+    exchange: Signed<Exchange>,
+    intent: Signed<FungibleTokenIntent>,
 }
 
 #[matchmaker]
 fn add_intent(graph_bytes: Vec<u8>, id: Vec<u8>, data: Vec<u8>) -> bool {
     let intent = decode_intent_data(&data);
-    let exchanges = intent.exchange.clone();
+    let exchanges = intent.data.exchange.clone();
     let mut graph = decode_graph(graph_bytes);
     log_string(format!("trying to match intent: {:#?}", intent));
-    exchanges.map(|exchange| add_node(&mut graph, id, exchange));
+    exchanges.into_iter().for_each(|exchange| {
+        add_node(&mut graph, id.clone(), exchange, intent.clone())
+    });
     find_match_and_remove_node(&mut graph);
     update_graph_data(&graph);
     true
@@ -33,10 +37,10 @@ fn create_transfer(
     to_node: &ExchangeNode,
 ) -> token::Transfer {
     token::Transfer {
-        source: from_node.exchange.addr.clone(),
-        target: to_node.exchange.addr.clone(),
-        token: to_node.exchange.token_buy.clone(),
-        amount: to_node.exchange.amount_buy,
+        source: from_node.exchange.data.addr.clone(),
+        target: to_node.exchange.data.addr.clone(),
+        token: to_node.exchange.data.token_buy.clone(),
+        amount: to_node.exchange.data.amount_buy,
     }
 }
 
@@ -45,8 +49,8 @@ fn send_tx(tx_data: IntentTransfers) {
     send_match(tx_data_bytes);
 }
 
-fn decode_intent_data(bytes: &[u8]) -> FungibleTokenIntent {
-    FungibleTokenIntent::try_from_slice(bytes).unwrap()
+fn decode_intent_data(bytes: &[u8]) -> Signed<FungibleTokenIntent> {
+    Signed::<FungibleTokenIntent>::try_from_slice(bytes).unwrap()
 }
 
 fn decode_graph(bytes: Vec<u8>) -> DiGraph<ExchangeNode, Address> {
@@ -74,19 +78,21 @@ fn find_to_update_node(
     let mut connect_buy = Vec::new();
     depth_first_search(graph, Some(start), |event| {
         if let DfsEvent::Discover(index, _time) = event {
-            let inverse_rate = 1. / new_node.exchange.rate_min;
+            let inverse_rate: Decimal =
+                Decimal::from(1) / new_node.exchange.data.rate_min.0;
             let current_node = &graph[index];
-            if new_node.exchange.token_sell == current_node.exchange.token_buy
-                && new_node.exchange.max_sell
-                    <= current_node.exchange.amount_buy
-                && inverse_rate >= current_node.rate_min
+            if new_node.exchange.data.token_sell
+                == current_node.exchange.data.token_buy
+                && new_node.exchange.data.max_sell
+                    <= current_node.exchange.data.amount_buy
+                && inverse_rate >= current_node.exchange.data.rate_min.0
             {
                 connect_sell.push(index);
-            } else if new_node.exchange.token_buy
-                == current_node.exchange.token_sell
-                && new_node.exchange.amount_buy
-                    <= current_node.exchange.max_sell
-                && inverse_rate <= current_node.rate_min
+            } else if new_node.exchange.data.token_buy
+                == current_node.exchange.data.token_sell
+                && new_node.exchange.data.amount_buy
+                    <= current_node.exchange.data.max_sell
+                && inverse_rate <= current_node.exchange.data.rate_min.0
             {
                 connect_buy.push(index);
             }
@@ -99,13 +105,18 @@ fn find_to_update_node(
 fn add_node(
     graph: &mut DiGraph<ExchangeNode, Address>,
     id: Vec<u8>,
-    exchange: Exchange,
+    exchange: Signed<Exchange>,
+    intent: Signed<FungibleTokenIntent>,
 ) {
-    let new_node = ExchangeNode { id, exchange };
+    let new_node = ExchangeNode {
+        id,
+        exchange,
+        intent,
+    };
     let new_node_index = graph.add_node(new_node.clone());
     let (connect_sell, connect_buy) = find_to_update_node(&graph, &new_node);
-    let sell_edge = new_node.exchange.token_sell;
-    let buy_edge = new_node.exchange.token_buy;
+    let sell_edge = new_node.exchange.data.token_sell;
+    let buy_edge = new_node.exchange.data.token_buy;
     for node_index in connect_sell {
         graph.update_edge(new_node_index, node_index, sell_edge.clone());
     }
@@ -131,16 +142,23 @@ fn create_and_send_tx_data(
             let node = &graph[intent_index];
             tx_data.transfers.insert(create_transfer(node, prev_node));
             tx_data
+                .exchanges
+                .insert(node.exchange.data.addr.clone(), node.exchange.clone());
+            tx_data
                 .intents
-                .insert(node.exchange.addr.clone(), node.exchange.clone());
+                .insert(node.exchange.data.addr.clone(), node.intent.clone());
             &node
         });
     tx_data
         .transfers
         .insert(create_transfer(first_node, last_node));
-    tx_data.intents.insert(
-        first_node.exchange.addr.clone(),
+    tx_data.exchanges.insert(
+        first_node.exchange.data.addr.clone(),
         first_node.exchange.clone(),
+    );
+    tx_data.intents.insert(
+        first_node.exchange.data.addr.clone(),
+        first_node.intent.clone(),
     );
     send_tx(tx_data)
 }
