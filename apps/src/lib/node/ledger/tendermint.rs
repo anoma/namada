@@ -232,6 +232,7 @@ impl tendermint_abci::Application for AbciWrapper {
         let chain_id = req.chain_id;
         let ts: tendermint_proto::google::protobuf::Timestamp =
             req.time.expect("Missing genesis time");
+        // TODO hacky conversion, depends on https://github.com/informalsystems/tendermint-rs/issues/870
         let genesis_time: DateTimeUtc =
             (Utc.timestamp(ts.seconds, ts.nanos as u32)).into();
         let (reply, reply_receiver) = channel();
@@ -350,6 +351,7 @@ impl tendermint_abci::Application for AbciWrapper {
                     Ok(height) => {
                         let ts: tendermint_proto::google::protobuf::Timestamp =
                             header.time.expect("Missing block time");
+                        // TODO hacky conversion, depends on https://github.com/informalsystems/tendermint-rs/issues/870
                         let time: DateTimeUtc =
                             (Utc.timestamp(ts.seconds, ts.nanos as u32)).into();
                         let (reply, reply_receiver) = channel();
