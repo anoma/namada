@@ -44,6 +44,7 @@ pwasm-utils = {version = "0.18.0", optional = true}
 rand = {version = "0.7", optional = true}
 rand_core = {version = "0.5", optional = true}
 rust_decimal = "1.14.3"
+rust_decimal_macros = "1.14"
 serde = {version = "1.0.125", features = ["derive"]}
 sha2 = "0.9.3"
 # We switch off "blake2b" because it cannot be compiled to wasm

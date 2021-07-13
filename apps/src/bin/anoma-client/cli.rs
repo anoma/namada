@@ -8,8 +8,11 @@ use anoma::client::tx;
 use anoma::proto::services::rpc_service_client::RpcServiceClient;
 use anoma::proto::{services, RpcMessage};
 use anoma::{cli, wallet};
-use anoma_shared::types::intent::Intent;
+use anoma_shared::types::intent::{
+    DecimalWrapper, Exchange, FungibleTokenIntent,
+};
 use anoma_shared::types::key::ed25519::Signed;
+use anoma_shared::types::token::Amount;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
@@ -73,7 +76,7 @@ fn craft_intent(
     args::CraftIntent {
         addr,
         token_sell,
-        amount_sell,
+        amount_sell: _,
         token_buy,
         amount_buy,
         file_path,
@@ -81,15 +84,23 @@ fn craft_intent(
 ) {
     let source_keypair = wallet::key_of(&addr.encode());
 
-    let intent = Intent {
+    let exchange = Exchange {
         addr,
         token_sell,
-        amount_sell,
         token_buy,
         amount_buy,
+        rate_min: DecimalWrapper::default(),
+        max_sell: Amount::default(),
     };
-    let signed: Signed<Intent> = Signed::new(&source_keypair, intent);
-    let data_bytes = signed.try_to_vec().unwrap();
+    let signed_exchange: Signed<Exchange> =
+        Signed::new(&source_keypair, exchange);
+    let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
+        &source_keypair,
+        FungibleTokenIntent {
+            exchange: vec![signed_exchange].into_iter().collect(),
+        },
+    );
+    let data_bytes = signed_ft.try_to_vec().unwrap();
 
     let mut file = File::create(file_path).unwrap();
     file.write_all(&data_bytes).unwrap();

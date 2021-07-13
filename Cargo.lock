@@ -139,6 +139,7 @@ dependencies = [
  "rand 0.7.3",
  "rand_core 0.5.1",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde 1.0.126",
  "sha2 0.9.5",
  "sparse-merkle-tree",
@@ -3904,6 +3905,16 @@ dependencies = [
  "arrayvec",
  "num-traits 0.2.14",
  "serde 1.0.126",
+]
+
+[[package]]
+name = "rust_decimal_macros"
+version = "1.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a776fe1e773e2e599d7813414ca7dd1f78b7e0fa699ecbefbfd24b5584df6819"
+dependencies = [
+ "quote",
+ "rust_decimal",
 ]
 
 [[package]]

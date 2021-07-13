@@ -26,8 +26,8 @@ fn apply_tx(tx_data: Vec<u8>) {
     }
 
     tx_data
-        .intents
+        .exchanges
         .values()
         .into_iter()
-        .for_each(intent::invalidate_intent);
+        .for_each(intent::invalidate_exchange);
 }

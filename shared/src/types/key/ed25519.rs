@@ -147,18 +147,35 @@ pub fn verify_tx_sig(
 
 /// A generic signed data wrapper for Borsh encode-able data.
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    Hash,
+    Eq,
+    PartialOrd,
 )]
-pub struct Signed<T: BorshSerialize + BorshDeserialize> {
+pub struct Signed<T: BorshSerialize + BorshDeserialize + Eq> {
     /// Arbitrary data to be signed
     pub data: T,
     /// The signature of the data
     pub sig: Signature,
 }
 
+impl<T> PartialEq for Signed<T>
+where
+    T: BorshSerialize + BorshDeserialize + Eq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
+    }
+}
+
 impl<T> Signed<T>
 where
-    T: BorshSerialize + BorshDeserialize,
+    T: BorshSerialize + BorshDeserialize + Eq,
 {
     /// Initialize a new signed data.
     pub fn new(keypair: &Keypair, data: T) -> Self {

@@ -1,23 +1,16 @@
 //! Intent data definitions and transaction and validity-predicate helpers.
 
 use std::collections::{HashMap, HashSet};
-use thiserror::Error;
+use std::io::ErrorKind;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
 use crate::types::key::ed25519::Signed;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token;
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Failed to serialize intent")]
-    SerializeFailed(),
-}
-
-type Result<T> = std::result::Result<T, Error>;
 
 /// A simple intent for fungible token trade
 #[derive(
@@ -28,25 +21,11 @@ type Result<T> = std::result::Result<T, Error>;
     BorshDeserialize,
     Serialize,
     Deserialize,
+    Eq,
 )]
-pub struct Intent {
-    /// Wasm program defining the spending conditions
-    pub code: Vec<u8>,
+pub struct FungibleTokenIntent {
     /// List of exchange definitions
-    pub exchanges: Vec<Exchange>,
-    /// The fee
-    pub fee: u64,
-}
-
-impl Intent {
-    pub fn serialize(&self) -> Result<Vec<u8>> {
-        let serialized_exchanges = self
-            .exchanges
-            .into_iter()
-            .map(|exchage| exchage.serialize())
-            .collect();
-        return self.code.concat(serialized_exchanges);
-    }
+    pub exchange: HashSet<Signed<Exchange>>,
 }
 
 #[derive(
@@ -58,25 +37,24 @@ impl Intent {
     Deserialize,
     Eq,
     PartialEq,
+    Hash,
+    PartialOrd,
 )]
-
 /// The definition of an intent exchange
 pub struct Exchange {
     /// The source address
     pub addr: Address,
     /// The token to be sold
     pub token_sell: Address,
-    /// The minimum amount of token to be sold
-    pub min_amount_sell: token::Amount,
+    /// The minimum rate
+    pub rate_min: DecimalWrapper,
     /// The maximum amount of token to be sold
-    pub max_amount_sell: token::Amount,
+    pub max_sell: token::Amount,
     /// The token to be bought
     pub token_buy: Address,
     /// The amount of token to be bought
     pub amount_buy: token::Amount,
 }
-
-// (token_sell, min_amount,max_amount) ->[(token_buy, rate)]
 
 /// These are transfers crafted from matched [`Intent`]s.
 #[derive(
@@ -86,8 +64,65 @@ pub struct IntentTransfers {
     /// Transfers crafted from the matched intents
     pub transfers: HashSet<token::Transfer>,
     // TODO benchmark between an map or a set, see which is less costly
-    /// The intents that were matched
-    pub intents: HashMap<Address, Signed<Intent>>,
+    /// The exchanges that were matched
+    pub exchanges: HashMap<Address, Signed<Exchange>>,
+    /// The intents
+    // TODO: refactor this without duplicating stuff. The exchanges in the
+    // `exchanges` hashmap are already contained in the FungibleTokenIntents
+    // belows
+    pub intents: HashMap<Address, Signed<FungibleTokenIntent>>,
+}
+
+/// Struct holding a safe rapresentation of a float
+#[derive(
+    Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Serialize, Deserialize,
+)]
+pub struct DecimalWrapper(pub Decimal);
+
+impl Default for DecimalWrapper {
+    fn default() -> Self {
+        DecimalWrapper(Decimal::default())
+    }
+}
+
+impl BorshSerialize for DecimalWrapper {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        let vec = self.0.to_string().as_bytes().to_vec();
+        let bytes = vec
+            .try_to_vec()
+            .expect("DecimalWrapper bytes encoding shouldn't fail");
+        writer.write_all(&bytes)
+    }
+}
+
+impl BorshDeserialize for DecimalWrapper {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        // deserialize the bytes first
+        let bytes: Vec<u8> =
+            BorshDeserialize::deserialize(buf).map_err(|e| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Error decoding DecimalWrapper: {}", e),
+                )
+            })?;
+        let decimal_str: &str =
+            std::str::from_utf8(bytes.as_slice()).map_err(|e| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Error decoding decimal: {}", e),
+                )
+            })?;
+        let decimal = Decimal::from_str(decimal_str).map_err(|e| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                format!("Error decoding decimal: {}", e),
+            )
+        })?;
+        Ok(DecimalWrapper(decimal))
+    }
 }
 
 impl IntentTransfers {
@@ -95,6 +130,7 @@ impl IntentTransfers {
     pub fn empty() -> Self {
         Self {
             transfers: HashSet::new(),
+            exchanges: HashMap::new(),
             intents: HashMap::new(),
         }
     }

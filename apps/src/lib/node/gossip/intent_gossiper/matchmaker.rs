@@ -110,6 +110,7 @@ impl Matchmaker {
     // that intent
     pub fn try_match_intent(&mut self, intent: &Intent) -> Result<bool> {
         if self.apply_filter(intent)? {
+            // TODO: add exchanges
             self.mempool
                 .put(intent.clone())
                 .map_err(Error::MempoolFailed)?;

@@ -22,7 +22,7 @@ pub mod tx_prelude {
     pub mod intent {
         pub use anoma_shared::types::intent::*;
 
-        pub use crate::intent::invalidate_intent;
+        pub use crate::intent::invalidate_exchange;
     }
 }
 
@@ -53,7 +53,7 @@ pub mod vp_prelude {
     pub mod intent {
         pub use anoma_shared::types::intent::*;
 
-        pub use crate::intent::vp;
+        pub use crate::intent::vp_exchange;
     }
 }
 

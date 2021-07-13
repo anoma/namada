@@ -1,6 +1,9 @@
-use anoma_vm_env::vp_prelude::intent::{Intent, IntentTransfers};
+use anoma_vm_env::vp_prelude::intent::{
+    Exchange, FungibleTokenIntent, IntentTransfers,
+};
 use anoma_vm_env::vp_prelude::key::ed25519::{Signed, SignedTxData};
 use anoma_vm_env::vp_prelude::*;
+use rust_decimal::prelude::*;
 
 enum KeyType<'a> {
     Token(&'a Address),
@@ -109,9 +112,14 @@ fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
         Ok(tx) => {
             match IntentTransfers::try_from_slice(&tx.data.unwrap()[..]) {
                 Ok(tx_data) => {
-                    if let Some(intent) = &tx_data.intents.get(addr) {
+                    if let Some(exchange) = &tx_data.exchanges.get(addr) {
+                        let intent_data = &tx_data.intents.get(addr).expect(
+                            "It should never fail since if there is an \
+                             exchange with a specific address there must be a \
+                             linked fungibletokenintent.",
+                        );
                         log_string("check intent".to_string());
-                        check_intent(addr, intent)
+                        check_intent(addr, exchange, intent_data)
                     } else {
                         log_string(
                             "no intent with a matching address".to_string(),
@@ -126,7 +134,11 @@ fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
     }
 }
 
-fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
+fn check_intent(
+    addr: &Address,
+    exchange: &Signed<Exchange>,
+    intent: &Signed<FungibleTokenIntent>,
+) -> bool {
     // verify signature
     let pk = key::ed25519::get(addr);
     if let Some(pk) = pk {
@@ -139,51 +151,57 @@ fn check_intent(addr: &Address, intent: &Signed<Intent>) -> bool {
     }
 
     // verify the intent have not been already used
-    if !intent::vp(intent) {
+    if !intent::vp_exchange(exchange) {
         return false;
     }
 
     // verify the intent is fulfilled
-    let Intent {
+    let Exchange {
         addr: _,
         token_sell,
-        amount_sell,
+        rate_min,
         token_buy,
         amount_buy,
-    } = &intent.data;
+        max_sell,
+    } = &exchange.data;
 
     let token_sell_key = token::balance_key(&token_sell, addr).to_string();
-    let sell_pre: token::Amount = read_pre(&token_sell_key).unwrap_or_default();
+    let mut sell_difference: token::Amount =
+        read_pre(&token_sell_key).unwrap_or_default();
     let sell_post: token::Amount =
         read_post(token_sell_key).unwrap_or_default();
 
-    // check that the sold token has been debited
-    if sell_pre.change() - sell_post.change() != amount_sell.change() {
-        log_string(format!(
-            "invalid sell, {}, {}, {}",
-            sell_pre.change(),
-            sell_post.change(),
-            amount_sell.change()
-        ));
-        return false;
-    }
+    sell_difference.spend(&sell_post);
 
     let token_buy_key = token::balance_key(&token_buy, addr).to_string();
     let buy_pre: token::Amount = read_pre(&token_buy_key).unwrap_or_default();
-    let buy_post: token::Amount = read_post(token_buy_key).unwrap_or_default();
-    // check that the bought token has been credited
-    let res = buy_post.change() - buy_pre.change() == amount_buy.change();
-    if !res {
+    let mut buy_difference: token::Amount =
+        read_post(token_buy_key).unwrap_or_default();
+
+    buy_difference.spend(&buy_pre);
+
+    let sell_diff: Decimal = sell_difference.change().into();
+    let buy_diff: Decimal = buy_difference.change().into();
+
+    // check if:
+    // - buy_difference > 0 to avoid division by 0 and make sure that something
+    //   is being sold/bought
+    // - rate_min is respected
+    // - max_sell is respected
+    if buy_difference.change() <= 0
+        || sell_diff / buy_diff > rate_min.0
+        || max_sell.change() < sell_difference.change()
+    {
         log_string(format!(
-            "invalid buy, {}, {}, {}",
-            buy_pre.change(),
-            buy_post.change(),
-            amount_buy.change()
+            "invalid exchange, {}, {}, {}",
+            sell_difference.change(),
+            buy_difference.change(),
+            max_sell.change()
         ));
+        false
+    } else {
+        true
     }
-    res
-    // TODO once an intent is fulfilled, it should be invalidated somehow to
-    // prevent replay
 }
 
 #[cfg(test)]
