@@ -8,15 +8,15 @@ any number of participants.
 The intent encoding allows the expression of a desire to participate in an asset
 exchange. The encoding is defined as follows :
 
-```rust
-struct FungibleToken {
-    address: Address,
-    token_sell: Address,
-    max_sell: Amount,
-    rate_min: f64,
-    token_buy: Address,
-    min_buy: Amount,
-    expire: Time::Instant,
+```protobuf
+message FungibleToken {
+  string address = 1;
+  string token_sell = 2;
+  int64 max_sell = 3;
+  int64 rate_min = 4;
+  string token_buy = 5;
+  int64 min_buy = 6;
+  google.protobuf.Timestamp expire = 7;
 }
 ```
 
