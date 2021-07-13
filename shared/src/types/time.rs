@@ -1,5 +1,7 @@
 //! Types for dealing with time and durations.
 
+use std::convert::{TryFrom, TryInto};
+
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
 
@@ -84,9 +86,13 @@ impl From<DateTime<Utc>> for DateTimeUtc {
     }
 }
 
-impl From<prost_types::Timestamp> for DateTimeUtc {
-    fn from(timestamp: prost_types::Timestamp) -> Self {
-        let system_time: std::time::SystemTime = timestamp.into();
-        Self(system_time.into())
+impl TryFrom<prost_types::Timestamp> for DateTimeUtc {
+    type Error = prost_types::TimestampOutOfSystemRangeError;
+
+    fn try_from(
+        timestamp: prost_types::Timestamp,
+    ) -> Result<Self, Self::Error> {
+        let system_time: std::time::SystemTime = timestamp.try_into()?;
+        Ok(Self(system_time.into()))
     }
 }

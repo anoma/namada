@@ -42,7 +42,8 @@ impl TryFrom<&[u8]> for Tx {
         let tx = types::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
         let timestamp = match tx.timestamp {
             Some(t) => {
-                let t: std::time::SystemTime = t.into();
+                let t: std::time::SystemTime =
+                    t.try_into().expect("Timestamp shouldn't be out of range");
                 let dt: DateTime<Utc> = t.into();
                 dt.to_rfc3339()
             }
@@ -236,7 +237,11 @@ impl Intent {
 impl Hash for Intent {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.data.hash(state);
-        let timestamp: std::time::SystemTime = self.timestamp.clone().into();
+        let timestamp: std::time::SystemTime = self
+            .timestamp
+            .clone()
+            .try_into()
+            .expect("Timestamp shouldn't be out of range");
         timestamp.hash(state);
     }
 }
