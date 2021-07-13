@@ -88,7 +88,7 @@ fn craft_intent(
         addr,
         token_sell,
         token_buy,
-        amount_buy,
+        min_buy,
         rate_min: DecimalWrapper::default(),
         max_sell: Amount::default(),
     };

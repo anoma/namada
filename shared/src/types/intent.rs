@@ -53,7 +53,7 @@ pub struct Exchange {
     /// The token to be bought
     pub token_buy: Address,
     /// The amount of token to be bought
-    pub amount_buy: token::Amount,
+    pub min_buy: token::Amount,
 }
 
 /// These are transfers crafted from matched [`Intent`]s.

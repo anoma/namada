@@ -157,11 +157,11 @@ fn check_intent(
 
     // verify the intent is fulfilled
     let Exchange {
-        addr: _,
+        addr,
         token_sell,
         rate_min,
         token_buy,
-        amount_buy,
+        min_buy,
         max_sell,
     } = &exchange.data;
 
@@ -186,11 +186,11 @@ fn check_intent(
     // check if:
     // - buy_difference > 0 to avoid division by 0 and make sure that something
     //   is being sold/bought
-    // - rate_min is respected
-    // - max_sell is respected
+    // - rate_min, max_sell, min_buy are respected
     if buy_difference.change() <= 0
         || sell_diff / buy_diff > rate_min.0
         || max_sell.change() < sell_difference.change()
+        || buy_diff < min_buy.change().into()
     {
         log_string(format!(
             "invalid exchange, {}, {}, {}",

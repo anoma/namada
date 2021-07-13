@@ -40,7 +40,7 @@ fn create_transfer(
         source: from_node.exchange.data.addr.clone(),
         target: to_node.exchange.data.addr.clone(),
         token: to_node.exchange.data.token_buy.clone(),
-        amount: to_node.exchange.data.amount_buy,
+        amount: to_node.exchange.data.min_buy,
     }
 }
 
@@ -65,10 +65,6 @@ fn update_graph_data(graph: &DiGraph<ExchangeNode, Address>) {
     update_data(serde_json::to_vec(graph).unwrap());
 }
 
-// sell at max 100 BTC at 1.5 rate to buy 50 ETH --> 1BTC = 1,5ETH --> 1ETH =
-// 1BTC/1,5 sell at max 100 ETH at 0,5 rate to buy 6 BTC
-// do we ready need max_sell?
-
 fn find_to_update_node(
     graph: &DiGraph<ExchangeNode, Address>,
     new_node: &ExchangeNode,
@@ -84,13 +80,13 @@ fn find_to_update_node(
             if new_node.exchange.data.token_sell
                 == current_node.exchange.data.token_buy
                 && new_node.exchange.data.max_sell
-                    <= current_node.exchange.data.amount_buy
+                    >= current_node.exchange.data.min_buy
                 && inverse_rate >= current_node.exchange.data.rate_min.0
             {
                 connect_sell.push(index);
             } else if new_node.exchange.data.token_buy
                 == current_node.exchange.data.token_sell
-                && new_node.exchange.data.amount_buy
+                && new_node.exchange.data.min_buy
                     <= current_node.exchange.data.max_sell
                 && inverse_rate <= current_node.exchange.data.rate_min.0
             {
