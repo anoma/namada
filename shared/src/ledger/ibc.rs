@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
+use borsh::BorshDeserialize;
 use ibc::ics02_client::client_consensus::AnyConsensusState;
+use ibc::ics02_client::client_def::{AnyClient, ClientDef};
 use ibc::ics02_client::client_state::AnyClientState;
 use ibc::ics02_client::client_type::ClientType;
 use ibc::ics02_client::context::ClientReader;
@@ -16,6 +18,7 @@ use thiserror::Error;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
+use crate::types::ibc::{ClientUpdateData, ClientUpgradeData};
 use crate::types::storage::{Key, KeySeg};
 
 #[allow(missing_docs)]
@@ -25,6 +28,8 @@ pub enum Error {
     NativeVpError(native_vp::Error),
     #[error("Key error: {0}")]
     KeyError(String),
+    #[error("Decoding TX data error: {0}")]
+    DecodingError(std::io::Error),
 }
 
 /// IBC functions result
@@ -66,7 +71,7 @@ where
 
     fn validate_tx(
         &self,
-        _tx_data: &[u8],
+        tx_data: &[u8],
         keys_changed: &HashSet<Key>,
         _verifiers: &HashSet<Address>,
     ) -> Result<bool> {
@@ -89,7 +94,7 @@ where
                             self.validate_created_client(&client_id)?
                         }
                         StateChange::Updated => {
-                            self.validate_updated_client(&client_id)?
+                            self.validate_updated_client(&client_id, tx_data)?
                         }
                         _ => {
                             tracing::info!(
@@ -223,12 +228,209 @@ where
             && client_type == consensus_state.client_type())
     }
 
-    fn validate_updated_client(&self, _id: &ClientId) -> Result<bool> {
-        // TODO: validate UpdateClient and UpgradeClient
-        Ok(false)
+    fn validate_updated_client(
+        &self,
+        client_id: &ClientId,
+        tx_data: &[u8],
+    ) -> Result<bool> {
+        // check the type of data in tx_data
+        match ClientUpdateData::try_from_slice(tx_data) {
+            Ok(data) => {
+                // "UpdateClient"
+                self.verify_update_client(client_id, data)
+            }
+            Err(_) => match ClientUpgradeData::try_from_slice(tx_data) {
+                Ok(data) => {
+                    // "UpgradeClient"
+                    self.verify_upgrade_client(client_id, data)
+                }
+                Err(e) => Err(Error::DecodingError(e)),
+            },
+        }
+    }
+
+    fn verify_update_client(
+        &self,
+        client_id: &ClientId,
+        data: ClientUpdateData,
+    ) -> Result<bool> {
+        match data.client_id() {
+            Some(id) if id == *client_id => {}
+            _ => return Ok(false),
+        }
+
+        // check the posterior states
+        let client_state = match self.client_state(client_id) {
+            Some(s) => s,
+            None => {
+                tracing::info!(
+                    "the client state of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        let height = client_state.latest_height();
+        let consensus_state = match self.consensus_state(client_id, height) {
+            Some(s) => s,
+            None => {
+                tracing::info!(
+                    "the consensus state of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        // check the prior client state
+        let pre_client_state = match self.client_state_pre(client_id) {
+            Some(s) => s,
+            None => {
+                tracing::info!(
+                    "the prior client state of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+
+        let header = match data.header() {
+            Some(h) => h,
+            None => {
+                tracing::info!("the header doesn't exist");
+                return Ok(false);
+            }
+        };
+
+        let client_type = match self.client_type(client_id) {
+            Some(t) => t,
+            None => {
+                tracing::info!(
+                    "the client type of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        let client = AnyClient::from_client_type(client_type);
+        match client.check_header_and_update_state(pre_client_state, header) {
+            Ok((new_client_state, new_consensus_state)) => Ok(new_client_state
+                == client_state
+                && new_consensus_state == consensus_state),
+            Err(e) => {
+                tracing::info!(
+                    "the header is invalid for the client {}: {}",
+                    client_id,
+                    e
+                );
+                Ok(false)
+            }
+        }
+    }
+
+    fn verify_upgrade_client(
+        &self,
+        client_id: &ClientId,
+        data: ClientUpgradeData,
+    ) -> Result<bool> {
+        match data.client_id() {
+            Some(id) if id == *client_id => {}
+            _ => return Ok(false),
+        }
+
+        // check the posterior states
+        let client_state = match self.client_state(client_id) {
+            Some(s) => s,
+            None => {
+                tracing::info!(
+                    "the client state of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        let height = client_state.latest_height();
+        let consensus_state = match self.consensus_state(client_id, height) {
+            Some(s) => s,
+            None => {
+                tracing::info!(
+                    "the consensus state of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        // check the prior client state
+        let pre_client_state = match self.client_state_pre(client_id) {
+            Some(s) => s,
+            None => {
+                tracing::info!(
+                    "the prior client state of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+
+        // get proofs
+        let client_proof = match data.proof_client() {
+            Some(p) => p,
+            None => {
+                tracing::info!("the client proof doesn't exist");
+                return Ok(false);
+            }
+        };
+        let consensus_proof = match data.proof_consensus_state() {
+            Some(p) => p,
+            None => {
+                tracing::info!("the consensus proof doesn't exist");
+                return Ok(false);
+            }
+        };
+
+        let client_type = match self.client_type(client_id) {
+            Some(t) => t,
+            None => {
+                tracing::info!(
+                    "the client type of ID {} doesn't exist",
+                    client_id
+                );
+                return Ok(false);
+            }
+        };
+        let client = AnyClient::from_client_type(client_type);
+        match client.verify_upgrade_and_update_state(
+            &pre_client_state,
+            &consensus_state,
+            client_proof,
+            consensus_proof,
+        ) {
+            Ok((new_client_state, new_consensus_state)) => Ok(new_client_state
+                == client_state
+                && new_consensus_state == consensus_state),
+            Err(e) => {
+                tracing::info!(
+                    "the header is invalid for the client {}: {}",
+                    client_id,
+                    e
+                );
+                Ok(false)
+            }
+        }
+    }
+
+    fn client_state_pre(&self, client_id: &ClientId) -> Option<AnyClientState> {
+        let path = Path::ClientState(client_id.clone()).to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a client state shouldn't fail");
+        match self.ctx.read_pre(&key) {
+            Ok(Some(value)) => AnyClientState::decode_vec(&value).ok(),
+            // returns None even if DB read fails
+            _ => None,
+        }
     }
 }
 
+/// Load the posterior client state
 impl<'a, DB, H> ClientReader for Ibc<'a, DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -296,8 +498,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use borsh::ser::BorshSerialize;
     use ibc::ics02_client::client_consensus::ConsensusState;
     use ibc::ics02_client::client_state::ClientState;
+    use ibc::ics02_client::header::AnyHeader;
     use ibc::mock::client_state::{MockClientState, MockConsensusState};
     use ibc::mock::header::MockHeader;
     use ibc::Height;
@@ -336,11 +540,7 @@ mod tests {
             .expect("Creating a key for a consensus state shouldn't fail")
     }
 
-    #[test]
-    fn test_create_client() {
-        let storage = TestStorage::default();
-        let mut write_log = WriteLog::default();
-
+    fn insert_init_states(write_log: &mut WriteLog) {
         // insert a mock client type
         let client_type_key = get_client_type_key();
         // `ClientType::Mock` cannot be decoded in ibc-rs for now
@@ -368,6 +568,13 @@ mod tests {
             .write(&consensus_key, bytes)
             .expect("write failed");
         write_log.commit_tx();
+    }
+
+    #[test]
+    fn test_create_client() {
+        let storage = TestStorage::default();
+        let mut write_log = WriteLog::default();
+        insert_init_states(&mut write_log);
 
         let tx_code = vec![];
         let tx_data = vec![];
@@ -376,7 +583,7 @@ mod tests {
         let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
 
         let mut keys_changed = HashSet::new();
-        keys_changed.insert(client_state_key);
+        keys_changed.insert(get_client_state_key());
 
         let verifiers = HashSet::new();
 
@@ -407,6 +614,55 @@ mod tests {
         // this should return false because no state is stored
         assert!(
             !ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_update_client() {
+        let mut storage = TestStorage::default();
+        let mut write_log = WriteLog::default();
+        insert_init_states(&mut write_log);
+        write_log.commit_block(&mut storage).expect("commit failed");
+
+        // update the client
+        let client_id = get_client_id();
+        let client_state_key = get_client_state_key();
+        let height = Height::new(1, 11);
+        let header = MockHeader::new(height);
+        let client_state = MockClientState(header).wrap_any();
+        let bytes = client_state.encode_vec().expect("encoding failed");
+        write_log
+            .write(&client_state_key, bytes)
+            .expect("write failed");
+        let consensus_key = get_consensus_state_key(height);
+        let consensus_state = MockConsensusState(header).wrap_any();
+        let bytes = consensus_state.encode_vec().expect("encoding failed");
+        write_log
+            .write(&consensus_key, bytes)
+            .expect("write failed");
+        write_log.commit_tx();
+
+        let tx_code = vec![];
+        // TODO: Need to fix ibc-rs to encode MockHeader
+        // https://github.com/informalsystems/ibc-rs/issues/1192
+        let tx_data = ClientUpdateData::new(client_id, AnyHeader::from(header))
+            .try_to_vec()
+            .expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data.clone()));
+        let gas_meter = VpGasMeter::new(0);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+
+        let mut keys_changed = HashSet::new();
+        keys_changed.insert(get_client_state_key());
+
+        let verifiers = HashSet::new();
+
+        let ibc = Ibc { ctx };
+        // this should return true because state has been stored
+        assert!(
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
                 .expect("validation failed")
         );
     }
