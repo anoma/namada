@@ -543,8 +543,7 @@ mod tests {
     fn insert_init_states(write_log: &mut WriteLog) {
         // insert a mock client type
         let client_type_key = get_client_type_key();
-        // `ClientType::Mock` cannot be decoded in ibc-rs for now
-        let client_type = "mock".to_string();
+        let client_type = ClientType::Mock.as_str().to_owned();
         write_log
             .write(
                 &client_type_key,
@@ -619,7 +618,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_update_client() {
         let mut storage = TestStorage::default();
         let mut write_log = WriteLog::default();
@@ -645,8 +643,6 @@ mod tests {
         write_log.commit_tx();
 
         let tx_code = vec![];
-        // TODO: Need to fix ibc-rs to encode MockHeader
-        // https://github.com/informalsystems/ibc-rs/issues/1192
         let tx_data = ClientUpdateData::new(client_id, AnyHeader::from(header))
             .try_to_vec()
             .expect("encoding failed");
