@@ -478,6 +478,7 @@ pub mod args {
     use std::str::FromStr;
 
     use anoma_shared::types::address::Address;
+    use anoma_shared::types::intent::DecimalWrapper;
     use anoma_shared::types::token;
     use libp2p::Multiaddr;
 
@@ -509,6 +510,7 @@ pub mod args {
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
     const NODE: Arg<String> = arg("node");
     const TOKEN_SELL: Arg<Address> = arg("token-sell");
+    const MIN_RATE: Arg<DecimalWrapper> = arg("min-rate");
     const TOKEN_BUY: Arg<Address> = arg("token-buy");
     const AMOUNT_SELL: Arg<token::Amount> = arg("amount-sell");
     const AMOUNT_BUY: Arg<token::Amount> = arg("amount-buy");
@@ -701,12 +703,14 @@ pub mod args {
         pub addr: Address,
         /// Token to sell
         pub token_sell: Address,
-        /// Amount of token to sell
-        pub amount_sell: token::Amount,
+        /// Max amount of token to sell
+        pub max_sell: token::Amount,
+        /// Rate
+        pub min_rate: DecimalWrapper,
         /// Token to buy
         pub token_buy: Address,
-        /// Amount of token to buy
-        pub amount_buy: token::Amount,
+        /// Min amount of token to buy
+        pub min_buy: token::Amount,
         /// Target file path
         pub file_path: String,
     }
@@ -714,17 +718,19 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let addr = ADDRESS.parse(matches);
             let token_sell = TOKEN_SELL.parse(matches);
-            let amount_sell = AMOUNT_SELL.parse(matches);
+            let max_sell = AMOUNT_SELL.parse(matches);
             let token_buy = TOKEN_BUY.parse(matches);
-            let amount_buy = AMOUNT_BUY.parse(matches);
+            let min_buy = AMOUNT_BUY.parse(matches);
             let file_path = FILE_PATH.parse(matches);
+            let min_rate = MIN_RATE.parse(matches);
             Self {
                 addr,
                 token_sell,
-                amount_sell,
+                max_sell,
                 token_buy,
-                amount_buy,
+                min_buy,
                 file_path,
+                min_rate,
             }
         }
 

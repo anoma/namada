@@ -76,9 +76,10 @@ fn craft_intent(
     args::CraftIntent {
         addr,
         token_sell,
-        amount_sell: _,
+        max_sell,
+        min_rate,
         token_buy,
-        amount_buy,
+        min_buy,
         file_path,
     }: args::CraftIntent,
 ) {
@@ -89,8 +90,8 @@ fn craft_intent(
         token_sell,
         token_buy,
         min_buy,
-        rate_min: DecimalWrapper::default(),
-        max_sell: Amount::default(),
+        rate_min: min_rate,
+        max_sell,
     };
     let signed_exchange: Signed<Exchange> =
         Signed::new(&source_keypair, exchange);

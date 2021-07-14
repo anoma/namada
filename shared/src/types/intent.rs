@@ -11,6 +11,7 @@ use crate::types::address::Address;
 use crate::types::key::ed25519::Signed;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token;
+use thiserror::Error;
 
 /// A simple intent for fungible token trade
 #[derive(
@@ -82,6 +83,38 @@ pub struct DecimalWrapper(pub Decimal);
 impl Default for DecimalWrapper {
     fn default() -> Self {
         DecimalWrapper(Decimal::default())
+    }
+}
+
+impl DecimalWrapper {
+    pub fn new(decimal: Decimal) -> Self {
+        Self(decimal)
+    }
+}
+
+impl From<Decimal> for DecimalWrapper {
+    fn from(decimal: Decimal) -> Self {
+        DecimalWrapper(decimal)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Error parsing as decimal: {0}.")]
+    DecimalParseError(String),
+}
+
+impl FromStr for DecimalWrapper {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let decimal = Decimal::from_str(s)
+            .map_err(|e| Self::Err::DecimalParseError(e.to_string()));
+
+        match decimal {
+            Ok(d) => Ok(DecimalWrapper::new(d)),
+            Err(e) => Err(e),
+        }
     }
 }
 
