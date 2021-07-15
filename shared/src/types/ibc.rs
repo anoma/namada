@@ -11,6 +11,17 @@ use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
+use thiserror::Error;
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Decoding error: {0}")]
+    DecodingError(String),
+}
+
+/// Decode result for IBC data
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// States to create a new client
 #[derive(
@@ -42,13 +53,15 @@ impl ClientCreationData {
     }
 
     /// Returns the client state
-    pub fn client_state(&self) -> Option<AnyClientState> {
-        AnyClientState::decode_vec(&self.client_state).ok()
+    pub fn client_state(&self) -> Result<AnyClientState> {
+        AnyClientState::decode_vec(&self.client_state)
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 
     /// Returns the consensus state
-    pub fn consensus_state(&self) -> Option<AnyConsensusState> {
-        AnyConsensusState::decode_vec(&self.consensus_state).ok()
+    pub fn consensus_state(&self) -> Result<AnyConsensusState> {
+        AnyConsensusState::decode_vec(&self.consensus_state)
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 }
 
@@ -67,27 +80,22 @@ impl ClientUpdateData {
     /// Returns the data to update a client
     pub fn new(client_id: ClientId, header: AnyHeader) -> Self {
         let client_id = client_id.as_str().to_owned();
-        let mut bytes = vec![];
-        header
-            .encode(&mut bytes)
+        let header = header
+            .encode_vec()
             .expect("Encoding a client header shouldn't fail");
-        // let header = header
-        //    .encode_vec()
-        //    .expect("Encoding a client header shouldn't fail");
-        Self {
-            client_id,
-            header: bytes,
-        }
+        Self { client_id, header }
     }
 
     /// Returns the client ID
-    pub fn client_id(&self) -> Option<ClientId> {
-        ClientId::from_str(&self.client_id).ok()
+    pub fn client_id(&self) -> Result<ClientId> {
+        ClientId::from_str(&self.client_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 
     /// Returns the header
-    pub fn header(&self) -> Option<AnyHeader> {
-        AnyHeader::decode_vec(&self.header).ok()
+    pub fn header(&self) -> Result<AnyHeader> {
+        AnyHeader::decode_vec(&self.header)
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 }
 
@@ -142,27 +150,32 @@ impl ClientUpgradeData {
     }
 
     /// Returns the client ID
-    pub fn client_id(&self) -> Option<ClientId> {
-        ClientId::from_str(&self.client_id).ok()
+    pub fn client_id(&self) -> Result<ClientId> {
+        ClientId::from_str(&self.client_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 
     /// Returns the client state
-    pub fn client_state(&self) -> Option<AnyClientState> {
-        AnyClientState::decode_vec(&self.client_state).ok()
+    pub fn client_state(&self) -> Result<AnyClientState> {
+        AnyClientState::decode_vec(&self.client_state)
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 
     /// Returns the consensus state
-    pub fn consensus_state(&self) -> Option<AnyConsensusState> {
-        AnyConsensusState::decode_vec(&self.consensus_state).ok()
+    pub fn consensus_state(&self) -> Result<AnyConsensusState> {
+        AnyConsensusState::decode_vec(&self.consensus_state)
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 
     /// Returns the proof for client state
-    pub fn proof_client(&self) -> Option<MerkleProof> {
-        MerkleProof::decode(&self.proof_client[..]).ok()
+    pub fn proof_client(&self) -> Result<MerkleProof> {
+        MerkleProof::decode(&self.proof_client[..])
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 
     /// Returns the proof for consensus state
-    pub fn proof_consensus_state(&self) -> Option<MerkleProof> {
-        MerkleProof::decode(&self.proof_consensus_state[..]).ok()
+    pub fn proof_consensus_state(&self) -> Result<MerkleProof> {
+        MerkleProof::decode(&self.proof_consensus_state[..])
+            .map_err(|e| Error::DecodingError(e.to_string()))
     }
 }

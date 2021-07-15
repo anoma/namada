@@ -29,7 +29,9 @@ pub enum Error {
     #[error("Key error: {0}")]
     KeyError(String),
     #[error("Decoding TX data error: {0}")]
-    DecodingError(std::io::Error),
+    DecodingTxDataError(std::io::Error),
+    #[error("IBC data error: {0}")]
+    IbcDataError(crate::types::ibc::Error),
 }
 
 /// IBC functions result
@@ -244,7 +246,7 @@ where
                     // "UpgradeClient"
                     self.verify_upgrade_client(client_id, data)
                 }
-                Err(e) => Err(Error::DecodingError(e)),
+                Err(e) => Err(Error::DecodingTxDataError(e)),
             },
         }
     }
@@ -254,9 +256,14 @@ where
         client_id: &ClientId,
         data: ClientUpdateData,
     ) -> Result<bool> {
-        match data.client_id() {
-            Some(id) if id == *client_id => {}
-            _ => return Ok(false),
+        let id = data.client_id().map_err(Error::IbcDataError)?;
+        if id != *client_id {
+            tracing::info!(
+                "the client ID is mismatched: {} in the tx data, {} in the key",
+                id,
+                client_id,
+            );
+            return Ok(false);
         }
 
         // check the posterior states
@@ -282,7 +289,7 @@ where
             }
         };
         // check the prior client state
-        let pre_client_state = match self.client_state_pre(client_id) {
+        let prev_client_state = match self.client_state_pre(client_id) {
             Some(s) => s,
             None => {
                 tracing::info!(
@@ -293,14 +300,7 @@ where
             }
         };
 
-        let header = match data.header() {
-            Some(h) => h,
-            None => {
-                tracing::info!("the header doesn't exist");
-                return Ok(false);
-            }
-        };
-
+        let header = data.header().map_err(Error::IbcDataError)?;
         let client_type = match self.client_type(client_id) {
             Some(t) => t,
             None => {
@@ -312,7 +312,7 @@ where
             }
         };
         let client = AnyClient::from_client_type(client_type);
-        match client.check_header_and_update_state(pre_client_state, header) {
+        match client.check_header_and_update_state(prev_client_state, header) {
             Ok((new_client_state, new_consensus_state)) => Ok(new_client_state
                 == client_state
                 && new_consensus_state == consensus_state),
@@ -332,9 +332,14 @@ where
         client_id: &ClientId,
         data: ClientUpgradeData,
     ) -> Result<bool> {
-        match data.client_id() {
-            Some(id) if id == *client_id => {}
-            _ => return Ok(false),
+        let id = data.client_id().map_err(Error::IbcDataError)?;
+        if id != *client_id {
+            tracing::info!(
+                "the client ID is mismatched: {} in the tx data, {} in the key",
+                id,
+                client_id,
+            );
+            return Ok(false);
         }
 
         // check the posterior states
@@ -370,34 +375,12 @@ where
                 return Ok(false);
             }
         };
-
         // get proofs
-        let client_proof = match data.proof_client() {
-            Some(p) => p,
-            None => {
-                tracing::info!("the client proof doesn't exist");
-                return Ok(false);
-            }
-        };
-        let consensus_proof = match data.proof_consensus_state() {
-            Some(p) => p,
-            None => {
-                tracing::info!("the consensus proof doesn't exist");
-                return Ok(false);
-            }
-        };
+        let client_proof = data.proof_client().map_err(Error::IbcDataError)?;
+        let consensus_proof =
+            data.proof_consensus_state().map_err(Error::IbcDataError)?;
 
-        let client_type = match self.client_type(client_id) {
-            Some(t) => t,
-            None => {
-                tracing::info!(
-                    "the client type of ID {} doesn't exist",
-                    client_id
-                );
-                return Ok(false);
-            }
-        };
-        let client = AnyClient::from_client_type(client_type);
+        let client = AnyClient::from_client_type(client_state.client_type());
         match client.verify_upgrade_and_update_state(
             &pre_client_state,
             &consensus_state,

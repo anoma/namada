@@ -4564,37 +4564,6 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#5ff96bdabd7eba02e2cdeea90799cc8d72effea5"
-dependencies = [
- "anomaly",
- "async-trait",
- "bytes 1.0.1",
- "chrono",
- "ed25519",
- "ed25519-dalek",
- "futures",
- "num-traits 0.2.14",
- "once_cell",
- "prost",
- "prost-types",
- "serde 1.0.126",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "sha2 0.9.5",
- "signature",
- "subtle 2.4.0",
- "subtle-encoding",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
- "thiserror",
- "toml",
- "url",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint"
-version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7d330f5d92e5e1c7a84130805b48b4983d98a37257034544492e3566315142b"
 dependencies = [
@@ -4625,6 +4594,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "tendermint"
+version = "0.20.0"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#5ff96bdabd7eba02e2cdeea90799cc8d72effea5"
+dependencies = [
+ "anomaly",
+ "async-trait",
+ "bytes 1.0.1",
+ "chrono",
+ "ed25519",
+ "ed25519-dalek",
+ "futures",
+ "num-traits 0.2.14",
+ "once_cell",
+ "prost",
+ "prost-types",
+ "serde 1.0.126",
+ "serde_bytes",
+ "serde_json",
+ "serde_repr",
+ "sha2 0.9.5",
+ "signature",
+ "subtle 2.4.0",
+ "subtle-encoding",
+ "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
+ "thiserror",
+ "toml",
+ "url",
+ "zeroize",
+]
+
+[[package]]
 name = "tendermint-abci"
 version = "0.20.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#5ff96bdabd7eba02e2cdeea90799cc8d72effea5"
@@ -4640,7 +4640,8 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#5ff96bdabd7eba02e2cdeea90799cc8d72effea5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fadcaea1eecd91dbdd9636fe8ad38d2b41fc0ae814c176e51e00925cdda78a34"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",
@@ -4658,8 +4659,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fadcaea1eecd91dbdd9636fe8ad38d2b41fc0ae814c176e51e00925cdda78a34"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#5ff96bdabd7eba02e2cdeea90799cc8d72effea5"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",
