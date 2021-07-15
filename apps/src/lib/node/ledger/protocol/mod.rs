@@ -7,7 +7,7 @@ use std::fmt;
 use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
 use anoma_shared::ledger::ibc::{self, Ibc};
 use anoma_shared::ledger::native_vp::{self, NativeVp};
-use anoma_shared::ledger::parameters::Parameters;
+use anoma_shared::ledger::parameters::{self, ParametersVp};
 use anoma_shared::ledger::pos::{self, PoS};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::proto::{self, Tx};
@@ -37,6 +37,8 @@ pub enum Error {
     IbcNativeVpError(ibc::Error),
     #[error("PoS native VP: {0}")]
     PosNativeVpError(pos::Error),
+    #[error("Parameters native VP: {0}")]
+    ParametersNativeVpError(parameters::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -222,14 +224,10 @@ fn execute_vps(
                                 .map_err(Error::IbcNativeVpError)
                         }
                         InternalAddress::Parameters => {
-                            debug_assert_eq!(*internal_addr, &Parameters::ADDR);
-                            Parameters::validate_tx(
-                                &mut ctx,
-                                tx_data,
-                                keys,
-                                &verifiers_addr,
-                            )
-                            .map_err(Error::NativeVpError)
+                            let parameters = ParametersVp { ctx };
+                            parameters
+                                .validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::ParametersNativeVpError)
                         }
                     };
 

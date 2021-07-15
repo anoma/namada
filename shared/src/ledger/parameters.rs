@@ -6,13 +6,34 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use super::storage::types::decode;
-use crate::ledger::native_vp::NativeVp;
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::types::{self, encode};
-use crate::ledger::storage::{self, Storage};
-use crate::ledger::vp_env;
+use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{DbKeySeg, Key};
 use crate::types::time::DurationSecs;
+
+const ADDR: InternalAddress = InternalAddress::Parameters;
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Native VP error: {0}")]
+    NativeVpError(native_vp::Error),
+}
+
+/// Parameters functions result
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Parameters VP
+pub struct ParametersVp<'a, DB, H>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Context to interact with the host structures.
+    pub ctx: Ctx<'a, DB, H>,
+}
 
 /// Protocol parameters
 #[derive(
@@ -79,7 +100,7 @@ pub enum ReadError {
 /// cost.
 pub fn read<DB, H>(
     storage: &Storage<DB, H>,
-) -> Result<(Parameters, u64), ReadError>
+) -> std::result::Result<(Parameters, u64), ReadError>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
@@ -91,28 +112,30 @@ where
     Ok((parameters, gas))
 }
 
-impl NativeVp for Parameters {
-    const ADDR: InternalAddress = InternalAddress::Parameters;
+impl<'a, DB, H> NativeVp for ParametersVp<'a, DB, H>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    type Error = Error;
 
-    fn init_genesis_storage<DB, H>(_storage: &mut Storage<DB, H>)
+    const ADDR: InternalAddress = ADDR;
+
+    fn init_genesis_storage<D, SH>(_storage: &mut Storage<D, SH>)
     where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: storage::StorageHasher,
+        D: storage::DB + for<'iter> storage::DBIter<'iter>,
+        SH: StorageHasher,
     {
         // TODO consider removing this from the trait, different VPs need
         // different args
     }
 
-    fn validate_tx<DB, H>(
-        _ctx: &mut super::native_vp::Ctx<DB, H>,
+    fn validate_tx(
+        &self,
         _tx_data: &[u8],
         _keys_changed: &HashSet<Key>,
         _verifiers: &HashSet<Address>,
-    ) -> vp_env::Result<bool>
-    where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: storage::StorageHasher,
-    {
+    ) -> Result<bool> {
         // TODO allow parameters change by over 2/3 validator voting power
         Ok(false)
     }
@@ -121,8 +144,12 @@ impl NativeVp for Parameters {
 /// Storage key used for parameters.
 fn storage_key() -> Key {
     Key {
-        segments: vec![DbKeySeg::AddressSeg(Address::Internal(
-            Parameters::ADDR,
-        ))],
+        segments: vec![DbKeySeg::AddressSeg(Address::Internal(ADDR))],
+    }
+}
+
+impl From<native_vp::Error> for Error {
+    fn from(err: native_vp::Error) -> Self {
+        Self::NativeVpError(err)
     }
 }
