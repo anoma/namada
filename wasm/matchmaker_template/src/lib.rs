@@ -1,14 +1,15 @@
 use std::collections::VecDeque;
 
 use anoma_vm_env::matchmaker_prelude::intent::{
-    Exchange, FungibleTokenIntent, IntentTransfers,
+    DecimalWrapper, Exchange, FungibleTokenIntent, IntentTransfers,
 };
 use anoma_vm_env::matchmaker_prelude::key::ed25519::Signed;
+use anoma_vm_env::matchmaker_prelude::token::Amount;
 use anoma_vm_env::matchmaker_prelude::*;
 use petgraph::graph::{node_index, DiGraph, NodeIndex};
 use petgraph::visit::{depth_first_search, Control, DfsEvent};
 use petgraph::Graph;
-use rust_decimal::prelude::Decimal;
+use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,11 +37,18 @@ fn create_transfer(
     from_node: &ExchangeNode,
     to_node: &ExchangeNode,
 ) -> token::Transfer {
+    // max_sell
+    // min_buy
+    // min_rate -> sell
+
+    let amount = from_node.exchange.data.rate_min.0
+        * Decimal::from_i128(to_node.exchange.data.max_sell.change()).unwrap();
+
     token::Transfer {
         source: from_node.exchange.data.addr.clone(),
         target: to_node.exchange.data.addr.clone(),
         token: to_node.exchange.data.token_buy.clone(),
-        amount: to_node.exchange.data.min_buy,
+        amount: Amount::from(amount.to_u64().unwrap()),
     }
 }
 
@@ -74,24 +82,26 @@ fn find_to_update_node(
     let mut connect_buy = Vec::new();
     depth_first_search(graph, Some(start), |event| {
         if let DfsEvent::Discover(index, _time) = event {
-            let inverse_rate: Decimal =
-                Decimal::from(1) / new_node.exchange.data.rate_min.0;
-            let current_node = &graph[index];
-            if new_node.exchange.data.token_sell
-                == current_node.exchange.data.token_buy
-                && new_node.exchange.data.max_sell
-                    >= current_node.exchange.data.min_buy
-                && inverse_rate >= current_node.exchange.data.rate_min.0
-            {
-                connect_sell.push(index);
-            } else if new_node.exchange.data.token_buy
-                == current_node.exchange.data.token_sell
-                && new_node.exchange.data.min_buy
-                    <= current_node.exchange.data.max_sell
-                && inverse_rate <= current_node.exchange.data.rate_min.0
-            {
-                connect_buy.push(index);
-            }
+            // let inverse_rate: Decimal =
+            //     Decimal::from(1) / new_node.exchange.data.rate_min.0;
+            // let current_node = &graph[index];
+            // if new_node.exchange.data.token_sell
+            //     == current_node.exchange.data.token_buy
+            //     && new_node.exchange.data.max_sell
+            //         >= current_node.exchange.data.min_buy
+            //     && inverse_rate >= current_node.exchange.data.rate_min.0
+            // {
+            //     connect_sell.push(index);
+            // } else if new_node.exchange.data.token_buy
+            //     == current_node.exchange.data.token_sell
+            //     && new_node.exchange.data.min_buy
+            //         <= current_node.exchange.data.max_sell
+            //     && inverse_rate <= current_node.exchange.data.rate_min.0
+            // {
+            //     connect_buy.push(index);
+            // }
+            connect_buy.push(index);
+            connect_sell.push(index);
         }
         Control::<()>::Continue
     });

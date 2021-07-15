@@ -104,6 +104,17 @@ pub enum Error {
     DecimalParseError(String),
 }
 
+impl From<token::Amount> for Result<DecimalWrapper, Error> {
+    fn from(amount: token::Amount) -> Self {
+        let decimal = Decimal::from_i128(amount.change());
+
+        match decimal {
+            Some(d) => Ok(DecimalWrapper::new(d)),
+            None => Err(Error::DecimalParseError(amount.change().to_string())),
+        }
+    }
+}
+
 impl FromStr for DecimalWrapper {
     type Err = Error;
 

@@ -503,17 +503,20 @@ pub mod args {
     const TOPIC: Arg<String> = arg("topic");
     const TOPICS: ArgMulti<String> = TOPIC.multi();
     const ADDRESS: Arg<Address> = arg("address");
+    const MULTI_ADDRESS: ArgMulti<Address> = arg_multi("address");
+    const SIGNING_KEY: Arg<Address> = arg("key");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
     const NODE: Arg<String> = arg("node");
-    const TOKEN_SELL: Arg<Address> = arg("token-sell");
-    const MIN_RATE: Arg<DecimalWrapper> = arg("min-rate");
-    const TOKEN_BUY: Arg<Address> = arg("token-buy");
-    const AMOUNT_SELL: Arg<token::Amount> = arg("amount-sell");
-    const AMOUNT_BUY: Arg<token::Amount> = arg("amount-buy");
+    const TOKEN_SELL: ArgMulti<Address> = arg_multi("token-sell");
+    const MIN_RATE: ArgMulti<DecimalWrapper> = arg_multi("min-rate");
+    const TOKEN_BUY: ArgMulti<Address> = arg_multi("token-buy");
+    const MAX_AMOUNT_SELL: ArgMulti<token::Amount> =
+        arg_multi("max-amount-sell");
+    const MIN_AMOUNT_BUY: ArgMulti<token::Amount> = arg_multi("min-amount-buy");
     const FILE_PATH: ArgDefault<String> =
         arg_default("file-path", DefaultFn(|| "intent.data".into()));
     const SOURCE: Arg<Address> = arg("source");
@@ -699,31 +702,35 @@ pub mod args {
     /// Craft intent for token exchange arguments
     #[derive(Debug)]
     pub struct CraftIntent {
+        pub key: Address,
         /// Source address
-        pub addr: Address,
+        pub addr: Vec<Address>,
         /// Token to sell
-        pub token_sell: Address,
+        pub token_sell: Vec<Address>,
         /// Max amount of token to sell
-        pub max_sell: token::Amount,
+        pub max_sell: Vec<token::Amount>,
         /// Rate
-        pub min_rate: DecimalWrapper,
+        pub min_rate: Vec<DecimalWrapper>,
         /// Token to buy
-        pub token_buy: Address,
+        pub token_buy: Vec<Address>,
         /// Min amount of token to buy
-        pub min_buy: token::Amount,
+        pub min_buy: Vec<token::Amount>,
         /// Target file path
         pub file_path: String,
     }
+
     impl Args for CraftIntent {
         fn parse(matches: &ArgMatches) -> Self {
-            let addr = ADDRESS.parse(matches);
+            let key = SIGNING_KEY.parse(matches);
+            let addr = MULTI_ADDRESS.parse(matches);
             let token_sell = TOKEN_SELL.parse(matches);
-            let max_sell = AMOUNT_SELL.parse(matches);
+            let max_sell = MAX_AMOUNT_SELL.parse(matches);
             let token_buy = TOKEN_BUY.parse(matches);
-            let min_buy = AMOUNT_BUY.parse(matches);
+            let min_buy = MIN_AMOUNT_BUY.parse(matches);
             let file_path = FILE_PATH.parse(matches);
             let min_rate = MIN_RATE.parse(matches);
             Self {
+                key,
                 addr,
                 token_sell,
                 max_sell,
@@ -735,11 +742,13 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(ADDRESS.def().about("The account address."))
+            app.arg(SIGNING_KEY.def().about("The signing key."))
+                .arg(ADDRESS.def().about("The account address."))
                 .arg(TOKEN_SELL.def().about("The selling token."))
-                .arg(AMOUNT_SELL.def().about("The amount selling."))
+                .arg(MAX_AMOUNT_SELL.def().about("The max amount selling."))
+                .arg(MIN_RATE.def().about("The minimum buying rate."))
                 .arg(TOKEN_BUY.def().about("The buying token."))
-                .arg(AMOUNT_BUY.def().about("The amount buying."))
+                .arg(MIN_AMOUNT_BUY.def().about("The min amount buying."))
                 .arg(FILE_PATH.def().about("The output file"))
         }
     }

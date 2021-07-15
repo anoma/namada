@@ -1,5 +1,6 @@
 //! Anoma client CLI.
 
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
 
@@ -8,11 +9,8 @@ use anoma::client::tx;
 use anoma::proto::services::rpc_service_client::RpcServiceClient;
 use anoma::proto::{services, RpcMessage};
 use anoma::{cli, wallet};
-use anoma_shared::types::intent::{
-    DecimalWrapper, Exchange, FungibleTokenIntent,
-};
+use anoma_shared::types::intent::{Exchange, FungibleTokenIntent};
 use anoma_shared::types::key::ed25519::Signed;
-use anoma_shared::types::token::Amount;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
@@ -74,6 +72,7 @@ async fn subscribe_topic(
 
 fn craft_intent(
     args::CraftIntent {
+        key,
         addr,
         token_sell,
         max_sell,
@@ -83,22 +82,42 @@ fn craft_intent(
         file_path,
     }: args::CraftIntent,
 ) {
-    let source_keypair = wallet::key_of(&addr.encode());
+    let mut input_lengths = vec![
+        addr.len(),
+        token_sell.len(),
+        max_sell.len(),
+        min_rate.len(),
+        token_buy.len(),
+        min_buy.len(),
+    ];
+    input_lengths.sort();
+    if input_lengths[0] != input_lengths[5] {
+        println!("Bad inputs length");
+    }
 
-    let exchange = Exchange {
-        addr,
-        token_sell,
-        token_buy,
-        min_buy,
-        rate_min: min_rate,
-        max_sell,
-    };
-    let signed_exchange: Signed<Exchange> =
-        Signed::new(&source_keypair, exchange);
+    let exchanges: HashSet<Signed<Exchange>> = addr
+        .iter()
+        .map(|address| {
+            let source_keypair = wallet::key_of(&address.clone().encode());
+
+            let exchange = Exchange {
+                addr: address.clone(),
+                token_sell: token_sell.get(0).unwrap().clone(),
+                token_buy: token_buy.get(0).unwrap().clone(),
+                min_buy: min_buy.get(0).unwrap().clone(),
+                rate_min: min_rate.get(0).unwrap().clone(),
+                max_sell: max_sell.get(0).unwrap().clone(),
+            };
+
+            Signed::new(&source_keypair, exchange)
+        })
+        .collect();
+
+    let signing_key = wallet::key_of(key.encode());
     let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
-        &source_keypair,
+        &signing_key,
         FungibleTokenIntent {
-            exchange: vec![signed_exchange].into_iter().collect(),
+            exchange: exchanges,
         },
     );
     let data_bytes = signed_ft.try_to_vec().unwrap();

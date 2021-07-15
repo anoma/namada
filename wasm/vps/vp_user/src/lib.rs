@@ -48,10 +48,14 @@ fn validate_tx(
         _ => false,
     };
 
+    log_string(format!("signature valid {}", valid_sig));
+
     // TODO memoize?
     // TODO this is not needed for matchmaker, maybe we should have a different
     // VP?
     let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
+
+    log_string(format!("valid transfer"));
 
     for key in keys_changed.iter() {
         let is_valid = match KeyType::from(key) {
@@ -84,10 +88,17 @@ fn validate_tx(
                 ));
                 pre.len() + 1 == post.len()
             }
-            KeyType::Token(_owner) | KeyType::InvalidIntentSet(_owner) => {
+            KeyType::InvalidIntentSet(_owner) => {
                 log_string(format!(
-                    "key {} is not of owner, valid_sig {}",
-                    key, valid_sig
+                    "InvalidIntentSet: key {} is not of owner, valid_sig {}, owner: {}, address: {}",
+                    key, valid_sig, _owner, addr
+                ));
+                valid_sig
+            }
+            KeyType::Token(_owner) => {
+                log_string(format!(
+                    "Token: key {} is not of owner, valid_sig {}, owner: {}, address: {}",
+                    key, valid_sig, _owner, addr
                 ));
                 valid_sig
             }
@@ -112,6 +123,10 @@ fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
         Ok(tx) => {
             match IntentTransfers::try_from_slice(&tx.data.unwrap()[..]) {
                 Ok(tx_data) => {
+                    log_string(format!(
+                        "tx_data.exchanges: {:?}, {}",
+                        tx_data.exchanges, &addr
+                    ));
                     if let Some(exchange) = &tx_data.exchanges.get(addr) {
                         let intent_data = &tx_data.intents.get(addr).expect(
                             "It should never fail since if there is an \
@@ -180,23 +195,26 @@ fn check_intent(
 
     buy_difference.spend(&buy_pre);
 
-    let sell_diff: Decimal = sell_difference.change().into();
-    let buy_diff: Decimal = buy_difference.change().into();
+    let sell_diff: Decimal = sell_difference.change().into(); // -> how many token I sold
+    let buy_diff: Decimal = buy_difference.change().into(); // -> how many token I got
+                                                            // how many token I got / how many token I sold
 
     // check if:
     // - buy_difference > 0 to avoid division by 0 and make sure that something
     //   is being sold/bought
     // - rate_min, max_sell, min_buy are respected
     if buy_difference.change() <= 0
-        || sell_diff / buy_diff > rate_min.0
+        || buy_diff / sell_diff > rate_min.0
         || max_sell.change() < sell_difference.change()
         || buy_diff < min_buy.change().into()
     {
         log_string(format!(
-            "invalid exchange, {}, {}, {}",
+            "invalid exchange, {}, {}, {}, {}, {}",
             sell_difference.change(),
             buy_difference.change(),
-            max_sell.change()
+            max_sell.change(),
+            rate_min.0,
+            sell_diff / buy_diff
         ));
         false
     } else {
