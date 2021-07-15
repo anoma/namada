@@ -38,7 +38,7 @@ std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 testing = []
 
 [dependencies]
-anoma_shared = {path = "../shared", features = ["wasm-runtime"]}
+anoma_shared = {path = "../shared", features = ["ibc-vp", "wasm-runtime"]}
 async-std = {version = "1.9.0", features = ["unstable"]}
 base64 = "0.13.0"
 bech32 = "0.8.0"

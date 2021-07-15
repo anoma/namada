@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
-use crate::types::address::{self, Address};
+use crate::types::address::{self, Address, InternalAddress};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -237,6 +237,78 @@ impl Key {
             _ => false,
         }
     }
+
+    /// Check if the given key is a key to IBC-related data
+    pub fn is_ibc_key(&self) -> bool {
+        match self.segments.get(0) {
+            Some(seg) => {
+                *seg == DbKeySeg::AddressSeg(Address::Internal(
+                    InternalAddress::Ibc,
+                ))
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns a key of the IBC-related data
+    /// Only this function can push "^" segment for IBC
+    pub fn ibc_key(path: impl AsRef<str>) -> Result<Self> {
+        let path = Self::parse(path)?;
+        let addr = Address::Internal(InternalAddress::Ibc);
+        let key = Self::from(addr.to_db_key());
+        Ok(key.join(&path))
+    }
+
+    /// Returns a key from the given DB key path that has the height and
+    /// the space type
+    pub fn parse_db_key(db_key: &str) -> Result<Self> {
+        let mut segments: Vec<&str> =
+            db_key.split(KEY_SEGMENT_SEPARATOR).collect();
+        let key = match segments.get(2) {
+            Some(seg)
+                if *seg == Address::Internal(InternalAddress::Ibc).raw() =>
+            {
+                // the path of IBC-related data should start with
+                // height/subspace/#IBC
+                Self::ibc_key(
+                    segments
+                        .split_off(3)
+                        .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                )
+                .map_err(|e| Error::Temporary {
+                    error: format!(
+                        "Cannot parse key segments {}: {}",
+                        db_key, e
+                    ),
+                })?
+            }
+            _ => match segments.get(3) {
+                Some(seg) if *seg == RESERVED_VP_KEY => {
+                    // the path of a validity predicate should be
+                    // height/subspace/{address}/?
+                    let mut addr_str =
+                        (*segments.get(2).expect("the address not found"))
+                            .to_owned();
+                    let _ = addr_str.remove(0);
+                    let addr = Address::decode(&addr_str)
+                        .expect("cannot decode the address");
+                    Self::validity_predicate(&addr)
+                }
+                _ => Self::parse(
+                    segments
+                        .split_off(2)
+                        .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                )
+                .map_err(|e| Error::Temporary {
+                    error: format!(
+                        "Cannot parse key segments {}: {}",
+                        db_key, e
+                    ),
+                })?,
+            },
+        };
+        Ok(key)
+    }
 }
 
 impl Display for Key {
@@ -292,6 +364,9 @@ impl KeySeg for DbKeySeg {
     fn parse(mut string: String) -> Result<Self> {
         // a separator should not included
         if string.contains(KEY_SEGMENT_SEPARATOR) {
+            return Err(Error::InvalidKeySeg(string));
+        }
+        if string == Address::Internal(InternalAddress::Ibc).raw() {
             return Err(Error::InvalidKeySeg(string));
         }
         match string.chars().next() {
@@ -454,6 +529,13 @@ mod tests {
         let target = "?/test".to_owned();
         match Key::parse(target).expect_err("unexpectedly succeeded") {
             Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
+            _ => panic!("unexpected error happens"),
+        }
+
+        let encoded_ibc_addr = Address::Internal(InternalAddress::Ibc).raw();
+        let target = format!("{}/test", encoded_ibc_addr);
+        match Key::parse(target).expect_err("unexpectedly succeeded") {
+            Error::InvalidKeySeg(s) => assert_eq!(s, encoded_ibc_addr),
             _ => panic!("unexpected error happens"),
         }
     }
