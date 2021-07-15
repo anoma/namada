@@ -1,7 +1,7 @@
 # PoS integration
 
 The [PoS system](/explore/design/pos.md) is integrated into Anoma ledger via:
-- an account with an internal address and a [native VP](vp.md#native-vps) and that validates any changes applied by transactions to the PoS account
+- an account with an internal address and a [native VP](vp.md#native-vps) that validates any changes applied by transactions to the PoS account state
 - transaction WASMs to perform various PoS actions, also available as a library code for custom made transactions
 
 The `votes_per_token` PoS system parameter must be chosen to satisfy the [Tendermint requirement](https://github.com/tendermint/spec/blob/60395941214439339cc60040944c67893b5f8145/spec/abci/apps.md#validator-updates) of `MaxTotalVotingPower = MaxInt64 / 8`.
