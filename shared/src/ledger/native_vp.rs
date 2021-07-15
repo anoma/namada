@@ -1,27 +1,41 @@
 //! Native validity predicate interface associated with internal accounts such
 //! as the PoS and IBC modules.
+use std::cell::RefCell;
 use std::collections::HashSet;
 
+use thiserror::Error;
+
 use crate::ledger::gas::VpGasMeter;
+#[cfg(feature = "ibc-vp")]
 use crate::ledger::ibc::Ibc;
 use crate::ledger::pos::PoS;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{Storage, StorageHasher};
-use crate::ledger::vp_env::Result;
 use crate::ledger::{storage, vp_env};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{BlockHash, BlockHeight, Key};
 use crate::vm::prefix_iter::PrefixIterators;
 
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Host context error: {0}")]
+    ContextError(vp_env::RuntimeError),
+}
+
+/// Native VP function result
+pub type Result<T> = std::result::Result<T, Error>;
+
 /// Initialize genesis storage for all the [`NativeVp`]s.
-pub fn init_genesis_storage<DB, H>(storage: &mut Storage<DB, H>)
+pub fn init_genesis_storage<'a, DB, H>(storage: &mut Storage<DB, H>)
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
-    PoS::init_genesis_storage(storage);
-    Ibc::init_genesis_storage(storage);
+    PoS::<'a, DB, H>::init_genesis_storage(storage);
+    #[cfg(feature = "ibc-vp")]
+    Ibc::<'a, DB, H>::init_genesis_storage(storage);
 }
 
 /// A native VP module should implement this module and add its initialization
@@ -30,23 +44,22 @@ pub trait NativeVp {
     /// The address of this VP
     const ADDR: InternalAddress;
 
+    /// Error type for the methods' results.
+    type Error: std::error::Error;
+
     /// Initialize storage in the genesis block
     fn init_genesis_storage<DB, H>(storage: &mut Storage<DB, H>)
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
         H: StorageHasher;
 
-    /// Run the validity predicate. This function can call methods on the
-    /// [`Ctx`] argument to interact with the host structures.
-    fn validate_tx<DB, H>(
-        ctx: &mut Ctx<DB, H>,
+    /// Run the validity predicate
+    fn validate_tx(
+        &self,
         tx_data: &[u8],
         keys_changed: &HashSet<Key>,
         verifiers: &HashSet<Address>,
-    ) -> Result<bool>
-    where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: StorageHasher;
+    ) -> std::result::Result<bool, Self::Error>;
 }
 
 /// A validity predicate's host context.
@@ -61,9 +74,9 @@ where
     H: StorageHasher,
 {
     /// Storage prefix iterators.
-    pub iterators: PrefixIterators<'a, DB>,
+    pub iterators: RefCell<PrefixIterators<'a, DB>>,
     /// VP gas meter.
-    pub gas_meter: VpGasMeter,
+    pub gas_meter: RefCell<VpGasMeter>,
     /// Read-only access to the storage.
     pub storage: &'a Storage<DB, H>,
     /// Read-only access to the write log.
@@ -85,8 +98,8 @@ where
         gas_meter: VpGasMeter,
     ) -> Self {
         Self {
-            iterators: PrefixIterators::default(),
-            gas_meter,
+            iterators: RefCell::new(PrefixIterators::default()),
+            gas_meter: RefCell::new(gas_meter),
             storage,
             write_log,
             tx,
@@ -94,88 +107,114 @@ where
     }
 
     /// Add a gas cost incured in a validity predicate
-    pub fn add_gas(&mut self, used_gas: u64) -> Result<()> {
-        vp_env::add_gas(&mut self.gas_meter, used_gas)
+    pub fn add_gas(&self, used_gas: u64) -> Result<()> {
+        vp_env::add_gas(&mut *self.gas_meter.borrow_mut(), used_gas)
+            .map_err(Error::ContextError)
     }
 
     /// Storage read prior state (before tx execution). It will try to read from
     /// the storage.
-    pub fn read_pre(&mut self, key: &Key) -> Result<Option<Vec<u8>>> {
-        vp_env::read_pre(&mut self.gas_meter, self.storage, key)
+    pub fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
+        vp_env::read_pre(&mut *self.gas_meter.borrow_mut(), self.storage, key)
+            .map_err(Error::ContextError)
     }
 
     /// Storage read posterior state (after tx execution). It will try to read
     /// from the write log first and if no entry found then from the
     /// storage.
-    pub fn read_post(&mut self, key: &Key) -> Result<Option<Vec<u8>>> {
+    pub fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_env::read_post(
-            &mut self.gas_meter,
+            &mut *self.gas_meter.borrow_mut(),
             self.storage,
             self.write_log,
             key,
         )
+        .map_err(Error::ContextError)
     }
 
     /// Storage `has_key` in prior state (before tx execution). It will try to
     /// read from the storage.
-    pub fn has_key_pre(&mut self, key: &Key) -> Result<bool> {
-        vp_env::has_key_pre(&mut self.gas_meter, self.storage, key)
+    pub fn has_key_pre(&self, key: &Key) -> Result<bool> {
+        vp_env::has_key_pre(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+            key,
+        )
+        .map_err(Error::ContextError)
     }
 
     /// Storage `has_key` in posterior state (after tx execution). It will try
     /// to check the write log first and if no entry found then the storage.
-    pub fn has_key_post(&mut self, key: &Key) -> Result<bool> {
+    pub fn has_key_post(&self, key: &Key) -> Result<bool> {
         vp_env::has_key_post(
-            &mut self.gas_meter,
+            &mut *self.gas_meter.borrow_mut(),
             self.storage,
             self.write_log,
             key,
         )
+        .map_err(Error::ContextError)
     }
 
     /// Getting the chain ID.
-    pub fn get_chain_id(&mut self) -> Result<String> {
-        vp_env::get_chain_id(&mut self.gas_meter, self.storage)
+    pub fn get_chain_id(&self) -> Result<String> {
+        vp_env::get_chain_id(&mut *self.gas_meter.borrow_mut(), self.storage)
+            .map_err(Error::ContextError)
     }
 
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
-    pub fn get_block_height(&mut self) -> Result<BlockHeight> {
-        vp_env::get_block_height(&mut self.gas_meter, self.storage)
+    pub fn get_block_height(&self) -> Result<BlockHeight> {
+        vp_env::get_block_height(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+        )
+        .map_err(Error::ContextError)
     }
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.
-    pub fn get_block_hash(&mut self) -> Result<BlockHash> {
-        vp_env::get_block_hash(&mut self.gas_meter, self.storage)
+    pub fn get_block_hash(&self) -> Result<BlockHash> {
+        vp_env::get_block_hash(&mut *self.gas_meter.borrow_mut(), self.storage)
+            .map_err(Error::ContextError)
     }
 
     /// Storage prefix iterator. It will try to get an iterator from the
     /// storage.
     pub fn iter_prefix(
-        &mut self,
+        &self,
         prefix: &Key,
     ) -> Result<<DB as storage::DBIter<'a>>::PrefixIter> {
-        vp_env::iter_prefix(&mut self.gas_meter, self.storage, prefix)
+        vp_env::iter_prefix(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+            prefix,
+        )
+        .map_err(Error::ContextError)
     }
 
     /// Storage prefix iterator for prior state (before tx execution). It will
     /// try to read from the storage.
     pub fn iter_pre_next(
-        &mut self,
+        &self,
         iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>> {
-        vp_env::iter_pre_next::<DB>(&mut self.gas_meter, iter)
+        vp_env::iter_pre_next::<DB>(&mut *self.gas_meter.borrow_mut(), iter)
+            .map_err(Error::ContextError)
     }
 
     /// Storage prefix iterator next for posterior state (after tx execution).
     /// It will try to read from the write log first and if no entry found
     /// then from the storage.
     pub fn iter_post_next(
-        &mut self,
+        &self,
         iter: &mut <DB as storage::DBIter<'_>>::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>> {
-        vp_env::iter_post_next::<DB>(&mut self.gas_meter, self.write_log, iter)
+        vp_env::iter_post_next::<DB>(
+            &mut *self.gas_meter.borrow_mut(),
+            self.write_log,
+            iter,
+        )
+        .map_err(Error::ContextError)
     }
 
     /// Evaluate a validity predicate with given data. The address, changed
@@ -185,7 +224,7 @@ where
     /// If the execution fails for whatever reason, this will return `false`.
     /// Otherwise returns the result of evaluation.
     pub fn eval(
-        &mut self,
+        &self,
         address: &Address,
         keys_changed: &HashSet<Key>,
         verifiers: &HashSet<Address>,
@@ -211,7 +250,7 @@ where
                 address,
                 self.storage,
                 self.write_log,
-                &mut self.gas_meter,
+                &mut *self.gas_meter.borrow_mut(),
                 self.tx,
                 &mut iterators,
                 verifiers,

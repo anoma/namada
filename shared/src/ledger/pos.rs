@@ -2,35 +2,61 @@
 
 use std::collections::HashSet;
 
-use crate::ledger::native_vp::{Ctx, NativeVp};
+use thiserror::Error;
+
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::ledger::vp_env::Result;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 
-/// Proof-of-Stake VP
-pub struct PoS;
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Native VP error: {0}")]
+    NativeVpError(native_vp::Error),
+}
 
-impl NativeVp for PoS {
+/// PoS functions result
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Proof-of-Stake VP
+pub struct PoS<'a, DB, H>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Context to interact with the host structures.
+    pub ctx: Ctx<'a, DB, H>,
+}
+
+impl<'a, DB, H> NativeVp for PoS<'a, DB, H>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    type Error = Error;
+
     const ADDR: InternalAddress = InternalAddress::PoS;
 
-    fn init_genesis_storage<DB, H>(_storage: &mut Storage<DB, H>)
+    fn init_genesis_storage<D, SH>(_storage: &mut Storage<D, SH>)
     where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: StorageHasher,
+        D: storage::DB + for<'iter> storage::DBIter<'iter>,
+        SH: StorageHasher,
     {
     }
 
-    fn validate_tx<DB, H>(
-        _ctx: &mut Ctx<DB, H>,
+    fn validate_tx(
+        &self,
         _tx_data: &[u8],
         _keys_changed: &HashSet<Key>,
         _verifiers: &HashSet<Address>,
-    ) -> Result<bool>
-    where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: StorageHasher,
-    {
+    ) -> Result<bool> {
         Ok(false)
+    }
+}
+
+impl From<native_vp::Error> for Error {
+    fn from(err: native_vp::Error) -> Self {
+        Self::NativeVpError(err)
     }
 }
