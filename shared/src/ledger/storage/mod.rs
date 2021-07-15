@@ -16,11 +16,13 @@ use types::MerkleTree;
 
 use crate::bytes::ByteBuf;
 use crate::ledger::gas::MIN_STORAGE_GAS;
+use crate::ledger::parameters::{self, EpochDuration};
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::storage::{
-    BlockHash, BlockHeight, Epoch, Key, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+    BlockHash, BlockHeight, DbKeySeg, Epoch, Key, BLOCK_HASH_LENGTH,
+    CHAIN_ID_LENGTH,
 };
-use crate::types::time::DateTimeUtc;
+use crate::types::time::{self, DateTimeUtc};
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -363,7 +365,79 @@ where
 
     /// Get the current (yet to be committed) block epoch
     pub fn get_block_epoch(&self) -> (Epoch, u64) {
-        (self.block.epoch, MIN_STORAGE_GAS)
+        (self.current_epoch, MIN_STORAGE_GAS)
+    }
+
+    /// Initialize the first epoch. The first epoch begins at genesis time.
+    pub fn init_genesis_epoch(
+        &mut self,
+        initial_height: BlockHeight,
+        genesis_time: DateTimeUtc,
+    ) -> Result<()> {
+        self.epoch_start_height = initial_height;
+        self.epoch_start_time = genesis_time;
+        self.update_epoch_in_merkle_tree()
+    }
+
+    /// Initialize a new epoch when the current epoch is finished.
+    pub fn update_epoch(
+        &mut self,
+        height: BlockHeight,
+        time: DateTimeUtc,
+    ) -> Result<()> {
+        let (parameters, _gas) =
+            parameters::read(&self).expect("Couldn't read protocol parameters");
+
+        // Check if the current epoch is over
+        let EpochDuration {
+            min_num_of_blocks,
+            min_duration,
+        } = parameters.epoch_duration;
+        let epoch_start_height = self.epoch_start_height;
+        let epoch_start_time = &self.epoch_start_time;
+        if height.0 - epoch_start_height.0 > min_num_of_blocks as u64
+            && time::duration_passed(&time, epoch_start_time, min_duration)
+        {
+            // Begin a new epoch
+            self.block.epoch.next();
+            self.current_epoch.next();
+            tracing::info!(
+                "Began a new epoch {}, height {}, start height {}",
+                self.block.epoch,
+                height,
+                self.epoch_start_height
+            );
+            debug_assert_eq!(self.block.epoch, self.current_epoch);
+            self.epoch_start_height = height;
+            self.epoch_start_time = time;
+        }
+        self.update_epoch_in_merkle_tree()
+    }
+
+    /// Update the merkle tree with epoch data
+    fn update_epoch_in_merkle_tree(&mut self) -> Result<()> {
+        self.update_tree(
+            H::hash_key(&Key {
+                segments: vec![DbKeySeg::StringSeg(
+                    "epoch_start_height".into(),
+                )],
+            }),
+            H::hash_value(&types::encode(&self.epoch_start_height)),
+        )?;
+        self.update_tree(
+            H::hash_key(&Key {
+                segments: vec![DbKeySeg::StringSeg(
+                    "epoch_start_height".into(),
+                )],
+            }),
+            H::hash_value(&types::encode(&self.epoch_start_time)),
+        )?;
+        self.update_tree(
+            H::hash_key(&Key {
+                segments: vec![DbKeySeg::StringSeg("current_epoch".into())],
+            }),
+            H::hash_value(&types::encode(&self.current_epoch)),
+        )
     }
 }
 

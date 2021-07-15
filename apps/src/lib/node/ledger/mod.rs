@@ -15,7 +15,7 @@ use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::PublicKey;
 use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
-use anoma_shared::types::time::{self, DateTimeUtc};
+use anoma_shared::types::time::DateTimeUtc;
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{address, key, token};
 use borsh::BorshSerialize;
@@ -133,9 +133,10 @@ impl Shell {
                 AbciMsg::InitChain {
                     reply,
                     chain_id,
+                    initial_height,
                     genesis_time,
                 } => {
-                    self.init_chain(chain_id, genesis_time)?;
+                    self.init_chain(chain_id, initial_height, genesis_time)?;
                     reply.send(()).map_err(|e| {
                         Error::AbciChannelSendError(format!("InitChain {}", e))
                     })?
@@ -220,6 +221,7 @@ impl Shell {
     fn init_chain(
         &mut self,
         chain_id: String,
+        initial_height: BlockHeight,
         genesis_time: DateTimeUtc,
     ) -> Result<()> {
         let (current_chain_id, _) = self.storage.get_chain_id();
@@ -321,8 +323,9 @@ impl Shell {
         };
         parameters::init_genesis_storage(&mut self.storage, &parameters);
 
-        // The first epoch begins at genesis time
-        self.storage.epoch_start_time = genesis_time;
+        self.storage
+            .init_genesis_epoch(initial_height, genesis_time)
+            .expect("Initializing genesis epoch must not fail");
 
         Ok(())
     }
@@ -401,27 +404,12 @@ impl Shell {
         time: DateTimeUtc,
     ) {
         self.gas_meter.reset();
-        self.storage.begin_block(hash, height).unwrap();
-
-        let (parameters, _gas) = parameters::read(&self.storage)
-            .expect("Couldn't read protocol parameters");
-
-        // Check if the current epoch is over
-        let EpochDuration {
-            min_num_of_blocks,
-            min_duration,
-        } = parameters.epoch_duration;
-        let epoch_start_height = self.storage.epoch_start_height;
-        let epoch_start_time = &self.storage.epoch_start_time;
-        if height.0 - epoch_start_height.0 >= min_num_of_blocks as u64
-            && time::duration_passed(&time, epoch_start_time, min_duration)
-        {
-            // Begin a new epoch
-            self.storage.block.epoch.next();
-            self.storage.epoch_start_height = height;
-            self.storage.epoch_start_time = time;
-            tracing::info!("Began a new epoch {}", self.storage.block.epoch);
-        }
+        self.storage
+            .begin_block(hash, height)
+            .expect("Must be able to begin a block");
+        self.storage
+            .update_epoch(height, time)
+            .expect("Must be able to update epoch");
     }
 
     /// End a block.

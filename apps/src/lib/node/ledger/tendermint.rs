@@ -73,6 +73,7 @@ pub enum AbciMsg {
     InitChain {
         reply: Sender<()>,
         chain_id: String,
+        initial_height: BlockHeight,
         genesis_time: DateTimeUtc,
     },
     /// Validate a given transaction for inclusion in the mempool
@@ -232,6 +233,10 @@ impl tendermint_abci::Application for AbciWrapper {
         let chain_id = req.chain_id;
         let ts: tendermint_proto::google::protobuf::Timestamp =
             req.time.expect("Missing genesis time");
+        let initial_height = req
+            .initial_height
+            .try_into()
+            .expect("Unexpected block height");
         // TODO hacky conversion, depends on https://github.com/informalsystems/tendermint-rs/issues/870
         let genesis_time: DateTimeUtc =
             (Utc.timestamp(ts.seconds, ts.nanos as u32)).into();
@@ -240,6 +245,7 @@ impl tendermint_abci::Application for AbciWrapper {
             .send(AbciMsg::InitChain {
                 reply,
                 chain_id,
+                initial_height,
                 genesis_time,
             })
             .expect("failed to send InitChain request");
