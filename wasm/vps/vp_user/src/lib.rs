@@ -209,13 +209,13 @@ fn check_intent(
     //   is being sold/bought
     // - rate_min, max_sell, min_buy are respected
 
-    log_string(format!("1 {}", buy_difference.change() <= 0));
-    log_string(format!("2 {}", buy_diff / sell_diff >= rate_min.0));
     log_string(format!(
-        "3 {}",
-        max_sell.change() > sell_difference.change()
+        "1: {}, 2: {}, 3: {}, 4: {}",
+        buy_difference.change() <= 0,
+        buy_diff / sell_diff >= rate_min.0,
+        max_sell.change() > sell_difference.change(),
+        buy_diff > min_buy.change().into()
     ));
-    log_string(format!("4 {}", buy_diff > min_buy.change().into()));
 
     if buy_difference.change() <= 0
         || buy_diff / sell_diff >= rate_min.0
