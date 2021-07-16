@@ -23,6 +23,10 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     }
 }
 
+// transfer - [albert, bertha, matchmaker, btc, xan]
+
+// transfer [(some exchanges), signature(matchmaker)]
+
 #[validity_predicate]
 fn validate_tx(
     tx_data: Vec<u8>,
@@ -37,25 +41,25 @@ fn validate_tx(
     ));
 
     // TODO memoize?
-    let valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
+    let transfer_valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
         Ok(tx) => {
             let pk = key::ed25519::get(&addr);
             match pk {
-                None => false,
                 Some(pk) => verify_tx_signature(&pk, &tx.sig),
+                None => false,
             }
         }
         _ => false,
     };
 
-    log_string(format!("signature valid {}", valid_sig));
+    log_string(format!("signature valid {}, {}", transfer_valid_sig, &addr));
 
     // TODO memoize?
     // TODO this is not needed for matchmaker, maybe we should have a different
     // VP?
     let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
 
-    log_string(format!("valid transfer"));
+    log_string(format!("valid transfer {}", valid_intent));
 
     for key in keys_changed.iter() {
         let is_valid = match KeyType::from(key) {
@@ -65,16 +69,17 @@ fn validate_tx(
                 let post: token::Amount = read_post(&key).unwrap_or_default();
                 let change = post.change() - pre.change();
                 log_string(format!(
-                    "token key: {}, change: {}, valid_sig: {}, valid_intent: \
+                    "token key: {}, change: {}, transfer_valid_sig: {}, valid_intent: \
                      {}, valid modification: {}",
                     key,
                     change,
-                    valid_sig,
+                    transfer_valid_sig,
                     valid_intent,
-                    (change < 0 && (valid_sig || valid_intent)) || change > 0
+                    (change < 0 && (transfer_valid_sig || valid_intent)) || change > 0
                 ));
                 // debit has to signed, credit doesn't
-                (change < 0 && (valid_sig || valid_intent)) || change > 0
+                (change < 0 && (transfer_valid_sig || valid_intent))
+                    || change > 0
             }
             KeyType::InvalidIntentSet(owner) if owner == &addr => {
                 let key = key.to_string();
@@ -90,24 +95,24 @@ fn validate_tx(
             }
             KeyType::InvalidIntentSet(_owner) => {
                 log_string(format!(
-                    "InvalidIntentSet: key {} is not of owner, valid_sig {}, owner: {}, address: {}",
-                    key, valid_sig, _owner, addr
+                    "InvalidIntentSet: key {} is not of owner, transfer_valid_sig {}, owner: {}, address: {}",
+                    key, transfer_valid_sig, _owner, addr
                 ));
-                valid_sig
+                transfer_valid_sig
             }
             KeyType::Token(_owner) => {
                 log_string(format!(
-                    "Token: key {} is not of owner, valid_sig {}, owner: {}, address: {}",
-                    key, valid_sig, _owner, addr
+                    "Token: key {} is not of owner, transfer_valid_sig {}, owner: {}, address: {}",
+                    key, transfer_valid_sig, _owner, addr
                 ));
-                valid_sig
+                transfer_valid_sig
             }
             KeyType::Unknown => {
                 log_string(format!(
                     "Unknown key modified, valid sig {}",
-                    valid_sig
+                    transfer_valid_sig
                 ));
-                valid_sig
+                transfer_valid_sig
             }
         };
         if !is_valid {
@@ -203,10 +208,19 @@ fn check_intent(
     // - buy_difference > 0 to avoid division by 0 and make sure that something
     //   is being sold/bought
     // - rate_min, max_sell, min_buy are respected
+
+    log_string(format!("1 {}", buy_difference.change() <= 0));
+    log_string(format!("2 {}", buy_diff / sell_diff >= rate_min.0));
+    log_string(format!(
+        "3 {}",
+        max_sell.change() > sell_difference.change()
+    ));
+    log_string(format!("4 {}", buy_diff > min_buy.change().into()));
+
     if buy_difference.change() <= 0
-        || buy_diff / sell_diff > rate_min.0
-        || max_sell.change() < sell_difference.change()
-        || buy_diff < min_buy.change().into()
+        || buy_diff / sell_diff >= rate_min.0
+        || max_sell.change() > sell_difference.change()
+        || buy_diff > min_buy.change().into()
     {
         log_string(format!(
             "invalid exchange, {}, {}, {}, {}, {}",

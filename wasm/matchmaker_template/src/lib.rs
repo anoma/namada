@@ -37,10 +37,6 @@ fn create_transfer(
     from_node: &ExchangeNode,
     to_node: &ExchangeNode,
 ) -> token::Transfer {
-    // max_sell
-    // min_buy
-    // min_rate -> sell
-
     let amount = from_node.exchange.data.rate_min.0
         * Decimal::from_i128(to_node.exchange.data.max_sell.change()).unwrap();
 
