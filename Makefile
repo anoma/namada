@@ -19,7 +19,11 @@ audit-ignores += RUSTSEC-2021-0064
 # Transitive dependency warning from tendermint-rpc
 audit-ignores += RUSTSEC-2020-0016
 # tokio issue affecting many deps
-audit-ignores += RUSTSEC-2021-0072 
+audit-ignores += RUSTSEC-2021-0072
+# Transitive dependency warning from tendermint-rs and ibc-rs
+audit-ignores += RUSTSEC-2021-0073
+# TODO upgrade libp2p
+audit-ignores += RUSTSEC-2021-0076
 
 build:
 	$(cargo) build
