@@ -75,12 +75,14 @@ sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", b
 # temporarily using fork work-around for https://github.com/informalsystems/tendermint-rs/issues/916
 tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis"}
 tendermint-abci = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis"}
+tendermint-proto = {git = "https://github.com/informalsystems/tendermint-rs", rev = "4a6c450"}
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis", features = ["http-client"]}
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.4.0"
+tower = "0.4"
+tower-abci = {git = "https://github.com/hdevalence/tower-abci/", rev="16bbe02"}
 tracing = "0.1.26"
 tracing-log = "0.1.2"
 tracing-subscriber = "0.2.18"
