@@ -1,22 +1,18 @@
 //! Types for dealing with time and durations.
 
 use std::convert::{TryFrom, TryInto};
+use std::ops::{Add, Sub};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
 
 /// Check if the given `duration` has passed since the given `start.
 pub fn duration_passed(
-    current: &DateTimeUtc,
-    start: &DateTimeUtc,
+    current: DateTimeUtc,
+    start: DateTimeUtc,
     duration: DurationSecs,
 ) -> bool {
-    let duration_std = std::time::Duration::from_secs(duration.0);
-    let duration_chrono = Duration::from_std(duration_std).expect(
-        "Duration shouldn't be larger than the maximum value supported for \
-         chrono::Duration",
-    );
-    start.0 + duration_chrono <= current.0
+    start + duration <= current
 }
 
 /// A duration in seconds precision.
@@ -50,13 +46,34 @@ impl From<std::time::Duration> for DurationSecs {
 }
 
 /// A duration in seconds precision.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DateTimeUtc(pub DateTime<Utc>);
 
 impl DateTimeUtc {
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
         Self(Utc::now())
+    }
+}
+
+impl Add<DurationSecs> for DateTimeUtc {
+    type Output = DateTimeUtc;
+
+    fn add(self, duration: DurationSecs) -> Self::Output {
+        let duration_std = std::time::Duration::from_secs(duration.0);
+        let duration_chrono = Duration::from_std(duration_std).expect(
+            "Duration shouldn't be larger than the maximum value supported \
+             for chrono::Duration",
+        );
+        (self.0 + duration_chrono).into()
+    }
+}
+
+impl Sub<Duration> for DateTimeUtc {
+    type Output = DateTimeUtc;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        (self.0 - rhs).into()
     }
 }
 

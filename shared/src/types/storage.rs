@@ -1,6 +1,7 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::ops::Add;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -61,6 +62,14 @@ pub struct BlockHeight(pub u64);
 impl Display for BlockHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl Add<u64> for BlockHeight {
+    type Output = BlockHeight;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
     }
 }
 
@@ -474,13 +483,16 @@ impl Display for Epoch {
 
 impl Epoch {
     /// Change to the next epoch
-    pub fn next(&mut self) {
-        self.0 += 1;
+    pub fn next(&self) -> Self {
+        Self(self.0 + 1)
     }
+}
 
-    /// Get the epoch at index `n + offset`, where `n` is `self`.
-    pub fn offset(&self, offset: u64) -> Self {
-        Self(self.0 + offset)
+impl Add<u64> for Epoch {
+    type Output = Epoch;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
     }
 }
 
