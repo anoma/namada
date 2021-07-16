@@ -10,7 +10,7 @@ use anoma_shared::ledger::gas::{self, BlockGasMeter};
 use anoma_shared::ledger::parameters::{EpochDuration, Parameters};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::storage::MerkleRoot;
-use anoma_shared::ledger::{native_vp, parameters};
+use anoma_shared::ledger::{ibc, parameters, pos};
 use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::PublicKey;
@@ -311,8 +311,8 @@ impl Shell {
             .write(&Key::validity_predicate(&matchmaker), user_vp.to_vec())
             .expect("Unable to write matchmaker VP");
 
-        // TODO pass in the genesis object
-        native_vp::init_genesis_storage(&mut self.storage);
+        pos::init_genesis_storage(&mut self.storage);
+        ibc::init_genesis_storage(&mut self.storage);
         // TODO put this into genesis
         let parameters = Parameters {
             epoch_duration: EpochDuration {

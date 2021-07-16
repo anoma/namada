@@ -121,15 +121,6 @@ where
 
     const ADDR: InternalAddress = ADDR;
 
-    fn init_genesis_storage<D, SH>(_storage: &mut Storage<D, SH>)
-    where
-        D: storage::DB + for<'iter> storage::DBIter<'iter>,
-        SH: StorageHasher,
-    {
-        // TODO consider removing this from the trait, different VPs need
-        // different args
-    }
-
     fn validate_tx(
         &self,
         _tx_data: &[u8],
