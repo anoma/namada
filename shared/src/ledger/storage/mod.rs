@@ -202,7 +202,7 @@ where
             height: self.block.height,
             epoch: self.block.epoch,
             next_epoch_min_start_height: self.next_epoch_min_start_height,
-            next_epoch_min_start_time: self.next_epoch_min_start_time.clone(),
+            next_epoch_min_start_time: self.next_epoch_min_start_time,
             subspaces: self.block.subspaces.clone(),
             address_gen: self.address_gen.clone(),
         };
@@ -532,6 +532,142 @@ pub mod testing {
                     "Test address generator seed",
                 ),
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{TimeZone, Utc};
+    use proptest::prelude::*;
+
+    use super::testing::*;
+    use super::*;
+    use crate::ledger::parameters::Parameters;
+    use crate::types::time::{self, Duration};
+
+    prop_compose! {
+        /// Setup test input data with arbitrary epoch duration, epoch start
+        /// height and time, and a block height and time that are greater than
+        /// the epoch start height and time, and the change to be applied to
+        /// the epoch duration parameters.
+        fn arb_and_epoch_duration_start_and_block()
+        (
+            start_height in 0..1000_u64,
+            start_time in 0..10000_i64,
+            min_num_of_blocks in 1..10_u64,
+            min_duration in 1..100_i64,
+        )
+        (
+            min_num_of_blocks in Just(min_num_of_blocks),
+            min_duration in Just(min_duration),
+            start_height in Just(start_height),
+            start_time in Just(start_time),
+            block_height in start_height + 1..(start_height + 2 * min_num_of_blocks as u64),
+            block_time in start_time + 1..(start_time + 2 * min_duration),
+            min_blocks_delta in -(min_num_of_blocks as i64 - 1)..5,
+            min_duration_delta in -(min_duration as i64 - 1)..50,
+        ) -> (EpochDuration, BlockHeight, DateTimeUtc, BlockHeight, DateTimeUtc,
+                i64, i64) {
+            let epoch_duration = EpochDuration {
+                min_num_of_blocks,
+                min_duration: Duration::seconds(min_duration).into(),
+            };
+            (epoch_duration,
+                BlockHeight(start_height), Utc.timestamp(start_time, 0).into(),
+                BlockHeight(block_height), Utc.timestamp(block_time, 0).into(),
+                min_blocks_delta, min_duration_delta)
+        }
+    }
+
+    proptest! {
+        /// Test that:
+        /// 1. When the minimum blocks have been created since the epoch
+        ///    start height and minimum time passed since the epoch start time,
+        ///    a new epoch must start.
+        /// 2. When the epoch duration parameters change, the current epoch's
+        ///    duration doesn't change, but the next one does.
+        #[test]
+        fn update_epoch_after_its_duration(
+            (epoch_duration, start_height, start_time, block_height, block_time,
+            min_blocks_delta, min_duration_delta)
+            in arb_and_epoch_duration_start_and_block())
+        {
+            let mut storage = TestStorage {
+                next_epoch_min_start_height:
+                    start_height + epoch_duration.min_num_of_blocks,
+                next_epoch_min_start_time:
+                    start_time + epoch_duration.min_duration,
+                ..Default::default()
+            };
+            let mut parameters = Parameters {
+                epoch_duration: epoch_duration.clone(),
+            };
+            parameters::init_genesis_storage(&mut storage, &parameters);
+
+            let epoch_before = storage.current_epoch;
+            assert_eq!(epoch_before, storage.block.epoch);
+
+            // Try to apply the epoch update
+            storage.update_epoch(block_height, block_time).unwrap();
+
+            // Test for 1.
+            if block_height.0 - start_height.0
+                >= epoch_duration.min_num_of_blocks as u64
+                && time::duration_passed(
+                    block_time,
+                    start_time,
+                    epoch_duration.min_duration,
+                )
+            {
+                assert_eq!(storage.block.epoch, epoch_before.next());
+                assert_eq!(storage.current_epoch, epoch_before.next());
+                assert_eq!(storage.next_epoch_min_start_height,
+                    block_height + epoch_duration.min_num_of_blocks);
+                assert_eq!(storage.next_epoch_min_start_time,
+                    block_time + epoch_duration.min_duration);
+            } else {
+                assert_eq!(storage.block.epoch, epoch_before);
+                assert_eq!(storage.current_epoch, epoch_before);
+            }
+
+            // Update the epoch duration parameters
+            parameters.epoch_duration.min_num_of_blocks =
+                (parameters.epoch_duration.min_num_of_blocks as i64 + min_blocks_delta) as u64;
+            let min_duration: i64 = parameters.epoch_duration.min_duration.0 as _;
+            parameters.epoch_duration.min_duration =
+                Duration::seconds(min_duration + min_duration_delta).into();
+            parameters::update(&mut storage, &parameters).unwrap();
+
+            // Test for 2.
+            let epoch_before = storage.current_epoch;
+            let height_of_update = storage.next_epoch_min_start_height.0 ;
+            let time_of_update = storage.next_epoch_min_start_time;
+            let height_before_update = BlockHeight(height_of_update - 1);
+            let height_of_update = BlockHeight(height_of_update);
+            let time_before_update = time_of_update - Duration::seconds(1);
+
+            // No update should happen before both epoch duration conditions are
+            // satisfied
+            storage.update_epoch(height_before_update, time_before_update).unwrap();
+            assert_eq!(storage.block.epoch, epoch_before);
+            assert_eq!(storage.current_epoch, epoch_before);
+            storage.update_epoch(height_of_update, time_before_update).unwrap();
+            assert_eq!(storage.block.epoch, epoch_before);
+            assert_eq!(storage.current_epoch, epoch_before);
+            storage.update_epoch(height_before_update, time_of_update).unwrap();
+            assert_eq!(storage.block.epoch, epoch_before);
+            assert_eq!(storage.current_epoch, epoch_before);
+
+            // Update should happen at this or after this height and time
+            storage.update_epoch(height_of_update, time_of_update).unwrap();
+            assert_eq!(storage.block.epoch, epoch_before.next());
+            assert_eq!(storage.current_epoch, epoch_before.next());
+            // The next epoch's minimum duration should change
+            assert_eq!(storage.next_epoch_min_start_height,
+                height_of_update + parameters.epoch_duration.min_num_of_blocks);
+            assert_eq!(storage.next_epoch_min_start_time,
+                time_of_update + parameters.epoch_duration.min_duration);
         }
     }
 }
