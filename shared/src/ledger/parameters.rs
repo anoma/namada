@@ -37,6 +37,7 @@ where
 
 /// Protocol parameters
 #[derive(
+    Clone,
     Debug,
     PartialEq,
     Eq,
@@ -54,6 +55,7 @@ pub struct Parameters {
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
 /// and `min_duration` have passed since the beginning of the current epoch.
 #[derive(
+    Clone,
     Debug,
     PartialEq,
     Eq,
@@ -65,7 +67,7 @@ pub struct Parameters {
 )]
 pub struct EpochDuration {
     /// Minimum number of blocks in an epoch
-    pub min_num_of_blocks: u32,
+    pub min_num_of_blocks: u64,
     /// Minimum duration of an epoch
     pub min_duration: DurationSecs,
 }
@@ -112,6 +114,32 @@ where
     Ok((parameters, gas))
 }
 
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum WriteError {
+    #[error("Storage error: {0}")]
+    StorageError(storage::Error),
+}
+
+/// Update the current parameters in storage. Returns the parameters and gas
+/// cost.
+pub fn update<DB, H>(
+    storage: &mut Storage<DB, H>,
+    parameters: &Parameters,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::StorageHasher,
+{
+    let key = storage_key();
+    let value = encode(parameters);
+    // TODO charge storage size diff
+    let (gas, _size_diff) = storage
+        .write(&key, value)
+        .map_err(WriteError::StorageError)?;
+    Ok(gas)
+}
+
 impl<'a, DB, H> NativeVp for ParametersVp<'a, DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -128,6 +156,7 @@ where
         _verifiers: &HashSet<Address>,
     ) -> Result<bool> {
         // TODO allow parameters change by over 2/3 validator voting power
+        // No changes are currently permitted
         Ok(false)
     }
 }

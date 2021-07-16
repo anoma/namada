@@ -26,12 +26,12 @@ impl DB for MockDB {
     fn write_block(&mut self, state: BlockState) -> Result<()> {
         // Epoch start height and time
         self.0.insert(
-            "epoch_start_height".into(),
-            types::encode(&state.epoch_start_height),
+            "next_epoch_min_start_height".into(),
+            types::encode(&state.next_epoch_min_start_height),
         );
         self.0.insert(
-            "epoch_start_time".into(),
-            types::encode(&state.epoch_start_time),
+            "next_epoch_min_start_time".into(),
+            types::encode(&state.next_epoch_min_start_time),
         );
 
         let prefix_key = Key::from(state.height.to_db_key());
@@ -118,14 +118,16 @@ impl DB for MockDB {
         }
 
         // Epoch start height and time
-        let epoch_start_height: BlockHeight = match self
+        let next_epoch_min_start_height: BlockHeight = match self
             .0
-            .get("epoch_start_height")
+            .get("next_epoch_min_start_height")
         {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
             None => return Ok(None),
         };
-        let epoch_start_time: DateTimeUtc = match self.0.get("epoch_start_time")
+        let next_epoch_min_start_time: DateTimeUtc = match self
+            .0
+            .get("next_epoch_min_start_time")
         {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
             None => return Ok(None),
@@ -206,8 +208,8 @@ impl DB for MockDB {
                 hash,
                 height,
                 epoch,
-                epoch_start_height,
-                epoch_start_time,
+                next_epoch_min_start_height,
+                next_epoch_min_start_time,
                 subspaces,
                 address_gen,
             })),

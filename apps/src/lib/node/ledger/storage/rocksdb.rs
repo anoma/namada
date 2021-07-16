@@ -110,10 +110,13 @@ impl DB for RocksDB {
 
         // Epoch start height and time
         batch.put(
-            "epoch_start_height",
-            types::encode(&state.epoch_start_height),
+            "next_epoch_min_start_height",
+            types::encode(&state.next_epoch_min_start_height),
         );
-        batch.put("epoch_start_time", types::encode(&state.epoch_start_time));
+        batch.put(
+            "next_epoch_min_start_time",
+            types::encode(&state.next_epoch_min_start_time),
+        );
 
         let prefix_key = Key::from(state.height.to_db_key());
         // Merkle tree
@@ -218,25 +221,29 @@ impl DB for RocksDB {
         }
 
         // Epoch start height and time
-        let epoch_start_height: BlockHeight = match self
+        let next_epoch_min_start_height: BlockHeight = match self
             .0
-            .get("epoch_start_height")
+            .get("next_epoch_min_start_height")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
             None => {
-                tracing::error!("Couldn't load epoch start height from the DB");
+                tracing::error!(
+                    "Couldn't load next epoch start height from the DB"
+                );
                 return Ok(None);
             }
         };
-        let epoch_start_time: DateTimeUtc = match self
+        let next_epoch_min_start_time: DateTimeUtc = match self
             .0
-            .get("epoch_start_time")
+            .get("next_epoch_min_start_time")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
             None => {
-                tracing::error!("Couldn't load epoch start time from the DB");
+                tracing::error!(
+                    "Couldn't load next epoch start time from the DB"
+                );
                 return Ok(None);
             }
         };
@@ -328,8 +335,8 @@ impl DB for RocksDB {
                 hash,
                 height,
                 epoch,
-                epoch_start_height,
-                epoch_start_time,
+                next_epoch_min_start_height,
+                next_epoch_min_start_time,
                 subspaces,
                 address_gen,
             })),

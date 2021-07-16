@@ -39,8 +39,8 @@ pub fn open(db_path: impl AsRef<Path>, chain_id: String) -> PersistentStorage {
         block,
         current_height: BlockHeight::default(),
         current_epoch: Epoch::default(),
-        epoch_start_height: BlockHeight::default(),
-        epoch_start_time: DateTimeUtc::now(),
+        next_epoch_min_start_height: BlockHeight::default(),
+        next_epoch_min_start_time: DateTimeUtc::now(),
         address_gen: EstablishedAddressGen::new(
             "Privacy is a function of liberty.",
         ),

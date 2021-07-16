@@ -22,7 +22,7 @@ use crate::types::storage::{
     BlockHash, BlockHeight, DbKeySeg, Epoch, Key, BLOCK_HASH_LENGTH,
     CHAIN_ID_LENGTH,
 };
-use crate::types::time::{self, DateTimeUtc};
+use crate::types::time::DateTimeUtc;
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -44,10 +44,10 @@ where
     pub current_height: BlockHeight,
     /// The epoch of the current block
     pub current_epoch: Epoch,
-    /// Block height at which the current epoch started
-    pub epoch_start_height: BlockHeight,
-    /// Block time at which the current epoch started
-    pub epoch_start_time: DateTimeUtc,
+    /// Minimum block height at which the next epoch may start
+    pub next_epoch_min_start_height: BlockHeight,
+    /// Minimum block time at which the next epoch may start
+    pub next_epoch_min_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
 }
@@ -96,10 +96,10 @@ pub struct BlockState {
     pub height: BlockHeight,
     /// Epoch of the block
     pub epoch: Epoch,
-    /// Block height at which the current epoch started
-    pub epoch_start_height: BlockHeight,
-    /// Block time at which the current epoch started
-    pub epoch_start_time: DateTimeUtc,
+    /// Minimum block height at which the next epoch may start
+    pub next_epoch_min_start_height: BlockHeight,
+    /// Minimum block time at which the next epoch may start
+    pub next_epoch_min_start_time: DateTimeUtc,
     /// Accounts' subspaces storage for arbitrary key-values
     pub subspaces: HashMap<Key, Vec<u8>>,
     /// Established address generator
@@ -157,8 +157,8 @@ where
             hash,
             height,
             epoch,
-            epoch_start_height,
-            epoch_start_time,
+            next_epoch_min_start_height,
+            next_epoch_min_start_time,
             subspaces,
             address_gen,
         }) = self.db.read_last_block()?
@@ -170,8 +170,8 @@ where
             self.block.subspaces = subspaces;
             self.current_height = height;
             self.current_epoch = epoch;
-            self.epoch_start_height = epoch_start_height;
-            self.epoch_start_time = epoch_start_time;
+            self.next_epoch_min_start_height = next_epoch_min_start_height;
+            self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
         } else {
@@ -201,8 +201,8 @@ where
             hash: self.block.hash.clone(),
             height: self.block.height,
             epoch: self.block.epoch,
-            epoch_start_height: self.epoch_start_height,
-            epoch_start_time: self.epoch_start_time.clone(),
+            next_epoch_min_start_height: self.next_epoch_min_start_height,
+            next_epoch_min_start_time: self.next_epoch_min_start_time.clone(),
             subspaces: self.block.subspaces.clone(),
             address_gen: self.address_gen.clone(),
         };
@@ -374,8 +374,14 @@ where
         initial_height: BlockHeight,
         genesis_time: DateTimeUtc,
     ) -> Result<()> {
-        self.epoch_start_height = initial_height;
-        self.epoch_start_time = genesis_time;
+        let (parameters, _gas) =
+            parameters::read(&self).expect("Couldn't read protocol parameters");
+        let EpochDuration {
+            min_num_of_blocks,
+            min_duration,
+        } = parameters.epoch_duration;
+        self.next_epoch_min_start_height = initial_height + min_num_of_blocks;
+        self.next_epoch_min_start_time = genesis_time + min_duration;
         self.update_epoch_in_merkle_tree()
     }
 
@@ -389,27 +395,20 @@ where
             parameters::read(&self).expect("Couldn't read protocol parameters");
 
         // Check if the current epoch is over
-        let EpochDuration {
-            min_num_of_blocks,
-            min_duration,
-        } = parameters.epoch_duration;
-        let epoch_start_height = self.epoch_start_height;
-        let epoch_start_time = &self.epoch_start_time;
-        if height.0 - epoch_start_height.0 > min_num_of_blocks as u64
-            && time::duration_passed(&time, epoch_start_time, min_duration)
+        if height >= self.next_epoch_min_start_height
+            && time >= self.next_epoch_min_start_time
         {
             // Begin a new epoch
-            self.block.epoch.next();
-            self.current_epoch.next();
-            tracing::info!(
-                "Began a new epoch {}, height {}, start height {}",
-                self.block.epoch,
-                height,
-                self.epoch_start_height
-            );
+            self.block.epoch = self.block.epoch.next();
+            self.current_epoch = self.current_epoch.next();
             debug_assert_eq!(self.block.epoch, self.current_epoch);
-            self.epoch_start_height = height;
-            self.epoch_start_time = time;
+            let EpochDuration {
+                min_num_of_blocks,
+                min_duration,
+            } = parameters.epoch_duration;
+            self.next_epoch_min_start_height = height + min_num_of_blocks;
+            self.next_epoch_min_start_time = time + min_duration;
+            tracing::info!("Began a new epoch {}", self.block.epoch);
         }
         self.update_epoch_in_merkle_tree()
     }
@@ -422,7 +421,7 @@ where
                     "epoch_start_height".into(),
                 )],
             }),
-            H::hash_value(&types::encode(&self.epoch_start_height)),
+            H::hash_value(&types::encode(&self.next_epoch_min_start_height)),
         )?;
         self.update_tree(
             H::hash_key(&Key {
@@ -430,7 +429,7 @@ where
                     "epoch_start_height".into(),
                 )],
             }),
-            H::hash_value(&types::encode(&self.epoch_start_time)),
+            H::hash_value(&types::encode(&self.next_epoch_min_start_time)),
         )?;
         self.update_tree(
             H::hash_key(&Key {
@@ -527,8 +526,8 @@ pub mod testing {
                 block,
                 current_height: BlockHeight::default(),
                 current_epoch: Epoch::default(),
-                epoch_start_height: BlockHeight::default(),
-                epoch_start_time: DateTimeUtc::now(),
+                next_epoch_min_start_height: BlockHeight::default(),
+                next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),
