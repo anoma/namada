@@ -7,7 +7,6 @@ use std::path::Path;
 use std::sync::mpsc;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
-use anoma_shared::ledger::parameters::{EpochDuration, Parameters};
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::storage::MerkleRoot;
 use anoma_shared::ledger::{ibc, parameters, pos};
@@ -23,7 +22,7 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use self::tendermint::{AbciMsg, AbciReceiver};
-use crate::{config, wallet};
+use crate::{config, genesis, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -231,6 +230,7 @@ impl Shell {
                 current_chain_id, chain_id
             )));
         }
+        let genesis = genesis::genesis();
 
         // Initialize because there is no block
         let token_vp =
@@ -313,15 +313,10 @@ impl Shell {
 
         pos::init_genesis_storage(&mut self.storage);
         ibc::init_genesis_storage(&mut self.storage);
-        // TODO put this into genesis
-        let parameters = Parameters {
-            epoch_duration: EpochDuration {
-                min_num_of_blocks: 10,
-                min_duration: anoma_shared::types::time::Duration::minutes(1)
-                    .into(),
-            },
-        };
-        parameters::init_genesis_storage(&mut self.storage, &parameters);
+        parameters::init_genesis_storage(
+            &mut self.storage,
+            &genesis.parameters,
+        );
 
         self.storage
             .init_genesis_epoch(initial_height, genesis_time)

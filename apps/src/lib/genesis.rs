@@ -1,5 +1,6 @@
 //! The parameters used for the chain's genesis
 
+use anoma_shared::ledger::parameters::{EpochDuration, Parameters};
 #[cfg(feature = "dev")]
 use ed25519_dalek::Keypair;
 #[cfg(not(feature = "dev"))]
@@ -12,6 +13,7 @@ use sha2::{Digest, Sha256};
 #[derive(Debug)]
 pub struct Genesis {
     pub validators: Vec<Validator>,
+    pub parameters: Parameters,
 }
 
 #[cfg(not(feature = "dev"))]
@@ -26,6 +28,7 @@ pub struct Validator {
 #[derive(Debug)]
 pub struct Genesis {
     pub validator: Validator,
+    pub parameters: Parameters,
 }
 
 #[cfg(feature = "dev")]
@@ -64,7 +67,17 @@ pub fn genesis() -> Genesis {
         keypair,
         voting_power: 10,
     };
-    Genesis { validator }
+    let parameters = Parameters {
+        epoch_duration: EpochDuration {
+            min_num_of_blocks: 10,
+            min_duration: anoma_shared::types::time::Duration::minutes(1)
+                .into(),
+        },
+    };
+    Genesis {
+        validator,
+        parameters,
+    }
 }
 
 impl Validator {
