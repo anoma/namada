@@ -123,6 +123,7 @@ pub mod rpc_service_client {
     }
 }
 /// Generated server implementations.
+#[allow(clippy::unit_arg)]
 pub mod rpc_service_server {
     #![allow(unused_variables, dead_code, missing_docs)]
     use tonic::codegen::*;
