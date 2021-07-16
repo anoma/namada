@@ -288,7 +288,7 @@ where
                 return Ok(false);
             }
         };
-        // check the prior client state
+        // check the prior states
         let prev_client_state = match self.client_state_pre(client_id) {
             Some(s) => s,
             None => {
@@ -299,28 +299,39 @@ where
                 return Ok(false);
             }
         };
-
-        let header = data.header().map_err(Error::IbcDataError)?;
-        let client_type = match self.client_type(client_id) {
-            Some(t) => t,
+        let prev_consensus_state = match self
+            .consensus_state_pre(client_id, prev_client_state.latest_height())
+        {
+            Some(s) => s,
             None => {
                 tracing::info!(
-                    "the client type of ID {} doesn't exist",
+                    "the prior consensus state of ID {} doesn't exist",
                     client_id
                 );
                 return Ok(false);
             }
         };
-        let client = AnyClient::from_client_type(client_type);
-        match client.check_header_and_update_state(prev_client_state, header) {
+
+        let client = AnyClient::from_client_type(client_state.client_type());
+        let headers = data.headers().map_err(Error::IbcDataError)?;
+        let updated = headers.iter().try_fold(
+            (prev_client_state, prev_consensus_state),
+            |(new_client_state, _), header| {
+                client.check_header_and_update_state(
+                    new_client_state,
+                    header.clone(),
+                )
+            },
+        );
+        match updated {
             Ok((new_client_state, new_consensus_state)) => Ok(new_client_state
                 == client_state
                 && new_consensus_state == consensus_state),
             Err(e) => {
                 tracing::info!(
-                    "the header is invalid for the client {}: {}",
+                    "a header is invalid for the client {}: {}",
                     client_id,
-                    e
+                    e,
                 );
                 Ok(false)
             }
@@ -407,6 +418,26 @@ where
             .expect("Creating a key for a client state shouldn't fail");
         match self.ctx.read_pre(&key) {
             Ok(Some(value)) => AnyClientState::decode_vec(&value).ok(),
+            // returns None even if DB read fails
+            _ => None,
+        }
+    }
+
+    fn consensus_state_pre(
+        &self,
+        client_id: &ClientId,
+        height: Height,
+    ) -> Option<AnyConsensusState> {
+        let path = Path::ClientConsensusState {
+            client_id: client_id.clone(),
+            epoch: height.revision_number,
+            height: height.revision_height,
+        }
+        .to_string();
+        let key = Key::ibc_key(path)
+            .expect("Creating a key for a consensus state shouldn't fail");
+        match self.ctx.read_pre(&key) {
+            Ok(Some(value)) => AnyConsensusState::decode_vec(&value).ok(),
             // returns None even if DB read fails
             _ => None,
         }
@@ -626,9 +657,10 @@ mod tests {
         write_log.commit_tx();
 
         let tx_code = vec![];
-        let tx_data = ClientUpdateData::new(client_id, AnyHeader::from(header))
-            .try_to_vec()
-            .expect("encoding failed");
+        let tx_data =
+            ClientUpdateData::new(client_id, vec![AnyHeader::from(header)])
+                .try_to_vec()
+                .expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);

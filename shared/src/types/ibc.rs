@@ -72,18 +72,22 @@ impl ClientCreationData {
 pub struct ClientUpdateData {
     /// The updated client ID
     client_id: String,
-    /// The client state
-    header: Vec<u8>,
+    /// The headers to update the client
+    headers: Vec<Vec<u8>>,
 }
 
 impl ClientUpdateData {
     /// Returns the data to update a client
-    pub fn new(client_id: ClientId, header: AnyHeader) -> Self {
+    pub fn new(client_id: ClientId, headers: Vec<AnyHeader>) -> Self {
         let client_id = client_id.as_str().to_owned();
-        let header = header
-            .encode_vec()
-            .expect("Encoding a client header shouldn't fail");
-        Self { client_id, header }
+        let headers = headers
+            .iter()
+            .map(|h| {
+                h.encode_vec()
+                    .expect("Encoding a client header shouldn't fail")
+            })
+            .collect();
+        Self { client_id, headers }
     }
 
     /// Returns the client ID
@@ -93,9 +97,14 @@ impl ClientUpdateData {
     }
 
     /// Returns the header
-    pub fn header(&self) -> Result<AnyHeader> {
-        AnyHeader::decode_vec(&self.header)
-            .map_err(|e| Error::DecodingError(e.to_string()))
+    pub fn headers(&self) -> Result<Vec<AnyHeader>> {
+        let mut headers = vec![];
+        for h in &self.headers {
+            let header = AnyHeader::decode_vec(h)
+                .map_err(|e| Error::DecodingError(e.to_string()))?;
+            headers.push(header);
+        }
+        Ok(headers)
     }
 }
 
