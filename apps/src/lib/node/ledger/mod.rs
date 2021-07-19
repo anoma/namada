@@ -202,6 +202,7 @@ pub fn run(config: config::Ledger) {
         if TERM_SIGNALS.contains(&sig) {
             sender.send(true).unwrap();
             abort_handle.abort();
+            // Wait for the database to finish flushing memtable
             shell_handle.join().expect("Anoma did not shut down properly");
             break;
         }
