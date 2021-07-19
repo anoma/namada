@@ -165,9 +165,7 @@ async fn run_shell(
     let future =
         Abortable::new(server.listen(config.address), abort_registration);
 
-    if !future.is_aborted() {
-        tracing::info!("Anoma node shut down unexpectedly");
-    }
+    let _ = future.await;
 }
 
 pub fn run(config: config::Ledger) {
