@@ -190,7 +190,7 @@ pub fn run(config: config::Ledger) {
     // on the database
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
     // start the shell + ABCI server
-    let _ = std::thread::spawn(move || {
+    let shell_handle = std::thread::spawn(move || {
         run_shell(config, abort_registration);
     });
     tracing::info!("Anoma ledger node started.");
@@ -202,6 +202,7 @@ pub fn run(config: config::Ledger) {
         if TERM_SIGNALS.contains(&sig) {
             sender.send(true).unwrap();
             abort_handle.abort();
+            shell_handle.join().expect("Anoma did not shut down properly");
             break;
         }
     }
