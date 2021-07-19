@@ -107,11 +107,7 @@ dependencies = [
  "tempfile",
  "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
  "tendermint-abci",
-<<<<<<< HEAD
  "tendermint-proto 0.18.1",
-=======
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
->>>>>>> 51b7169366f2809f52dd25890e4fcd0ee0208c38
  "tendermint-rpc",
  "thiserror",
  "tokio",
@@ -4697,9 +4693,8 @@ dependencies = [
 
 [[package]]
 name = "tendermint-proto"
-<<<<<<< HEAD
 version = "0.18.1"
-source = "git+https://github.com/informalsystems/tendermint-rs.git?rev=4a6c450#4a6c450340c52299c7ff94896ee56edfef85b8ca"
+source = "git+https://github.com/informalsystems/tendermint-rs?rev=4a6c450#4a6c450340c52299c7ff94896ee56edfef85b8ca"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",
@@ -4716,10 +4711,7 @@ dependencies = [
 
 [[package]]
 name = "tendermint-proto"
-version = "0.19.0"
-=======
 version = "0.20.0"
->>>>>>> 51b7169366f2809f52dd25890e4fcd0ee0208c38
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fadcaea1eecd91dbdd9636fe8ad38d2b41fc0ae814c176e51e00925cdda78a34"
 dependencies = [
