@@ -66,7 +66,7 @@ the next run will have up to date values.
 
 The main program is called on two specific occasion; when intent gossip node is
 started, on all intent from database and whenever a new intent is received from
-the network.
+the p2p network and the RPC endpoint, if enabled.
 
 ## Transaction
 
