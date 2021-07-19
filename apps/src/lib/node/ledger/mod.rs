@@ -10,7 +10,7 @@ use std::sync::mpsc::channel;
 use std::task::{Context, Poll};
 
 use anoma_shared::types::storage::{BlockHash, BlockHeight};
-use futures::future::FutureExt;
+use futures::future::{AbortHandle, AbortRegistration, Abortable, FutureExt};
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
 use tendermint_proto::abci::CheckTxType;
@@ -130,7 +130,10 @@ pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
 }
 
 #[tokio::main]
-async fn run_shell(config: config::Ledger) {
+async fn run_shell(
+    config: config::Ledger,
+    abort_registration: AbortRegistration,
+) {
     // Construct our ABCI application.
     let service = Shell::new(&config.db, config::DEFAULT_CHAIN_ID.to_owned());
 
@@ -159,7 +162,12 @@ async fn run_shell(config: config::Ledger) {
         .unwrap();
 
     // Run the server with the shell
-    server.listen(config.address).await.unwrap();
+    let future =
+        Abortable::new(server.listen(config.address), abort_registration);
+
+    if !future.is_aborted() {
+        tracing::info!("Anoma node shut down unexpectedly");
+    }
 }
 
 pub fn run(config: config::Ledger) {
@@ -179,9 +187,13 @@ pub fn run(config: config::Ledger) {
             );
         }
     });
+
+    // used for shutting down the shell and making sure that drop is called
+    // on the database
+    let (abort_handle, abort_registration) = AbortHandle::new_pair();
     // start the shell + ABCI server
     let _ = std::thread::spawn(move || {
-        run_shell(config);
+        run_shell(config, abort_registration);
     });
     tracing::info!("Anoma ledger node started.");
 
@@ -191,6 +203,7 @@ pub fn run(config: config::Ledger) {
     for sig in signals.forever() {
         if TERM_SIGNALS.contains(&sig) {
             sender.send(true).unwrap();
+            abort_handle.abort();
             break;
         }
     }
