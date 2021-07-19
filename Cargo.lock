@@ -105,9 +105,9 @@ dependencies = [
  "signal-hook",
  "sparse-merkle-tree",
  "tempfile",
- "tendermint",
+ "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
  "tendermint-abci",
- "tendermint-proto",
+ "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
  "tendermint-rpc",
  "thiserror",
  "tokio",
@@ -129,6 +129,8 @@ dependencies = [
  "chrono",
  "ed25519-dalek",
  "hex",
+ "ibc",
+ "ibc-proto",
  "itertools 0.10.1",
  "loupe",
  "parity-wasm",
@@ -143,6 +145,7 @@ dependencies = [
  "serde 1.0.126",
  "sha2 0.9.5",
  "sparse-merkle-tree",
+ "tendermint-proto 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "test-env-log",
  "thiserror",
  "tonic-build",
@@ -247,9 +250,9 @@ checksum = "9d6e24d2cce90c53b948c46271bfb053e4bdc2db9b5d3f65e20f8cf28a1b7fc3"
 
 [[package]]
 name = "assert_cmd"
-version = "1.0.5"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a88b6bd5df287567ffdf4ddf4d33060048e1068308e5f62d81c6f9824a045a48"
+checksum = "3d20831bd004dda4c7c372c19cdabff369f794a95e955b3f13fe460e3e1ae95f"
 dependencies = [
  "bstr",
  "doc-comment",
@@ -1232,10 +1235,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e25ea47919b1560c4e3b7fe0aaab9becf5b84a10325ddf7db0f0ba5e1026499"
 
 [[package]]
-name = "difference"
-version = "2.0.0"
+name = "difflib"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "524cbf6897b527295dff137cec09ecf3a05f4fddffd7dfcd1585403449e74198"
+checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
 
 [[package]]
 name = "digest"
@@ -1270,6 +1273,33 @@ name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
+
+[[package]]
+name = "dyn-clonable"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e9232f0e607a262ceb9bd5141a3dfb3e4db6994b31989bbfd845878cba59fd4"
+dependencies = [
+ "dyn-clonable-impl",
+ "dyn-clone",
+]
+
+[[package]]
+name = "dyn-clonable-impl"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "558e40ea573c374cf53507fd240b7ee2f5477df7cfebdb97323ec61c719399c5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee2626afccd7561a06cf1367e2950c4718ea04565e20fb5029b6c7d8ad09abcf"
 
 [[package]]
 name = "dynasm"
@@ -1747,6 +1777,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gumdrop"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46571f5d540478cf70d2a42dd0d6d8e9f4b9cc7531544b93311e657b86568a0b"
+dependencies = [
+ "gumdrop_derive",
+]
+
+[[package]]
+name = "gumdrop_derive"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "915ef07c710d84733522461de2a734d4d62a3fd39a4d4f404c2f385ef8618d05"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1965,6 +2015,61 @@ dependencies = [
  "native-tls",
  "tokio",
  "tokio-native-tls",
+]
+
+[[package]]
+name = "ibc"
+version = "0.6.0"
+source = "git+https://github.com/informalsystems/ibc-rs?rev=3f0d4bc38a3d737cbd289c2087d09228bdb7b07f#3f0d4bc38a3d737cbd289c2087d09228bdb7b07f"
+dependencies = [
+ "anomaly",
+ "bytes 1.0.1",
+ "chrono",
+ "dyn-clonable",
+ "ibc-proto",
+ "ics23",
+ "prost",
+ "prost-types",
+ "regex",
+ "serde 1.0.126",
+ "serde_derive",
+ "serde_json",
+ "sha2 0.9.5",
+ "subtle-encoding",
+ "tendermint 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tendermint-proto 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tendermint-testgen",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "ibc-proto"
+version = "0.8.2"
+source = "git+https://github.com/informalsystems/ibc-rs?rev=3f0d4bc38a3d737cbd289c2087d09228bdb7b07f#3f0d4bc38a3d737cbd289c2087d09228bdb7b07f"
+dependencies = [
+ "anomaly",
+ "bytes 1.0.1",
+ "prost",
+ "prost-types",
+ "tendermint-proto 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "thiserror",
+ "tonic",
+]
+
+[[package]]
+name = "ics23"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a575acddcafc39b28ccc3c685a0029b58e4741af99cd6c9fa11406ad4c4085d6"
+dependencies = [
+ "anyhow",
+ "bytes 1.0.1",
+ "hex",
+ "prost",
+ "ripemd160",
+ "sha2 0.9.5",
+ "sha3",
 ]
 
 [[package]]
@@ -3395,11 +3500,12 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 
 [[package]]
 name = "predicates"
-version = "1.0.8"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f49cfaf7fdaa3bfacc6fa3e7054e65148878354a5cfddcf661df4c851f8021df"
+checksum = "c6e46ca79eb4e21e2ec14430340c71250ab69332abf85521c95d3a8bc336aa76"
 dependencies = [
- "difference",
+ "difflib",
+ "itertools 0.10.1",
  "predicates-core",
 ]
 
@@ -3858,6 +3964,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ripemd160"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2eca4ecc81b7f313189bf73ce724400a07da2a6dac19588b03c8bd76a2dcc251"
+dependencies = [
+ "block-buffer 0.9.0",
+ "digest 0.9.0",
+ "opaque-debug 0.3.0",
+]
+
+[[package]]
 name = "rkyv"
 version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4255,6 +4372,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f0242b8e50dd9accdd56170e94ca1ebd223b098eb9c83539a6e367d0f36ae68"
 
 [[package]]
+name = "simple-error"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc47a29ce97772ca5c927f75bac34866b16d64e07f330c3248e2d7226623901b"
+
+[[package]]
 name = "slab"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4441,6 +4564,38 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7d330f5d92e5e1c7a84130805b48b4983d98a37257034544492e3566315142b"
+dependencies = [
+ "anomaly",
+ "async-trait",
+ "bytes 1.0.1",
+ "chrono",
+ "ed25519",
+ "ed25519-dalek",
+ "futures",
+ "num-traits 0.2.14",
+ "once_cell",
+ "prost",
+ "prost-types",
+ "serde 1.0.126",
+ "serde_bytes",
+ "serde_json",
+ "serde_repr",
+ "sha2 0.9.5",
+ "signature",
+ "subtle 2.4.0",
+ "subtle-encoding",
+ "tendermint-proto 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "thiserror",
+ "toml",
+ "url",
+ "zeroize",
+]
+
+[[package]]
+name = "tendermint"
+version = "0.20.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#5ff96bdabd7eba02e2cdeea90799cc8d72effea5"
 dependencies = [
  "anomaly",
@@ -4462,7 +4617,7 @@ dependencies = [
  "signature",
  "subtle 2.4.0",
  "subtle-encoding",
- "tendermint-proto",
+ "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
  "thiserror",
  "toml",
  "url",
@@ -4477,9 +4632,28 @@ dependencies = [
  "bytes 1.0.1",
  "eyre",
  "prost",
- "tendermint-proto",
+ "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "tendermint-proto"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fadcaea1eecd91dbdd9636fe8ad38d2b41fc0ae814c176e51e00925cdda78a34"
+dependencies = [
+ "anomaly",
+ "bytes 1.0.1",
+ "chrono",
+ "num-derive",
+ "num-traits 0.2.14",
+ "prost",
+ "prost-types",
+ "serde 1.0.126",
+ "serde_bytes",
+ "subtle-encoding",
+ "thiserror",
 ]
 
 [[package]]
@@ -4519,14 +4693,29 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "subtle-encoding",
- "tendermint",
- "tendermint-proto",
+ "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
+ "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis)",
  "thiserror",
  "tokio",
  "tracing",
  "url",
  "uuid",
  "walkdir",
+]
+
+[[package]]
+name = "tendermint-testgen"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbe4acaa8aa91bb208a22a7aa3e57610e2f6948c0b69667f7666ebc1bec27171"
+dependencies = [
+ "ed25519-dalek",
+ "gumdrop",
+ "serde 1.0.126",
+ "serde_json",
+ "simple-error",
+ "tempfile",
+ "tendermint 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4592,18 +4781,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.25"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa6f76457f59514c7eeb4e59d891395fab0b2fd1d40723ae737d64153392e9c6"
+checksum = "93119e4feac1cbe6c798c34d3a53ea0026b0b1de6a120deef895137c0529bfe2"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.25"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a36768c0fbf1bb15eca10defa29526bda730a2376c2ab4393ccfa16fb1a318d"
+checksum = "060d69a0afe7796bf42e9e2ff91f5ee691fb15c53d38b4b62a9a53eb23164745"
 dependencies = [
  "proc-macro2",
  "quote",

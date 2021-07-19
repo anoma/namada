@@ -5,10 +5,7 @@ use std::ops::Bound::{Excluded, Included};
 
 use super::{BlockState, DBIter, Error, Result, DB};
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
-use crate::types::address::Address;
-use crate::types::storage::{
-    BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR, RESERVED_VP_KEY,
-};
+use crate::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 
 /// An in-memory DB for testing.
 #[derive(Debug)]
@@ -111,75 +108,48 @@ impl DB for MockDB {
         for (path, bytes) in
             self.0.range((Included(prefix), Excluded(upper_prefix)))
         {
-            let mut segments: Vec<&str> =
+            let segments: Vec<&str> =
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
-                Some(prefix) => {
-                    match *prefix {
-                        "tree" => match segments.get(2) {
-                            Some(smt) => match *smt {
-                                "root" => {
-                                    root = Some(
-                                        types::decode(bytes)
-                                            .map_err(Error::CodingError)?,
-                                    )
-                                }
-                                "store" => {
-                                    store = Some(
-                                        types::decode(bytes)
-                                            .map_err(Error::CodingError)?,
-                                    )
-                                }
-                                _ => unknown_key_error(path)?,
-                            },
-                            None => unknown_key_error(path)?,
+                Some(prefix) => match *prefix {
+                    "tree" => match segments.get(2) {
+                        Some(smt) => match *smt {
+                            "root" => {
+                                root = Some(
+                                    types::decode(bytes)
+                                        .map_err(Error::CodingError)?,
+                                )
+                            }
+                            "store" => {
+                                store = Some(
+                                    types::decode(bytes)
+                                        .map_err(Error::CodingError)?,
+                                )
+                            }
+                            _ => unknown_key_error(path)?,
                         },
-                        "hash" => {
-                            hash = Some(
-                                types::decode(bytes)
-                                    .map_err(Error::CodingError)?,
-                            )
-                        }
-                        "subspace" => {
-                            // We need special handling of validity predicate
-                            // keys, which are reserved and so calling
-                            // `Key::parse` on them would fail
-                            let key = match segments.get(3) {
-                                Some(seg) if *seg == RESERVED_VP_KEY => {
-                                    // the path of a validity predicate should
-                                    // be height/subspace/address/?
-                                    let mut addr_str = (*segments
-                                        .get(2)
-                                        .expect("the address not found"))
-                                    .to_owned();
-                                    let _ = addr_str.remove(0);
-                                    let addr = Address::decode(&addr_str)
-                                        .expect("cannot decode the address");
-                                    Key::validity_predicate(&addr)
-                                }
-                                _ => {
-                                    Key::parse(segments.split_off(2).join(
-                                        &KEY_SEGMENT_SEPARATOR.to_string(),
-                                    ))
-                                    .map_err(|e| Error::Temporary {
-                                        error: format!(
-                                            "Cannot parse key segments {}: {}",
-                                            path, e
-                                        ),
-                                    })?
-                                }
-                            };
-                            subspaces.insert(key, bytes.to_vec());
-                        }
-                        "address_gen" => {
-                            address_gen = Some(
-                                types::decode(bytes)
-                                    .map_err(Error::CodingError)?,
-                            );
-                        }
-                        _ => unknown_key_error(path)?,
+                        None => unknown_key_error(path)?,
+                    },
+                    "hash" => {
+                        hash = Some(
+                            types::decode(bytes).map_err(Error::CodingError)?,
+                        )
                     }
-                }
+                    "subspace" => {
+                        let key = Key::parse_db_key(path).map_err(|e| {
+                            Error::Temporary {
+                                error: e.to_string(),
+                            }
+                        })?;
+                        subspaces.insert(key, bytes.to_vec());
+                    }
+                    "address_gen" => {
+                        address_gen = Some(
+                            types::decode(bytes).map_err(Error::CodingError)?,
+                        );
+                    }
+                    _ => unknown_key_error(path)?,
+                },
                 None => unknown_key_error(path)?,
             }
         }

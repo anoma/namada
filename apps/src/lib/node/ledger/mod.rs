@@ -220,10 +220,10 @@ impl Shell {
         }
 
         // Initialize because there is no block
-        let token_vp = std::fs::read("wasm/vps/vp_token/vp.wasm")
-            .expect("cannot load token VP");
-        let user_vp = std::fs::read("wasm/vps/vp_user/vp.wasm")
-            .expect("cannot load user VP");
+        let token_vp =
+            std::fs::read("wasm/vp_token.wasm").expect("cannot load token VP");
+        let user_vp =
+            std::fs::read("wasm/vp_user.wasm").expect("cannot load user VP");
 
         // TODO load initial accounts from genesis
 
