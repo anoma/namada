@@ -100,7 +100,7 @@ impl Service<Request> for Shell {
             })),
             Request::CheckTx(tx) => {
                 let r#type = match CheckTxType::from_i32(tx.r#type)
-                    .expect("received unexpected CheckTxType")
+                    .expect("received unexpected CheckTxType from ABCI")
                 {
                     CheckTxType::New => MempoolTxType::NewTransaction,
                     CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
