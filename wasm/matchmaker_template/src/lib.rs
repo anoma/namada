@@ -6,6 +6,7 @@ use anoma_vm_env::matchmaker_prelude::intent::{
 use anoma_vm_env::matchmaker_prelude::key::ed25519::Signed;
 use anoma_vm_env::matchmaker_prelude::token::Amount;
 use anoma_vm_env::matchmaker_prelude::*;
+use good_lp::{default_solver, variable, variables, Solution, SolverModel};
 use petgraph::graph::{node_index, DiGraph, NodeIndex};
 use petgraph::visit::{depth_first_search, Control, DfsEvent};
 use petgraph::Graph;
@@ -37,12 +38,14 @@ fn create_transfer(
     from_node: &ExchangeNode,
     to_node: &ExchangeNode,
 ) -> token::Transfer {
+    // we want the minimum between
+    // - 1 / FROM_NODE.rate_min * TO_NODE.max_sell
+    // -
     let max_amount = (Decimal::from_i128(1).unwrap()
-        / to_node.exchange.data.rate_min.0)
-        * Decimal::from_i128(from_node.exchange.data.max_sell.change())
-            .unwrap();
+        / from_node.exchange.data.rate_min.0)
+        * Decimal::from_i128(to_node.exchange.data.max_sell.change()).unwrap();
     let amount = std::cmp::min(
-        to_node.exchange.data.max_sell.change(),
+        from_node.exchange.data.max_sell.change(),
         max_amount.to_i128().unwrap(),
     );
 
@@ -84,6 +87,18 @@ fn find_to_update_node(
     let mut connect_buy = Vec::new();
     depth_first_search(graph, Some(start), |event| {
         if let DfsEvent::Discover(index, _time) = event {
+            let current_node = &graph[index];
+            if new_node.exchange.data.token_sell
+                == current_node.exchange.data.token_buy
+            {
+                connect_sell.push(index);
+            }
+            if new_node.exchange.data.token_buy
+                == current_node.exchange.data.token_sell
+            {
+                connect_buy.push(index);
+            }
+
             // let inverse_rate: Decimal =
             //     Decimal::from(1) / new_node.exchange.data.rate_min.0;
             // let current_node = &graph[index];
@@ -102,8 +117,6 @@ fn find_to_update_node(
             // {
             //     connect_buy.push(index);
             // }
-            connect_buy.push(index);
-            connect_sell.push(index);
         }
         Control::<()>::Continue
     });
@@ -122,6 +135,7 @@ fn add_node(
         intent,
     };
     let new_node_index = graph.add_node(new_node.clone());
+    log_string(format!("before graph: {:?}", graph));
     let (connect_sell, connect_buy) = find_to_update_node(&graph, &new_node);
     let sell_edge = new_node.exchange.data.token_sell;
     let buy_edge = new_node.exchange.data.token_buy;
@@ -131,6 +145,7 @@ fn add_node(
     for node_index in connect_buy {
         graph.update_edge(node_index, new_node_index, buy_edge.clone());
     }
+    log_string(format!("after graph: {:?}", graph));
 }
 
 fn create_and_send_tx_data(
@@ -142,6 +157,7 @@ fn create_and_send_tx_data(
         cycle_intents.len()
     ));
     let cycle_intents = sort_cycle(graph, cycle_intents);
+    let amounts = compute_amounts(graph, &cycle_intents);
     let mut cycle_intents_iter = cycle_intents.into_iter();
     let first_node = cycle_intents_iter.next().map(|i| &graph[i]).unwrap();
     let mut tx_data = IntentTransfers::empty();
@@ -168,7 +184,15 @@ fn create_and_send_tx_data(
         first_node.exchange.data.addr.clone(),
         first_node.intent.clone(),
     );
+    log_string(format!("tx data: {:?}", tx_data.transfers));
     send_tx(tx_data)
+}
+
+fn compute_amounts(
+    graph: &DiGraph<ExchangeNode, Address>,
+    cycle_intents: &Vec<NodeIndex>,
+) -> Vec<Decimal> {
+    return Vec::new();
 }
 
 // The cycle returned by tarjan_scc only contains the node_index in an arbitrary
