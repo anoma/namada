@@ -37,14 +37,20 @@ fn create_transfer(
     from_node: &ExchangeNode,
     to_node: &ExchangeNode,
 ) -> token::Transfer {
-    let amount = from_node.exchange.data.rate_min.0
-        * Decimal::from_i128(to_node.exchange.data.max_sell.change()).unwrap();
+    let max_amount = (Decimal::from_i128(1).unwrap()
+        / to_node.exchange.data.rate_min.0)
+        * Decimal::from_i128(from_node.exchange.data.max_sell.change())
+            .unwrap();
+    let amount = std::cmp::min(
+        to_node.exchange.data.max_sell.change(),
+        max_amount.to_i128().unwrap(),
+    );
 
     token::Transfer {
         source: from_node.exchange.data.addr.clone(),
         target: to_node.exchange.data.addr.clone(),
         token: to_node.exchange.data.token_buy.clone(),
-        amount: Amount::from(amount.to_u64().unwrap()),
+        amount: Amount::from(amount as u64),
     }
 }
 

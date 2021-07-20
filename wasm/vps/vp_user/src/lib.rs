@@ -185,6 +185,10 @@ fn check_intent(
         max_sell,
     } = &exchange.data;
 
+    log_string(format!(
+        "exchange description: {}, {}, {}, {}, {}", token_sell, token_buy, max_sell.change(), min_buy.change(), rate_min.0 
+    ));
+
     let token_sell_key = token::balance_key(&token_sell, addr).to_string();
     let mut sell_difference: token::Amount =
         read_pre(&token_sell_key).unwrap_or_default();
@@ -202,33 +206,30 @@ fn check_intent(
 
     let sell_diff: Decimal = sell_difference.change().into(); // -> how many token I sold
     let buy_diff: Decimal = buy_difference.change().into(); // -> how many token I got
-                                                            // how many token I got / how many token I sold
-
-    // check if:
-    // - buy_difference > 0 to avoid division by 0 and make sure that something
-    //   is being sold/bought
-    // - rate_min, max_sell, min_buy are respected
 
     log_string(format!(
-        "1: {}, 2: {}, 3: {}, 4: {}",
-        buy_difference.change() <= 0,
-        buy_diff / sell_diff >= rate_min.0,
-        max_sell.change() > sell_difference.change(),
-        buy_diff > min_buy.change().into()
+        "buy_diff > 0: {}, rate check: {}, max_sell > sell_diff: {}, buy_diff > min_buy: {}",
+        buy_difference.change() > 0, 
+        sell_diff / buy_diff >= rate_min.0,
+        max_sell.change() >= sell_difference.change(), 
+        buy_diff >= min_buy.change().into()
     ));
 
-    if buy_difference.change() <= 0
-        || buy_diff / sell_diff >= rate_min.0
-        || max_sell.change() > sell_difference.change()
-        || buy_diff > min_buy.change().into()
+    if !(buy_difference.change() > 0
+        && (sell_diff / buy_diff >= rate_min.0) 
+        && max_sell.change() >= buy_difference.change()
+        && sell_diff >= min_buy.change().into())
     {
         log_string(format!(
-            "invalid exchange, {}, {}, {}, {}, {}",
+            "invalid exchange, {} / {}, sell diff: {}, buy diff: {}, max_sell: {}, rate_min: {}, min_buy: {}, buy_diff / sell_diff: {}",
+            token_sell,
+            token_buy,
             sell_difference.change(),
             buy_difference.change(),
             max_sell.change(),
             rate_min.0,
-            sell_diff / buy_diff
+            min_buy.change(),
+            buy_diff / sell_diff
         ));
         false
     } else {
