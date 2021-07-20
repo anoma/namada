@@ -104,7 +104,7 @@ mod tests {
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // 2. Kill the tendermint node
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(5));
         Command::new("killall")
             .args(&["tendermint"])
             .spawn()
