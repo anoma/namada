@@ -11,14 +11,24 @@ use std::task::{Context, Poll};
 
 use anoma_shared::types::storage::{BlockHash, BlockHeight};
 use futures::future::{AbortHandle, AbortRegistration, Abortable, FutureExt};
-use signal_hook::consts::TERM_SIGNALS;
-use signal_hook::iterator::Signals;
 use tendermint_proto::abci::CheckTxType;
 use tower::{Service, ServiceBuilder};
 use tower_abci::{response, split, BoxError, Request, Response, Server};
 
 use crate::node::ledger::shell::{MempoolTxType, Shell};
 use crate::{config, genesis};
+
+/// A panic-proof handle for aborting a future. Will abort during
+/// stack unwinding as its drop method calls abort.
+struct Aborter {
+    handle: AbortHandle,
+}
+
+impl Drop for Aborter {
+    fn drop(&mut self) {
+        self.handle.abort();
+    }
+}
 
 impl Service<Request> for Shell {
     type Error = BoxError;
@@ -35,7 +45,7 @@ impl Service<Request> for Shell {
     }
 
     fn call(&mut self, req: Request) -> Self::Future {
-        tracing::info!(?req);
+        tracing::debug!(?req);
         let rsp = match req {
             Request::InitChain(init) => {
                 match self.init_chain(init) {
@@ -120,15 +130,20 @@ impl Service<Request> for Shell {
                 Ok(Response::ApplySnapshotChunk(Default::default()))
             }
         };
-        tracing::info!(?rsp);
+        tracing::debug!(?rsp);
         Box::pin(async move { rsp.map_err(|e| e.into()) }.boxed())
     }
 }
 
+/// Resets the tendermint_node state and removes database files
 pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
     shell::reset(config)
 }
 
+/// Runs the an asynchronous ABCI server with four sub-components for consensus,
+/// mempool, snapshot, and info.
+///
+/// Runs until an abort handles sends a message to terminate the process
 #[tokio::main]
 async fn run_shell(
     config: config::Ledger,
@@ -138,7 +153,7 @@ async fn run_shell(
     let service = Shell::new(&config.db, config::DEFAULT_CHAIN_ID.to_owned());
 
     // Split it into components.
-    let (consensus, mempool, snapshot, info) = split::service(service, 1);
+    let (consensus, mempool, snapshot, info) = split::service(service, 5);
 
     // Hand those components to the ABCI server, but customize request behavior
     // for each category
@@ -164,51 +179,62 @@ async fn run_shell(
     // Run the server with the shell
     let future =
         Abortable::new(server.listen(config.address), abort_registration);
-
     let _ = future.await;
 }
 
+/// Runs two child processes: A tendermint node, a shell which contains an ABCI
+/// server for talking to the tendermint node. Both should be alive for correct
+/// functioning.
+///
+/// When the thread containing the tendermint node finishes its work (either by
+/// panic or by a termination signal), will send an abort message to the shell.
+///
+/// When the shell process finishes, we check if it finished with a panic. If it
+/// did we stop the tendermint node with a channel that acts as a kill switch.
 pub fn run(config: config::Ledger) {
-    // Run Tendermint ABCI server in another thread
     let home_dir = config.tendermint.clone();
     let socket_address = config.address.to_string();
-    // used for shutting down Tendermint node
+
+    // used for shutting down Tendermint node in case the shell panics
     let (sender, receiver) = channel();
+    let kill_switch = sender.clone();
+    // used for shutting down the shell and making sure that drop is called
+    // on the database
+    let (abort_handle, abort_registration) = AbortHandle::new_pair();
+
     // start Tendermint node
-    let _ = std::thread::spawn(move || {
+    let tendermint_handle = std::thread::spawn(move || {
         if let Err(err) =
-            tendermint_node::run(home_dir, &socket_address, receiver)
+            tendermint_node::run(home_dir, &socket_address, sender, receiver)
         {
             tracing::error!(
                 "Failed to start-up a Tendermint node with {}",
                 err
             );
         }
+        // Once tendermint node stops, ensure that we stop the shell.
+        // Implemented in the drop method to be panic-proof
+        Aborter {
+            handle: abort_handle,
+        };
     });
 
-    // used for shutting down the shell and making sure that drop is called
-    // on the database
-    let (abort_handle, abort_registration) = AbortHandle::new_pair();
     // start the shell + ABCI server
     let shell_handle = std::thread::spawn(move || {
         run_shell(config, abort_registration);
     });
+
     tracing::info!("Anoma ledger node started.");
 
-    // If a termination signal is received, shut down the tendermint node
-    let mut signals =
-        Signals::new(TERM_SIGNALS).expect("Failed to creat OS signal handlers");
-    for sig in signals.forever() {
-        if TERM_SIGNALS.contains(&sig) {
-            sender.send(true).unwrap();
-            abort_handle.abort();
-            // Wait for the database to finish flushing memtable
-            shell_handle
-                .join()
-                .expect("Anoma did not shut down properly");
-            break;
+    match shell_handle.join() {
+        Err(_) => {
+            tracing::info!("Anoma shut down unexpectedly");
+            // if the shell panicked, shut down the tendermint node
+            let _ = kill_switch.send(true);
         }
+        _ => tracing::info!("Shutting down Anoma node"),
     }
-
-    tracing::info!("Shutting down Anoma node");
+    tendermint_handle
+        .join()
+        .expect("Tendermint node did not shut down properly");
 }

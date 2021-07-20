@@ -7,11 +7,14 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use serde_json::json;
+use signal_hook::consts::TERM_SIGNALS;
+use signal_hook::iterator::Signals;
 use tendermint::config::TendermintConfig;
 use thiserror::Error;
 
 use crate::config;
 use crate::genesis::{self, Validator};
+use crate::std::sync::mpsc::Sender;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -31,10 +34,11 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Run the ABCI server in the current thread (blocking).
+/// Run the tendermint node.
 pub fn run(
     home_dir: PathBuf,
     socket_address: &str,
+    kill_switch: Sender<bool>,
     receiver: Receiver<bool>,
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
@@ -52,7 +56,6 @@ pub fn run(
     }
 
     update_tendermint_config(&home_dir)?;
-
     let tendermint_node = Command::new("tendermint")
         .args(&[
             "node",
@@ -65,6 +68,7 @@ pub fn run(
         .map_err(Error::TendermintStartUp)?;
     tracing::info!("Tendermint node started");
 
+    kill_on_term_signal(kill_switch);
     if receiver.recv().unwrap() {
         tracing::info!(
             "Received termination signal, shutting down Tendermint node"
@@ -73,8 +77,22 @@ pub fn run(
             libc::kill(tendermint_node.id() as i32, libc::SIGTERM);
         };
     }
-
     Ok(())
+}
+
+/// Listens for termination signals and forwards a kill command to the
+/// tendermint node when it encounters one.
+fn kill_on_term_signal(kill_switch: Sender<bool>) {
+    let _ = std::thread::spawn(move || {
+        let mut signals = Signals::new(TERM_SIGNALS)
+            .expect("Failed to creat OS signal handlers");
+        for sig in signals.forever() {
+            if TERM_SIGNALS.contains(&sig) {
+                kill_switch.send(true).unwrap();
+                break;
+            }
+        }
+    });
 }
 
 pub fn reset(config: config::Ledger) -> Result<()> {
