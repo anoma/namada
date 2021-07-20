@@ -16,5 +16,5 @@ exclude = [
 ]
 
 [patch.crates-io]
-tracing = { git = "https://github.com/tokio-rs/tracing/", branch = "v0.1.x" }
-tracing-core = { git = "https://github.com/tokio-rs/tracing/", branch = "v0.1.x" }
+tracing = {git = "https://github.com/tokio-rs/tracing/", branch = "v0.1.x"}
+tracing-core = {git = "https://github.com/tokio-rs/tracing/", branch = "v0.1.x"}
