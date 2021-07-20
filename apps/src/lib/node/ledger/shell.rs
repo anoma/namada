@@ -12,6 +12,7 @@ use anoma_shared::types::token::Amount;
 use anoma_shared::types::{address, key, token};
 use borsh::BorshSerialize;
 use itertools::Itertools;
+use tendermint::block::Header;
 use thiserror::Error;
 use tower_abci::{request, response};
 
@@ -219,9 +220,15 @@ impl Shell {
     }
 
     /// Begin a new block.
-    pub fn begin_block(&mut self, hash: BlockHash, height: BlockHeight) {
+    pub fn begin_block(&mut self, hash: BlockHash, header: Header) {
         self.gas_meter.reset();
-        self.storage.begin_block(hash, height).unwrap();
+        let height = BlockHeight(header.height.into());
+        self.storage
+            .begin_block(hash, height)
+            .expect("BeginBlock shouldn't fail");
+        self.storage
+            .set_header(header)
+            .expect("Setting a header shouldn't fail");
     }
 
     /// Validate and apply a transaction.

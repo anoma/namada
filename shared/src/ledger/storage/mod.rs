@@ -11,6 +11,7 @@ use std::fmt::Display;
 
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+use tendermint::block::Header;
 use thiserror::Error;
 use types::MerkleTree;
 
@@ -35,9 +36,11 @@ where
     pub db: D,
     /// The ID of the chain
     pub chain_id: String,
-    /// The storage for the last committed block
+    /// The storage for the current (yet to be committed) block
     pub block: BlockStorage<H>,
-    /// The height of the current block
+    /// The latest block header
+    pub header: Option<Header>,
+    /// The height of the committed block
     pub current_height: BlockHeight,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
@@ -181,6 +184,7 @@ where
         };
         self.db.write_block(state)?;
         self.current_height = self.block.height;
+        self.header = None;
         Ok(())
     }
 
@@ -292,6 +296,14 @@ where
         Ok(())
     }
 
+    /// Set the block header.
+    /// The header is not in the Merkle tree as it's tracked by Tendermint.
+    /// Hence, we don't update the tree when this is set.
+    pub fn set_header(&mut self, header: Header) -> Result<()> {
+        self.header = Some(header);
+        Ok(())
+    }
+
     /// Block data is in the Merkle tree as it's tracked by Tendermint in the
     /// block header. Hence, we don't update the tree when this is set.
     pub fn begin_block(
@@ -334,6 +346,11 @@ where
     /// Get the current (yet to be committed) block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
+    }
+
+    /// Get the block header
+    pub fn get_block_header(&self) -> (Option<Header>, u64) {
+        (self.header.clone(), MIN_STORAGE_GAS)
     }
 }
 
@@ -420,6 +437,7 @@ pub mod testing {
                 db: MockDB::default(),
                 chain_id,
                 block,
+                header: None,
                 current_height: BlockHeight(0),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",

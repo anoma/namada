@@ -35,6 +35,7 @@ pub fn open(db_path: impl AsRef<Path>, chain_id: String) -> PersistentStorage {
         db: rocksdb::open(db_path).expect("cannot open the DB"),
         chain_id,
         block,
+        header: None,
         current_height: BlockHeight(0),
         address_gen: EstablishedAddressGen::new(
             "Privacy is a function of liberty.",

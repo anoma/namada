@@ -76,15 +76,13 @@ impl Service<Request> for Shell {
             Request::BeginBlock(block) => {
                 match (
                     BlockHash::try_from(&*block.hash),
-                    BlockHeight::try_from(
-                        block.header.expect("missing block's header").height,
-                    ),
+                    block.header.expect("missing block's header").try_into(),
                 ) {
-                    (Ok(hash), Ok(height)) => {
-                        let _ = self.begin_block(hash, height);
+                    (Ok(hash), Ok(header)) => {
+                        let _ = self.begin_block(hash, header);
                     }
                     (Ok(_), Err(msg)) => {
-                        tracing::error!("Unexpected block height {}", msg);
+                        tracing::error!("Unexpected block header {}", msg);
                     }
                     (err @ Err(_), _) => tracing::error!("{:#?}", err),
                 };
