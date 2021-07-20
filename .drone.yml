@@ -589,7 +589,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 5b99cc7bc82eaf73562737dd1574ab24379270e804ba53e85d024e939aa546f1
-
+hmac: 99a637391a7da1c3ccdc2d50cd8535792a65eb6550024845896ff41f7124ae1a
 
 ...
