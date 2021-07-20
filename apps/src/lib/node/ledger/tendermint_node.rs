@@ -43,7 +43,7 @@ pub fn run(
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
 
-    // init and run a Tendermint node child process
+    // init and run a tendermint node child process
     Command::new("tendermint")
         .args(&["init", "--home", &home_dir_string])
         .output()
@@ -66,15 +66,16 @@ pub fn run(
         ])
         .spawn()
         .map_err(Error::TendermintStartUp)?;
+    let pid = tendermint_node.id();
     tracing::info!("Tendermint node started");
 
-    kill_on_term_signal(kill_switch);
+    // make sure to shut down when receiving a termination signal
+    kill_on_term_signal(kill_switch.clone());
+    // shut down the anoma node if tendermint unexpectedly stops
+    monitor_process(tendermint_node, kill_switch);
     if receiver.recv().unwrap() {
-        tracing::info!(
-            "Received termination signal, shutting down Tendermint node"
-        );
         unsafe {
-            libc::kill(tendermint_node.id() as i32, libc::SIGTERM);
+            libc::kill(pid as i32, libc::SIGTERM);
         };
     }
     Ok(())
@@ -88,10 +89,27 @@ fn kill_on_term_signal(kill_switch: Sender<bool>) {
             .expect("Failed to creat OS signal handlers");
         for sig in signals.forever() {
             if TERM_SIGNALS.contains(&sig) {
+                tracing::info!(
+                    "Received termination signal, shutting down Tendermint \
+                     node"
+                );
                 kill_switch.send(true).unwrap();
                 break;
             }
         }
+    });
+}
+
+/// Monitors the tendermint node. If it shuts down, this detects it and
+/// shuts down the anoma node
+fn monitor_process(
+    mut process: std::process::Child,
+    kill_switch: Sender<bool>,
+) {
+    std::thread::spawn(move || {
+        process.wait().expect("Tendermint was not running");
+        tracing::info!("Tendermint node shut down unexpectedly.");
+        kill_switch.send(true).unwrap();
     });
 }
 
