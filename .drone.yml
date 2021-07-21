@@ -115,7 +115,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+      | sha256sum -c -, sh scripts/ci/pre-run.sh false]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
   pull: if-not-exists
@@ -589,6 +589,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 9fbe935bc29005941729b1197ee036278311784145e8756cd42de10789de8ed2
+hmac: a9e7fb97aa802230db6cd3aa399caef806fc7272256dc5dbeb62683d2a66ca3e
 
 ...

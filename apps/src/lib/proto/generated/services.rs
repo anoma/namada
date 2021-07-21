@@ -35,7 +35,7 @@ pub struct RpcResponse {
 }
 /// Generated client implementations.
 pub mod rpc_service_client {
-    #![allow(unused_variables, dead_code, missing_docs)]
+    #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     #[derive(Debug, Clone)]
     pub struct RpcServiceClient<T> {
@@ -73,7 +73,7 @@ pub mod rpc_service_client {
                 tonic::Request<()>,
             ) -> Result<tonic::Request<()>, tonic::Status>,
             T:
-                Service<
+                tonic::codegen::Service<
                     http::Request<tonic::body::BoxBody>,
                     Response = http::Response<
                         <T as tonic::client::GrpcService<
@@ -81,8 +81,9 @@ pub mod rpc_service_client {
                         >>::ResponseBody,
                     >,
                 >,
-            <T as Service<http::Request<tonic::body::BoxBody>>>::Error:
-                Into<StdError> + Send + Sync,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+            >>::Error: Into<StdError> + Send + Sync,
         {
             RpcServiceClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -125,7 +126,7 @@ pub mod rpc_service_client {
 /// Generated server implementations.
 #[allow(clippy::unit_arg)]
 pub mod rpc_service_server {
-    #![allow(unused_variables, dead_code, missing_docs)]
+    #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for
     /// use with RpcServiceServer.
@@ -166,7 +167,7 @@ pub mod rpc_service_server {
             InterceptedService::new(Self::new(inner), interceptor)
         }
     }
-    impl<T, B> Service<http::Request<B>> for RpcServiceServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for RpcServiceServer<T>
     where
         T: RpcService,
         B: Body + Send + Sync + 'static,
