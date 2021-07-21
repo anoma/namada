@@ -295,7 +295,7 @@ impl Shell {
         tracing::info!(
             "Committed block hash: {}, height: {}",
             root,
-            self.storage.current_height,
+            self.storage.last_height,
         );
         response.data = root.0;
         response

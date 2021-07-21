@@ -36,7 +36,7 @@ pub fn open(db_path: impl AsRef<Path>, chain_id: String) -> PersistentStorage {
         chain_id,
         block,
         header: None,
-        current_height: BlockHeight(0),
+        last_height: BlockHeight(0),
         address_gen: EstablishedAddressGen::new(
             "Privacy is a function of liberty.",
         ),

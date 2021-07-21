@@ -41,7 +41,7 @@ where
     /// The latest block header
     pub header: Option<Header>,
     /// The height of the committed block
-    pub current_height: BlockHeight,
+    pub last_height: BlockHeight,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
 }
@@ -150,7 +150,7 @@ where
             self.block.hash = hash;
             self.block.height = height;
             self.block.subspaces = subspaces;
-            self.current_height = height;
+            self.last_height = height;
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
         } else {
@@ -183,7 +183,7 @@ where
             address_gen: self.address_gen.clone(),
         };
         self.db.write_block(state)?;
-        self.current_height = self.block.height;
+        self.last_height = self.block.height;
         self.header = None;
         Ok(())
     }
@@ -236,7 +236,7 @@ where
             return Ok((Some(v.to_vec()), gas as _));
         }
 
-        match self.db.read(self.current_height, key)? {
+        match self.db.read(self.last_height, key)? {
             Some(v) => {
                 let gas = key.len() + v.len();
                 Ok((Some(v), gas as _))
@@ -251,7 +251,7 @@ where
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
         (
-            self.db.iter_prefix(self.current_height, prefix),
+            self.db.iter_prefix(self.last_height, prefix),
             prefix.len() as _,
         )
     }
@@ -438,7 +438,7 @@ pub mod testing {
                 chain_id,
                 block,
                 header: None,
-                current_height: BlockHeight(0),
+                last_height: BlockHeight(0),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),

@@ -1642,7 +1642,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#e5b64c3df038b4d4e076c67402480f4b71187f85"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#bc2d7c43a773da617fe7daaf518a52c041052427"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -1673,7 +1673,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis#e5b64c3df038b4d4e076c67402480f4b71187f85"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#bc2d7c43a773da617fe7daaf518a52c041052427"
 dependencies = [
  "anomaly",
  "bytes",
