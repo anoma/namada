@@ -10,7 +10,6 @@ use std::sync::mpsc::channel;
 use std::task::{Context, Poll};
 
 use anoma_shared::types::storage::{BlockHash, BlockHeight};
-use anoma_shared::types::time::{DateTimeUtc, TimeZone, Utc};
 use futures::future::{AbortHandle, AbortRegistration, Abortable, FutureExt};
 use tendermint_proto::abci::CheckTxType;
 use tower::{Service, ServiceBuilder};
@@ -75,21 +74,15 @@ impl Service<Request> for Shell {
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
             Request::BeginBlock(block) => {
-                let header = block.header.expect("missing block's header");
                 match (
                     BlockHash::try_from(&*block.hash),
-                    BlockHeight::try_from(header.height),
+                    block.header.expect("missing block's header").try_into(),
                 ) {
-                    (Ok(hash), Ok(height)) => {
-                        let ts: tendermint_proto::google::protobuf::Timestamp =
-                            header.time.expect("Missing block time");
-                        // TODO hacky conversion, depends on https://github.com/informalsystems/tendermint-rs/issues/870
-                        let time: DateTimeUtc =
-                            (Utc.timestamp(ts.seconds, ts.nanos as u32)).into();
-                        let _ = self.begin_block(hash, height, time);
+                    (Ok(hash), Ok(header)) => {
+                        let _ = self.begin_block(hash, header);
                     }
                     (Ok(_), Err(msg)) => {
-                        tracing::error!("Unexpected block height {}", msg);
+                        tracing::error!("Unexpected block header {}", msg);
                     }
                     (err @ Err(_), _) => tracing::error!("{:#?}", err),
                 };

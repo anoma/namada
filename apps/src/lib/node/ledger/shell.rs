@@ -8,11 +8,12 @@ use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::Address;
 use anoma_shared::types::key::ed25519::PublicKey;
 use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
-use anoma_shared::types::time::{DateTimeUtc, TimeZone, Utc};
+use anoma_shared::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{address, key, token};
 use borsh::BorshSerialize;
 use itertools::Itertools;
+use tendermint::block::Header;
 use thiserror::Error;
 use tower_abci::{request, response};
 
@@ -240,16 +241,18 @@ impl Shell {
     }
 
     /// Begin a new block.
-    pub fn begin_block(
-        &mut self,
-        hash: BlockHash,
-        height: BlockHeight,
-        time: DateTimeUtc,
-    ) {
+    pub fn begin_block(&mut self, hash: BlockHash, header: Header) {
+        let height = BlockHeight(header.height.into());
+        let time: DateTime<Utc> = header.time.into();
+        let time: DateTimeUtc = time.into();
+
         self.gas_meter.reset();
         self.storage
             .begin_block(hash, height)
-            .expect("Must be able to begin a block");
+            .expect("BeginBlock shouldn't fail");
+        self.storage
+            .set_header(header)
+            .expect("Setting a header shouldn't fail");
         self.storage
             .update_epoch(height, time)
             .expect("Must be able to update epoch");
@@ -319,7 +322,7 @@ impl Shell {
         tracing::info!(
             "Committed block hash: {}, height: {}",
             root,
-            self.storage.current_height,
+            self.storage.last_height,
         );
         response.data = root.0;
         response
