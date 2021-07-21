@@ -25,8 +25,6 @@ use crate::types::ibc::{
 };
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg};
 
-pub(super) const COUNTER_PATH: &str = "connections/counter";
-
 impl<'a, DB, H> Ibc<'a, DB, H>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
