@@ -11,6 +11,7 @@ use std::fmt::Display;
 
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+use tendermint::block::Header;
 use thiserror::Error;
 use types::MerkleTree;
 
@@ -35,10 +36,12 @@ where
     pub db: D,
     /// The ID of the chain
     pub chain_id: String,
-    /// The storage for the last committed block
+    /// The storage for the current (yet to be committed) block
     pub block: BlockStorage<H>,
-    /// The height of the current block
-    pub current_height: BlockHeight,
+    /// The latest block header
+    pub header: Option<Header>,
+    /// The height of the committed block
+    pub last_height: BlockHeight,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
 }
@@ -147,7 +150,7 @@ where
             self.block.hash = hash;
             self.block.height = height;
             self.block.subspaces = subspaces;
-            self.current_height = height;
+            self.last_height = height;
             self.address_gen = address_gen;
             tracing::debug!("Loaded storage from DB");
         } else {
@@ -180,7 +183,8 @@ where
             address_gen: self.address_gen.clone(),
         };
         self.db.write_block(state)?;
-        self.current_height = self.block.height;
+        self.last_height = self.block.height;
+        self.header = None;
         Ok(())
     }
 
@@ -232,7 +236,7 @@ where
             return Ok((Some(v.to_vec()), gas as _));
         }
 
-        match self.db.read(self.current_height, key)? {
+        match self.db.read(self.last_height, key)? {
             Some(v) => {
                 let gas = key.len() + v.len();
                 Ok((Some(v), gas as _))
@@ -247,7 +251,7 @@ where
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
         (
-            self.db.iter_prefix(self.current_height, prefix),
+            self.db.iter_prefix(self.last_height, prefix),
             prefix.len() as _,
         )
     }
@@ -289,6 +293,14 @@ where
     /// block header. Hence, we don't update the tree when this is set.
     pub fn set_chain_id(&mut self, chain_id: &str) -> Result<()> {
         self.chain_id = chain_id.to_owned();
+        Ok(())
+    }
+
+    /// Set the block header.
+    /// The header is not in the Merkle tree as it's tracked by Tendermint.
+    /// Hence, we don't update the tree when this is set.
+    pub fn set_header(&mut self, header: Header) -> Result<()> {
+        self.header = Some(header);
         Ok(())
     }
 
@@ -334,6 +346,11 @@ where
     /// Get the current (yet to be committed) block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
+    }
+
+    /// Get the block header
+    pub fn get_block_header(&self) -> (Option<Header>, u64) {
+        (self.header.clone(), MIN_STORAGE_GAS)
     }
 }
 
@@ -420,7 +437,8 @@ pub mod testing {
                 db: MockDB::default(),
                 chain_id,
                 block,
-                current_height: BlockHeight(0),
+                header: None,
+                last_height: BlockHeight(0),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),

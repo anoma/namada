@@ -147,6 +147,7 @@ dependencies = [
  "serde 1.0.126",
  "sha2 0.9.5",
  "sparse-merkle-tree",
+ "tendermint",
  "tendermint-proto",
  "test-env-log",
  "thiserror",
