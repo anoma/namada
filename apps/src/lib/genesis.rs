@@ -9,10 +9,12 @@ use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use sha2::{Digest, Sha256};
 
-#[cfg(not(feature = "dev"))]
 #[derive(Debug)]
 pub struct Genesis {
+    #[cfg(not(feature = "dev"))]
     pub validators: Vec<Validator>,
+    #[cfg(feature = "dev")]
+    pub validator: Validator,
     pub parameters: Parameters,
 }
 
@@ -22,13 +24,6 @@ pub struct Validator {
     pub address: String,
     pub pk: PublicKey,
     pub voting_power: u64,
-}
-
-#[cfg(feature = "dev")]
-#[derive(Debug)]
-pub struct Genesis {
-    pub validator: Validator,
-    pub parameters: Parameters,
 }
 
 #[cfg(feature = "dev")]
