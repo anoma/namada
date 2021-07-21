@@ -565,7 +565,9 @@ mod tests {
             start_time in Just(start_time),
             block_height in start_height + 1..(start_height + 2 * min_num_of_blocks as u64),
             block_time in start_time + 1..(start_time + 2 * min_duration),
+            // Delta will be applied on the `min_num_of_blocks` parameter
             min_blocks_delta in -(min_num_of_blocks as i64 - 1)..5,
+            // Delta will be applied on the `min_duration` parameter
             min_duration_delta in -(min_duration as i64 - 1)..50,
         ) -> (EpochDuration, BlockHeight, DateTimeUtc, BlockHeight, DateTimeUtc,
                 i64, i64) {
