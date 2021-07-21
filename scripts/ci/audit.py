@@ -16,6 +16,9 @@ HEADERS = {
     'Authorization': 'token {}'.format(GH_TOKEN)
 }
 
+ISSUE_TITLE = 'Cargo Audit'
+ISSUE_LABEL = 'audit'
+
 
 # 0 - not exist,2 already exist, else issue number
 def check_issue_status(body: str) -> int:
@@ -26,8 +29,8 @@ def check_issue_status(body: str) -> int:
     with urlopen(req) as response:
         issues = json.load(response)
         for issue in issues:
-            title_check = issue['title'] == 'Cargo Audit' 
-            label_check = 'audit' in list(map(lambda label: label['name'], issue['labels']))
+            title_check = issue['title'] == ISSUE_TITLE
+            label_check = ISSUE_LABEL in list(map(lambda label: label['name'], issue['labels']))
             if title_check and label_check:
                 if issue['body'] == body:
                     return 2
@@ -46,7 +49,7 @@ def modify_issue(issue_number: int, body: str):
 
 
 def create_issue(body: str):
-    body = {"title": "Cargo Audit", "body": body, "labels": ["audit"]}
+    body = {"title": ISSUE_TITLE, "body": body, "labels": [ISSUE_LABEL]}
     encoded_body = json.dumps(body).encode('ascii')
     req = urllib.request.Request(CREATE_ISSUE_URL, data=encoded_body, headers=HEADERS)
 
@@ -54,6 +57,7 @@ def create_issue(body: str):
         json.load(response)
 
 
+issue_template = '# Vulnerabilities \n{}'
 table_header = '| Id  | Package  | Title  | Date  |\n|----:|---------:|-------:|------:|'
 table_row = '|{}|{}|{}|{}|'
 
@@ -79,14 +83,15 @@ for vulnerability in vulnerabilities['list']:
     table.append(new_table_row)
 
 table_rendered = '\n'.join(table)
+issue_body = issue_template.format(table_rendered)
 
-issue_status = check_issue_status(table_rendered)
+issue_status = check_issue_status(issue_body)
 
 if issue_status == 0:
     print("Create new issue.")
-    create_issue(table_rendered)
+    create_issue(issue_body)
 elif issue_status == 2:
     print("Issue already created.")
 else:
     print("Issue updated.")
-    modify_issue(issue_status, table_rendered)
+    modify_issue(issue_status, issue_body)
