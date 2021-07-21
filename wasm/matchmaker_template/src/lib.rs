@@ -192,11 +192,38 @@ fn compute_amounts(
     graph: &DiGraph<ExchangeNode, Address>,
     cycle_intents: &Vec<NodeIndex>,
 ) -> Vec<Decimal> {
-    return Vec::new();
+    let intent_graph = graph.filter_map(
+        |node_index, node| {
+            if cycle_intents.contains(&node_index) {
+                Some(node)
+            } else {
+                None
+            }
+        },
+        |_edge_index, edge| Some(edge),
+    );
+    log_string(format!("{:?}", intent_graph));
+
+    let mut vars = variables!();
+
+    depth_first_search(intent_graph, Some(start), |event| {
+        if let DfsEvent::Discover(index, _time) = event {
+            let current_node = &graph[index];
+            // get next node following th edge
+            let edges = currect_node.edges();
+            &current_node
+        }
+        Control::<()>::Continue
+    });
+
+    vars.add(variable().min(2).max(9));
+
+    Vec::new()
 }
 
 // The cycle returned by tarjan_scc only contains the node_index in an arbitrary
 // order without edges. we must reorder them to craft the transfer
+
 fn sort_cycle(
     graph: &DiGraph<ExchangeNode, Address>,
     cycle_intents: Vec<NodeIndex>,
