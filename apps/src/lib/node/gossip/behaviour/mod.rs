@@ -1,9 +1,7 @@
 mod discovery;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
-use std::task::{Context, Poll};
 use std::time::Duration;
 
 use anoma_shared::proto::{self, Intent, IntentGossipMessage};
@@ -17,9 +15,7 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::identity::Keypair;
-use libp2p::swarm::{
-    NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters,
-};
+use libp2p::swarm::NetworkBehaviourEventProcess;
 use libp2p::{NetworkBehaviour, PeerId};
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
@@ -112,27 +108,12 @@ impl TopicSubscriptionFilter for IntentGossipSubscriptionFilter {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "AnomaBehaviourEvent", poll_method = "poll")]
 pub struct Behaviour {
-    pub intent_gossip_behaviour: libp2p::gossipsub::Gossipsub<
-        IdentityTransform,
-        IntentGossipSubscriptionFilter,
-    >,
+    pub intent_gossip_behaviour: Gossipsub,
     pub discovery: DiscoveryBehaviour,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
     pub intent_gossip_app: intent_gossiper::GossipIntent,
-    #[behaviour(ignore)]
-    events: VecDeque<AnomaBehaviourEvent>,
-}
-
-#[derive(Debug)]
-pub enum AnomaBehaviourEvent {
-    PeerConnected(PeerId),
-    PeerDisconnected(PeerId),
-    Message(GossipsubMessage, PeerId, MessageId),
-    Subscribed(PeerId, TopicHash),
-    Unsubscribed(PeerId, TopicHash),
 }
 
 pub fn message_id(message: &GossipsubMessage) -> MessageId {

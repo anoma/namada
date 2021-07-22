@@ -496,7 +496,6 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                 }
                 // Nothing to notify handler
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                    match event {}
                 }
                 NetworkBehaviourAction::ReportObservedAddr {
                     address,
