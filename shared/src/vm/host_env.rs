@@ -1499,7 +1499,7 @@ pub fn mm_remove_intents<MEM, MM>(
     mm.remove_intents(intents_id);
 }
 
-/// Inject a transaction from matchmaker's matched intents to the ledger
+/// Injupdate_stateaction from matchmaker's matched intents to the ledger
 pub fn mm_send_match<MEM, MM>(
     env: &MatchmakerEnv<MEM, MM>,
     data_ptr: u64,

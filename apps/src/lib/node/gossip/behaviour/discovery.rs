@@ -54,10 +54,18 @@ pub enum DiscoveryEvent {
 /// `DiscoveryBehaviour` configuration.
 #[derive(Clone)]
 pub struct DiscoveryConfig {
+    /// user defined peer that are given to kad in order to connect to the
+    /// network
     user_defined: Vec<PeerAddress>,
+    /// maximum number of peer to connect to
     discovery_max: u64,
+    /// enable kademlia to find new peer
     enable_kademlia: bool,
+    /// look for new peer over local network. Must have kademlia activated
     enable_mdns: bool,
+    // TODO: should this be optional? maybe all node should implement it.
+    /// use the option from kademlia. Prevent some type of attacks against
+    /// kademlia.
     kademlia_disjoint_query_paths: bool,
 }
 impl Default for DiscoveryConfig {
@@ -93,6 +101,7 @@ impl DiscoveryConfigBuilder {
         self
     }
 
+    /// Configures if disjoint query path is enabled
     pub fn use_kademlia_disjoint_query_paths(
         &mut self,
         value: bool,
@@ -113,6 +122,7 @@ impl DiscoveryConfigBuilder {
         self
     }
 
+    /// Build the discovery config
     pub fn build(&self) -> Result<DiscoveryConfig> {
         Ok(self.config.clone())
     }
@@ -143,13 +153,21 @@ pub struct DiscoveryBehaviour {
     /// Number of active connections to pause discovery on.
     discovery_max: u64,
 }
+
 impl Display for DiscoveryBehaviour {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(
             format!(
-                "user_defined {:?}, kademlia: {:?}, mdns: {:?}, \
-                 next_kad_random_query: {:?}, duration_to_next_kad {:?}, \
-                 num_connection: {:?}, peers: {:?}, discovery_max: {:?}",
+                "{
+    user_defined {:?},
+    kademlia: {:?},
+    mdns: {:?},
+    next_kad_random_query: {:?},
+    duration_to_next_kad {:?},
+    num_connection: {:?},
+    peers: {:?},
+    discovery_max: {:?}
+}",
                 self.user_defined,
                 self.kademlia.is_enabled(),
                 self.mdns.is_enabled(),
@@ -185,8 +203,9 @@ impl DiscoveryBehaviour {
             let store = MemoryStore::new(local_peer_id.to_owned());
             let mut kad_config = KademliaConfig::default();
             kad_config.disjoint_query_paths(kademlia_disjoint_query_paths);
+            // TODO: choose a better protocol name
             kad_config.set_protocol_name(
-                format!("/anoma/kad/{}/kad/1.0.0", "anoma")
+                "/anoma/kad/anoma/kad/1.0.0"
                     .as_bytes()
                     .to_vec(),
             );
@@ -210,6 +229,9 @@ impl DiscoveryBehaviour {
         };
 
         let mdns_opt = if enable_mdns {
+            // Because the mdns config needs to be created in an async way we
+            // need a runtime.
+            // TODO: Maybe do an MR upstream to add the possibility of a sync way
             let rt = tokio::runtime::Runtime::new().unwrap();
             Some(
                 rt.block_on(Mdns::new(MdnsConfig::default()))
@@ -242,6 +264,9 @@ impl NetworkBehaviour for DiscoveryBehaviour {
         self.kademlia.new_handler()
     }
 
+    /// Look for the address of a peer first in the user defined list then in
+    /// kademlia then lastly in the local network. Sum all possible address and
+    /// returns.
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         let mut list = self
             .user_defined
@@ -459,26 +484,23 @@ impl NetworkBehaviour for DiscoveryBehaviour {
             match ev {
                 NetworkBehaviourAction::GenerateEvent(event) => match event {
                     MdnsEvent::Discovered(list) => {
-                        if self.num_connections >= self.discovery_max {
+                        if self.num_connections < self.discovery_max {
+                            // Add any discovered peers to Kademlia
+                            for (peer_id, multiaddr) in list {
+                                if let Some(kad) = self.kademlia.as_mut() {
+                                    kad.add_address(&peer_id, multiaddr);
+                                }
+                            }
+                        } else {
                             tracing::info!(
                                 "max reached {:?}, {:?}",
                                 self.num_connections,
                                 self.discovery_max
                             );
                             // Already over discovery max, don't add discovered
-                            // peers.
-                            // We could potentially buffer these addresses to be
-                            // added later, but mdns
-                            // is not an important use case and may be removed
-                            // in future.
-                            continue;
-                        }
-
-                        // Add any discovered peers to Kademlia
-                        for (peer_id, multiaddr) in list {
-                            if let Some(kad) = self.kademlia.as_mut() {
-                                kad.add_address(&peer_id, multiaddr);
-                            }
+                            // peers. We could potentially buffer these
+                            // addresses to be added later, but mdns is not an
+                            // important use case and may be removed in future.
                         }
                     }
                     MdnsEvent::Expired(_) => {}

@@ -53,22 +53,38 @@ pub type Gossipsub = libp2p::gossipsub::Gossipsub<
 >;
 
 // TODO merge type of config and this one ? Maybe not a good idea
+// TODO extends with MaxSubscribionFilter
+/// IntentGossipSubscriptionfilter is a wrapper of TopicSubscriptionFilter to
+/// allows combination of any sort of filter.
 pub enum IntentGossipSubscriptionFilter {
     RegexFilter(RegexSubscriptionFilter),
     WhitelistFilter(WhitelistSubscriptionFilter),
 }
 
+/// IntentGossipEvent describe events received/sent in the gossipsub network.
+/// All information are extracted from the GossipsubEvent type. This type is
+/// used as a wrapper of GossipsubEvent in order to have only information of
+/// interest and possibly enforce some invariant.
 #[derive(Debug)]
 pub struct IntentGossipEvent {
+    /// The PeerId that initially created this message
     pub propagation_source: PeerId,
+    /// The MessageId of this message. This MessageId allows to discriminate
+    /// already received message
     pub message_id: MessageId,
+    // TODO maybe remove the Option of this field to make mandatory to have an
+    // id.
+    /// The peer that transmitted this message to us. It can be anonymous
     pub source: Option<PeerId>,
+    /// The content of the data
     pub data: Vec<u8>,
+    /// The topic from which we received the message
     pub topic: TopicHash,
 }
 
 impl From<GossipsubEvent> for IntentGossipEvent {
-    // To be used only with Message event
+    /// Transforme a GossipsubEvent into an IntentGossipEvent. This function
+    /// fails if the gossipsubEvent does not contain a GossipsubMessage.
     fn from(event: GossipsubEvent) -> Self {
         if let GossipsubEvent::Message {
             propagation_source,
@@ -94,7 +110,9 @@ impl From<GossipsubEvent> for IntentGossipEvent {
         }
     }
 }
+
 impl TopicSubscriptionFilter for IntentGossipSubscriptionFilter {
+    /// tcheck that the proposed topic can be subscribed
     fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
         match self {
             IntentGossipSubscriptionFilter::RegexFilter(filter) => {
@@ -107,15 +125,19 @@ impl TopicSubscriptionFilter for IntentGossipSubscriptionFilter {
     }
 }
 
+/// Behaviour is composed of a `DiscoveryBehaviour` and an GossipsubBehaviour`.
+/// It automatically connect to newly discovered peer, except specified
+/// otherwise, and propagates intents to other peers.
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
     pub intent_gossip_behaviour: Gossipsub,
-    pub discovery: DiscoveryBehaviour,
+    pub discover_behaviour: DiscoveryBehaviour,
     // TODO add another gossipsub (or floodsub ?) for dkg message propagation ?
     #[behaviour(ignore)]
     pub intent_gossip_app: intent_gossiper::GossipIntent,
 }
 
+/// [message_id] use the hash of the message data as an id
 pub fn message_id(message: &GossipsubMessage) -> MessageId {
     let mut hasher = DefaultHasher::new();
     message.data.hash(&mut hasher);
@@ -123,26 +145,17 @@ pub fn message_id(message: &GossipsubMessage) -> MessageId {
 }
 
 impl Behaviour {
-    fn poll<TBehaviourIn>(
-        &mut self,
-        _: &mut Context,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<TBehaviourIn, AnomaBehaviourEvent>> {
-        if !self.events.is_empty() {
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                self.events.pop_front().unwrap(),
-            ));
-        }
-        Poll::Pending
-    }
-
+    /// Create a new behaviour based on the config given
     pub fn new(
         key: Keypair,
         config: &crate::config::IntentGossiper,
     ) -> (Self, Option<Receiver<MatchmakerMessage>>) {
         let peer_id = PeerId::from_public_key(key.public());
 
-        // Set a custom gossipsub
+        // TODO remove hardcoded value and add them to the config Except
+        // validation_mode, protocol_id_prefix, message_id_fn and
+        // validate_messages
+        // Set a custom gossipsub for our use case
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
             .protocol_id_prefix("intent_gossip")
             .heartbeat_interval(Duration::from_secs(1))
@@ -187,6 +200,7 @@ impl Behaviour {
         let (intent_gossip_app, matchmaker_event_receiver) =
             intent_gossiper::GossipIntent::new(&config).unwrap();
 
+        // subscribe to all topic listed in the config.
         config
             .topics
             .iter()
@@ -201,35 +215,37 @@ impl Behaviour {
             })
             .expect("failed to subscribe to topic");
 
-        // TODO: check silent fail if not bootstrap_peers is not multiaddr
-        let discovery_opt = if let Some(dis_config) = &config.discover_peer {
-            let discovery_config = DiscoveryConfigBuilder::default()
-                .with_user_defined(dis_config.bootstrap_peers.clone())
-                .discovery_limit(dis_config.max_discovery_peers)
-                .with_kademlia(dis_config.kademlia)
-                .with_mdns(dis_config.mdns)
-                .use_kademlia_disjoint_query_paths(true)
-                .build()
-                .unwrap();
-
-            DiscoveryBehaviour::new(peer_id, discovery_config)
-        } else {
-            let discovery_config =
-                DiscoveryConfigBuilder::default().build().unwrap();
-            DiscoveryBehaviour::new(peer_id, discovery_config)
+        let discover_behaviour = {
+            // TODO: check that bootstrap_peers are in multiaddr (otherwise it
+            // fails silently)
+            let discover_config = if let Some(discover_config) =
+                &config.discover_peer
+            {
+                DiscoveryConfigBuilder::default()
+                    .with_user_defined(discover_config.bootstrap_peers.clone())
+                    .discovery_limit(discover_config.max_discovery_peers)
+                    .with_kademlia(discover_config.kademlia)
+                    .with_mdns(discover_config.mdns)
+                    .use_kademlia_disjoint_query_paths(true)
+                    .build()
+                    .unwrap()
+            } else {
+                DiscoveryConfigBuilder::default().build().unwrap()
+            };
+            DiscoveryBehaviour::new(peer_id, discover_config).unwrap()
         };
-
         (
             Self {
                 intent_gossip_behaviour,
-                discovery: discovery_opt.unwrap(),
+                discover_behaviour,
                 intent_gossip_app,
-                events: VecDeque::new(),
             },
             matchmaker_event_receiver,
         )
     }
 
+    /// tries to apply a new intent. Fails if the logic fails or if the intent
+    /// is rejected. If the matchmaker fails the message is only ignore
     fn handle_intent(&mut self, intent: Intent) -> MessageAcceptance {
         match self.intent_gossip_app.apply_intent(intent) {
             Ok(true) => MessageAcceptance::Accept,
@@ -238,7 +254,9 @@ impl Behaviour {
                 tracing::error!("Error while trying to apply an intent: {}", e);
                 match e {
                     intent_gossiper::Error::DecodeError(_) => {
-                        panic!("can't happens, because intent already decoded")
+                        panic!(
+                            "can't happens, because intent is already decoded"
+                        )
                     }
                     intent_gossiper::Error::MatchmakerInit(err)
                     | intent_gossiper::Error::Matchmaker(err) => {
@@ -253,6 +271,8 @@ impl Behaviour {
         }
     }
 
+    // Tries to decoded the arbitrary data in an intent then call
+    // [handle_intent]. fails if the data does not contains an intent
     fn handle_raw_intent(
         &mut self,
         data: impl AsRef<[u8]>,
@@ -273,14 +293,17 @@ impl Behaviour {
 }
 
 impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
+    /// When a new event is generated by the intent gossip behaviour
     fn inject_event(&mut self, event: GossipsubEvent) {
-        tracing::info!("received : {:?}", event);
+        tracing::info!("received a new message : {:?}", event);
         match event {
             GossipsubEvent::Message {
                 message,
                 propagation_source,
                 message_id,
             } => {
+                // validity is the type of response return to the network
+                // (valid|reject|ignore)
                 let validity = self.handle_raw_intent(message.data);
                 self.intent_gossip_behaviour
                     .report_message_validation_result(
@@ -288,9 +311,12 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                         &propagation_source,
                         validity,
                     )
-                    .expect("Failed to validate the message ");
+                    .expect("Failed to validate the message");
             }
+            // When a peer subscribe to a new topic, this node also tries to
+            // connect to it using the filter defined in the config
             GossipsubEvent::Subscribed { peer_id: _, topic } => {
+                // try to subscribe to the new topic
                 self.intent_gossip_behaviour
                     .subscribe(&IdentTopic::new(topic.into_string()))
                     .map_err(Error::FailedSubscription)
@@ -299,6 +325,10 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
                         false
                     });
             }
+            // Nothing to do when you are informed that a peer unsubscribed to a
+            // topic.
+            // TODO: It could be interesting to unsubscribe to a topic when the
+            // node is not connected to anyone else.
             GossipsubEvent::Unsubscribed {
                 peer_id: _,
                 topic: _,
@@ -308,14 +338,13 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for Behaviour {
 }
 
 impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
+    // The logic is part of the DiscoveryBehaviour, nothing to do here.
     fn inject_event(&mut self, event: DiscoveryEvent) {
         match event {
-            DiscoveryEvent::Connected(peer_id) => self
-                .events
-                .push_back(AnomaBehaviourEvent::PeerConnected(peer_id)),
-            DiscoveryEvent::Disconnected(peer_id) => self
-                .events
-                .push_back(AnomaBehaviourEvent::PeerDisconnected(peer_id)),
+            DiscoveryEvent::Connected(peer) =>
+                tracing::info!("Connect to a new peer: {:?}", peer),
+            DiscoveryEvent::Disconnected(peer) =>
+                tracing::info!("Peer disconnected: {:?}", peer)
         }
     }
 }

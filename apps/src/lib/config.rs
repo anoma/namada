@@ -140,6 +140,8 @@ pub enum SubscriptionFilter {
     RegexFilter(#[serde(with = "serde_regex")] Regex),
     WhitelistFilter(Vec<String>),
 }
+
+// TODO peer_id can be part of Multiaddr, mayby this splitting is not useful ?
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct PeerAddress {
     pub address: Multiaddr,
@@ -186,16 +188,21 @@ impl<'de> Deserialize<'de> for PeerAddress {
     }
 }
 
+// TODO add reserved_peers: explicit peers for gossipsub network, to not be
+// added to kademlia
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiscoverPeer {
     pub max_discovery_peers: u64,
     pub kademlia: bool,
     pub mdns: bool,
-    pub bootstrap_peers: HashSet<PeerAddress>, /* TODO add reserved_peers(explicit peers for gossipsub network, to not
-                                                * be added to kademlia) */
+    pub bootstrap_peers: HashSet<PeerAddress>,
 }
 
 impl Default for DiscoverPeer {
+    /// default configuration for discovering peer.
+    /// max_discovery_peers: 16,
+    /// kademlia: true,
+    /// mdns: true,
     fn default() -> Self {
         Self {
             max_discovery_peers: 16,
