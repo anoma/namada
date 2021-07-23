@@ -1,6 +1,6 @@
 # Accounts
 
-[Tracking Issue](https://github.com/anomanetwork/anoma/issues/45)
+[Tracking Issue](https://github.com/anoma/anoma/issues/45)
 
 ---
 
