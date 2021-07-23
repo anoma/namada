@@ -409,7 +409,7 @@ pub mod mm_token_exch {
     }
 
     fn update_graph_data(graph: &DiGraph<IntentNode, Address>) {
-        update_data(serde_json::to_vec(graph).unwrap());
+        update_state(serde_json::to_vec(graph).unwrap());
     }
 
     fn find_to_update_node(
