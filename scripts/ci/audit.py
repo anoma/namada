@@ -59,7 +59,7 @@ def create_issue(body: str):
 
 issue_template = '# Vulnerabilities \n{}'
 table_header = '| Id  | Package  | Title  | Date  |\n|----:|---------:|-------:|------:|'
-table_row = '|{}|{}|{}|{}|'
+table_row = '|[{0}]({advisory_db}{0})|{1}|{2}|{3}|'
 
 table = [table_header]
 
@@ -79,7 +79,9 @@ for vulnerability in vulnerabilities['list']:
     vuln_title = vuln_description['title']
     vuln_package = vuln_description['package']
     vuln_date = vuln_description['date']
-    new_table_row = table_row.format(vuln_id, vuln_package, vuln_title, vuln_date)
+    new_table_row = table_row.format(vuln_id, vuln_package, vuln_title, vuln_date, 
+        # link issues by their ID to the advisory DB
+        advisory_db = 'https://rustsec.org/advisories/')
     table.append(new_table_row)
 
 table_rendered = '\n'.join(table)
