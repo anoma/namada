@@ -4,7 +4,7 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "4e5ed681d344b98eb335a4efb11feae4aa776abcedda48bb1ff86b8904f911f8  Makefile"
+- commands: [echo "2a6ba6b44d80549d97b40094745f2b25e8770e29c750c4e0c5a07fd67d434a4a  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
@@ -13,7 +13,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "ee8890fe79e3230f4d3069c5065deb6500cd31964d7fcd4922c66c9ce5f5ceea  scripts/ci/audit.py"
+      | sha256sum -c -, echo "9903defee0e3026ac3bd3248757c9773579d87ec570bca209423403589218f65  scripts/ci/audit.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh false]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -107,7 +107,7 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "4e5ed681d344b98eb335a4efb11feae4aa776abcedda48bb1ff86b8904f911f8  Makefile"
+- commands: [echo "2a6ba6b44d80549d97b40094745f2b25e8770e29c750c4e0c5a07fd67d434a4a  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
@@ -116,7 +116,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "ee8890fe79e3230f4d3069c5065deb6500cd31964d7fcd4922c66c9ce5f5ceea  scripts/ci/audit.py"
+      | sha256sum -c -, echo "9903defee0e3026ac3bd3248757c9773579d87ec570bca209423403589218f65  scripts/ci/audit.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh false]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -191,7 +191,7 @@ kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [echo "4e5ed681d344b98eb335a4efb11feae4aa776abcedda48bb1ff86b8904f911f8  Makefile"
+- commands: [echo "2a6ba6b44d80549d97b40094745f2b25e8770e29c750c4e0c5a07fd67d434a4a  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
@@ -200,7 +200,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "ee8890fe79e3230f4d3069c5065deb6500cd31964d7fcd4922c66c9ce5f5ceea  scripts/ci/audit.py"
+      | sha256sum -c -, echo "9903defee0e3026ac3bd3248757c9773579d87ec570bca209423403589218f65  scripts/ci/audit.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -271,7 +271,7 @@ kind: pipeline
 name: anoma-ci-audit-pr
 node: {project: anoma}
 steps:
-- commands: [echo "4e5ed681d344b98eb335a4efb11feae4aa776abcedda48bb1ff86b8904f911f8  Makefile"
+- commands: [echo "2a6ba6b44d80549d97b40094745f2b25e8770e29c750c4e0c5a07fd67d434a4a  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
@@ -280,7 +280,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "ee8890fe79e3230f4d3069c5065deb6500cd31964d7fcd4922c66c9ce5f5ceea  scripts/ci/audit.py"
+      | sha256sum -c -, echo "9903defee0e3026ac3bd3248757c9773579d87ec570bca209423403589218f65  scripts/ci/audit.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -337,7 +337,7 @@ kind: pipeline
 name: anoma-ci-miri-pr
 node: {project: anoma}
 steps:
-- commands: [echo "4e5ed681d344b98eb335a4efb11feae4aa776abcedda48bb1ff86b8904f911f8  Makefile"
+- commands: [echo "2a6ba6b44d80549d97b40094745f2b25e8770e29c750c4e0c5a07fd67d434a4a  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
@@ -346,7 +346,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "ee8890fe79e3230f4d3069c5065deb6500cd31964d7fcd4922c66c9ce5f5ceea  scripts/ci/audit.py"
+      | sha256sum -c -, echo "9903defee0e3026ac3bd3248757c9773579d87ec570bca209423403589218f65  scripts/ci/audit.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -407,7 +407,7 @@ kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [echo "4e5ed681d344b98eb335a4efb11feae4aa776abcedda48bb1ff86b8904f911f8  Makefile"
+- commands: [echo "2a6ba6b44d80549d97b40094745f2b25e8770e29c750c4e0c5a07fd67d434a4a  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
@@ -416,7 +416,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "ee8890fe79e3230f4d3069c5065deb6500cd31964d7fcd4922c66c9ce5f5ceea  scripts/ci/audit.py"
+      | sha256sum -c -, echo "9903defee0e3026ac3bd3248757c9773579d87ec570bca209423403589218f65  scripts/ci/audit.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -485,7 +485,7 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [echo "4e5ed681d344b98eb335a4efb11feae4aa776abcedda48bb1ff86b8904f911f8  Makefile"
+- commands: [echo "2a6ba6b44d80549d97b40094745f2b25e8770e29c750c4e0c5a07fd67d434a4a  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
@@ -494,7 +494,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "ee8890fe79e3230f4d3069c5065deb6500cd31964d7fcd4922c66c9ce5f5ceea  scripts/ci/audit.py"
+      | sha256sum -c -, echo "9903defee0e3026ac3bd3248757c9773579d87ec570bca209423403589218f65  scripts/ci/audit.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -598,6 +598,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 4e7b95e2efb3c6e17f6e20a075d4190cd16bbebb0c196bbba7904c335e7ef0c0
+hmac: fa42937c9e6183fd07b990da166f95895c3b008c0d1724b89a17cd165c0b7688
 
 ...
