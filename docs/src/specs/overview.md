@@ -10,7 +10,7 @@ For block validator voting power assignment, the ledger employs a proof-of-stake
 
 The ledger's key-value storage is organized into blocks and user specific state is organized into accounts. The state machine executes transactions, which can apply arbitrary changes to the state that are validated by validity predicates associated with the accounts involved in the transaction.
 
-To prevent transaction front-running, the ledger employs a DKG scheme as implemented in [Ferveo](https://github.com/anomanetwork/ferveo). Using this scheme, transactions are encrypted before being submitted to the ledger. The encrypted transactions are committed by a block proposer to a specific order in which they must be executed once decrypted.
+To prevent transaction front-running, the ledger employs a DKG scheme as implemented in [Ferveo](https://github.com/anoma/ferveo). Using this scheme, transactions are encrypted before being submitted to the ledger. The encrypted transactions are committed by a block proposer to a specific order in which they must be executed once decrypted.
 
 - TODO add fractal scaling & protocol upgrade system overview
 
