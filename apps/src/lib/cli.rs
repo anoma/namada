@@ -477,8 +477,8 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use anoma_shared::types::address::Address;
-    use anoma_shared::types::token;
+    use anoma::types::address::Address;
+    use anoma::types::token;
     use libp2p::Multiaddr;
 
     use super::utils::*;

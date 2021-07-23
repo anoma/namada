@@ -2,7 +2,7 @@ mod filter;
 mod matchmaker;
 mod mempool;
 
-use anoma_shared::proto::Intent;
+use anoma::proto::Intent;
 use matchmaker::Matchmaker;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;

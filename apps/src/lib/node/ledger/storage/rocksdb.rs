@@ -18,14 +18,10 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 
-use anoma_shared::ledger::storage::types::PrefixIterator;
-use anoma_shared::ledger::storage::{
-    types, BlockState, DBIter, Error, Result, DB,
-};
-use anoma_shared::types::storage::{
-    BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
-};
-use anoma_shared::types::time::DateTimeUtc;
+use anoma::ledger::storage::types::PrefixIterator;
+use anoma::ledger::storage::{types, BlockState, DBIter, Error, Result, DB};
+use anoma::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
+use anoma::types::time::DateTimeUtc;
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,

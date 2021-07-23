@@ -1,5 +1,5 @@
 //! Implements transparent addresses as described in [Accounts
-//! Addresses](tech-specs/src/explore/design/ledger/accounts.md#addresses).
+//! Addresses](docs/src/explore/design/ledger/accounts.md#addresses).
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;

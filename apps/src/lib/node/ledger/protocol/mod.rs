@@ -4,16 +4,16 @@ use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt;
 
-use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
-use anoma_shared::ledger::ibc::{self, Ibc};
-use anoma_shared::ledger::native_vp::{self, NativeVp};
-use anoma_shared::ledger::parameters::{self, ParametersVp};
-use anoma_shared::ledger::pos::{self, PoS};
-use anoma_shared::ledger::storage::write_log::WriteLog;
-use anoma_shared::proto::{self, Tx};
-use anoma_shared::types::address::{Address, InternalAddress};
-use anoma_shared::types::storage::Key;
-use anoma_shared::vm::{self, wasm};
+use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
+use anoma::ledger::ibc::{self, Ibc};
+use anoma::ledger::native_vp::{self, NativeVp};
+use anoma::ledger::parameters::{self, ParametersVp};
+use anoma::ledger::pos::{self, PoS};
+use anoma::ledger::storage::write_log::WriteLog;
+use anoma::proto::{self, Tx};
+use anoma::types::address::{Address, InternalAddress};
+use anoma::types::storage::Key;
+use anoma::vm::{self, wasm};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -22,7 +22,7 @@ use crate::node::ledger::storage::PersistentStorage;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    StorageError(anoma_shared::ledger::storage::Error),
+    StorageError(anoma::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]

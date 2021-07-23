@@ -71,7 +71,48 @@ dependencies = [
 name = "anoma"
 version = "0.1.0"
 dependencies = [
- "anoma_shared",
+ "assert_matches",
+ "bech32",
+ "borsh",
+ "chrono",
+ "ed25519-dalek",
+ "hex",
+ "ibc",
+ "ibc-proto",
+ "itertools 0.10.1",
+ "loupe",
+ "parity-wasm",
+ "pretty_assertions",
+ "proptest",
+ "prost 0.8.0",
+ "prost-types 0.8.0",
+ "pwasm-utils",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
+ "rust_decimal",
+ "serde 1.0.126",
+ "sha2 0.9.5",
+ "sparse-merkle-tree",
+ "tendermint",
+ "tendermint-proto",
+ "test-env-log",
+ "thiserror",
+ "tonic-build",
+ "tracing",
+ "tracing-subscriber",
+ "wasmer",
+ "wasmer-compiler-cranelift",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-universal",
+ "wasmer-vm",
+ "wasmparser 0.79.0",
+]
+
+[[package]]
+name = "anoma_apps"
+version = "0.1.0"
+dependencies = [
+ "anoma",
  "async-std",
  "base64 0.13.0",
  "bech32",
@@ -122,52 +163,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma_shared"
-version = "0.1.0"
-dependencies = [
- "assert_matches",
- "bech32",
- "borsh",
- "chrono",
- "ed25519-dalek",
- "hex",
- "ibc",
- "ibc-proto",
- "itertools 0.10.1",
- "loupe",
- "parity-wasm",
- "pretty_assertions",
- "proptest",
- "prost 0.8.0",
- "prost-types 0.8.0",
- "pwasm-utils",
- "rand 0.7.3",
- "rand_core 0.5.1",
- "rust_decimal",
- "serde 1.0.126",
- "sha2 0.9.5",
- "sparse-merkle-tree",
- "tendermint",
- "tendermint-proto",
- "test-env-log",
- "thiserror",
- "tonic-build",
- "tracing",
- "tracing-subscriber",
- "wasmer",
- "wasmer-compiler-cranelift",
- "wasmer-compiler-singlepass",
- "wasmer-engine-universal",
- "wasmer-vm",
- "wasmparser 0.79.0",
-]
-
-[[package]]
 name = "anoma_tests"
 version = "0.1.0"
 dependencies = [
  "anoma",
- "anoma_shared",
+ "anoma_apps",
  "anoma_vm_env",
  "assert_cmd",
  "color-eyre",
@@ -187,7 +187,7 @@ dependencies = [
 name = "anoma_vm_env"
 version = "0.1.0"
 dependencies = [
- "anoma_shared",
+ "anoma",
  "anoma_vm_macro",
  "borsh",
 ]
