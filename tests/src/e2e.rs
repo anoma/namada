@@ -7,7 +7,7 @@ mod tests {
     use std::process::Command;
     use std::{fs, thread};
 
-    use anoma::config::{Config, IntentGossiper};
+    use anoma_apps::config::{Config, IntentGossiper};
     use assert_cmd::assert::OutputAssertExt;
     use assert_cmd::cargo::CommandCargoExt;
     use color_eyre::eyre::Result;

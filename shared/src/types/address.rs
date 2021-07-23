@@ -1,5 +1,5 @@
 //! Implements transparent addresses as described in [Accounts
-//! Addresses](tech-specs/src/explore/design/ledger/accounts.md#addresses).
+//! Addresses](docs/src/explore/design/ledger/accounts.md#addresses).
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -245,6 +245,8 @@ pub enum InternalAddress {
     PoS,
     /// Inter-blockchain communication
     Ibc,
+    /// Protocol parameters
+    Parameters,
 }
 
 impl Display for InternalAddress {
@@ -255,6 +257,7 @@ impl Display for InternalAddress {
             match self {
                 Self::PoS => "PoS",
                 Self::Ibc => "IBC",
+                Self::Parameters => "Parameters",
             }
         )
     }
