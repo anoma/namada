@@ -259,7 +259,7 @@ pub async fn build_transport(
 }
 
 // TODO document choice made here
-// TODO inject it in the configuration instead of hard-coding it
+// TODO inject it in the configuration instead of hard-coding it ?
 pub fn build_p2p_connections_limit() -> ConnectionLimits {
     ConnectionLimits::default()
         .with_max_pending_incoming(Some(10))

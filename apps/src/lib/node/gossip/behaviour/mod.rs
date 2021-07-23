@@ -45,8 +45,6 @@ pub enum Error {
     Mdns(std::io::Error),
 }
 
-// pub type Result<T> = std::result::Result<T, Error>;
-
 pub type Gossipsub = libp2p::gossipsub::Gossipsub<
     IdentityTransform,
     IntentGossipSubscriptionFilter,
@@ -180,9 +178,8 @@ impl Behaviour {
                     WhitelistSubscriptionFilter(
                         topics
                             .iter()
-                            .map(|topic| {
-                                TopicHash::from(IdentTopic::new(topic))
-                            })
+                            .map(IdentTopic::new)
+                            .map(TopicHash::from)
                             .collect(),
                     ),
                 )
@@ -271,8 +268,8 @@ impl Behaviour {
         }
     }
 
-    // Tries to decoded the arbitrary data in an intent then call
-    // [handle_intent]. fails if the data does not contains an intent
+    /// Tries to decoded the arbitrary data in an intent then call
+    /// [handle_intent]. fails if the data does not contains an intent
     fn handle_raw_intent(
         &mut self,
         data: impl AsRef<[u8]>,
@@ -344,7 +341,9 @@ impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
             DiscoveryEvent::Connected(peer) =>
                 tracing::info!("Connect to a new peer: {:?}", peer),
             DiscoveryEvent::Disconnected(peer) =>
-                tracing::info!("Peer disconnected: {:?}", peer)
+                tracing::info!("Peer disconnected: {:?}", peer),
+            _ => {}
+
         }
     }
 }

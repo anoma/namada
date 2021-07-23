@@ -138,7 +138,6 @@ impl Matchmaker {
         }
     }
 
-    ///
     pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
         match mm_message {
             MatchmakerMessage::InjectTx(tx_data) => {
