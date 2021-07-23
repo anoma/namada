@@ -44,10 +44,13 @@ pub fn run(
     let home_dir_string = home_dir.to_string_lossy().to_string();
 
     // init and run a tendermint node child process
-    Command::new("tendermint")
+    let output = Command::new("tendermint")
         .args(&["init", "--home", &home_dir_string])
         .output()
         .map_err(Error::TendermintInit)?;
+    if !output.status.success() {
+        panic!("Tendermint failed to initialize with {:#?}", output);
+    }
 
     if cfg!(feature = "dev") {
         // override the validator key file
