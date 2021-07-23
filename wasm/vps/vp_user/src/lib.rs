@@ -210,15 +210,15 @@ fn check_intent(
     log_string(format!(
         "buy_diff > 0: {}, rate check: {}, max_sell > sell_diff: {}, buy_diff > min_buy: {}",
         buy_difference.change() > 0, 
-        sell_diff / buy_diff >= rate_min.0,
-        max_sell.change() >= buy_difference.change(),
-        sell_diff >= min_buy.change().into()
+        buy_diff / sell_diff >= rate_min.0,
+        max_sell.change() >= sell_difference.change(),
+        buy_diff >= min_buy.change().into()
     ));
 
     if !(buy_difference.change() > 0
-        && (sell_diff / buy_diff >= rate_min.0) 
-        && max_sell.change() >= buy_difference.change()
-        && sell_diff >= min_buy.change().into())
+        && (buy_diff / sell_diff >= rate_min.0) 
+        && max_sell.change() >= sell_difference.change()
+        && buy_diff >= min_buy.change().into())
     {
         log_string(format!(
             "invalid exchange, {} / {}, sell diff: {}, buy diff: {}, max_sell: {}, rate_min: {}, min_buy: {}, buy_diff / sell_diff: {}",
