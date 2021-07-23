@@ -81,7 +81,7 @@ tendermint-abci = {git = "https://github.com/heliaxdev/tendermint-rs", branch = 
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost"}
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost", features = ["http-client"]}
 thiserror = "1.0.24"
-tokio = {version = "1.2.0", features = ["full"]}
+tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.5.0"
 tower = "0.4"
