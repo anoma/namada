@@ -73,7 +73,10 @@ impl Service<Request> for Shell {
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
-            Request::BeginBlock(block) => {
+            Request::PrepareProposal(block) => {
+                // TODO: The spec for ABCI++ states that a new unbatched header will be included
+                // in this request. It is at present if it is a field on the block request
+                // header or not
                 match (
                     BlockHash::try_from(&*block.hash),
                     block.header.expect("missing block's header").try_into(),
@@ -86,18 +89,20 @@ impl Service<Request> for Shell {
                     }
                     (err @ Err(_), _) => tracing::error!("{:#?}", err),
                 };
-                Ok(Response::BeginBlock(Default::default()))
+                // TODO: The block field will contain block data and modified header that need
+                // to be returned
+                Ok(Response::PrepareProposal(Default::default()))
             }
-            Request::DeliverTx(deliver_tx) => {
-                Ok(Response::DeliverTx(self.apply_tx(deliver_tx)))
+            Request::VerifyHeader(header) => {
+                Ok(Response::VerifyHeader(self.verify_header(header)))
             }
-            Request::EndBlock(end) => match BlockHeight::try_from(end.height) {
-                Ok(height) => Ok(Response::EndBlock(self.end_block(height))),
-                Err(_) => {
-                    tracing::error!("Unexpected block height {}", end.height);
-                    Ok(Response::EndBlock(Default::default()))
-                }
-            },
+            Request::ProcessProposal(block) => {
+                // TODO: What computation should be done here? It seems as though we cannot
+                // validate transactions as I assume they won't be decrypted until the finalize
+                // block phase as I also assume threshold decryption will happen in the vote
+                // extension phase.
+                Ok(Response::ProcessProposal(self.process_proposal(block)))
+            }
             Request::Commit(_) => Ok(Response::Commit(self.commit())),
             Request::Flush(_) => Ok(Response::Flush(Default::default())),
             Request::SetOption(_) => {

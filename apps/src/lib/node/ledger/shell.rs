@@ -241,7 +241,7 @@ impl Shell {
     }
 
     /// Begin a new block.
-    pub fn begin_block(&mut self, hash: BlockHash, header: Header) {
+    pub fn prepare_proposal(&mut self, hash: BlockHash, header: Header) {
         let height = BlockHeight(header.height.into());
         let time: DateTime<Utc> = header.time.into();
         let time: DateTimeUtc = time.into();
@@ -249,7 +249,7 @@ impl Shell {
         self.gas_meter.reset();
         self.storage
             .begin_block(hash, height)
-            .expect("BeginBlock shouldn't fail");
+            .expect("Beginning a block shouldn't fail");
         self.storage
             .set_header(header)
             .expect("Setting a header shouldn't fail");
@@ -258,48 +258,51 @@ impl Shell {
             .expect("Must be able to update epoch");
     }
 
-    /// Validate and apply a transaction.
-    pub fn apply_tx(&mut self, req: request::DeliverTx) -> response::DeliverTx {
-        let mut response = response::DeliverTx::default();
-        let result = protocol::apply_tx(
-            &*req.tx,
-            &mut self.gas_meter,
-            &mut self.write_log,
-            &self.storage,
-        )
-        .map_err(Error::TxError);
+    // Verify the headers of the block
+    // TODO: This will include checking announcements of stake, individual and aggregated PVSS
+    // instances from the DKG protocol
+    pub fn verify_header(&self, req: request::VerifyHeader) -> response::VerifyHeader {
 
-        match result {
-            Ok(result) => {
-                if result.is_accepted() {
-                    tracing::info!(
-                        "all VPs accepted apply_tx storage modification {:#?}",
-                        result
-                    );
-                    self.write_log.commit_tx();
-                } else {
-                    tracing::info!(
-                        "some VPs rejected apply_tx storage modification {:#?}",
-                        result.vps_result.rejected_vps
-                    );
-                    self.write_log.drop_tx();
-                    response.code = 1;
-                }
-                response.gas_used = gas::as_i64(result.gas_used);
-                response.info = result.to_string();
-            }
-            Err(msg) => {
-                response.gas_used =
-                    gas::as_i64(self.gas_meter.get_current_transaction_gas());
-                response.info = msg.to_string();
-            }
-        }
-        response
     }
 
-    /// End a block.
-    pub fn end_block(&mut self, _height: BlockHeight) -> response::EndBlock {
-        Default::default()
+    /// Validate and apply transactions.
+    /// TODO: Will we also decrypt transactions here?
+    pub fn finalize_block(&mut self, req: request::FinalizeBlock) -> Result<response::FinalizeBlock> {
+        let mut response = response::FinalizeBlock::default();
+        for tx in req.tx {
+            match protocol::apply_tx(
+                tx,
+                &mut self.gas_meter,
+                &mut self.write_log,
+                &self.storage,
+            ).map_err(Error::TxError) {
+                Ok(result) => {
+                    if result.is_accepted() {
+                        tracing::info!(
+                            "all VPs accepted apply_tx storage modification {:#?}",
+                            result
+                        );
+                        self.write_log.commit_tx();
+                    } else {
+                        tracing::info!(
+                            "some VPs rejected apply_tx storage modification {:#?}",
+                            result.vps_result.rejected_vps
+                        );
+                        self.write_log.drop_tx();
+                        // TODO: Fix
+                        response.code = 1;
+                    }
+                    // TODO: Fix
+                    response.info = result.to_string();
+                }
+                Err(msg) => {
+                    // TODO: Fix
+                    response.info = msg.to_string();
+                }
+            }
+        }
+        response.gas_used = self.gas_meter.finalize_transaction()?;
+        response
     }
 
     /// Commit a block. Persist the application state and return the Merkle root
