@@ -26,7 +26,8 @@ files_to_check = [
     'wasm/mm_filter_template/Makefile',
     'docs/Makefile',
     'scripts/ci/update-wasm.sh',
-    'scripts/ci/pre-run.sh'
+    'scripts/ci/pre-run.sh',
+    'scripts/ci/audit.py'
 ]
 
 scripts_to_run = [
