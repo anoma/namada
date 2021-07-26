@@ -90,6 +90,13 @@ where
         }
     }
 
+    fn is_counter_key(key: &Key) -> bool {
+        let path = COUNTER_PATH.to_owned();
+        let counter_key = Key::ibc_key(path)
+            .expect("Creating a key for a connection counter failed");
+        *key == counter_key
+    }
+
     /// Returns the connection ID after #IBC/connections
     fn get_connection_id(key: &Key) -> Result<ConnectionId> {
         match key.segments.get(2) {
