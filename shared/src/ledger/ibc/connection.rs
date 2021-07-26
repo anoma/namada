@@ -21,7 +21,6 @@ use crate::ledger::storage::{self, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::ibc::{
     ConnectionOpenAckData, ConnectionOpenConfirmData, ConnectionOpenTryData,
-    Error as IbcDataError,
 };
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg};
 
@@ -398,17 +397,5 @@ where
                 unreachable!();
             }
         }
-    }
-}
-
-impl From<IbcDataError> for Error {
-    fn from(err: IbcDataError) -> Self {
-        Self::IbcDataError(err)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Self::DecodingTxDataError(err)
     }
 }

@@ -163,6 +163,24 @@ where
     }
 }
 
+impl From<native_vp::Error> for Error {
+    fn from(err: native_vp::Error) -> Self {
+        Self::NativeVpError(err)
+    }
+}
+
+impl From<crate::types::ibc::Error> for Error {
+    fn from(err: crate::types::ibc::Error) -> Self {
+        Self::IbcDataError(err)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::DecodingTxDataError(err)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -513,11 +531,5 @@ mod tests {
             ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
                 .expect("validation failed")
         );
-    }
-}
-
-impl From<native_vp::Error> for Error {
-    fn from(err: native_vp::Error) -> Self {
-        Self::NativeVpError(err)
     }
 }

@@ -127,7 +127,7 @@ where
         client_id: &ClientId,
         data: ClientUpdateData,
     ) -> Result<bool> {
-        let id = data.client_id().map_err(Error::IbcDataError)?;
+        let id = data.client_id()?;
         if id != *client_id {
             tracing::info!(
                 "the client ID is mismatched: {} in the tx data, {} in the key",
@@ -184,7 +184,7 @@ where
         };
 
         let client = AnyClient::from_client_type(client_state.client_type());
-        let headers = data.headers().map_err(Error::IbcDataError)?;
+        let headers = data.headers()?;
         let updated = headers.iter().try_fold(
             (prev_client_state, prev_consensus_state),
             |(new_client_state, _), header| {
@@ -214,7 +214,7 @@ where
         client_id: &ClientId,
         data: ClientUpgradeData,
     ) -> Result<bool> {
-        let id = data.client_id().map_err(Error::IbcDataError)?;
+        let id = data.client_id()?;
         if id != *client_id {
             tracing::info!(
                 "the client ID is mismatched: {} in the tx data, {} in the key",
@@ -258,9 +258,8 @@ where
             }
         };
         // get proofs
-        let client_proof = data.proof_client().map_err(Error::IbcDataError)?;
-        let consensus_proof =
-            data.proof_consensus_state().map_err(Error::IbcDataError)?;
+        let client_proof = data.proof_client()?;
+        let consensus_proof = data.proof_consensus_state()?;
 
         let client = AnyClient::from_client_type(client_state.client_type());
         match client.verify_upgrade_and_update_state(
