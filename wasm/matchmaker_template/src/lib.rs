@@ -257,7 +257,6 @@ fn compute_amounts(
     &intent_graph.reverse();
     depth_first_search(&intent_graph, Some(start), |event| {
         if let DfsEvent::Discover(index, _time) = event {
-            let current_node = intent_graph[index];
             let edges = graph.edges(index);
 
             edges
