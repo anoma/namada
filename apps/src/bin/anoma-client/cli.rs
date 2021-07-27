@@ -90,7 +90,7 @@ fn craft_intent(
         token_buy.len(),
         min_buy.len(),
     ];
-    input_lengths.sort();
+    input_lengths.sort_unstable();
     if input_lengths[0] != input_lengths[5] {
         println!("Bad inputs length");
     }
@@ -104,9 +104,9 @@ fn craft_intent(
                 addr: address.clone(),
                 token_sell: token_sell.get(0).unwrap().clone(),
                 token_buy: token_buy.get(0).unwrap().clone(),
-                min_buy: min_buy.get(0).unwrap().clone(),
+                min_buy: *min_buy.get(0).unwrap(),
                 rate_min: min_rate.get(0).unwrap().clone(),
-                max_sell: max_sell.get(0).unwrap().clone(),
+                max_sell: *max_sell.get(0).unwrap(),
             };
 
             Signed::new(&source_keypair, exchange)

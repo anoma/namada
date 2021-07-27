@@ -5,7 +5,7 @@ mod tests {
     use core::time;
     use std::path::PathBuf;
     use std::process::Command;
-    use std::time::Duration;
+    
     use std::{fs, thread};
 
     use anoma_apps::config::{Config, IntentGossiper};
@@ -528,7 +528,7 @@ mod tests {
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_ledger
-            .exp_string(&format!("No state could be found",))
+            .exp_string(&"No state could be found".to_string())
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // Wait for ledger and gossip to start
