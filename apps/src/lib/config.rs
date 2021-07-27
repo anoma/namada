@@ -314,10 +314,8 @@ impl IntentGossiper {
 
         if matchmaker {
             gossiper_config.matchmaker = Some(Matchmaker {
-                matchmaker: "../wasm/matchmaker_template/matchmaker.wasm"
-                    .parse()
-                    .unwrap(),
-                tx_code: "../wasm/txs/tx_from_intent/tx.wasm".parse().unwrap(),
+                matchmaker: "../wasm/mm_token_exch.wasm".parse().unwrap(),
+                tx_code: "../wasm/tx_from_intent.wasm".parse().unwrap(),
                 ledger_address: "0.0.0.0:26657".parse().unwrap(),
                 filter: None,
             })

@@ -24,14 +24,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "739f4a8db6605981345c5654f3a85b056ce52f37a39d34da03f25bf2151ea16e"
 
 [[package]]
-name = "anoma_shared"
+name = "anoma"
 version = "0.1.0"
 dependencies = [
  "bech32",
  "borsh",
  "chrono",
  "ed25519-dalek",
- "hex",
  "itertools",
  "loupe",
  "parity-wasm",
@@ -42,7 +41,6 @@ dependencies = [
  "rand 0.7.3",
  "rand_core 0.5.1",
  "rust_decimal",
- "rust_decimal_macros",
  "serde",
  "sha2",
  "sparse-merkle-tree",
@@ -62,7 +60,7 @@ dependencies = [
 name = "anoma_tests"
 version = "0.1.0"
 dependencies = [
- "anoma_shared",
+ "anoma",
  "anoma_vm_env",
  "concat-idents",
  "test-env-log",
@@ -74,7 +72,7 @@ dependencies = [
 name = "anoma_vm_env"
 version = "0.1.0"
 dependencies = [
- "anoma_shared",
+ "anoma",
  "anoma_vm_macro",
  "borsh",
 ]
@@ -723,12 +721,6 @@ checksum = "322f4de77956e22ed0e5032c359a0f1273f1f7f0d79bfa3b8ffbc730d7fbcc5c"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "ident_case"
@@ -1399,16 +1391,6 @@ dependencies = [
  "arrayvec",
  "num-traits",
  "serde",
-]
-
-[[package]]
-name = "rust_decimal_macros"
-version = "1.14.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a776fe1e773e2e599d7813414ca7dd1f78b7e0fa699ecbefbfd24b5584df6819"
-dependencies = [
- "quote",
- "rust_decimal",
 ]
 
 [[package]]
