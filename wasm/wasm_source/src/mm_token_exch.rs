@@ -156,7 +156,7 @@ fn create_and_send_tx_data(
                 |prev_node, intent_index| {
                     let node = &graph[intent_index];
                     let exchanged_amount =
-                        res.get(&node.exchange.data).unwrap().clone();
+                        *res.get(&node.exchange.data).unwrap();
                     log_string(format!(
                         "crafting transfer: {}, {}, {}",
                         node.exchange.data.addr.clone(),
@@ -180,8 +180,7 @@ fn create_and_send_tx_data(
                     &node
                 },
             );
-            let last_amount =
-                res.get(&first_node.exchange.data).unwrap().clone();
+            let last_amount = *res.get(&first_node.exchange.data).unwrap();
             log_string(format!(
                 "crafting transfer: {}, {}, {}",
                 first_node.exchange.data.addr.clone(),
@@ -212,7 +211,7 @@ fn create_and_send_tx_data(
 
 fn compute_amounts(
     graph: &DiGraph<ExchangeNode, Address>,
-    cycle_intents: &Vec<NodeIndex>,
+    cycle_intents: &[NodeIndex],
 ) -> Result<HashMap<Exchange, u64>, ResolutionError> {
     let nodes = graph
         .raw_nodes()
@@ -228,7 +227,7 @@ fn compute_amounts(
             if cycle_intents.contains(&node_index) {
                 let edges = graph.neighbors(node_index);
 
-                edges
+                *edges
                     .map(|target_node_index| {
                         let target = graph[target_node_index].clone();
 
@@ -246,7 +245,6 @@ fn compute_amounts(
                     .collect::<Vec<Option<(Variable, &ExchangeNode)>>>()
                     .get(0)
                     .unwrap()
-                    .clone()
             } else {
                 None
             }
@@ -264,25 +262,23 @@ fn compute_amounts(
 
     // we need to invert the graph otherwise we are not able to build the
     // constrains
-    &intent_graph.reverse();
+    intent_graph.reverse();
 
     let start = node_index(0);
     depth_first_search(&intent_graph, Some(start), |event| {
         if let DfsEvent::Discover(index, _time) = event {
             let edges = graph.edges(index);
 
-            edges
-                .map(|edge| {
-                    let source = intent_graph[edge.source()];
-                    let target = intent_graph[edge.target()];
+            edges.for_each(|edge| {
+                let source = intent_graph[edge.source()];
+                let target = intent_graph[edge.target()];
 
-                    constrains.push((
-                        source.0,
-                        target.0,
-                        target.1.exchange.data.rate_min.0.to_f64().unwrap(),
-                    ));
-                })
-                .count();
+                constrains.push((
+                    source.0,
+                    target.0,
+                    target.1.exchange.data.rate_min.0.to_f64().unwrap(),
+                ));
+            });
         }
         Control::<()>::Continue
     });
@@ -298,15 +294,11 @@ fn compute_amounts(
             let amounts = solution
                 .into_inner()
                 .iter()
-                .map(|(_, amount)| amount.clone() as u64)
+                .map(|(_, amount)| *amount as u64)
                 .collect::<Vec<u64>>();
-            nodes
-                .iter()
-                .enumerate()
-                .map(|(index, exchange)| {
-                    amount_map.insert(exchange.clone(), amounts[index]);
-                })
-                .count();
+            nodes.iter().enumerate().for_each(|(index, exchange)| {
+                amount_map.insert(exchange.clone(), amounts[index]);
+            });
             Ok(amount_map)
         }
         Err(error) => Err(error),

@@ -5,7 +5,6 @@ mod tests {
     use core::time;
     use std::path::PathBuf;
     use std::process::Command;
-    
     use std::{fs, thread};
 
     use anoma_apps::config::{Config, IntentGossiper};
