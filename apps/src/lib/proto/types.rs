@@ -1,6 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 
-use anoma_shared::proto::{Dkg, Error, Intent};
+use anoma::proto::{Dkg, Error, Intent};
 
 use super::generated::services;
 
@@ -134,7 +134,7 @@ mod tests {
         let topic = "arbitrary string".to_owned();
         let topic_message = SubscribeTopicMessage::new(topic.clone());
 
-        let topic_rpc_message = RpcMessage::new_topic(topic.clone());
+        let topic_rpc_message = RpcMessage::new_topic(topic);
         let services_rpc_message: services::RpcMessage =
             topic_rpc_message.into();
         match services_rpc_message.message {

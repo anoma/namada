@@ -72,8 +72,8 @@ pub mod cmds {
         }
     }
 
-    /// Used as top-level commands ([`Cmd`] instance) in `anoman` binary.
-    /// Used as sub-commands ([`SubCmd`] instance) in `anoma` binary.
+    /// Used as top-level commands (`Cmd` instance) in `anoman` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
     #[derive(Debug)]
     pub enum AnomaNode {
         Ledger(Ledger),
@@ -117,8 +117,8 @@ pub mod cmds {
         }
     }
 
-    /// Used as top-level commands ([`Cmd`] instance) in `anomac` binary.
-    /// Used as sub-commands ([`SubCmd`] instance) in `anoma` binary.
+    /// Used as top-level commands (`Cmd` instance) in `anomac` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
     #[derive(Debug)]
     pub enum AnomaClient {
         TxCustom(TxCustom),
@@ -477,9 +477,9 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use anoma_shared::types::address::Address;
-    use anoma_shared::types::intent::DecimalWrapper;
-    use anoma_shared::types::token;
+    use anoma::types::address::Address;
+    use anoma::types::intent::DecimalWrapper;
+    use anoma::types::token;
     use libp2p::Multiaddr;
 
     use super::utils::*;

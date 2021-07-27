@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::time::Duration;
 
-use anoma_shared::proto::IntentGossipMessage;
+use anoma::proto::IntentGossipMessage;
 use libp2p::core::connection::ConnectionLimits;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;

@@ -4,16 +4,16 @@ use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt;
 
-use anoma_shared::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
-use anoma_shared::ledger::ibc::Ibc;
-use anoma_shared::ledger::native_vp::{self, NativeVp};
-use anoma_shared::ledger::pos::PoS;
-use anoma_shared::ledger::storage::write_log::WriteLog;
-use anoma_shared::ledger::vp_env;
-use anoma_shared::proto::{self, Tx};
-use anoma_shared::types::address::{Address, InternalAddress};
-use anoma_shared::types::storage::Key;
-use anoma_shared::vm::{self, wasm};
+use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
+use anoma::ledger::ibc::{self, Ibc};
+use anoma::ledger::native_vp::{self, NativeVp};
+use anoma::ledger::parameters::{self, ParametersVp};
+use anoma::ledger::pos::{self, PoS};
+use anoma::ledger::storage::write_log::WriteLog;
+use anoma::proto::{self, Tx};
+use anoma::types::address::{Address, InternalAddress};
+use anoma::types::storage::Key;
+use anoma::vm::{self, wasm};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -22,7 +22,7 @@ use crate::node::ledger::storage::PersistentStorage;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    StorageError(anoma_shared::ledger::storage::Error),
+    StorageError(anoma::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
@@ -33,8 +33,12 @@ pub enum Error {
     VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
-    #[error("Error executing native VP: {0}")]
-    NativeVpError(vp_env::RuntimeError),
+    #[error("IBC native VP: {0}")]
+    IbcNativeVpError(ibc::Error),
+    #[error("PoS native VP: {0}")]
+    PosNativeVpError(pos::Error),
+    #[error("Parameters native VP: {0}")]
+    ParametersNativeVpError(parameters::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -201,7 +205,7 @@ fn execute_vps(
                     (addr, keys, vp),
                 ),
                 Vp::Native(internal_addr) => {
-                    let mut ctx =
+                    let ctx =
                         native_vp::Ctx::new(storage, write_log, tx, gas_meter);
                     let tx_data = match tx.data.as_ref() {
                         Some(data) => &data[..],
@@ -210,24 +214,20 @@ fn execute_vps(
 
                     let accepted: Result<bool> = match internal_addr {
                         InternalAddress::PoS => {
-                            debug_assert_eq!(*internal_addr, &PoS::ADDR);
-                            PoS::validate_tx(
-                                &mut ctx,
-                                tx_data,
-                                keys,
-                                &verifiers_addr,
-                            )
-                            .map_err(Error::NativeVpError)
+                            let pos = PoS { ctx };
+                            pos.validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::PosNativeVpError)
                         }
                         InternalAddress::Ibc => {
-                            debug_assert_eq!(*internal_addr, &Ibc::ADDR);
-                            Ibc::validate_tx(
-                                &mut ctx,
-                                tx_data,
-                                keys,
-                                &verifiers_addr,
-                            )
-                            .map_err(Error::NativeVpError)
+                            let ibc = Ibc { ctx };
+                            ibc.validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::IbcNativeVpError)
+                        }
+                        InternalAddress::Parameters => {
+                            let parameters = ParametersVp { ctx };
+                            parameters
+                                .validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::ParametersNativeVpError)
                         }
                     };
 

@@ -1,73 +1,51 @@
 //! This crate contains library code for wasm. Some of the code is re-exported
 //! from the `shared` crate.
 
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+
 pub mod imports;
-mod intent;
+pub mod intent;
 pub mod key;
-mod token;
+pub mod token;
 
 pub mod tx_prelude {
-    pub use anoma_shared::types::address::Address;
-    pub use anoma_shared::types::*;
+    pub use anoma::types::address::Address;
+    pub use anoma::types::*;
     pub use anoma_vm_macro::transaction;
 
     pub use super::imports::tx::*;
-
-    pub mod token {
-        pub use anoma_shared::types::token::*;
-
-        pub use crate::token::transfer;
-    }
-
-    pub mod intent {
-        pub use anoma_shared::types::intent::*;
-
-        pub use crate::intent::invalidate_exchange;
-    }
+    pub use crate::intent::tx as intent;
+    pub use crate::token::tx as token;
 }
 
 pub mod vp_prelude {
     // used in the VP input
     pub use std::collections::HashSet;
 
-    pub use anoma_shared::types::address::Address;
-    pub use anoma_shared::types::*;
+    pub use anoma::types::address::Address;
+    pub use anoma::types::*;
     pub use anoma_vm_macro::validity_predicate;
 
     pub use crate::imports::vp::*;
-
+    pub use crate::intent::vp as intent;
     pub mod key {
-        pub mod ed25519 {
-            pub use anoma_shared::types::key::ed25519::*;
-
-            pub use crate::key::ed25519::*;
-        }
+        pub use crate::key::ed25519::vp as ed25519;
     }
-
-    pub mod token {
-        pub use anoma_shared::types::token::*;
-
-        pub use crate::token::vp;
-    }
-
-    pub mod intent {
-        pub use anoma_shared::types::intent::*;
-
-        pub use crate::intent::vp_exchange;
-    }
+    pub use crate::token::vp as token;
 }
 
 pub mod matchmaker_prelude {
-    pub use anoma_shared::types::address::Address;
-    pub use anoma_shared::types::*;
+    pub use anoma::types::address::Address;
+    pub use anoma::types::*;
     pub use anoma_vm_macro::matchmaker;
 
     pub use crate::imports::matchmaker::*;
 }
 
 pub mod filter_prelude {
-    pub use anoma_shared::types::address::Address;
-    pub use anoma_shared::types::*;
+    pub use anoma::types::address::Address;
+    pub use anoma::types::*;
     pub use anoma_vm_macro::filter;
 
     pub use super::imports::filter::*;

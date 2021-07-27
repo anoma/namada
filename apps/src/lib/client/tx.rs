@@ -1,17 +1,17 @@
 use std::str::FromStr;
 
-use anoma_shared::proto::Tx;
-use anoma_shared::types::key::ed25519::Keypair;
-use anoma_shared::types::token;
-use anoma_shared::types::transaction::UpdateVp;
+use anoma::proto::Tx;
+use anoma::types::key::ed25519::Keypair;
+use anoma::types::token;
+use anoma::types::transaction::UpdateVp;
 use borsh::BorshSerialize;
 use tendermint_rpc::{Client, HttpClient};
 
 use crate::cli::args;
 use crate::wallet;
 
-const TX_UPDATE_VP_WASM: &str = "wasm/txs/tx_update_vp/tx.wasm";
-const TX_TRANSFER_WASM: &str = "wasm/txs/tx_transfer/tx.wasm";
+const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
+const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
 
 pub async fn submit_custom(args: args::TxCustom) {
     let tx_code = std::fs::read(args.code_path)

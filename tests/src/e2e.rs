@@ -8,7 +8,7 @@ mod tests {
     use std::time::Duration;
     use std::{fs, thread};
 
-    use anoma::config::{Config, IntentGossiper};
+    use anoma_apps::config::{Config, IntentGossiper};
     use assert_cmd::assert::OutputAssertExt;
     use assert_cmd::cargo::CommandCargoExt;
     use color_eyre::eyre::Result;
@@ -73,6 +73,55 @@ mod tests {
                     eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
                 })?;
         }
+
+        Ok(())
+    }
+
+    /// In this test we:
+    /// 1. Start up the ledger
+    /// 2. Kill the tendermint process
+    /// 3. Check that the node detects this
+    /// 4. Check that the node shuts down
+    #[test]
+    fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
+        let dir = setup();
+
+        let base_dir = tempdir().unwrap();
+        let base_dir_arg = &base_dir.path().to_string_lossy();
+
+        // 1. Run the ledger node
+        let mut cmd = Command::cargo_bin("anoma")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
+            "--base-dir",
+            base_dir_arg,
+            "ledger",
+        ]);
+        println!("Running {:?}", cmd);
+        let mut session = spawn_command(cmd, Some(20_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session
+            .exp_string("Anoma ledger node started")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // 2. Kill the tendermint node
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        Command::new("pkill")
+            .args(&["tendermint"])
+            .spawn()
+            .expect("Test failed")
+            .wait()
+            .expect("Test failed");
+
+        // 3. Check that anoma detects that the tendermint node is dead
+        session
+            .exp_string("Tendermint node shut down unexpectedly.")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // 4. Check that the ledger node shuts down
+        session
+            .exp_string("Shutting down Anoma node")
+            .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
     }
@@ -654,8 +703,8 @@ mod tests {
         pub const KARTOFFEL: &str = "a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn233sgccnjs3eak5wwh";
 
         // Paths to the WASMs used for tests
-        pub const TX_TRANSFER_WASM: &str = "wasm/txs/tx_transfer/tx.wasm";
-        pub const VP_USER_WASM: &str = "wasm/vps/vp_user/vp.wasm";
+        pub const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
+        pub const VP_USER_WASM: &str = "wasm/vp_user.wasm";
         pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
     }
 }

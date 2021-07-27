@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use anoma_shared::proto::{self, Intent, IntentGossipMessage};
+use anoma::proto::{self, Intent, IntentGossipMessage};
 use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
