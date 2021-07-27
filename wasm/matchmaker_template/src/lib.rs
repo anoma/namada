@@ -143,10 +143,9 @@ fn create_and_send_tx_data(
     let cycle_intents = sort_cycle(graph, cycle_intents);
     let amounts = compute_amounts(graph, &cycle_intents);
 
-    log_string(format!("amounts: {:?}", amounts));
-
     match amounts {
         Ok(res) => {
+            log_string(format!("amounts: {:?}", &res.values()));
             let mut cycle_intents_iter = cycle_intents.into_iter();
             let first_node =
                 cycle_intents_iter.next().map(|i| &graph[i]).unwrap();

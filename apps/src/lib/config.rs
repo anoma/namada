@@ -302,6 +302,8 @@ impl IntentGossiper {
         peers_info: Vec<(String, u32, PeerId)>,
         mdns: bool,
         kademlia: bool,
+        matchmaker: bool,
+        rpc: bool,
     ) -> Self {
         let mut gossiper_config = IntentGossiper::default();
         let mut discover_config = DiscoverPeer::default();
@@ -310,6 +312,21 @@ impl IntentGossiper {
             &format!("/ip4/{}/tcp/{}", ip, port).to_string(),
         )
         .unwrap();
+
+        if matchmaker {
+            gossiper_config.matchmaker = Some(Matchmaker {
+                matchmaker: "../wasm/matchmaker_template/matchmaker.wasm"
+                    .parse()
+                    .unwrap(),
+                tx_code: "../wasm/txs/tx_from_intent/tx.wasm".parse().unwrap(),
+                ledger_address: "0.0.0.0:26657".parse().unwrap(),
+                filter: None,
+            })
+        }
+
+        if rpc {
+            gossiper_config.rpc = Some(RpcServer::default())
+        }
 
         let bootstrap_peers: HashSet<PeerAddress> = peers_info
             .iter()
