@@ -412,8 +412,10 @@ mod tests {
         Ok(())
     }
 
-    /// This test run the ledger and gossip binaries. It then craft 3 intents and
-    // sends them to the matchmaker. The matchmaker should be able to craft a transfer transaction with the 3 intents.
+    /// This test run the ledger and gossip binaries. It then craft 3 intents
+    /// and
+    // sends them to the matchmaker. The matchmaker should be able to craft a
+    // transfer transaction with the 3 intents.
     #[test]
     fn match_intent() -> Result<()> {
         setup();
@@ -436,7 +438,9 @@ mod tests {
         base_node_ledger.args(&["--base-dir", first_node_dir, "ledger"]);
 
         // Craft intents
-        // cargo run --bin anomac -- craft-intent --key $BERTHA --address $BERTHA --min-amount-buy 100 --max-amount-sell 70 --token-buy $XAN --token-sell $BTC --min-rate 2 --file-path intent.A
+        // cargo run --bin anomac -- craft-intent --key $BERTHA --address
+        // $BERTHA --min-amount-buy 100 --max-amount-sell 70 --token-buy $XAN
+        // --token-sell $BTC --min-rate 2 --file-path intent.A
         let tx_a = vec![
             "craft-intent",
             "--key",
@@ -461,7 +465,9 @@ mod tests {
         spawn_command(craft_intent_a, Some(5_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // cargo run --bin anomac -- craft-intent --key $ALBERT --address $ALBERT --min-amount-buy 50 --max-amount-sell 300 --token-buy $BTC --token-sell $ETH --min-rate 0.7 --file-path intent.B
+        // cargo run --bin anomac -- craft-intent --key $ALBERT --address
+        // $ALBERT --min-amount-buy 50 --max-amount-sell 300 --token-buy $BTC
+        // --token-sell $ETH --min-rate 0.7 --file-path intent.B
         let tx_b = vec![
             "craft-intent",
             "--key",
@@ -486,7 +492,9 @@ mod tests {
         spawn_command(craft_intent_b, Some(5_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // cargo run --bin anomac -- craft-intent --key $CHRISTEL --address $CHRISTEL --min-amount-buy 20 --max-amount-sell 200 --token-buy $ETH --token-sell $XAN --min-rate 0.5 --file-path intent.C
+        // cargo run --bin anomac -- craft-intent --key $CHRISTEL --address
+        // $CHRISTEL --min-amount-buy 20 --max-amount-sell 200 --token-buy $ETH
+        // --token-sell $XAN --min-rate 0.5 --file-path intent.C
         let tx_c = vec![
             "craft-intent",
             "--key",
@@ -545,7 +553,8 @@ mod tests {
             spawn_command(send_intent_a, Some(20_000))
                 .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // means it sent it correctly but not able to gossip it (which is correct since there is only 1 node)
+        // means it sent it correctly but not able to gossip it (which is
+        // correct since there is only 1 node)
         session_send_intent_a
             .exp_regex(".*Failed to publish_intent InsufficientPeers*")
             .map_err(|e| eyre!(format!("{}", e)))?;
@@ -569,7 +578,8 @@ mod tests {
             spawn_command(send_intent_b, Some(20_000))
                 .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // means it sent it correctly but not able to gossip it (which is correct since there is only 1 node)
+        // means it sent it correctly but not able to gossip it (which is
+        // correct since there is only 1 node)
         session_send_intent_b
             .exp_regex(".*Failed to publish_intent InsufficientPeers*")
             .map_err(|e| eyre!(format!("{}", e)))?;
@@ -593,7 +603,8 @@ mod tests {
             spawn_command(send_intent_c, Some(20_000))
                 .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // means it sent it correctly but not able to gossip it (which is correct since there is only 1 node)
+        // means it sent it correctly but not able to gossip it (which is
+        // correct since there is only 1 node)
         session_send_intent_c
             .exp_regex(".*Failed to publish_intent InsufficientPeers*")
             .map_err(|e| eyre!(format!("{}", e)))?;

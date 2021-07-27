@@ -6,12 +6,12 @@ use std::io::ErrorKind;
 use borsh::{BorshDeserialize, BorshSerialize};
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::types::address::Address;
 use crate::types::key::ed25519::Signed;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token;
-use thiserror::Error;
 
 /// A simple intent for fungible token trade
 #[derive(
@@ -76,21 +76,17 @@ pub struct IntentTransfers {
 
 /// Struct holding a safe rapresentation of a float
 #[derive(
-    Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Serialize, Deserialize,
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    Default,
 )]
 pub struct DecimalWrapper(pub Decimal);
-
-impl Default for DecimalWrapper {
-    fn default() -> Self {
-        DecimalWrapper(Decimal::default())
-    }
-}
-
-impl DecimalWrapper {
-    pub fn new(decimal: Decimal) -> Self {
-        Self(decimal)
-    }
-}
 
 impl From<Decimal> for DecimalWrapper {
     fn from(decimal: Decimal) -> Self {
@@ -98,6 +94,7 @@ impl From<Decimal> for DecimalWrapper {
     }
 }
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error parsing as decimal: {0}.")]
@@ -109,7 +106,7 @@ impl From<token::Amount> for Result<DecimalWrapper, Error> {
         let decimal = Decimal::from_i128(amount.change());
 
         match decimal {
-            Some(d) => Ok(DecimalWrapper::new(d)),
+            Some(d) => Ok(DecimalWrapper::from(d)),
             None => Err(Error::DecimalParseError(amount.change().to_string())),
         }
     }
@@ -123,7 +120,7 @@ impl FromStr for DecimalWrapper {
             .map_err(|e| Self::Err::DecimalParseError(e.to_string()));
 
         match decimal {
-            Ok(d) => Ok(DecimalWrapper::new(d)),
+            Ok(d) => Ok(DecimalWrapper::from(d)),
             Err(e) => Err(e),
         }
     }

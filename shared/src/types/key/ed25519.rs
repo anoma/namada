@@ -147,17 +147,9 @@ pub fn verify_tx_sig(
 
 /// A generic signed data wrapper for Borsh encode-able data.
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-    Hash,
-    Eq,
-    PartialOrd,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
-pub struct Signed<T: BorshSerialize + BorshDeserialize + Eq> {
+pub struct Signed<T: BorshSerialize + BorshDeserialize> {
     /// Arbitrary data to be signed
     pub data: T,
     /// The signature of the data
@@ -166,16 +158,40 @@ pub struct Signed<T: BorshSerialize + BorshDeserialize + Eq> {
 
 impl<T> PartialEq for Signed<T>
 where
-    T: BorshSerialize + BorshDeserialize + Eq,
+    T: BorshSerialize + BorshDeserialize + PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.data == other.data
+        self.data == other.data && self.sig == other.sig
+    }
+}
+
+impl<T> Eq for Signed<T> where
+    T: BorshSerialize + BorshDeserialize + Eq + PartialEq
+{
+}
+
+impl<T> Hash for Signed<T>
+where
+    T: BorshSerialize + BorshDeserialize + Hash,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+        self.sig.hash(state);
+    }
+}
+
+impl<T> PartialOrd for Signed<T>
+where
+    T: BorshSerialize + BorshDeserialize + PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.data.partial_cmp(&other.data)
     }
 }
 
 impl<T> Signed<T>
 where
-    T: BorshSerialize + BorshDeserialize + Eq,
+    T: BorshSerialize + BorshDeserialize,
 {
     /// Initialize a new signed data.
     pub fn new(keypair: &Keypair, data: T) -> Self {

@@ -166,7 +166,8 @@ fn create_and_send_tx_data(
                     tx_data.transfers.insert(create_transfer(
                         node,
                         prev_node,
-                        exchanged_amount, // safe as we have as many amounts as intents
+                        exchanged_amount, /* safe as we have as many amounts
+                                           * as intents */
                     ));
                     tx_data.exchanges.insert(
                         node.exchange.data.addr.clone(),
@@ -261,7 +262,8 @@ fn compute_amounts(
 
     let mut constrains = Vec::new();
 
-    // we need to invert the graph otherwise we are not able to build the constrains
+    // we need to invert the graph otherwise we are not able to build the
+    // constrains
     &intent_graph.reverse();
 
     let start = node_index(0);

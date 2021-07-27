@@ -73,13 +73,14 @@ fn validate_tx(
                 let post: token::Amount = read_post(&key).unwrap_or_default();
                 let change = post.change() - pre.change();
                 log_string(format!(
-                    "token key: {}, change: {}, transfer_valid_sig: {}, valid_intent: \
-                     {}, valid modification: {}",
+                    "token key: {}, change: {}, transfer_valid_sig: {}, \
+                     valid_intent: {}, valid modification: {}",
                     key,
                     change,
                     transfer_valid_sig,
                     valid_intent,
-                    (change < 0 && (transfer_valid_sig || valid_intent)) || change > 0
+                    (change < 0 && (transfer_valid_sig || valid_intent))
+                        || change > 0
                 ));
                 // debit has to signed, credit doesn't
                 (change < 0 && (transfer_valid_sig || valid_intent))
@@ -99,14 +100,16 @@ fn validate_tx(
             }
             KeyType::InvalidIntentSet(_owner) => {
                 log_string(format!(
-                    "InvalidIntentSet: key {} is not of owner, transfer_valid_sig {}, owner: {}, address: {}",
+                    "InvalidIntentSet: key {} is not of owner, \
+                     transfer_valid_sig {}, owner: {}, address: {}",
                     key, transfer_valid_sig, _owner, addr
                 ));
                 transfer_valid_sig
             }
             KeyType::Token(_owner) => {
                 log_string(format!(
-                    "Token: key {} is not of owner, transfer_valid_sig {}, owner: {}, address: {}",
+                    "Token: key {} is not of owner, transfer_valid_sig {}, \
+                     owner: {}, address: {}",
                     key, transfer_valid_sig, _owner, addr
                 ));
                 transfer_valid_sig
@@ -190,7 +193,12 @@ fn check_intent(
     } = &exchange.data;
 
     log_string(format!(
-        "exchange description: {}, {}, {}, {}, {}", token_sell, token_buy, max_sell.change(), min_buy.change(), rate_min.0 
+        "exchange description: {}, {}, {}, {}, {}",
+        token_sell,
+        token_buy,
+        max_sell.change(),
+        min_buy.change(),
+        rate_min.0
     ));
 
     let token_sell_key = token::balance_key(&token_sell, addr).to_string();
@@ -212,20 +220,22 @@ fn check_intent(
     let buy_diff: Decimal = buy_difference.change().into(); // -> how many token I got
 
     log_string(format!(
-        "buy_diff > 0: {}, rate check: {}, max_sell > sell_diff: {}, buy_diff > min_buy: {}",
-        buy_difference.change() > 0, 
+        "buy_diff > 0: {}, rate check: {}, max_sell > sell_diff: {}, buy_diff \
+         > min_buy: {}",
+        buy_difference.change() > 0,
         buy_diff / sell_diff >= rate_min.0,
         max_sell.change() >= sell_difference.change(),
         buy_diff >= min_buy.change().into()
     ));
 
     if !(buy_difference.change() > 0
-        && (buy_diff / sell_diff >= rate_min.0) 
+        && (buy_diff / sell_diff >= rate_min.0)
         && max_sell.change() >= sell_difference.change()
         && buy_diff >= min_buy.change().into())
     {
         log_string(format!(
-            "invalid exchange, {} / {}, sell diff: {}, buy diff: {}, max_sell: {}, rate_min: {}, min_buy: {}, buy_diff / sell_diff: {}",
+            "invalid exchange, {} / {}, sell diff: {}, buy diff: {}, \
+             max_sell: {}, rate_min: {}, min_buy: {}, buy_diff / sell_diff: {}",
             token_sell,
             token_buy,
             sell_difference.change(),
