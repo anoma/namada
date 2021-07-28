@@ -64,9 +64,9 @@ impl Amount {
         }
     }
 
-    /// return the f64 rappresentation
+    /// return the f64 rapresentation
     pub fn to_f64(&self) -> f64 {
-        self.micro as f64
+        self.micro as f64 / 1_000_000_f64
     }
 }
 

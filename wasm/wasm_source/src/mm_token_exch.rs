@@ -97,7 +97,7 @@ fn find_to_update_node(
             if new_node.exchange.data.token_buy
                 == current_node.exchange.data.token_sell
                 && current_node.exchange.data.max_sell
-                    > new_node.exchange.data.min_buy
+                    >= new_node.exchange.data.min_buy
             {
                 connect_buy.push(index);
             }

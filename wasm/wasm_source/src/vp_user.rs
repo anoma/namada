@@ -27,10 +27,6 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     }
 }
 
-// transfer - [albert, bertha, matchmaker, btc, xan]
-
-// transfer [(some exchanges), signature(matchmaker)]
-
 #[validity_predicate]
 fn validate_tx(
     tx_data: Vec<u8>,

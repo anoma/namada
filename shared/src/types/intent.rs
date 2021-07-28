@@ -1,6 +1,7 @@
 //! Intent data definitions and transaction and validity-predicate helpers.
 
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::io::ErrorKind;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -101,8 +102,10 @@ pub enum Error {
     DecimalParseError(String),
 }
 
-impl From<token::Amount> for Result<DecimalWrapper, Error> {
-    fn from(amount: token::Amount) -> Self {
+impl TryFrom<token::Amount> for DecimalWrapper {
+    type Error = Error;
+
+    fn try_from(amount: token::Amount) -> Result<Self, Self::Error> {
         let decimal = Decimal::from_i128(amount.change());
 
         match decimal {

@@ -537,7 +537,7 @@ mod tests {
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_ledger
-            .exp_string(&"No state could be found".to_string())
+            .exp_string("No state could be found")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // Wait for ledger and gossip to start
@@ -615,32 +615,26 @@ mod tests {
         // means it sent it correctly but not able to gossip it (which is
         // correct since there is only 1 node)
         session_send_intent_c
-            .exp_regex(".*Failed to publish_intent InsufficientPeers*")
+            .exp_string("Failed to publish_intent InsufficientPeers")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // check that the amount matched are correct
         session_gossip
-            .exp_regex(".*amounts: [100000000, 70000000, 200000000]*")
+            .exp_string("amounts: [100000000, 70000000, 200000000]")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // check that the transfers transactions are correct
         session_gossip
-            .exp_regex(".*crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70000000*")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70000000")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_regex(".*crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200000000*")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200000000")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_regex(".crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000*")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
             .map_err(|e| eyre!(format!("{}", e)))?;
-
-        drop(session_gossip);
-        drop(session_ledger);
-        drop(session_send_intent_a);
-        drop(session_send_intent_b);
-        drop(session_send_intent_c);
 
         Ok(())
     }
