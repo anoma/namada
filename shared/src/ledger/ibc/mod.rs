@@ -5,6 +5,7 @@ mod connection;
 
 use std::collections::HashSet;
 
+use ibc::ics02_client::context::ClientReader;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
@@ -45,9 +46,7 @@ where
     H: StorageHasher,
 {
     // the client counter
-    let path = "clients/counter".to_owned();
-    let key =
-        Key::ibc_key(path).expect("Creating a key for a client counter failed");
+    let key = Key::ibc_client_counter();
     let value = crate::ledger::storage::types::encode(&0);
     storage
         .write(&key, value)
@@ -85,12 +84,16 @@ where
 
             let accepted = match Self::get_ibc_prefix(key) {
                 IbcPrefix::Client => {
-                    let client_id = Self::get_client_id(key)?;
-                    if !clients.insert(client_id.clone()) {
-                        // this client has been checked
-                        continue;
+                    if key.is_ibc_client_counter() {
+                        self.client_counter_pre() < self.client_counter()
+                    } else {
+                        let client_id = Self::get_client_id(key)?;
+                        if !clients.insert(client_id.clone()) {
+                            // this client has been checked
+                            continue;
+                        }
+                        self.validate_client(&client_id, tx_data)?
                     }
-                    self.validate_client(&client_id, tx_data)?
                 }
                 IbcPrefix::Connection => {
                     self.validate_connection(key, tx_data)?

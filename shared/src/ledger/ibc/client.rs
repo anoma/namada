@@ -293,6 +293,23 @@ where
         }
     }
 
+    pub(super) fn client_counter_pre(&self) -> u64 {
+        let key = Key::ibc_client_counter();
+        match self.ctx.read_post(&key) {
+            Ok(Some(value)) => match storage::types::decode(&value) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("decoding a client counter failed: {}", e);
+                    u64::MAX
+                }
+            },
+            _ => {
+                tracing::error!("client counter doesn't exist");
+                unreachable!();
+            }
+        }
+    }
+
     fn consensus_state_pre(
         &self,
         client_id: &ClientId,
@@ -366,12 +383,15 @@ where
     }
 
     fn client_counter(&self) -> u64 {
-        let path = "clients/counter".to_owned();
-        let key = Key::ibc_key(path)
-            .expect("Creating a key for a client counter failed");
+        let key = Key::ibc_client_counter();
         match self.ctx.read_post(&key) {
-            Ok(Some(value)) => storage::types::decode(&value)
-                .expect("converting a client counter shouldn't failed"),
+            Ok(Some(value)) => match storage::types::decode(&value) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("decoding a client counter failed: {}", e);
+                    u64::MIN
+                }
+            },
             _ => {
                 tracing::error!("client counter doesn't exist");
                 unreachable!();

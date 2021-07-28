@@ -260,6 +260,11 @@ impl Key {
     }
 
     /// Check if the given key is a key of the connection counter
+    pub fn is_ibc_client_counter(&self) -> bool {
+        *self == Self::ibc_client_counter()
+    }
+
+    /// Check if the given key is a key of the connection counter
     pub fn is_ibc_connection_counter(&self) -> bool {
         *self == Self::ibc_connection_counter()
     }
@@ -271,6 +276,13 @@ impl Key {
         let addr = Address::Internal(InternalAddress::Ibc);
         let key = Self::from(addr.to_db_key());
         Ok(key.join(&path))
+    }
+
+    /// Returns a key of the IBC client counter
+    pub fn ibc_client_counter() -> Self {
+        let path = "clients/counter".to_owned();
+        Key::ibc_key(path)
+            .expect("Creating a key for the client counter shouldn't fail")
     }
 
     /// Returns a key of the IBC connection counter
