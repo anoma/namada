@@ -417,7 +417,7 @@ mod tests {
     // transfer transaction with the 3 intents.
     #[test]
     fn match_intent() -> Result<()> {
-        setup();
+        let working_dir = setup();
 
         let base_dir = tempdir().unwrap();
         let node_dirs = generate_network_of(
@@ -440,6 +440,17 @@ mod tests {
         // cargo run --bin anomac -- craft-intent --key $BERTHA --address
         // $BERTHA --min-amount-buy 100 --max-amount-sell 70 --token-buy $XAN
         // --token-sell $BTC --min-rate 2 --file-path intent.A
+        let intent_a_path =
+            format!("{}/intent.A", working_dir.to_string_lossy());
+        let intent_b_path =
+            format!("{}/intent.C", working_dir.to_string_lossy());
+        let intent_c_path =
+            format!("{}/intent.B", working_dir.to_string_lossy());
+
+        println!("{}", intent_a_path);
+        println!("{}", intent_b_path);
+        println!("{}", intent_c_path);
+
         let tx_a = vec![
             "craft-intent",
             "--key",
@@ -457,12 +468,13 @@ mod tests {
             "--min-rate",
             "2",
             "--file-path",
-            "intent.A",
+            intent_a_path.as_ref(),
         ];
         let mut craft_intent_a = Command::cargo_bin("anomac")?;
         craft_intent_a.args(tx_a);
-        spawn_command(craft_intent_a, Some(5_000))
-            .map_err(|e| eyre!(format!("{}", e)))?;
+        craft_intent_a.output().expect("Should create the intent");
+        // spawn_command(craft_intent_a, Some(5_000))
+        //     .map_err(|e| eyre!(format!("{}", e)))?;
 
         // cargo run --bin anomac -- craft-intent --key $ALBERT --address
         // $ALBERT --min-amount-buy 50 --max-amount-sell 300 --token-buy $BTC
@@ -484,12 +496,11 @@ mod tests {
             "--min-rate",
             "0.7",
             "--file-path",
-            "intent.B",
+            intent_b_path.as_ref(),
         ];
         let mut craft_intent_b = Command::cargo_bin("anomac")?;
         craft_intent_b.args(tx_b);
-        spawn_command(craft_intent_b, Some(5_000))
-            .map_err(|e| eyre!(format!("{}", e)))?;
+        craft_intent_b.output().expect("Should create the intent");
 
         // cargo run --bin anomac -- craft-intent --key $CHRISTEL --address
         // $CHRISTEL --min-amount-buy 20 --max-amount-sell 200 --token-buy $ETH
@@ -511,12 +522,11 @@ mod tests {
             "--min-rate",
             "0.5",
             "--file-path",
-            "intent.C",
+            intent_c_path.as_ref(),
         ];
         let mut craft_intent_c = Command::cargo_bin("anomac")?;
         craft_intent_c.args(tx_c);
-        spawn_command(craft_intent_c, Some(10_000))
-            .map_err(|e| eyre!(format!("{}", e)))?;
+        craft_intent_c.output().expect("Should create the intent");
 
         //  Start gossip
         let mut session_gossip = spawn_command(base_node_gossip, Some(40_000))
@@ -543,7 +553,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            "../intent.A",
+            intent_a_path.as_ref(),
             "--topic",
             "asset_v1",
         ]);
@@ -569,7 +579,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            "../intent.B",
+            intent_b_path.as_ref(),
             "--topic",
             "asset_v1",
         ]);
@@ -594,7 +604,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            "../intent.C",
+            intent_c_path.as_ref(),
             "--topic",
             "asset_v1",
         ]);
