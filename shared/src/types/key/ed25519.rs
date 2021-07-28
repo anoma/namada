@@ -309,6 +309,21 @@ impl From<PublicKey> for PublicKeyHash {
     }
 }
 
+impl From<&PublicKey> for PublicKeyHash {
+    fn from(pk: &PublicKey) -> Self {
+        let pk_bytes =
+            pk.try_to_vec().expect("Public key encoding shouldn't fail");
+        let mut hasher = Sha256::new();
+        hasher.update(pk_bytes);
+        // hex of the first 40 chars of the hash
+        Self(format!(
+            "{:.width$X}",
+            hasher.finalize(),
+            width = address::HASH_LEN
+        ))
+    }
+}
+
 /// Run `cargo test gen_keypair -- --nocapture` to generate a keypair.
 #[cfg(test)]
 #[test]

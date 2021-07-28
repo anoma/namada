@@ -2,16 +2,16 @@ use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 
 use anoma_shared::ledger::gas::{self, BlockGasMeter};
-use anoma_shared::ledger::storage::write_log::WriteLog;
+use anoma_shared::ledger::storage::write_log::{StorageModification, WriteLog};
 use anoma_shared::ledger::{ibc, parameters, pos};
 use anoma_shared::proto::{self, Tx};
 use anoma_shared::types::address::Address;
-use anoma_shared::types::key::ed25519::PublicKey;
-use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
+use anoma_shared::types::key::ed25519::{PublicKey, verify_signature_raw, Signature};
+use anoma_shared::types::storage::{BlockHash, BlockHeight, Key, write_log::WriteLog};
 use anoma_shared::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
-use anoma_shared::types::token::Amount;
+use anoma_shared::types::token::{Amount, balance_key};
 use anoma_shared::types::{address, key, token};
-use borsh::BorshSerialize;
+use borsh::{BorshSerialize, BorshDeserialize};
 use itertools::Itertools;
 use tendermint::block::Header;
 use thiserror::Error;
@@ -24,6 +24,10 @@ use crate::{config, genesis, wallet};
 pub enum Error {
     #[error("Error removing the DB data: {0}")]
     RemoveDB(std::io::Error),
+    #[error("Error reading from the Write Log: {0}")]
+    WriteLog(std::io::Error),
+    #[error("Address not found in storage: {0}")]
+    MissingAddress(String),
     #[error("chain ID mismatch: {0}")]
     ChainIdError(String),
     #[error("Error decoding a transaction from bytes: {0}")]
@@ -265,6 +269,11 @@ impl Shell {
 
     }
 
+    /// Check the fees and signatures of the fee payer for a transaction
+    pub fn process_proposal(&mut self, req: request::ProcessProposal) -> response::ProcessProposal {
+        // TODO: iterate over the transactions in the proposal and verify each one
+    }
+
     /// Validate and apply transactions.
     /// TODO: Will we also decrypt transactions here?
     pub fn finalize_block(&mut self, req: request::FinalizeBlock) -> Result<response::FinalizeBlock> {
@@ -370,5 +379,39 @@ impl Shell {
             }
         }
         response
+    }
+
+    /// Check the fees and signatures of the fee payer for a transaction
+    fn preprocess_tx(pk: &PublicKey, fee: &Fee, sig: &Signature) -> bool {
+        verify_signature_raw(pk, fee,  sig)?;
+        let fee_payer_addr = Address::from(pk);
+        if self.retrieve_balance(pk.into()) < fee {
+
+        }
+    }
+
+    /// Given an address and a type of token, look up the balance of that token at
+    /// the specified address. Charges gas
+    fn retrieve_balance(&mut self, addr: &Address) -> Result<Amount> {
+        let key = balance_key(&xan(), addr);
+        // try to read from the write log first
+        let (log_val, gas) = self.write_log.read(&key);
+        self.gas_meter.add(gas)?;
+        match log_val {
+            Some(&StorageModification::Write { ref value }) |
+            Some(&StorageModification::InitAccount {
+                vp: ref value, ..
+            })=> {
+                BorshDeserialize::try_from_slice(&value).map_err(Error::WriteLog)
+            }
+            _ => {
+                // when not found in write log, try to read from the storage
+                let (value, gas) = self.storage.read(&key)?;
+                self.gas_meter.add(gas)?;
+                value
+                    .map(|v| BorshDeserialize::try_from_slice(&v).map_err(Error::WriteLog))
+                    .unwrap_or(Err(Error::MissingAddress(addr.encode())))
+            }
+        }
     }
 }

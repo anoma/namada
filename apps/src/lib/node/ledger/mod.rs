@@ -97,10 +97,6 @@ impl Service<Request> for Shell {
                 Ok(Response::VerifyHeader(self.verify_header(header)))
             }
             Request::ProcessProposal(block) => {
-                // TODO: What computation should be done here? It seems as though we cannot
-                // validate transactions as I assume they won't be decrypted until the finalize
-                // block phase as I also assume threshold decryption will happen in the vote
-                // extension phase.
                 Ok(Response::ProcessProposal(self.process_proposal(block)))
             }
             Request::Commit(_) => Ok(Response::Commit(self.commit())),

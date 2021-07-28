@@ -226,6 +226,18 @@ pub enum ImplicitAddress {
     Ed25519(key::ed25519::PublicKeyHash),
 }
 
+impl From<&key::ed25519::PublicKey> for ImplicitAddress {
+    fn from(pk: &key::ed25519::PublicKey) -> Self {
+        ImplicitAddress::Ed25519(pk.into())
+    }
+}
+
+impl From<&key::ed25519::PublicKey> for Address {
+    fn from(pk: &key::ed25519::PublicKey) -> Self {
+        Self::Implicit(pk.into())
+    }
+}
+
 /// An internal address represents a module with a native VP
 #[derive(
     Debug,

@@ -1,4 +1,5 @@
 //! The ledger's protocol
+pub mod dkg;
 
 use std::collections::HashSet;
 use std::convert::TryFrom;

@@ -8,7 +8,10 @@ use prost_types::Timestamp;
 use thiserror::Error;
 
 use super::generated::types;
-use crate::types::key::ed25519::{self, Keypair};
+use crate::types::address::Address;
+use crate::types::key::ed25519::{self, Keypair, PublicKey};
+use crate::types::token::Amount;
+
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -90,6 +93,18 @@ impl Tx {
     pub fn sign(self, keypair: &Keypair) -> Tx {
         ed25519::sign_tx(keypair, self)
     }
+}
+
+pub struct Fee {
+    amount: Amount,
+    token: Address,
+}
+
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EncryptedTx {
+    pub pk: PublicKey,
+    pub fee: Fee
 }
 
 #[derive(Clone, Debug, PartialEq)]
