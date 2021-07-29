@@ -377,22 +377,7 @@ where
 
     fn connection_counter(&self) -> u64 {
         let key = Key::ibc_connection_counter();
-        match self.ctx.read_post(&key) {
-            Ok(Some(value)) => match storage::types::decode(&value) {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!(
-                        "decoding a connection counter failed: {}",
-                        e
-                    );
-                    u64::MIN
-                }
-            },
-            _ => {
-                tracing::error!("connection counter doesn't exist");
-                unreachable!();
-            }
-        }
+        self.read_counter(&key)
     }
 }
 

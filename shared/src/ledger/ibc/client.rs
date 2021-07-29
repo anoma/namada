@@ -359,19 +359,7 @@ where
 
     fn client_counter(&self) -> u64 {
         let key = Key::ibc_client_counter();
-        match self.ctx.read_post(&key) {
-            Ok(Some(value)) => match storage::types::decode(&value) {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!("decoding a client counter failed: {}", e);
-                    u64::MIN
-                }
-            },
-            _ => {
-                tracing::error!("client counter doesn't exist");
-                unreachable!();
-            }
-        }
+        self.read_counter(&key)
     }
 }
 

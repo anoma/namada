@@ -269,6 +269,11 @@ impl Key {
         *self == Self::ibc_connection_counter()
     }
 
+    /// Check if the given key is a key of the connection counter
+    pub fn is_ibc_channel_counter(&self) -> bool {
+        *self == Self::ibc_channel_counter()
+    }
+
     /// Returns a key of the IBC-related data
     /// Only this function can push `InternalAddress::Ibc` segment
     pub fn ibc_key(path: impl AsRef<str>) -> Result<Self> {
@@ -290,6 +295,13 @@ impl Key {
         let path = "connections/counter".to_owned();
         Key::ibc_key(path)
             .expect("Creating a key for the connection counter shouldn't fail")
+    }
+
+    /// Returns a key of the IBC channel counter
+    pub fn ibc_channel_counter() -> Self {
+        let path = "channelEnds/counter".to_owned();
+        Key::ibc_key(path)
+            .expect("Creating a key for the channel counter shouldn't fail")
     }
 
     /// Returns a key from the given DB key path that has the height and

@@ -1,7 +1,9 @@
 //! IBC integration as a native validity predicate
 
+mod channel;
 mod client;
 mod connection;
+mod port;
 
 use std::collections::HashSet;
 
@@ -99,8 +101,8 @@ where
                 IbcPrefix::Connection => {
                     self.validate_connection(key, tx_data)?
                 }
+                IbcPrefix::Channel => self.validate_channel(key, tx_data)?,
                 // TODO implement validations for modules
-                IbcPrefix::Channel => false,
                 IbcPrefix::Packet => false,
                 IbcPrefix::Unknown => {
                     return Err(Error::KeyError(format!(
@@ -163,6 +165,22 @@ where
             Ok(StateChange::Created)
         } else {
             Ok(StateChange::NotExists)
+        }
+    }
+
+    fn read_counter(&self, key: &Key) -> u64 {
+        match self.ctx.read_post(&key) {
+            Ok(Some(value)) => match storage::types::decode(&value) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("decoding a counter failed: {}", e);
+                    u64::MIN
+                }
+            },
+            _ => {
+                tracing::error!("the counter doesn't exist");
+                unreachable!();
+            }
         }
     }
 }
