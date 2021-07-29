@@ -347,10 +347,10 @@ impl Shell {
     }
 
     /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> response::Query {
+    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
         let mut response = response::Query::default();
         let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = self.write_log.clone();
+        let mut write_log = WriteLog::default();
         match protocol::apply_tx(
             tx_bytes,
             &mut gas_meter,
