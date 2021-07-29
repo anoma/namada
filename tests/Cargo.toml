@@ -18,6 +18,7 @@ concat-idents = "1.1.2"
 test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing = "0.1.26"
 tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
+serde_json = { version = "1.0.65" }
 
 [dev-dependencies]
 anoma_apps = {path = "../apps", features = ["testing"]}

@@ -6,11 +6,15 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
+use std::convert::TryFrom;
+
+use anoma::types::{address::Address, intent::DecimalWrapper, token::Amount};
 use clap::{AppSettings, ArgMatches};
+
+use self::args::TokenExchange;
 
 use super::config;
 mod utils;
-use serde::Deserialize;
 use utils::*;
 
 const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
@@ -479,11 +483,12 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use anoma::types::address::Address;
+    use anoma::types::address::{Address, EstablishedAddress};
     use anoma::types::intent::DecimalWrapper;
     use anoma::types::token;
     use libp2p::Multiaddr;
-    use serde_json::Value;
+    use serde::de::{self, Error};
+    use serde::{Deserialize, Serialize};
 
     use super::utils::*;
     use super::ArgMatches;
@@ -506,7 +511,6 @@ pub mod args {
     const TOPIC: Arg<String> = arg("topic");
     const TOPICS: ArgMulti<String> = TOPIC.multi();
     const ADDRESS: Arg<Address> = arg("address");
-    const MULTI_ADDRESS: ArgMulti<Address> = arg_multi("address");
     const SIGNING_KEY: Arg<Address> = arg("key");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
@@ -514,12 +518,6 @@ pub mod args {
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
     const NODE: Arg<String> = arg("node");
-    const TOKEN_SELL: ArgMulti<Address> = arg_multi("token-sell");
-    const MIN_RATE: ArgMulti<DecimalWrapper> = arg_multi("min-rate");
-    const TOKEN_BUY: ArgMulti<Address> = arg_multi("token-buy");
-    const MAX_AMOUNT_SELL: ArgMulti<token::Amount> =
-        arg_multi("max-amount-sell");
-    const MIN_AMOUNT_BUY: ArgMulti<token::Amount> = arg_multi("min-amount-buy");
     const FILE_PATH_OUTPUT: ArgDefault<String> =
         arg_default("file-path-output", DefaultFn(|| "intent.data".into()));
     const FILE_PATH_INPUT: ArgDefault<String> =
@@ -707,19 +705,10 @@ pub mod args {
     /// Craft intent for token exchange arguments
     #[derive(Debug)]
     pub struct CraftIntent {
+        /// Signing key
         pub key: Address,
-        /// Source address
-        pub addr: Vec<Address>,
-        /// Token to sell
-        pub token_sell: Vec<Address>,
-        /// Max amount of token to sell
-        pub max_sell: Vec<token::Amount>,
-        /// Rate
-        pub min_rate: Vec<DecimalWrapper>,
-        /// Token to buy
-        pub token_buy: Vec<Address>,
-        /// Min amount of token to buy
-        pub min_buy: Vec<token::Amount>,
+        /// Exchange description
+        pub exchanges: Vec<TokenExchange>,
         /// Target file path
         pub file_path: String,
     }
@@ -729,59 +718,51 @@ pub mod args {
             let key = SIGNING_KEY.parse(matches);
             let file_path_output = FILE_PATH_OUTPUT.parse(matches);
             let file_path_input = FILE_PATH_INPUT.parse(matches);
-            let file = File::open(&file_path_input).expect("File exist.");
+            let file = File::open(&file_path_input).expect("File must exist.");
 
             let exchanges: Vec<TokenExchange> = serde_json::from_reader(file)
                 .expect("JSON was not well-formatted");
-            for exchange in &exchanges {
-                println!("{}", exchange.addr);
-            }
 
-            let addr = MULTI_ADDRESS.parse(matches);
-            let token_sell = TOKEN_SELL.parse(matches);
-            let max_sell = MAX_AMOUNT_SELL.parse(matches);
-            let token_buy = TOKEN_BUY.parse(matches);
-            let min_buy = MIN_AMOUNT_BUY.parse(matches);
-            let min_rate = MIN_RATE.parse(matches);
             Self {
                 key,
-                addr,
-                token_sell,
-                max_sell,
-                token_buy,
-                min_buy,
+                exchanges,
                 file_path: file_path_output,
-                min_rate,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(SIGNING_KEY.def().about("The signing key."))
-                .arg(ADDRESS.def().about("The account address."))
-                .arg(TOKEN_SELL.def().about("The selling token."))
-                .arg(MAX_AMOUNT_SELL.def().about("The max amount selling."))
-                .arg(MIN_RATE.def().about("The minimum buying rate."))
-                .arg(TOKEN_BUY.def().about("The buying token."))
-                .arg(MIN_AMOUNT_BUY.def().about("The min amount buying."))
                 .arg(FILE_PATH_OUTPUT.def().about("The output file"))
                 .arg(FILE_PATH_INPUT.def().about("The input file"))
         }
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Serialize, Deserialize)]
+    
     pub struct TokenExchange {
         /// Source address that will sign the exchange
+        #[serde(deserialize_with = "address_deserialize")]
         pub addr: Address,
         /// Token to sell
+        #[serde(deserialize_with = "address_deserialize")]
         pub token_sell: Address,
         /// Max amount of token to sell
         pub max_sell: token::Amount,
         /// Rate
         pub min_rate: DecimalWrapper,
         /// Token to buy
+        #[serde(deserialize_with = "address_deserialize")]
         pub token_buy: Address,
         /// Min amount of token to buy
         pub min_buy: token::Amount,
+    }
+
+    pub fn address_deserialize<'d, D>(deserializer: D) -> Result<Address, D::Error>
+    where
+        D: de::Deserializer<'d>,
+    {
+        let address = String::deserialize(deserializer)?;
+        Address::decode(address).map_err(Error::custom)        
     }
 
     /// Subscribe intent topic arguments
@@ -1012,3 +993,34 @@ pub fn update_gossip_config(
     }
     Ok(())
 }
+
+
+#[test]
+fn test_cli() {
+    let test = TokenExchange {
+        addr: Address::decode("a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9").unwrap(),
+        token_sell: Address::decode("a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc").unwrap(),
+        token_buy: Address::decode("a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3").unwrap(),
+        max_sell: Amount::from(100),
+        min_buy: Amount::from(70),  
+        min_rate: DecimalWrapper::try_from(Amount::from(70)).unwrap()
+    };
+
+    println!("{}", serde_json::to_string(&test).unwrap());
+}
+
+
+// struct TokenExchange {
+//     /// Source address that will sign the exchange
+//     pub addr: Address,
+//     /// Token to sell
+//     pub token_sell: Address,
+//     /// Max amount of token to sell
+//     pub max_sell: token::Amount,
+//     /// Rate
+//     pub min_rate: DecimalWrapper,
+//     /// Token to buy
+//     pub token_buy: Address,
+//     /// Min amount of token to buy
+//     pub min_buy: token::Amount,
+// }

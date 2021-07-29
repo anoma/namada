@@ -25,6 +25,7 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
     Serialize,
     Deserialize,
 )]
+#[serde(transparent)]
 pub struct Amount {
     micro: u64,
 }

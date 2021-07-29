@@ -73,40 +73,23 @@ async fn subscribe_topic(
 fn craft_intent(
     args::CraftIntent {
         key,
-        addr,
-        token_sell,
-        max_sell,
-        min_rate,
-        token_buy,
-        min_buy,
+        exchanges,
         file_path,
     }: args::CraftIntent,
 ) {
-    let mut input_lengths = vec![
-        addr.len(),
-        token_sell.len(),
-        max_sell.len(),
-        min_rate.len(),
-        token_buy.len(),
-        min_buy.len(),
-    ];
-    input_lengths.sort_unstable();
-    if input_lengths[0] != input_lengths[5] {
-        println!("Bad inputs length");
-    }
-
-    let exchanges: HashSet<Signed<Exchange>> = addr
+    let exchanges: HashSet<Signed<Exchange>> = exchanges
         .iter()
-        .map(|address| {
-            let source_keypair = wallet::key_of(&address.clone().encode());
+        .map(|exchange| {
+            let source_keypair =
+                wallet::key_of(&exchange.addr.clone().encode());
 
             let exchange = Exchange {
-                addr: address.clone(),
-                token_sell: token_sell.get(0).unwrap().clone(),
-                token_buy: token_buy.get(0).unwrap().clone(),
-                min_buy: *min_buy.get(0).unwrap(),
-                rate_min: min_rate.get(0).unwrap().clone(),
-                max_sell: *max_sell.get(0).unwrap(),
+                addr: exchange.addr.clone(),
+                token_sell: exchange.token_sell.clone(),
+                token_buy: exchange.token_buy.clone(),
+                min_buy: exchange.min_buy,
+                rate_min: exchange.min_rate.clone(),
+                max_sell: exchange.max_sell,
             };
 
             Signed::new(&source_keypair, exchange)
