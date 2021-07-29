@@ -78,7 +78,7 @@ pub fn tx<DB, H>(
     write_log: &mut WriteLog,
     gas_meter: &mut BlockGasMeter,
     tx_code: impl AsRef<[u8]>,
-    tx_data: Vec<u8>,
+    tx_data: impl AsRef<[u8]>,
 ) -> Result<HashSet<Address>>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,

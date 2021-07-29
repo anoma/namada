@@ -117,7 +117,8 @@ fn execute_tx(
     gas_meter
         .add_compiling_fee(tx.code.len())
         .map_err(Error::GasError)?;
-    let tx_data = tx.data.clone().unwrap_or_default();
+    let empty = vec![];
+    let tx_data = tx.data.as_ref().unwrap_or_else(|| &empty);
     wasm::run::tx(storage, write_log, gas_meter, &tx.code, tx_data)
         .map_err(Error::TxRunnerError)
 }
