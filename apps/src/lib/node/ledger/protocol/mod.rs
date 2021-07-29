@@ -196,14 +196,17 @@ fn execute_vps(
         .try_fold(VpsResult::default, |mut result, (addr, keys, vp)| {
             let mut gas_meter = VpGasMeter::new(initial_gas);
             let accept = match &vp {
-                Vp::Wasm(vp) => execute_wasm_vp(
+                Vp::Wasm(vp) => wasm::run::vp(
+                    vp,
                     tx,
+                    addr,
                     storage,
                     write_log,
-                    &verifiers_addr,
                     &mut gas_meter,
-                    (addr, keys, vp),
-                ),
+                    keys,
+                    &verifiers_addr,
+                )
+                .map_err(Error::VpRunnerError),
                 Vp::Native(internal_addr) => {
                     let ctx =
                         native_vp::Ctx::new(storage, write_log, tx, gas_meter);
@@ -289,29 +292,6 @@ fn merge_vp_results(
         gas_used,
         errors,
     })
-}
-
-/// Execute a WASM validity predicates
-#[allow(clippy::too_many_arguments)]
-fn execute_wasm_vp(
-    tx: &Tx,
-    storage: &PersistentStorage,
-    write_log: &WriteLog,
-    verifiers: &HashSet<Address>,
-    vp_gas_meter: &mut VpGasMeter,
-    (addr, keys, vp): (&Address, &HashSet<Key>, &[u8]),
-) -> Result<bool> {
-    wasm::run::vp(
-        vp,
-        tx,
-        addr,
-        storage,
-        write_log,
-        vp_gas_meter,
-        keys,
-        verifiers,
-    )
-    .map_err(Error::VpRunnerError)
 }
 
 impl fmt::Display for TxResult {
