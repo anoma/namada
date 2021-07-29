@@ -1,3 +1,4 @@
+mod shims;
 pub mod protocol;
 mod shell;
 pub mod storage;
@@ -16,6 +17,7 @@ use tower::{Service, ServiceBuilder};
 use tower_abci::{response, split, BoxError, Request, Response, Server};
 
 use crate::node::ledger::shell::{MempoolTxType, Shell};
+use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::{config, genesis};
 
 /// A panic-proof handle for aborting a future. Will abort during
@@ -45,7 +47,6 @@ impl Service<Request> for Shell {
     }
 
     fn call(&mut self, req: Request) -> Self::Future {
-        tracing::debug!(?req);
         let rsp = match req {
             Request::InitChain(init) => {
                 match self.init_chain(init) {
@@ -73,7 +74,7 @@ impl Service<Request> for Shell {
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
-            Request::PrepareProposal(block) => {
+            shim::Request::PrepareProposal(block) => {
                 // TODO: The spec for ABCI++ states that a new unbatched header will be included
                 // in this request. It is at present if it is a field on the block request
                 // header or not
@@ -82,7 +83,7 @@ impl Service<Request> for Shell {
                     block.header.expect("missing block's header").try_into(),
                 ) {
                     (Ok(hash), Ok(header)) => {
-                        let _ = self.begin_block(hash, header);
+                        let _ = self.prepare_proposal(hash, header);
                     }
                     (Ok(_), Err(msg)) => {
                         tracing::error!("Unexpected block header {}", msg);
@@ -93,15 +94,20 @@ impl Service<Request> for Shell {
                 // to be returned
                 Ok(Response::PrepareProposal(Default::default()))
             }
-            Request::VerifyHeader(header) => {
-                Ok(Response::VerifyHeader(self.verify_header(header)))
+            shim::Request::VerifyHeader => {
+                Ok(shim::Response::VerifyHeader(self.verify_header(header)))
             }
             Request::ProcessProposal(block) => {
-                // TODO: What computation should be done here? It seems as though we cannot
-                // validate transactions as I assume they won't be decrypted until the finalize
-                // block phase as I also assume threshold decryption will happen in the vote
-                // extension phase.
                 Ok(Response::ProcessProposal(self.process_proposal(block)))
+            }
+            Request::RevertProposal(_req) => {
+                Ok(Response::RevertProposal(self.revert_proposal(_req)))
+            }
+            Request::ExtendVote(_req) => {
+                Ok(Response::ExtendVote(self.extend_vote(_req)))
+            }
+            Request::VerifyVoteExtension(_req) => {
+                Ok(Response::VerifyVoteExtension(_req))
             }
             Request::Commit(_) => Ok(Response::Commit(self.commit())),
             Request::Flush(_) => Ok(Response::Flush(Default::default())),
@@ -133,7 +139,6 @@ impl Service<Request> for Shell {
                 Ok(Response::ApplySnapshotChunk(Default::default()))
             }
         };
-        tracing::debug!(?rsp);
         Box::pin(async move { rsp.map_err(|e| e.into()) }.boxed())
     }
 }

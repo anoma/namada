@@ -265,6 +265,11 @@ impl Shell {
 
     }
 
+    /// Check the fees and signatures of the fee payer for a transaction
+    pub fn process_proposal(&mut self, req: request::ProcessProposal) -> response::ProcessProposal {
+        // TODO: iterate over the transactions in the proposal and verify each one
+    }
+
     /// Validate and apply transactions.
     /// TODO: Will we also decrypt transactions here?
     pub fn finalize_block(&mut self, req: request::FinalizeBlock) -> Result<response::FinalizeBlock> {
