@@ -114,12 +114,11 @@ fn execute_tx(
     gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
 ) -> Result<HashSet<Address>> {
-    let tx_code = tx.code.clone();
     gas_meter
-        .add_compiling_fee(tx_code.len())
+        .add_compiling_fee(tx.code.len())
         .map_err(Error::GasError)?;
     let tx_data = tx.data.clone().unwrap_or_default();
-    wasm::run::tx(storage, write_log, gas_meter, tx_code, tx_data)
+    wasm::run::tx(storage, write_log, gas_meter, &tx.code, tx_data)
         .map_err(Error::TxRunnerError)
 }
 
