@@ -779,7 +779,6 @@ mod tests {
         let proof_consensus = CommitmentProofBytes::from(vec![0]);
         let tx_code = vec![];
         let data = ConnectionOpenTryData::new(
-            None,
             client_id,
             client_state,
             counterparty,
