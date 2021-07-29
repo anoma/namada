@@ -10,6 +10,7 @@ use clap::{AppSettings, ArgMatches};
 
 use super::config;
 mod utils;
+use serde::Deserialize;
 use utils::*;
 
 const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
@@ -473,6 +474,7 @@ pub mod cmds {
 }
 
 pub mod args {
+    use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
@@ -481,6 +483,7 @@ pub mod args {
     use anoma::types::intent::DecimalWrapper;
     use anoma::types::token;
     use libp2p::Multiaddr;
+    use serde_json::Value;
 
     use super::utils::*;
     use super::ArgMatches;
@@ -517,8 +520,10 @@ pub mod args {
     const MAX_AMOUNT_SELL: ArgMulti<token::Amount> =
         arg_multi("max-amount-sell");
     const MIN_AMOUNT_BUY: ArgMulti<token::Amount> = arg_multi("min-amount-buy");
-    const FILE_PATH: ArgDefault<String> =
-        arg_default("file-path", DefaultFn(|| "intent.data".into()));
+    const FILE_PATH_OUTPUT: ArgDefault<String> =
+        arg_default("file-path-output", DefaultFn(|| "intent.data".into()));
+    const FILE_PATH_INPUT: ArgDefault<String> =
+        arg_default("file-path-input", DefaultFn(|| "exchanges.data".into()));
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
     const TOKEN: Arg<Address> = arg("token");
@@ -722,12 +727,21 @@ pub mod args {
     impl Args for CraftIntent {
         fn parse(matches: &ArgMatches) -> Self {
             let key = SIGNING_KEY.parse(matches);
+            let file_path_output = FILE_PATH_OUTPUT.parse(matches);
+            let file_path_input = FILE_PATH_INPUT.parse(matches);
+            let file = File::open(&file_path_input).expect("File exist.");
+
+            let exchanges: Vec<TokenExchange> = serde_json::from_reader(file)
+                .expect("JSON was not well-formatted");
+            for exchange in &exchanges {
+                println!("{}", exchange.addr);
+            }
+
             let addr = MULTI_ADDRESS.parse(matches);
             let token_sell = TOKEN_SELL.parse(matches);
             let max_sell = MAX_AMOUNT_SELL.parse(matches);
             let token_buy = TOKEN_BUY.parse(matches);
             let min_buy = MIN_AMOUNT_BUY.parse(matches);
-            let file_path = FILE_PATH.parse(matches);
             let min_rate = MIN_RATE.parse(matches);
             Self {
                 key,
@@ -736,7 +750,7 @@ pub mod args {
                 max_sell,
                 token_buy,
                 min_buy,
-                file_path,
+                file_path: file_path_output,
                 min_rate,
             }
         }
@@ -749,8 +763,25 @@ pub mod args {
                 .arg(MIN_RATE.def().about("The minimum buying rate."))
                 .arg(TOKEN_BUY.def().about("The buying token."))
                 .arg(MIN_AMOUNT_BUY.def().about("The min amount buying."))
-                .arg(FILE_PATH.def().about("The output file"))
+                .arg(FILE_PATH_OUTPUT.def().about("The output file"))
+                .arg(FILE_PATH_INPUT.def().about("The input file"))
         }
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct TokenExchange {
+        /// Source address that will sign the exchange
+        pub addr: Address,
+        /// Token to sell
+        pub token_sell: Address,
+        /// Max amount of token to sell
+        pub max_sell: token::Amount,
+        /// Rate
+        pub min_rate: DecimalWrapper,
+        /// Token to buy
+        pub token_buy: Address,
+        /// Min amount of token to buy
+        pub min_buy: token::Amount,
     }
 
     /// Subscribe intent topic arguments
