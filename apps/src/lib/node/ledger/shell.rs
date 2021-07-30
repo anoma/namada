@@ -262,20 +262,21 @@ impl Shell {
     // Verify the headers of the block
     // TODO: This will include checking announcements of stake, individual and aggregated PVSS
     // instances from the DKG protocol
-    pub fn verify_header(&self, _req: shim::request::VerifyHeader) -> response::VerifyHeader {
-
+    pub fn verify_header(&self, _req: shim::request::VerifyHeader) -> shim::response::VerifyHeader {
+        Default::default()
     }
 
     /// Check the fees and signatures of the fee payer for a transaction
-    pub fn process_proposal(&mut self, req: request::ProcessProposal) -> response::ProcessProposal {
-        // TODO: iterate over the transactions in the proposal and verify each one
+    pub fn process_proposal(&mut self, _req: shim::request::ProcessProposal) -> shim::response::ProcessProposal {
+        Default::default()
     }
 
     /// Validate and apply transactions.
     /// TODO: Will we also decrypt transactions here?
-    pub fn finalize_block(&mut self, req: request::FinalizeBlock) -> Result<response::FinalizeBlock> {
-        let mut response = response::FinalizeBlock::default();
-        for tx in req.tx {
+    pub fn finalize_block(&mut self, req: shim::request::FinalizeBlock) -> Result<shim::response::FinalizeBlock> {
+        let mut response = shim::response::FinalizeBlock::default();
+        for tx in &req.txs {
+            let mut tx_result = Default::default();
             match protocol::apply_tx(
                 tx,
                 &mut self.gas_meter,
@@ -295,20 +296,18 @@ impl Shell {
                             result.vps_result.rejected_vps
                         );
                         self.write_log.drop_tx();
-                        // TODO: Fix
-                        response.code = 1;
+                        tx_result.code = 1;
                     }
-                    // TODO: Fix
-                    response.info = result.to_string();
+                    tx_result.info = result.to_string();
                 }
                 Err(msg) => {
-                    // TODO: Fix
-                    response.info = msg.to_string();
+                    tx_result.info = msg.to_string();
                 }
             }
+            response.tx_results.append(tx_result);
         }
         response.gas_used = self.gas_meter.finalize_transaction()?;
-        response
+        Ok(response)
     }
 
     /// Commit a block. Persist the application state and return the Merkle root

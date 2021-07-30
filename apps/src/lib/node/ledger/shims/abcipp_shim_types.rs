@@ -15,15 +15,33 @@ pub mod shim {
 
     use super::Request as Req;
     use super::Response as Resp;
+    use crate::node::ledger::shell;
+
+    pub type TxBytes = Vec<u8>;
 
     #[derive(Error, Debug)]
     pub enum Error {
-        #[error("Error converting Request from ABCI to ABCI++: {:0?}")]
+        #[error("Error converting Request from ABCI to ABCI++: {0:?}")]
         ConvertReq(Req),
-        #[error("Error converting Response from ABCI++ to ABCI: {:0?}")]
+        #[error("Error converting Response from ABCI++ to ABCI: {0:?}")]
         ConvertResp(Res),
+        #[error("{0}")]
+        Shell(shell::Error)
     }
 
+    /// Errors from the shell need to be propagated upward
+    impl From<shell::Error> for Error {
+        fn from(err: shell::Error) -> Self {
+            Self::Shell(err)
+        }
+    }
+
+    /// Our custom request types. It is the duty of the shim to change
+    /// the request types coming from tower-abci to these before forwarding
+    /// it to the shell
+    ///
+    /// Each request contains a custom payload type as well, which may
+    /// be simply a unit struct
     pub enum Request {
         InitChain(RequestInitChain),
         Info(RequestInfo),
@@ -46,6 +64,7 @@ pub mod shim {
         ApplySnapshotChunk(RequestApplySnapshotChunk),
     }
 
+    /// Attempt to convert a tower-abci request to an internal one
     impl TryFrom<Req> for Request {
         type Error = Error;
 
@@ -54,8 +73,7 @@ pub mod shim {
                 Req::InitChain(inner) => Ok(Request::InitChain(inner)),
                 Req::Info(inner) => Ok(Request::Info(inner)),
                 Req::Query(inner) => Ok(Request::Query(inner)),
-                // TODO: needed?
-                Req::BeginBlock(inner) => Ok(Request::PrepareProposal(inner.into())),
+                // TODO: Necessary?
                 Req::EndBlock(inner) => Ok(Request::FinalizeBlock(inner.into())),
                 Req::Commit(inner) => Ok(Request::Commit(inner)),
                 Req::Flush(inner) => Ok(Request::Flush(inner)),
@@ -71,6 +89,9 @@ pub mod shim {
         }
     }
 
+    /// Custom response types. These will be returned by the shell along with
+    /// custom payload types (which may be unit structs). It is the duty of
+    /// the shim to convert these to responses understandable to tower-abci
     pub enum Response {
         InitChain(ResponseInitChain),
         Info(ResponseInfo),
@@ -93,16 +114,16 @@ pub mod shim {
         ApplySnapshotChunk(ResponseApplySnapshotChunk),
     }
 
+    /// Attempt to convert response from shell to a tower-abci response type
     impl TryFrom<Response> for Resp {
         type Error = Error;
 
-        fn try_from(resp: Response) -> Result<Resp, Error> {
+        fn try_from(resp: Result<Response, shell::Error>) -> Result<Resp, Error> {
             match resp {
                 Response::InitChain(inner) => Ok(Resp::InitChain(inner)),
                 Response::Info(inner) => Ok(Resp::Info(inner)),
                 Response::Query(inner) => Ok(Resp::Query(inner)),
-                // TODO: needed?
-                Response::PrepareProposal(inner) => Ok(Resp::BeginBlock(inner.into())),
+                // TODO: Necessary?
                 Response::FinalizeBlock(inner) => Ok(Resp::EndBlock(inner.into())),
                 Response::Commit(inner) => Ok(Resp::Commit(inner)),
                 Response::Flush(inner) => Ok(Resp::Flush(inner)),
@@ -118,6 +139,7 @@ pub mod shim {
         }
     }
 
+    /// Custom types for request payloads
     pub mod request {
         use anoma_shared::types::storage::{BlockHash, BlockHeight};
         use tendermint_proto::types::Header;
@@ -144,16 +166,19 @@ pub mod shim {
         pub struct VerifyVoteExtension;
 
         pub struct FinalizeBlock {
-
+            pub txs: Vec<super::TxBytes>,
         }
 
-        impl From<RequestEndBlock> for FinalizeBlock {
-            fn from(req: RequestEndBlock) -> Self {
-
+        impl From<Vec<super::TxBytes>> for FinalizeBlock {
+            fn from(tx_bytes: Vec<super::TxBytes>) -> Self {
+                Self {
+                    txs: tx_bytes
+                }
             }
         }
     }
 
+    /// Custom types for response payloads
     pub mod response {
         use tower_abci::response;
 
@@ -182,8 +207,14 @@ pub mod shim {
         pub struct VerifyVoteExtension;
 
         #[derive(Default)]
-        pub struct FinalizeBlock {
+        pub struct TxResult {
+            pub code: u32,
+            pub info: String,
+        }
 
+        #[derive(Default)]
+        pub struct FinalizeBlock {
+            pub tx_results: Vec<TxResult>,
         }
 
     }

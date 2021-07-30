@@ -75,9 +75,6 @@ impl Service<Request> for Shell {
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
             Request::PrepareProposal(block) => {
-                // TODO: The spec for ABCI++ states that a new unbatched header will be included
-                // in this request. It is at present if it is a field on the block request
-                // header or not
                 match (
                     BlockHash::try_from(&*block.hash),
                     block.header.expect("missing block's header").try_into(),
@@ -90,23 +87,21 @@ impl Service<Request> for Shell {
                     }
                     (err @ Err(_), _) => tracing::error!("{:#?}", err),
                 };
-                // TODO: The block field will contain block data and modified header that need
-                // to be returned
                 Ok(Response::PrepareProposal(Default::default()))
             }
-            Request::VerifyHeader => {
-                Ok(Response::VerifyHeader(self.verify_header(header)))
+            Request::VerifyHeader(_req) => {
+                Ok(Response::VerifyHeader(self.verify_header(_req)))
             }
             Request::ProcessProposal(block) => {
                 Ok(Response::ProcessProposal(self.process_proposal(block)))
             }
-            Request::RevertProposal => {
+            Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
-            Request::ExtendVote => {
+            Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
-            Request::VerifyVoteExtension => {
+            Request::VerifyVoteExtension(_req) => {
                 Ok(Response::VerifyVoteExtension(_req))
             }
             Request::FinalizeBlock(finalize) => {
