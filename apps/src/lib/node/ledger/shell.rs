@@ -18,6 +18,7 @@ use thiserror::Error;
 use tower_abci::{request, response};
 
 use crate::node::ledger::{protocol, storage, tendermint_node};
+use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::{config, genesis, wallet};
 
 #[derive(Error, Debug)]
@@ -261,7 +262,7 @@ impl Shell {
     // Verify the headers of the block
     // TODO: This will include checking announcements of stake, individual and aggregated PVSS
     // instances from the DKG protocol
-    pub fn verify_header(&self, req: request::VerifyHeader) -> response::VerifyHeader {
+    pub fn verify_header(&self, _req: shim::request::VerifyHeader) -> response::VerifyHeader {
 
     }
 

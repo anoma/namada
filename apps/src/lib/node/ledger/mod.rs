@@ -14,10 +14,10 @@ use anoma_shared::types::storage::{BlockHash, BlockHeight};
 use futures::future::{AbortHandle, AbortRegistration, Abortable, FutureExt};
 use tendermint_proto::abci::CheckTxType;
 use tower::{Service, ServiceBuilder};
-use tower_abci::{response, split, BoxError, Request, Response, Server};
+use tower_abci::{response, split, BoxError, Response, Server};
 
 use crate::node::ledger::shell::{MempoolTxType, Shell};
-use crate::node::ledger::shims::abcipp_shim_types::shim;
+use crate::node::ledger::shims::abcipp_shim_types::shim::Request;
 use crate::{config, genesis};
 
 /// A panic-proof handle for aborting a future. Will abort during
@@ -74,7 +74,7 @@ impl Service<Request> for Shell {
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
-            shim::Request::PrepareProposal(block) => {
+            Request::PrepareProposal(block) => {
                 // TODO: The spec for ABCI++ states that a new unbatched header will be included
                 // in this request. It is at present if it is a field on the block request
                 // header or not
@@ -94,20 +94,23 @@ impl Service<Request> for Shell {
                 // to be returned
                 Ok(Response::PrepareProposal(Default::default()))
             }
-            shim::Request::VerifyHeader => {
-                Ok(shim::Response::VerifyHeader(self.verify_header(header)))
+            Request::VerifyHeader => {
+                Ok(Response::VerifyHeader(self.verify_header(header)))
             }
             Request::ProcessProposal(block) => {
                 Ok(Response::ProcessProposal(self.process_proposal(block)))
             }
-            Request::RevertProposal(_req) => {
+            Request::RevertProposal => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
-            Request::ExtendVote(_req) => {
+            Request::ExtendVote => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
-            Request::VerifyVoteExtension(_req) => {
+            Request::VerifyVoteExtension => {
                 Ok(Response::VerifyVoteExtension(_req))
+            }
+            Request::FinalizeBlock(finalize) => {
+
             }
             Request::Commit(_) => Ok(Response::Commit(self.commit())),
             Request::Flush(_) => Ok(Response::Flush(Default::default())),

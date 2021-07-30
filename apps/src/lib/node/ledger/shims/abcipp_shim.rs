@@ -6,22 +6,22 @@ use std::task::{Context, Poll};
 use anoma_shared::types::storage::{BlockHash, BlockHeight};
 use futures::future::FutureExt;
 use tower::{Service, ServiceBuilder};
-use tower_abci::{response, split, BoxError, Request, Response, Server};
+use tower_abci::{response, split, BoxError, Request as Req, Response as Resp, Server};
 
-use super::abcipp_shim_types::shim;
+use super::abcipp_shim_types::shim::{Response, Request};
 
-pub struct AbcippShim<S: Service<Request>> {
+pub struct AbcippShim<S: Service<Req>> {
     service: S,
 }
 
-impl<S> Service<Request> for AbcippShim<S>
-    where S: Service<Request>
+impl<S> Service<Req> for AbcippShim<S>
+    where S: Service<Req>
 {
     type Error = BoxError;
     type Future = Pin<
-        Box<dyn Future<Output = Result<Response, BoxError>> + Send + 'static>,
+        Box<dyn Future<Output = Result<Resp, BoxError>> + Send + 'static>,
     >;
-    type Response = Response;
+    type Response = Resp;
 
     fn poll_ready(
         &mut self,
@@ -30,11 +30,11 @@ impl<S> Service<Request> for AbcippShim<S>
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request) -> Self::Future {
+    fn call(&mut self, req: Requ) -> Self::Future {
         tracing::debug!(?req);
         let rsp = match req {
-            Request::BeginBlock(block) => {
-               self.service(shim::Request::PrepareProposal(block.into()))
+            Req::BeginBlock(block) => {
+               self.service(Request::PrepareProposal(block.into()))
                    .map(|resp| Response::BeginBlock(resp.into()))
             }
             Request::DeliverTx(deliver_tx) => {
