@@ -77,8 +77,8 @@ pub fn tx<DB, H>(
     storage: &Storage<DB, H>,
     write_log: &mut WriteLog,
     gas_meter: &mut BlockGasMeter,
-    tx_code: Vec<u8>,
-    tx_data: Vec<u8>,
+    tx_code: impl AsRef<[u8]>,
+    tx_data: impl AsRef<[u8]>,
 ) -> Result<HashSet<Address>>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -102,7 +102,7 @@ where
         &mut result_buffer,
     );
 
-    let tx_code = prepare_wasm_code(&tx_code)?;
+    let tx_code = prepare_wasm_code(tx_code)?;
 
     let initial_memory =
         memory::prepare_tx_memory(&wasm_store).map_err(Error::MemoryError)?;
