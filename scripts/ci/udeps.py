@@ -16,8 +16,8 @@ HEADERS = {
     'Authorization': 'token {}'.format(GH_TOKEN)
 }
 
-ISSUE_TITLE = 'Cargo Audit'
-ISSUE_LABEL = 'audit'
+ISSUE_TITLE = 'Cargo Udeps'
+ISSUE_LABEL = 'udeps'
 
 
 # 0 - not exist,2 already exist, else issue number
@@ -57,32 +57,39 @@ def create_issue(body: str):
         json.load(response)
 
 
-issue_template = '# Vulnerabilities \n{}'
-table_header = '| Id  | Package  | Title  | Date  |\n|----:|---------:|-------:|------:|'
-table_row = '|[{0}]({advisory_db}{0})|{1}|{2}|{3}|'
+def format_manifest_path(path: str) -> str:
+    base_path_index = path.split('/').index('anoma-prototype')
+    return '/'.join(path.split('/')[base_path_index:])
+
+issue_template = '# Unused dependencies \n{}'
+table_header = '| Crate | Manifest Path | Package | Type |\n|----:|---------:|-------:|-------:|'
+table_row = '|{}|{}|{}|{}|'
 
 table = [table_header]
 
-command = ['cargo', 'audit', '--json']
+command = ['cargo', '+nightly-2021-03-09', 'udeps', '--all-features', '--locked', '--output', 'json']
 p = subprocess.Popen(command, stdout=subprocess.PIPE)
 output = p.stdout.read()
 retcode = p.wait()
 
-vulnerabilities = json.loads(output)['vulnerabilities']
-if int(vulnerabilities['count']) == 0:
-    print("No vulnerabilities found.")
+unused_deps = json.loads(output)
+if unused_deps['success'] == 'true':
+    print("No unused dependencies found.")
     exit(0)
 
-for vulnerability in vulnerabilities['list']:
-    vuln_description = vulnerability['advisory']
-    vuln_id = vuln_description['id']
-    vuln_title = vuln_description['title']
-    vuln_package = vuln_description['package']
-    vuln_date = vuln_description['date']
-    new_table_row = table_row.format(vuln_id, vuln_package, vuln_title, vuln_date, 
-        # link issues by their ID to the advisory DB
-        advisory_db = 'https://rustsec.org/advisories/')
-    table.append(new_table_row)
+for crate in unused_deps['unused_deps'].keys():
+    info = unused_deps['unused_deps'][crate]
+    manifest_path = format_manifest_path(info['manifest_path'])
+    create_name = crate.split(" (")[0]
+    for normal in info['normal']:
+        new_table_row = table_row.format(create_name, manifest_path, normal, 'normal')
+        table.append(new_table_row)
+    for development in info['development']:
+        new_table_row = table_row.format(create_name, manifest_path, development, 'development')
+        table.append(new_table_row)
+    for build in info['build']:
+        new_table_row = table_row.format(create_name, manifest_path, build, 'build')
+        table.append(new_table_row)
 
 table_rendered = '\n'.join(table)
 issue_body = issue_template.format(table_rendered)
