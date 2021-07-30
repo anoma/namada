@@ -469,7 +469,7 @@ mod tests {
                 "min_buy": 20,
                 "max_sell": 200,
                 "token_buy": ETH,
-                "token_sell": BTC,
+                "token_sell": XAN,
                 "min_rate": 0.5
             }
         ]);
@@ -646,8 +646,8 @@ mod tests {
         drop(session_gossip);
         drop(session_ledger);
         drop(session_send_intent_a);
-        // drop(session_send_intent_b);
-        // drop(session_send_intent_c);
+        drop(session_send_intent_b);
+        drop(session_send_intent_c);
 
         Ok(())
     }
