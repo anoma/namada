@@ -520,8 +520,8 @@ mod tests {
         craft_intent_b.output().expect("Should create the intent");
 
         // // cargo run --bin anomac -- craft-intent --key $CHRISTEL --address
-        // // $CHRISTEL --min-amount-buy 20 --max-amount-sell 200 --token-buy $ETH
-        // // --token-sell $XAN --min-rate 0.5 --file-path intent.C
+        // // $CHRISTEL --min-amount-buy 20 --max-amount-sell 200 --token-buy
+        // $ETH // --token-sell $XAN --min-rate 0.5 --file-path intent.C
         let tx_c = vec![
             "craft-intent",
             "--key",
@@ -726,9 +726,6 @@ mod tests {
     #[cfg(test)]
     #[allow(dead_code)]
     mod constants {
-        use std::collections::HashMap;
-
-        use serde_json::json;
 
         // User addresses
         pub const ALBERT: &str = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx";

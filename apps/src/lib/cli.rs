@@ -6,12 +6,7 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
-use std::convert::TryFrom;
-
-use anoma::types::{address::Address, intent::DecimalWrapper, token::Amount};
 use clap::{AppSettings, ArgMatches};
-
-use self::args::TokenExchange;
 
 use super::config;
 mod utils;
@@ -483,7 +478,7 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use anoma::types::address::{Address, EstablishedAddress};
+    use anoma::types::address::Address;
     use anoma::types::intent::DecimalWrapper;
     use anoma::types::token;
     use libp2p::Multiaddr;
@@ -738,7 +733,7 @@ pub mod args {
     }
 
     #[derive(Debug, Serialize, Deserialize)]
-    
+
     pub struct TokenExchange {
         /// Source address that will sign the exchange
         #[serde(deserialize_with = "address_deserialize")]
@@ -757,12 +752,14 @@ pub mod args {
         pub min_buy: token::Amount,
     }
 
-    pub fn address_deserialize<'d, D>(deserializer: D) -> Result<Address, D::Error>
+    pub fn address_deserialize<'d, D>(
+        deserializer: D,
+    ) -> Result<Address, D::Error>
     where
         D: de::Deserializer<'d>,
     {
         let address = String::deserialize(deserializer)?;
-        Address::decode(address).map_err(Error::custom)        
+        Address::decode(address).map_err(Error::custom)
     }
 
     /// Subscribe intent topic arguments
@@ -993,34 +990,3 @@ pub fn update_gossip_config(
     }
     Ok(())
 }
-
-
-#[test]
-fn test_cli() {
-    let test = TokenExchange {
-        addr: Address::decode("a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9").unwrap(),
-        token_sell: Address::decode("a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc").unwrap(),
-        token_buy: Address::decode("a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3").unwrap(),
-        max_sell: Amount::from(100),
-        min_buy: Amount::from(70),  
-        min_rate: DecimalWrapper::try_from(Amount::from(70)).unwrap()
-    };
-
-    println!("{}", serde_json::to_string(&test).unwrap());
-}
-
-
-// struct TokenExchange {
-//     /// Source address that will sign the exchange
-//     pub addr: Address,
-//     /// Token to sell
-//     pub token_sell: Address,
-//     /// Max amount of token to sell
-//     pub max_sell: token::Amount,
-//     /// Rate
-//     pub min_rate: DecimalWrapper,
-//     /// Token to buy
-//     pub token_buy: Address,
-//     /// Min amount of token to buy
-//     pub min_buy: token::Amount,
-// }
