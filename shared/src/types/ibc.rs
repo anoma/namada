@@ -9,10 +9,11 @@ use ibc::ics02_client::client_consensus::AnyConsensusState;
 use ibc::ics02_client::client_state::AnyClientState;
 use ibc::ics02_client::header::AnyHeader;
 use ibc::ics02_client::height::Height;
-use ibc::ics03_connection::connection::Counterparty;
+use ibc::ics03_connection::connection::Counterparty as ConnCounterparty;
 use ibc::ics03_connection::version::Version;
+use ibc::ics04_channel::channel::{Counterparty as ChanCounterparty, Order};
 use ibc::ics23_commitment::commitment::CommitmentProofBytes;
-use ibc::ics24_host::identifier::{ClientId, ConnectionId};
+use ibc::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
 use ibc::proofs::{ConsensusProof, Proofs};
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use ibc_proto::ibc::core::connection::v1::Counterparty as RawCounterparty;
@@ -209,7 +210,7 @@ impl ConnectionOpenInitData {
     /// Returns the data to initalize a connection
     pub fn new(
         client_id: ClientId,
-        counterparty: Counterparty,
+        counterparty: ConnCounterparty,
         version: Version,
         delay_period: Duration,
     ) -> Self {
@@ -238,7 +239,7 @@ impl ConnectionOpenInitData {
     }
 
     /// Returns the counterparty
-    pub fn counterparty(&self) -> Option<Counterparty> {
+    pub fn counterparty(&self) -> Option<ConnCounterparty> {
         // TODO: Need Profobuf implementation for Counterparty in ibc-rs
         // Counterparty::decode_vec(self.counterparty).ok()
         match RawCounterparty::decode(&self.counterparty[..]) {
@@ -287,7 +288,7 @@ impl ConnectionOpenTryData {
     pub fn new(
         client_id: ClientId,
         client_state: AnyClientState,
-        counterparty: Counterparty,
+        counterparty: ConnCounterparty,
         counterparty_versions: Vec<Version>,
         proof_height: Height,
         proof_connection: CommitmentProofBytes,
@@ -339,11 +340,11 @@ impl ConnectionOpenTryData {
     }
 
     /// Returns the counterparty
-    pub fn counterparty(&self) -> Result<Counterparty> {
+    pub fn counterparty(&self) -> Result<ConnCounterparty> {
         // TODO: Need Profobuf implementation for Counterparty in ibc-rs
         // Counterparty::decode_vec(self.counterparty).ok()
         match RawCounterparty::decode(&self.counterparty[..]) {
-            Ok(c) => Counterparty::try_from(c)
+            Ok(c) => ConnCounterparty::try_from(c)
                 .map_err(|e| Error::DecodingError(e.to_string())),
             Err(e) => Err(Error::DecodingError(e.to_string())),
         }
@@ -561,6 +562,552 @@ impl ConnectionOpenConfirmData {
     /// Returns the connection ID
     pub fn connnection_id(&self) -> Result<ConnectionId> {
         ConnectionId::from_str(&self.conn_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the height of the proofs
+    pub fn proof_height(&self) -> Height {
+        Height::new(self.proof_height.0, self.proof_height.1)
+    }
+
+    /// Returns the proof for connection
+    pub fn proof_connection(&self) -> CommitmentProofBytes {
+        self.proof_connection.clone().into()
+    }
+
+    /// Returns the proof for client state
+    pub fn proof_client(&self) -> CommitmentProofBytes {
+        self.proof_client.clone().into()
+    }
+
+    /// Returns the proof for consensus state
+    pub fn proof_consensus(&self) -> CommitmentProofBytes {
+        self.proof_consensus.clone().into()
+    }
+
+    /// Returns the proofs
+    pub fn proofs(&self) -> Result<Proofs> {
+        let height = self.proof_height();
+        let consensus_proof =
+            ConsensusProof::new(self.proof_consensus(), height)
+                .map_err(Error::DecodingError)?;
+        Proofs::new(
+            self.proof_connection(),
+            Some(self.proof_client()),
+            Some(consensus_proof),
+            None,
+            height,
+        )
+        .map_err(Error::DecodingError)
+    }
+}
+
+/// Data to initialize a channel
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ChannelOpenInitData {
+    /// The port ID
+    port_id: String,
+    /// The order feature of the channel
+    order: String,
+    /// The counterparty
+    counterparty: Vec<u8>,
+    /// The connection hops
+    connection_hops: Vec<String>,
+    /// The version
+    version: String,
+}
+
+impl ChannelOpenInitData {
+    /// Returns the data to initalize a channel
+    pub fn new(
+        port_id: PortId,
+        order: Order,
+        counterparty: ChanCounterparty,
+        connection_hops: Vec<ConnectionId>,
+        version: String,
+    ) -> Self {
+        let port_id = port_id.as_str().to_owned();
+        let order = order.as_str().to_owned();
+        let counterparty = counterparty
+            .encode_vec()
+            .expect("Encoding a counterparty shouldn't fail");
+        let connection_hops = connection_hops
+            .iter()
+            .map(|c| c.as_str().to_owned())
+            .collect();
+        Self {
+            port_id,
+            order,
+            counterparty,
+            connection_hops,
+            version,
+        }
+    }
+
+    /// Returns the port ID
+    pub fn port_id(&self) -> Result<PortId> {
+        PortId::from_str(&self.port_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the order
+    pub fn order(&self) -> Result<Order> {
+        Order::from_str(&self.order)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the counterparty
+    pub fn counterparty(&self) -> Result<ChanCounterparty> {
+        ChanCounterparty::decode_vec(&self.counterparty)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the connection hops
+    pub fn connection_hops(&self) -> Result<Vec<ConnectionId>> {
+        let mut hops = vec![];
+        for conn_str in &self.connection_hops {
+            let id = ConnectionId::from_str(conn_str)
+                .map_err(|e| Error::DecodingError(e.to_string()))?;
+            hops.push(id);
+        }
+        Ok(hops)
+    }
+
+    /// Returns the version
+    pub fn version(&self) -> String {
+        self.version.clone()
+    }
+}
+
+/// Data to try to open a channel
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ChannelOpenTryData {
+    /// The port ID
+    port_id: String,
+    /// The order feature of the channel
+    order: String,
+    /// The counterparty
+    counterparty: Vec<u8>,
+    /// The connection hops
+    connection_hops: Vec<String>,
+    /// The version
+    version: String,
+    /// The counterparty version
+    counterparty_version: String,
+    /// The height of the proof
+    proof_height: (u64, u64),
+    /// The proof of the connection
+    proof_connection: Vec<u8>,
+    /// The proof of the client state
+    proof_client: Vec<u8>,
+    /// The proof of the consensus state
+    proof_consensus: Vec<u8>,
+}
+
+impl ChannelOpenTryData {
+    /// Returns the data to try to open a channel
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        port_id: PortId,
+        order: Order,
+        counterparty: ChanCounterparty,
+        connection_hops: Vec<ConnectionId>,
+        version: String,
+        counterparty_version: String,
+        proof_height: Height,
+        proof_connection: CommitmentProofBytes,
+        proof_client: CommitmentProofBytes,
+        proof_consensus: CommitmentProofBytes,
+    ) -> Self {
+        let port_id = port_id.as_str().to_owned();
+        let order = order.as_str().to_owned();
+        let counterparty = counterparty
+            .encode_vec()
+            .expect("Encoding a counterparty shouldn't fail");
+        let connection_hops = connection_hops
+            .iter()
+            .map(|c| c.as_str().to_owned())
+            .collect();
+        Self {
+            port_id,
+            order,
+            counterparty,
+            connection_hops,
+            version,
+            counterparty_version,
+            proof_height: (
+                proof_height.revision_number,
+                proof_height.revision_height,
+            ),
+            proof_connection: proof_connection.into(),
+            proof_client: proof_client.into(),
+            proof_consensus: proof_consensus.into(),
+        }
+    }
+
+    /// Returns the port ID
+    pub fn port_id(&self) -> Result<PortId> {
+        PortId::from_str(&self.port_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the order
+    pub fn order(&self) -> Result<Order> {
+        Order::from_str(&self.order)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the counterparty
+    pub fn counterparty(&self) -> Result<ChanCounterparty> {
+        ChanCounterparty::decode_vec(&self.counterparty)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the connection hops
+    pub fn connection_hops(&self) -> Result<Vec<ConnectionId>> {
+        let mut hops = vec![];
+        for conn_str in &self.connection_hops {
+            let id = ConnectionId::from_str(conn_str)
+                .map_err(|e| Error::DecodingError(e.to_string()))?;
+            hops.push(id);
+        }
+        Ok(hops)
+    }
+
+    /// Returns the version
+    pub fn version(&self) -> String {
+        self.version.clone()
+    }
+
+    /// Returns the counterparty version
+    pub fn counterparty_version(&self) -> String {
+        self.counterparty_version.clone()
+    }
+
+    /// Returns the height of the proofs
+    pub fn proof_height(&self) -> Height {
+        Height::new(self.proof_height.0, self.proof_height.1)
+    }
+
+    /// Returns the proof for connection
+    pub fn proof_connection(&self) -> CommitmentProofBytes {
+        self.proof_connection.clone().into()
+    }
+
+    /// Returns the proof for client state
+    pub fn proof_client(&self) -> CommitmentProofBytes {
+        self.proof_client.clone().into()
+    }
+
+    /// Returns the proof for consensus state
+    pub fn proof_consensus(&self) -> CommitmentProofBytes {
+        self.proof_consensus.clone().into()
+    }
+
+    /// Returns the proofs
+    pub fn proofs(&self) -> Result<Proofs> {
+        let height = self.proof_height();
+        let consensus_proof =
+            ConsensusProof::new(self.proof_consensus(), height)
+                .map_err(Error::DecodingError)?;
+        Proofs::new(
+            self.proof_connection(),
+            Some(self.proof_client()),
+            Some(consensus_proof),
+            None,
+            height,
+        )
+        .map_err(Error::DecodingError)
+    }
+}
+
+/// Data to acknowledge a channel
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ChannelOpenAckData {
+    /// The port ID
+    port_id: String,
+    /// The channel ID
+    channel_id: String,
+    /// The counterpart channel ID
+    counterpart_channel_id: String,
+    /// The counterparty version
+    counterparty_version: String,
+    /// The height of the proof
+    proof_height: (u64, u64),
+    /// The proof of the connection
+    proof_connection: Vec<u8>,
+    /// The proof of the client state
+    proof_client: Vec<u8>,
+    /// The proof of the consensus state
+    proof_consensus: Vec<u8>,
+}
+
+impl ChannelOpenAckData {
+    /// Returns the data to acknowledge a channel
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        port_id: PortId,
+        channel_id: ChannelId,
+        counterpart_channel_id: ChannelId,
+        counterparty_version: String,
+        proof_height: Height,
+        proof_connection: CommitmentProofBytes,
+        proof_client: CommitmentProofBytes,
+        proof_consensus: CommitmentProofBytes,
+    ) -> Self {
+        let port_id = port_id.as_str().to_owned();
+        let channel_id = channel_id.as_str().to_owned();
+        let counterpart_channel_id = counterpart_channel_id.as_str().to_owned();
+        Self {
+            port_id,
+            channel_id,
+            counterpart_channel_id,
+            counterparty_version,
+            proof_height: (
+                proof_height.revision_number,
+                proof_height.revision_height,
+            ),
+            proof_connection: proof_connection.into(),
+            proof_client: proof_client.into(),
+            proof_consensus: proof_consensus.into(),
+        }
+    }
+
+    /// Returns the port ID
+    pub fn port_id(&self) -> Result<PortId> {
+        PortId::from_str(&self.port_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the port ID
+    pub fn channel_id(&self) -> Result<ChannelId> {
+        ChannelId::from_str(&self.channel_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the port ID
+    pub fn counterpart_channel_id(&self) -> Result<ChannelId> {
+        ChannelId::from_str(&self.counterpart_channel_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the counterparty version
+    pub fn counterparty_version(&self) -> String {
+        self.counterparty_version.clone()
+    }
+
+    /// Returns the height of the proofs
+    pub fn proof_height(&self) -> Height {
+        Height::new(self.proof_height.0, self.proof_height.1)
+    }
+
+    /// Returns the proof for connection
+    pub fn proof_connection(&self) -> CommitmentProofBytes {
+        self.proof_connection.clone().into()
+    }
+
+    /// Returns the proof for client state
+    pub fn proof_client(&self) -> CommitmentProofBytes {
+        self.proof_client.clone().into()
+    }
+
+    /// Returns the proof for consensus state
+    pub fn proof_consensus(&self) -> CommitmentProofBytes {
+        self.proof_consensus.clone().into()
+    }
+
+    /// Returns the proofs
+    pub fn proofs(&self) -> Result<Proofs> {
+        let height = self.proof_height();
+        let consensus_proof =
+            ConsensusProof::new(self.proof_consensus(), height)
+                .map_err(Error::DecodingError)?;
+        Proofs::new(
+            self.proof_connection(),
+            Some(self.proof_client()),
+            Some(consensus_proof),
+            None,
+            height,
+        )
+        .map_err(Error::DecodingError)
+    }
+}
+
+/// Data to confirm a channel
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ChannelOpenConfirmData {
+    /// The port ID
+    port_id: String,
+    /// The channel ID
+    channel_id: String,
+    /// The height of the proof
+    proof_height: (u64, u64),
+    /// The proof of the connection
+    proof_connection: Vec<u8>,
+    /// The proof of the client state
+    proof_client: Vec<u8>,
+    /// The proof of the consensus state
+    proof_consensus: Vec<u8>,
+}
+
+impl ChannelOpenConfirmData {
+    /// Returns the data to confirm a channel
+    pub fn new(
+        port_id: PortId,
+        channel_id: ChannelId,
+        proof_height: Height,
+        proof_connection: CommitmentProofBytes,
+        proof_client: CommitmentProofBytes,
+        proof_consensus: CommitmentProofBytes,
+    ) -> Self {
+        let port_id = port_id.as_str().to_owned();
+        let channel_id = channel_id.as_str().to_owned();
+        Self {
+            port_id,
+            channel_id,
+            proof_height: (
+                proof_height.revision_number,
+                proof_height.revision_height,
+            ),
+            proof_connection: proof_connection.into(),
+            proof_client: proof_client.into(),
+            proof_consensus: proof_consensus.into(),
+        }
+    }
+
+    /// Returns the port ID
+    pub fn port_id(&self) -> Result<PortId> {
+        PortId::from_str(&self.port_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the port ID
+    pub fn channel_id(&self) -> Result<ChannelId> {
+        ChannelId::from_str(&self.channel_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the height of the proofs
+    pub fn proof_height(&self) -> Height {
+        Height::new(self.proof_height.0, self.proof_height.1)
+    }
+
+    /// Returns the proof for connection
+    pub fn proof_connection(&self) -> CommitmentProofBytes {
+        self.proof_connection.clone().into()
+    }
+
+    /// Returns the proof for client state
+    pub fn proof_client(&self) -> CommitmentProofBytes {
+        self.proof_client.clone().into()
+    }
+
+    /// Returns the proof for consensus state
+    pub fn proof_consensus(&self) -> CommitmentProofBytes {
+        self.proof_consensus.clone().into()
+    }
+
+    /// Returns the proofs
+    pub fn proofs(&self) -> Result<Proofs> {
+        let height = self.proof_height();
+        let consensus_proof =
+            ConsensusProof::new(self.proof_consensus(), height)
+                .map_err(Error::DecodingError)?;
+        Proofs::new(
+            self.proof_connection(),
+            Some(self.proof_client()),
+            Some(consensus_proof),
+            None,
+            height,
+        )
+        .map_err(Error::DecodingError)
+    }
+}
+
+/// Data to close a channel
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ChannelCloseInitData {
+    /// The port ID
+    port_id: String,
+    /// The channel ID
+    channel_id: String,
+}
+
+impl ChannelCloseInitData {
+    /// Returns the data to close a channel
+    pub fn new(port_id: PortId, channel_id: ChannelId) -> Self {
+        let port_id = port_id.as_str().to_owned();
+        let channel_id = channel_id.as_str().to_owned();
+        Self {
+            port_id,
+            channel_id,
+        }
+    }
+
+    /// Returns the port ID
+    pub fn port_id(&self) -> Result<PortId> {
+        PortId::from_str(&self.port_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the port ID
+    pub fn channel_id(&self) -> Result<ChannelId> {
+        ChannelId::from_str(&self.channel_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+}
+
+/// Data to confirm closing a channel
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ChannelCloseConfirmData {
+    /// The port ID
+    port_id: String,
+    /// The channel ID
+    channel_id: String,
+    /// The height of the proof
+    proof_height: (u64, u64),
+    /// The proof of the connection
+    proof_connection: Vec<u8>,
+    /// The proof of the client state
+    proof_client: Vec<u8>,
+    /// The proof of the consensus state
+    proof_consensus: Vec<u8>,
+}
+
+impl ChannelCloseConfirmData {
+    /// Returns the data to confirm closing a channel
+    pub fn new(
+        port_id: PortId,
+        channel_id: ChannelId,
+        proof_height: Height,
+        proof_connection: CommitmentProofBytes,
+        proof_client: CommitmentProofBytes,
+        proof_consensus: CommitmentProofBytes,
+    ) -> Self {
+        let port_id = port_id.as_str().to_owned();
+        let channel_id = channel_id.as_str().to_owned();
+        Self {
+            port_id,
+            channel_id,
+            proof_height: (
+                proof_height.revision_number,
+                proof_height.revision_height,
+            ),
+            proof_connection: proof_connection.into(),
+            proof_client: proof_client.into(),
+            proof_consensus: proof_consensus.into(),
+        }
+    }
+
+    /// Returns the port ID
+    pub fn port_id(&self) -> Result<PortId> {
+        PortId::from_str(&self.port_id)
+            .map_err(|e| Error::DecodingError(e.to_string()))
+    }
+
+    /// Returns the port ID
+    pub fn channel_id(&self) -> Result<ChannelId> {
+        ChannelId::from_str(&self.channel_id)
             .map_err(|e| Error::DecodingError(e.to_string()))
     }
 

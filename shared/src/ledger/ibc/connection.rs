@@ -107,8 +107,8 @@ where
         conn_id: &ConnectionId,
     ) -> Result<StateChange> {
         let path = Path::Connections(conn_id.clone()).to_string();
-        let key = Key::ibc_key(path)
-            .expect("Creating a key for a client type failed");
+        let key =
+            Key::ibc_key(path).expect("Creating a key for a connection failed");
         self.get_state_change(&key)
             .map_err(|e| Error::InvalidStateChange(e.to_string()))
     }
