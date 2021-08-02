@@ -11,7 +11,6 @@ use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
 use anoma_shared::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{address, key, token};
-
 use borsh::BorshSerialize;
 use itertools::Itertools;
 use tendermint::block::Header;
