@@ -43,7 +43,7 @@ For the transaction to be valid, all the triggered validity predicates must acce
 First, the addresses whose validity predicates should be triggered by the transaction are determined. In this process, the addresses get associated with a set of modified storage keys that are relevant to the address:
 1. The addresses set by the transaction (see `insert_verifier` in [transaction host environment functions](#transaction-host-environment-functions)) are associated with *all* the modified storage keys.
 
-   TODO - <https://github.com/anomanetwork/anoma/issues/292>
+   TODO - <https://github.com/anoma/anoma/issues/292>
 1. The storage keys that were modified by the transaction are associated with the addresses included in the storage keys. Note that a storage key may contain more than one address, in which case all its addresses are associated with this key. 
 1. All these addresses are additionally associated with the storage key to the validity predicates of any newly initialized accounts' by the transaction (see `init_account` in [transaction host environment functions](#transaction-host-environment-functions)).
 

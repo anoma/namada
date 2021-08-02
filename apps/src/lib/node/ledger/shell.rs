@@ -1,6 +1,7 @@
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 
+
 use anoma_shared::ledger::gas::BlockGasMeter;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::{ibc, parameters, pos};
@@ -11,6 +12,7 @@ use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
 use anoma_shared::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma_shared::types::token::Amount;
 use anoma_shared::types::{address, key, token};
+
 use borsh::BorshSerialize;
 use itertools::Itertools;
 use tendermint::block::Header;
@@ -352,7 +354,6 @@ impl Shell {
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
         // store the block's data in DB
-        // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {
             tracing::error!(
                 "Encountered a storage error while committing a block {:?}",
@@ -389,10 +390,10 @@ impl Shell {
     }
 
     /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> response::Query {
+    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
         let mut response = response::Query::default();
         let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = self.write_log.clone();
+        let mut write_log = WriteLog::default();
         match protocol::apply_tx(
             tx_bytes,
             &mut gas_meter,

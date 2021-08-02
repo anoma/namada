@@ -4,15 +4,17 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "8887947e432665d8f5f700a39d0fce2bba3fe85e73b095427c72bf069f897a77  Makefile"
+- commands: [echo "bbfbe620050938a09f918633a6aad7927f11b0018ac7001a97e0a7fae12ebb9c  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      | sha256sum -c -, echo "84c2e8a9203a7877e5f247b309163fe803e0ea6fe4a877fcd74edbbc7e27c428  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh false]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -106,15 +108,17 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "8887947e432665d8f5f700a39d0fce2bba3fe85e73b095427c72bf069f897a77  Makefile"
+- commands: [echo "bbfbe620050938a09f918633a6aad7927f11b0018ac7001a97e0a7fae12ebb9c  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      | sha256sum -c -, echo "84c2e8a9203a7877e5f247b309163fe803e0ea6fe4a877fcd74edbbc7e27c428  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh false]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -189,15 +193,17 @@ kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [echo "8887947e432665d8f5f700a39d0fce2bba3fe85e73b095427c72bf069f897a77  Makefile"
+- commands: [echo "bbfbe620050938a09f918633a6aad7927f11b0018ac7001a97e0a7fae12ebb9c  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      | sha256sum -c -, echo "84c2e8a9203a7877e5f247b309163fe803e0ea6fe4a877fcd74edbbc7e27c428  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -265,18 +271,20 @@ workspace: {path: /usr/local/rust/project}
 ---
 environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
-name: anoma-ci-audit-pr
+name: anoma-ci-cron
 node: {project: anoma}
 steps:
-- commands: [echo "8887947e432665d8f5f700a39d0fce2bba3fe85e73b095427c72bf069f897a77  Makefile"
+- commands: [echo "bbfbe620050938a09f918633a6aad7927f11b0018ac7001a97e0a7fae12ebb9c  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      | sha256sum -c -, echo "84c2e8a9203a7877e5f247b309163fe803e0ea6fe4a877fcd74edbbc7e27c428  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -296,12 +304,21 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make audit]
+- commands: [python3 scripts/ci/audit.py]
   depends_on: [restore-cache]
+  environment:
+    GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: audit
   pull: if-not-exists
-- depends_on: [audit]
+- commands: [python3 scripts/ci/udeps.py]
+  depends_on: [restore-cache]
+  environment:
+    GITHUB_TOKEN: {from_secret: github_token}
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: udeps
+  pull: if-not-exists
+- depends_on: [audit, udeps]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -321,8 +338,8 @@ steps:
   when:
     status: [success, failure]
 trigger:
-  branch: [develop, master]
-  event: [pull_request, push]
+  cron: [audit]
+  event: [cron]
 type: docker
 workspace: {path: /drone/workspace}
 ---
@@ -331,15 +348,17 @@ kind: pipeline
 name: anoma-ci-miri-pr
 node: {project: anoma}
 steps:
-- commands: [echo "8887947e432665d8f5f700a39d0fce2bba3fe85e73b095427c72bf069f897a77  Makefile"
+- commands: [echo "bbfbe620050938a09f918633a6aad7927f11b0018ac7001a97e0a7fae12ebb9c  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      | sha256sum -c -, echo "84c2e8a9203a7877e5f247b309163fe803e0ea6fe4a877fcd74edbbc7e27c428  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -389,8 +408,8 @@ steps:
   when:
     status: [success, failure]
 trigger:
-  branch: [develop, master]
-  event: [pull_request, push]
+  branch: [master]
+  event: [push]
 type: docker
 workspace: {path: /drone/workspace}
 ---
@@ -400,15 +419,17 @@ kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [echo "8887947e432665d8f5f700a39d0fce2bba3fe85e73b095427c72bf069f897a77  Makefile"
+- commands: [echo "bbfbe620050938a09f918633a6aad7927f11b0018ac7001a97e0a7fae12ebb9c  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      | sha256sum -c -, echo "84c2e8a9203a7877e5f247b309163fe803e0ea6fe4a877fcd74edbbc7e27c428  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -428,8 +449,8 @@ steps:
     mount: [target/doc]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make build-doc, mkdir tech-specs/book/rustdoc,
-    mv -v target/doc/* tech-specs/book/rustdoc/]
+- commands: [sccache --start-server, make build-doc, mkdir docs/book/rustdoc, mv -v
+      target/doc/* docs/book/rustdoc/]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -444,7 +465,7 @@ steps:
   name: publish-gh-pages
   pull: if-not-exists
   settings:
-    pages_directory: ./tech-specs/book
+    pages_directory: ./docs/book
     password: {from_secret: github_token}
     username: DroneCI
 - depends_on: [publish-gh-pages]
@@ -477,15 +498,17 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [echo "8887947e432665d8f5f700a39d0fce2bba3fe85e73b095427c72bf069f897a77  Makefile"
+- commands: [echo "bbfbe620050938a09f918633a6aad7927f11b0018ac7001a97e0a7fae12ebb9c  Makefile"
       | sha256sum -c -, echo "75f379fff890772234de206302a9f84efe65251cf607f51f082dac81722ae295  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_template/Makefile"
       | sha256sum -c -, echo "c9eb8a4268fba73481b1a7d4bae0305e5493e37f622808f271bbced875c27eae  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  tech-specs/Makefile"
+      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      | sha256sum -c -, echo "84c2e8a9203a7877e5f247b309163fe803e0ea6fe4a877fcd74edbbc7e27c428  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: alpine/git:v2.30.1
   name: check-scripts-integrity
@@ -589,6 +612,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: a9e7fb97aa802230db6cd3aa399caef806fc7272256dc5dbeb62683d2a66ca3e
+hmac: d29feca6cdcc19643e726c15417d61550fac55217320af1b3dd6fc1e835de9e0
 
 ...

@@ -2,7 +2,7 @@ mod cli;
 
 use std::env;
 
-use anoma::logging;
+use anoma_apps::logging;
 use color_eyre::eyre::Result;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;

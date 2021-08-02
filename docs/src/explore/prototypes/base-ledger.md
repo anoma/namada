@@ -2,7 +2,7 @@
 
 ## Version 2
 
-tracking issue <https://github.com/anomanetwork/anoma/issues/62>
+tracking issue <https://github.com/anoma/anoma/issues/62>
 
 ### Goals
 
@@ -53,7 +53,7 @@ This module handles initializing and running `tendermint` and forwards messages 
 
 ##### Storage
 
-Key-value storage. More details are specified on [Database page](tech-specs/src/explore/design/db.md).
+Key-value storage. More details are specified on [Database page](./explore/design/db.md).
 
 ##### CLI
 

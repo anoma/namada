@@ -12,16 +12,10 @@ wasms := wasm/wasm_source
 # Paths for all the wasm templates
 wasm_templates := wasm/tx_template wasm/vp_template wasm/mm_template wasm/mm_filter_template
 
-# Transitive dependency of wasmer. It's safe to ignore as we don't use cranelift compiler. It should disseaper once the wasmer library updates its dependencies
-audit-ignores := RUSTSEC-2021-0067
-# Transitive dependency warning from tendermint-rpc
-audit-ignores += RUSTSEC-2021-0064
 # Transitive dependency warning from tendermint-rpc
 audit-ignores += RUSTSEC-2020-0016
-# tokio issue affecting many deps
-audit-ignores += RUSTSEC-2021-0072
 # Transitive dependency warning from tendermint-rs and ibc-rs
-# TODO https://github.com/anomanetwork/anoma/issues/340
+# TODO https://github.com/anoma/anoma/issues/340
 audit-ignores += RUSTSEC-2021-0073
 # TODO upgrade libp2p
 audit-ignores += RUSTSEC-2021-0076
@@ -107,7 +101,7 @@ clean:
 
 build-doc:
 	$(cargo) doc --no-deps
-	make -C tech-specs build
+	make -C docs build
 
 doc:
 	# build and opens the docs in browser

@@ -3,7 +3,7 @@ authors = ["Heliax AG <hello@heliax.dev>"]
 description = "Anoma apps"
 edition = "2018"
 license = "GPL-3.0"
-name = "anoma"
+name = "anoma_apps"
 readme = "../README.md"
 resolver = "2"
 version = "0.1.0"
@@ -11,21 +11,24 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "anoma"
+name = "anoma_apps"
 path = "src/lib/mod.rs"
 
 # Anoma CLI that aggregates some common commands for the node and the client
 [[bin]]
+doc = false
 name = "anoma"
 path = "src/bin/anoma/main.rs"
 
 # Anoma node
 [[bin]]
+doc = false
 name = "anoman"
 path = "src/bin/anoma-node/main.rs"
 
 # Anoma client
 [[bin]]
+doc = false
 name = "anomac"
 path = "src/bin/anoma-client/main.rs"
 
@@ -38,7 +41,7 @@ std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 testing = []
 
 [dependencies]
-anoma_shared = {path = "../shared", features = ["ibc-vp", "wasm-runtime"]}
+anoma = {path = "../shared", features = ["ibc-vp", "wasm-runtime"]}
 async-std = {version = "1.9.0", features = ["unstable"]}
 base64 = "0.13.0"
 bech32 = "0.8.0"
@@ -78,7 +81,7 @@ tendermint-abci = {git = "https://github.com/heliaxdev/tendermint-rs", branch = 
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost"}
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost", features = ["http-client"]}
 thiserror = "1.0.24"
-tokio = {version = "1.2.0", features = ["full"]}
+tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.5.0"
 tower = "0.4"
@@ -88,7 +91,7 @@ tracing-log = "0.1.2"
 tracing-subscriber = "0.2.18"
 
 [dev-dependencies]
-anoma_shared = {path = "../shared", features = ["testing", "wasm-runtime"]}
+anoma = {path = "../shared", features = ["testing", "wasm-runtime"]}
 cargo-watch = "7.5.0"
 proptest = "1.0.0"
 tempfile = "3.2.0"

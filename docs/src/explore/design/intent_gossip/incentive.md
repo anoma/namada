@@ -1,6 +1,6 @@
 # Incentive
 
-[Tracking Issue](https://github.com/anomanetwork/anoma/issues/37)
+[Tracking Issue](https://github.com/anoma/anoma/issues/37)
 
 ---
 

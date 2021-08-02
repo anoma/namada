@@ -1,6 +1,6 @@
 # Intents
 
-[Tracking Issue](https://github.com/anomanetwork/anoma/issues/36)
+[Tracking Issue](https://github.com/anoma/anoma/issues/36)
 
 ---
 

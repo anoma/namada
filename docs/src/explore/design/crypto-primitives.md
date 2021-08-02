@@ -1,6 +1,6 @@
 # Crypto primitives
 
-[Tracking Issue](https://github.com/anomanetwork/anoma/issues/39)
+[Tracking Issue](https://github.com/anoma/anoma/issues/39)
 
 ---
 

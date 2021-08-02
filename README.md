@@ -1,7 +1,7 @@
 # Anoma
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-[![Drone CI build status](https://ci.heliax.dev/api/badges/anomanetwork/anoma/status.svg)](https://ci.heliax.dev/anomanetwork/anoma)
+[![Drone CI build status](https://ci.heliax.dev/api/badges/anoma/anoma/status.svg)](https://ci.heliax.dev/anoma/anoma)
 
 ## Overview
 
@@ -11,8 +11,8 @@ This is an implementation of the Anoma ledger in Rust.
 
 ## Docs
 
-- [docs](https://anomanetwork.github.io/anoma/): built from [tech-specs mdBook](./tech-specs/)
-- [rustdoc](https://anomanetwork.github.io/anoma/rustdoc/anoma/): built from the source
+- [docs](https://anoma.github.io/anoma/): built from [docs mdBook](./docs/)
+- [rustdoc](https://anoma.github.io/anoma/rustdoc/anoma/): built from the source
 
 ## Warning
 
