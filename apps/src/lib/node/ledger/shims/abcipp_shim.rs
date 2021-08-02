@@ -4,7 +4,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use anoma_shared::types::storage::BlockHeight;
+use anoma::types::storage::BlockHeight;
 use futures::future::FutureExt;
 use tendermint_proto::abci::{RequestQuery, ResponseDeliverTx};
 use tower::Service;
