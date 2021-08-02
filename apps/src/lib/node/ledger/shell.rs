@@ -1,7 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 
-
 use anoma_shared::ledger::gas::BlockGasMeter;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::{ibc, parameters, pos};
