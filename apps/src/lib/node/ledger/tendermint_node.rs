@@ -44,10 +44,13 @@ pub fn run(
     let home_dir_string = home_dir.to_string_lossy().to_string();
 
     // init and run a tendermint node child process
-    Command::new("tendermint")
+    let output = Command::new("tendermint")
         .args(&["init", "--home", &home_dir_string])
         .output()
         .map_err(Error::TendermintInit)?;
+    if !output.status.success() {
+        panic!("Tendermint failed to initialize with {:#?}", output);
+    }
 
     if cfg!(feature = "dev") {
         // override the validator key file
@@ -93,7 +96,7 @@ fn kill_on_term_signal(kill_switch: Sender<bool>) {
                     "Received termination signal, shutting down Tendermint \
                      node"
                 );
-                kill_switch.send(true).unwrap();
+                let _ = kill_switch.send(true);
                 break;
             }
         }
@@ -108,8 +111,10 @@ fn monitor_process(
 ) {
     std::thread::spawn(move || {
         process.wait().expect("Tendermint was not running");
+        // TODO: This log line should not appear on normal shutdown, i.e.
+        // SIGKILL. Should try using an atomic bool for checking
         tracing::info!("Tendermint node shut down unexpectedly.");
-        kill_switch.send(true).unwrap();
+        let _ = kill_switch.send(true);
     });
 }
 

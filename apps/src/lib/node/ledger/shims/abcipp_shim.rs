@@ -1,34 +1,43 @@
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::future::Future;
+use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use anoma_shared::types::storage::{BlockHash, BlockHeight};
+use anoma_shared::types::storage::BlockHeight;
 use futures::future::FutureExt;
-use tower::{Service, ServiceBuilder};
-use tower_abci::{response, split, BoxError, Request as Req, Response as Resp, Server};
+use tendermint_proto::abci::{RequestQuery, ResponseDeliverTx};
+use tower::Service;
+use tower_abci::{BoxError, Request as Req, Response as Resp};
 
-use super::abcipp_shim_types::shim::{Error, Response, Request, TxBytes};
+use super::super::Shell;
+use super::abcipp_shim_types::shim::{Error, Request, Response, TxBytes};
 
 /// The shim wraps the shell, which implements ABCI++
 /// The shim makes a crude translation between the ABCI
 /// interface currently used by tendermint and the shell's
 /// interface
-pub struct AbcippShim<S: Service<Request>> {
-    service: S,
+pub struct AbcippShim {
+    service: Shell,
     block_txs: Vec<TxBytes>,
+}
+
+impl AbcippShim {
+    pub fn new(db_path: impl AsRef<Path>, chain_id: String) -> Self {
+        Self {
+            service: Shell::new(db_path, chain_id),
+            block_txs: vec![],
+        }
+    }
 }
 
 /// This is the actual tower service that we run for now.
 /// It provides the translation between tendermints interface
 /// and the interface of the shell service.
-impl<S> Service<Req> for AbcippShim<S>
-    where S: Service<Request>
-{
+impl Service<Req> for AbcippShim {
     type Error = BoxError;
-    type Future = Pin<
-        Box<dyn Future<Output = Result<Resp, BoxError>> + Send + 'static>,
-    >;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Resp, BoxError>> + Send + 'static>>;
     type Response = Resp;
 
     fn poll_ready(
@@ -40,40 +49,61 @@ impl<S> Service<Req> for AbcippShim<S>
 
     fn call(&mut self, req: Req) -> Self::Future {
         tracing::debug!(?req);
-        let rsp: Result<Resp, Error> = match req {
+        let rsp = match req {
             Req::BeginBlock(block) => {
-                // we simply forward BeginBlock request to the PrepareProposal request
+                // we simply forward BeginBlock request to the PrepareProposal
+                // request
                 self.service
                     .call(Request::PrepareProposal(block.into()))
-                    .await
-                    .map(Resp::BeginBlock)
                     .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::PrepareProposal(resp) => {
+                            Ok(Resp::BeginBlock(resp.into()))
+                        }
+                        _ => Err(Error::ConvertResp(res)),
+                    })
             }
             Req::DeliverTx(deliver_tx) => {
                 // We store all the transactions to be applied in
                 // bulk at a later step
-                self.block_txs.push(deliver_tx.tx);
-                Ok(Resp::DeliverTx(Default::default()))
+                self.block_txs.push(deliver_tx.tx.clone());
+                // here we mimic the "process transaction phase"
+                let req = RequestQuery {
+                    data: deliver_tx.tx,
+                    path: "dry_run_tx".into(),
+                    height: match &self.service.storage.header {
+                        Some(header) => header.height.into(),
+                        _ => 0,
+                    },
+                    prove: false,
+                };
+                Ok(Resp::DeliverTx(ResponseDeliverTx {
+                    info: self.service.query(req).info,
+                    ..Default::default()
+                }))
             }
             Req::EndBlock(end) => {
-                self.service.call(Request::FinalizeBlock(self.block_txs.into())).await;
-                self.block_txs = vec!();
                 if BlockHeight::try_from(end.height).is_err() {
                     // TODO: Should we panic?
                     tracing::error!("Unexpected block height {}", end.height);
                 };
-                Ok(Resp::EndBlock(Default::default()))
-            },
-            _ => {
-                request = Request::try_from(req.clone())?;
-                let response = self.service.call(request).await;
-                match response {
-                    resp @ Ok(_) => Resp::try_from(resp),
-                    Err(err) => Err(Error::Shell(err))
-                }
+                let mut txs = vec![];
+                std::mem::swap(&mut txs, &mut self.block_txs);
+                self.service
+                    .call(Request::FinalizeBlock(txs.into()))
+                    .map_err(Error::Shell)
+                    .map(|_| Resp::EndBlock(Default::default()))
             }
+            _ => match Request::try_from(req.clone()) {
+                Ok(request) => self
+                    .service
+                    .call(request)
+                    .map(Resp::try_from)
+                    .map_err(Error::Shell)
+                    .and_then(|inner| inner),
+                Err(err) => Err(err),
+            },
         };
-        tracing::debug!(?rsp);
         Box::pin(async move { rsp.map_err(|e| e.into()) }.boxed())
     }
 }

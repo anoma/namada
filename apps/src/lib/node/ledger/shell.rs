@@ -1,7 +1,7 @@
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 
-use anoma_shared::ledger::gas::{self, BlockGasMeter};
+use anoma_shared::ledger::gas::BlockGasMeter;
 use anoma_shared::ledger::storage::write_log::WriteLog;
 use anoma_shared::ledger::{ibc, parameters, pos};
 use anoma_shared::proto::{self, Tx};
@@ -17,8 +17,9 @@ use tendermint::block::Header;
 use thiserror::Error;
 use tower_abci::{request, response};
 
-use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
+use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::{config, genesis, wallet};
 
 #[derive(Error, Debug)]
@@ -31,6 +32,8 @@ pub enum Error {
     TxDecodingError(proto::Error),
     #[error("Error trying to apply a transaction: {0}")]
     TxError(protocol::Error),
+    #[error("Gas limit exceeding while applying transactions in block")]
+    GasOverflow,
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
 }
@@ -60,7 +63,7 @@ pub enum MempoolTxType {
 
 #[derive(Debug)]
 pub struct Shell {
-    storage: storage::PersistentStorage,
+    pub(super) storage: storage::PersistentStorage,
     gas_meter: BlockGasMeter,
     write_log: WriteLog,
 }
@@ -260,39 +263,66 @@ impl Shell {
     }
 
     // Verify the headers of the block
-    // TODO: This will include checking announcements of stake, individual and aggregated PVSS
-    // instances from the DKG protocol
-    pub fn verify_header(&self, _req: shim::request::VerifyHeader) -> shim::response::VerifyHeader {
+    // TODO: This will include checking announcements of stake, individual and
+    // aggregated PVSS instances from the DKG protocol
+    pub fn verify_header(
+        &self,
+        _req: shim::request::VerifyHeader,
+    ) -> shim::response::VerifyHeader {
         Default::default()
     }
 
     /// Check the fees and signatures of the fee payer for a transaction
-    pub fn process_proposal(&mut self, _req: shim::request::ProcessProposal) -> shim::response::ProcessProposal {
+    pub fn process_proposal(
+        &mut self,
+        _req: shim::request::ProcessProposal,
+    ) -> shim::response::ProcessProposal {
+        Default::default()
+    }
+
+    pub fn revert_proposal(
+        &mut self,
+        _req: shim::request::RevertProposal,
+    ) -> shim::response::RevertProposal {
+        Default::default()
+    }
+
+    pub fn extend_vote(
+        &mut self,
+        _req: shim::request::ExtendVote,
+    ) -> shim::response::ExtendVote {
         Default::default()
     }
 
     /// Validate and apply transactions.
     /// TODO: Will we also decrypt transactions here?
-    pub fn finalize_block(&mut self, req: shim::request::FinalizeBlock) -> Result<shim::response::FinalizeBlock> {
+    pub fn finalize_block(
+        &mut self,
+        req: shim::request::FinalizeBlock,
+    ) -> Result<shim::response::FinalizeBlock> {
         let mut response = shim::response::FinalizeBlock::default();
         for tx in &req.txs {
-            let mut tx_result = Default::default();
+            let mut tx_result: TxResult = Default::default();
             match protocol::apply_tx(
                 tx,
                 &mut self.gas_meter,
                 &mut self.write_log,
                 &self.storage,
-            ).map_err(Error::TxError) {
+            )
+            .map_err(Error::TxError)
+            {
                 Ok(result) => {
                     if result.is_accepted() {
                         tracing::info!(
-                            "all VPs accepted apply_tx storage modification {:#?}",
+                            "all VPs accepted apply_tx storage modification \
+                             {:#?}",
                             result
                         );
                         self.write_log.commit_tx();
                     } else {
                         tracing::info!(
-                            "some VPs rejected apply_tx storage modification {:#?}",
+                            "some VPs rejected apply_tx storage modification \
+                             {:#?}",
                             result.vps_result.rejected_vps
                         );
                         self.write_log.drop_tx();
@@ -304,9 +334,12 @@ impl Shell {
                     tx_result.info = msg.to_string();
                 }
             }
-            response.tx_results.append(tx_result);
+            response.tx_results.push(tx_result);
         }
-        response.gas_used = self.gas_meter.finalize_transaction()?;
+        response.gas_used = self
+            .gas_meter
+            .finalize_transaction()
+            .map_err(|_| Error::GasOverflow)?;
         Ok(response)
     }
 

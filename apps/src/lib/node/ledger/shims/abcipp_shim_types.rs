@@ -1,22 +1,21 @@
 use tower_abci::{Request, Response};
 
 pub mod shim {
-    use std::convert::{TryFrom, TryInto};
+    use std::convert::TryFrom;
+
     use tendermint_proto::abci::{
-        RequestInitChain, RequestInfo, RequestQuery, RequestCommit,
-        RequestFlush, RequestSetOption, RequestEcho, RequestCheckTx,
-        RequestListSnapshots, RequestOfferSnapshot, RequestLoadSnapshotChunk,
-        RequestApplySnapshotChunk, ResponseInitChain, ResponseInfo,
-        ResponseQuery, ResponseCommit, ResponseFlush, ResponseSetOption,
-        ResponseEcho, ResponseCheckTx, ResponseListSnapshots, ResponseOfferSnapshot,
-        ResponseLoadSnapshotChunk, ResponseApplySnapshotChunk
+        RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
+        RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
+        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestQuery,
+        RequestSetOption, ResponseApplySnapshotChunk, ResponseCheckTx,
+        ResponseCommit, ResponseEcho, ResponseFlush, ResponseInfo,
+        ResponseInitChain, ResponseListSnapshots, ResponseLoadSnapshotChunk,
+        ResponseOfferSnapshot, ResponseQuery, ResponseSetOption,
     };
-    use thiserror;
+    use thiserror::Error;
 
-    use super::Request as Req;
-    use super::Response as Resp;
+    use super::{Request as Req, Response as Resp};
     use crate::node::ledger::shell;
-
     pub type TxBytes = Vec<u8>;
 
     #[derive(Error, Debug)]
@@ -24,9 +23,9 @@ pub mod shim {
         #[error("Error converting Request from ABCI to ABCI++: {0:?}")]
         ConvertReq(Req),
         #[error("Error converting Response from ABCI++ to ABCI: {0:?}")]
-        ConvertResp(Res),
-        #[error("{0}")]
-        Shell(shell::Error)
+        ConvertResp(Response),
+        #[error("{0:?}")]
+        Shell(shell::Error),
     }
 
     /// Errors from the shell need to be propagated upward
@@ -47,10 +46,15 @@ pub mod shim {
         Info(RequestInfo),
         Query(RequestQuery),
         PrepareProposal(request::PrepareProposal),
+        #[allow(dead_code)]
         VerifyHeader(request::VerifyHeader),
+        #[allow(dead_code)]
         ProcessProposal(request::ProcessProposal),
+        #[allow(dead_code)]
         RevertProposal(request::RevertProposal),
+        #[allow(dead_code)]
         ExtendVote(request::ExtendVote),
+        #[allow(dead_code)]
         VerifyVoteExtension(request::VerifyVoteExtension),
         FinalizeBlock(request::FinalizeBlock),
         Commit(RequestCommit),
@@ -73,18 +77,20 @@ pub mod shim {
                 Req::InitChain(inner) => Ok(Request::InitChain(inner)),
                 Req::Info(inner) => Ok(Request::Info(inner)),
                 Req::Query(inner) => Ok(Request::Query(inner)),
-                // TODO: Necessary?
-                Req::EndBlock(inner) => Ok(Request::FinalizeBlock(inner.into())),
                 Req::Commit(inner) => Ok(Request::Commit(inner)),
                 Req::Flush(inner) => Ok(Request::Flush(inner)),
                 Req::SetOption(inner) => Ok(Request::SetOption(inner)),
-                Req::Echo(inner) => Ok(Reqest::Echo(inner)),
+                Req::Echo(inner) => Ok(Request::Echo(inner)),
                 Req::CheckTx(inner) => Ok(Request::CheckTx(inner)),
                 Req::ListSnapshots(inner) => Ok(Request::ListSnapshots(inner)),
                 Req::OfferSnapshot(inner) => Ok(Request::OfferSnapshot(inner)),
-                Req::LoadSnapshotChunk(inner) => Ok(Request::LoadSnapshotChunk(inner)),
-                Req::ApplySnapshotChunk(inner) => Ok(Request::ApplySnapshotChunk(inner)),
-                _ => Err(Error::ConvertReq(req))
+                Req::LoadSnapshotChunk(inner) => {
+                    Ok(Request::LoadSnapshotChunk(inner))
+                }
+                Req::ApplySnapshotChunk(inner) => {
+                    Ok(Request::ApplySnapshotChunk(inner))
+                }
+                _ => Err(Error::ConvertReq(req)),
             }
         }
     }
@@ -92,6 +98,7 @@ pub mod shim {
     /// Custom response types. These will be returned by the shell along with
     /// custom payload types (which may be unit structs). It is the duty of
     /// the shim to convert these to responses understandable to tower-abci
+    #[derive(Debug)]
     pub enum Response {
         InitChain(ResponseInitChain),
         Info(ResponseInfo),
@@ -101,7 +108,7 @@ pub mod shim {
         ProcessProposal(response::ProcessProposal),
         RevertProposal(response::RevertProposal),
         ExtendVote(response::ExtendVote),
-        VerifyVoteExtension(repsonse::VerifyVoteExtension),
+        VerifyVoteExtension(response::VerifyVoteExtension),
         FinalizeBlock(response::FinalizeBlock),
         Commit(ResponseCommit),
         Flush(ResponseFlush),
@@ -118,32 +125,37 @@ pub mod shim {
     impl TryFrom<Response> for Resp {
         type Error = Error;
 
-        fn try_from(resp: Result<Response, shell::Error>) -> Result<Resp, Error> {
+        fn try_from(resp: Response) -> Result<Resp, Error> {
             match resp {
                 Response::InitChain(inner) => Ok(Resp::InitChain(inner)),
                 Response::Info(inner) => Ok(Resp::Info(inner)),
                 Response::Query(inner) => Ok(Resp::Query(inner)),
-                // TODO: Necessary?
-                Response::FinalizeBlock(inner) => Ok(Resp::EndBlock(inner.into())),
                 Response::Commit(inner) => Ok(Resp::Commit(inner)),
                 Response::Flush(inner) => Ok(Resp::Flush(inner)),
                 Response::SetOption(inner) => Ok(Resp::SetOption(inner)),
                 Response::Echo(inner) => Ok(Resp::Echo(inner)),
                 Response::CheckTx(inner) => Ok(Resp::CheckTx(inner)),
-                Response::ListSnapshots(inner) => Ok(Resp::ListSnapshots(inner)),
-                Response::OfferSnapshot(inner) => Ok(Resp::OfferSnapshot(inner)),
-                Response::LoadSnapshotChunk(inner) => Ok(Resp::LoadSnapshotChunk(inner)),
-                Response::ApplySnapshotChunk(inner) => Ok(Resp::ApplySnapshotChunk(inner)),
-                _ => Err(Error::ConvertResp(resp))
+                Response::ListSnapshots(inner) => {
+                    Ok(Resp::ListSnapshots(inner))
+                }
+                Response::OfferSnapshot(inner) => {
+                    Ok(Resp::OfferSnapshot(inner))
+                }
+                Response::LoadSnapshotChunk(inner) => {
+                    Ok(Resp::LoadSnapshotChunk(inner))
+                }
+                Response::ApplySnapshotChunk(inner) => {
+                    Ok(Resp::ApplySnapshotChunk(inner))
+                }
+                _ => Err(Error::ConvertResp(resp)),
             }
         }
     }
 
     /// Custom types for request payloads
     pub mod request {
-        use anoma_shared::types::storage::{BlockHash, BlockHeight};
+        use tendermint_proto::abci::RequestBeginBlock;
         use tendermint_proto::types::Header;
-        use tendermint_proto::abci::{RequestBeginBlock, RequestEndBlock};
 
         pub struct PrepareProposal {
             pub hash: Vec<u8>,
@@ -171,9 +183,7 @@ pub mod shim {
 
         impl From<Vec<super::TxBytes>> for FinalizeBlock {
             fn from(tx_bytes: Vec<super::TxBytes>) -> Self {
-                Self {
-                    txs: tx_bytes
-                }
+                Self { txs: tx_bytes }
             }
         }
     }
@@ -182,7 +192,7 @@ pub mod shim {
     pub mod response {
         use tower_abci::response;
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct PrepareProposal;
 
         impl From<PrepareProposal> for response::BeginBlock {
@@ -191,31 +201,31 @@ pub mod shim {
             }
         }
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct VerifyHeader;
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct ProcessProposal;
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct RevertProposal;
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct ExtendVote;
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct VerifyVoteExtension;
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct TxResult {
             pub code: u32,
             pub info: String,
         }
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         pub struct FinalizeBlock {
             pub tx_results: Vec<TxResult>,
+            pub gas_used: u64,
         }
-
     }
 }
