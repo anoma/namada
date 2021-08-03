@@ -479,11 +479,9 @@ pub mod args {
     use std::str::FromStr;
 
     use anoma::types::address::Address;
-    use anoma::types::intent::{Exchange};
+    use anoma::types::intent::Exchange;
     use anoma::types::token;
     use libp2p::Multiaddr;
-    
-    
 
     use super::utils::*;
     use super::ArgMatches;
