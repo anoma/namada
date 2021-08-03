@@ -77,22 +77,11 @@ fn craft_intent(
         file_path,
     }: args::CraftIntent,
 ) {
-    let exchanges: HashSet<Signed<Exchange>> = exchanges
+    let signed_exchanges: HashSet<Signed<Exchange>> = exchanges
         .iter()
         .map(|exchange| {
-            let source_keypair =
-                wallet::key_of(&exchange.addr.clone().encode());
-
-            let exchange = Exchange {
-                addr: exchange.addr.clone(),
-                token_sell: exchange.token_sell.clone(),
-                token_buy: exchange.token_buy.clone(),
-                min_buy: exchange.min_buy,
-                rate_min: exchange.rate_min.clone(),
-                max_sell: exchange.max_sell,
-            };
-
-            Signed::new(&source_keypair, exchange)
+            let source_keypair = wallet::key_of(exchange.addr.encode());
+            Signed::new(&source_keypair, exchange.clone())
         })
         .collect();
 
@@ -100,7 +89,7 @@ fn craft_intent(
     let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
         &signing_key,
         FungibleTokenIntent {
-            exchange: exchanges,
+            exchange: signed_exchanges,
         },
     );
     let data_bytes = signed_ft.try_to_vec().unwrap();
