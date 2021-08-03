@@ -265,6 +265,7 @@ impl Shell {
     // Verify the headers of the block
     // TODO: This will include checking announcements of stake, individual and
     // aggregated PVSS instances from the DKG protocol
+    // We will also probably decrypt transactions here
     pub fn verify_header(
         &self,
         _req: shim::request::VerifyHeader,
@@ -295,7 +296,6 @@ impl Shell {
     }
 
     /// Validate and apply transactions.
-    /// TODO: Will we also decrypt transactions here?
     pub fn finalize_block(
         &mut self,
         req: shim::request::FinalizeBlock,

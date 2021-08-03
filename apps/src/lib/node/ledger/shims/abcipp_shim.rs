@@ -6,7 +6,6 @@ use std::task::{Context, Poll};
 
 use anoma::types::storage::BlockHeight;
 use futures::future::FutureExt;
-use tendermint_proto::abci::{RequestQuery, ResponseDeliverTx};
 use tower::Service;
 use tower_abci::{BoxError, Request as Req, Response as Resp};
 
@@ -67,26 +66,11 @@ impl Service<Req> for AbcippShim {
                 // We store all the transactions to be applied in
                 // bulk at a later step
                 self.block_txs.push(deliver_tx.tx.clone());
-                // here we mimic the "process transaction phase"
-                let req = RequestQuery {
-                    data: deliver_tx.tx,
-                    path: "dry_run_tx".into(),
-                    height: match &self.service.storage.header {
-                        Some(header) => header.height.into(),
-                        _ => 0,
-                    },
-                    prove: false,
-                };
-                Ok(Resp::DeliverTx(ResponseDeliverTx {
-                    info: self.service.query(req).info,
-                    ..Default::default()
-                }))
+                Ok(Resp::DeliverTx(Default::default()))
             }
             Req::EndBlock(end) => {
-                if BlockHeight::try_from(end.height).is_err() {
-                    // TODO: Should we panic?
-                    tracing::error!("Unexpected block height {}", end.height);
-                };
+                BlockHeight::try_from(end.height)
+                    .expect(&format!("Unexpected block height {}", end.height));
                 let mut txs = vec![];
                 std::mem::swap(&mut txs, &mut self.block_txs);
                 self.service

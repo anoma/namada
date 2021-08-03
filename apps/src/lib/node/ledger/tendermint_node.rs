@@ -71,7 +71,6 @@ pub fn run(
         .map_err(Error::TendermintStartUp)?;
     let pid = tendermint_node.id();
     tracing::info!("Tendermint node started");
-
     // make sure to shut down when receiving a termination signal
     kill_on_term_signal(kill_switch.clone());
     // shut down the anoma node if tendermint unexpectedly stops
@@ -111,9 +110,7 @@ fn monitor_process(
 ) {
     std::thread::spawn(move || {
         process.wait().expect("Tendermint was not running");
-        // TODO: This log line should not appear on normal shutdown, i.e.
-        // SIGKILL. Should try using an atomic bool for checking
-        tracing::info!("Tendermint node shut down unexpectedly.");
+        tracing::info!("Tendermint node is no longer running.");
         let _ = kill_switch.send(true);
     });
 }

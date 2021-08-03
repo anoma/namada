@@ -286,7 +286,7 @@ mod tests {
                 }
                 let cmd_str = format!("{:?}", cmd);
 
-                let mut session =
+                let mut request =
                     spawn_command(cmd, Some(20_000)).map_err(|e| {
                         eyre!(format!(
                             "in command: {}\n\nReason: {}",
@@ -294,7 +294,7 @@ mod tests {
                         ))
                     })?;
                 if !dry_run {
-                    session.exp_string("Mempool validation passed").map_err(
+                    request.exp_string("Mempool validation passed").map_err(
                         |e| {
                             eyre!(format!(
                                 "in command: {}\n\nReason: {}",
@@ -307,9 +307,9 @@ mod tests {
                     eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
                 })?;
 
-                let status = session.process.wait().unwrap();
+                let status = request.process.wait().unwrap();
                 assert_eq!(
-                    WaitStatus::Exited(session.process.child_pid, 0),
+                    WaitStatus::Exited(request.process.child_pid, 0),
                     status
                 );
             }
@@ -402,6 +402,105 @@ mod tests {
         drop(session);
 
         drop(session_two);
+
+        Ok(())
+    }
+
+    /// In this test we:
+    /// 1. Run the ledger node
+    /// 2. Submit an invalid transaction
+    /// 3. Shut down the ledger
+    /// 4. Restart the ledger
+    #[test]
+    fn invalid_transactions() -> Result<()> {
+        let dir = setup();
+
+        let base_dir = tempdir().unwrap();
+        let base_dir_arg = &base_dir.path().to_string_lossy();
+
+        // 1. Run the ledger node
+        let mut cmd = Command::cargo_bin("anoman")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
+            "--base-dir",
+            base_dir_arg,
+            "ledger",
+        ]);
+        println!("Running {:?}", cmd);
+        let mut session = spawn_command(cmd, Some(20_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session
+            .exp_string("Anoma ledger node started")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+        session
+            .exp_string("Started node")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // 2. Submit a an invalid transaction
+        let tx_args = vec![
+            "transfer", "--source", BERTHA, "--target", ALBERT, "--token",
+            XAN, "--amount", "1_000_000.1",
+        ];
+
+        let mut cmd = Command::cargo_bin("anomac")?;
+        cmd.current_dir(&dir)
+            .env("ANOMA_LOG", "debug")
+            .args(&["--base-dir", base_dir_arg])
+            .args(tx_args);
+
+        let cmd_str = format!("{:?}", cmd);
+
+        let mut request =
+            spawn_command(cmd, Some(20_000)).map_err(|e| {
+                eyre!(format!( "in command: {}\n\nReason: {}", cmd_str, e))
+            })?;
+
+        request.exp_string("Mempool validation passed").map_err(
+            |e| {
+                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+            })?;
+
+        let status = request.process.wait().unwrap();
+        assert_eq!(
+            WaitStatus::Exited(request.process.child_pid, 0),
+            status
+        );
+
+        session.exp_string("some VPs rejected apply_tx storage modification").map_err(|e| {
+            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+        })?;
+
+        // Wait to commit a block
+        session
+            .exp_regex(r"Committed block hash.*, height: 2")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+
+        // 3. Shut it down
+        session
+            .send_control('c')
+            .map_err(|e| eyre!(format!("{}", e)))?;
+        drop(session);
+
+        // 4. Restart the ledger
+        let mut cmd = Command::cargo_bin("anoma")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
+            "--base-dir",
+            base_dir_arg,
+            "ledger",
+        ]);
+        println!("Running {:?}", cmd);
+        let mut session = spawn_command(cmd, Some(20_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session
+            .exp_string("Anoma ledger node started")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // There should be previous state now
+        session
+            .exp_string("Last state root hash:")
+            .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
     }
