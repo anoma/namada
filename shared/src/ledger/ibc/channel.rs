@@ -75,7 +75,7 @@ where
             StateChange::Created => match channel.state() {
                 State::Init => Ok(true),
                 State::TryOpen => self.verify_channel_try_proof(
-                    port_channel_id.clone(),
+                    port_channel_id,
                     &channel,
                     tx_data,
                 ),
@@ -89,7 +89,7 @@ where
                 }
             },
             StateChange::Updated => self.validate_updated_channel(
-                port_channel_id.clone(),
+                port_channel_id,
                 &channel,
                 tx_data,
             ),
@@ -145,12 +145,7 @@ where
         };
 
         let feature = channel.ordering().to_string();
-        if !version.is_supported_feature(feature.clone()) {
-            tracing::info!("the feature isn't supported: {}", feature);
-            return false;
-        }
-
-        true
+        version.is_supported_feature(feature)
     }
 
     fn validate_updated_channel(
@@ -307,7 +302,7 @@ where
         let expected_connection_hops = vec![counterpart_conn_id];
         let expected_channel = ChannelEnd::new(
             expected_state,
-            channel.ordering().clone(),
+            *channel.ordering(),
             expected_my_side,
             expected_connection_hops,
             channel.version(),
@@ -526,7 +521,7 @@ where
         let path = Path::Acks {
             port_id: key.0.clone(),
             channel_id: key.1.clone(),
-            sequence: key.2.clone(),
+            sequence: key.2,
         };
         self.get_packet_info(path)
     }
