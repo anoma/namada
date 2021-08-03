@@ -311,7 +311,6 @@ impl Shell {
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
         // store the block's data in DB
-        // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {
             tracing::error!(
                 "Encountered a storage error while committing a block {:?}",
@@ -348,10 +347,10 @@ impl Shell {
     }
 
     /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> response::Query {
+    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
         let mut response = response::Query::default();
         let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = self.write_log.clone();
+        let mut write_log = WriteLog::default();
         match protocol::apply_tx(
             tx_bytes,
             &mut gas_meter,
