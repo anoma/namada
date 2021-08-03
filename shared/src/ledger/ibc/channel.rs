@@ -41,6 +41,10 @@ where
         key: &Key,
         tx_data: &[u8],
     ) -> Result<bool> {
+        if key.is_ibc_channel_counter() {
+            return Ok(self.channel_counter_pre() < self.channel_counter());
+        }
+
         let port_id = Self::get_port_id(key)?;
         let channel_id = Self::get_channel_id(key)?;
 
@@ -391,6 +395,11 @@ where
             // returns None even if DB read fails
             _ => None,
         }
+    }
+
+    fn channel_counter_pre(&self) -> u64 {
+        let key = Key::ibc_channel_counter();
+        self.read_counter_pre(&key)
     }
 }
 

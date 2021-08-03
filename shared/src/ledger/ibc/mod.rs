@@ -23,10 +23,14 @@ pub enum Error {
     KeyError(String),
     #[error("Client validation error: {0}")]
     ClientError(client::Error),
+    #[error("Counter error: {0}")]
+    CounterError(String),
     #[error("Connection validation error: {0}")]
     ConnectionError(connection::Error),
     #[error("No connection error: {0}")]
     NoConnectionError(String),
+    #[error("Decoding error: {0}")]
+    DecodingError(String),
 }
 
 /// IBC functions result
@@ -168,6 +172,20 @@ where
         }
     }
 
+    fn read_counter_pre(&self, key: &Key) -> Result<u64> {
+        match self.ctx.read_pre(&key) {
+            Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
+                Error::CounterError(format!(
+                    "Decoding the client counter failed: {}",
+                    e
+                ))
+            }),
+            _ => Err(Error::CounterError(
+                "The client counter doesn't exist".to_owned(),
+            )),
+        }
+    }
+
     fn read_counter(&self, key: &Key) -> u64 {
         match self.ctx.read_post(&key) {
             Ok(Some(value)) => match storage::types::decode(&value) {
@@ -182,6 +200,12 @@ where
                 unreachable!();
             }
         }
+    }
+}
+
+impl From<native_vp::Error> for Error {
+    fn from(err: native_vp::Error) -> Self {
+        Self::NativeVpError(err)
     }
 }
 

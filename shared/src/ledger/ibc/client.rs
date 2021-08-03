@@ -262,17 +262,8 @@ where
 
     pub(super) fn client_counter_pre(&self) -> Result<u64> {
         let key = Key::ibc_client_counter();
-        match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
-                Error::InvalidClient(format!(
-                    "Decoding the client counter failed: {}",
-                    e
-                ))
-            }),
-            _ => Err(Error::InvalidClient(
-                "The client counter doesn't exist".to_owned(),
-            )),
-        }
+        self.read_counter_pre(&key)
+            .map_err(|e| Error::InvalidClient(e.to_string()))
     }
 
     fn consensus_state_pre(

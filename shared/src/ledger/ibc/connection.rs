@@ -301,17 +301,8 @@ where
 
     fn connection_counter_pre(&self) -> Result<u64> {
         let key = Key::ibc_connection_counter();
-        match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
-                Error::InvalidConnection(format!(
-                    "Decoding the connection counter failed: {}",
-                    e
-                ))
-            }),
-            _ => Err(Error::InvalidConnection(
-                "The connection counter should exist".to_owned(),
-            )),
-        }
+        self.read_counter_pre(&key)
+            .map_err(|e| Error::InvalidConnection(e.to_string()))
     }
 }
 
