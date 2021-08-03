@@ -38,14 +38,14 @@ where
         let path = Path::Ports(port_id.clone()).to_string();
         let key = Key::ibc_key(path).expect("Creating a key for a port failed");
         match self.ctx.read_post(&key) {
-            // TODO fix Capability
+            // TODO fix Capability in `ibc-rs` to set the index
             Ok(Some(_)) => Some(Capability::new()),
             _ => None,
         }
     }
 
-    fn authenticate(&self, cap: &Capability, port_id: &PortId) -> bool {
-        // TODO
-        false
+    fn authenticate(&self, _cap: &Capability, _port_id: &PortId) -> bool {
+        // TODO check the reversed map for the capability index
+        true
     }
 }

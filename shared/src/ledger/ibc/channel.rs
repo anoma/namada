@@ -448,13 +448,12 @@ where
         &self,
         port_id: &PortId,
     ) -> std::result::Result<Capability, Ics4Error> {
-        let cap = PortReader::lookup_module_by_port(self, port_id);
-        match cap {
-            Some(c) => {
-                if !PortReader::authenticate(self, &c, port_id) {
-                    Err(Ics4Kind::InvalidPortCapability.into())
+        match self.lookup_module_by_port(port_id) {
+            Some(cap) => {
+                if self.authenticate(&cap, port_id) {
+                    Ok(cap)
                 } else {
-                    Ok(c)
+                    Err(Ics4Kind::InvalidPortCapability.into())
                 }
             }
             None => Err(Ics4Kind::NoPortCapability(port_id.clone()).into()),
