@@ -486,7 +486,8 @@ mod tests {
         base_node_ledger.args(&["--base-dir", first_node_dir, "ledger"]);
 
         // Craft intents
-        // cargo run --bin anomac -- craft-intent --key $BERTHA --file-path-input intent.A.data --file-path-output intent.A
+        // cargo run --bin anomac -- craft-intent --key $BERTHA
+        // --file-path-input intent.A.data --file-path-output intent.A
 
         let tx_a = vec![
             "craft-intent",
@@ -501,7 +502,8 @@ mod tests {
         craft_intent_a.args(tx_a);
         craft_intent_a.output().expect("Should create the intent");
 
-        // cargo run --bin anomac -- craft-intent --key $ALBERT --file-path-input intent.B.data --file-path-output intent.B
+        // cargo run --bin anomac -- craft-intent --key $ALBERT
+        // --file-path-input intent.B.data --file-path-output intent.B
         let tx_b = vec![
             "craft-intent",
             "--key",
@@ -515,7 +517,8 @@ mod tests {
         craft_intent_b.args(tx_b);
         craft_intent_b.output().expect("Should create the intent");
 
-        // cargo run --bin anomac -- craft-intent --key $CHRISTEL --file-path-input intent.C.data --file-path-output intent.C
+        // cargo run --bin anomac -- craft-intent --key $CHRISTEL
+        // --file-path-input intent.C.data --file-path-output intent.C
         let tx_c = vec![
             "craft-intent",
             "--key",
