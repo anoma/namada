@@ -88,7 +88,7 @@ fn craft_intent(
                 token_sell: exchange.token_sell.clone(),
                 token_buy: exchange.token_buy.clone(),
                 min_buy: exchange.min_buy,
-                rate_min: exchange.min_rate.clone(),
+                rate_min: exchange.rate_min.clone(),
                 max_sell: exchange.max_sell,
             };
 

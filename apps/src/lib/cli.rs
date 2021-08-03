@@ -479,7 +479,7 @@ pub mod args {
     use std::str::FromStr;
 
     use anoma::types::address::Address;
-    use anoma::types::intent::DecimalWrapper;
+    use anoma::types::intent::{DecimalWrapper, Exchange};
     use anoma::types::token;
     use libp2p::Multiaddr;
     use serde::de::{self, Error};
@@ -703,7 +703,7 @@ pub mod args {
         /// Signing key
         pub key: Address,
         /// Exchange description
-        pub exchanges: Vec<TokenExchange>,
+        pub exchanges: Vec<Exchange>,
         /// Target file path
         pub file_path: String,
     }
@@ -715,7 +715,7 @@ pub mod args {
             let file_path_input = FILE_PATH_INPUT.parse(matches);
             let file = File::open(&file_path_input).expect("File must exist.");
 
-            let exchanges: Vec<TokenExchange> = serde_json::from_reader(file)
+            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
                 .expect("JSON was not well-formatted");
 
             Self {
@@ -730,36 +730,6 @@ pub mod args {
                 .arg(FILE_PATH_OUTPUT.def().about("The output file"))
                 .arg(FILE_PATH_INPUT.def().about("The input file"))
         }
-    }
-
-    #[derive(Debug, Serialize, Deserialize)]
-
-    pub struct TokenExchange {
-        /// Source address that will sign the exchange
-        #[serde(deserialize_with = "address_deserialize")]
-        pub addr: Address,
-        /// Token to sell
-        #[serde(deserialize_with = "address_deserialize")]
-        pub token_sell: Address,
-        /// Max amount of token to sell
-        pub max_sell: token::Amount,
-        /// Rate
-        pub min_rate: DecimalWrapper,
-        /// Token to buy
-        #[serde(deserialize_with = "address_deserialize")]
-        pub token_buy: Address,
-        /// Min amount of token to buy
-        pub min_buy: token::Amount,
-    }
-
-    pub fn address_deserialize<'d, D>(
-        deserializer: D,
-    ) -> Result<Address, D::Error>
-    where
-        D: de::Deserializer<'d>,
-    {
-        let address = String::deserialize(deserializer)?;
-        Address::decode(address).map_err(Error::custom)
     }
 
     /// Subscribe intent topic arguments
