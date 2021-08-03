@@ -91,6 +91,7 @@ dependencies = [
  "rand_core 0.5.1",
  "rust_decimal",
  "serde 1.0.126",
+ "serde_json",
  "sha2 0.9.5",
  "sparse-merkle-tree",
  "tendermint",
