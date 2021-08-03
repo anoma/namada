@@ -485,10 +485,8 @@ mod tests {
         let mut base_node_ledger = Command::cargo_bin("anoman")?;
         base_node_ledger.args(&["--base-dir", first_node_dir, "ledger"]);
 
-        // // Craft intents
-        // // cargo run --bin anomac -- craft-intent --key $BERTHA --address
-        // // $BERTHA --min-amount-buy 100 --max-amount-sell 70 --token-buy $XAN
-        // // --token-sell $BTC --min-rate 2 --file-path intent.A
+        // Craft intents
+        // cargo run --bin anomac -- craft-intent --key $BERTHA --file-path-input intent.A.data --file-path-output intent.A
 
         let tx_a = vec![
             "craft-intent",
@@ -503,9 +501,7 @@ mod tests {
         craft_intent_a.args(tx_a);
         craft_intent_a.output().expect("Should create the intent");
 
-        // // cargo run --bin anomac -- craft-intent --key $ALBERT --address
-        // // $ALBERT --min-amount-buy 50 --max-amount-sell 300 --token-buy $BTC
-        // // --token-sell $ETH --min-rate 0.7 --file-path intent.B
+        // cargo run --bin anomac -- craft-intent --key $ALBERT --file-path-input intent.B.data --file-path-output intent.B
         let tx_b = vec![
             "craft-intent",
             "--key",
@@ -519,9 +515,7 @@ mod tests {
         craft_intent_b.args(tx_b);
         craft_intent_b.output().expect("Should create the intent");
 
-        // // cargo run --bin anomac -- craft-intent --key $CHRISTEL --address
-        // // $CHRISTEL --min-amount-buy 20 --max-amount-sell 200 --token-buy
-        // $ETH // --token-sell $XAN --min-rate 0.5 --file-path intent.C
+        // cargo run --bin anomac -- craft-intent --key $CHRISTEL --file-path-input intent.C.data --file-path-output intent.C
         let tx_c = vec![
             "craft-intent",
             "--key",
