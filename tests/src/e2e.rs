@@ -440,6 +440,10 @@ mod tests {
         let intent_b_path_input = &format!("{}.data", &intent_b_path);
         let intent_c_path_input = &format!("{}.data", &intent_c_path);
 
+        println!("{}, {}", intent_a_path, intent_a_path_input);
+        println!("{}, {}", intent_b_path, intent_b_path_input);
+        println!("{}, {}", intent_c_path, intent_c_path_input);
+
         let intent_a_json = json!([
             {
                 "key": BERTHA,
@@ -448,7 +452,7 @@ mod tests {
                 "max_sell": 70,
                 "token_buy": XAN,
                 "token_sell": BTC,
-                "min_rate": 2
+                "rate_min": 2
             }
         ]);
         let intent_b_json = json!([
@@ -459,7 +463,7 @@ mod tests {
                 "max_sell": 300,
                 "token_buy": BTC,
                 "token_sell": ETH,
-                "min_rate": 0.7
+                "rate_min": 0.7
             }
         ]);
         let intent_c_json = json!([
@@ -470,7 +474,7 @@ mod tests {
                 "max_sell": 200,
                 "token_buy": ETH,
                 "token_sell": XAN,
-                "min_rate": 0.5
+                "rate_min": 0.5
             }
         ]);
         generate_intent_json(intent_a_path_input, intent_a_json);
@@ -500,7 +504,7 @@ mod tests {
         ];
         let mut craft_intent_a = Command::cargo_bin("anomac")?;
         craft_intent_a.args(tx_a);
-        craft_intent_a.output().expect("Should create the intent");
+        craft_intent_a.spawn().expect("Should create the intent");
 
         // cargo run --bin anomac -- craft-intent --key $ALBERT
         // --file-path-input intent.B.data --file-path-output intent.B
@@ -515,7 +519,7 @@ mod tests {
         ];
         let mut craft_intent_b = Command::cargo_bin("anomac")?;
         craft_intent_b.args(tx_b);
-        craft_intent_b.output().expect("Should create the intent");
+        craft_intent_b.spawn().expect("Should create the intent");
 
         // cargo run --bin anomac -- craft-intent --key $CHRISTEL
         // --file-path-input intent.C.data --file-path-output intent.C
@@ -530,7 +534,7 @@ mod tests {
         ];
         let mut craft_intent_c = Command::cargo_bin("anomac")?;
         craft_intent_c.args(tx_c);
-        craft_intent_c.output().expect("Should create the intent");
+        craft_intent_c.spawn().expect("Should create the intent");
 
         //  Start gossip
         let mut session_gossip = spawn_command(base_node_gossip, Some(40_000))
@@ -623,22 +627,22 @@ mod tests {
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // // check that the amount matched are correct
-        // session_gossip
-        //     .exp_string("amounts: [100000000, 70000000, 200000000]")
-        //     .map_err(|e| eyre!(format!("{}", e)))?;
+        session_gossip
+            .exp_string("amounts: [100000000, 70000000, 200000000]")
+            .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // // check that the transfers transactions are correct
-        // session_gossip
-        //     .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70000000")
-        //     .map_err(|e| eyre!(format!("{}", e)))?;
+        // check that the transfers transactions are correct
+        session_gossip
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70000000")
+            .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // session_gossip
-        //     .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200000000")
-        //     .map_err(|e| eyre!(format!("{}", e)))?;
+        session_gossip
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200000000")
+            .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // session_gossip
-        //     .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
-        //     .map_err(|e| eyre!(format!("{}", e)))?;
+        session_gossip
+            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
+            .map_err(|e| eyre!(format!("{}", e)))?;
 
         drop(session_gossip);
         drop(session_ledger);

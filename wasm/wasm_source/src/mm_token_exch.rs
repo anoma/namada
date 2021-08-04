@@ -34,7 +34,7 @@ fn add_intent(graph_bytes: Vec<u8>, id: Vec<u8>, data: Vec<u8>) -> bool {
     let intent = decode_intent_data(&data);
     let exchanges = intent.data.exchange.clone();
     let mut graph = decode_graph(graph_bytes);
-    log_string(format!("trying to match intent: {:#?}", intent));
+    log_string(format!("trying to match new intent"));
     exchanges.into_iter().for_each(|exchange| {
         add_node(&mut graph, id.clone(), exchange, intent.clone())
     });
@@ -89,21 +89,22 @@ fn find_to_update_node(
             let current_node = &graph[index];
             if new_node.exchange.data.token_sell
                 == current_node.exchange.data.token_buy
-                && new_node.exchange.data.max_sell
-                    >= current_node.exchange.data.min_buy
+            // && new_node.exchange.data.max_sell
+            //     >= current_node.exchange.data.min_buy
             {
                 connect_sell.push(index);
             }
             if new_node.exchange.data.token_buy
                 == current_node.exchange.data.token_sell
-                && current_node.exchange.data.max_sell
-                    >= new_node.exchange.data.min_buy
+            // && current_node.exchange.data.max_sell
+            //     >= new_node.exchange.data.min_buy
             {
                 connect_buy.push(index);
             }
         }
         Control::<()>::Continue
     });
+    log_string(format!("{:?}, {:?}", connect_sell, connect_buy));
     (connect_sell, connect_buy)
 }
 
@@ -119,7 +120,7 @@ fn add_node(
         intent,
     };
     let new_node_index = graph.add_node(new_node.clone());
-    log_string(format!("before graph: {:?}", graph));
+    // log_string(format!("before graph: {:?}", graph));
     let (connect_sell, connect_buy) = find_to_update_node(&graph, &new_node);
     let sell_edge = new_node.exchange.data.token_sell;
     let buy_edge = new_node.exchange.data.token_buy;
@@ -129,7 +130,7 @@ fn add_node(
     for node_index in connect_buy {
         graph.update_edge(node_index, new_node_index, buy_edge.clone());
     }
-    log_string(format!("after graph: {:?}", graph));
+    // log_string(format!("after graph: {:?}", graph));
 }
 
 fn create_and_send_tx_data(
@@ -339,6 +340,7 @@ fn find_match_and_send_tx(
             create_and_send_tx_data(graph, cycle_intents);
         }
     }
+    log_string(format!("found: {:?}", to_remove_nodes));
     to_remove_nodes
 }
 
