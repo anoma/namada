@@ -65,6 +65,13 @@ where
     storage
         .write(&key, value)
         .expect("Unable to write the initial connection counter");
+
+    // the channel counter
+    let key = Key::ibc_channel_counter();
+    let value = storage::types::encode(&0);
+    storage
+        .write(&key, value)
+        .expect("Unable to write the initial channel counter");
 }
 
 impl<'a, DB, H> NativeVp for Ibc<'a, DB, H>
