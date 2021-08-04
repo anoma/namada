@@ -433,9 +433,9 @@ mod tests {
         let intent_a_path =
             format!("{}/intent.A", working_dir.to_string_lossy());
         let intent_b_path =
-            format!("{}/intent.C", working_dir.to_string_lossy());
-        let intent_c_path =
             format!("{}/intent.B", working_dir.to_string_lossy());
+        let intent_c_path =
+            format!("{}/intent.C", working_dir.to_string_lossy());
         let intent_a_path_input = &format!("{}.data", &intent_a_path);
         let intent_b_path_input = &format!("{}.data", &intent_b_path);
         let intent_c_path_input = &format!("{}.data", &intent_c_path);
