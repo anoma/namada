@@ -106,8 +106,14 @@ where
                     self.validate_connection(key, tx_data)?
                 }
                 IbcPrefix::Channel => self.validate_channel(key, tx_data)?,
+                IbcPrefix::Port => self.validate_port(key)?,
                 // TODO implement validations for modules
-                IbcPrefix::Packet => false,
+                IbcPrefix::SeqSend => false,
+                IbcPrefix::SeqRecv => false,
+                IbcPrefix::SeqAck => false,
+                IbcPrefix::Commitment => false,
+                IbcPrefix::Receipt => false,
+                IbcPrefix::Ack => false,
                 IbcPrefix::Unknown => {
                     return Err(Error::KeyError(format!(
                         "Invalid IBC-related key: {}",
@@ -135,7 +141,13 @@ enum IbcPrefix {
     Client,
     Connection,
     Channel,
-    Packet,
+    Port,
+    SeqSend,
+    SeqRecv,
+    SeqAck,
+    Commitment,
+    Receipt,
+    Ack,
     Unknown,
 }
 
@@ -151,7 +163,13 @@ where
                 "clients" => IbcPrefix::Client,
                 "connections" => IbcPrefix::Connection,
                 "channelEnds" => IbcPrefix::Channel,
-                "packets" => IbcPrefix::Packet,
+                "ports" => IbcPrefix::Port,
+                "nextSequenceSend" => IbcPrefix::SeqSend,
+                "nextSequenceRecv" => IbcPrefix::SeqRecv,
+                "nextSequenceAck" => IbcPrefix::SeqAck,
+                "commitments" => IbcPrefix::Commitment,
+                "receipts" => IbcPrefix::Receipt,
+                "acks" => IbcPrefix::Ack,
                 _ => IbcPrefix::Unknown,
             },
             None => IbcPrefix::Unknown,
