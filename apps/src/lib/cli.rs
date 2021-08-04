@@ -504,6 +504,8 @@ pub mod args {
     const TOPIC: Arg<String> = arg("topic");
     const TOPICS: ArgMulti<String> = TOPIC.multi();
     const ADDRESS: Arg<Address> = arg("address");
+    // TODO: once we have a wallet, we should also allow to use a key alias 
+    // <https://github.com/anoma/anoma/issues/167>
     const SIGNING_KEY: Arg<Address> = arg("key");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
@@ -513,8 +515,7 @@ pub mod args {
     const NODE: Arg<String> = arg("node");
     const FILE_PATH_OUTPUT: ArgDefault<String> =
         arg_default("file-path-output", DefaultFn(|| "intent.data".into()));
-    const FILE_PATH_INPUT: ArgDefault<String> =
-        arg_default("file-path-input", DefaultFn(|| "exchanges.data".into()));
+    const FILE_PATH_INPUT: Arg<String> = arg("file-path-input");
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
     const TOKEN: Arg<Address> = arg("token");
@@ -724,7 +725,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(SIGNING_KEY.def().about("The signing key."))
+            app.arg(SIGNING_KEY.def().about("Address of the account with key used to sign the intent."))
                 .arg(FILE_PATH_OUTPUT.def().about("The output file"))
                 .arg(FILE_PATH_INPUT.def().about("The input file"))
         }
