@@ -1,6 +1,6 @@
 //! A basic fungible token
 
-use std::convert::TryInto;
+
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
