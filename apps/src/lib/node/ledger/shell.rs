@@ -25,11 +25,11 @@ pub enum Error {
     #[error("Error removing the DB data: {0}")]
     RemoveDB(std::io::Error),
     #[error("chain ID mismatch: {0}")]
-    ChainIdError(String),
+    ChainId(String),
     #[error("Error decoding a transaction from bytes: {0}")]
-    TxDecodingError(proto::Error),
+    TxDecoding(proto::Error),
     #[error("Error trying to apply a transaction: {0}")]
-    TxError(protocol::Error),
+    TxApply(protocol::Error),
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
 }
@@ -94,7 +94,7 @@ impl Shell {
         let response = response::InitChain::default();
         let (current_chain_id, _) = self.storage.get_chain_id();
         if current_chain_id != init.chain_id {
-            return Err(Error::ChainIdError(format!(
+            return Err(Error::ChainId(format!(
                 "Current chain ID: {}, Tendermint chain ID: {}",
                 current_chain_id, init.chain_id
             )));
@@ -131,7 +131,7 @@ impl Shell {
 
         for token in &tokens {
             // default tokens VPs for testing
-            let key = Key::validity_predicate(&token);
+            let key = Key::validity_predicate(token);
             self.storage
                 .write(&key, token_vp.to_vec())
                 .expect("Unable to write token VP");
@@ -267,7 +267,7 @@ impl Shell {
             &mut self.write_log,
             &self.storage,
         )
-        .map_err(Error::TxError);
+        .map_err(Error::TxApply);
 
         match result {
             Ok(result) => {
@@ -336,7 +336,7 @@ impl Shell {
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
         let mut response = response::CheckTx::default();
-        match Tx::try_from(tx_bytes).map_err(Error::TxDecodingError) {
+        match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(_) => response.info = String::from("Mempool validation passed"),
             Err(msg) => {
                 response.code = 1;
@@ -357,7 +357,7 @@ impl Shell {
             &mut write_log,
             &self.storage,
         )
-        .map_err(Error::TxError)
+        .map_err(Error::TxApply)
         {
             Ok(result) => response.info = result.to_string(),
             Err(error) => {

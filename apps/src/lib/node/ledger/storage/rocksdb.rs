@@ -53,7 +53,7 @@ pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
     cf_opts.create_missing_column_families(true);
     cf_opts.create_if_missing(true);
 
-    cf_opts.set_comparator(&"key_comparator", key_comparator);
+    cf_opts.set_comparator("key_comparator", key_comparator);
     let extractor = SliceTransform::create_fixed_prefix(20);
     cf_opts.set_prefix_extractor(extractor);
     // TODO use column families
