@@ -104,7 +104,6 @@ fn find_to_update_node(
         }
         Control::<()>::Continue
     });
-    log_string(format!("{:?}, {:?}", connect_sell, connect_buy));
     (connect_sell, connect_buy)
 }
 
@@ -252,8 +251,6 @@ fn compute_amounts(
         },
         |_edge_index, edge| Some(edge),
     );
-
-    log_string(format!("{:?}", intent_graph));
 
     let variables_iter = vars.iter_variables_with_def().map(|(var, _)| var);
     let obj_function: Expression = variables_iter.sum();

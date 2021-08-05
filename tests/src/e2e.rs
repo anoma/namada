@@ -577,7 +577,7 @@ mod tests {
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_regex(".*trying to match intent: *")
+            .exp_regex(".*trying to match new intent*")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // Send intent B
@@ -602,7 +602,7 @@ mod tests {
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_regex(".*trying to match intent: *")
+            .exp_regex(".*trying to match new intent*")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // // Send intent C
@@ -628,20 +628,20 @@ mod tests {
 
         // // check that the amount matched are correct
         session_gossip
-            .exp_string("amounts: [100000000, 70000000, 200000000]")
+            .exp_string("amounts: [100, 70, 200]")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // check that the transfers transactions are correct
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         drop(session_gossip);
