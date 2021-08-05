@@ -7,6 +7,7 @@ mod port;
 
 use std::collections::HashSet;
 
+use ibc::ics02_client::context::ClientReader;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
