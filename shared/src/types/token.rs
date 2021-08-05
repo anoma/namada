@@ -1,5 +1,6 @@
 //! A basic fungible token
 
+use std::convert::TryInto;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -65,15 +66,28 @@ impl Amount {
         }
     }
 
-    /// return the f64 representation
-    pub fn to_f64(&self) -> f64 {
+    // Return the f64 rapresentation
+    pub fn to_f64(self) -> f64 {
         self.micro as f64
+    }
+
+    /// Return the u64 rapresentation
+    pub fn to_u64(self) -> u64 {
+        self.micro as u64
     }
 }
 
 impl From<u64> for Amount {
     fn from(micro: u64) -> Self {
         Self { micro }
+    }
+}
+
+impl From<f64> for Amount {
+    fn from(micro: f64) -> Self {
+        Self {
+            micro: (micro * 1_000_000_f64) as u64,
+        }
     }
 }
 

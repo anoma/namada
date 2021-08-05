@@ -119,7 +119,6 @@ fn add_node(
         intent,
     };
     let new_node_index = graph.add_node(new_node.clone());
-    // log_string(format!("before graph: {:?}", graph));
     let (connect_sell, connect_buy) = find_to_update_node(&graph, &new_node);
     let sell_edge = new_node.exchange.data.token_sell;
     let buy_edge = new_node.exchange.data.token_buy;
@@ -129,7 +128,6 @@ fn add_node(
     for node_index in connect_buy {
         graph.update_edge(node_index, new_node_index, buy_edge.clone());
     }
-    // log_string(format!("after graph: {:?}", graph));
 }
 
 fn create_and_send_tx_data(
@@ -292,7 +290,7 @@ fn compute_amounts(
             let amounts = solution
                 .into_inner()
                 .iter()
-                .map(|(_, amount)| *amount as u64)
+                .map(|(_, amount)| Amount::from(*amount).to_u64())
                 .collect::<Vec<u64>>();
             nodes.iter().enumerate().for_each(|(index, exchange)| {
                 amount_map.insert(exchange.clone(), amounts[index]);
