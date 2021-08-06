@@ -12,11 +12,36 @@ use ibc::ics02_client::height::Height;
 use ibc::ics24_host::identifier::ClientId;
 use ibc::ics24_host::Path;
 use tendermint_proto::Protobuf;
+use thiserror::Error;
 
-use super::{Error, Ibc, Result, StateChange};
+use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
-use crate::types::ibc::{ClientUpdateData, ClientUpgradeData};
+use crate::types::ibc::{
+    ClientUpdateData, ClientUpgradeData, Error as IbcDataError,
+};
 use crate::types::storage::{Key, KeySeg};
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Key error: {0}")]
+    KeyError(String),
+    #[error("State change error: {0}")]
+    StateChangeError(String),
+    #[error("Client error: {0}")]
+    ClientError(String),
+    #[error("Header error: {0}")]
+    HeaderError(String),
+    #[error("Proof verification error: {0}")]
+    ProofVerificationError(String),
+    #[error("Decoding TX data error: {0}")]
+    DecodingTxDataError(std::io::Error),
+    #[error("IBC data error: {0}")]
+    IbcDataError(IbcDataError),
+}
+
+/// IBC client functions result
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl<'a, DB, H> Ibc<'a, DB, H>
 where
@@ -33,13 +58,10 @@ where
             StateChange::Updated => {
                 self.validate_updated_client(client_id, tx_data)
             }
-            _ => {
-                tracing::info!(
-                    "unexpected state change for an IBC client: {}",
-                    client_id
-                );
-                Ok(false)
-            }
+            _ => Err(Error::StateChangeError(format!(
+                "The state change of the client is invalid: ID {}",
+                client_id
+            ))),
         }
     }
 
@@ -49,7 +71,7 @@ where
             Some(id) => ClientId::from_str(&id.raw())
                 .map_err(|e| Error::KeyError(e.to_string())),
             None => Err(Error::KeyError(format!(
-                "The client key doesn't have a client ID: {}",
+                "The key doesn't have a client ID: {}",
                 key
             ))),
         }
@@ -63,38 +85,36 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client type failed");
         self.get_state_change(&key)
+            .map_err(|e| Error::StateChangeError(e.to_string()))
     }
 
     fn validate_created_client(&self, client_id: &ClientId) -> Result<bool> {
         let client_type = match self.client_type(client_id) {
             Some(t) => t,
             None => {
-                tracing::info!(
-                    "the client type of ID {} doesn't exist",
+                return Err(Error::ClientError(format!(
+                    "The client type doesn't exist: ID {}",
                     client_id
-                );
-                return Ok(false);
+                )));
             }
         };
         let client_state = match ClientReader::client_state(self, client_id) {
             Some(s) => s,
             None => {
-                tracing::info!(
-                    "the client state of ID {} doesn't exist",
+                return Err(Error::ClientError(format!(
+                    "The client state doesn't exist: ID {}",
                     client_id
-                );
-                return Ok(false);
+                )));
             }
         };
         let height = client_state.latest_height();
         let consensus_state = match self.consensus_state(client_id, height) {
             Some(c) => c,
             None => {
-                tracing::info!(
-                    "the consensus state of ID {} doesn't exist",
-                    client_id
-                );
-                return Ok(false);
+                return Err(Error::ClientError(format!(
+                    "The consensus state doesn't exist: ID {}, Height {}",
+                    client_id, height
+                )));
             }
         };
         Ok(client_type == client_state.client_type()
@@ -112,13 +132,11 @@ where
                 // "UpdateClient"
                 self.verify_update_client(client_id, data)
             }
-            Err(_) => match ClientUpgradeData::try_from_slice(tx_data) {
-                Ok(data) => {
-                    // "UpgradeClient"
-                    self.verify_upgrade_client(client_id, data)
-                }
-                Err(e) => Err(Error::DecodingTxDataError(e)),
-            },
+            Err(_) => {
+                // "UpgradeClient"
+                let data = ClientUpgradeData::try_from_slice(tx_data)?;
+                self.verify_upgrade_client(client_id, data)
+            }
         }
     }
 
@@ -129,59 +147,38 @@ where
     ) -> Result<bool> {
         let id = data.client_id()?;
         if id != *client_id {
-            tracing::info!(
-                "the client ID is mismatched: {} in the tx data, {} in the key",
-                id,
-                client_id,
-            );
-            return Ok(false);
+            return Err(Error::ClientError(format!(
+                "The client ID is mismatched: {} in the tx data, {} in the key",
+                id, client_id,
+            )));
         }
 
         // check the posterior states
         let client_state = match ClientReader::client_state(self, client_id) {
             Some(s) => s,
             None => {
-                tracing::info!(
-                    "the client state of ID {} doesn't exist",
+                return Err(Error::ClientError(format!(
+                    "The client state doesn't exist: ID {}",
                     client_id
-                );
-                return Ok(false);
+                )));
             }
         };
         let height = client_state.latest_height();
         let consensus_state = match self.consensus_state(client_id, height) {
             Some(s) => s,
             None => {
-                tracing::info!(
-                    "the consensus state of ID {} doesn't exist",
-                    client_id
-                );
-                return Ok(false);
+                return Err(Error::ClientError(format!(
+                    "The consensus state doesn't exist: ID {}, Height {}",
+                    client_id, height
+                )));
             }
         };
         // check the prior states
-        let prev_client_state = match self.client_state_pre(client_id) {
-            Some(s) => s,
-            None => {
-                tracing::info!(
-                    "the prior client state of ID {} doesn't exist",
-                    client_id
-                );
-                return Ok(false);
-            }
-        };
-        let prev_consensus_state = match self
-            .consensus_state_pre(client_id, prev_client_state.latest_height())
-        {
-            Some(s) => s,
-            None => {
-                tracing::info!(
-                    "the prior consensus state of ID {} doesn't exist",
-                    client_id
-                );
-                return Ok(false);
-            }
-        };
+        let prev_client_state = self.client_state_pre(client_id)?;
+        let prev_consensus_state = self.consensus_state_pre(
+            client_id,
+            prev_client_state.latest_height(),
+        )?;
 
         let client = AnyClient::from_client_type(client_state.client_type());
         let headers = data.headers()?;
@@ -198,14 +195,10 @@ where
             Ok((new_client_state, new_consensus_state)) => Ok(new_client_state
                 == client_state
                 && new_consensus_state == consensus_state),
-            Err(e) => {
-                tracing::info!(
-                    "a header is invalid for the client {}: {}",
-                    client_id,
-                    e,
-                );
-                Ok(false)
-            }
+            Err(e) => Err(Error::HeaderError(format!(
+                "The header is invalid: ID {}, {}",
+                client_id, e,
+            ))),
         }
     }
 
@@ -216,47 +209,34 @@ where
     ) -> Result<bool> {
         let id = data.client_id()?;
         if id != *client_id {
-            tracing::info!(
-                "the client ID is mismatched: {} in the tx data, {} in the key",
-                id,
-                client_id,
-            );
-            return Ok(false);
+            return Err(Error::ClientError(format!(
+                "The client ID is mismatched: {} in the tx data, {} in the key",
+                id, client_id,
+            )));
         }
 
         // check the posterior states
         let client_state = match ClientReader::client_state(self, client_id) {
             Some(s) => s,
             None => {
-                tracing::info!(
-                    "the client state of ID {} doesn't exist",
+                return Err(Error::ClientError(format!(
+                    "The client state doesn't exist: ID {}",
                     client_id
-                );
-                return Ok(false);
+                )));
             }
         };
         let height = client_state.latest_height();
         let consensus_state = match self.consensus_state(client_id, height) {
             Some(s) => s,
             None => {
-                tracing::info!(
-                    "the consensus state of ID {} doesn't exist",
-                    client_id
-                );
-                return Ok(false);
+                return Err(Error::ClientError(format!(
+                    "The consensus state doesn't exist: ID {}, Height {}",
+                    client_id, height
+                )));
             }
         };
         // check the prior client state
-        let pre_client_state = match self.client_state_pre(client_id) {
-            Some(s) => s,
-            None => {
-                tracing::info!(
-                    "the prior client state of ID {} doesn't exist",
-                    client_id
-                );
-                return Ok(false);
-            }
-        };
+        let pre_client_state = self.client_state_pre(client_id)?;
         // get proofs
         let client_proof = data.proof_client()?;
         let consensus_proof = data.proof_consensus_state()?;
@@ -271,42 +251,42 @@ where
             Ok((new_client_state, new_consensus_state)) => Ok(new_client_state
                 == client_state
                 && new_consensus_state == consensus_state),
-            Err(e) => {
-                tracing::info!(
-                    "the header is invalid for the client {}: {}",
-                    client_id,
-                    e
-                );
-                Ok(false)
-            }
+            Err(e) => Err(Error::ProofVerificationError(e.to_string())),
         }
     }
 
-    fn client_state_pre(&self, client_id: &ClientId) -> Option<AnyClientState> {
+    fn client_state_pre(&self, client_id: &ClientId) -> Result<AnyClientState> {
         let path = Path::ClientState(client_id.clone()).to_string();
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client state shouldn't fail");
         match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => AnyClientState::decode_vec(&value).ok(),
-            // returns None even if DB read fails
-            _ => None,
+            Ok(Some(value)) => {
+                AnyClientState::decode_vec(&value).map_err(|e| {
+                    Error::ClientError(format!(
+                        "Decoding the client state failed: ID {}, {}",
+                        client_id, e
+                    ))
+                })
+            }
+            _ => Err(Error::ClientError(format!(
+                "The prior client state doesn't exist: ID {}",
+                client_id
+            ))),
         }
     }
 
-    pub(super) fn client_counter_pre(&self) -> u64 {
+    pub(super) fn client_counter_pre(&self) -> Result<u64> {
         let key = Key::ibc_client_counter();
         match self.ctx.read_post(&key) {
-            Ok(Some(value)) => match storage::types::decode(&value) {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!("decoding a client counter failed: {}", e);
-                    u64::MAX
-                }
-            },
-            _ => {
-                tracing::error!("client counter doesn't exist");
-                unreachable!();
-            }
+            Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
+                Error::ClientError(format!(
+                    "Decoding the client counter failed: {}",
+                    e
+                ))
+            }),
+            _ => Err(Error::ClientError(
+                "The client counter doesn't exist".to_owned(),
+            )),
         }
     }
 
@@ -314,7 +294,7 @@ where
         &self,
         client_id: &ClientId,
         height: Height,
-    ) -> Option<AnyConsensusState> {
+    ) -> Result<AnyConsensusState> {
         let path = Path::ClientConsensusState {
             client_id: client_id.clone(),
             epoch: height.revision_number,
@@ -324,9 +304,19 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a consensus state shouldn't fail");
         match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => AnyConsensusState::decode_vec(&value).ok(),
-            // returns None even if DB read fails
-            _ => None,
+            Ok(Some(value)) => {
+                AnyConsensusState::decode_vec(&value).map_err(|e| {
+                    Error::ClientError(format!(
+                        "Decoding the consensus state failed: ID {}, Height \
+                         {}, {}",
+                        client_id, height, e
+                    ))
+                })
+            }
+            _ => Err(Error::ClientError(format!(
+                "The prior consensus state doesn't exist: ID {}, Height {}",
+                client_id, height
+            ))),
         }
     }
 }
@@ -397,5 +387,17 @@ where
                 unreachable!();
             }
         }
+    }
+}
+
+impl From<IbcDataError> for Error {
+    fn from(err: IbcDataError) -> Self {
+        Self::IbcDataError(err)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::DecodingTxDataError(err)
     }
 }

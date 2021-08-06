@@ -20,10 +20,10 @@ pub enum Error {
     NativeVpError(native_vp::Error),
     #[error("Key error: {0}")]
     KeyError(String),
-    #[error("Decoding TX data error: {0}")]
-    DecodingTxDataError(std::io::Error),
-    #[error("IBC data error: {0}")]
-    IbcDataError(crate::types::ibc::Error),
+    #[error("Connection validation error: {0}")]
+    ClientError(client::Error),
+    #[error("Connection validation error: {0}")]
+    ConnectionError(connection::Error),
 }
 
 /// IBC functions result
@@ -85,7 +85,7 @@ where
             let accepted = match Self::get_ibc_prefix(key) {
                 IbcPrefix::Client => {
                     if key.is_ibc_client_counter() {
-                        self.client_counter_pre() < self.client_counter()
+                        self.client_counter_pre()? < self.client_counter()
                     } else {
                         let client_id = Self::get_client_id(key)?;
                         if !clients.insert(client_id.clone()) {
@@ -172,15 +172,15 @@ impl From<native_vp::Error> for Error {
     }
 }
 
-impl From<crate::types::ibc::Error> for Error {
-    fn from(err: crate::types::ibc::Error) -> Self {
-        Self::IbcDataError(err)
+impl From<client::Error> for Error {
+    fn from(err: client::Error) -> Self {
+        Self::ClientError(err)
     }
 }
 
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Self::DecodingTxDataError(err)
+impl From<connection::Error> for Error {
+    fn from(err: connection::Error) -> Self {
+        Self::ConnectionError(err)
     }
 }
 
@@ -332,10 +332,13 @@ mod tests {
         let verifiers = HashSet::new();
 
         let ibc = Ibc { ctx };
-        // this should return false because no state is stored
-        assert!(
-            !ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
-                .expect("validation failed")
+        // this should fail because no state is stored
+        let result = ibc
+            .validate_tx(&tx_data, &keys_changed, &verifiers)
+            .unwrap_err();
+        assert_matches!(
+            result,
+            Error::ClientError(client::Error::StateChangeError(_))
         );
     }
 
@@ -457,10 +460,13 @@ mod tests {
         let verifiers = HashSet::new();
 
         let ibc = Ibc { ctx };
-        // this should return false because no client exists
-        assert!(
-            !ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
-                .expect("validation failed")
+        // this should fail because no client exists
+        let result = ibc
+            .validate_tx(&tx_data, &keys_changed, &verifiers)
+            .unwrap_err();
+        assert_matches!(
+            result,
+            Error::ConnectionError(connection::Error::ClientError(_))
         );
     }
 
