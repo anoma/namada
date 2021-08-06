@@ -26,12 +26,14 @@ pub enum Error {
     ClientError(client::Error),
     #[error("Counter error: {0}")]
     CounterError(String),
+    #[error("Client validation error: {0}")]
+    ClientError(client::Error),
     #[error("Connection validation error: {0}")]
     ConnectionError(connection::Error),
-    #[error("No connection error: {0}")]
-    NoConnectionError(String),
-    #[error("Decoding error: {0}")]
-    DecodingError(String),
+    #[error("Channel validation error: {0}")]
+    ChannelError(channel::Error),
+    #[error("Port validation error: {0}")]
+    PortError(port::Error),
 }
 
 /// IBC functions result
@@ -244,6 +246,18 @@ impl From<client::Error> for Error {
 impl From<connection::Error> for Error {
     fn from(err: connection::Error) -> Self {
         Self::ConnectionError(err)
+    }
+}
+
+impl From<channel::Error> for Error {
+    fn from(err: channel::Error) -> Self {
+        Self::ChannelError(err)
+    }
+}
+
+impl From<port::Error> for Error {
+    fn from(err: port::Error) -> Self {
+        Self::PortError(err)
     }
 }
 

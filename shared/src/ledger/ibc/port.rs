@@ -7,10 +7,25 @@ use ibc::ics05_port::capabilities::Capability;
 use ibc::ics05_port::context::PortReader;
 use ibc::ics24_host::identifier::PortId;
 use ibc::ics24_host::Path;
+use thiserror::Error;
 
-use super::{Error, Ibc, Result, StateChange};
+use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::storage::{Key, KeySeg};
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Key error: {0}")]
+    KeyError(String),
+    #[error("State change error: {0}")]
+    StateChangeError(String),
+    #[error("Port error: {0}")]
+    PortError(String),
+}
+
+/// IBC port functions result
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl<'a, DB, H> Ibc<'a, DB, H>
 where
@@ -23,19 +38,16 @@ where
             StateChange::Created | StateChange::Updated => {
                 match self.authenticated_capability(&port_id) {
                     Ok(_) => Ok(true),
-                    Err(e) => {
-                        tracing::info!("{}", e);
-                        Ok(false)
-                    }
+                    Err(e) => Err(Error::PortError(format!(
+                        "The port is not authenticated: ID {}, {}",
+                        port_id, e
+                    ))),
                 }
             }
-            _ => {
-                tracing::info!(
-                    "unexpected state change of the port: {}",
-                    port_id
-                );
-                Ok(false)
-            }
+            _ => Err(Error::PortError(format!(
+                "The state change of the port is invalid: Port {}",
+                port_id
+            ))),
         }
     }
 
@@ -45,7 +57,7 @@ where
             Some(id) => PortId::from_str(&id.raw())
                 .map_err(|e| Error::KeyError(e.to_string())),
             None => Err(Error::KeyError(format!(
-                "The key doesn't have a port ID: {}",
+                "The key doesn't have a port ID: Key {}",
                 key
             ))),
         }
@@ -56,6 +68,7 @@ where
         let key =
             Key::ibc_key(path).expect("Creating a key for a connection failed");
         self.get_state_change(&key)
+            .map_err(|e| Error::StateChangeError(e.to_string()))
     }
 }
 
