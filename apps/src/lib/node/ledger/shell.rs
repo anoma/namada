@@ -1,5 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
+use std::str::FromStr;
 
 use anoma::ledger::gas::{self, BlockGasMeter};
 use anoma::ledger::storage::write_log::WriteLog;
@@ -17,6 +18,8 @@ use tendermint::block::Header;
 use thiserror::Error;
 use tower_abci::{request, response};
 
+use super::rpc;
+use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::{config, genesis, wallet};
 
@@ -119,17 +122,8 @@ impl Shell {
             .expect("The genesis address shouldn't fail decoding");
         let users = vec![alberto, bertha, christel];
 
-        let tokens = vec![
-            address::xan(),
-            address::btc(),
-            address::eth(),
-            address::dot(),
-            address::schnitzel(),
-            address::apfel(),
-            address::kartoffel(),
-        ];
-
-        for token in &tokens {
+        let tokens = address::tokens();
+        for token in tokens.keys() {
             // default tokens VPs for testing
             let key = Key::validity_predicate(&token);
             self.storage
@@ -137,7 +131,7 @@ impl Shell {
                 .expect("Unable to write token VP");
         }
 
-        for (user, token) in users.iter().cartesian_product(tokens.iter()) {
+        for (user, token) in users.iter().cartesian_product(tokens.keys()) {
             // default user VPs for testing
             self.storage
                 .write(&Key::validity_predicate(user), user_vp.to_vec())
@@ -233,10 +227,23 @@ impl Shell {
     /// Uses `path` in the query to forward the request to the
     /// right query method and returns the result (which may be
     /// the default if `path` is not a supported string.
-    pub fn query(&mut self, query: request::Query) -> response::Query {
-        match query.path.as_str() {
-            "dry_run_tx" => self.dry_run_tx(&query.data),
-            _ => response::Query::default(),
+    pub fn query(&self, query: request::Query) -> response::Query {
+        use rpc::Path;
+        match Path::from_str(&query.path) {
+            Ok(path) => match path {
+                Path::DryRunTx => self.dry_run_tx(&query.data),
+                Path::Value(storage_key) => {
+                    self.read_storage_value(&storage_key)
+                }
+                Path::Prefix(storage_key) => {
+                    self.read_storage_prefix(&storage_key)
+                }
+            },
+            Err(err) => response::Query {
+                code: 1,
+                info: format!("RPC error: {}", err),
+                ..Default::default()
+            },
         }
     }
 
@@ -366,5 +373,67 @@ impl Shell {
             }
         }
         response
+    }
+
+    /// Query to read a value from storage
+    fn read_storage_value(&self, key: &Key) -> response::Query {
+        match self.storage.read(key) {
+            Ok((Some(value), _gas)) => response::Query {
+                value,
+                ..Default::default()
+            },
+            Ok((None, _gas)) => response::Query {
+                code: 1,
+                info: format!("No value found for key: {}", key),
+                ..Default::default()
+            },
+            Err(err) => response::Query {
+                code: 2,
+                info: format!("Storage error: {}", err),
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Query to read a range of values from storage with a matching prefix. The
+    /// value in successful response is a [`Vec<PrefixValue>`] encoded with
+    /// [`BorshSerialize`].
+    fn read_storage_prefix(&self, key: &Key) -> response::Query {
+        let (iter, _gas) = self.storage.iter_prefix(key);
+        let mut iter = iter.peekable();
+        if iter.peek().is_none() {
+            response::Query {
+                code: 1,
+                info: format!("No value found for key: {}", key),
+                ..Default::default()
+            }
+        } else {
+            let values: std::result::Result<
+                Vec<PrefixValue>,
+                anoma::types::storage::Error,
+            > = iter
+                .map(|(key, value, _gas)| {
+                    let key = Key::parse(key)?;
+                    Ok(PrefixValue { key, value })
+                })
+                .collect();
+            match values {
+                Ok(values) => {
+                    let value = values.try_to_vec().unwrap();
+                    response::Query {
+                        value,
+                        ..Default::default()
+                    }
+                }
+                Err(err) => response::Query {
+                    code: 1,
+                    info: format!(
+                        "Error parsing a storage key {}: {}",
+                        key, err
+                    ),
+                    ..Default::default()
+                },
+            }
+        }
     }
 }
