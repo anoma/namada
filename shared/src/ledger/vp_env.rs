@@ -52,8 +52,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (value, gas) =
-        storage.read(key).map_err(RuntimeError::StorageError)?;
+    let (value, gas) = storage.read(key).map_err(RuntimeError::StorageError)?;
     add_gas(gas_meter, gas)?;
     Ok(value)
 }
