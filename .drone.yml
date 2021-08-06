@@ -30,7 +30,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: '{{ checksum "Cargo.lock" }}'
+    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -91,7 +91,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: '{{ checksum "Cargo.lock" }}'
+    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -134,7 +134,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: nightly/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/nightly/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -175,7 +175,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: nightly/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/nightly/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -219,7 +219,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: '{{ checksum "Cargo.lock" }}'
+    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -257,7 +257,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: '{{ checksum "Cargo.lock" }}'
+    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -300,7 +300,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: audit/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/audit/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -330,7 +330,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: audit/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/audit/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -374,7 +374,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: miri/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/miri/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -400,7 +400,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: miri/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/miri/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -524,7 +524,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: '{{ checksum "Cargo.lock" }}'
+    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -598,7 +598,7 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: '{{ checksum "Cargo.lock" }}'
+    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -612,6 +612,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 8fb02889ee7bf833bb14e9901a4f49dac9597418854c073eafd11eb7f22d414c
+hmac: 0a3881deda9cc7ff0b421982f760c32e72520678eef56cac163c3e4774fccb8c
 
 ...
