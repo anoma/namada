@@ -73,8 +73,11 @@ async fn submit_tx(args: args::Tx, tx: Tx) {
     // let request_body = request.into_json();
     // println!("HTTP request body: {}", request_body);
 
+    // let socket_url = Url::from_str("ws://localhost:26657/websocket")
+    //    .expect(&format!("Unable to parse ledger address as url: {:?}",
+    // &args.ledger_address));
     let client = HttpClient::new(args.ledger_address).unwrap();
-    // TODO broadcast_tx_commit shouldn't be used live;
+
     if args.dry_run {
         let path = FromStr::from_str("dry_run_tx").unwrap();
 

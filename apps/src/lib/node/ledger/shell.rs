@@ -337,7 +337,7 @@ impl Shell {
     ) -> response::CheckTx {
         let mut response = response::CheckTx::default();
         match Tx::try_from(tx_bytes).map_err(Error::TxDecodingError) {
-            Ok(_) => response.info = String::from("Mempool validation passed"),
+            Ok(_) => response.log = String::from("Mempool validation passed"),
             Err(msg) => {
                 response.code = 1;
                 response.log = msg.to_string();

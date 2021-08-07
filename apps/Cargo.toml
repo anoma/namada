@@ -43,6 +43,7 @@ testing = []
 [dependencies]
 anoma = {path = "../shared", features = ["ibc-vp", "wasm-runtime"]}
 async-std = {version = "1.9.0", features = ["unstable"]}
+async-trait = "0.1.51"
 base64 = "0.13.0"
 bech32 = "0.8.0"
 blake2b-rs = "0.2.0"
@@ -79,7 +80,7 @@ sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", b
 tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost"}
 tendermint-abci = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost"}
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost", features = ["http-client"]}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost", features = ["http-client", "websocket-client"]}
 thiserror = "1.0.24"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
@@ -89,6 +90,7 @@ tower-abci = {git = "https://github.com/heliaxdev/tower-abci", branch = "tomas/u
 tracing = "0.1.26"
 tracing-log = "0.1.2"
 tracing-subscriber = "0.2.18"
+websocket = "0.26.2"
 
 [dev-dependencies]
 anoma = {path = "../shared", features = ["testing", "wasm-runtime"]}
