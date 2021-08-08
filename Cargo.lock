@@ -5724,7 +5724,7 @@ dependencies = [
 [[package]]
 name = "tracing-futures"
 version = "0.2.5"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#aeae4fab322a9bb8943c357cbd9ed43a54424085"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#8cc3c51a5be9767c1bf73ef9386f7cc479b1c371"
 dependencies = [
  "pin-project 1.0.8",
  "tracing",

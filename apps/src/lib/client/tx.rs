@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use std::str::FromStr;
 
 use anoma::proto::Tx;
 use anoma::types::key::ed25519::Keypair;
@@ -7,8 +6,9 @@ use anoma::types::token;
 use anoma::types::transaction::UpdateVp;
 use borsh::BorshSerialize;
 use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::{Client, HttpClient};
+use tendermint_rpc::Client;
 
+use super::rpc;
 use crate::cli::args;
 use crate::client::tendermint_rpc_client::{
     hash_tx, Error, TendermintRpcClient, WebSocketAddress,
@@ -78,19 +78,8 @@ async fn submit_tx(args: args::Tx, tx: Tx) {
     // let request_body = request.into_json();
     // println!("HTTP request body: {}", request_body);
 
-    // let socket_url = Url::from_str("ws://localhost:26657/websocket")
-    //    .expect(&format!("Unable to parse ledger address as url: {:?}",
-    // &args.ledger_address));
-
     if args.dry_run {
-        let client = HttpClient::new(args.ledger_address).unwrap();
-        let path = FromStr::from_str("dry_run_tx").unwrap();
-
-        let response = client
-            .abci_query(Some(path), tx_bytes, None, false)
-            .await
-            .unwrap();
-        println!("{:#?}", response);
+        rpc::dry_run_tx(&args.ledger_address, tx_bytes).await
     } else if let Err(err) = broadcast_tx(args.ledger_address, tx_bytes).await {
         eprintln!("Encountered error while broadcasting transaction: {}", err);
     }
