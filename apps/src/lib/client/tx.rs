@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::str::FromStr;
 
 use anoma::proto::Tx;
@@ -5,9 +6,13 @@ use anoma::types::key::ed25519::Keypair;
 use anoma::types::token;
 use anoma::types::transaction::UpdateVp;
 use borsh::BorshSerialize;
+use tendermint_rpc::query::{EventType, Query};
 use tendermint_rpc::{Client, HttpClient};
 
 use crate::cli::args;
+use crate::client::tendermint_rpc_client::{
+    hash_tx, Error, TendermintRpcClient, WebSocketAddress,
+};
 use crate::wallet;
 
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
@@ -76,9 +81,9 @@ async fn submit_tx(args: args::Tx, tx: Tx) {
     // let socket_url = Url::from_str("ws://localhost:26657/websocket")
     //    .expect(&format!("Unable to parse ledger address as url: {:?}",
     // &args.ledger_address));
-    let client = HttpClient::new(args.ledger_address).unwrap();
 
     if args.dry_run {
+        let client = HttpClient::new(args.ledger_address).unwrap();
         let path = FromStr::from_str("dry_run_tx").unwrap();
 
         let response = client
@@ -86,9 +91,30 @@ async fn submit_tx(args: args::Tx, tx: Tx) {
             .await
             .unwrap();
         println!("{:#?}", response);
-    } else {
-        let response =
-            client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
-        println!("{:#?}", response);
+    } else if let Err(err) = broadcast_tx(args.ledger_address, tx_bytes).await {
+        eprintln!("Encountered error while broadcasting transaction: {}", err);
     }
+}
+
+async fn broadcast_tx(
+    address: tendermint::net::Address,
+    tx_bytes: Vec<u8>,
+) -> Result<(), Error> {
+    let mut client =
+        TendermintRpcClient::open(WebSocketAddress::try_from(address)?)?;
+    // It is better to subscribe to the transaction before it is broadcast
+    let query = Query::from(EventType::Tx)
+        .and_eq("tx.hash", hash_tx(&tx_bytes).to_string());
+    client.subscribe(query)?;
+    println!(
+        "{:?}",
+        client
+            .broadcast_tx_sync(tx_bytes.into())
+            .await
+            .map_err(|err| Error::Response(format!("{:?}", err)))?
+    );
+    println!("{:?}", client.receive_response()?);
+    client.unsubscribe()?;
+    client.close();
+    Ok(())
 }

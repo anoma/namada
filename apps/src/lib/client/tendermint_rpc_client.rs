@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
@@ -5,14 +6,17 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use sha2::{Digest, Sha256};
 use tendermint::abci::transaction;
+use tendermint::net::Address;
 use tendermint_rpc::query::Query;
 use tendermint_rpc::{Client, Request, Response, SimpleRequest};
 use thiserror::Error;
-use websocket::result::{WebSocketError, WebSocketResult};
+use websocket::result::WebSocketError;
 use websocket::{ClientBuilder, Message, OwnedMessage};
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Could not convert into websocket address: {0:?}")]
+    Address(tendermint::net::Address),
     #[error("Websocket Error: {0:?}")]
     Websocket(WebSocketError),
     #[error("Failed to subscribe to the event: {0}")]
@@ -55,13 +59,12 @@ mod rpc_types {
     }
 
     #[derive(Debug, Deserialize, Serialize)]
-    pub struct RpcSubscription {
-        #[serde(skip_serializing)]
-        pub method: SubscribeType,
+    pub struct RpcSubscription(
+        #[serde(skip_serializing)] pub SubscribeType,
         #[serde(serialize_with = "serialize_query")]
         #[serde(deserialize_with = "deserialize_query")]
-        pub params: Query,
-    }
+        pub Query,
+    );
 
     fn serialize_query<S>(
         query: &Query,
@@ -103,6 +106,9 @@ mod rpc_types {
         deserializer.deserialize_any(QueryVisitor)
     }
 
+    /// This type is required by the tendermint_rs traits but we
+    /// cannot use it due to a bug in the RPC responses from
+    /// tendermint
     #[derive(Debug, Deserialize, Serialize)]
     #[serde(transparent)]
     pub struct RpcResponse(String);
@@ -121,7 +127,7 @@ mod rpc_types {
         type Response = RpcResponse;
 
         fn method(&self) -> Method {
-            match self.method {
+            match self.0 {
                 SubscribeType::Subscribe => Method::Subscribe,
                 SubscribeType::Unsubscribe => Method::Unsubscribe,
             }
@@ -131,7 +137,18 @@ mod rpc_types {
 
 pub struct WebSocketAddress {
     host: String,
-    port: u32,
+    port: u16,
+}
+
+impl TryFrom<tendermint::net::Address> for WebSocketAddress {
+    type Error = Error;
+
+    fn try_from(value: Address) -> Result<Self, Self::Error> {
+        match value {
+            Address::Tcp { host, port, .. } => Ok(Self { host, port }),
+            _ => Err(Error::Address(value)),
+        }
+    }
 }
 
 impl Display for WebSocketAddress {
@@ -140,10 +157,10 @@ impl Display for WebSocketAddress {
     }
 }
 
-use rpc_types::{RpcResponse, RpcSubscription, SubscribeType};
+use rpc_types::{RpcSubscription, SubscribeType};
 
-/// We need interior mutability since the perform method of the Client
-/// trait from tendermint_rpc only takes `&self` as an argument
+/// We need interior mutability since the `perform` method of the `Client`
+/// trait from `tendermint_rpc` only takes `&self` as an argument
 /// Furthermore, TendermintRpcClient must be `Send` since it will be
 /// used in async methods
 type Websocket = Arc<Mutex<websocket::sync::client::Client<TcpStream>>>;
@@ -155,7 +172,7 @@ pub struct TendermintRpcClient {
 
 impl TendermintRpcClient {
     /// Open up a new websocket given a specified URL
-    pub fn open(url: WebSocketAddress) -> WebSocketResult<Self> {
+    pub fn open(url: WebSocketAddress) -> Result<Self, Error> {
         match ClientBuilder::new(&url.to_string())
             .unwrap()
             .connect_insecure()
@@ -164,8 +181,15 @@ impl TendermintRpcClient {
                 websocket: Arc::new(Mutex::new(websocket)),
                 subscribed: None,
             }),
-            Err(inner) => Err(inner),
+            Err(inner) => Err(Error::Websocket(inner)),
         }
+    }
+
+    /// Shutdown the client. Can still be reused afterwards
+    pub fn close(&mut self) {
+        // Even in the case of errors, this will be shutdown
+        let _ = self.websocket.lock().unwrap().shutdown();
+        self.subscribed = None
     }
 
     /// Subscribes to an event specified by the query argument.
@@ -176,20 +200,17 @@ impl TendermintRpcClient {
             return Err(Error::AlreadySubscribed);
         }
         // send the subscription request
+        let message = RpcSubscription(SubscribeType::Subscribe, query.clone())
+            .into_json();
+
         self.websocket
             .lock()
             .unwrap()
-            .send_message(&Message::text(
-                RpcSubscription {
-                    method: SubscribeType::Subscribe,
-                    params: query.clone(),
-                }
-                .into_json(),
-            ))
+            .send_message(&Message::text(&message))
             .map_err(Error::Websocket)?;
 
         // check that the request was received and a success message returned
-        match self.process_response(|_| Error::Subscribe(query.to_string())) {
+        match self.process_response(|_| Error::Subscribe(message)) {
             Ok(_) => {
                 self.subscribed = Some(query);
                 Ok(())
@@ -201,9 +222,7 @@ impl TendermintRpcClient {
     /// Receive a response from the subscribed event
     pub fn receive_response(&self) -> Result<(), Error> {
         if self.subscribed.is_some() {
-            let response = self.process_response(|err| {
-                Error::Response(format!("{:?}", err))
-            })?;
+            let response = self.process_response(Error::Response)?;
             println!("{:?}", response);
             Ok(())
         } else {
@@ -212,26 +231,24 @@ impl TendermintRpcClient {
     }
 
     /// Unsubscribe from the currently subscribed event
+    /// Note that even if an error is returned, the client
+    /// will return to an unsubscribed state
     pub fn unsubscribe(&mut self) -> Result<(), Error> {
         match self.subscribed.take() {
             Some(query) => {
                 // send the subscription request
+                let message =
+                    RpcSubscription(SubscribeType::Unsubscribe, query)
+                        .into_json();
+
                 self.websocket
                     .lock()
                     .unwrap()
-                    .send_message(&Message::text(
-                        RpcSubscription {
-                            method: SubscribeType::Unsubscribe,
-                            params: query.clone(),
-                        }
-                        .into_json(),
-                    ))
+                    .send_message(&Message::text(&message))
                     .map_err(Error::Websocket)?;
                 // check that the request was received and a success message
                 // returned
-                match self
-                    .process_response(|_| Error::Unsubscribe(query.to_string()))
-                {
+                match self.process_response(|_| Error::Unsubscribe(message)) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(err),
                 }
@@ -241,11 +258,17 @@ impl TendermintRpcClient {
     }
 
     /// Process the next response received and handle any exceptions that
-    /// may have occurred. Includes a function to map an error response
+    /// may have occurred. Takes a function to map response to an error
     /// as a parameter
-    fn process_response<F>(&self, f: F) -> Result<RpcResponse, Error>
+    ///
+    /// Ideally the responses from tendermint would be parsed by the
+    /// tendermint-rs libraries. Unfortunately, the "result"/"error"
+    /// fields in the response are expected to be strings and
+    /// tendermint sometimes sends back `{}` instead. So we
+    /// process the response ourselves.
+    fn process_response<F>(&self, f: F) -> Result<String, Error>
     where
-        F: FnOnce(tendermint_rpc::error::Error) -> Error,
+        F: FnOnce(String) -> Error,
     {
         match self
             .websocket
@@ -254,10 +277,21 @@ impl TendermintRpcClient {
             .recv_message()
             .map_err(Error::Websocket)?
         {
-            OwnedMessage::Text(resp) => match RpcResponse::from_string(resp) {
-                Ok(resp) => Ok(resp),
-                Err(inner) => Err(f(inner)),
-            },
+            OwnedMessage::Text(resp) => {
+                if let serde_json::Value::Object(parsed) =
+                    serde_json::from_str(&resp).unwrap()
+                {
+                    if parsed.contains_key("result") {
+                        Ok(resp)
+                    } else if parsed.contains_key("error") {
+                        Err(f(resp))
+                    } else {
+                        Err(Error::UnexpectedResponse(OwnedMessage::Text(resp)))
+                    }
+                } else {
+                    Err(Error::UnexpectedResponse(OwnedMessage::Text(resp)))
+                }
+            }
             other => Err(Error::UnexpectedResponse(other)),
         }
     }
@@ -312,7 +346,7 @@ impl Client for TendermintRpcClient {
     }
 }
 
-fn hash_tx(tx_bytes: &[u8]) -> transaction::Hash {
+pub fn hash_tx(tx_bytes: &[u8]) -> transaction::Hash {
     let digest = Sha256::digest(tx_bytes);
     let mut hash_bytes = [0u8; 32];
     hash_bytes.copy_from_slice(&digest);
