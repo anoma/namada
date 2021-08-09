@@ -89,34 +89,27 @@ where
     }
 
     fn validate_created_client(&self, client_id: &ClientId) -> Result<bool> {
-        let client_type = match self.client_type(client_id) {
-            Some(t) => t,
-            None => {
-                return Err(Error::ClientError(format!(
-                    "The client type doesn't exist: ID {}",
-                    client_id
-                )));
-            }
-        };
-        let client_state = match ClientReader::client_state(self, client_id) {
-            Some(s) => s,
-            None => {
-                return Err(Error::ClientError(format!(
+        let client_type = self.client_type(client_id).ok_or_else(|| {
+            Error::ClientError(format!(
+                "The client type doesn't exist: ID {}",
+                client_id
+            ))
+        })?;
+        let client_state = ClientReader::client_state(self, client_id)
+            .ok_or_else(|| {
+                Error::ClientError(format!(
                     "The client state doesn't exist: ID {}",
                     client_id
-                )));
-            }
-        };
+                ))
+            })?;
         let height = client_state.latest_height();
-        let consensus_state = match self.consensus_state(client_id, height) {
-            Some(c) => c,
-            None => {
-                return Err(Error::ClientError(format!(
+        let consensus_state =
+            self.consensus_state(client_id, height).ok_or_else(|| {
+                Error::ClientError(format!(
                     "The consensus state doesn't exist: ID {}, Height {}",
                     client_id, height
-                )));
-            }
-        };
+                ))
+            })?;
         Ok(client_type == client_state.client_type()
             && client_type == consensus_state.client_type())
     }
@@ -154,25 +147,21 @@ where
         }
 
         // check the posterior states
-        let client_state = match ClientReader::client_state(self, client_id) {
-            Some(s) => s,
-            None => {
-                return Err(Error::ClientError(format!(
+        let client_state = ClientReader::client_state(self, client_id)
+            .ok_or_else(|| {
+                Error::ClientError(format!(
                     "The client state doesn't exist: ID {}",
                     client_id
-                )));
-            }
-        };
+                ))
+            })?;
         let height = client_state.latest_height();
-        let consensus_state = match self.consensus_state(client_id, height) {
-            Some(s) => s,
-            None => {
-                return Err(Error::ClientError(format!(
+        let consensus_state =
+            self.consensus_state(client_id, height).ok_or_else(|| {
+                Error::ClientError(format!(
                     "The consensus state doesn't exist: ID {}, Height {}",
                     client_id, height
-                )));
-            }
-        };
+                ))
+            })?;
         // check the prior states
         let prev_client_state = self.client_state_pre(client_id)?;
         let prev_consensus_state = self.consensus_state_pre(
@@ -216,25 +205,21 @@ where
         }
 
         // check the posterior states
-        let client_state = match ClientReader::client_state(self, client_id) {
-            Some(s) => s,
-            None => {
-                return Err(Error::ClientError(format!(
+        let client_state = ClientReader::client_state(self, client_id)
+            .ok_or_else(|| {
+                Error::ClientError(format!(
                     "The client state doesn't exist: ID {}",
                     client_id
-                )));
-            }
-        };
+                ))
+            })?;
         let height = client_state.latest_height();
-        let consensus_state = match self.consensus_state(client_id, height) {
-            Some(s) => s,
-            None => {
-                return Err(Error::ClientError(format!(
+        let consensus_state =
+            self.consensus_state(client_id, height).ok_or_else(|| {
+                Error::ClientError(format!(
                     "The consensus state doesn't exist: ID {}, Height {}",
                     client_id, height
-                )));
-            }
-        };
+                ))
+            })?;
         // check the prior client state
         let pre_client_state = self.client_state_pre(client_id)?;
         // get proofs

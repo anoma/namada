@@ -69,15 +69,12 @@ where
         }
 
         let conn_id = Self::get_connection_id(key)?;
-        let conn = match self.connection_end(&conn_id) {
-            Some(c) => c,
-            None => {
-                return Err(Error::ConnectionError(format!(
-                    "The connection doesn't exist: ID {}",
-                    conn_id
-                )));
-            }
-        };
+        let conn = self.connection_end(&conn_id).ok_or_else(|| {
+            Error::ConnectionError(format!(
+                "The connection doesn't exist: ID {}",
+                conn_id
+            ))
+        })?;
 
         match self.get_connection_state_change(&conn_id)? {
             StateChange::Created => {
