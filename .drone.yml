@@ -223,8 +223,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [rustup target add wasm32-unknown-unknown, make build-wasm-scripts, sh
-      scripts/ci/update-wasm.sh]
+- commands: [rustup target add wasm32-unknown-unknown, make build-wasm-scripts]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -246,7 +245,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: test-wasm
   pull: if-not-exists
-- depends_on: [test-wasm]
+- commands: [sh scripts/ci/update-wasm.sh]
+  depends_on: [test-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    GITHUB_TOKEN: {from_secret: github_token}
+    SCCACHE_BUCKET: heliax-drone-cache-v2s
+    SCCACHE_S3_KEY_PREFIX: sccache-test-wasm
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  name: push-wasm
+  pull: if-not-exists
+- depends_on: [push-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -613,6 +623,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 3b9cfb870ce8b0ef1dcf6dd8a6d6befc47af4196cd8a92a0c69c23d1ce9888f1
+hmac: 246e61ca55cb695323cf1c167504923227dacc1deb80e902c17adce4e783aa2a
 
 ...
