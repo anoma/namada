@@ -197,7 +197,7 @@ fn check_intent(
         rate_min.0
     ));
 
-    let token_sell_key = token::balance_key(&token_sell, addr).to_string();
+    let token_sell_key = token::balance_key(token_sell, addr).to_string();
     let mut sell_difference: token::Amount =
         read_pre(&token_sell_key).unwrap_or_default();
     let sell_post: token::Amount =
@@ -205,7 +205,7 @@ fn check_intent(
 
     sell_difference.spend(&sell_post);
 
-    let token_buy_key = token::balance_key(&token_buy, addr).to_string();
+    let token_buy_key = token::balance_key(token_buy, addr).to_string();
     let buy_pre: token::Amount = read_pre(&token_buy_key).unwrap_or_default();
     let mut buy_difference: token::Amount =
         read_post(token_buy_key).unwrap_or_default();

@@ -119,7 +119,7 @@ fn add_node(
         intent,
     };
     let new_node_index = graph.add_node(new_node.clone());
-    let (connect_sell, connect_buy) = find_to_update_node(&graph, &new_node);
+    let (connect_sell, connect_buy) = find_to_update_node(graph, &new_node);
     let sell_edge = new_node.exchange.data.token_sell;
     let buy_edge = new_node.exchange.data.token_buy;
     for node_index in connect_sell {
@@ -175,7 +175,7 @@ fn create_and_send_tx_data(
                         node.exchange.data.addr.clone(),
                         node.intent.clone(),
                     );
-                    &node
+                    node
                 },
             );
             let last_amount = *res.get(&first_node.exchange.data).unwrap();
@@ -340,7 +340,7 @@ fn find_match_and_send_tx(
 }
 
 fn find_match_and_remove_node(graph: &mut DiGraph<ExchangeNode, Address>) {
-    let mut to_remove_nodes = find_match_and_send_tx(&graph);
+    let mut to_remove_nodes = find_match_and_send_tx(graph);
     // Must be sorted in reverse order because it removes the node by index
     // otherwise it would not remove the correct node
     to_remove_nodes.sort_by(|a, b| b.cmp(a));
