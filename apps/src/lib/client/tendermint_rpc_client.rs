@@ -66,7 +66,7 @@ mod rpc_types {
         pub Query,
     );
 
-    fn serialize_query<S>(
+    pub(super) fn serialize_query<S>(
         query: &Query,
         serialize: S,
     ) -> Result<S::Ok, S::Error>
@@ -76,7 +76,9 @@ mod rpc_types {
         serialize.serialize_str(&query.to_string())
     }
 
-    fn deserialize_query<'de, D>(deserializer: D) -> Result<Query, D::Error>
+    pub(super) fn deserialize_query<'de, D>(
+        deserializer: D,
+    ) -> Result<Query, D::Error>
     where
         D: de::Deserializer<'de>,
     {
@@ -351,4 +353,136 @@ pub fn hash_tx(tx_bytes: &[u8]) -> transaction::Hash {
     let mut hash_bytes = [0u8; 32];
     hash_bytes.copy_from_slice(&digest);
     transaction::Hash::new(hash_bytes)
+}
+
+/// The TendermintRpcClient has a basic state machine for ensuring
+/// at most one subscription at a time. These tests cover that it
+/// works as intended.
+#[cfg(test)]
+mod test_tendermint_rpc_client {
+    use serde::{Deserialize, Serialize};
+    use tendermint_rpc::query::{EventType, Query};
+    use websocket::sync::Server;
+    use websocket::{Message, OwnedMessage};
+
+    use crate::client::tendermint_rpc_client::{
+        TendermintRpcClient, WebSocketAddress,
+    };
+
+    #[derive(Debug, Deserialize, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum SubscribeType {
+        Subscribe,
+        Unsubscribe,
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
+    pub struct RpcSubscription {
+        pub jsonrpc: String,
+        pub id: String,
+        pub method: SubscribeType,
+        // #[serde(serialize_with = "super::rpc_types::serialize_query")]
+        // #[serde(deserialize_with = "super::rpc_types::deserialize_query")]
+        pub params: Vec<String>,
+    }
+
+    fn address() -> WebSocketAddress {
+        WebSocketAddress {
+            host: "localhost".into(),
+            port: 26657,
+        }
+    }
+
+    /// Mocks responses to queries. Fairly arbitrary with just enough variety to
+    /// test the TendermintRpcClient state machine.
+    fn handle(msg: String) -> &'static str {
+        let request: RpcSubscription = serde_json::from_str(&msg).unwrap();
+        match request.method {
+            SubscribeType::Unsubscribe => {
+                r#"{"jsonrpc": "2.0", "id": 1, "error": "error"}"#
+            }
+            SubscribeType::Subscribe => {
+                if request.params[0]
+                    == Query::from(EventType::NewBlock).to_string()
+                {
+                    r#"{"jsonrpc": "2.0", "id": 1, "error": "error"}"#
+                } else {
+                    r#"{"jsonrpc": "2.0", "id": 1, "result": {}}"#
+                }
+            }
+        }
+    }
+
+    /// A mock tendermint node. This is just a basic websocket server
+    fn start() {
+        let node = Server::bind("localhost:26657").unwrap();
+        for connection in node.filter_map(Result::ok) {
+            std::thread::spawn(move || {
+                let mut client = connection.accept().unwrap();
+                loop {
+                    let resp = match client.recv_message().unwrap() {
+                        OwnedMessage::Text(msg) => handle(msg),
+                        _ => panic!("Unexpected request"),
+                    };
+                    let msg = Message::text(resp);
+                    let _ = client.send_message(&msg);
+                }
+            });
+        }
+    }
+
+    /// Test that we cannot subscribe to a new event
+    /// if we have an active subscription
+    #[test]
+    fn test_subscribe_twice() {
+        std::thread::spawn(start);
+        // need to make sure that the mock tendermint node has time to boot up
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let mut rpc_client = TendermintRpcClient::open(address())
+            .expect("Client could not start");
+        // Check that subscription was successful
+        rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
+        assert_eq!(rpc_client.subscribed, Some(Query::from(EventType::Tx)));
+        // Check that we cannot subscribe while we still have an active
+        // subscription
+        assert!(rpc_client.subscribe(Query::from(EventType::Tx)).is_err());
+    }
+
+    /// Test that even if there is an error on the protocol layer,
+    /// the client still unsubscribes and returns control
+    #[test]
+    fn test_unsubscribe_even_on_protocol_error() {
+        std::thread::spawn(start);
+        // need to make sure that the mock tendermint node has time to boot up
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let mut rpc_client = TendermintRpcClient::open(address())
+            .expect("Client could not start");
+        // Check that subscription was successful
+        rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
+        assert_eq!(rpc_client.subscribed, Some(Query::from(EventType::Tx)));
+        // Check that unsubscribe was successful even though it returned an
+        // error
+        assert!(rpc_client.unsubscribe().is_err());
+        assert_eq!(rpc_client.subscribed, None);
+    }
+
+    /// Test that if we unsubscribe from an event, we can
+    /// reuse the client to subscribe to a new event
+    #[test]
+    fn test_subscribe_after_unsubscribe() {
+        std::thread::spawn(start);
+        // need to make sure that the mock tendermint node has time to boot up
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let mut rpc_client = TendermintRpcClient::open(address())
+            .expect("Client could not start");
+        // Check that subscription was successful
+        rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
+        assert_eq!(rpc_client.subscribed, Some(Query::from(EventType::Tx)));
+        // Check that unsubscribe was successful
+        let _ = rpc_client.unsubscribe();
+        assert_eq!(rpc_client.subscribed, None);
+        // Check that we can now subscribe to new event
+        rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
+        assert_eq!(rpc_client.subscribed, Some(Query::from(EventType::Tx)));
+    }
 }

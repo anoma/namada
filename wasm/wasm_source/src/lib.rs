@@ -265,7 +265,7 @@ pub mod vp_user {
             amount_buy,
         } = &intent.data;
 
-        let token_sell_key = token::balance_key(&token_sell, addr).to_string();
+        let token_sell_key = token::balance_key(token_sell, addr).to_string();
         let sell_pre: token::Amount =
             read_pre(&token_sell_key).unwrap_or_default();
         let sell_post: token::Amount =
@@ -282,7 +282,7 @@ pub mod vp_user {
             return false;
         }
 
-        let token_buy_key = token::balance_key(&token_buy, addr).to_string();
+        let token_buy_key = token::balance_key(token_buy, addr).to_string();
         let buy_pre: token::Amount =
             read_pre(&token_buy_key).unwrap_or_default();
         let buy_post: token::Amount =
@@ -448,8 +448,7 @@ pub mod mm_token_exch {
     ) {
         let new_node = IntentNode { id, intent };
         let new_node_index = graph.add_node(new_node.clone());
-        let (connect_sell, connect_buy) =
-            find_to_update_node(&graph, &new_node);
+        let (connect_sell, connect_buy) = find_to_update_node(graph, &new_node);
         let sell_edge = new_node.intent.data.token_sell;
         let buy_edge = new_node.intent.data.token_buy;
         for node_index in connect_sell {
@@ -479,7 +478,7 @@ pub mod mm_token_exch {
                 tx_data
                     .intents
                     .insert(node.intent.data.addr.clone(), node.intent.clone());
-                &node
+                node
             });
         tx_data
             .transfers
@@ -530,7 +529,7 @@ pub mod mm_token_exch {
     }
 
     fn find_match_and_remove_node(graph: &mut DiGraph<IntentNode, Address>) {
-        let mut to_remove_nodes = find_match_and_send_tx(&graph);
+        let mut to_remove_nodes = find_match_and_send_tx(graph);
         // Must be sorted in reverse order because it removes the node by index
         // otherwise it would not remove the correct node
         to_remove_nodes.sort_by(|a, b| b.cmp(a));
