@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
-use anoma_shared::types::intent;
-use anoma_shared::types::key::ed25519::{Signature, Signed};
+use anoma::types::intent;
+use anoma::types::key::ed25519::{Signature, Signed};
 
 /// Tx imports and functions.
 pub mod tx {
-    pub use anoma_shared::types::intent::*;
+    pub use anoma::types::intent::*;
 
     use super::*;
     pub fn invalidate_intent(intent: &Signed<Intent>) {
@@ -20,7 +20,7 @@ pub mod tx {
 
 /// Vp imports and functions.
 pub mod vp {
-    pub use anoma_shared::types::intent::*;
+    pub use anoma::types::intent::*;
 
     use super::*;
 

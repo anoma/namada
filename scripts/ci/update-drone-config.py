@@ -13,7 +13,7 @@ import boto3
 
 DRONE_FILE: str = ".drone"
 DRONE_FILE_SUFFIX: str = ".yml"
-REPOSITORY: str = "anomanetwork/anoma"
+REPOSITORY: str = "anoma/anoma"
 
 STEP_NAME = 'check-scripts-integrity'
 
@@ -24,14 +24,19 @@ files_to_check = [
     'wasm/tx_template/Makefile',
     'wasm/mm_template/Makefile',
     'wasm/mm_filter_template/Makefile',
-    'tech-specs/Makefile',
+    'docs/Makefile',
     'scripts/ci/update-wasm.sh',
-    'scripts/ci/pre-run.sh'
+    'scripts/ci/pre-run.sh',
+    'scripts/ci/audit.py',
+    'scripts/ci/udeps.py',
 ]
 
 scripts_to_run = [
     'scripts/ci/pre-run.sh'
 ]
+
+# config names here will run `run_command_template_always` instead of `run_command_template`
+always_run_step_names = ["anoma-ci-build-pr", "anoma-ci-checks-pr"]
 
 check_command_template = 'echo "{}  {}" | sha256sum -c -'
 run_command_template = 'sh {}'
@@ -108,7 +113,7 @@ def main():
 
     for config in drone_config:
         if 'steps' in config:
-            always_run_step = config['name'] == 'anoma-ci-build-pr'
+            always_run_step = config['name'] in always_run_step_names
             config_steps = config['steps'][0]
             if config_steps and config_steps['name'] == STEP_NAME:
                 commands = []

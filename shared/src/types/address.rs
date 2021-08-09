@@ -1,6 +1,7 @@
 //! Implements transparent addresses as described in [Accounts
-//! Addresses](tech-specs/src/explore/design/ledger/accounts.md#addresses).
+//! Addresses](docs/src/explore/design/ledger/accounts.md#addresses).
 
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -245,6 +246,8 @@ pub enum InternalAddress {
     PoS,
     /// Inter-blockchain communication
     Ibc,
+    /// Protocol parameters
+    Parameters,
 }
 
 impl Display for InternalAddress {
@@ -255,6 +258,7 @@ impl Display for InternalAddress {
             match self {
                 Self::PoS => "PoS",
                 Self::Ibc => "IBC",
+                Self::Parameters => "Parameters",
             }
         )
     }
@@ -293,6 +297,22 @@ pub fn apfel() -> Address {
 /// Temporary helper for testing
 pub fn kartoffel() -> Address {
     Address::decode("a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn233sgccnjs3eak5wwh").expect("The token address decoding shouldn't fail")
+}
+
+/// Temporary helper for testing, a hash map of tokens addresses with their
+/// informal currency codes.
+pub fn tokens() -> HashMap<Address, &'static str> {
+    vec![
+        (xan(), "XAN"),
+        (btc(), "BTC"),
+        (eth(), "ETH"),
+        (dot(), "DOT"),
+        (schnitzel(), "Schnitzel"),
+        (apfel(), "Apfel"),
+        (kartoffel(), "Kartoffel"),
+    ]
+    .into_iter()
+    .collect()
 }
 
 /// Temporary helper for testing

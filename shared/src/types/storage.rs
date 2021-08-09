@@ -1,6 +1,7 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::ops::Add;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,7 @@ pub const RESERVED_VP_KEY: &str = "?";
 
 /// Height of a block, i.e. the level.
 #[derive(
+    Default,
     Clone,
     Copy,
     BorshSerialize,
@@ -60,6 +62,14 @@ pub struct BlockHeight(pub u64);
 impl Display for BlockHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl Add<u64> for BlockHeight {
+    type Output = BlockHeight;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
     }
 }
 
@@ -249,13 +259,25 @@ impl Key {
         }
     }
 
+    /// Check if the given key is a key of the connection counter
+    pub fn is_ibc_connection_counter(&self) -> bool {
+        *self == Self::ibc_connection_counter()
+    }
+
     /// Returns a key of the IBC-related data
-    /// Only this function can push "^" segment for IBC
+    /// Only this function can push `InternalAddress::Ibc` segment
     pub fn ibc_key(path: impl AsRef<str>) -> Result<Self> {
         let path = Self::parse(path)?;
         let addr = Address::Internal(InternalAddress::Ibc);
         let key = Self::from(addr.to_db_key());
         Ok(key.join(&path))
+    }
+
+    /// Returns a key of the IBC connection counter
+    pub fn ibc_connection_counter() -> Self {
+        let path = "connections/counter".to_owned();
+        Key::ibc_key(path)
+            .expect("Creating a key for the connection counter shouldn't fail")
     }
 
     /// Returns a key from the given DB key path that has the height and
@@ -446,6 +468,43 @@ impl KeySeg for Address {
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.clone())
+    }
+}
+
+/// Epoch identifier. Epochs are identified by consecutive numbers.
+#[derive(
+    Clone,
+    Copy,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct Epoch(pub u64);
+
+impl Display for Epoch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Epoch {
+    /// Change to the next epoch
+    pub fn next(&self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
+impl Add<u64> for Epoch {
+    type Output = Epoch;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
     }
 }
 

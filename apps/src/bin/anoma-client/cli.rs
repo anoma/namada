@@ -3,13 +3,13 @@
 use std::fs::File;
 use std::io::Write;
 
-use anoma::cli::{args, cmds};
-use anoma::client::tx;
-use anoma::proto::services::rpc_service_client::RpcServiceClient;
-use anoma::proto::{services, RpcMessage};
-use anoma::{cli, wallet};
-use anoma_shared::types::intent::Intent;
-use anoma_shared::types::key::ed25519::Signed;
+use anoma::types::intent::Intent;
+use anoma::types::key::ed25519::Signed;
+use anoma_apps::cli::{args, cmds};
+use anoma_apps::client::{rpc, tx};
+use anoma_apps::proto::services::rpc_service_client::RpcServiceClient;
+use anoma_apps::proto::{services, RpcMessage};
+use anoma_apps::{cli, wallet};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
@@ -24,6 +24,9 @@ pub async fn main() -> Result<()> {
         }
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
             tx::submit_update_vp(args).await;
+        }
+        cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
+            rpc::query_balance(args).await;
         }
         cmds::AnomaClient::Intent(cmds::Intent(args)) => {
             gossip_intent(args).await;
@@ -47,7 +50,7 @@ async fn gossip_intent(
 ) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
     let data = std::fs::read(data_path).expect("data file IO error");
-    let intent = anoma_shared::proto::Intent::new(data);
+    let intent = anoma::proto::Intent::new(data);
     let message: services::RpcMessage =
         RpcMessage::new_intent(intent, topic).into();
     let response = client

@@ -7,7 +7,7 @@ mod tests {
     use std::process::Command;
     use std::{fs, thread};
 
-    use anoma::config::{Config, IntentGossiper};
+    use anoma_apps::config::{Config, IntentGossiper};
     use assert_cmd::assert::OutputAssertExt;
     use assert_cmd::cargo::CommandCargoExt;
     use color_eyre::eyre::Result;
@@ -72,6 +72,55 @@ mod tests {
                     eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
                 })?;
         }
+
+        Ok(())
+    }
+
+    /// In this test we:
+    /// 1. Start up the ledger
+    /// 2. Kill the tendermint process
+    /// 3. Check that the node detects this
+    /// 4. Check that the node shuts down
+    #[test]
+    fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
+        let dir = setup();
+
+        let base_dir = tempdir().unwrap();
+        let base_dir_arg = &base_dir.path().to_string_lossy();
+
+        // 1. Run the ledger node
+        let mut cmd = Command::cargo_bin("anoma")?;
+        cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
+            "--base-dir",
+            base_dir_arg,
+            "ledger",
+        ]);
+        println!("Running {:?}", cmd);
+        let mut session = spawn_command(cmd, Some(20_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session
+            .exp_string("Anoma ledger node started")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // 2. Kill the tendermint node
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        Command::new("pkill")
+            .args(&["tendermint"])
+            .spawn()
+            .expect("Test failed")
+            .wait()
+            .expect("Test failed");
+
+        // 3. Check that anoma detects that the tendermint node is dead
+        session
+            .exp_string("Tendermint node shut down unexpectedly.")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // 4. Check that the ledger node shuts down
+        session
+            .exp_string("Shutting down Anoma node")
+            .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
     }
@@ -182,8 +231,9 @@ mod tests {
     /// 2. Submit a token transfer tx
     /// 3. Submit a transaction to update an account's validity predicate
     /// 4. Submit a custom tx
+    /// 5. Query token balance
     #[test]
-    fn ledger_txs() -> Result<()> {
+    fn ledger_txs_and_queries() -> Result<()> {
         let dir = setup();
 
         let base_dir = tempdir().unwrap();
@@ -264,6 +314,37 @@ mod tests {
                     status
                 );
             }
+        }
+
+        let query_args_and_expected_response = vec![
+            // 5. Query token balance
+            (
+                vec!["balance", "--owner", BERTHA, "--token", XAN],
+                // expect a decimal
+                r"XAN: (\d*\.)\d+",
+            ),
+        ];
+        for (query_args, expected) in &query_args_and_expected_response {
+            let mut cmd = Command::cargo_bin("anomac")?;
+            cmd.current_dir(&dir)
+                .env("ANOMA_LOG", "debug")
+                .args(&["--base-dir", base_dir_arg])
+                .args(query_args);
+            let cmd_str = format!("{:?}", cmd);
+
+            let mut session =
+                spawn_command(cmd, Some(10_000)).map_err(|e| {
+                    eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+                })?;
+            session.exp_regex(expected).map_err(|e| {
+                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+            })?;
+
+            let status = session.process.wait().unwrap();
+            assert_eq!(
+                WaitStatus::Exited(session.process.child_pid, 0),
+                status
+            );
         }
 
         Ok(())
