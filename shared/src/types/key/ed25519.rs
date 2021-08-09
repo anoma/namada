@@ -65,7 +65,7 @@ pub fn is_pk_key(key: &Key) -> Option<&Address> {
 
 /// Sign the data with a key.
 pub fn sign(keypair: &Keypair, data: impl AsRef<[u8]>) -> Signature {
-    Signature(keypair.sign(&data.as_ref()))
+    Signature(keypair.sign(data.as_ref()))
 }
 
 #[allow(missing_docs)]

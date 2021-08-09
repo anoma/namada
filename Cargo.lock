@@ -362,9 +362,9 @@ dependencies = [
 
 [[package]]
 name = "async-process"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8f38756dd9ac84671c428afbf7c9f7495feff9ec5b0710f17100098e5b354ac"
+checksum = "b21b63ab5a0db0369deb913540af2892750e42d949faacc7a61495ac418a1692"
 dependencies = [
  "async-io",
  "blocking",
@@ -2041,9 +2041,9 @@ dependencies = [
 
 [[package]]
 name = "http-body"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60daa14be0e0786db0f03a9e57cb404c9d756eed2b6c62b9ea98ec5743ec75a9"
+checksum = "399c583b2979440c60be0821a6199eca73bc3c8dcd9d070d75ac726e2c6186e5"
 dependencies = [
  "bytes 1.0.1",
  "http",
@@ -3677,9 +3677,9 @@ checksum = "57e35a3326b75e49aa85f5dc6ec15b41108cf5aee58eabb1f274dd18b73c2451"
 
 [[package]]
 name = "predicates-tree"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15f553275e5721409451eb85e15fd9a860a6e5ab4496eb215987502b5f5391f2"
+checksum = "d7dd0fd014130206c9352efbdc92be592751b2b9274dff685348341082c6ea3d"
 dependencies = [
  "predicates-core",
  "treeline",
@@ -4069,9 +4069,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ab49abadf3f9e1c4bc499e8845e152ad87d2ad2d30371841171169e9d75feee"
+checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
 dependencies = [
  "bitflags",
 ]
@@ -4596,9 +4596,9 @@ checksum = "cc47a29ce97772ca5c927f75bac34866b16d64e07f330c3248e2d7226623901b"
 
 [[package]]
 name = "slab"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f173ac3d1a7e3b28003f40de0b5ce7fe2710f9b9dc3fc38664cebee46b3b6527"
+checksum = "c307a32c1c5c437f38c7fd45d753050587732ba8628319fbdf12a7e289ccc590"
 
 [[package]]
 name = "smallvec"
@@ -4793,7 +4793,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#bc2d7c43a773da617fe7daaf518a52c041052427"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -4824,7 +4824,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#bc2d7c43a773da617fe7daaf518a52c041052427"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",
@@ -4842,7 +4842,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#bc2d7c43a773da617fe7daaf518a52c041052427"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
 dependencies = [
  "async-trait",
  "bytes 1.0.1",
@@ -4871,7 +4871,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#bc2d7c43a773da617fe7daaf518a52c041052427"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
@@ -5210,7 +5210,7 @@ checksum = "360dfd1d6d30e05fda32ace2c8c70e9c0a9da713275777f5a4dbb8a1893930c6"
 [[package]]
 name = "tracing"
 version = "0.1.26"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#0af3ea646592265a4e81bf22696d769ca9d052e4"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "cfg-if 1.0.0",
  "log",
@@ -5222,7 +5222,7 @@ dependencies = [
 [[package]]
 name = "tracing-attributes"
 version = "0.1.15"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#0af3ea646592265a4e81bf22696d769ca9d052e4"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5232,7 +5232,7 @@ dependencies = [
 [[package]]
 name = "tracing-core"
 version = "0.1.18"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#0af3ea646592265a4e81bf22696d769ca9d052e4"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "lazy_static 1.4.0",
 ]
@@ -5250,7 +5250,8 @@ dependencies = [
 [[package]]
 name = "tracing-futures"
 version = "0.2.5"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#0af3ea646592265a4e81bf22696d769ca9d052e4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97d095ae15e245a057c8e8451bab9b3ee1e1f68e9ba2b4fbc18d0ac5237835f2"
 dependencies = [
  "pin-project 1.0.8",
  "tracing",
@@ -5259,8 +5260,7 @@ dependencies = [
 [[package]]
 name = "tracing-futures"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97d095ae15e245a057c8e8451bab9b3ee1e1f68e9ba2b4fbc18d0ac5237835f2"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "pin-project 1.0.8",
  "tracing",
@@ -5312,7 +5312,7 @@ dependencies = [
 [[package]]
 name = "tracing-tower"
 version = "0.1.0"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#0af3ea646592265a4e81bf22696d769ca9d052e4"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "futures",
  "http",

@@ -7,7 +7,7 @@ use std::io::Write;
 use anoma::types::intent::{Exchange, FungibleTokenIntent};
 use anoma::types::key::ed25519::Signed;
 use anoma_apps::cli::{args, cmds};
-use anoma_apps::client::tx;
+use anoma_apps::client::{rpc, tx};
 use anoma_apps::proto::services::rpc_service_client::RpcServiceClient;
 use anoma_apps::proto::{services, RpcMessage};
 use anoma_apps::{cli, wallet};
@@ -25,6 +25,9 @@ pub async fn main() -> Result<()> {
         }
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
             tx::submit_update_vp(args).await;
+        }
+        cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
+            rpc::query_balance(args).await;
         }
         cmds::AnomaClient::Intent(cmds::Intent(args)) => {
             gossip_intent(args).await;

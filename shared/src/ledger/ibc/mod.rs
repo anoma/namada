@@ -197,13 +197,13 @@ where
     }
 
     fn get_state_change(&self, key: &Key) -> Result<StateChange> {
-        if self.ctx.has_key_pre(&key)? {
-            if self.ctx.has_key_post(&key)? {
+        if self.ctx.has_key_pre(key)? {
+            if self.ctx.has_key_post(key)? {
                 Ok(StateChange::Updated)
             } else {
                 Ok(StateChange::Deleted)
             }
-        } else if self.ctx.has_key_post(&key)? {
+        } else if self.ctx.has_key_post(key)? {
             Ok(StateChange::Created)
         } else {
             Ok(StateChange::NotExists)
