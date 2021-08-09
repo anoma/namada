@@ -259,7 +259,7 @@ impl Key {
         }
     }
 
-    /// Check if the given key is a key of the connection counter
+    /// Check if the given key is a key of the client counter
     pub fn is_ibc_client_counter(&self) -> bool {
         *self == Self::ibc_client_counter()
     }
@@ -269,9 +269,14 @@ impl Key {
         *self == Self::ibc_connection_counter()
     }
 
-    /// Check if the given key is a key of the connection counter
+    /// Check if the given key is a key of the channel counter
     pub fn is_ibc_channel_counter(&self) -> bool {
         *self == Self::ibc_channel_counter()
+    }
+
+    /// Check if the given key is a key of the capability index
+    pub fn is_ibc_capability_index(&self) -> bool {
+        *self == Self::ibc_capability_index()
     }
 
     /// Returns a key of the IBC-related data
@@ -302,6 +307,13 @@ impl Key {
         let path = "channelEnds/counter".to_owned();
         Key::ibc_key(path)
             .expect("Creating a key for the channel counter shouldn't fail")
+    }
+
+    /// Returns a key of the IBC capability index
+    pub fn ibc_capability_index() -> Self {
+        let path = "capabilities/index".to_owned();
+        Key::ibc_key(path)
+            .expect("Creating a key for the capability index shouldn't fail")
     }
 
     /// Returns a key from the given DB key path that has the height and

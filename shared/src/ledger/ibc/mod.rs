@@ -75,6 +75,13 @@ where
     storage
         .write(&key, value)
         .expect("Unable to write the initial channel counter");
+
+    // the capability index
+    let key = Key::ibc_capability_index();
+    let value = storage::types::encode(&0);
+    storage
+        .write(&key, value)
+        .expect("Unable to write the initial capability index");
 }
 
 impl<'a, DB, H> NativeVp for Ibc<'a, DB, H>
@@ -117,6 +124,7 @@ where
                 }
                 IbcPrefix::Channel => self.validate_channel(key, tx_data)?,
                 IbcPrefix::Port => self.validate_port(key)?,
+                IbcPrefix::Capability => self.validate_capability(key)?,
                 // TODO implement validations for modules
                 IbcPrefix::SeqSend => false,
                 IbcPrefix::SeqRecv => false,
@@ -152,6 +160,7 @@ enum IbcPrefix {
     Connection,
     Channel,
     Port,
+    Capability,
     SeqSend,
     SeqRecv,
     SeqAck,
@@ -174,6 +183,7 @@ where
                 "connections" => IbcPrefix::Connection,
                 "channelEnds" => IbcPrefix::Channel,
                 "ports" => IbcPrefix::Port,
+                "capabilities" => IbcPrefix::Capability,
                 "nextSequenceSend" => IbcPrefix::SeqSend,
                 "nextSequenceRecv" => IbcPrefix::SeqRecv,
                 "nextSequenceAck" => IbcPrefix::SeqAck,
