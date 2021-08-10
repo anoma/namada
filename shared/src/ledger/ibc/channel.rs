@@ -25,6 +25,7 @@ use tendermint_proto::Protobuf;
 use thiserror::Error;
 
 use super::{Ibc, StateChange};
+use crate::ledger::native_vp::Error as NativeVpError;
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::ibc::{
     ChannelCloseConfirmData, ChannelCloseInitData, ChannelOpenAckData,
@@ -35,6 +36,8 @@ use crate::types::storage::{Key, KeySeg};
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Native VP error: {0}")]
+    NativeVpError(NativeVpError),
     #[error("Key error: {0}")]
     KeyError(String),
     #[error("State change error: {0}")]
@@ -47,6 +50,10 @@ pub enum Error {
     PortError(String),
     #[error("Version error: {0}")]
     VersionError(String),
+    #[error("Sequence error: {0}")]
+    SequenceError(String),
+    #[error("Packet info error: {0}")]
+    PacketInfoError(String),
     #[error("Proof verification error: {0}")]
     ProofVerificationError(Ics04Error),
     #[error("Decoding TX data error: {0}")]
@@ -338,38 +345,41 @@ where
         }
     }
 
-    fn get_sequence(&self, path: Path) -> Option<Sequence> {
+    fn get_sequence(&self, path: Path) -> Result<Sequence> {
         let key = Key::ibc_key(path.to_string())
             .expect("Creating akey for a sequence shouldn't fail");
-        match self.ctx.read_post(&key) {
-            Ok(Some(value)) => {
-                let index: u64 = match storage::types::decode(value) {
-                    Ok(i) => i,
-                    Err(e) => {
-                        tracing::error!(
+        match self.ctx.read_post(&key)? {
+            Some(value) => {
+                let index: u64 =
+                    storage::types::decode(value).map_err(|e| {
+                        Error::SequenceError(format!(
                             "Decoding a sequece index failed: {}",
                             e
-                        );
-                        return None;
-                    }
-                };
-                Some(Sequence::from(index))
+                        ))
+                    })?;
+                Ok(Sequence::from(index))
             }
-            // returns None even if DB read fails
-            _ => None,
+            None => Err(Error::SequenceError(format!(
+                "The sequence doesn't exist: Path {}",
+                path
+            ))),
         }
     }
 
-    fn get_packet_info(&self, path: Path) -> Option<String> {
+    fn get_packet_info(&self, path: Path) -> Result<String> {
         let key = Key::ibc_key(path.to_string())
             .expect("Creating akey for a packet info shouldn't fail");
-        match self.ctx.read_post(&key) {
-            Ok(Some(value)) => match String::from_utf8(value.to_vec()) {
-                Ok(s) => Some(s),
-                Err(_) => None,
-            },
-            // returns None even if DB read fails
-            _ => None,
+        match self.ctx.read_post(&key)? {
+            Some(value) => String::from_utf8(value.to_vec()).map_err(|e| {
+                Error::PacketInfoError(format!(
+                    "Decoding the packet info failed: {}",
+                    e
+                ))
+            }),
+            None => Err(Error::PacketInfoError(format!(
+                "The packet info doesn't exist: Path {}",
+                path
+            ))),
         }
     }
 
@@ -456,10 +466,47 @@ where
 
     fn connection_channels(
         &self,
-        _conn_id: &ConnectionId,
+        conn_id: &ConnectionId,
     ) -> Option<Vec<(PortId, ChannelId)>> {
-        // TODO I'm not sure why this is required
-        None
+        let mut channels = vec![];
+        let prefix = Key::parse("channelEnds/ports")
+            .expect("Creating a key for the prefix shouldn't fail");
+        let mut iter = match self.ctx.iter_prefix(&prefix) {
+            Ok(i) => i,
+            Err(_) => return None,
+        };
+        loop {
+            let next = match self.ctx.iter_post_next(&mut iter) {
+                Ok(n) => n,
+                Err(_) => return None,
+            };
+            if let Some((key, value)) = next {
+                let channel = match ChannelEnd::decode_vec(&value) {
+                    Ok(c) => c,
+                    Err(_) => return None,
+                };
+                if let Some(id) = channel.connection_hops().get(0) {
+                    if id == conn_id {
+                        let key = match Key::parse(&key) {
+                            Ok(k) => k,
+                            Err(_) => return None,
+                        };
+                        let port_id = match Self::get_port_id(&key) {
+                            Ok(id) => id,
+                            Err(_) => return None,
+                        };
+                        let channel_id = match Self::get_channel_id(&key) {
+                            Ok(id) => id,
+                            Err(_) => return None,
+                        };
+                        channels.push((port_id, channel_id));
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        Some(channels)
     }
 
     fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState> {
@@ -496,7 +543,7 @@ where
     ) -> Option<Sequence> {
         let port_channel_id = port_channel_id.clone();
         let path = Path::SeqSends(port_channel_id.0, port_channel_id.1);
-        self.get_sequence(path)
+        self.get_sequence(path).ok()
     }
 
     fn get_next_sequence_recv(
@@ -505,7 +552,7 @@ where
     ) -> Option<Sequence> {
         let port_channel_id = port_channel_id.clone();
         let path = Path::SeqRecvs(port_channel_id.0, port_channel_id.1);
-        self.get_sequence(path)
+        self.get_sequence(path).ok()
     }
 
     fn get_next_sequence_ack(
@@ -514,7 +561,7 @@ where
     ) -> Option<Sequence> {
         let port_channel_id = port_channel_id.clone();
         let path = Path::SeqAcks(port_channel_id.0, port_channel_id.1);
-        self.get_sequence(path)
+        self.get_sequence(path).ok()
     }
 
     fn get_packet_commitment(
@@ -527,7 +574,7 @@ where
             channel_id: key.1,
             sequence: key.2,
         };
-        self.get_packet_info(path)
+        self.get_packet_info(path).ok()
     }
 
     fn get_packet_receipt(
@@ -558,7 +605,7 @@ where
             channel_id: key.1.clone(),
             sequence: key.2,
         };
-        self.get_packet_info(path)
+        self.get_packet_info(path).ok()
     }
 
     fn hash(&self, value: String) -> String {
@@ -580,6 +627,12 @@ where
     fn channel_counter(&self) -> u64 {
         let key = Key::ibc_channel_counter();
         self.read_counter(&key)
+    }
+}
+
+impl From<NativeVpError> for Error {
+    fn from(err: NativeVpError) -> Self {
+        Self::NativeVpError(err)
     }
 }
 
