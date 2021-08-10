@@ -229,12 +229,12 @@ fn compute_amounts(
                     .map(|target_node_index| {
                         let target = graph[target_node_index].clone();
 
-                        let surce_var_def = variable();
-                        var_set.insert(node_index, surce_var_def.clone());
+                        let variable_definition = variable();
+                        var_set.insert(node_index, variable_definition.clone());
 
-                        let var_def = surce_var_def
-                            .min(target.exchange.data.min_buy.to_f64())
-                            .max(node.exchange.data.max_sell.to_f64());
+                        let var_def = variable_definition
+                            .min(target.exchange.data.min_buy)
+                            .max(node.exchange.data.max_sell);
 
                         let var = vars.add(var_def);
 
@@ -290,7 +290,7 @@ fn compute_amounts(
             let amounts = solution
                 .into_inner()
                 .iter()
-                .map(|(_, amount)| Amount::from(*amount).to_u64())
+                .map(|(_, amount)| u64::from(Amount::from(*amount)))
                 .collect::<Vec<u64>>();
             nodes.iter().enumerate().for_each(|(index, exchange)| {
                 amount_map.insert(exchange.clone(), amounts[index]);

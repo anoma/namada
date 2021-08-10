@@ -60,15 +60,17 @@ impl Amount {
             micro: amount * 1_000_000,
         }
     }
+}
 
-    /// Return the f64 rapresentation
-    pub fn to_f64(self) -> f64 {
-        self.micro as f64
+impl From<Amount> for f64 {
+    fn from(amount: Amount) -> Self {
+        amount.micro as f64
     }
+}
 
-    /// Return the u64 rapresentation
-    pub fn to_u64(self) -> u64 {
-        self.micro as u64
+impl From<Amount> for u64 {
+    fn from(amount: Amount) -> Self {
+        amount.micro as u64
     }
 }
 

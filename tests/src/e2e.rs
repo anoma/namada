@@ -446,9 +446,8 @@ mod tests {
     }
 
     /// This test run the ledger and gossip binaries. It then craft 3 intents
-    /// and
-    // sends them to the matchmaker. The matchmaker should be able to craft a
-    // transfer transaction with the 3 intents.
+    /// and sends them to the matchmaker. The matchmaker should be able to craft a
+    /// transfer transaction with the 3 intents.
     #[test]
     fn match_intent() -> Result<()> {
         let working_dir = setup();
@@ -637,7 +636,7 @@ mod tests {
             .exp_regex(".*trying to match new intent*")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // // Send intent C
+        // Send intent C
         let mut send_intent_c = Command::cargo_bin("anomac")?;
         send_intent_c.args(&[
             "intent",
@@ -658,7 +657,7 @@ mod tests {
             .exp_string("Failed to publish_intent InsufficientPeers")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // // check that the amount matched are correct
+        // check that the amount matched are correct
         session_gossip
             .exp_string("amounts: [100000000, 70000000, 200000000]")
             .map_err(|e| eyre!(format!("{}", e)))?;
