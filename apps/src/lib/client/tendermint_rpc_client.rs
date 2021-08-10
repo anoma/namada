@@ -668,6 +668,8 @@ mod test_tendermint_rpc_client {
                 r#"{{"jsonrpc": "2.0", "id": {}, "result": "subscription result!"}}"#,
                 id
             )
-        )
+        );
+        // Check that there are no pending subscription responses
+        assert!(rpc_client.received_responses.lock().unwrap().is_empty());
     }
 }
