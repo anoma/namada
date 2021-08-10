@@ -102,7 +102,7 @@ async fn broadcast_tx(
             .await
             .map_err(|err| Error::Response(format!("{:?}", err)))?
     );
-    println!("{:?}", client.receive_response()?);
+    println!("{}", client.receive_response()?);
     client.unsubscribe()?;
     client.close();
     Ok(())

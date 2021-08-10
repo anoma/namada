@@ -83,6 +83,7 @@ tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch =
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost", features = ["http-client", "websocket-client"]}
 thiserror = "1.0.24"
 tokio = {version = "1.8.2", features = ["full"]}
+tokio-test = "0.4.2"
 toml = "0.5.8"
 tonic = "0.5.0"
 tower = "0.4"

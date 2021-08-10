@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::net::TcpStream;
@@ -31,6 +32,8 @@ pub enum Error {
     NotSubscribed,
     #[error("Received an error response: {0}")]
     Response(String),
+    #[error("Encountered JSONRPC request/response without an id")]
+    MissingId,
 }
 
 /// Module that brings in the basic building blocks from tendermint_rpc
@@ -166,10 +169,17 @@ use rpc_types::{RpcSubscription, SubscribeType};
 /// Furthermore, TendermintRpcClient must be `Send` since it will be
 /// used in async methods
 type Websocket = Arc<Mutex<websocket::sync::client::Client<TcpStream>>>;
+type ResponseQueue = Arc<Mutex<HashMap<String, String>>>;
+
+struct Subscription {
+    id: String,
+    query: Query,
+}
 
 pub struct TendermintRpcClient {
     websocket: Websocket,
-    subscribed: Option<Query>,
+    subscribed: Option<Subscription>,
+    received_responses: ResponseQueue,
 }
 
 impl TendermintRpcClient {
@@ -182,6 +192,7 @@ impl TendermintRpcClient {
             Ok(websocket) => Ok(Self {
                 websocket: Arc::new(Mutex::new(websocket)),
                 subscribed: None,
+                received_responses: Arc::new(Mutex::new(HashMap::new())),
             }),
             Err(inner) => Err(Error::Websocket(inner)),
         }
@@ -191,7 +202,8 @@ impl TendermintRpcClient {
     pub fn close(&mut self) {
         // Even in the case of errors, this will be shutdown
         let _ = self.websocket.lock().unwrap().shutdown();
-        self.subscribed = None
+        self.subscribed = None;
+        self.received_responses.lock().unwrap().clear();
     }
 
     /// Subscribes to an event specified by the query argument.
@@ -204,6 +216,7 @@ impl TendermintRpcClient {
         // send the subscription request
         let message = RpcSubscription(SubscribeType::Subscribe, query.clone())
             .into_json();
+        let msg_id = get_id(&message).unwrap();
 
         self.websocket
             .lock()
@@ -212,21 +225,24 @@ impl TendermintRpcClient {
             .map_err(Error::Websocket)?;
 
         // check that the request was received and a success message returned
-        match self.process_response(|_| Error::Subscribe(message)) {
+        match self.process_response(|_| Error::Subscribe(message), None) {
             Ok(_) => {
-                self.subscribed = Some(query);
+                self.subscribed = Some(Subscription { id: msg_id, query });
                 Ok(())
             }
             Err(err) => Err(err),
         }
     }
 
-    /// Receive a response from the subscribed event
-    pub fn receive_response(&self) -> Result<(), Error> {
-        if self.subscribed.is_some() {
-            let response = self.process_response(Error::Response)?;
-            println!("{:?}", response);
-            Ok(())
+    /// Receive a response from the subscribed event or
+    /// process the response if it has already been recieved
+    pub fn receive_response(&self) -> Result<String, Error> {
+        if let Some(Subscription { id, .. }) = &self.subscribed {
+            let response = self.process_response(
+                Error::Response,
+                self.received_responses.lock().unwrap().remove(id),
+            )?;
+            Ok(response)
         } else {
             Err(Error::NotSubscribed)
         }
@@ -237,7 +253,7 @@ impl TendermintRpcClient {
     /// will return to an unsubscribed state
     pub fn unsubscribe(&mut self) -> Result<(), Error> {
         match self.subscribed.take() {
-            Some(query) => {
+            Some(Subscription { query, .. }) => {
                 // send the subscription request
                 let message =
                     RpcSubscription(SubscribeType::Unsubscribe, query)
@@ -248,9 +264,13 @@ impl TendermintRpcClient {
                     .unwrap()
                     .send_message(&Message::text(&message))
                     .map_err(Error::Websocket)?;
+                // empty out the message queue. Should be empty already
+                self.received_responses.lock().unwrap().clear();
                 // check that the request was received and a success message
                 // returned
-                match self.process_response(|_| Error::Unsubscribe(message)) {
+                match self
+                    .process_response(|_| Error::Unsubscribe(message), None)
+                {
                     Ok(_) => Ok(()),
                     Err(err) => Err(err),
                 }
@@ -261,24 +281,35 @@ impl TendermintRpcClient {
 
     /// Process the next response received and handle any exceptions that
     /// may have occurred. Takes a function to map response to an error
-    /// as a parameter
+    /// as a parameter.
+    ///
+    /// Optionally, the response may have been received earlier while
+    /// handling a different request. In that case, we process it
+    /// now.
     ///
     /// Ideally the responses from tendermint would be parsed by the
     /// tendermint-rs libraries. Unfortunately, the "result"/"error"
     /// fields in the response are expected to be strings and
     /// tendermint sometimes sends back `{}` instead. So we
     /// process the response ourselves.
-    fn process_response<F>(&self, f: F) -> Result<String, Error>
+    fn process_response<F>(
+        &self,
+        f: F,
+        received: Option<String>,
+    ) -> Result<String, Error>
     where
         F: FnOnce(String) -> Error,
     {
-        match self
-            .websocket
-            .lock()
-            .unwrap()
-            .recv_message()
-            .map_err(Error::Websocket)?
-        {
+        let resp = match received {
+            Some(resp) => Ok(OwnedMessage::Text(resp)),
+            None => self
+                .websocket
+                .lock()
+                .unwrap()
+                .recv_message()
+                .map_err(Error::Websocket),
+        }?;
+        match resp {
             OwnedMessage::Text(resp) => {
                 if let serde_json::Value::Object(parsed) =
                     serde_json::from_str(&resp).unwrap()
@@ -311,6 +342,7 @@ impl Client for TendermintRpcClient {
         // send the subscription request
         // Return an empty response if the request fails to send
         let req_json = request.into_json();
+        let req_id = get_id(&req_json).unwrap();
         if let Err(error) = self
             .websocket
             .lock()
@@ -326,24 +358,39 @@ impl Client for TendermintRpcClient {
         }
 
         // Return the response if text is returned, else return empty response
-        match self
-            .websocket
-            .lock()
-            .unwrap()
-            .recv_message()
-            .expect("Failed to receive message from websocket")
-        {
-            OwnedMessage::Text(resp) => {
-                <R as Request>::Response::from_string(resp)
-            }
-            other => {
-                tracing::info! {
-                    "Received unexpect response to query: {}\nReceived {:?}",
-                    &req_json,
-                    other
-                };
-                <R as Request>::Response::from_string("")
-            }
+        loop {
+            let response = match self
+                .websocket
+                .lock()
+                .unwrap()
+                .recv_message()
+                .expect("Failed to receive message from websocket")
+            {
+                OwnedMessage::Text(resp) => resp,
+                other => {
+                    tracing::info! {
+                        "Received unexpect response to query: {}\nReceived {:?}",
+                        &req_json,
+                        other
+                    };
+                    String::from("")
+                }
+            };
+            // Check that we did not accidentally get a response for a
+            // subscription. If so, store it for later
+            if let Ok(resp_id) = get_id(&response) {
+                if resp_id != req_id {
+                    self.received_responses
+                        .lock()
+                        .unwrap()
+                        .insert(resp_id, response);
+                } else {
+                    return <R as Request>::Response::from_string(response);
+                }
+            } else {
+                // got an invalid response, just return nothing
+                return <R as Request>::Response::from_string(response);
+            };
         }
     }
 }
@@ -355,13 +402,29 @@ pub fn hash_tx(tx_bytes: &[u8]) -> transaction::Hash {
     transaction::Hash::new(hash_bytes)
 }
 
+fn get_id(req_json: &str) -> Result<String, Error> {
+    if let serde_json::Value::Object(req) =
+        serde_json::from_str(req_json).unwrap()
+    {
+        req.get("id").ok_or(Error::MissingId).map(|v| v.to_string())
+    } else {
+        Err(Error::MissingId)
+    }
+}
+
 /// The TendermintRpcClient has a basic state machine for ensuring
 /// at most one subscription at a time. These tests cover that it
 /// works as intended.
+///
+/// Furthermore, since a client can handle a subscription and a
+/// simple request simultaneously, we must test that the correct
+/// responses are give for each of the corresponding requests
 #[cfg(test)]
 mod test_tendermint_rpc_client {
     use serde::{Deserialize, Serialize};
+    use tendermint_rpc::endpoint::abci_info::AbciInfo;
     use tendermint_rpc::query::{EventType, Query};
+    use tendermint_rpc::Client;
     use websocket::sync::Server;
     use websocket::{Message, OwnedMessage};
 
@@ -370,20 +433,19 @@ mod test_tendermint_rpc_client {
     };
 
     #[derive(Debug, Deserialize, Serialize)]
-    #[serde(rename_all = "lowercase")]
-    pub enum SubscribeType {
+    #[serde(rename_all = "snake_case")]
+    pub enum ReqType {
         Subscribe,
         Unsubscribe,
+        AbciInfo,
     }
 
     #[derive(Debug, Deserialize, Serialize)]
-    pub struct RpcSubscription {
+    pub struct RpcRequest {
         pub jsonrpc: String,
         pub id: String,
-        pub method: SubscribeType,
-        // #[serde(serialize_with = "super::rpc_types::serialize_query")]
-        // #[serde(deserialize_with = "super::rpc_types::deserialize_query")]
-        pub params: Vec<String>,
+        pub method: ReqType,
+        pub params: Option<Vec<String>>,
     }
 
     fn address() -> WebSocketAddress {
@@ -393,39 +455,94 @@ mod test_tendermint_rpc_client {
         }
     }
 
-    /// Mocks responses to queries. Fairly arbitrary with just enough variety to
-    /// test the TendermintRpcClient state machine.
-    fn handle(msg: String) -> &'static str {
-        let request: RpcSubscription = serde_json::from_str(&msg).unwrap();
-        match request.method {
-            SubscribeType::Unsubscribe => {
-                r#"{"jsonrpc": "2.0", "id": 1, "error": "error"}"#
-            }
-            SubscribeType::Subscribe => {
-                if request.params[0]
-                    == Query::from(EventType::NewBlock).to_string()
-                {
-                    r#"{"jsonrpc": "2.0", "id": 1, "error": "error"}"#
-                } else {
-                    r#"{"jsonrpc": "2.0", "id": 1, "result": {}}"#
+    #[derive(Default)]
+    struct Handle {
+        subscription_id: Option<String>,
+    }
+
+    impl Handle {
+        /// Mocks responses to queries. Fairly arbitrary with just enough
+        /// variety to test the TendermintRpcClient state machine and
+        /// message synchronization
+        fn handle(&mut self, msg: String) -> Vec<String> {
+            let id = super::get_id(&msg).unwrap();
+            let request: RpcRequest = serde_json::from_str(&msg).unwrap();
+            match request.method {
+                ReqType::Unsubscribe => {
+                    self.subscription_id = None;
+                    vec![format!(
+                        r#"{{"jsonrpc": "2.0", "id": {}, "error": "error"}}"#,
+                        id
+                    )]
+                }
+                ReqType::Subscribe => {
+                    self.subscription_id = Some(id);
+                    let id = self.subscription_id.as_ref().unwrap();
+                    if request.params.unwrap()[0]
+                        == Query::from(EventType::NewBlock).to_string()
+                    {
+                        vec![format!(
+                            r#"{{"jsonrpc": "2.0", "id": {}, "error": "error"}}"#,
+                            id
+                        )]
+                    } else {
+                        vec![format!(
+                            r#"{{"jsonrpc": "2.0", "id": {}, "result": {{}}}}"#,
+                            id
+                        )]
+                    }
+                }
+                ReqType::AbciInfo => {
+                    // Mock a subscription result returning on the wire before
+                    // the simple request result
+                    let info = AbciInfo {
+                        last_block_app_hash: super::hash_tx(
+                            "Testing".as_bytes(),
+                        )
+                        .as_ref()
+                        .into(),
+                        ..AbciInfo::default()
+                    };
+                    let resp = serde_json::to_string(&info).unwrap();
+                    if let Some(prev_id) = self.subscription_id.take() {
+                        vec![
+                            format!(
+                                r#"{{"jsonrpc": "2.0", "id": {}, "result": "subscription result!"}}"#,
+                                prev_id
+                            ),
+                            format!(
+                                r#"{{"jsonrpc": "2.0", "id": {}, "result": {{"response": {}}}}}"#,
+                                id, resp
+                            ),
+                        ]
+                    } else {
+                        vec![format!(
+                            r#"{{"jsonrpc": "2.0", "id": {}, "result": {{"response": {}}}}}"#,
+                            id, resp
+                        )]
+                    }
                 }
             }
         }
     }
 
     /// A mock tendermint node. This is just a basic websocket server
+    /// TODO: When the thread drops from scope, we may get an ignorable
+    /// panic as we did not shut the loop down. But we should.
     fn start() {
         let node = Server::bind("localhost:26657").unwrap();
         for connection in node.filter_map(Result::ok) {
             std::thread::spawn(move || {
+                let mut handler = Handle::default();
                 let mut client = connection.accept().unwrap();
                 loop {
-                    let resp = match client.recv_message().unwrap() {
-                        OwnedMessage::Text(msg) => handle(msg),
+                    for resp in match client.recv_message().unwrap() {
+                        OwnedMessage::Text(msg) => handler.handle(msg),
                         _ => panic!("Unexpected request"),
-                    };
-                    let msg = Message::text(resp);
-                    let _ = client.send_message(&msg);
+                    } {
+                        let msg = Message::text(resp);
+                        let _ = client.send_message(&msg);
+                    }
                 }
             });
         }
@@ -442,7 +559,10 @@ mod test_tendermint_rpc_client {
             .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
-        assert_eq!(rpc_client.subscribed, Some(Query::from(EventType::Tx)));
+        assert_eq!(
+            rpc_client.subscribed.as_ref().expect("Test failed").query,
+            Query::from(EventType::Tx)
+        );
         // Check that we cannot subscribe while we still have an active
         // subscription
         assert!(rpc_client.subscribe(Query::from(EventType::Tx)).is_err());
@@ -459,11 +579,14 @@ mod test_tendermint_rpc_client {
             .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
-        assert_eq!(rpc_client.subscribed, Some(Query::from(EventType::Tx)));
+        assert_eq!(
+            rpc_client.subscribed.as_ref().expect("Test failed").query,
+            Query::from(EventType::Tx)
+        );
         // Check that unsubscribe was successful even though it returned an
         // error
         assert!(rpc_client.unsubscribe().is_err());
-        assert_eq!(rpc_client.subscribed, None);
+        assert!(rpc_client.subscribed.is_none());
     }
 
     /// Test that if we unsubscribe from an event, we can
@@ -477,12 +600,74 @@ mod test_tendermint_rpc_client {
             .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
-        assert_eq!(rpc_client.subscribed, Some(Query::from(EventType::Tx)));
+        assert_eq!(
+            rpc_client.subscribed.as_ref().expect("Test failed").query,
+            Query::from(EventType::Tx)
+        );
         // Check that unsubscribe was successful
         let _ = rpc_client.unsubscribe();
-        assert_eq!(rpc_client.subscribed, None);
+        assert!(rpc_client.subscribed.as_ref().is_none());
         // Check that we can now subscribe to new event
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
-        assert_eq!(rpc_client.subscribed, Some(Query::from(EventType::Tx)));
+        assert_eq!(
+            rpc_client.subscribed.expect("Test failed").query,
+            Query::from(EventType::Tx)
+        );
+    }
+
+    /// In this test we first subscribe to an event and then
+    /// make a simple request.
+    ///
+    /// The mock node is set up so that while the request is waiting
+    /// for its response, it receives the response for the subscription.
+    ///
+    /// This test checks that methods correctly return the correct
+    /// responses.
+    #[test]
+    fn test_subscription_returns_before_request_handled() {
+        std::thread::spawn(start);
+        // need to make sure that the mock tendermint node has time to boot up
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let mut rpc_client = TendermintRpcClient::open(address())
+            .expect("Client could not start");
+        // Check that subscription was successful
+        rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
+        assert_eq!(
+            rpc_client.subscribed.as_ref().expect("Test failed").query,
+            Query::from(EventType::Tx)
+        );
+        // Check that there are no pending subscription responses
+        assert!(rpc_client.received_responses.lock().unwrap().is_empty());
+        // If the wrong response is returned, json deserialization will fail the
+        // test
+        let _ =
+            tokio_test::block_on(rpc_client.abci_info()).expect("Test failed");
+        // Check that we received the subscription response and it has been
+        // stored
+        assert!(
+            rpc_client
+                .received_responses
+                .lock()
+                .unwrap()
+                .contains_key(&rpc_client.subscribed.as_ref().unwrap().id)
+        );
+        // we need the id to test the response
+        let id = rpc_client
+            .received_responses
+            .lock()
+            .unwrap()
+            .keys()
+            .next()
+            .unwrap()
+            .clone();
+        // check that we receive the expected response to the subscription
+        let response = rpc_client.receive_response().expect("Test failed");
+        assert_eq!(
+            response,
+            format!(
+                r#"{{"jsonrpc": "2.0", "id": {}, "result": "subscription result!"}}"#,
+                id
+            )
+        )
     }
 }
