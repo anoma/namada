@@ -446,8 +446,8 @@ mod tests {
     }
 
     /// This test run the ledger and gossip binaries. It then craft 3 intents
-    /// and sends them to the matchmaker. The matchmaker should be able to craft a
-    /// transfer transaction with the 3 intents.
+    /// and sends them to the matchmaker. The matchmaker should be able to craft
+    /// a transfer transaction with the 3 intents.
     #[test]
     fn match_intent() -> Result<()> {
         let working_dir = setup();
