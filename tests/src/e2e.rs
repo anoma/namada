@@ -438,8 +438,15 @@ mod tests {
 
         // 2. Submit a an invalid transaction
         let tx_args = vec![
-            "transfer", "--source", BERTHA, "--target", ALBERT, "--token",
-            XAN, "--amount", "1_000_000.1",
+            "transfer",
+            "--source",
+            BERTHA,
+            "--target",
+            ALBERT,
+            "--token",
+            XAN,
+            "--amount",
+            "1_000_000.1",
         ];
 
         let mut cmd = Command::cargo_bin("anomac")?;
@@ -450,31 +457,29 @@ mod tests {
 
         let cmd_str = format!("{:?}", cmd);
 
-        let mut request =
-            spawn_command(cmd, Some(20_000)).map_err(|e| {
-                eyre!(format!( "in command: {}\n\nReason: {}", cmd_str, e))
-            })?;
+        let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
+            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+        })?;
 
-        request.exp_string("Mempool validation passed").map_err(
-            |e| {
+        request
+            .exp_string("Mempool validation passed")
+            .map_err(|e| {
                 eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
             })?;
 
         let status = request.process.wait().unwrap();
-        assert_eq!(
-            WaitStatus::Exited(request.process.child_pid, 0),
-            status
-        );
+        assert_eq!(WaitStatus::Exited(request.process.child_pid, 0), status);
 
-        session.exp_string("some VPs rejected apply_tx storage modification").map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+        session
+            .exp_string("some VPs rejected apply_tx storage modification")
+            .map_err(|e| {
+                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+            })?;
 
         // Wait to commit a block
         session
             .exp_regex(r"Committed block hash.*, height: 2")
             .map_err(|e| eyre!(format!("{}", e)))?;
-
 
         // 3. Shut it down
         session

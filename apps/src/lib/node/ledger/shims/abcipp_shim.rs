@@ -65,12 +65,13 @@ impl Service<Req> for AbcippShim {
             Req::DeliverTx(deliver_tx) => {
                 // We store all the transactions to be applied in
                 // bulk at a later step
-                self.block_txs.push(deliver_tx.tx.clone());
+                self.block_txs.push(deliver_tx.tx);
                 Ok(Resp::DeliverTx(Default::default()))
             }
             Req::EndBlock(end) => {
-                BlockHeight::try_from(end.height)
-                    .expect(&format!("Unexpected block height {}", end.height));
+                BlockHeight::try_from(end.height).unwrap_or_else(|_| {
+                    panic!("Unexpected block height {}", end.height)
+                });
                 let mut txs = vec![];
                 std::mem::swap(&mut txs, &mut self.block_txs);
                 self.service
