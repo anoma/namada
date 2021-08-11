@@ -2124,9 +2124,9 @@ dependencies = [
 
 [[package]]
 name = "http-body"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60daa14be0e0786db0f03a9e57cb404c9d756eed2b6c62b9ea98ec5743ec75a9"
+checksum = "399c583b2979440c60be0821a6199eca73bc3c8dcd9d070d75ac726e2c6186e5"
 dependencies = [
  "bytes 1.0.1",
  "http",
@@ -5688,7 +5688,7 @@ checksum = "360dfd1d6d30e05fda32ace2c8c70e9c0a9da713275777f5a4dbb8a1893930c6"
 [[package]]
 name = "tracing"
 version = "0.1.26"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#aeae4fab322a9bb8943c357cbd9ed43a54424085"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "cfg-if 1.0.0",
  "log 0.4.14",
@@ -5700,7 +5700,7 @@ dependencies = [
 [[package]]
 name = "tracing-attributes"
 version = "0.1.15"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#aeae4fab322a9bb8943c357cbd9ed43a54424085"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5710,7 +5710,7 @@ dependencies = [
 [[package]]
 name = "tracing-core"
 version = "0.1.18"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#aeae4fab322a9bb8943c357cbd9ed43a54424085"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "lazy_static 1.4.0",
 ]
@@ -5738,7 +5738,7 @@ dependencies = [
 [[package]]
 name = "tracing-futures"
 version = "0.2.5"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#8cc3c51a5be9767c1bf73ef9386f7cc479b1c371"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "pin-project 1.0.8",
  "tracing",
@@ -5790,7 +5790,7 @@ dependencies = [
 [[package]]
 name = "tracing-tower"
 version = "0.1.0"
-source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#aeae4fab322a9bb8943c357cbd9ed43a54424085"
+source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "futures 0.3.16",
  "http",
