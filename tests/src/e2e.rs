@@ -578,6 +578,7 @@ mod tests {
         session_ledger
             .exp_string("No state could be found")
             .map_err(|e| eyre!(format!("{}", e)))?;
+        drop(session_ledger);
 
         // Wait for ledger and gossip to start
         sleep(3);
@@ -606,6 +607,7 @@ mod tests {
         session_send_intent_a
             .exp_regex(".*Failed to publish_intent InsufficientPeers*")
             .map_err(|e| eyre!(format!("{}", e)))?;
+        drop(session_send_intent_a);
 
         session_gossip
             .exp_regex(".*trying to match new intent*")
@@ -631,6 +633,7 @@ mod tests {
         session_send_intent_b
             .exp_regex(".*Failed to publish_intent InsufficientPeers*")
             .map_err(|e| eyre!(format!("{}", e)))?;
+        drop(session_send_intent_b);
 
         session_gossip
             .exp_regex(".*trying to match new intent*")
@@ -656,6 +659,7 @@ mod tests {
         session_send_intent_c
             .exp_string("Failed to publish_intent InsufficientPeers")
             .map_err(|e| eyre!(format!("{}", e)))?;
+        drop(session_send_intent_c);
 
         // check that the amount matched are correct
         session_gossip
@@ -674,12 +678,6 @@ mod tests {
         session_gossip
             .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
             .map_err(|e| eyre!(format!("{}", e)))?;
-
-        drop(session_gossip);
-        drop(session_ledger);
-        drop(session_send_intent_a);
-        drop(session_send_intent_b);
-        drop(session_send_intent_c);
 
         Ok(())
     }
