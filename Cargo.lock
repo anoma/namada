@@ -806,12 +806,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
 
 [[package]]
-name = "bytesize"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c58ec36aac5066d5ca17df51b3e70279f5670a72102f5752cb7e7c856adfc70"
-
-[[package]]
 name = "cache-padded"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1067,7 +1061,7 @@ dependencies = [
  "cranelift-codegen-shared",
  "cranelift-entity",
  "gimli 0.24.0",
- "log",
+ "log 0.4.14",
  "regalloc",
  "smallvec 1.6.1",
  "target-lexicon",
@@ -2229,7 +2223,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper",
+ "hyper 0.14.11",
  "pin-project-lite 0.2.7",
  "tokio",
  "tokio-io-timeout",
@@ -2381,7 +2375,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc633605454125dec4b66843673f01c7df2b89479b32e0ed634e43a91cff62a5"
 dependencies = [
  "autocfg 1.0.1",
- "autocfg",
  "hashbrown 0.11.2",
  "serde 1.0.127",
 ]
@@ -2610,9 +2603,9 @@ dependencies = [
  "libp2p-websocket",
  "libp2p-yamux",
  "parity-multiaddr",
- "parking_lot",
+ "parking_lot 0.11.1",
  "pin-project 1.0.8",
- "smallvec",
+ "smallvec 1.6.1",
  "wasm-timer",
 ]
 
@@ -2635,7 +2628,7 @@ dependencies = [
  "multihash",
  "multistream-select",
  "parity-multiaddr",
- "parking_lot",
+ "parking_lot 0.11.1",
  "pin-project 1.0.8",
  "prost 0.7.0",
  "prost-build 0.7.0",
@@ -2777,7 +2770,7 @@ dependencies = [
  "libp2p-swarm",
  "log 0.4.14",
  "rand 0.8.4",
- "smallvec",
+ "smallvec 1.6.1",
  "socket2 0.4.1",
  "void",
 ]
@@ -2860,8 +2853,8 @@ version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07cb4dd4b917e5b40ddefe49b96b07adcd8d342e0317011d175b7b2bb1dcc974"
 dependencies = [
- "futures",
- "log",
+ "futures 0.3.16",
+ "log 0.4.14",
  "pin-project 1.0.8",
  "rand 0.7.3",
  "salsa20",
@@ -2880,7 +2873,7 @@ dependencies = [
  "futures-timer",
  "libp2p-core",
  "libp2p-swarm",
- "log",
+ "log 0.4.14",
  "pin-project 1.0.8",
  "prost 0.7.0",
  "prost-build 0.7.0",
@@ -2950,7 +2943,7 @@ dependencies = [
  "ipnet",
  "libc",
  "libp2p-core",
- "log",
+ "log 0.4.14",
  "socket2 0.4.1",
 ]
 
@@ -3348,10 +3341,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d91ec0a2440aaff5f78ec35631a7027d50386c6163aa975f7caa0d5da4b6ff8"
 dependencies = [
  "bytes 1.0.1",
- "futures",
- "log",
+ "futures 0.3.16",
+ "log 0.4.14",
  "pin-project 1.0.8",
- "smallvec",
+ "smallvec 1.6.1",
  "unsigned-varint 0.7.0",
 ]
 
@@ -3633,7 +3626,7 @@ dependencies = [
  "byteorder",
  "data-encoding",
  "multihash",
- "percent-encoding",
+ "percent-encoding 2.1.0",
  "serde 1.0.127",
  "static_assertions",
  "unsigned-varint 0.7.0",
@@ -4967,6 +4960,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "smallvec"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
+
+[[package]]
 name = "snow"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5189,7 +5188,6 @@ dependencies = [
  "anomaly",
  "bytes 1.0.1",
  "chrono",
- "eyre",
  "num-derive",
  "num-traits 0.2.14",
  "prost 0.8.0",
@@ -5198,8 +5196,6 @@ dependencies = [
  "serde_bytes",
  "subtle-encoding",
  "thiserror",
- "tracing",
- "tendermint-proto",
 ]
 
 [[package]]
@@ -5385,7 +5381,7 @@ dependencies = [
  "mio 0.7.13",
  "num_cpus",
  "once_cell",
- "parking_lot",
+ "parking_lot 0.11.1",
  "pin-project-lite 0.2.7",
  "signal-hook-registry",
  "tokio-macros",
@@ -5525,13 +5521,10 @@ name = "tokio-test"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53474327ae5e166530d17f2d956afcb4f8a004de581b3cae10f12006bc8163e3"
-
 dependencies = [
  "async-stream",
  "bytes 1.0.1",
  "futures-core",
- "pin-project-lite 0.2.7",
-
  "tokio",
  "tokio-stream",
 ]
@@ -5556,7 +5549,7 @@ dependencies = [
  "bytes 1.0.1",
  "futures-core",
  "futures-sink",
- "log",
+ "log 0.4.14",
  "pin-project-lite 0.2.7",
  "tokio",
 ]
@@ -5587,7 +5580,7 @@ dependencies = [
  "http-body",
  "hyper 0.14.11",
  "hyper-timeout",
- "percent-encoding",
+ "percent-encoding 2.1.0",
  "pin-project 1.0.8",
  "prost 0.8.0",
  "prost-derive 0.8.0",
@@ -5640,7 +5633,7 @@ version = "0.1.0"
 source = "git+https://github.com/heliaxdev/tower-abci?branch=tomas/update-prost#629130c347d799e04926504e41af3e2d361ec8f6"
 dependencies = [
  "bytes 1.0.1",
- "futures",
+ "futures 0.3.16",
  "pin-project 1.0.8",
  "prost 0.8.0",
  "tendermint-proto",
@@ -5679,7 +5672,7 @@ version = "0.1.26"
 source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "cfg-if 1.0.0",
- "log",
+ "log 0.4.14",
  "pin-project-lite 0.2.7",
  "tracing-attributes",
  "tracing-core",
