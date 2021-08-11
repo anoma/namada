@@ -102,6 +102,7 @@ dependencies = [
  "rand_core 0.5.1",
  "rust_decimal",
  "serde 1.0.127",
+ "serde_json",
  "sha2 0.9.5",
  "sparse-merkle-tree",
  "tendermint",
@@ -131,7 +132,6 @@ dependencies = [
  "blake2b-rs",
  "borsh",
  "byteorder",
- "bytesize",
  "cargo-watch",
  "clap 3.0.0-beta.2",
  "color-eyre",
@@ -159,7 +159,6 @@ dependencies = [
  "sparse-merkle-tree",
  "tempfile",
  "tendermint",
- "tendermint-abci",
  "tendermint-proto",
  "tendermint-rpc",
  "thiserror",
@@ -191,6 +190,7 @@ dependencies = [
  "libp2p",
  "pretty_assertions",
  "rexpect",
+ "serde_json",
  "tempfile",
  "test-env-log",
  "tracing",
@@ -1067,7 +1067,7 @@ dependencies = [
  "cranelift-codegen-shared",
  "cranelift-entity",
  "gimli 0.24.0",
- "log 0.4.14",
+ "log",
  "regalloc",
  "smallvec 1.6.1",
  "target-lexicon",
@@ -2229,7 +2229,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper 0.14.11",
+ "hyper",
  "pin-project-lite 0.2.7",
  "tokio",
  "tokio-io-timeout",
@@ -2381,6 +2381,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc633605454125dec4b66843673f01c7df2b89479b32e0ed634e43a91cff62a5"
 dependencies = [
  "autocfg 1.0.1",
+ "autocfg",
  "hashbrown 0.11.2",
  "serde 1.0.127",
 ]
@@ -2609,9 +2610,9 @@ dependencies = [
  "libp2p-websocket",
  "libp2p-yamux",
  "parity-multiaddr",
- "parking_lot 0.11.1",
+ "parking_lot",
  "pin-project 1.0.8",
- "smallvec 1.6.1",
+ "smallvec",
  "wasm-timer",
 ]
 
@@ -2634,7 +2635,7 @@ dependencies = [
  "multihash",
  "multistream-select",
  "parity-multiaddr",
- "parking_lot 0.11.1",
+ "parking_lot",
  "pin-project 1.0.8",
  "prost 0.7.0",
  "prost-build 0.7.0",
@@ -2776,7 +2777,7 @@ dependencies = [
  "libp2p-swarm",
  "log 0.4.14",
  "rand 0.8.4",
- "smallvec 1.6.1",
+ "smallvec",
  "socket2 0.4.1",
  "void",
 ]
@@ -2859,8 +2860,8 @@ version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07cb4dd4b917e5b40ddefe49b96b07adcd8d342e0317011d175b7b2bb1dcc974"
 dependencies = [
- "futures 0.3.16",
- "log 0.4.14",
+ "futures",
+ "log",
  "pin-project 1.0.8",
  "rand 0.7.3",
  "salsa20",
@@ -2879,7 +2880,7 @@ dependencies = [
  "futures-timer",
  "libp2p-core",
  "libp2p-swarm",
- "log 0.4.14",
+ "log",
  "pin-project 1.0.8",
  "prost 0.7.0",
  "prost-build 0.7.0",
@@ -2949,7 +2950,7 @@ dependencies = [
  "ipnet",
  "libc",
  "libp2p-core",
- "log 0.4.14",
+ "log",
  "socket2 0.4.1",
 ]
 
@@ -3347,10 +3348,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d91ec0a2440aaff5f78ec35631a7027d50386c6163aa975f7caa0d5da4b6ff8"
 dependencies = [
  "bytes 1.0.1",
- "futures 0.3.16",
- "log 0.4.14",
+ "futures",
+ "log",
  "pin-project 1.0.8",
- "smallvec 1.6.1",
+ "smallvec",
  "unsigned-varint 0.7.0",
 ]
 
@@ -3632,7 +3633,7 @@ dependencies = [
  "byteorder",
  "data-encoding",
  "multihash",
- "percent-encoding 2.1.0",
+ "percent-encoding",
  "serde 1.0.127",
  "static_assertions",
  "unsigned-varint 0.7.0",
@@ -4966,12 +4967,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "smallvec"
-version = "1.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
-
-[[package]]
 name = "snow"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5187,19 +5182,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tendermint-abci"
-version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
-dependencies = [
- "bytes 1.0.1",
- "eyre",
- "prost 0.8.0",
- "tendermint-proto",
- "thiserror",
- "tracing",
-]
-
-[[package]]
 name = "tendermint-proto"
 version = "0.20.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
@@ -5207,6 +5189,7 @@ dependencies = [
  "anomaly",
  "bytes 1.0.1",
  "chrono",
+ "eyre",
  "num-derive",
  "num-traits 0.2.14",
  "prost 0.8.0",
@@ -5215,6 +5198,8 @@ dependencies = [
  "serde_bytes",
  "subtle-encoding",
  "thiserror",
+ "tracing",
+ "tendermint-proto",
 ]
 
 [[package]]
@@ -5400,7 +5385,7 @@ dependencies = [
  "mio 0.7.13",
  "num_cpus",
  "once_cell",
- "parking_lot 0.11.1",
+ "parking_lot",
  "pin-project-lite 0.2.7",
  "signal-hook-registry",
  "tokio-macros",
@@ -5540,10 +5525,13 @@ name = "tokio-test"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53474327ae5e166530d17f2d956afcb4f8a004de581b3cae10f12006bc8163e3"
+
 dependencies = [
  "async-stream",
  "bytes 1.0.1",
  "futures-core",
+ "pin-project-lite 0.2.7",
+
  "tokio",
  "tokio-stream",
 ]
@@ -5568,7 +5556,7 @@ dependencies = [
  "bytes 1.0.1",
  "futures-core",
  "futures-sink",
- "log 0.4.14",
+ "log",
  "pin-project-lite 0.2.7",
  "tokio",
 ]
@@ -5599,7 +5587,7 @@ dependencies = [
  "http-body",
  "hyper 0.14.11",
  "hyper-timeout",
- "percent-encoding 2.1.0",
+ "percent-encoding",
  "pin-project 1.0.8",
  "prost 0.8.0",
  "prost-derive 0.8.0",
@@ -5652,7 +5640,7 @@ version = "0.1.0"
 source = "git+https://github.com/heliaxdev/tower-abci?branch=tomas/update-prost#629130c347d799e04926504e41af3e2d361ec8f6"
 dependencies = [
  "bytes 1.0.1",
- "futures 0.3.16",
+ "futures",
  "pin-project 1.0.8",
  "prost 0.8.0",
  "tendermint-proto",
@@ -5691,7 +5679,7 @@ version = "0.1.26"
 source = "git+https://github.com/tokio-rs/tracing/?branch=v0.1.x#478156ae391bd39aa2c0c849923cfe0e18cee986"
 dependencies = [
  "cfg-if 1.0.0",
- "log 0.4.14",
+ "log",
  "pin-project-lite 0.2.7",
  "tracing-attributes",
  "tracing-core",

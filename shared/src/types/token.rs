@@ -27,6 +27,7 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
     Serialize,
     Deserialize,
 )]
+#[serde(transparent)]
 pub struct Amount {
     micro: u64,
 }
@@ -61,9 +62,29 @@ impl Amount {
     }
 }
 
+impl From<Amount> for f64 {
+    fn from(amount: Amount) -> Self {
+        amount.micro as f64
+    }
+}
+
+impl From<Amount> for u64 {
+    fn from(amount: Amount) -> Self {
+        amount.micro as u64
+    }
+}
+
 impl From<u64> for Amount {
     fn from(micro: u64) -> Self {
         Self { micro }
+    }
+}
+
+impl From<f64> for Amount {
+    fn from(micro: f64) -> Self {
+        Self {
+            micro: (micro * 1_000_000_f64) as u64,
+        }
     }
 }
 

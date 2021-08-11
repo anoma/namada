@@ -156,6 +156,39 @@ pub struct Signed<T: BorshSerialize + BorshDeserialize> {
     pub sig: Signature,
 }
 
+impl<T> PartialEq for Signed<T>
+where
+    T: BorshSerialize + BorshDeserialize + PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data && self.sig == other.sig
+    }
+}
+
+impl<T> Eq for Signed<T> where
+    T: BorshSerialize + BorshDeserialize + Eq + PartialEq
+{
+}
+
+impl<T> Hash for Signed<T>
+where
+    T: BorshSerialize + BorshDeserialize + Hash,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+        self.sig.hash(state);
+    }
+}
+
+impl<T> PartialOrd for Signed<T>
+where
+    T: BorshSerialize + BorshDeserialize + PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.data.partial_cmp(&other.data)
+    }
+}
+
 impl<T> Signed<T>
 where
     T: BorshSerialize + BorshDeserialize,

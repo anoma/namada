@@ -58,7 +58,7 @@ def create_issue(body: str):
 
 
 def format_manifest_path(path: str) -> str:
-    base_path_index = path.split('/').index('anoma-prototype')
+    base_path_index = path.split('/').index('anoma')
     return '/'.join(path.split('/')[base_path_index:])
 
 issue_template = '# Unused dependencies \n{}'
