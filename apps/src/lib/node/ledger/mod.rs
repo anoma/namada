@@ -1,4 +1,5 @@
 pub mod protocol;
+pub mod rpc;
 mod shell;
 mod shims;
 pub mod storage;
@@ -13,10 +14,11 @@ use tendermint_proto::abci::CheckTxType;
 use tower::ServiceBuilder;
 use tower_abci::{response, split, Server};
 
+use crate::config;
+use crate::config::genesis;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
-use crate::{config, genesis};
 
 /// A panic-proof handle for aborting a future. Will abort during
 /// stack unwinding as its drop method calls abort.

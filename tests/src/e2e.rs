@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use core::time;
+    use std::fs::OpenOptions;
     use std::path::PathBuf;
     use std::process::Command;
     use std::{fs, thread};
@@ -17,6 +18,7 @@ mod tests {
     use libp2p::PeerId;
     use rexpect::process::wait::WaitStatus;
     use rexpect::session::spawn_command;
+    use serde_json::json;
     use tempfile::tempdir;
 
     /// A helper that should be ran on start of every e2e test case.
@@ -231,8 +233,9 @@ mod tests {
     /// 2. Submit a token transfer tx
     /// 3. Submit a transaction to update an account's validity predicate
     /// 4. Submit a custom tx
+    /// 5. Query token balance
     #[test]
-    fn ledger_txs() -> Result<()> {
+    fn ledger_txs_and_queries() -> Result<()> {
         let dir = setup();
 
         let base_dir = tempdir().unwrap();
@@ -315,6 +318,37 @@ mod tests {
             }
         }
 
+        let query_args_and_expected_response = vec![
+            // 5. Query token balance
+            (
+                vec!["balance", "--owner", BERTHA, "--token", XAN],
+                // expect a decimal
+                r"XAN: (\d*\.)\d+",
+            ),
+        ];
+        for (query_args, expected) in &query_args_and_expected_response {
+            let mut cmd = Command::cargo_bin("anomac")?;
+            cmd.current_dir(&dir)
+                .env("ANOMA_LOG", "debug")
+                .args(&["--base-dir", base_dir_arg])
+                .args(query_args);
+            let cmd_str = format!("{:?}", cmd);
+
+            let mut session =
+                spawn_command(cmd, Some(10_000)).map_err(|e| {
+                    eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+                })?;
+            session.exp_regex(expected).map_err(|e| {
+                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+            })?;
+
+            let status = session.process.wait().unwrap();
+            assert_eq!(
+                WaitStatus::Exited(session.process.child_pid, 0),
+                status
+            );
+        }
+
         Ok(())
     }
 
@@ -326,8 +360,13 @@ mod tests {
         setup();
 
         let base_dir = tempdir().unwrap();
-        let node_dirs =
-            generate_network_of(base_dir.path().to_path_buf(), 2, false, true);
+        let node_dirs = generate_network_of(
+            base_dir.path().to_path_buf(),
+            2,
+            false,
+            true,
+            false,
+        );
 
         let first_node_dir = node_dirs[0].0.to_str().unwrap();
         let first_node_peer_id = node_dirs[0].1.to_string();
@@ -510,11 +549,264 @@ mod tests {
         Ok(())
     }
 
+    /// This test run the ledger and gossip binaries. It then craft 3 intents
+    /// and sends them to the matchmaker. The matchmaker should be able to craft
+    /// a transfer transaction with the 3 intents.
+    #[test]
+    fn match_intent() -> Result<()> {
+        let working_dir = setup();
+
+        let base_dir = tempdir().unwrap();
+        let node_dirs = generate_network_of(
+            base_dir.path().to_path_buf(),
+            1,
+            false,
+            true,
+            true,
+        );
+
+        let intent_a_path =
+            format!("{}/intent.A", working_dir.to_string_lossy());
+        let intent_b_path =
+            format!("{}/intent.B", working_dir.to_string_lossy());
+        let intent_c_path =
+            format!("{}/intent.C", working_dir.to_string_lossy());
+        let intent_a_path_input = &format!("{}.data", &intent_a_path);
+        let intent_b_path_input = &format!("{}.data", &intent_b_path);
+        let intent_c_path_input = &format!("{}.data", &intent_c_path);
+
+        println!("{}, {}", intent_a_path, intent_a_path_input);
+        println!("{}, {}", intent_b_path, intent_b_path_input);
+        println!("{}, {}", intent_c_path, intent_c_path_input);
+
+        let intent_a_json = json!([
+            {
+                "key": BERTHA,
+                "addr": BERTHA,
+                "min_buy": 100,
+                "max_sell": 70,
+                "token_buy": XAN,
+                "token_sell": BTC,
+                "rate_min": 2
+            }
+        ]);
+        let intent_b_json = json!([
+            {
+                "key": ALBERT,
+                "addr": ALBERT,
+                "min_buy": 50,
+                "max_sell": 300,
+                "token_buy": BTC,
+                "token_sell": ETH,
+                "rate_min": 0.7
+            }
+        ]);
+        let intent_c_json = json!([
+            {
+                "key": CHRISTEL,
+                "addr": CHRISTEL,
+                "min_buy": 20,
+                "max_sell": 200,
+                "token_buy": ETH,
+                "token_sell": XAN,
+                "rate_min": 0.5
+            }
+        ]);
+        generate_intent_json(intent_a_path_input, intent_a_json);
+        generate_intent_json(intent_b_path_input, intent_b_json);
+        generate_intent_json(intent_c_path_input, intent_c_json);
+
+        let first_node_dir = node_dirs[0].0.to_str().unwrap();
+
+        let mut base_node_gossip = Command::cargo_bin("anoman")?;
+        base_node_gossip.args(&["--base-dir", first_node_dir, "gossip"]);
+
+        let mut base_node_ledger = Command::cargo_bin("anoman")?;
+        base_node_ledger.args(&["--base-dir", first_node_dir, "ledger"]);
+
+        // Craft intents
+        // cargo run --bin anomac -- craft-intent --key $BERTHA
+        // --file-path-input intent.A.data --file-path-output intent.A
+
+        let tx_a = vec![
+            "craft-intent",
+            "--key",
+            BERTHA,
+            "--file-path-output",
+            intent_a_path.as_ref(),
+            "--file-path-input",
+            intent_a_path_input,
+        ];
+        let mut craft_intent_a = Command::cargo_bin("anomac")?;
+        craft_intent_a.args(tx_a);
+        craft_intent_a.spawn().expect("Should create the intent");
+
+        // cargo run --bin anomac -- craft-intent --key $ALBERT
+        // --file-path-input intent.B.data --file-path-output intent.B
+        let tx_b = vec![
+            "craft-intent",
+            "--key",
+            ALBERT,
+            "--file-path-output",
+            intent_b_path.as_ref(),
+            "--file-path-input",
+            intent_b_path_input,
+        ];
+        let mut craft_intent_b = Command::cargo_bin("anomac")?;
+        craft_intent_b.args(tx_b);
+        craft_intent_b.spawn().expect("Should create the intent");
+
+        // cargo run --bin anomac -- craft-intent --key $CHRISTEL
+        // --file-path-input intent.C.data --file-path-output intent.C
+        let tx_c = vec![
+            "craft-intent",
+            "--key",
+            CHRISTEL,
+            "--file-path-output",
+            intent_c_path.as_ref(),
+            "--file-path-input",
+            intent_c_path_input,
+        ];
+        let mut craft_intent_c = Command::cargo_bin("anomac")?;
+        craft_intent_c.args(tx_c);
+        craft_intent_c.spawn().expect("Should create the intent");
+
+        //  Start gossip
+        let mut session_gossip = spawn_command(base_node_gossip, Some(40_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        //  Start ledger
+        let mut session_ledger = spawn_command(base_node_ledger, Some(40_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session_ledger
+            .exp_string("No state could be found")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // Wait for ledger and gossip to start
+        sleep(3);
+
+        // cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent.A --topic "asset_v1"
+        // cargo run --bin anomac -- intent --node "http://127.0.0.1:39112" --data-path intent.B --topic "asset_v1"
+        // cargo run --bin anomac -- intent --node "http://127.0.0.1:39112" --data-path intent.C --topic "asset_v1"
+        //  Send intent A
+        let mut send_intent_a = Command::cargo_bin("anomac")?;
+        send_intent_a.args(&[
+            "intent",
+            "--node",
+            "http://127.0.0.1:39111",
+            "--data-path",
+            intent_a_path.as_ref(),
+            "--topic",
+            "asset_v1",
+        ]);
+
+        let mut session_send_intent_a =
+            spawn_command(send_intent_a, Some(20_000))
+                .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // means it sent it correctly but not able to gossip it (which is
+        // correct since there is only 1 node)
+        session_send_intent_a
+            .exp_regex(".*Failed to publish_intent InsufficientPeers*")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session_gossip
+            .exp_regex(".*trying to match new intent*")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // Send intent B
+        let mut send_intent_b = Command::cargo_bin("anomac")?;
+        send_intent_b.args(&[
+            "intent",
+            "--node",
+            "http://127.0.0.1:39111",
+            "--data-path",
+            intent_b_path.as_ref(),
+            "--topic",
+            "asset_v1",
+        ]);
+        let mut session_send_intent_b =
+            spawn_command(send_intent_b, Some(20_000))
+                .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // means it sent it correctly but not able to gossip it (which is
+        // correct since there is only 1 node)
+        session_send_intent_b
+            .exp_regex(".*Failed to publish_intent InsufficientPeers*")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session_gossip
+            .exp_regex(".*trying to match new intent*")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // Send intent C
+        let mut send_intent_c = Command::cargo_bin("anomac")?;
+        send_intent_c.args(&[
+            "intent",
+            "--node",
+            "http://127.0.0.1:39111",
+            "--data-path",
+            intent_c_path.as_ref(),
+            "--topic",
+            "asset_v1",
+        ]);
+        let mut session_send_intent_c =
+            spawn_command(send_intent_c, Some(40_000))
+                .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // means it sent it correctly but not able to gossip it (which is
+        // correct since there is only 1 node)
+        session_send_intent_c
+            .exp_string("Failed to publish_intent InsufficientPeers")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // check that the amount matched are correct
+        session_gossip
+            .exp_string("amounts: [100000000, 70000000, 200000000]")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // check that the transfers transactions are correct
+        session_gossip
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70000000")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session_gossip
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200000000")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session_gossip
+            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        drop(session_gossip);
+        drop(session_ledger);
+        drop(session_send_intent_a);
+        drop(session_send_intent_b);
+        drop(session_send_intent_c);
+
+        Ok(())
+    }
+
+    fn generate_intent_json(
+        intent_path: &str,
+        exchange_json: serde_json::Value,
+    ) {
+        let intent_writer = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(intent_path)
+            .unwrap();
+        serde_json::to_writer(intent_writer, &exchange_json).unwrap();
+    }
+
     fn generate_network_of(
         path: PathBuf,
         n_of_peers: u32,
         with_mdns: bool,
         with_kademlia: bool,
+        with_matchmaker: bool,
     ) -> Vec<(PathBuf, PeerId)> {
         let mut index = 0;
 
@@ -532,6 +824,8 @@ mod tests {
                 info,
                 with_mdns,
                 with_kademlia,
+                index == 0 && with_matchmaker,
+                index == 0 && with_matchmaker,
             );
             let peer_key =
                 Keypair::Ed25519(gossiper_config.gossiper.key.clone());
@@ -568,6 +862,7 @@ mod tests {
     #[cfg(test)]
     #[allow(dead_code)]
     mod constants {
+
         // User addresses
         pub const ALBERT: &str = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx";
         pub const BERTHA: &str = "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9";

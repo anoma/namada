@@ -1,5 +1,6 @@
 //! A basic fungible token
 
+use std::fmt::Display;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -14,6 +15,7 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
 #[derive(
     Clone,
     Copy,
+    Default,
     BorshSerialize,
     BorshDeserialize,
     PartialEq,
@@ -25,6 +27,7 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
     Serialize,
     Deserialize,
 )]
+#[serde(transparent)]
 pub struct Amount {
     micro: u64,
 }
@@ -33,12 +36,6 @@ const MAX_SCALE: u32 = 6;
 
 /// A change in tokens amount
 pub type Change = i128;
-
-impl Default for Amount {
-    fn default() -> Self {
-        Self { micro: 0 }
-    }
-}
 
 impl Amount {
     /// Get the amount as a [`Change`]
@@ -65,9 +62,37 @@ impl Amount {
     }
 }
 
+impl From<Amount> for f64 {
+    fn from(amount: Amount) -> Self {
+        amount.micro as f64
+    }
+}
+
+impl From<Amount> for u64 {
+    fn from(amount: Amount) -> Self {
+        amount.micro as u64
+    }
+}
+
 impl From<u64> for Amount {
     fn from(micro: u64) -> Self {
         Self { micro }
+    }
+}
+
+impl From<f64> for Amount {
+    fn from(micro: f64) -> Self {
+        Self {
+            micro: (micro * 1_000_000_f64) as u64,
+        }
+    }
+}
+
+impl Display for Amount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let decimal =
+            rust_decimal::Decimal::new(self.micro as i64, 6).normalize();
+        write!(f, "{}", decimal)
     }
 }
 
@@ -114,6 +139,13 @@ pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
         .push(&BALANCE_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
         .push(&owner.to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Obtain a storage key prefix for all users' balances.
+pub fn balance_prefix(token_addr: &Address) -> Key {
+    Key::from(token_addr.to_db_key())
+        .push(&BALANCE_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

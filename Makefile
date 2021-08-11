@@ -41,6 +41,9 @@ clippy:
 	make -C $(wasms) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
+clippy-fix:
+	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
+
 install:
 	# Warning: built in debug mode for now
 	$(cargo) install --path ./apps --debug

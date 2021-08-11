@@ -13,23 +13,23 @@ use tendermint::config::TendermintConfig;
 use thiserror::Error;
 
 use crate::config;
-use crate::genesis::{self, Validator};
+use crate::config::genesis::{self, Validator};
 use crate::std::sync::mpsc::Sender;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed to initialize Tendermint: {0}")]
-    TendermintInit(std::io::Error),
+    Init(std::io::Error),
     #[error("Failed to load Tendermint config file: {0}")]
-    TendermintLoadConfig(tendermint::error::Error),
+    LoadConfig(tendermint::error::Error),
     #[error("Failed to open Tendermint config for writing: {0}")]
-    TendermintOpenWriteConfig(std::io::Error),
+    OpenWriteConfig(std::io::Error),
     #[error("Failed to serialize Tendermint config TOML to string: {0}")]
-    TendermintConfigSerializeToml(toml::ser::Error),
+    ConfigSerializeToml(toml::ser::Error),
     #[error("Failed to write Tendermint config: {0}")]
-    TendermintWriteConfig(std::io::Error),
+    WriteConfig(std::io::Error),
     #[error("Failed to start up Tendermint node: {0}")]
-    TendermintStartUp(std::io::Error),
+    StartUp(std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -47,7 +47,7 @@ pub fn run(
     let output = Command::new("tendermint")
         .args(&["init", "--home", &home_dir_string])
         .output()
-        .map_err(Error::TendermintInit)?;
+        .map_err(Error::Init)?;
     if !output.status.success() {
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
@@ -68,7 +68,7 @@ pub fn run(
             &home_dir_string,
         ])
         .spawn()
-        .map_err(Error::TendermintStartUp)?;
+        .map_err(Error::StartUp)?;
     let pid = tendermint_node.id();
     tracing::info!("Tendermint node started");
     // make sure to shut down when receiving a termination signal
@@ -138,8 +138,8 @@ pub fn reset(config: config::Ledger) -> Result<()> {
 fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
-    let mut config = TendermintConfig::load_toml_file(&path)
-        .map_err(Error::TendermintLoadConfig)?;
+    let mut config =
+        TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
@@ -161,12 +161,12 @@ fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
         .write(true)
         .truncate(true)
         .open(path)
-        .map_err(Error::TendermintOpenWriteConfig)?;
-    let config_str = toml::to_string(&config)
-        .map_err(Error::TendermintConfigSerializeToml)?;
+        .map_err(Error::OpenWriteConfig)?;
+    let config_str =
+        toml::to_string(&config).map_err(Error::ConfigSerializeToml)?;
     file.write(config_str.as_bytes())
         .map(|_| ())
-        .map_err(Error::TendermintWriteConfig)
+        .map_err(Error::WriteConfig)
 }
 
 #[cfg(feature = "dev")]
