@@ -360,6 +360,27 @@ where
         }
     }
 
+    fn get_sequence_pre(&self, path: Path) -> Result<Sequence> {
+        let key = Key::ibc_key(path.to_string())
+            .expect("Creating akey for a sequence shouldn't fail");
+        match self.ctx.read_pre(&key)? {
+            Some(value) => {
+                let index: u64 =
+                    storage::types::decode(value).map_err(|e| {
+                        Error::SequenceError(format!(
+                            "Decoding a prior sequece index failed: {}",
+                            e
+                        ))
+                    })?;
+                Ok(Sequence::from(index))
+            }
+            None => Err(Error::SequenceError(format!(
+                "The prior sequence doesn't exist: Path {}",
+                path
+            ))),
+        }
+    }
+
     fn get_sequence(&self, path: Path) -> Result<Sequence> {
         let key = Key::ibc_key(path.to_string())
             .expect("Creating a key for a sequence shouldn't fail");
@@ -376,6 +397,23 @@ where
             }
             None => Err(Error::InvalidSequence(format!(
                 "The sequence doesn't exist: Path {}",
+                path
+            ))),
+        }
+    }
+
+    fn get_packet_info_pre(&self, path: Path) -> Result<String> {
+        let key = Key::ibc_key(path.to_string())
+            .expect("Creating akey for a packet info shouldn't fail");
+        match self.ctx.read_pre(&key)? {
+            Some(value) => String::from_utf8(value.to_vec()).map_err(|e| {
+                Error::PacketInfoError(format!(
+                    "Decoding the prior packet info failed: {}",
+                    e
+                ))
+            }),
+            None => Err(Error::PacketInfoError(format!(
+                "The prior packet info doesn't exist: Path {}",
                 path
             ))),
         }
@@ -398,7 +436,7 @@ where
         }
     }
 
-    fn connection_from_channel(
+    pub(super) fn connection_from_channel(
         &self,
         channel: &ChannelEnd,
     ) -> Result<ConnectionEnd> {
@@ -445,6 +483,46 @@ where
                 e
             ))),
         }
+    }
+
+    pub(super) fn get_next_sequence_send_pre(
+        &self,
+        port_channel_id: &(PortId, ChannelId),
+    ) -> Result<Sequence> {
+        let port_channel_id = port_channel_id.clone();
+        let path = Path::SeqSends(port_channel_id.0, port_channel_id.1);
+        self.get_sequence_pre(path)
+    }
+
+    pub(super) fn get_next_sequence_recv_pre(
+        &self,
+        port_channel_id: &(PortId, ChannelId),
+    ) -> Result<Sequence> {
+        let port_channel_id = port_channel_id.clone();
+        let path = Path::SeqRecvs(port_channel_id.0, port_channel_id.1);
+        self.get_sequence_pre(path)
+    }
+
+    pub(super) fn get_next_sequence_ack_pre(
+        &self,
+        port_channel_id: &(PortId, ChannelId),
+    ) -> Result<Sequence> {
+        let port_channel_id = port_channel_id.clone();
+        let path = Path::SeqAcks(port_channel_id.0, port_channel_id.1);
+        self.get_sequence_pre(path)
+    }
+
+    pub(super) fn get_packet_commitment_pre(
+        &self,
+        key: &(PortId, ChannelId, Sequence),
+    ) -> Result<String> {
+        let key = key.clone();
+        let path = Path::Commitments {
+            port_id: key.0,
+            channel_id: key.1,
+            sequence: key.2,
+        };
+        self.get_packet_info_pre(path)
     }
 
     fn channel_counter_pre(&self) -> Result<u64> {

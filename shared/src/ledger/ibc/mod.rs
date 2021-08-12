@@ -4,6 +4,7 @@ mod channel;
 mod client;
 mod connection;
 mod port;
+mod sequence;
 
 use std::collections::HashSet;
 
@@ -32,6 +33,8 @@ pub enum Error {
     ChannelError(channel::Error),
     #[error("Port validation error: {0}")]
     PortError(port::Error),
+    #[error("Sequence validation error: {0}")]
+    SequenceError(sequence::Error),
 }
 
 /// IBC functions result
@@ -127,10 +130,16 @@ where
                 IbcPrefix::Channel => self.validate_channel(key, tx_data)?,
                 IbcPrefix::Port => self.validate_port(key)?,
                 IbcPrefix::Capability => self.validate_capability(key)?,
+                IbcPrefix::SeqSend => {
+                    self.validate_sequence_send(key, tx_data)?
+                }
+                IbcPrefix::SeqRecv => {
+                    self.validate_sequence_recv(key, tx_data)?
+                }
+                IbcPrefix::SeqAck => {
+                    self.validate_sequence_ack(key, tx_data)?
+                }
                 // TODO implement validations for modules
-                IbcPrefix::SeqSend => continue,
-                IbcPrefix::SeqRecv => continue,
-                IbcPrefix::SeqAck => continue,
                 IbcPrefix::Commitment => continue,
                 IbcPrefix::Receipt => continue,
                 IbcPrefix::Ack => continue,
@@ -267,6 +276,12 @@ impl From<channel::Error> for Error {
 impl From<port::Error> for Error {
     fn from(err: port::Error) -> Self {
         Self::PortError(err)
+    }
+}
+
+impl From<sequence::Error> for Error {
+    fn from(err: sequence::Error) -> Self {
+        Self::SequenceError(err)
     }
 }
 

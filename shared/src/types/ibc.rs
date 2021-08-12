@@ -12,9 +12,11 @@ use ibc::ics02_client::height::Height;
 use ibc::ics03_connection::connection::Counterparty as ConnCounterparty;
 use ibc::ics03_connection::version::Version;
 use ibc::ics04_channel::channel::{Counterparty as ChanCounterparty, Order};
+use ibc::ics04_channel::packet::Packet;
 use ibc::ics23_commitment::commitment::CommitmentProofBytes;
 use ibc::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
 use ibc::proofs::{ConsensusProof, Proofs};
+use ibc_proto::ibc::core::channel::v1::Packet as RawPacket;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use ibc_proto::ibc::core::connection::v1::Counterparty as RawCounterparty;
 use prost::Message;
@@ -1141,5 +1143,134 @@ impl ChannelCloseConfirmData {
             height,
         )
         .map_err(Error::DecodingError)
+    }
+}
+
+/// Returns the encoded packet
+pub fn encode_packet(packet: &Packet) -> Vec<u8> {
+    let raw_packet = RawPacket::from(packet.clone());
+    let mut bytes = vec![];
+    raw_packet
+        .encode(&mut bytes)
+        .expect("Encoding a packet shouldn't fail");
+    bytes
+}
+
+/// Returns the packet
+pub fn decode_packet(bytes: impl AsRef<[u8]>) -> Result<Packet> {
+    let raw_packet = RawPacket::decode(bytes.as_ref())
+        .map_err(|e| Error::DecodingError(e.to_string()))?;
+    Packet::try_from(raw_packet)
+        .map_err(|e| Error::DecodingError(e.to_string()))
+}
+
+/// Data for receiving a packet
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct PacketReceiptData {
+    /// The packet
+    packet: Vec<u8>,
+    /// The height of the proof
+    proof_height: (u64, u64),
+    /// The proof of the packet
+    proof_packets: Vec<u8>,
+}
+
+impl PacketReceiptData {
+    /// Create data for receiving packet
+    pub fn new(
+        packet: Packet,
+        proof_height: Height,
+        proof_packets: CommitmentProofBytes,
+    ) -> Self {
+        let bytes = encode_packet(&packet);
+        Self {
+            packet: bytes,
+            proof_height: (
+                proof_height.revision_number,
+                proof_height.revision_height,
+            ),
+            proof_packets: proof_packets.into(),
+        }
+    }
+
+    /// Returns the packet
+    pub fn packet(&self) -> Result<Packet> {
+        decode_packet(&self.packet)
+    }
+
+    /// Returns the height of the proof
+    pub fn proof_height(&self) -> Height {
+        Height::new(self.proof_height.0, self.proof_height.1)
+    }
+
+    /// Returns the proof of the packet
+    pub fn proof_packet(&self) -> CommitmentProofBytes {
+        self.proof_packets.clone().into()
+    }
+
+    /// Returns the proofs for verification
+    pub fn proofs(&self) -> Result<Proofs> {
+        Proofs::new(self.proof_packet(), None, None, None, self.proof_height())
+            .map_err(Error::DecodingError)
+    }
+}
+
+/// Data for packet acknowledgement
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct PacketAckData {
+    /// The packet
+    packet: Vec<u8>,
+    /// The acknowledgement
+    ack: Vec<u8>,
+    /// The height of the proof
+    proof_height: (u64, u64),
+    /// The proof of the packet
+    proof_packets: Vec<u8>,
+}
+
+impl PacketAckData {
+    /// Create data for packet acknowledgement
+    pub fn new(
+        packet: Packet,
+        ack: Vec<u8>,
+        proof_height: Height,
+        proof_packets: CommitmentProofBytes,
+    ) -> Self {
+        let bytes = encode_packet(&packet);
+        Self {
+            packet: bytes,
+            ack,
+            proof_height: (
+                proof_height.revision_number,
+                proof_height.revision_height,
+            ),
+            proof_packets: proof_packets.into(),
+        }
+    }
+
+    /// Returns the packet
+    pub fn packet(&self) -> Result<Packet> {
+        decode_packet(&self.packet)
+    }
+
+    /// Returns the acknowledgement
+    pub fn ack(&self) -> Vec<u8> {
+        self.ack.clone()
+    }
+
+    /// Returns the height of the proof
+    pub fn proof_height(&self) -> Height {
+        Height::new(self.proof_height.0, self.proof_height.1)
+    }
+
+    /// Returns the proof of the packet
+    pub fn proof_packet(&self) -> CommitmentProofBytes {
+        self.proof_packets.clone().into()
+    }
+
+    /// Returns the proofs for verification
+    pub fn proofs(&self) -> Result<Proofs> {
+        Proofs::new(self.proof_packet(), None, None, None, self.proof_height())
+            .map_err(Error::DecodingError)
     }
 }
