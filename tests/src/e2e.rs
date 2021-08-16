@@ -680,8 +680,6 @@ mod tests {
             .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        base_dir.close().unwrap();
-
         Ok(())
     }
 
