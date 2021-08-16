@@ -675,9 +675,17 @@ mod tests {
 
         // insert a port
         let port_key = get_port_key();
-        let index = 0;
+        let index = 0u64;
         write_log
             .write(&port_key, storage::types::encode(&index))
+            .expect("write failed");
+        // insert to the reverse map
+        let path = format!("capabilities/{}", index);
+        let index_key =
+            Key::ibc_key(path).expect("Creating a key for a capability failed");
+        let port_id = get_port_id().as_str().to_owned();
+        write_log
+            .write(&index_key, storage::types::encode(&port_id))
             .expect("write failed");
 
         // insert a initial channel
@@ -700,6 +708,7 @@ mod tests {
         let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
 
         let mut keys_changed = HashSet::new();
+        keys_changed.insert(get_port_key());
         keys_changed.insert(get_channel_key());
 
         let verifiers = HashSet::new();

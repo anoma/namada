@@ -138,6 +138,18 @@ where
         }
     }
 
+    /// Returns the port ID after #IBC/channelEnds/ports
+    fn get_port_id(key: &Key) -> Result<PortId> {
+        match key.segments.get(3) {
+            Some(id) => PortId::from_str(&id.raw())
+                .map_err(|e| Error::KeyError(e.to_string())),
+            None => Err(Error::KeyError(format!(
+                "The key doesn't have a port ID: Key {}",
+                key
+            ))),
+        }
+    }
+
     /// Returns the channel ID after #IBC/channelEnds/ports/{port_id}/channels
     fn get_channel_id(key: &Key) -> Result<ChannelId> {
         match key.segments.get(5) {

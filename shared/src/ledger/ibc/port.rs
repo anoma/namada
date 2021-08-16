@@ -35,7 +35,7 @@ where
     H: 'static + StorageHasher,
 {
     pub(super) fn validate_port(&self, key: &Key) -> Result<bool> {
-        let port_id = Self::get_port_id(key)?;
+        let port_id = Self::get_port_id_for_capability(key)?;
         match self.get_port_state_change(&port_id)? {
             StateChange::Created => {
                 match self.authenticated_capability(&port_id) {
@@ -53,9 +53,9 @@ where
         }
     }
 
-    /// Returns the port ID after #IBC/channelEnds/ports
-    pub(super) fn get_port_id(key: &Key) -> Result<PortId> {
-        match key.segments.get(3) {
+    /// Returns the port ID after #IBC/ports
+    fn get_port_id_for_capability(key: &Key) -> Result<PortId> {
+        match key.segments.get(2) {
             Some(id) => PortId::from_str(&id.raw())
                 .map_err(|e| Error::KeyError(e.to_string())),
             None => Err(Error::KeyError(format!(
