@@ -516,11 +516,13 @@ pub mod cmds {
 }
 
 pub mod args {
+    use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
 
     use anoma::types::address::Address;
+    use anoma::types::intent::Exchange;
     use anoma::types::token;
     use libp2p::Multiaddr;
 
@@ -528,8 +530,6 @@ pub mod args {
     use super::ArgMatches;
 
     const ADDRESS: Arg<Address> = arg("address");
-    const AMOUNT_BUY: Arg<token::Amount> = arg("amount-buy");
-    const AMOUNT_SELL: Arg<token::Amount> = arg("amount-sell");
     const AMOUNT: Arg<token::Amount> = arg("amount");
     const BASE_DIR: ArgDefault<PathBuf> =
         arg_default("base-dir", DefaultFn(|| ".anoma".into()));
@@ -537,8 +537,6 @@ pub mod args {
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
-    const FILE_PATH: ArgDefault<String> =
-        arg_default("file-path", DefaultFn(|| "intent.data".into()));
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
@@ -550,21 +548,25 @@ pub mod args {
         }));
     const LEDGER_ADDRESS_OPT: ArgOpt<tendermint::net::Address> =
         LEDGER_ADDRESS.opt();
+    const PEERS: ArgMulti<String> = arg_multi("peers");
+    const TOPIC: Arg<String> = arg("topic");
+    const TOPICS: ArgMulti<String> = TOPIC.multi();
+    // TODO: once we have a wallet, we should also allow to use a key alias
+    // <https://github.com/anoma/anoma/issues/167>
+    const SIGNING_KEY: Arg<Address> = arg("key");
+    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const LEDGER_ADDRESS: Arg<tendermint::net::Address> = arg("ledger-address");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE: Arg<String> = arg("node");
+    const FILE_PATH_OUTPUT: ArgDefault<String> =
+        arg_default("file-path-output", DefaultFn(|| "intent.data".into()));
+    const FILE_PATH_INPUT: Arg<String> = arg("file-path-input");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
-    const PEERS: ArgMulti<String> = arg_multi("peers");
-    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
-    const TOKEN_BUY: Arg<Address> = arg("token-buy");
     const TOKEN_OPT: ArgOpt<Address> = TOKEN.opt();
-    const TOKEN_SELL: Arg<Address> = arg("token-sell");
     const TOKEN: Arg<Address> = arg("token");
-    const TOPIC: Arg<String> = arg("topic");
-    const TOPICS: ArgMulti<String> = TOPIC.multi();
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
 
     /// Global command arguments
@@ -783,45 +785,37 @@ pub mod args {
     /// Craft intent for token exchange arguments
     #[derive(Debug)]
     pub struct CraftIntent {
-        /// Source address
-        pub addr: Address,
-        /// Token to sell
-        pub token_sell: Address,
-        /// Amount of token to sell
-        pub amount_sell: token::Amount,
-        /// Token to buy
-        pub token_buy: Address,
-        /// Amount of token to buy
-        pub amount_buy: token::Amount,
+        /// Signing key
+        pub key: Address,
+        /// Exchange description
+        pub exchanges: Vec<Exchange>,
         /// Target file path
         pub file_path: String,
     }
 
     impl Args for CraftIntent {
         fn parse(matches: &ArgMatches) -> Self {
-            let addr = ADDRESS.parse(matches);
-            let token_sell = TOKEN_SELL.parse(matches);
-            let amount_sell = AMOUNT_SELL.parse(matches);
-            let token_buy = TOKEN_BUY.parse(matches);
-            let amount_buy = AMOUNT_BUY.parse(matches);
-            let file_path = FILE_PATH.parse(matches);
+            let key = SIGNING_KEY.parse(matches);
+            let file_path_output = FILE_PATH_OUTPUT.parse(matches);
+            let file_path_input = FILE_PATH_INPUT.parse(matches);
+            let file = File::open(&file_path_input).expect("File must exist.");
+
+            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
+                .expect("JSON was not well-formatted");
+
             Self {
-                addr,
-                token_sell,
-                amount_sell,
-                token_buy,
-                amount_buy,
-                file_path,
+                key,
+                exchanges,
+                file_path: file_path_output,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(ADDRESS.def().about("The account address."))
-                .arg(TOKEN_SELL.def().about("The selling token."))
-                .arg(AMOUNT_SELL.def().about("The amount selling."))
-                .arg(TOKEN_BUY.def().about("The buying token."))
-                .arg(AMOUNT_BUY.def().about("The amount buying."))
-                .arg(FILE_PATH.def().about("The output file"))
+            app.arg(SIGNING_KEY.def().about(
+                "Address of the account with key used to sign the intent.",
+            ))
+            .arg(FILE_PATH_OUTPUT.def().about("The output file"))
+            .arg(FILE_PATH_INPUT.def().about("The input file"))
         }
     }
 
