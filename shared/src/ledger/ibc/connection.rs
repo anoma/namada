@@ -31,21 +31,21 @@ use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Key error: {0}")]
-    KeyError(String),
+    InvalidKey(String),
     #[error("State change error: {0}")]
-    StateChangeError(String),
+    InvalidStateChange(String),
     #[error("Client error: {0}")]
-    ClientError(String),
+    InvalidClient(String),
     #[error("Connection error: {0}")]
-    ConnectionError(String),
+    InvalidConnection(String),
     #[error("Version error: {0}")]
-    VersionError(String),
+    InvalidVersion(String),
     #[error("Proof verification error: {0}")]
-    ProofVerificationError(Ics03Error),
+    ProofVerificationFailure(Ics03Error),
     #[error("Decoding TX data error: {0}")]
-    DecodingTxDataError(std::io::Error),
+    DecodingTxData(std::io::Error),
     #[error("IBC data error: {0}")]
-    IbcDataError(IbcDataError),
+    DecodingIbcData(IbcDataError),
 }
 
 /// IBC connection functions result
@@ -70,7 +70,7 @@ where
 
         let conn_id = Self::get_connection_id(key)?;
         let conn = self.connection_end(&conn_id).ok_or_else(|| {
-            Error::ConnectionError(format!(
+            Error::InvalidConnection(format!(
                 "The connection doesn't exist: ID {}",
                 conn_id
             ))
@@ -83,7 +83,7 @@ where
             StateChange::Updated => {
                 self.validate_updated_connection(&conn_id, conn, tx_data)
             }
-            _ => Err(Error::StateChangeError(format!(
+            _ => Err(Error::InvalidStateChange(format!(
                 "The state change of the connection is invalid: ID {}",
                 conn_id
             ))),
@@ -94,8 +94,8 @@ where
     fn get_connection_id(key: &Key) -> Result<ConnectionId> {
         match key.segments.get(2) {
             Some(id) => ConnectionId::from_str(&id.raw())
-                .map_err(|e| Error::KeyError(e.to_string())),
-            None => Err(Error::KeyError(format!(
+                .map_err(|e| Error::InvalidKey(e.to_string())),
+            None => Err(Error::InvalidKey(format!(
                 "The key doesn't have a connection ID: {}",
                 key
             ))),
@@ -110,7 +110,7 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client type failed");
         self.get_state_change(&key)
-            .map_err(|e| Error::StateChangeError(e.to_string()))
+            .map_err(|e| Error::InvalidStateChange(e.to_string()))
     }
 
     fn validate_created_connection(
@@ -124,7 +124,7 @@ where
                 let client_id = conn.client_id();
                 match ConnectionReader::client_state(self, client_id) {
                     Some(_) => Ok(true),
-                    None => Err(Error::ClientError(format!(
+                    None => Err(Error::InvalidClient(format!(
                         "The client state for the connection doesn't exist: \
                          ID {}",
                         conn_id,
@@ -132,7 +132,7 @@ where
                 }
             }
             State::TryOpen => self.verify_connection_try_proof(conn, tx_data),
-            _ => Err(Error::ConnectionError(format!(
+            _ => Err(Error::InvalidConnection(format!(
                 "The connection state is invalid: ID {}",
                 conn_id
             ))),
@@ -155,13 +155,13 @@ where
                     State::TryOpen => self.verify_connection_confirm_proof(
                         conn_id, conn, tx_data,
                     ),
-                    _ => Err(Error::StateChangeError(format!(
+                    _ => Err(Error::InvalidStateChange(format!(
                         "The state change of connection is invalid: ID {}",
                         conn_id
                     ))),
                 }
             }
-            _ => Err(Error::ConnectionError(format!(
+            _ => Err(Error::InvalidConnection(format!(
                 "The state of the connection is invalid: ID {}",
                 conn_id
             ))),
@@ -195,7 +195,7 @@ where
             &proofs,
         ) {
             Ok(_) => Ok(true),
-            Err(e) => Err(Error::ProofVerificationError(e)),
+            Err(e) => Err(Error::ProofVerificationFailure(e)),
         }
     }
 
@@ -209,7 +209,7 @@ where
 
         // version check
         if conn.versions().contains(&data.version()?) {
-            return Err(Error::VersionError(
+            return Err(Error::InvalidVersion(
                 "The version is unsupported".to_owned(),
             ));
         }
@@ -217,7 +217,7 @@ where
         // counterpart connection ID check
         if let Some(counterpart_conn_id) = conn.counterparty().connection_id() {
             if *counterpart_conn_id != data.counterpart_connection_id()? {
-                return Err(Error::ConnectionError(format!(
+                return Err(Error::InvalidConnection(format!(
                     "The counterpart connection ID mismatched: ID {}",
                     counterpart_conn_id
                 )));
@@ -246,7 +246,7 @@ where
             &proofs,
         ) {
             Ok(_) => Ok(true),
-            Err(e) => Err(Error::ProofVerificationError(e)),
+            Err(e) => Err(Error::ProofVerificationFailure(e)),
         }
     }
 
@@ -274,7 +274,7 @@ where
         let proofs = data.proofs()?;
         match verify_proofs(self, None, &conn, &expected_conn, &proofs) {
             Ok(_) => Ok(true),
-            Err(e) => Err(Error::ProofVerificationError(e)),
+            Err(e) => Err(Error::ProofVerificationFailure(e)),
         }
     }
 
@@ -287,12 +287,12 @@ where
             .expect("Creating a key for a connection end failed");
         match self.ctx.read_pre(&key) {
             Ok(Some(value)) => ConnectionEnd::decode_vec(&value).map_err(|e| {
-                Error::ConnectionError(format!(
+                Error::InvalidConnection(format!(
                     "Decoding the connection failed: {}",
                     e
                 ))
             }),
-            _ => Err(Error::ConnectionError(format!(
+            _ => Err(Error::InvalidConnection(format!(
                 "Unable to get the previous connection: ID {}",
                 conn_id
             ))),
@@ -303,12 +303,12 @@ where
         let key = Key::ibc_connection_counter();
         match self.ctx.read_pre(&key) {
             Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
-                Error::ConnectionError(format!(
+                Error::InvalidConnection(format!(
                     "Decoding the connection counter failed: {}",
                     e
                 ))
             }),
-            _ => Err(Error::ConnectionError(
+            _ => Err(Error::InvalidConnection(
                 "The connection counter should exist".to_owned(),
             )),
         }
@@ -398,12 +398,12 @@ where
 
 impl From<IbcDataError> for Error {
     fn from(err: IbcDataError) -> Self {
-        Self::IbcDataError(err)
+        Self::DecodingIbcData(err)
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Self::DecodingTxDataError(err)
+        Self::DecodingTxData(err)
     }
 }

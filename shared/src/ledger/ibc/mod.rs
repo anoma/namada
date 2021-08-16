@@ -338,7 +338,7 @@ mod tests {
             .unwrap_err();
         assert_matches!(
             result,
-            Error::ClientError(client::Error::StateChangeError(_))
+            Error::ClientError(client::Error::InvalidStateChange(_))
         );
     }
 
@@ -466,7 +466,7 @@ mod tests {
             .unwrap_err();
         assert_matches!(
             result,
-            Error::ConnectionError(connection::Error::ClientError(_))
+            Error::ConnectionError(connection::Error::InvalidClient(_))
         );
     }
 
