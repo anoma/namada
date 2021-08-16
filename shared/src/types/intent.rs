@@ -58,7 +58,7 @@ pub struct Exchange {
     pub min_buy: token::Amount,
 }
 
-/// These are transfers crafted from matched [`Intent`]s.
+/// These are transfers crafted from matched [`Exchange`]s.
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
