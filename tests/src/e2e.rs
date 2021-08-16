@@ -530,9 +530,9 @@ mod tests {
             "--key",
             BERTHA,
             "--file-path-output",
-            intent_a_path.to_str().unwrap().as_ref(),
+            intent_a_path.to_str().unwrap(),
             "--file-path-input",
-            intent_a_path_input.to_str().unwrap().as_ref(),
+            intent_a_path_input.to_str().unwrap(),
         ];
         let mut craft_intent_a = Command::cargo_bin("anomac")?;
         craft_intent_a.args(tx_a);
@@ -545,9 +545,9 @@ mod tests {
             "--key",
             ALBERT,
             "--file-path-output",
-            intent_b_path.to_str().unwrap().as_ref(),
+            intent_b_path.to_str().unwrap(),
             "--file-path-input",
-            intent_b_path_input.to_str().unwrap().as_ref(),
+            intent_b_path_input.to_str().unwrap(),
         ];
         let mut craft_intent_b = Command::cargo_bin("anomac")?;
         craft_intent_b.args(tx_b);
@@ -560,9 +560,9 @@ mod tests {
             "--key",
             CHRISTEL,
             "--file-path-output",
-            intent_c_path.to_str().unwrap().as_ref(),
+            intent_c_path.to_str().unwrap(),
             "--file-path-input",
-            intent_c_path_input.to_str().unwrap().as_ref(),
+            intent_c_path_input.to_str().unwrap(),
         ];
         let mut craft_intent_c = Command::cargo_bin("anomac")?;
         craft_intent_c.args(tx_c);
@@ -594,7 +594,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_a_path.to_str().unwrap().as_ref(),
+            intent_a_path.to_str().unwrap(),
             "--topic",
             "asset_v1",
         ]);
@@ -621,7 +621,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_b_path.to_str().unwrap().as_ref(),
+            intent_b_path.to_str().unwrap(),
             "--topic",
             "asset_v1",
         ]);
@@ -647,7 +647,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_c_path.to_str().unwrap().as_ref(),
+            intent_c_path.to_str().unwrap(),
             "--topic",
             "asset_v1",
         ]);
