@@ -67,7 +67,7 @@ table_row = '|{}|{}|{}|{}|'
 
 table = [table_header]
 
-command = ['cargo', '+nightly-2021-03-09', 'udeps', '--all-features', '--locked', '--output', 'json']
+command = ['cargo', '+nightly-2021-08-04', 'udeps', '--all-features', '--locked', '--output', 'json']
 p = subprocess.Popen(command, stdout=subprocess.PIPE)
 output = p.stdout.read()
 retcode = p.wait()
