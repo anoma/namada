@@ -5,6 +5,8 @@ use anoma::types::key::ed25519::Keypair;
 use anoma::types::token;
 use anoma::types::transaction::UpdateVp;
 use borsh::BorshSerialize;
+use jsonpath_lib as jsonpath;
+use serde::Serialize;
 use tendermint_rpc::query::{EventType, Query};
 use tendermint_rpc::Client;
 
@@ -102,8 +104,42 @@ async fn broadcast_tx(
             .await
             .map_err(|err| Error::Response(format!("{:?}", err)))?
     );
-    println!("{}", client.receive_response()?);
+    let parsed = TxResponse::try_from(client.receive_response()?)
+        .map_err(Error::Response)?;
+    println!(
+        "Response {}",
+        serde_json::to_string_pretty(&parsed).unwrap()
+    );
     client.unsubscribe()?;
     client.close();
     Ok(())
+}
+
+#[derive(Serialize)]
+struct TxResponse {
+    info: String,
+    height: String,
+    hash: String,
+}
+
+impl TryFrom<serde_json::Value> for TxResponse {
+    type Error = String;
+
+    fn try_from(json: serde_json::Value) -> Result<Self, Self::Error> {
+        let mut selector = jsonpath::selector(&json);
+        let height = selector("$.data.value.TxResult.height").unwrap();
+        let info = selector("$.data.value.TxResult.result.info").unwrap();
+        let hash = selector("$.events.['tx.hash'][0]").unwrap();
+        Ok(TxResponse {
+            info: trim(info[0].to_string()),
+            height: trim(height[0].to_string()),
+            hash: trim(hash[0].to_string()),
+        })
+    }
+}
+
+fn trim(mut quote: String) -> String {
+    quote.remove(0);
+    quote.remove(quote.len() - 1);
+    quote
 }

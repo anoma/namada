@@ -36,6 +36,8 @@ pub enum Error {
     MissingId,
 }
 
+type Json = serde_json::Value;
+
 /// Module that brings in the basic building blocks from tendermint_rpc
 /// and adds the necessary functionality and wrappers to them.
 mod rpc_types {
@@ -47,6 +49,8 @@ mod rpc_types {
     use tendermint_rpc::method::Method;
     use tendermint_rpc::query::{EventType, Query};
     use tendermint_rpc::{request, response};
+
+    use super::Json;
 
     #[derive(Debug, Deserialize, Serialize)]
     pub struct RpcRequest {
@@ -116,7 +120,7 @@ mod rpc_types {
     /// tendermint
     #[derive(Debug, Deserialize, Serialize)]
     #[serde(transparent)]
-    pub struct RpcResponse(String);
+    pub struct RpcResponse(pub Json);
 
     impl response::Response for RpcResponse {}
 
@@ -162,7 +166,7 @@ impl Display for WebSocketAddress {
     }
 }
 
-use rpc_types::{RpcSubscription, SubscribeType};
+use rpc_types::{RpcResponse, RpcSubscription, SubscribeType};
 
 /// We need interior mutability since the `perform` method of the `Client`
 /// trait from `tendermint_rpc` only takes `&self` as an argument
@@ -235,8 +239,8 @@ impl TendermintRpcClient {
     }
 
     /// Receive a response from the subscribed event or
-    /// process the response if it has already been recieved
-    pub fn receive_response(&self) -> Result<String, Error> {
+    /// process the response if it has already been received
+    pub fn receive_response(&self) -> Result<Json, Error> {
         if let Some(Subscription { id, .. }) = &self.subscribed {
             let response = self.process_response(
                 Error::Response,
@@ -286,17 +290,11 @@ impl TendermintRpcClient {
     /// Optionally, the response may have been received earlier while
     /// handling a different request. In that case, we process it
     /// now.
-    ///
-    /// Ideally the responses from tendermint would be parsed by the
-    /// tendermint-rs libraries. Unfortunately, the "result"/"error"
-    /// fields in the response are expected to be strings and
-    /// tendermint sometimes sends back `{}` instead. So we
-    /// process the response ourselves.
     fn process_response<F>(
         &self,
         f: F,
         received: Option<String>,
-    ) -> Result<String, Error>
+    ) -> Result<Json, Error>
     where
         F: FnOnce(String) -> Error,
     {
@@ -310,21 +308,9 @@ impl TendermintRpcClient {
                 .map_err(Error::Websocket),
         }?;
         match resp {
-            OwnedMessage::Text(resp) => {
-                if let serde_json::Value::Object(parsed) =
-                    serde_json::from_str(&resp).unwrap()
-                {
-                    if parsed.contains_key("result") {
-                        Ok(resp)
-                    } else if parsed.contains_key("error") {
-                        Err(f(resp))
-                    } else {
-                        Err(Error::UnexpectedResponse(OwnedMessage::Text(resp)))
-                    }
-                } else {
-                    Err(Error::UnexpectedResponse(OwnedMessage::Text(resp)))
-                }
-            }
+            OwnedMessage::Text(raw) => RpcResponse::from_string(raw)
+                .map(|v| v.0)
+                .map_err(|e| f(e.to_string())),
             other => Err(Error::UnexpectedResponse(other)),
         }
     }
@@ -507,7 +493,7 @@ mod test_tendermint_rpc_client {
                     if let Some(prev_id) = self.subscription_id.take() {
                         vec![
                             format!(
-                                r#"{{"jsonrpc": "2.0", "id": {}, "result": "subscription result!"}}"#,
+                                r#"{{"jsonrpc": "2.0", "id": {}, "result": {{"subscription": "result!"}}}}"#,
                                 prev_id
                             ),
                             format!(
@@ -651,24 +637,10 @@ mod test_tendermint_rpc_client {
                 .unwrap()
                 .contains_key(&rpc_client.subscribed.as_ref().unwrap().id)
         );
-        // we need the id to test the response
-        let id = rpc_client
-            .received_responses
-            .lock()
-            .unwrap()
-            .keys()
-            .next()
-            .unwrap()
-            .clone();
+
         // check that we receive the expected response to the subscription
         let response = rpc_client.receive_response().expect("Test failed");
-        assert_eq!(
-            response,
-            format!(
-                r#"{{"jsonrpc": "2.0", "id": {}, "result": "subscription result!"}}"#,
-                id
-            )
-        );
+        assert_eq!(response.to_string(), r#"{"subscription":"result!"}"#);
         // Check that there are no pending subscription responses
         assert!(rpc_client.received_responses.lock().unwrap().is_empty());
     }
