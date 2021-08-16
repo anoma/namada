@@ -5,7 +5,7 @@ import urllib
 import urllib.request
 from urllib.request import urlopen
 
-GH_TOKEN = os.environ['GITHUB_TOKEN'] or 'test'
+GH_TOKEN = os.environ['GITHUB_TOKEN']
 
 GET_ISSUES_URL = 'https://api.github.com/repos/{}/{}/issues'.format('anoma', 'anoma')
 CREATE_ISSUE_URL = 'https://api.github.com/repos/{}/{}/issues'.format('anoma', 'anoma')
