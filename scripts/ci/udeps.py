@@ -5,7 +5,7 @@ import urllib
 import urllib.request
 from urllib.request import urlopen
 
-GH_TOKEN = os.environ['GITHUB_TOKEN']
+GH_TOKEN = os.environ['GITHUB_TOKEN'] or 'test'
 
 GET_ISSUES_URL = 'https://api.github.com/repos/{}/{}/issues'.format('anoma', 'anoma')
 CREATE_ISSUE_URL = 'https://api.github.com/repos/{}/{}/issues'.format('anoma', 'anoma')
@@ -19,6 +19,9 @@ HEADERS = {
 ISSUE_TITLE = 'Cargo Udeps'
 ISSUE_LABEL = 'udeps'
 
+
+def get_nightly_from_file() -> str:
+    return open("rust-nightly-version", "r").read().strip()
 
 # 0 - not exist,2 already exist, else issue number
 def check_issue_status(body: str) -> int:
@@ -67,7 +70,8 @@ table_row = '|{}|{}|{}|{}|'
 
 table = [table_header]
 
-command = ['cargo', '+nightly-2021-08-04', 'udeps', '--all-features', '--locked', '--output', 'json']
+nightly_version = get_nightly_from_file()
+command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--all-features', '--locked', '--output', 'json']
 p = subprocess.Popen(command, stdout=subprocess.PIPE)
 output = p.stdout.read()
 retcode = p.wait()
