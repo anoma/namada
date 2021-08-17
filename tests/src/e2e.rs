@@ -480,8 +480,8 @@ mod tests {
             {
                 "key": BERTHA,
                 "addr": BERTHA,
-                "min_buy": 100,
-                "max_sell": 70,
+                "min_buy": "100.0",
+                "max_sell": "70",
                 "token_buy": XAN,
                 "token_sell": BTC,
                 "rate_min": 2
@@ -491,8 +491,8 @@ mod tests {
             {
                 "key": ALBERT,
                 "addr": ALBERT,
-                "min_buy": 50,
-                "max_sell": 300,
+                "min_buy": "50",
+                "max_sell": "300",
                 "token_buy": BTC,
                 "token_sell": ETH,
                 "rate_min": 0.7
@@ -502,8 +502,8 @@ mod tests {
             {
                 "key": CHRISTEL,
                 "addr": CHRISTEL,
-                "min_buy": 20,
-                "max_sell": 200,
+                "min_buy": "20",
+                "max_sell": "200",
                 "token_buy": ETH,
                 "token_sell": XAN,
                 "rate_min": 0.5
@@ -664,20 +664,20 @@ mod tests {
 
         // check that the amount matched are correct
         session_gossip
-            .exp_string("amounts: [100000000, 70000000, 200000000]")
+            .exp_string("amounts: 100, 70, 200")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // check that the transfers transactions are correct
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())

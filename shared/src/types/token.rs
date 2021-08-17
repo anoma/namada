@@ -24,15 +24,16 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
     Ord,
     Debug,
     Hash,
-    Serialize,
-    Deserialize,
 )]
-#[serde(transparent)]
 pub struct Amount {
     micro: u64,
 }
 
-const MAX_SCALE: u32 = 6;
+/// Maximum decimal places in a token [`Amount`] and [`Change`].
+pub const MAX_DECIMAL_PLACES: u32 = 6;
+/// Decimal scale of token [`Amount`] and [`Change`].
+pub const SCALE: u64 = 1_000_000;
+const SCALE_F64: f64 = SCALE as f64;
 
 /// A change in tokens amount
 pub type Change = i128;
@@ -57,14 +58,51 @@ impl Amount {
     /// Create a new amount from whole number of tokens
     pub fn whole(amount: u64) -> Self {
         Self {
-            micro: amount * 1_000_000,
+            micro: amount * SCALE,
         }
     }
 }
 
+impl serde::Serialize for Amount {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let amount_string = self.to_string();
+        serde::Serialize::serialize(&amount_string, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Amount {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let amount_string: String =
+            serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&amount_string).map_err(D::Error::custom)
+    }
+}
+
 impl From<Amount> for f64 {
+    /// Warning: `f64` loses precision and it should not be used when exact
+    /// values are required.
     fn from(amount: Amount) -> Self {
-        amount.micro as f64
+        amount.micro as f64 / SCALE_F64
+    }
+}
+
+impl From<f64> for Amount {
+    /// Warning: `f64` loses precision and it should not be used when exact
+    /// values are required.
+    fn from(micro: f64) -> Self {
+        Self {
+            micro: (micro * SCALE_F64).round() as u64,
+        }
     }
 }
 
@@ -77,14 +115,6 @@ impl From<Amount> for u64 {
 impl From<u64> for Amount {
     fn from(micro: u64) -> Self {
         Self { micro }
-    }
-}
-
-impl From<f64> for Amount {
-    fn from(micro: f64) -> Self {
-        Self {
-            micro: (micro * 1_000_000_f64) as u64,
-        }
     }
 }
 
@@ -102,8 +132,8 @@ pub enum AmountParseError {
     #[error("Error decoding token amount: {0}")]
     InvalidDecimal(rust_decimal::Error),
     #[error(
-        "Error decoding token amount, scale too large: {0}. Maximum \
-         {MAX_SCALE}"
+        "Error decoding token amount, too many decimal places: {0}. Maximum \
+         {MAX_DECIMAL_PLACES}"
     )]
     ScaleTooLarge(u32),
     #[error("Error decoding token amount, the value is within invalid range.")]
@@ -120,7 +150,8 @@ impl FromStr for Amount {
                 if scale > 6 {
                     return Err(AmountParseError::ScaleTooLarge(scale));
                 }
-                let whole = decimal * rust_decimal::Decimal::new(1_000_000, 0);
+                let whole =
+                    decimal * rust_decimal::Decimal::new(SCALE as i64, 0);
                 let micro: u64 =
                     rust_decimal::prelude::ToPrimitive::to_u64(&whole)
                         .ok_or(AmountParseError::InvalidRange)?;
@@ -200,4 +231,24 @@ pub struct Transfer {
     pub token: Address,
     /// The amount of tokens
     pub amount: Amount,
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+            /// The upper limit is set to `2^51`, because then the float is
+            /// starting to lose precision.
+            #[test]
+            fn test_token_amount_f64_conversion(raw_amount in 0..2_u64.pow(51)) {
+                let amount = Amount::from(raw_amount);
+                // A round-trip conversion to and from f64 should be an identity
+                let float = f64::from(amount);
+                let identity = Amount::from(float);
+                assert_eq!(amount, identity);
+        }
+    }
 }
