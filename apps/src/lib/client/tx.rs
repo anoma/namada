@@ -12,8 +12,8 @@ use tendermint_rpc::Client;
 
 use super::rpc;
 use crate::cli::args;
-use crate::client::tendermint_rpc_client::{
-    hash_tx, Error, TendermintRpcClient, WebSocketAddress,
+use crate::client::tendermint_websocket_client::{
+    hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
 use crate::wallet;
 
@@ -92,7 +92,7 @@ async fn broadcast_tx(
     tx_bytes: Vec<u8>,
 ) -> Result<(), Error> {
     let mut client =
-        TendermintRpcClient::open(WebSocketAddress::try_from(address)?)?;
+        TendermintWebsocketClient::open(WebSocketAddress::try_from(address)?)?;
     // It is better to subscribe to the transaction before it is broadcast
     let query = Query::from(EventType::Tx)
         .and_eq("tx.hash", hash_tx(&tx_bytes).to_string());
@@ -104,8 +104,7 @@ async fn broadcast_tx(
             .await
             .map_err(|err| Error::Response(format!("{:?}", err)))?
     );
-    let parsed = TxResponse::try_from(client.receive_response()?)
-        .map_err(Error::Response)?;
+    let parsed = TxResponse::from(client.receive_response()?);
     println!(
         "Response {}",
         serde_json::to_string_pretty(&parsed).unwrap()
@@ -122,24 +121,16 @@ struct TxResponse {
     hash: String,
 }
 
-impl TryFrom<serde_json::Value> for TxResponse {
-    type Error = String;
-
-    fn try_from(json: serde_json::Value) -> Result<Self, Self::Error> {
+impl From<serde_json::Value> for TxResponse {
+    fn from(json: serde_json::Value) -> Self {
         let mut selector = jsonpath::selector(&json);
         let height = selector("$.data.value.TxResult.height").unwrap();
         let info = selector("$.data.value.TxResult.result.info").unwrap();
         let hash = selector("$.events.['tx.hash'][0]").unwrap();
-        Ok(TxResponse {
-            info: trim(info[0].to_string()),
-            height: trim(height[0].to_string()),
-            hash: trim(hash[0].to_string()),
-        })
+        TxResponse {
+            info: serde_json::from_value(info[0].clone()).unwrap(),
+            height: serde_json::from_value(height[0].clone()).unwrap(),
+            hash: serde_json::from_value(hash[0].clone()).unwrap(),
+        }
     }
-}
-
-fn trim(mut quote: String) -> String {
-    quote.remove(0);
-    quote.remove(quote.len() - 1);
-    quote
 }

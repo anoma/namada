@@ -170,7 +170,7 @@ use rpc_types::{RpcResponse, RpcSubscription, SubscribeType};
 
 /// We need interior mutability since the `perform` method of the `Client`
 /// trait from `tendermint_rpc` only takes `&self` as an argument
-/// Furthermore, TendermintRpcClient must be `Send` since it will be
+/// Furthermore, TendermintWebsocketClient must be `Send` since it will be
 /// used in async methods
 type Websocket = Arc<Mutex<websocket::sync::client::Client<TcpStream>>>;
 type ResponseQueue = Arc<Mutex<HashMap<String, String>>>;
@@ -180,13 +180,13 @@ struct Subscription {
     query: Query,
 }
 
-pub struct TendermintRpcClient {
+pub struct TendermintWebsocketClient {
     websocket: Websocket,
     subscribed: Option<Subscription>,
     received_responses: ResponseQueue,
 }
 
-impl TendermintRpcClient {
+impl TendermintWebsocketClient {
     /// Open up a new websocket given a specified URL
     pub fn open(url: WebSocketAddress) -> Result<Self, Error> {
         match ClientBuilder::new(&url.to_string())
@@ -317,7 +317,7 @@ impl TendermintRpcClient {
 }
 
 #[async_trait]
-impl Client for TendermintRpcClient {
+impl Client for TendermintWebsocketClient {
     async fn perform<R>(
         &self,
         request: R,
@@ -398,7 +398,7 @@ fn get_id(req_json: &str) -> Result<String, Error> {
     }
 }
 
-/// The TendermintRpcClient has a basic state machine for ensuring
+/// The TendermintWebsocketClient has a basic state machine for ensuring
 /// at most one subscription at a time. These tests cover that it
 /// works as intended.
 ///
@@ -406,7 +406,7 @@ fn get_id(req_json: &str) -> Result<String, Error> {
 /// simple request simultaneously, we must test that the correct
 /// responses are give for each of the corresponding requests
 #[cfg(test)]
-mod test_tendermint_rpc_client {
+mod test_tendermint_websocket_client {
     use serde::{Deserialize, Serialize};
     use tendermint_rpc::endpoint::abci_info::AbciInfo;
     use tendermint_rpc::query::{EventType, Query};
@@ -414,8 +414,8 @@ mod test_tendermint_rpc_client {
     use websocket::sync::Server;
     use websocket::{Message, OwnedMessage};
 
-    use crate::client::tendermint_rpc_client::{
-        TendermintRpcClient, WebSocketAddress,
+    use crate::client::tendermint_websocket_client::{
+        TendermintWebsocketClient, WebSocketAddress,
     };
 
     #[derive(Debug, Deserialize, Serialize)]
@@ -448,7 +448,7 @@ mod test_tendermint_rpc_client {
 
     impl Handle {
         /// Mocks responses to queries. Fairly arbitrary with just enough
-        /// variety to test the TendermintRpcClient state machine and
+        /// variety to test the TendermintWebsocketClient state machine and
         /// message synchronization
         fn handle(&mut self, msg: String) -> Vec<String> {
             let id = super::get_id(&msg).unwrap();
@@ -541,7 +541,7 @@ mod test_tendermint_rpc_client {
         std::thread::spawn(start);
         // need to make sure that the mock tendermint node has time to boot up
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut rpc_client = TendermintRpcClient::open(address())
+        let mut rpc_client = TendermintWebsocketClient::open(address())
             .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
@@ -561,7 +561,7 @@ mod test_tendermint_rpc_client {
         std::thread::spawn(start);
         // need to make sure that the mock tendermint node has time to boot up
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut rpc_client = TendermintRpcClient::open(address())
+        let mut rpc_client = TendermintWebsocketClient::open(address())
             .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
@@ -582,7 +582,7 @@ mod test_tendermint_rpc_client {
         std::thread::spawn(start);
         // need to make sure that the mock tendermint node has time to boot up
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut rpc_client = TendermintRpcClient::open(address())
+        let mut rpc_client = TendermintWebsocketClient::open(address())
             .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
@@ -614,7 +614,7 @@ mod test_tendermint_rpc_client {
         std::thread::spawn(start);
         // need to make sure that the mock tendermint node has time to boot up
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut rpc_client = TendermintRpcClient::open(address())
+        let mut rpc_client = TendermintWebsocketClient::open(address())
             .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
