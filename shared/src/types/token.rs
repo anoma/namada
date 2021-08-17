@@ -24,10 +24,7 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
     Ord,
     Debug,
     Hash,
-    Serialize,
-    Deserialize,
 )]
-#[serde(transparent)]
 pub struct Amount {
     micro: u64,
 }
@@ -63,6 +60,31 @@ impl Amount {
         Self {
             micro: amount * SCALE,
         }
+    }
+}
+
+impl serde::Serialize for Amount {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let amount_string = self.to_string();
+        serde::Serialize::serialize(&amount_string, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Amount {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let amount_string: String =
+            serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&amount_string).map_err(D::Error::custom)
     }
 }
 
