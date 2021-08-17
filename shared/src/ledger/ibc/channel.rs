@@ -37,29 +37,29 @@ use crate::types::storage::{Key, KeySeg};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Native VP error: {0}")]
-    NativeVpError(NativeVpError),
+    NativeVp(NativeVpError),
     #[error("Key error: {0}")]
-    KeyError(String),
+    InvalidKey(String),
     #[error("State change error: {0}")]
-    StateChangeError(String),
+    InvalidStateChange(String),
     #[error("Connection error: {0}")]
-    ConnectionError(String),
+    InvalidConnection(String),
     #[error("Channel error: {0}")]
-    ChannelError(String),
+    InvalidChannel(String),
     #[error("Port error: {0}")]
-    PortError(String),
+    InvalidPort(String),
     #[error("Version error: {0}")]
-    VersionError(String),
+    InvalidVersion(String),
     #[error("Sequence error: {0}")]
-    SequenceError(String),
+    InvalidSequence(String),
     #[error("Packet info error: {0}")]
-    PacketInfoError(String),
+    InvalidPacketInfo(String),
     #[error("Proof verification error: {0}")]
-    ProofVerificationError(Ics04Error),
+    ProofVerificationFailure(Ics04Error),
     #[error("Decoding TX data error: {0}")]
-    DecodingTxDataError(std::io::Error),
+    DecodingTxData(std::io::Error),
     #[error("IBC data error: {0}")]
-    IbcDataError(IbcDataError),
+    InvalidIbcData(IbcDataError),
 }
 
 /// IBC channel functions result
@@ -80,11 +80,11 @@ where
         }
 
         let port_id = Self::get_port_id(key)
-            .map_err(|e| Error::KeyError(e.to_string()))?;
+            .map_err(|e| Error::InvalidKey(e.to_string()))?;
         let channel_id = Self::get_channel_id(key)?;
 
         self.authenticated_capability(&port_id).map_err(|e| {
-            Error::PortError(format!(
+            Error::InvalidPort(format!(
                 "The port is not authenticated: ID {}, {}",
                 port_id, e
             ))
@@ -94,7 +94,7 @@ where
         let channel = match self.channel_end(&port_channel_id) {
             Some(c) => c,
             None => {
-                return Err(Error::ChannelError(format!(
+                return Err(Error::InvalidChannel(format!(
                     "The channel doesn't exist: Port {}, Channel {}",
                     port_channel_id.0, port_channel_id.1
                 )));
@@ -102,7 +102,7 @@ where
         };
         // check the number of hops and empty version in the channel end
         channel.validate_basic().map_err(|e| {
-            Error::ChannelError(format!(
+            Error::InvalidChannel(format!(
                 "The channel is invalid: Port {}, Channel {}, {}",
                 port_channel_id.0, port_channel_id.1, e
             ))
@@ -118,7 +118,7 @@ where
                     &channel,
                     tx_data,
                 ),
-                _ => Err(Error::ChannelError(format!(
+                _ => Err(Error::InvalidChannel(format!(
                     "The channel state is invalid: Port {}, Channel {}, State \
                      {}",
                     port_channel_id.0,
@@ -131,7 +131,7 @@ where
                 &channel,
                 tx_data,
             ),
-            _ => Err(Error::StateChangeError(format!(
+            _ => Err(Error::InvalidStateChange(format!(
                 "The state change of the channel: Port {}, Channel {}",
                 port_channel_id.0, port_channel_id.1
             ))),
@@ -142,8 +142,8 @@ where
     fn get_port_id(key: &Key) -> Result<PortId> {
         match key.segments.get(3) {
             Some(id) => PortId::from_str(&id.raw())
-                .map_err(|e| Error::KeyError(e.to_string())),
-            None => Err(Error::KeyError(format!(
+                .map_err(|e| Error::InvalidKey(e.to_string())),
+            None => Err(Error::InvalidKey(format!(
                 "The key doesn't have a port ID: Key {}",
                 key
             ))),
@@ -154,8 +154,8 @@ where
     fn get_channel_id(key: &Key) -> Result<ChannelId> {
         match key.segments.get(5) {
             Some(id) => ChannelId::from_str(&id.raw())
-                .map_err(|e| Error::KeyError(e.to_string())),
-            None => Err(Error::KeyError(format!(
+                .map_err(|e| Error::InvalidKey(e.to_string())),
+            None => Err(Error::InvalidKey(format!(
                 "The key doesn't have a channel ID: {}",
                 key
             ))),
@@ -171,7 +171,7 @@ where
         let key =
             Key::ibc_key(path).expect("Creating a key for a channel failed");
         self.get_state_change(&key)
-            .map_err(|e| Error::StateChangeError(e.to_string()))
+            .map_err(|e| Error::InvalidStateChange(e.to_string()))
     }
 
     fn validate_version(&self, channel: &ChannelEnd) -> Result<()> {
@@ -180,7 +180,7 @@ where
         let version = match versions.as_slice() {
             [version] => version,
             _ => {
-                return Err(Error::VersionError(
+                return Err(Error::InvalidVersion(
                     "Multiple versions are specified or no version".to_owned(),
                 ));
             }
@@ -190,7 +190,7 @@ where
         if version.is_supported_feature(feature.clone()) {
             Ok(())
         } else {
-            Err(Error::VersionError(format!(
+            Err(Error::InvalidVersion(format!(
                 "The version is unsupported: Feature {}",
                 feature
             )))
@@ -216,7 +216,7 @@ where
                     channel,
                     tx_data,
                 ),
-                _ => Err(Error::StateChangeError(format!(
+                _ => Err(Error::InvalidStateChange(format!(
                     "The state change of the channel is invalid: Port {}, \
                      Channel {}",
                     port_channel_id.0, port_channel_id.1,
@@ -224,7 +224,7 @@ where
             },
             State::Closed => {
                 if !prev_channel.state_matches(&State::Open) {
-                    return Err(Error::StateChangeError(format!(
+                    return Err(Error::InvalidStateChange(format!(
                         "The state change of the channel is invalid: Port {}, \
                          Channel {}",
                         port_channel_id.0, port_channel_id.1,
@@ -239,7 +239,7 @@ where
                     ),
                 }
             }
-            _ => Err(Error::StateChangeError(format!(
+            _ => Err(Error::InvalidStateChange(format!(
                 "The state change of the channel is invalid: Port {}, Channel \
                  {}",
                 port_channel_id.0, port_channel_id.1
@@ -330,7 +330,7 @@ where
             match connection.counterparty().connection_id() {
                 Some(id) => id.clone(),
                 None => {
-                    return Err(Error::ConnectionError(
+                    return Err(Error::InvalidConnection(
                         "The counterpart connection ID doesn't exist"
                             .to_owned(),
                     ));
@@ -347,13 +347,13 @@ where
 
         match verify_channel_proofs(
             self,
-            &channel,
+            channel,
             &connection,
             &expected_channel,
             &proofs,
         ) {
             Ok(_) => Ok(true),
-            Err(e) => Err(Error::ProofVerificationError(e)),
+            Err(e) => Err(Error::ProofVerificationFailure(e)),
         }
     }
 
@@ -364,14 +364,14 @@ where
             Some(value) => {
                 let index: u64 =
                     storage::types::decode(value).map_err(|e| {
-                        Error::SequenceError(format!(
+                        Error::InvalidSequence(format!(
                             "Decoding a sequece index failed: {}",
                             e
                         ))
                     })?;
                 Ok(Sequence::from(index))
             }
-            None => Err(Error::SequenceError(format!(
+            None => Err(Error::InvalidSequence(format!(
                 "The sequence doesn't exist: Path {}",
                 path
             ))),
@@ -383,12 +383,12 @@ where
             .expect("Creating akey for a packet info shouldn't fail");
         match self.ctx.read_post(&key)? {
             Some(value) => String::from_utf8(value.to_vec()).map_err(|e| {
-                Error::PacketInfoError(format!(
+                Error::InvalidPacketInfo(format!(
                     "Decoding the packet info failed: {}",
                     e
                 ))
             }),
-            None => Err(Error::PacketInfoError(format!(
+            None => Err(Error::InvalidPacketInfo(format!(
                 "The packet info doesn't exist: Path {}",
                 path
             ))),
@@ -401,15 +401,15 @@ where
     ) -> Result<ConnectionEnd> {
         match channel.connection_hops().get(0) {
             Some(conn_id) => {
-                match ChannelReader::connection_end(self, &conn_id) {
+                match ChannelReader::connection_end(self, conn_id) {
                     Some(conn) => Ok(conn),
-                    None => Err(Error::ConnectionError(format!(
+                    None => Err(Error::InvalidConnection(format!(
                         "The connection doesn't exist: ID {}",
                         conn_id
                     ))),
                 }
             }
-            _ => Err(Error::ConnectionError(
+            _ => Err(Error::InvalidConnection(
                 "the corresponding connection ID doesn't exist".to_owned(),
             )),
         }
@@ -428,16 +428,16 @@ where
             Key::ibc_key(path).expect("Creating a key for a channel failed");
         match self.ctx.read_pre(&key) {
             Ok(Some(value)) => ChannelEnd::decode_vec(&value).map_err(|e| {
-                Error::ChannelError(format!(
+                Error::InvalidChannel(format!(
                     "Decoding the channel failed: Port {}, Channel {}, {}",
                     port_channel_id.0, port_channel_id.1, e
                 ))
             }),
-            Ok(None) => Err(Error::ChannelError(format!(
+            Ok(None) => Err(Error::InvalidChannel(format!(
                 "The prior channel doesn't exist: Port {}, Channel {}",
                 port_channel_id.0, port_channel_id.1
             ))),
-            Err(e) => Err(Error::ChannelError(format!(
+            Err(e) => Err(Error::InvalidChannel(format!(
                 "Reading the prior channel failed: {}",
                 e
             ))),
@@ -447,7 +447,7 @@ where
     fn channel_counter_pre(&self) -> Result<u64> {
         let key = Key::ibc_channel_counter();
         self.read_counter_pre(&key)
-            .map_err(|e| Error::ChannelError(e.to_string()))
+            .map_err(|e| Error::InvalidChannel(e.to_string()))
     }
 }
 
@@ -644,18 +644,18 @@ where
 
 impl From<NativeVpError> for Error {
     fn from(err: NativeVpError) -> Self {
-        Self::NativeVpError(err)
+        Self::NativeVp(err)
     }
 }
 
 impl From<IbcDataError> for Error {
     fn from(err: IbcDataError) -> Self {
-        Self::IbcDataError(err)
+        Self::InvalidIbcData(err)
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Self::DecodingTxDataError(err)
+        Self::DecodingTxData(err)
     }
 }

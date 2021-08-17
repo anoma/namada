@@ -211,7 +211,7 @@ where
     }
 
     fn read_counter_pre(&self, key: &Key) -> Result<u64> {
-        match self.ctx.read_pre(&key) {
+        match self.ctx.read_pre(key) {
             Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
                 Error::CounterError(format!(
                     "Decoding the client counter failed: {}",
@@ -225,7 +225,7 @@ where
     }
 
     fn read_counter(&self, key: &Key) -> u64 {
-        match self.ctx.read_post(&key) {
+        match self.ctx.read_post(key) {
             Ok(Some(value)) => match storage::types::decode(&value) {
                 Ok(c) => c,
                 Err(e) => {

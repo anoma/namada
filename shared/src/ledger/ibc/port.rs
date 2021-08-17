@@ -17,13 +17,13 @@ use crate::types::storage::{Key, KeySeg};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Key error: {0}")]
-    KeyError(String),
+    InvalidKey(String),
     #[error("State change error: {0}")]
-    StateChangeError(String),
+    InvalidStateChange(String),
     #[error("Port error: {0}")]
-    PortError(String),
+    InvalidPort(String),
     #[error("Capability error: {0}")]
-    CapabilityError(String),
+    NoCapability(String),
 }
 
 /// IBC port functions result
@@ -40,13 +40,13 @@ where
             StateChange::Created => {
                 match self.authenticated_capability(&port_id) {
                     Ok(_) => Ok(true),
-                    Err(e) => Err(Error::PortError(format!(
+                    Err(e) => Err(Error::InvalidPort(format!(
                         "The port is not authenticated: ID {}, {}",
                         port_id, e
                     ))),
                 }
             }
-            _ => Err(Error::PortError(format!(
+            _ => Err(Error::InvalidPort(format!(
                 "The state change of the port is invalid: Port {}",
                 port_id
             ))),
@@ -57,8 +57,8 @@ where
     fn get_port_id_for_capability(key: &Key) -> Result<PortId> {
         match key.segments.get(2) {
             Some(id) => PortId::from_str(&id.raw())
-                .map_err(|e| Error::KeyError(e.to_string())),
-            None => Err(Error::KeyError(format!(
+                .map_err(|e| Error::InvalidKey(e.to_string())),
+            None => Err(Error::InvalidKey(format!(
                 "The key doesn't have a port ID: Key {}",
                 key
             ))),
@@ -70,7 +70,7 @@ where
         let key =
             Key::ibc_key(path).expect("Creating a key for a connection failed");
         self.get_state_change(&key)
-            .map_err(|e| Error::StateChangeError(e.to_string()))
+            .map_err(|e| Error::InvalidStateChange(e.to_string()))
     }
 
     pub(super) fn validate_capability(&self, key: &Key) -> Result<bool> {
@@ -79,21 +79,21 @@ where
         } else {
             match self
                 .get_state_change(key)
-                .map_err(|e| Error::StateChangeError(e.to_string()))?
+                .map_err(|e| Error::InvalidStateChange(e.to_string()))?
             {
                 StateChange::Created => {
                     let cap = Self::get_capability(key)?;
                     let port_id = self.get_port_by_capability(&cap)?;
                     match self.lookup_module_by_port(&port_id) {
                         Some(c) => Ok(c == cap),
-                        None => Err(Error::CapabilityError(format!(
+                        None => Err(Error::NoCapability(format!(
                             "The capability is not mapped: Index {}, Port {}",
                             cap.index(),
                             port_id
                         ))),
                     }
                 }
-                _ => Err(Error::StateChangeError(format!(
+                _ => Err(Error::InvalidStateChange(format!(
                     "The state change of the capability is invalid: key {}",
                     key
                 ))),
@@ -104,7 +104,7 @@ where
     fn capability_index_pre(&self) -> Result<u64> {
         let key = Key::ibc_capability_index();
         self.read_counter_pre(&key)
-            .map_err(|e| Error::CapabilityError(e.to_string()))
+            .map_err(|e| Error::NoCapability(e.to_string()))
     }
 
     fn capability_index(&self) -> Result<u64> {
@@ -117,14 +117,14 @@ where
         match key.segments.get(2) {
             Some(i) => {
                 let index: u64 = i.raw().parse().map_err(|e| {
-                    Error::CapabilityError(format!(
+                    Error::NoCapability(format!(
                         "The key has a non-number index: Key {}, {}",
                         key, e
                     ))
                 })?;
                 Ok(Capability::from(index))
             }
-            None => Err(Error::CapabilityError(format!(
+            None => Err(Error::NoCapability(format!(
                 "The key doesn't have a capability index: Key {}",
                 key
             ))),
@@ -139,20 +139,21 @@ where
             Ok(Some(value)) => {
                 let id: String =
                     storage::types::decode(&value).map_err(|e| {
-                        Error::PortError(format!(
+                        Error::InvalidPort(format!(
                             "Decoding the port ID failed: {}",
                             e
                         ))
                     })?;
                 PortId::from_str(&id)
-                    .map_err(|e| Error::PortError(e.to_string()))
+                    .map_err(|e| Error::InvalidPort(e.to_string()))
             }
-            Ok(None) => Err(Error::PortError(
+            Ok(None) => Err(Error::InvalidPort(
                 "The capability is not mapped to any port".to_owned(),
             )),
-            Err(e) => {
-                Err(Error::PortError(format!("Reading the port failed {}", e)))
-            }
+            Err(e) => Err(Error::InvalidPort(format!(
+                "Reading the port failed {}",
+                e
+            ))),
         }
     }
 }
