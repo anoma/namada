@@ -688,7 +688,8 @@ steps:
   when:
     status: [success, failure]
 trigger:
-  event: [pull_request]
+  branch: [master]
+  event: [push]
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
