@@ -20,7 +20,7 @@ pub enum Error {
     NativeVpError(native_vp::Error),
     #[error("Key error: {0}")]
     KeyError(String),
-    #[error("Connection validation error: {0}")]
+    #[error("Client validation error: {0}")]
     ClientError(client::Error),
     #[error("Connection validation error: {0}")]
     ConnectionError(connection::Error),
