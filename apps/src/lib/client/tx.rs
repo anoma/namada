@@ -1,12 +1,20 @@
+use std::convert::TryFrom;
+
 use anoma::proto::Tx;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::token;
 use anoma::types::transaction::UpdateVp;
 use borsh::BorshSerialize;
-use tendermint_rpc::{Client, HttpClient};
+use jsonpath_lib as jsonpath;
+use serde::Serialize;
+use tendermint_rpc::query::{EventType, Query};
+use tendermint_rpc::Client;
 
 use super::rpc;
 use crate::cli::args;
+use crate::client::tendermint_websocket_client::{
+    hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
+};
 use crate::wallet;
 
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
@@ -74,11 +82,55 @@ async fn submit_tx(args: args::Tx, tx: Tx) {
 
     if args.dry_run {
         rpc::dry_run_tx(&args.ledger_address, tx_bytes).await
-    } else {
-        // TODO broadcast_tx_commit shouldn't be used live;
-        let client = HttpClient::new(args.ledger_address).unwrap();
-        let response =
-            client.broadcast_tx_commit(tx_bytes.into()).await.unwrap();
-        println!("{:#?}", response);
+    } else if let Err(err) = broadcast_tx(args.ledger_address, tx_bytes).await {
+        eprintln!("Encountered error while broadcasting transaction: {}", err);
+    }
+}
+
+async fn broadcast_tx(
+    address: tendermint::net::Address,
+    tx_bytes: Vec<u8>,
+) -> Result<(), Error> {
+    let mut client =
+        TendermintWebsocketClient::open(WebSocketAddress::try_from(address)?)?;
+    // It is better to subscribe to the transaction before it is broadcast
+    let query = Query::from(EventType::Tx)
+        .and_eq("tx.hash", hash_tx(&tx_bytes).to_string());
+    client.subscribe(query)?;
+    println!(
+        "{:?}",
+        client
+            .broadcast_tx_sync(tx_bytes.into())
+            .await
+            .map_err(|err| Error::Response(format!("{:?}", err)))?
+    );
+    let parsed = TxResponse::from(client.receive_response()?);
+    println!(
+        "Response {}",
+        serde_json::to_string_pretty(&parsed).unwrap()
+    );
+    client.unsubscribe()?;
+    client.close();
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct TxResponse {
+    info: String,
+    height: String,
+    hash: String,
+}
+
+impl From<serde_json::Value> for TxResponse {
+    fn from(json: serde_json::Value) -> Self {
+        let mut selector = jsonpath::selector(&json);
+        let height = selector("$.data.value.TxResult.height").unwrap();
+        let info = selector("$.data.value.TxResult.result.info").unwrap();
+        let hash = selector("$.events.['tx.hash'][0]").unwrap();
+        TxResponse {
+            info: serde_json::from_value(info[0].clone()).unwrap(),
+            height: serde_json::from_value(height[0].clone()).unwrap(),
+            hash: serde_json::from_value(hash[0].clone()).unwrap(),
+        }
     }
 }

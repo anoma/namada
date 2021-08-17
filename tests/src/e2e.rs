@@ -554,7 +554,7 @@ mod tests {
     /// a transfer transaction with the 3 intents.
     #[test]
     fn match_intent() -> Result<()> {
-        let working_dir = setup();
+        setup();
 
         let base_dir = tempdir().unwrap();
         let node_dirs = generate_network_of(
@@ -565,26 +565,27 @@ mod tests {
             true,
         );
 
-        let intent_a_path =
-            format!("{}/intent.A", working_dir.to_string_lossy());
-        let intent_b_path =
-            format!("{}/intent.B", working_dir.to_string_lossy());
-        let intent_c_path =
-            format!("{}/intent.C", working_dir.to_string_lossy());
-        let intent_a_path_input = &format!("{}.data", &intent_a_path);
-        let intent_b_path_input = &format!("{}.data", &intent_b_path);
-        let intent_c_path_input = &format!("{}.data", &intent_c_path);
+        let intent_a_path = base_dir.path().to_path_buf().join("intent.A");
+        let intent_b_path = base_dir.path().to_path_buf().join("intent.B");
+        let intent_c_path = base_dir.path().to_path_buf().join("intent.C");
 
-        println!("{}, {}", intent_a_path, intent_a_path_input);
-        println!("{}, {}", intent_b_path, intent_b_path_input);
-        println!("{}, {}", intent_c_path, intent_c_path_input);
+        let intent_a_path_input =
+            base_dir.path().to_path_buf().join("intent.A.data");
+        let intent_b_path_input =
+            base_dir.path().to_path_buf().join("intent.B.data");
+        let intent_c_path_input =
+            base_dir.path().to_path_buf().join("intent.C.data");
+
+        println!("{:?}, {:?}", intent_a_path, intent_a_path_input);
+        println!("{:?}, {:?}", intent_b_path, intent_b_path_input);
+        println!("{:?}, {:?}", intent_c_path, intent_c_path_input);
 
         let intent_a_json = json!([
             {
                 "key": BERTHA,
                 "addr": BERTHA,
-                "min_buy": 100,
-                "max_sell": 70,
+                "min_buy": "100.0",
+                "max_sell": "70",
                 "token_buy": XAN,
                 "token_sell": BTC,
                 "rate_min": 2
@@ -594,8 +595,8 @@ mod tests {
             {
                 "key": ALBERT,
                 "addr": ALBERT,
-                "min_buy": 50,
-                "max_sell": 300,
+                "min_buy": "50",
+                "max_sell": "300",
                 "token_buy": BTC,
                 "token_sell": ETH,
                 "rate_min": 0.7
@@ -605,16 +606,16 @@ mod tests {
             {
                 "key": CHRISTEL,
                 "addr": CHRISTEL,
-                "min_buy": 20,
-                "max_sell": 200,
+                "min_buy": "20",
+                "max_sell": "200",
                 "token_buy": ETH,
                 "token_sell": XAN,
                 "rate_min": 0.5
             }
         ]);
-        generate_intent_json(intent_a_path_input, intent_a_json);
-        generate_intent_json(intent_b_path_input, intent_b_json);
-        generate_intent_json(intent_c_path_input, intent_c_json);
+        generate_intent_json(intent_a_path_input.clone(), intent_a_json);
+        generate_intent_json(intent_b_path_input.clone(), intent_b_json);
+        generate_intent_json(intent_c_path_input.clone(), intent_c_json);
 
         let first_node_dir = node_dirs[0].0.to_str().unwrap();
 
@@ -633,9 +634,9 @@ mod tests {
             "--key",
             BERTHA,
             "--file-path-output",
-            intent_a_path.as_ref(),
+            intent_a_path.to_str().unwrap(),
             "--file-path-input",
-            intent_a_path_input,
+            intent_a_path_input.to_str().unwrap(),
         ];
         let mut craft_intent_a = Command::cargo_bin("anomac")?;
         craft_intent_a.args(tx_a);
@@ -648,9 +649,9 @@ mod tests {
             "--key",
             ALBERT,
             "--file-path-output",
-            intent_b_path.as_ref(),
+            intent_b_path.to_str().unwrap(),
             "--file-path-input",
-            intent_b_path_input,
+            intent_b_path_input.to_str().unwrap(),
         ];
         let mut craft_intent_b = Command::cargo_bin("anomac")?;
         craft_intent_b.args(tx_b);
@@ -663,9 +664,9 @@ mod tests {
             "--key",
             CHRISTEL,
             "--file-path-output",
-            intent_c_path.as_ref(),
+            intent_c_path.to_str().unwrap(),
             "--file-path-input",
-            intent_c_path_input,
+            intent_c_path_input.to_str().unwrap(),
         ];
         let mut craft_intent_c = Command::cargo_bin("anomac")?;
         craft_intent_c.args(tx_c);
@@ -697,7 +698,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_a_path.as_ref(),
+            intent_a_path.to_str().unwrap(),
             "--topic",
             "asset_v1",
         ]);
@@ -724,7 +725,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_b_path.as_ref(),
+            intent_b_path.to_str().unwrap(),
             "--topic",
             "asset_v1",
         ]);
@@ -750,7 +751,7 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_c_path.as_ref(),
+            intent_c_path.to_str().unwrap(),
             "--topic",
             "asset_v1",
         ]);
@@ -767,27 +768,27 @@ mod tests {
 
         // check that the amount matched are correct
         session_gossip
-            .exp_string("amounts: [100000000, 70000000, 200000000]")
+            .exp_string("amounts: 100, 70, 200")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // check that the transfers transactions are correct
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, 200")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_gossip
-            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100000000")
+            .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
     }
 
     fn generate_intent_json(
-        intent_path: &str,
+        intent_path: PathBuf,
         exchange_json: serde_json::Value,
     ) {
         let intent_writer = OpenOptions::new()

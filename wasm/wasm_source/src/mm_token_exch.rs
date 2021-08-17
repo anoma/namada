@@ -4,8 +4,7 @@ use anoma_vm_env::matchmaker_prelude::intent::{
     Exchange, FungibleTokenIntent, IntentTransfers,
 };
 use anoma_vm_env::matchmaker_prelude::key::ed25519::Signed;
-use anoma_vm_env::matchmaker_prelude::token::Amount;
-use anoma_vm_env::matchmaker_prelude::*;
+use anoma_vm_env::matchmaker_prelude::{token, *};
 use good_lp::{
     constraint, default_solver, variable, variables, Expression,
     ResolutionError, SolverModel, Variable, VariableDefinition,
@@ -46,13 +45,13 @@ fn add_intent(graph_bytes: Vec<u8>, id: Vec<u8>, data: Vec<u8>) -> bool {
 fn create_transfer(
     from_node: &ExchangeNode,
     to_node: &ExchangeNode,
-    amount: u64,
+    amount: token::Amount,
 ) -> token::Transfer {
     token::Transfer {
         source: from_node.exchange.data.addr.clone(),
         target: to_node.exchange.data.addr.clone(),
         token: to_node.exchange.data.token_buy.clone(),
-        amount: Amount::from(amount),
+        amount,
     }
 }
 
@@ -143,7 +142,13 @@ fn create_and_send_tx_data(
 
     match amounts {
         Ok(res) => {
-            log_string(format!("amounts: {:?}", &res.values()));
+            log_string(format!(
+                "amounts: {}",
+                res.values()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ));
             let mut cycle_intents_iter = cycle_intents.into_iter();
             let first_node =
                 cycle_intents_iter.next().map(|i| &graph[i]).unwrap();
@@ -210,7 +215,7 @@ fn create_and_send_tx_data(
 fn compute_amounts(
     graph: &DiGraph<ExchangeNode, Address>,
     cycle_intents: &[NodeIndex],
-) -> Result<HashMap<Exchange, u64>, ResolutionError> {
+) -> Result<HashMap<Exchange, token::Amount>, ResolutionError> {
     let nodes = graph
         .raw_nodes()
         .iter()
@@ -290,8 +295,8 @@ fn compute_amounts(
             let amounts = solution
                 .into_inner()
                 .iter()
-                .map(|(_, amount)| u64::from(Amount::from(*amount)))
-                .collect::<Vec<u64>>();
+                .map(|(_, amount)| token::Amount::from(*amount))
+                .collect::<Vec<_>>();
             nodes.iter().enumerate().for_each(|(index, exchange)| {
                 amount_map.insert(exchange.clone(), amounts[index]);
             });
