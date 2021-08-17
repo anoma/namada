@@ -22,8 +22,6 @@ pub enum Error {
     NativeVpError(native_vp::Error),
     #[error("Key error: {0}")]
     KeyError(String),
-    #[error("Client validation error: {0}")]
-    ClientError(client::Error),
     #[error("Counter error: {0}")]
     CounterError(String),
     #[error("Client validation error: {0}")]
