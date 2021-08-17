@@ -77,7 +77,7 @@ output = p.stdout.read()
 retcode = p.wait()
 
 unused_deps = json.loads(output)
-if unused_deps['success'] == 'true':
+if unused_deps['success'] == True:
     print("No unused dependencies found.")
     exit(0)
 
