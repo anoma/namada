@@ -201,3 +201,23 @@ pub struct Transfer {
     /// The amount of tokens
     pub amount: Amount,
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+            /// The upper limit is set to `2^51`, because then the float is
+            /// starting to lose precision.
+            #[test]
+            fn test_token_amount_f64_conversion(raw_amount in 0..2_u64.pow(51)) {
+                let amount = Amount::from(raw_amount);
+                // A round-trip conversion to and from f64 should be an identity
+                let float = f64::from(amount);
+                let identity = Amount::from(float);
+                assert_eq!(amount, identity);
+        }
+    }
+}
