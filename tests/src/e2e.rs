@@ -116,7 +116,7 @@ mod tests {
 
         // 3. Check that anoma detects that the tendermint node is dead
         session
-            .exp_string("Tendermint node shut down unexpectedly.")
+            .exp_string("Tendermint node is no longer running.")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // 4. Check that the ledger node shuts down
