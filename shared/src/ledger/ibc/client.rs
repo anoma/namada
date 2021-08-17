@@ -262,7 +262,7 @@ where
 
     pub(super) fn client_counter_pre(&self) -> Result<u64> {
         let key = Key::ibc_client_counter();
-        match self.ctx.read_post(&key) {
+        match self.ctx.read_pre(&key) {
             Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
                 Error::InvalidClient(format!(
                     "Decoding the client counter failed: {}",
