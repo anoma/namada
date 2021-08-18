@@ -506,11 +506,9 @@ mod tests {
                 eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
             })?;
 
-        request
-            .exp_string("Transaction is invalid")
-            .map_err(|e| {
-                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-            })?;
+        request.exp_string("Transaction is invalid").map_err(|e| {
+            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+        })?;
 
         let status = request.process.wait().unwrap();
         assert_eq!(WaitStatus::Exited(request.process.child_pid, 0), status);
