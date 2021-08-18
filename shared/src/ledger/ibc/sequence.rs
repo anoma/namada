@@ -14,7 +14,6 @@ use ibc::proofs::Proofs;
 use ibc::timestamp::Expiry;
 use thiserror::Error;
 
-use super::channel::Error as ChannelError;
 use super::Ibc;
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::ibc::{
@@ -26,21 +25,23 @@ use crate::types::storage::{Key, KeySeg};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Key error: {0}")]
-    KeyError(String),
+    InvalidKey(String),
     #[error("Client error: {0}")]
-    ClientError(String),
+    InvalidClient(String),
+    #[error("Connection error: {0}")]
+    InvalidConnection(String),
     #[error("Channel error: {0}")]
-    ChannelError(String),
+    InvalidChannel(String),
     #[error("Port error: {0}")]
-    PortError(String),
+    InvalidPort(String),
     #[error("Sequence error: {0}")]
-    SequenceError(String),
+    InvalidSequence(String),
     #[error("Proof verification error: {0}")]
-    ProofVerificationError(String),
+    ProofVerificationFailure(String),
     #[error("Decoding TX data error: {0}")]
-    DecodingTxDataError(std::io::Error),
+    DecodingTxData(std::io::Error),
     #[error("IBC data error: {0}")]
-    IbcDataError(IbcDataError),
+    InvalidIbcData(IbcDataError),
 }
 
 /// IBC packet functions result
@@ -64,11 +65,13 @@ where
     ) -> Result<bool> {
         let port_channel_id = Self::get_port_channel_id(key)?;
         let packet = types::decode_packet(tx_data)?;
-        let next_seq_pre = self.get_next_sequence_send_pre(&port_channel_id)?;
+        let next_seq_pre = self
+            .get_next_sequence_send_pre(&port_channel_id)
+            .map_err(|e| Error::InvalidSequence(e.to_string()))?;
         let next_seq = match self.get_next_sequence_send(&port_channel_id) {
             Some(s) => s,
             None => {
-                return Err(Error::SequenceError(
+                return Err(Error::InvalidSequence(
                     "The nextSequenceSend doesn't exit".to_owned(),
                 ));
             }
@@ -90,11 +93,13 @@ where
         let port_channel_id = Self::get_port_channel_id(key)?;
         let data = PacketReceiptData::try_from_slice(tx_data)?;
         let packet = data.packet()?;
-        let next_seq_pre = self.get_next_sequence_recv_pre(&port_channel_id)?;
+        let next_seq_pre = self
+            .get_next_sequence_recv_pre(&port_channel_id)
+            .map_err(|e| Error::InvalidSequence(e.to_string()))?;
         let next_seq = match self.get_next_sequence_recv(&port_channel_id) {
             Some(s) => s,
             None => {
-                return Err(Error::SequenceError(
+                return Err(Error::InvalidSequence(
                     "The nextSequenceRecv doesn't exist".to_owned(),
                 ));
             }
@@ -125,17 +130,19 @@ where
         let port_channel_id = Self::get_port_channel_id(key)?;
         let data = PacketAckData::try_from_slice(tx_data)?;
         let packet = data.packet()?;
-        let next_seq_pre = self.get_next_sequence_ack_pre(&port_channel_id)?;
+        let next_seq_pre = self
+            .get_next_sequence_ack_pre(&port_channel_id)
+            .map_err(|e| Error::InvalidSequence(e.to_string()))?;
         let next_seq = match self.get_next_sequence_ack(&port_channel_id) {
             Some(s) => s,
             None => {
-                return Err(Error::SequenceError(
+                return Err(Error::InvalidSequence(
                     "The nextSequenceAck doesn't exist".to_owned(),
                 ));
             }
         };
         if u64::from(next_seq_pre) + 1 != u64::from(next_seq) {
-            return Err(Error::SequenceError(
+            return Err(Error::InvalidSequence(
                 "The sequence number is invalid".to_owned(),
             ));
         }
@@ -164,7 +171,7 @@ where
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
     ) -> Result<bool> {
-        if !self.validate_packet(&packet, Phase::Send)? {
+        if !self.validate_packet(packet, Phase::Send)? {
             return Ok(false);
         }
 
@@ -185,7 +192,7 @@ where
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
     ) -> Result<bool> {
-        if !self.validate_packet(&packet, Phase::Recv)? {
+        if !self.validate_packet(packet, Phase::Recv)? {
             return Ok(false);
         }
 
@@ -209,7 +216,7 @@ where
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
     ) -> Result<bool> {
-        if !self.validate_packet(&packet, Phase::Ack)? {
+        if !self.validate_packet(packet, Phase::Ack)? {
             return Ok(false);
         }
 
@@ -218,7 +225,9 @@ where
             port_channel_id.1.clone(),
             packet.sequence,
         );
-        let prev_commitment = self.get_packet_commitment_pre(&key)?;
+        let prev_commitment = self
+            .get_packet_commitment_pre(&key)
+            .map_err(|e| Error::InvalidSequence(e.to_string()))?;
         let input = format!(
             "{:?},{:?},{:?}",
             packet.timeout_timestamp, packet.timeout_height, packet.data,
@@ -240,21 +249,23 @@ where
         packet: &Packet,
         proofs: &Proofs,
     ) -> Result<bool> {
-        let channel = match self.channel_end(&port_channel_id) {
+        let channel = match self.channel_end(port_channel_id) {
             Some(c) => c,
             None => {
-                return Err(Error::ChannelError(format!(
+                return Err(Error::InvalidChannel(format!(
                     "The channel doesn't exist: Port {}, Channel {}",
                     port_channel_id.0, port_channel_id.1,
                 )));
             }
         };
-        let connection = self.connection_from_channel(&channel)?;
+        let connection = self
+            .connection_from_channel(&channel)
+            .map_err(|e| Error::InvalidConnection(e.to_string()))?;
         let client_id = connection.client_id().clone();
 
         match verify_packet_recv_proofs(self, packet, client_id, proofs) {
             Ok(_) => Ok(true),
-            Err(e) => Err(Error::ProofVerificationError(e.to_string())),
+            Err(e) => Err(Error::ProofVerificationFailure(e.to_string())),
         }
     }
 
@@ -265,32 +276,34 @@ where
         ack: Vec<u8>,
         proofs: &Proofs,
     ) -> Result<bool> {
-        let channel = match self.channel_end(&port_channel_id) {
+        let channel = match self.channel_end(port_channel_id) {
             Some(c) => c,
             None => {
-                return Err(Error::ChannelError(format!(
+                return Err(Error::InvalidChannel(format!(
                     "The channel doesn't exist: Port {}, Channel {}",
                     port_channel_id.0, port_channel_id.1,
                 )));
             }
         };
-        let connection = self.connection_from_channel(&channel)?;
+        let connection = self
+            .connection_from_channel(&channel)
+            .map_err(|e| Error::InvalidConnection(e.to_string()))?;
         let client_id = connection.client_id().clone();
 
         match verify_packet_acknowledgement_proofs(
             self, packet, ack, client_id, proofs,
         ) {
             Ok(_) => Ok(true),
-            Err(e) => Err(Error::ProofVerificationError(e.to_string())),
+            Err(e) => Err(Error::ProofVerificationFailure(e.to_string())),
         }
     }
 
     fn get_port_channel_id(key: &Key) -> Result<(PortId, ChannelId)> {
         let port_id = match key.segments.get(3) {
             Some(id) => PortId::from_str(&id.raw())
-                .map_err(|e| Error::KeyError(e.to_string()))?,
+                .map_err(|e| Error::InvalidKey(e.to_string()))?,
             None => {
-                return Err(Error::KeyError(format!(
+                return Err(Error::InvalidKey(format!(
                     "The key doesn't have a port ID: {}",
                     key
                 )));
@@ -298,9 +311,9 @@ where
         };
         let channel_id = match key.segments.get(5) {
             Some(id) => ChannelId::from_str(&id.raw())
-                .map_err(|e| Error::KeyError(e.to_string()))?,
+                .map_err(|e| Error::InvalidKey(e.to_string()))?,
             None => {
-                return Err(Error::KeyError(format!(
+                return Err(Error::InvalidKey(format!(
                     "The key doesn't have a channel ID: {}",
                     key
                 )));
@@ -313,10 +326,10 @@ where
         &self,
         port_channel_id: &(PortId, ChannelId),
     ) -> Result<bool> {
-        let channel = match self.channel_end(&port_channel_id) {
+        let channel = match self.channel_end(port_channel_id) {
             Some(c) => c,
             None => {
-                return Err(Error::ChannelError(format!(
+                return Err(Error::InvalidChannel(format!(
                     "The channel doesn't exist: Port {}, Channel {}",
                     port_channel_id.0, port_channel_id.1
                 )));
@@ -339,7 +352,7 @@ where
         // port authentication
         self.authenticated_capability(&port_channel_id.0)
             .map_err(|e| {
-                Error::PortError(format!(
+                Error::InvalidPort(format!(
                     "The port is not owned: Port {}, {}",
                     port_channel_id.0, e
                 ))
@@ -348,7 +361,7 @@ where
         let channel = match self.channel_end(&port_channel_id) {
             Some(c) => c,
             None => {
-                return Err(Error::ChannelError(format!(
+                return Err(Error::InvalidChannel(format!(
                     "The channel doesn't exist: Port {}, Channel {}",
                     port_channel_id.0, port_channel_id.1,
                 )));
@@ -358,7 +371,9 @@ where
             return Ok(false);
         }
 
-        let connection = self.connection_from_channel(&channel)?;
+        let connection = self
+            .connection_from_channel(&channel)
+            .map_err(|e| Error::InvalidConnection(e.to_string()))?;
         if !connection.is_open() {
             return Ok(false);
         }
@@ -395,7 +410,7 @@ where
                     }
                 };
                 // check timeout timestamp
-                match self.client_consensus_state(&client_id, height) {
+                match self.client_consensus_state(client_id, height) {
                     Some(s) => {
                         if s.timestamp().check_expiry(&packet.timeout_timestamp)
                             != Expiry::NotExpired
@@ -404,7 +419,7 @@ where
                         }
                     }
                     None => {
-                        return Err(Error::ClientError(format!(
+                        return Err(Error::InvalidClient(format!(
                             "The consensus state doesn't exist: ID {}, Height \
                              {}",
                             client_id, height
@@ -433,20 +448,14 @@ where
     }
 }
 
-impl From<ChannelError> for Error {
-    fn from(err: ChannelError) -> Self {
-        Self::SequenceError(err.to_string())
-    }
-}
-
 impl From<IbcDataError> for Error {
     fn from(err: IbcDataError) -> Self {
-        Self::IbcDataError(err)
+        Self::InvalidIbcData(err)
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Self::DecodingTxDataError(err)
+        Self::DecodingTxData(err)
     }
 }
