@@ -94,8 +94,11 @@ async fn broadcast_tx(
     let mut client =
         TendermintWebsocketClient::open(WebSocketAddress::try_from(address)?)?;
     // It is better to subscribe to the transaction before it is broadcast
-    let query = Query::from(EventType::Tx)
-        .and_eq("tx.hash", hash_tx(&tx_bytes).to_string());
+    //
+    // Note that the `applied.hash` key comes from a custom event
+    // created by the shell
+    let query = Query::from(EventType::NewBlock)
+        .and_eq("applied.hash", hash_tx(&tx_bytes).to_string());
     client.subscribe(query)?;
     println!(
         "{:?}",
@@ -119,18 +122,24 @@ struct TxResponse {
     info: String,
     height: String,
     hash: String,
+    code: String,
+    gas_used: String,
 }
 
 impl From<serde_json::Value> for TxResponse {
     fn from(json: serde_json::Value) -> Self {
         let mut selector = jsonpath::selector(&json);
-        let height = selector("$.data.value.TxResult.height").unwrap();
-        let info = selector("$.data.value.TxResult.result.info").unwrap();
-        let hash = selector("$.events.['tx.hash'][0]").unwrap();
+        let info = selector("$.events.['applied.info'][0]").unwrap();
+        let height = selector("$.events.['applied.height'][0]").unwrap();
+        let hash = selector("$.events.['applied.hash'][0]").unwrap();
+        let code = selector("$.events.['applied.code'][0]").unwrap();
+        let gas_used = selector("$.events.['applied.gas_used'][0]").unwrap();
         TxResponse {
             info: serde_json::from_value(info[0].clone()).unwrap(),
             height: serde_json::from_value(height[0].clone()).unwrap(),
             hash: serde_json::from_value(hash[0].clone()).unwrap(),
+            code: serde_json::from_value(code[0].clone()).unwrap(),
+            gas_used: serde_json::from_value(gas_used[0].clone()).unwrap(),
         }
     }
 }

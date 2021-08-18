@@ -178,18 +178,14 @@ pub mod shim {
         pub struct VerifyVoteExtension;
 
         pub struct FinalizeBlock {
+            pub height: i64,
             pub txs: Vec<super::TxBytes>,
-        }
-
-        impl From<Vec<super::TxBytes>> for FinalizeBlock {
-            fn from(tx_bytes: Vec<super::TxBytes>) -> Self {
-                Self { txs: tx_bytes }
-            }
         }
     }
 
     /// Custom types for response payloads
     pub mod response {
+        use tendermint_proto::abci::Event;
         use tower_abci::response;
 
         #[derive(Debug, Default)]
@@ -224,8 +220,17 @@ pub mod shim {
 
         #[derive(Debug, Default)]
         pub struct FinalizeBlock {
-            pub tx_results: Vec<TxResult>,
+            pub events: Vec<Event>,
             pub gas_used: u64,
+        }
+
+        impl From<FinalizeBlock> for response::EndBlock {
+            fn from(resp: FinalizeBlock) -> Self {
+                Self {
+                    events: resp.events,
+                    ..Default::default()
+                }
+            }
         }
     }
 }

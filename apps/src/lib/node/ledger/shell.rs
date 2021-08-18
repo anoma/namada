@@ -20,9 +20,9 @@ use tower_abci::{request, response};
 
 use super::rpc;
 use crate::config::genesis;
+use crate::node::ledger::events::{Event, EventType};
 use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
-use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::{config, wallet};
 
@@ -270,10 +270,6 @@ impl Shell {
             .expect("Must be able to update epoch");
     }
 
-    // Verify the headers of the block
-    // TODO: This will include checking announcements of stake, individual and
-    // aggregated PVSS instances from the DKG protocol
-    // We will also probably decrypt transactions here
     pub fn verify_header(
         &self,
         _req: shim::request::VerifyHeader,
@@ -310,7 +306,8 @@ impl Shell {
     ) -> Result<shim::response::FinalizeBlock> {
         let mut response = shim::response::FinalizeBlock::default();
         for tx in &req.txs {
-            let mut tx_result: TxResult = Default::default();
+            let mut tx_result =
+                Event::new_tx_event(EventType::Applied, tx, req.height);
             match protocol::apply_tx(
                 tx,
                 &mut self.gas_meter,
@@ -327,6 +324,7 @@ impl Shell {
                             result
                         );
                         self.write_log.commit_tx();
+                        tx_result["code"] = "0".into();
                     } else {
                         tracing::info!(
                             "some VPs rejected apply_tx storage modification \
@@ -334,16 +332,22 @@ impl Shell {
                             result.vps_result.rejected_vps
                         );
                         self.write_log.drop_tx();
-                        tx_result.code = 1;
+                        tx_result["code"] = "1".into();
                     }
-                    tx_result.info = result.to_string();
+                    tx_result["gas_used"] = result.gas_used.to_string();
+                    tx_result["info"] = result.to_string();
                 }
                 Err(msg) => {
-                    tx_result.info = msg.to_string();
+                    tx_result["gas_used"] = self
+                        .gas_meter
+                        .get_current_transaction_gas()
+                        .to_string();
+                    tx_result["info"] = msg.to_string();
                 }
             }
-            response.tx_results.push(tx_result);
+            response.events.push(tx_result.into());
         }
+
         response.gas_used = self
             .gas_meter
             .finalize_transaction()

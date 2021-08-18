@@ -10,7 +10,9 @@ use tower::Service;
 use tower_abci::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
-use super::abcipp_shim_types::shim::{Error, Request, Response, TxBytes};
+use super::abcipp_shim_types::shim::{
+    request, Error, Request, Response, TxBytes,
+};
 
 /// The shim wraps the shell, which implements ABCI++
 /// The shim makes a crude translation between the ABCI
@@ -74,10 +76,21 @@ impl Service<Req> for AbcippShim {
                 });
                 let mut txs = vec![];
                 std::mem::swap(&mut txs, &mut self.block_txs);
+
                 self.service
-                    .call(Request::FinalizeBlock(txs.into()))
-                    .map_err(Error::Shell)
-                    .map(|_| Resp::EndBlock(Default::default()))
+                    .call(Request::FinalizeBlock(request::FinalizeBlock {
+                        height: end.height,
+                        txs,
+                    }))
+                    .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::FinalizeBlock(resp) => {
+                            let x = Resp::EndBlock(resp.into());
+                            println!("{:?}", x);
+                            Ok(x)
+                        }
+                        _ => Err(Error::ConvertResp(res)),
+                    })
             }
             _ => match Request::try_from(req.clone()) {
                 Ok(request) => self

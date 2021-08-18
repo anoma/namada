@@ -306,7 +306,7 @@ mod tests {
                         },
                     )?;
                 }
-                session.exp_string("Transaction is valid.").map_err(|e| {
+                request.exp_string("Transaction is valid.").map_err(|e| {
                     eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
                 })?;
 
@@ -502,6 +502,12 @@ mod tests {
 
         request
             .exp_string("Mempool validation passed")
+            .map_err(|e| {
+                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+            })?;
+
+        request
+            .exp_string("Transaction is invalid")
             .map_err(|e| {
                 eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
             })?;
