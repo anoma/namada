@@ -367,14 +367,14 @@ where
             Some(value) => {
                 let index: u64 =
                     storage::types::decode(value).map_err(|e| {
-                        Error::SequenceError(format!(
+                        Error::InvalidSequence(format!(
                             "Decoding a prior sequece index failed: {}",
                             e
                         ))
                     })?;
                 Ok(Sequence::from(index))
             }
-            None => Err(Error::SequenceError(format!(
+            None => Err(Error::InvalidSequence(format!(
                 "The prior sequence doesn't exist: Path {}",
                 path
             ))),
@@ -407,12 +407,12 @@ where
             .expect("Creating akey for a packet info shouldn't fail");
         match self.ctx.read_pre(&key)? {
             Some(value) => String::from_utf8(value.to_vec()).map_err(|e| {
-                Error::PacketInfoError(format!(
+                Error::InvalidPacketInfo(format!(
                     "Decoding the prior packet info failed: {}",
                     e
                 ))
             }),
-            None => Err(Error::PacketInfoError(format!(
+            None => Err(Error::InvalidPacketInfo(format!(
                 "The prior packet info doesn't exist: Path {}",
                 path
             ))),
