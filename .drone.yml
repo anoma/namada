@@ -4,7 +4,7 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3c1d4c67f409bcfa378a2d1e7e7c76f7b6ef90a3b70d289e8d276ec0004c2787  Makefile"
+- commands: [echo "bfc3ef1d1ab3da3192b33ee305686691fd609baf16d5dca82691f647b3520c7a  Makefile"
       | sha256sum -c -, echo "a99d5adbe5629a2a5ab321a3c956195191816b806ae78fc277fc279683b1ee09  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -108,7 +108,7 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3c1d4c67f409bcfa378a2d1e7e7c76f7b6ef90a3b70d289e8d276ec0004c2787  Makefile"
+- commands: [echo "bfc3ef1d1ab3da3192b33ee305686691fd609baf16d5dca82691f647b3520c7a  Makefile"
       | sha256sum -c -, echo "a99d5adbe5629a2a5ab321a3c956195191816b806ae78fc277fc279683b1ee09  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -193,7 +193,7 @@ kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3c1d4c67f409bcfa378a2d1e7e7c76f7b6ef90a3b70d289e8d276ec0004c2787  Makefile"
+- commands: [echo "bfc3ef1d1ab3da3192b33ee305686691fd609baf16d5dca82691f647b3520c7a  Makefile"
       | sha256sum -c -, echo "a99d5adbe5629a2a5ab321a3c956195191816b806ae78fc277fc279683b1ee09  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -223,7 +223,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-wasm-scripts, make opt-wasm]
+- commands: [make build-wasm-scripts]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -279,7 +279,7 @@ kind: pipeline
 name: anoma-ci-cron
 node: {project: anoma}
 steps:
-- commands: [echo "3c1d4c67f409bcfa378a2d1e7e7c76f7b6ef90a3b70d289e8d276ec0004c2787  Makefile"
+- commands: [echo "bfc3ef1d1ab3da3192b33ee305686691fd609baf16d5dca82691f647b3520c7a  Makefile"
       | sha256sum -c -, echo "a99d5adbe5629a2a5ab321a3c956195191816b806ae78fc277fc279683b1ee09  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -353,7 +353,7 @@ kind: pipeline
 name: anoma-ci-miri-pr
 node: {project: anoma}
 steps:
-- commands: [echo "3c1d4c67f409bcfa378a2d1e7e7c76f7b6ef90a3b70d289e8d276ec0004c2787  Makefile"
+- commands: [echo "bfc3ef1d1ab3da3192b33ee305686691fd609baf16d5dca82691f647b3520c7a  Makefile"
       | sha256sum -c -, echo "a99d5adbe5629a2a5ab321a3c956195191816b806ae78fc277fc279683b1ee09  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -424,7 +424,7 @@ kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [echo "3c1d4c67f409bcfa378a2d1e7e7c76f7b6ef90a3b70d289e8d276ec0004c2787  Makefile"
+- commands: [echo "bfc3ef1d1ab3da3192b33ee305686691fd609baf16d5dca82691f647b3520c7a  Makefile"
       | sha256sum -c -, echo "a99d5adbe5629a2a5ab321a3c956195191816b806ae78fc277fc279683b1ee09  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -503,7 +503,7 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [echo "3c1d4c67f409bcfa378a2d1e7e7c76f7b6ef90a3b70d289e8d276ec0004c2787  Makefile"
+- commands: [echo "bfc3ef1d1ab3da3192b33ee305686691fd609baf16d5dca82691f647b3520c7a  Makefile"
       | sha256sum -c -, echo "a99d5adbe5629a2a5ab321a3c956195191816b806ae78fc277fc279683b1ee09  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -608,7 +608,7 @@ kind: pipeline
 name: anoma-ci-wasm-master
 node: {project: anoma}
 steps:
-- commands: [echo "3c1d4c67f409bcfa378a2d1e7e7c76f7b6ef90a3b70d289e8d276ec0004c2787  Makefile"
+- commands: [echo "bfc3ef1d1ab3da3192b33ee305686691fd609baf16d5dca82691f647b3520c7a  Makefile"
       | sha256sum -c -, echo "a99d5adbe5629a2a5ab321a3c956195191816b806ae78fc277fc279683b1ee09  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -640,7 +640,7 @@ steps:
     restore: true
 - commands: [make build-wasm-scripts, "for wasm in $(ls wasm/*.wasm)\ndo\n  shasum
       -a 256 ${wasm} >> checksum.sha256\ndone\n", make clean-wasm-scripts, make build-wasm-scripts,
-    make opt-wasm, shasum -c checksum.sha256, rm checksum.sha256]
+    shasum -c checksum.sha256, rm checksum.sha256]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -682,6 +682,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 1b74f271919e299183ab5ed957af4af0f89c4938b2b5e5993d10a53b46306e44
+hmac: 01ffd9da25fe70bb7c0eac451563452089e824f31fe37c5913904cee02ef1172
 
 ...

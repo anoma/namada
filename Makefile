@@ -116,6 +116,11 @@ build-wasm-scripts-docker:
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm-scripts:
 	make -C $(wasms)
+	make opt-wasm
+
+# this command needs wasm-opt installed
+opt-wasm:
+	@for file in $(shell ls wasm/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
 
 clean-wasm-scripts:
 	make -C $(wasms) clean

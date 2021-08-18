@@ -9,6 +9,13 @@ WORKDIR /usr/local/rust/wasm
 RUN rustup toolchain install 1.54.0 --component rustc cargo rust-std rust-docs rls rust-analysis
 RUN rustup target add wasm32-unknown-unknown
 
+# Download binaryen and verify checksum
+ADD https://github.com/WebAssembly/binaryen/releases/download/version_101/binaryen-version_101-x86_64-linux.tar.gz /tmp/binaryen.tar.gz
+
+# Extract and install wasm-opt
+RUN tar -xf /tmp/binaryen.tar.gz
+RUN mv binaryen-version_*/bin/wasm-opt /usr/local/bin
+RUN rm -rf binaryen-version_*/ /tmp/binaryen.tar.gz
 
 # Tell anoma build.rs not to compile proto files inside the docker
 ENV COMPILE_PROTO=false
