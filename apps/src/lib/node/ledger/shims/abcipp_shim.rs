@@ -86,7 +86,6 @@ impl Service<Req> for AbcippShim {
                     .and_then(|res| match res {
                         Response::FinalizeBlock(resp) => {
                             let x = Resp::EndBlock(resp.into());
-                            println!("{:?}", x);
                             Ok(x)
                         }
                         _ => Err(Error::ConvertResp(res)),
