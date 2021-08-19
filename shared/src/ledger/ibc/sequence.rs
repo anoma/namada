@@ -253,7 +253,7 @@ where
         Ok(())
     }
 
-    fn validate_packet_commitment(
+    pub(super) fn validate_packet_commitment(
         &self,
         packet: &Packet,
         commitment: String,
@@ -350,7 +350,7 @@ where
         Ok((port_id, channel_id))
     }
 
-    fn is_ordered_channel(
+    pub(super) fn is_ordered_channel(
         &self,
         port_channel_id: &(PortId, ChannelId),
     ) -> Result<bool> {

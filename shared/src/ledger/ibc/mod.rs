@@ -3,6 +3,7 @@
 mod channel;
 mod client;
 mod connection;
+mod packet;
 mod port;
 mod sequence;
 
@@ -33,6 +34,8 @@ pub enum Error {
     ChannelError(channel::Error),
     #[error("Port validation error: {0}")]
     PortError(port::Error),
+    #[error("Packet validation error: {0}")]
+    PacketError(packet::Error),
     #[error("Sequence validation error: {0}")]
     SequenceError(sequence::Error),
 }
@@ -139,10 +142,11 @@ where
                 IbcPrefix::SeqAck => {
                     self.validate_sequence_ack(key, tx_data)?
                 }
-                // TODO implement validations for modules
-                IbcPrefix::Commitment => continue,
-                IbcPrefix::Receipt => continue,
-                IbcPrefix::Ack => continue,
+                IbcPrefix::Commitment => {
+                    self.validate_commitment(key, tx_data)?
+                }
+                IbcPrefix::Receipt => self.validate_receipt(key)?,
+                IbcPrefix::Ack => self.validate_ack(key)?,
                 IbcPrefix::Unknown => {
                     return Err(Error::KeyError(format!(
                         "Invalid IBC-related key: {}",
@@ -276,6 +280,12 @@ impl From<channel::Error> for Error {
 impl From<port::Error> for Error {
     fn from(err: port::Error) -> Self {
         Self::PortError(err)
+    }
+}
+
+impl From<packet::Error> for Error {
+    fn from(err: packet::Error) -> Self {
+        Self::PacketError(err)
     }
 }
 
