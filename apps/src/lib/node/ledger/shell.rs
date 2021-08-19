@@ -343,6 +343,7 @@ impl Shell {
                         .get_current_transaction_gas()
                         .to_string();
                     tx_result["info"] = msg.to_string();
+                    tx_result["code"] = "2".into();
                 }
             }
             response.events.push(tx_result.into());
