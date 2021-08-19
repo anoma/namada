@@ -109,7 +109,7 @@ async fn broadcast_tx(
     );
     let parsed = TxResponse::from(client.receive_response()?);
     println!(
-        "Response {}",
+        "Transaction applied with result: {}",
         serde_json::to_string_pretty(&parsed).unwrap()
     );
     client.unsubscribe()?;

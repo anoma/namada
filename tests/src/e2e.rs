@@ -447,9 +447,10 @@ mod tests {
 
     /// In this test we:
     /// 1. Run the ledger node
-    /// 2. Submit an invalid transaction
+    /// 2. Submit an invalid transaction (disallowed by state machine)
     /// 3. Shut down the ledger
     /// 4. Restart the ledger
+    /// 5. Submit and invalid transactions (malformed)
     #[test]
     fn invalid_transactions() -> Result<()> {
         let dir = setup();
@@ -510,6 +511,10 @@ mod tests {
             eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
         })?;
 
+        request.exp_string(r#""code": "1"#).map_err(|e| {
+            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+        })?;
+
         let status = request.process.wait().unwrap();
         assert_eq!(WaitStatus::Exited(request.process.child_pid, 0), status);
 
@@ -550,6 +555,44 @@ mod tests {
             .exp_string("Last state root hash:")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
+        let tx_args = vec![
+            "transfer",
+            "--source",
+            BERTHA,
+            "--target",
+            ALBERT,
+            "--token",
+            BERTHA,
+            "--amount",
+            "1_000_000.1",
+        ];
+        let mut cmd = Command::cargo_bin("anomac")?;
+        cmd.current_dir(&dir)
+            .env("ANOMA_LOG", "debug")
+            .args(&["--base-dir", base_dir_arg])
+            .args(tx_args);
+
+        let cmd_str = format!("{:?}", cmd);
+
+        let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
+            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+        })?;
+
+        request
+            .exp_string("Mempool validation passed")
+            .map_err(|e| {
+                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+            })?;
+
+        request.exp_string("Error trying to apply a transaction").map_err(|e| {
+            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+        })?;
+
+        request.exp_string(r#""code": "2"#).map_err(|e| {
+            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+        })?;
+        let status = request.process.wait().unwrap();
+        assert_eq!(WaitStatus::Exited(request.process.child_pid, 0), status);
         Ok(())
     }
 
