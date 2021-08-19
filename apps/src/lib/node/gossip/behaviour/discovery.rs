@@ -54,7 +54,6 @@ pub enum DiscoveryEvent {
     KademliaEvent(KademliaEvent),
 }
 
-
 /// `DiscoveryBehaviour` configuration.
 #[derive(Clone)]
 pub struct DiscoveryConfig {
@@ -212,9 +211,7 @@ impl DiscoveryBehaviour {
             kad_config.disjoint_query_paths(kademlia_disjoint_query_paths);
             // TODO: choose a better protocol name
             kad_config.set_protocol_name(
-                "/anoma/kad/anoma/kad/1.0.0"
-                    .as_bytes()
-                    .to_vec(),
+                "/anoma/kad/anoma/kad/1.0.0".as_bytes().to_vec(),
             );
 
             let mut kademlia =
@@ -223,7 +220,7 @@ impl DiscoveryBehaviour {
             user_defined
                 .iter()
                 .for_each(|PeerAddress { address, peer_id }| {
-                    kademlia.add_address(&peer_id, address.clone());
+                    kademlia.add_address(peer_id, address.clone());
                     peers.insert(*peer_id);
                 });
 
@@ -240,7 +237,8 @@ impl DiscoveryBehaviour {
         let mdns_opt = if enable_mdns {
             // Because the mdns config needs to be created in an async way we
             // need a runtime.
-            // TODO: Maybe do an MR upstream to add the possibility of a sync way
+            // TODO: Maybe do an MR upstream to add the possibility of a sync
+            // way
             let rt = tokio::runtime::Runtime::new().unwrap();
             Some(
                 rt.block_on(Mdns::new(MdnsConfig::default()))
@@ -411,7 +409,6 @@ impl NetworkBehaviour for DiscoveryBehaviour {
 		Self::OutEvent,
 		>,
     >{
-
         // Immediately process the content of `discovered`.
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev));
@@ -419,8 +416,8 @@ impl NetworkBehaviour for DiscoveryBehaviour {
 
         // Poll Kademlia return every other event except kad event
         while let Poll::Ready(ev) = self.kademlia.poll(cx, params) {
-            if let NetworkBehaviourAction::GenerateEvent(_kad_ev) = ev {}
-            else {
+            if let NetworkBehaviourAction::GenerateEvent(_kad_ev) = ev {
+            } else {
                 return Poll::Ready(ev.map_out(DiscoveryEvent::KademliaEvent));
             }
         }
@@ -491,8 +488,7 @@ impl NetworkBehaviour for DiscoveryBehaviour {
                     });
                 }
                 // Nothing to notify handler
-                NetworkBehaviourAction::NotifyHandler { .. } => {
-                }
+                NetworkBehaviourAction::NotifyHandler { .. } => {}
                 NetworkBehaviourAction::ReportObservedAddr {
                     address,
                     score,

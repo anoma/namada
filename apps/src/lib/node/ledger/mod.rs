@@ -1,4 +1,5 @@
 pub mod protocol;
+pub mod rpc;
 mod shell;
 pub mod storage;
 mod tendermint_node;
@@ -9,14 +10,15 @@ use std::pin::Pin;
 use std::sync::mpsc::channel;
 use std::task::{Context, Poll};
 
-use anoma_shared::types::storage::{BlockHash, BlockHeight};
+use anoma::types::storage::{BlockHash, BlockHeight};
 use futures::future::{AbortHandle, AbortRegistration, Abortable, FutureExt};
 use tendermint_proto::abci::CheckTxType;
 use tower::{Service, ServiceBuilder};
 use tower_abci::{response, split, BoxError, Request, Response, Server};
 
+use crate::config;
+use crate::config::genesis;
 use crate::node::ledger::shell::{MempoolTxType, Shell};
-use crate::{config, genesis};
 
 /// A panic-proof handle for aborting a future. Will abort during
 /// stack unwinding as its drop method calls abort.

@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use anoma_shared::proto::{self, Intent, IntentGossipMessage};
+use anoma::proto::{self, Intent, IntentGossipMessage};
 use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,
@@ -32,7 +32,7 @@ pub enum Error {
     #[error("Failed to subscribe")]
     FailedSubscription(libp2p::gossipsub::error::SubscriptionError),
     #[error("Failed initializing the intent gossiper app: {0}")]
-    GossipIntentError(intent_gossiper::Error),
+    GossipIntent(intent_gossiper::Error),
     #[error("Failed initializing the topic filter: {0}")]
     Filter(String),
     #[error("Failed initializing the gossip behaviour: {0}")]
@@ -195,7 +195,7 @@ impl Behaviour {
             .unwrap();
 
         let (intent_gossip_app, matchmaker_event_receiver) =
-            intent_gossiper::GossipIntent::new(&config).unwrap();
+            intent_gossiper::GossipIntent::new(config).unwrap();
 
         // subscribe to all topic listed in the config.
         config
@@ -250,10 +250,8 @@ impl Behaviour {
             Err(e) => {
                 tracing::error!("Error while trying to apply an intent: {}", e);
                 match e {
-                    intent_gossiper::Error::DecodeError(_) => {
-                        panic!(
-                            "can't happens, because intent is already decoded"
-                        )
+                    intent_gossiper::Error::Decode(_) => {
+                        panic!("can't happens, because intent already decoded")
                     }
                     intent_gossiper::Error::MatchmakerInit(err)
                     | intent_gossiper::Error::Matchmaker(err) => {
@@ -338,12 +336,13 @@ impl NetworkBehaviourEventProcess<DiscoveryEvent> for Behaviour {
     // The logic is part of the DiscoveryBehaviour, nothing to do here.
     fn inject_event(&mut self, event: DiscoveryEvent) {
         match event {
-            DiscoveryEvent::Connected(peer) =>
-                tracing::info!("Connect to a new peer: {:?}", peer),
-            DiscoveryEvent::Disconnected(peer) =>
-                tracing::info!("Peer disconnected: {:?}", peer),
+            DiscoveryEvent::Connected(peer) => {
+                tracing::info!("Connect to a new peer: {:?}", peer)
+            }
+            DiscoveryEvent::Disconnected(peer) => {
+                tracing::info!("Peer disconnected: {:?}", peer)
+            }
             _ => {}
-
         }
     }
 }

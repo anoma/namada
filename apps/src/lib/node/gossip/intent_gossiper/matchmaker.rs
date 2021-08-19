@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use anoma_shared::gossip::mm::MmHost;
-use anoma_shared::proto::{Intent, IntentId, Tx};
-use anoma_shared::vm::wasm;
+use anoma::gossip::mm::MmHost;
+use anoma::proto::{Intent, IntentId, Tx};
+use anoma::vm::wasm;
 use tendermint::net;
 use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
@@ -13,7 +13,8 @@ use super::mempool::{self, IntentMempool};
 use crate::types::MatchmakerMessage;
 use crate::{config, wallet};
 
-/// A matchmaker receive intents and tries to find a match with previously received intent.
+/// A matchmaker receive intents and tries to find a match with previously
+/// received intent.
 #[derive(Debug)]
 pub struct Matchmaker {
     /// All valid and received intent are saved in this mempool

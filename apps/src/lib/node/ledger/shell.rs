@@ -1,35 +1,39 @@
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
+use std::str::FromStr;
 
-use anoma_shared::ledger::gas::{self, BlockGasMeter};
-use anoma_shared::ledger::storage::write_log::WriteLog;
-use anoma_shared::ledger::{ibc, parameters, pos};
-use anoma_shared::proto::{self, Tx};
-use anoma_shared::types::address::Address;
-use anoma_shared::types::key::ed25519::PublicKey;
-use anoma_shared::types::storage::{BlockHash, BlockHeight, Key};
-use anoma_shared::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
-use anoma_shared::types::token::Amount;
-use anoma_shared::types::{address, key, token};
+use anoma::ledger::gas::{self, BlockGasMeter};
+use anoma::ledger::storage::write_log::WriteLog;
+use anoma::ledger::{ibc, parameters, pos};
+use anoma::proto::{self, Tx};
+use anoma::types::address::Address;
+use anoma::types::key::ed25519::PublicKey;
+use anoma::types::storage::{BlockHash, BlockHeight, Key};
+use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
+use anoma::types::token::Amount;
+use anoma::types::{address, key, token};
 use borsh::BorshSerialize;
 use itertools::Itertools;
 use tendermint::block::Header;
 use thiserror::Error;
 use tower_abci::{request, response};
 
+use super::rpc;
+use crate::config::genesis;
+use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::{protocol, storage, tendermint_node};
-use crate::{config, genesis, wallet};
+use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error removing the DB data: {0}")]
     RemoveDB(std::io::Error),
     #[error("chain ID mismatch: {0}")]
-    ChainIdError(String),
+    ChainId(String),
     #[error("Error decoding a transaction from bytes: {0}")]
-    TxDecodingError(proto::Error),
+    TxDecoding(proto::Error),
     #[error("Error trying to apply a transaction: {0}")]
-    TxError(protocol::Error),
+    TxApply(protocol::Error),
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
 }
@@ -94,7 +98,7 @@ impl Shell {
         let response = response::InitChain::default();
         let (current_chain_id, _) = self.storage.get_chain_id();
         if current_chain_id != init.chain_id {
-            return Err(Error::ChainIdError(format!(
+            return Err(Error::ChainId(format!(
                 "Current chain ID: {}, Tendermint chain ID: {}",
                 current_chain_id, init.chain_id
             )));
@@ -119,25 +123,16 @@ impl Shell {
             .expect("The genesis address shouldn't fail decoding");
         let users = vec![alberto, bertha, christel];
 
-        let tokens = vec![
-            address::xan(),
-            address::btc(),
-            address::eth(),
-            address::dot(),
-            address::schnitzel(),
-            address::apfel(),
-            address::kartoffel(),
-        ];
-
-        for token in &tokens {
+        let tokens = address::tokens();
+        for token in tokens.keys() {
             // default tokens VPs for testing
-            let key = Key::validity_predicate(&token);
+            let key = Key::validity_predicate(token);
             self.storage
                 .write(&key, token_vp.to_vec())
                 .expect("Unable to write token VP");
         }
 
-        for (user, token) in users.iter().cartesian_product(tokens.iter()) {
+        for (user, token) in users.iter().cartesian_product(tokens.keys()) {
             // default user VPs for testing
             self.storage
                 .write(&Key::validity_predicate(user), user_vp.to_vec())
@@ -233,10 +228,23 @@ impl Shell {
     /// Uses `path` in the query to forward the request to the
     /// right query method and returns the result (which may be
     /// the default if `path` is not a supported string.
-    pub fn query(&mut self, query: request::Query) -> response::Query {
-        match query.path.as_str() {
-            "dry_run_tx" => self.dry_run_tx(&query.data),
-            _ => response::Query::default(),
+    pub fn query(&self, query: request::Query) -> response::Query {
+        use rpc::Path;
+        match Path::from_str(&query.path) {
+            Ok(path) => match path {
+                Path::DryRunTx => self.dry_run_tx(&query.data),
+                Path::Value(storage_key) => {
+                    self.read_storage_value(&storage_key)
+                }
+                Path::Prefix(storage_key) => {
+                    self.read_storage_prefix(&storage_key)
+                }
+            },
+            Err(err) => response::Query {
+                code: 1,
+                info: format!("RPC error: {}", err),
+                ..Default::default()
+            },
         }
     }
 
@@ -267,7 +275,7 @@ impl Shell {
             &mut self.write_log,
             &self.storage,
         )
-        .map_err(Error::TxError);
+        .map_err(Error::TxApply);
 
         match result {
             Ok(result) => {
@@ -311,7 +319,6 @@ impl Shell {
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
         // store the block's data in DB
-        // TODO commit async?
         self.storage.commit().unwrap_or_else(|e| {
             tracing::error!(
                 "Encountered a storage error while committing a block {:?}",
@@ -337,8 +344,8 @@ impl Shell {
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
         let mut response = response::CheckTx::default();
-        match Tx::try_from(tx_bytes).map_err(Error::TxDecodingError) {
-            Ok(_) => response.info = String::from("Mempool validation passed"),
+        match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
+            Ok(_) => response.log = String::from("Mempool validation passed"),
             Err(msg) => {
                 response.code = 1;
                 response.log = msg.to_string();
@@ -348,17 +355,17 @@ impl Shell {
     }
 
     /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> response::Query {
+    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
         let mut response = response::Query::default();
         let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = self.write_log.clone();
+        let mut write_log = WriteLog::default();
         match protocol::apply_tx(
             tx_bytes,
             &mut gas_meter,
             &mut write_log,
             &self.storage,
         )
-        .map_err(Error::TxError)
+        .map_err(Error::TxApply)
         {
             Ok(result) => response.info = result.to_string(),
             Err(error) => {
@@ -367,5 +374,67 @@ impl Shell {
             }
         }
         response
+    }
+
+    /// Query to read a value from storage
+    fn read_storage_value(&self, key: &Key) -> response::Query {
+        match self.storage.read(key) {
+            Ok((Some(value), _gas)) => response::Query {
+                value,
+                ..Default::default()
+            },
+            Ok((None, _gas)) => response::Query {
+                code: 1,
+                info: format!("No value found for key: {}", key),
+                ..Default::default()
+            },
+            Err(err) => response::Query {
+                code: 2,
+                info: format!("Storage error: {}", err),
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Query to read a range of values from storage with a matching prefix. The
+    /// value in successful response is a [`Vec<PrefixValue>`] encoded with
+    /// [`BorshSerialize`].
+    fn read_storage_prefix(&self, key: &Key) -> response::Query {
+        let (iter, _gas) = self.storage.iter_prefix(key);
+        let mut iter = iter.peekable();
+        if iter.peek().is_none() {
+            response::Query {
+                code: 1,
+                info: format!("No value found for key: {}", key),
+                ..Default::default()
+            }
+        } else {
+            let values: std::result::Result<
+                Vec<PrefixValue>,
+                anoma::types::storage::Error,
+            > = iter
+                .map(|(key, value, _gas)| {
+                    let key = Key::parse(key)?;
+                    Ok(PrefixValue { key, value })
+                })
+                .collect();
+            match values {
+                Ok(values) => {
+                    let value = values.try_to_vec().unwrap();
+                    response::Query {
+                        value,
+                        ..Default::default()
+                    }
+                }
+                Err(err) => response::Query {
+                    code: 1,
+                    info: format!(
+                        "Error parsing a storage key {}: {}",
+                        key, err
+                    ),
+                    ..Default::default()
+                },
+            }
+        }
     }
 }
