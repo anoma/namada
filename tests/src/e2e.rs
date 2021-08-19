@@ -584,7 +584,9 @@ mod tests {
                 eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
             })?;
 
-        request.exp_string("Error trying to apply a transaction").map_err(|e| {
+        request
+            .exp_string("Error trying to apply a transaction")
+            .map_err(|e| {
             eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
         })?;
 
