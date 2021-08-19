@@ -101,7 +101,7 @@ async fn broadcast_tx(
         .and_eq("applied.hash", hash_tx(&tx_bytes).to_string());
     client.subscribe(query)?;
     println!(
-        "{:?}",
+        "Transaction added to mempool: {:?}",
         client
             .broadcast_tx_sync(tx_bytes.into())
             .await
