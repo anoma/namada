@@ -73,7 +73,7 @@ fn decode_graph(bytes: Vec<u8>) -> DiGraph<ExchangeNode, Address> {
 }
 
 fn update_graph_data(graph: &DiGraph<ExchangeNode, Address>) {
-    update_data(serde_json::to_vec(graph).unwrap());
+    update_state(serde_json::to_vec(graph).unwrap());
 }
 
 fn find_to_update_node(
