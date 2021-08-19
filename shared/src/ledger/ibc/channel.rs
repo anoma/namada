@@ -91,15 +91,12 @@ where
         })?;
 
         let port_channel_id = (port_id, channel_id);
-        let channel = match self.channel_end(&port_channel_id) {
-            Some(c) => c,
-            None => {
-                return Err(Error::InvalidChannel(format!(
-                    "The channel doesn't exist: Port {}, Channel {}",
-                    port_channel_id.0, port_channel_id.1
-                )));
-            }
-        };
+        let channel = self.channel_end(&port_channel_id).ok_or_else(|| {
+            Error::InvalidChannel(format!(
+                "The channel doesn't exist: Port {}, Channel {}",
+                port_channel_id.0, port_channel_id.1
+            ))
+        })?;
         // check the number of hops and empty version in the channel end
         channel.validate_basic().map_err(|e| {
             Error::InvalidChannel(format!(
@@ -359,7 +356,7 @@ where
 
     fn get_sequence(&self, path: Path) -> Result<Sequence> {
         let key = Key::ibc_key(path.to_string())
-            .expect("Creating akey for a sequence shouldn't fail");
+            .expect("Creating a key for a sequence shouldn't fail");
         match self.ctx.read_post(&key)? {
             Some(value) => {
                 let index: u64 =
@@ -380,7 +377,7 @@ where
 
     fn get_packet_info(&self, path: Path) -> Result<String> {
         let key = Key::ibc_key(path.to_string())
-            .expect("Creating akey for a packet info shouldn't fail");
+            .expect("Creating a key for a packet info shouldn't fail");
         match self.ctx.read_post(&key)? {
             Some(value) => String::from_utf8(value.to_vec()).map_err(|e| {
                 Error::InvalidPacketInfo(format!(
@@ -483,34 +480,16 @@ where
         let mut channels = vec![];
         let prefix = Key::parse("channelEnds/ports")
             .expect("Creating a key for the prefix shouldn't fail");
-        let mut iter = match self.ctx.iter_prefix(&prefix) {
-            Ok(i) => i,
-            Err(_) => return None,
-        };
+        let mut iter = self.ctx.iter_prefix(&prefix).ok()?;
         loop {
-            let next = match self.ctx.iter_post_next(&mut iter) {
-                Ok(n) => n,
-                Err(_) => return None,
-            };
+            let next = self.ctx.iter_post_next(&mut iter).ok()?;
             if let Some((key, value)) = next {
-                let channel = match ChannelEnd::decode_vec(&value) {
-                    Ok(c) => c,
-                    Err(_) => return None,
-                };
+                let channel = ChannelEnd::decode_vec(&value).ok()?;
                 if let Some(id) = channel.connection_hops().get(0) {
                     if id == conn_id {
-                        let key = match Key::parse(&key) {
-                            Ok(k) => k,
-                            Err(_) => return None,
-                        };
-                        let port_id = match Self::get_port_id(&key) {
-                            Ok(id) => id,
-                            Err(_) => return None,
-                        };
-                        let channel_id = match Self::get_channel_id(&key) {
-                            Ok(id) => id,
-                            Err(_) => return None,
-                        };
+                        let key = Key::parse(&key).ok()?;
+                        let port_id = Self::get_port_id(&key).ok()?;
+                        let channel_id = Self::get_channel_id(&key).ok()?;
                         channels.push((port_id, channel_id));
                     }
                 }
@@ -580,11 +559,11 @@ where
         &self,
         key: &(PortId, ChannelId, Sequence),
     ) -> Option<String> {
-        let key = key.clone();
+        let (port_id, channel_id, sequence) = key.clone();
         let path = Path::Commitments {
-            port_id: key.0,
-            channel_id: key.1,
-            sequence: key.2,
+            port_id,
+            channel_id,
+            sequence,
         };
         self.get_packet_info(path).ok()
     }
@@ -593,14 +572,14 @@ where
         &self,
         key: &(PortId, ChannelId, Sequence),
     ) -> Option<Receipt> {
-        let key = key.clone();
+        let (port_id, channel_id, sequence) = key.clone();
         let path = Path::Receipts {
-            port_id: key.0,
-            channel_id: key.1,
-            sequence: key.2,
+            port_id,
+            channel_id,
+            sequence,
         };
         let key = Key::ibc_key(path.to_string())
-            .expect("Creating akey for a packet info shouldn't fail");
+            .expect("Creating a key for a packet info shouldn't fail");
         match self.ctx.read_post(&key) {
             Ok(Some(_)) => Some(Receipt::Ok),
             // returns None even if DB read fails
@@ -612,10 +591,11 @@ where
         &self,
         key: &(PortId, ChannelId, Sequence),
     ) -> Option<String> {
+        let (port_id, channel_id, sequence) = key.clone();
         let path = Path::Acks {
-            port_id: key.0.clone(),
-            channel_id: key.1.clone(),
-            sequence: key.2,
+            port_id,
+            channel_id,
+            sequence,
         };
         self.get_packet_info(path).ok()
     }

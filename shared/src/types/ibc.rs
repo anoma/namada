@@ -85,7 +85,7 @@ pub struct ClientUpdateData {
 impl ClientUpdateData {
     /// Returns the data to update a client
     pub fn new(client_id: ClientId, headers: Vec<AnyHeader>) -> Self {
-        let client_id = client_id.as_str().to_owned();
+        let client_id = client_id.to_string();
         let headers = headers
             .iter()
             .map(|h| {
@@ -138,7 +138,7 @@ impl ClientUpgradeData {
         client_proof: MerkleProof,
         consensus_proof: MerkleProof,
     ) -> Self {
-        let client_id = client_id.as_str().to_owned();
+        let client_id = client_id.to_string();
         let client_state = client_state
             .encode_vec()
             .expect("Encoding a client state shouldn't fail");
@@ -214,7 +214,7 @@ impl ConnectionOpenInitData {
         version: Version,
         delay_period: Duration,
     ) -> Self {
-        let client_id = client_id.as_str().to_owned();
+        let client_id = client_id.to_string();
         // TODO: Need Profobuf implementation for Counterparty in ibc-rs
         // let counterparty = counterparty.encode_vec().expect("Encoding a
         // counterparty shouldn't fail");
@@ -296,7 +296,7 @@ impl ConnectionOpenTryData {
         proof_consensus: CommitmentProofBytes,
         delay_period: Duration,
     ) -> Self {
-        let client_id = client_id.as_str().to_owned();
+        let client_id = client_id.to_string();
         let client_state = client_state
             .encode_vec()
             .expect("Encoding a client state shouldn't fail");
@@ -438,8 +438,8 @@ impl ConnectionOpenAckData {
         proof_consensus: CommitmentProofBytes,
         version: Version,
     ) -> Self {
-        let conn_id = conn_id.as_str().to_owned();
-        let counterpart_conn_id = counterparty_conn_id.as_str().to_owned();
+        let conn_id = conn_id.to_string();
+        let counterpart_conn_id = counterparty_conn_id.to_string();
         let client_state = client_state
             .encode_vec()
             .expect("Encoding a client state shouldn't fail");
@@ -546,7 +546,7 @@ impl ConnectionOpenConfirmData {
         proof_client: CommitmentProofBytes,
         proof_consensus: CommitmentProofBytes,
     ) -> Self {
-        let conn_id = conn_id.as_str().to_owned();
+        let conn_id = conn_id.to_string();
         Self {
             conn_id,
             proof_height: (
@@ -626,15 +626,13 @@ impl ChannelOpenInitData {
         connection_hops: Vec<ConnectionId>,
         version: String,
     ) -> Self {
-        let port_id = port_id.as_str().to_owned();
-        let order = order.as_str().to_owned();
+        let port_id = port_id.to_string();
+        let order = order.to_string();
         let counterparty = counterparty
             .encode_vec()
             .expect("Encoding a counterparty shouldn't fail");
-        let connection_hops = connection_hops
-            .iter()
-            .map(|c| c.as_str().to_owned())
-            .collect();
+        let connection_hops =
+            connection_hops.iter().map(|c| c.to_string()).collect();
         Self {
             port_id,
             order,
@@ -664,13 +662,13 @@ impl ChannelOpenInitData {
 
     /// Returns the connection hops
     pub fn connection_hops(&self) -> Result<Vec<ConnectionId>> {
-        let mut hops = vec![];
-        for conn_str in &self.connection_hops {
-            let id = ConnectionId::from_str(conn_str)
-                .map_err(|e| Error::DecodingError(e.to_string()))?;
-            hops.push(id);
-        }
-        Ok(hops)
+        self.connection_hops
+            .iter()
+            .map(|conn_str| {
+                ConnectionId::from_str(conn_str)
+                    .map_err(|e| Error::DecodingError(e.to_string()))
+            })
+            .collect()
     }
 
     /// Returns the version
@@ -719,15 +717,13 @@ impl ChannelOpenTryData {
         proof_client: CommitmentProofBytes,
         proof_consensus: CommitmentProofBytes,
     ) -> Self {
-        let port_id = port_id.as_str().to_owned();
-        let order = order.as_str().to_owned();
+        let port_id = port_id.to_string();
+        let order = order.to_string();
         let counterparty = counterparty
             .encode_vec()
             .expect("Encoding a counterparty shouldn't fail");
-        let connection_hops = connection_hops
-            .iter()
-            .map(|c| c.as_str().to_owned())
-            .collect();
+        let connection_hops =
+            connection_hops.iter().map(|c| c.to_string()).collect();
         Self {
             port_id,
             order,
@@ -855,9 +851,9 @@ impl ChannelOpenAckData {
         proof_client: CommitmentProofBytes,
         proof_consensus: CommitmentProofBytes,
     ) -> Self {
-        let port_id = port_id.as_str().to_owned();
-        let channel_id = channel_id.as_str().to_owned();
-        let counterpart_channel_id = counterpart_channel_id.as_str().to_owned();
+        let port_id = port_id.to_string();
+        let channel_id = channel_id.to_string();
+        let counterpart_channel_id = counterpart_channel_id.to_string();
         Self {
             port_id,
             channel_id,
@@ -960,8 +956,8 @@ impl ChannelOpenConfirmData {
         proof_client: CommitmentProofBytes,
         proof_consensus: CommitmentProofBytes,
     ) -> Self {
-        let port_id = port_id.as_str().to_owned();
-        let channel_id = channel_id.as_str().to_owned();
+        let port_id = port_id.to_string();
+        let channel_id = channel_id.to_string();
         Self {
             port_id,
             channel_id,
@@ -1036,8 +1032,8 @@ pub struct ChannelCloseInitData {
 impl ChannelCloseInitData {
     /// Returns the data to close a channel
     pub fn new(port_id: PortId, channel_id: ChannelId) -> Self {
-        let port_id = port_id.as_str().to_owned();
-        let channel_id = channel_id.as_str().to_owned();
+        let port_id = port_id.to_string();
+        let channel_id = channel_id.to_string();
         Self {
             port_id,
             channel_id,
@@ -1084,8 +1080,8 @@ impl ChannelCloseConfirmData {
         proof_client: CommitmentProofBytes,
         proof_consensus: CommitmentProofBytes,
     ) -> Self {
-        let port_id = port_id.as_str().to_owned();
-        let channel_id = channel_id.as_str().to_owned();
+        let port_id = port_id.to_string();
+        let channel_id = channel_id.to_string();
         Self {
             port_id,
             channel_id,
