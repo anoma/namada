@@ -475,7 +475,7 @@ mod tests {
             .exp_string("Started node")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // 2. Submit a an invalid transaction
+        // 2. Submit a an invalid transaction (amount > source's balance)
         let tx_args = vec![
             "transfer",
             "--source",
