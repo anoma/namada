@@ -516,10 +516,14 @@ pub mod cmds {
 }
 
 pub mod args {
+    use std::convert::TryInto;
     use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
+
+    use anoma::types::intent::DecimalWrapper;
+    use serde::Deserialize;
 
     use anoma::types::address::Address;
     use anoma::types::intent::Exchange;
@@ -779,6 +783,61 @@ pub mod args {
                         "The subnetwork where the intent should be sent to",
                     ),
                 )
+        }
+    }
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct ExchangeDefinition {
+        /// The source address
+        pub addr: String,
+        /// The token to be sold
+        pub token_sell: String,
+        /// The minimum rate
+        pub rate_min: String,
+        /// The maximum amount of token to be sold
+        pub max_sell: String,
+        /// The token to be bought
+        pub token_buy: String,
+        /// The amount of token to be bought
+        pub min_buy: String,
+        // The path to the wasm vp code
+        pub vp_path: Option<String>,
+    }
+
+    impl TryInto<Exchange> for ExchangeDefinition {
+        type Error = &'static str;
+
+        fn try_into(self) -> Result<Exchange, Self::Error> {
+            let vp = if let Some(path) = self.vp_path {
+                if let Ok(wasm) = std::fs::read(path) {
+                    Some(wasm)
+                } else {
+                    None // maybe here is better to throw an error or inform the user that the path to the VP is invalid
+                }
+            } else {
+                None
+            };
+            let addr = Address::decode(self.addr)
+                .expect("Addr should be a valid address");
+            let token_sell = Address::decode(self.token_buy)
+                .expect("Token_buy should be a valid address");
+            let token_buy = Address::decode(self.token_sell)
+                .expect("Token_sell should be a valid address");
+            let min_buy = token::Amount::from_str(&self.min_buy)
+                .expect("Min_buy must be convertible to number");
+            let max_sell = token::Amount::from_str(&self.max_sell)
+                .expect("Max_sell must be convertible to number");
+            let rate_min = DecimalWrapper::from_str(&self.rate_min)
+                .expect("Max_sell must be convertible to decimal.");
+
+            Ok(Exchange {
+                addr,
+                token_sell,
+                rate_min,
+                max_sell,
+                token_buy,
+                min_buy,
+                vp,
+            })
         }
     }
 

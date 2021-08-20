@@ -56,6 +56,8 @@ pub struct Exchange {
     pub token_buy: Address,
     /// The amount of token to be bought
     pub min_buy: token::Amount,
+    /// The vp code
+    pub vp: Option<Vec<u8>>,
 }
 
 /// These are transfers crafted from matched [`Exchange`]s.

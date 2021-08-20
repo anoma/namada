@@ -614,6 +614,8 @@ mod tests {
             true,
         );
 
+        println!("{}", base_dir.path().to_str().unwrap());
+
         let intent_a_path = base_dir.path().to_path_buf().join("intent.A");
         let intent_b_path = base_dir.path().to_path_buf().join("intent.B");
         let intent_c_path = base_dir.path().to_path_buf().join("intent.C");
@@ -817,7 +819,7 @@ mod tests {
 
         // check that the amount matched are correct
         session_gossip
-            .exp_string("amounts: 100, 70, 200")
+            .exp_string("amounts: 70, 100, 200")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // check that the transfers transactions are correct

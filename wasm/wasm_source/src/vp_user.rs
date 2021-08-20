@@ -186,7 +186,16 @@ fn check_intent(
         token_buy,
         min_buy,
         max_sell,
+        vp,
     } = &exchange.data;
+
+    if let Some(code) = vp {
+        let eval_result = eval(code.to_vec(), vec![]);
+        log_string(format!("eval result: {}", eval_result));
+        if !eval_result {
+            return false;
+        }
+    }
 
     log_string(format!(
         "exchange description: {}, {}, {}, {}, {}",
