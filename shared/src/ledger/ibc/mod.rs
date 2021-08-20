@@ -1,7 +1,9 @@
 //! IBC integration as a native validity predicate
 
+mod channel;
 mod client;
 mod connection;
+mod port;
 
 use std::collections::HashSet;
 
@@ -20,10 +22,16 @@ pub enum Error {
     NativeVpError(native_vp::Error),
     #[error("Key error: {0}")]
     KeyError(String),
+    #[error("Counter error: {0}")]
+    CounterError(String),
     #[error("Client validation error: {0}")]
     ClientError(client::Error),
     #[error("Connection validation error: {0}")]
     ConnectionError(connection::Error),
+    #[error("Channel validation error: {0}")]
+    ChannelError(channel::Error),
+    #[error("Port validation error: {0}")]
+    PortError(port::Error),
 }
 
 /// IBC functions result
@@ -47,17 +55,31 @@ where
 {
     // the client counter
     let key = Key::ibc_client_counter();
-    let value = crate::ledger::storage::types::encode(&0);
+    let value = storage::types::encode(&0);
     storage
         .write(&key, value)
         .expect("Unable to write the initial client counter");
 
     // the connection counter
     let key = Key::ibc_connection_counter();
-    let value = crate::ledger::storage::types::encode(&0);
+    let value = storage::types::encode(&0);
     storage
         .write(&key, value)
         .expect("Unable to write the initial connection counter");
+
+    // the channel counter
+    let key = Key::ibc_channel_counter();
+    let value = storage::types::encode(&0);
+    storage
+        .write(&key, value)
+        .expect("Unable to write the initial channel counter");
+
+    // the capability index
+    let key = Key::ibc_capability_index();
+    let value = storage::types::encode(&0);
+    storage
+        .write(&key, value)
+        .expect("Unable to write the initial capability index");
 }
 
 impl<'a, DB, H> NativeVp for Ibc<'a, DB, H>
@@ -98,9 +120,16 @@ where
                 IbcPrefix::Connection => {
                     self.validate_connection(key, tx_data)?
                 }
+                IbcPrefix::Channel => self.validate_channel(key, tx_data)?,
+                IbcPrefix::Port => self.validate_port(key)?,
+                IbcPrefix::Capability => self.validate_capability(key)?,
                 // TODO implement validations for modules
-                IbcPrefix::Channel => false,
-                IbcPrefix::Packet => false,
+                IbcPrefix::SeqSend => false,
+                IbcPrefix::SeqRecv => false,
+                IbcPrefix::SeqAck => false,
+                IbcPrefix::Commitment => false,
+                IbcPrefix::Receipt => false,
+                IbcPrefix::Ack => false,
                 IbcPrefix::Unknown => {
                     return Err(Error::KeyError(format!(
                         "Invalid IBC-related key: {}",
@@ -128,7 +157,14 @@ enum IbcPrefix {
     Client,
     Connection,
     Channel,
-    Packet,
+    Port,
+    Capability,
+    SeqSend,
+    SeqRecv,
+    SeqAck,
+    Commitment,
+    Receipt,
+    Ack,
     Unknown,
 }
 
@@ -144,7 +180,14 @@ where
                 "clients" => IbcPrefix::Client,
                 "connections" => IbcPrefix::Connection,
                 "channelEnds" => IbcPrefix::Channel,
-                "packets" => IbcPrefix::Packet,
+                "ports" => IbcPrefix::Port,
+                "capabilities" => IbcPrefix::Capability,
+                "nextSequenceSend" => IbcPrefix::SeqSend,
+                "nextSequenceRecv" => IbcPrefix::SeqRecv,
+                "nextSequenceAck" => IbcPrefix::SeqAck,
+                "commitments" => IbcPrefix::Commitment,
+                "receipts" => IbcPrefix::Receipt,
+                "acks" => IbcPrefix::Ack,
                 _ => IbcPrefix::Unknown,
             },
             None => IbcPrefix::Unknown,
@@ -162,6 +205,36 @@ where
             Ok(StateChange::Created)
         } else {
             Ok(StateChange::NotExists)
+        }
+    }
+
+    fn read_counter_pre(&self, key: &Key) -> Result<u64> {
+        match self.ctx.read_pre(key) {
+            Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
+                Error::CounterError(format!(
+                    "Decoding the client counter failed: {}",
+                    e
+                ))
+            }),
+            _ => Err(Error::CounterError(
+                "The client counter doesn't exist".to_owned(),
+            )),
+        }
+    }
+
+    fn read_counter(&self, key: &Key) -> u64 {
+        match self.ctx.read_post(key) {
+            Ok(Some(value)) => match storage::types::decode(&value) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("decoding a counter failed: {}", e);
+                    u64::MIN
+                }
+            },
+            _ => {
+                tracing::error!("the counter doesn't exist");
+                unreachable!();
+            }
         }
     }
 }
@@ -184,6 +257,18 @@ impl From<connection::Error> for Error {
     }
 }
 
+impl From<channel::Error> for Error {
+    fn from(err: channel::Error) -> Self {
+        Self::ChannelError(err)
+    }
+}
+
+impl From<port::Error> for Error {
+    fn from(err: port::Error) -> Self {
+        Self::PortError(err)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -195,13 +280,18 @@ mod tests {
     use ibc::ics02_client::client_type::ClientType;
     use ibc::ics02_client::header::AnyHeader;
     use ibc::ics03_connection::connection::{
-        ConnectionEnd, Counterparty, State,
+        ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
     };
     use ibc::ics03_connection::version::Version;
+    use ibc::ics04_channel::channel::{
+        ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
+    };
     use ibc::ics23_commitment::commitment::{
         CommitmentPrefix, CommitmentProofBytes,
     };
-    use ibc::ics24_host::identifier::{ClientId, ConnectionId};
+    use ibc::ics24_host::identifier::{
+        ChannelId, ClientId, ConnectionId, PortId,
+    };
     use ibc::ics24_host::Path;
     use ibc::mock::client_state::{MockClientState, MockConsensusState};
     use ibc::mock::header::MockHeader;
@@ -247,10 +337,7 @@ mod tests {
         let client_type_key = get_client_type_key();
         let client_type = ClientType::Mock.as_str().to_owned();
         write_log
-            .write(
-                &client_type_key,
-                crate::ledger::storage::types::encode(&client_type),
-            )
+            .write(&client_type_key, storage::types::encode(&client_type))
             .expect("write failed");
         // insert a mock client state
         let client_state_key = get_client_state_key();
@@ -289,6 +376,28 @@ mod tests {
             .try_to_vec()
             .expect("Encoding an address string shouldn't fail");
         CommitmentPrefix::from(bytes)
+    }
+
+    fn get_port_id() -> PortId {
+        PortId::from_str("test_port").expect("Creating a port ID failed")
+    }
+
+    fn get_port_key() -> Key {
+        let port_id = get_port_id();
+        let path = Path::Ports(port_id).to_string();
+        Key::ibc_key(path).expect("Creating a key for a port failed")
+    }
+
+    fn get_channel_id() -> ChannelId {
+        ChannelId::from_str("test_channel")
+            .expect("Creating a channel ID failed")
+    }
+
+    fn get_channel_key() -> Key {
+        let port_id = get_port_id();
+        let channel_id = get_channel_id();
+        let path = Path::ChannelEnds(port_id, channel_id).to_string();
+        Key::ibc_key(path).expect("Creating a key for a channel failed")
     }
 
     #[test]
@@ -400,9 +509,9 @@ mod tests {
         let client_id = get_client_id();
         let conn_key = get_connection_key();
         let conn = ConnectionEnd::new(
-            State::Init,
+            ConnState::Init,
             client_id,
-            Counterparty::default(),
+            ConnCounterparty::default(),
             vec![Version::default()],
             Duration::new(100, 0),
         );
@@ -438,9 +547,9 @@ mod tests {
         let client_id = get_client_id();
         let conn_key = get_connection_key();
         let conn = ConnectionEnd::new(
-            State::Init,
+            ConnState::Init,
             client_id,
-            Counterparty::default(),
+            ConnCounterparty::default(),
             vec![Version::default()],
             Duration::new(100, 0),
         );
@@ -484,9 +593,9 @@ mod tests {
         let client_id = get_client_id();
         let conn_key = get_connection_key();
         let conn = ConnectionEnd::new(
-            State::TryOpen,
+            ConnState::TryOpen,
             client_id.clone(),
-            Counterparty::default(),
+            ConnCounterparty::default(),
             vec![Version::default()],
             Duration::new(100, 0),
         );
@@ -503,7 +612,7 @@ mod tests {
         let counterpart_conn_id =
             ConnectionId::from_str("counterpart_test_connection")
                 .expect("Creating a connection ID failed");
-        let counterparty = Counterparty::new(
+        let counterparty = ConnCounterparty::new(
             counterpart_client_id,
             Some(counterpart_conn_id),
             get_commitment_prefix(),
@@ -536,6 +645,73 @@ mod tests {
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
+        assert!(
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_init_channel() {
+        let mut storage = TestStorage::default();
+        let mut write_log = WriteLog::default();
+        insert_init_states(&mut write_log);
+        write_log.commit_block(&mut storage).expect("commit failed");
+
+        // insert a initial connection
+        let client_id = get_client_id();
+        let conn_key = get_connection_key();
+        let conn = ConnectionEnd::new(
+            ConnState::Open,
+            client_id,
+            ConnCounterparty::default(),
+            vec![Version::default()],
+            Duration::new(100, 0),
+        );
+        let bytes = conn.encode_vec().expect("encoding failed");
+        write_log.write(&conn_key, bytes).expect("write failed");
+
+        // insert a port
+        let port_key = get_port_key();
+        let index = 0u64;
+        write_log
+            .write(&port_key, storage::types::encode(&index))
+            .expect("write failed");
+        // insert to the reverse map
+        let path = format!("capabilities/{}", index);
+        let index_key =
+            Key::ibc_key(path).expect("Creating a key for a capability failed");
+        let port_id = get_port_id().as_str().to_owned();
+        write_log
+            .write(&index_key, storage::types::encode(&port_id))
+            .expect("write failed");
+
+        // insert a initial channel
+        let channel_key = get_channel_key();
+        let channel = ChannelEnd::new(
+            ChanState::Init,
+            Order::default(),
+            ChanCounterparty::default(),
+            vec![get_connection_id()],
+            "ORDER_ORDERED".to_string(),
+        );
+        let bytes = channel.encode_vec().expect("encoding failed");
+        write_log.write(&channel_key, bytes).expect("write failed");
+        write_log.commit_tx();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+        let tx = Tx::new(tx_code, Some(tx_data.clone()));
+        let gas_meter = VpGasMeter::new(0);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+
+        let mut keys_changed = HashSet::new();
+        keys_changed.insert(get_port_key());
+        keys_changed.insert(get_channel_key());
+
+        let verifiers = HashSet::new();
+
+        let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
                 .expect("validation failed")
