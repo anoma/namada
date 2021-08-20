@@ -132,9 +132,7 @@ where
     }
 
     fn get_port_by_capability(&self, cap: &Capability) -> Result<PortId> {
-        let path = format!("capabilities/{}", cap.index());
-        let key =
-            Key::ibc_key(path).expect("Creating a key for a capability failed");
+        let key = Key::ibc_capability(cap.index());
         match self.ctx.read_post(&key) {
             Ok(Some(value)) => {
                 let id: String =
