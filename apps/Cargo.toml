@@ -32,6 +32,12 @@ doc = false
 name = "anomac"
 path = "src/bin/anoma-client/main.rs"
 
+# Anoma wallet
+[[bin]]
+doc = false
+name = "anomaw"
+path = "src/bin/anoma-wallet/main.rs"
+
 [features]
 default = ["std", "dev"]
 # NOTE "dev" features that shouldn't be used in live networks are enabled by default for now

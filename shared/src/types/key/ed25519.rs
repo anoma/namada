@@ -27,6 +27,15 @@ pub struct PublicKey(ed25519_dalek::PublicKey);
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SecretKey(ed25519_dalek::SecretKey);
 
+impl PublicKey {
+    /// Checks if the PublicKey is the same as a dalek's key.
+    /// Necessary for the wallet.
+    pub fn is_same_key(&self, key: ed25519_dalek::PublicKey) -> bool {
+        let PublicKey(public_key) = &self;
+        *public_key == key
+    }
+}
+
 /// Ed25519 signature
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Signature(ed25519_dalek::Signature);
