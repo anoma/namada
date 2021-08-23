@@ -420,7 +420,7 @@ where
         let key = Key::ibc_key(path.to_string())
             .expect("Creating a key for a packet info shouldn't fail");
         match self.ctx.read_post(&key)? {
-            Some(value) => String::from_utf8(value.to_vec()).map_err(|e| {
+            Some(value) => storage::types::decode(value).map_err(|e| {
                 Error::InvalidPacketInfo(format!(
                     "Decoding the packet info failed: {}",
                     e
