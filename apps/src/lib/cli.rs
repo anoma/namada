@@ -516,7 +516,7 @@ pub mod cmds {
 }
 
 pub mod args {
-    use std::convert::TryInto;
+    use std::convert::TryFrom;
     use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
@@ -785,6 +785,8 @@ pub mod args {
                 )
         }
     }
+
+    /// Helper struct for generating intents
     #[derive(Debug, Clone, Deserialize)]
     pub struct ExchangeDefinition {
         /// The source address
@@ -803,11 +805,13 @@ pub mod args {
         pub vp_path: Option<String>,
     }
 
-    impl TryInto<Exchange> for ExchangeDefinition {
+    impl TryFrom<ExchangeDefinition> for Exchange {
         type Error = &'static str;
 
-        fn try_into(self) -> Result<Exchange, Self::Error> {
-            let vp = if let Some(path) = self.vp_path {
+        fn try_from(
+            value: ExchangeDefinition,
+        ) -> Result<Exchange, Self::Error> {
+            let vp = if let Some(path) = value.vp_path {
                 if let Ok(wasm) = std::fs::read(path) {
                     Some(wasm)
                 } else {
@@ -816,17 +820,17 @@ pub mod args {
             } else {
                 None
             };
-            let addr = Address::decode(self.addr)
+            let addr = Address::decode(value.addr)
                 .expect("Addr should be a valid address");
-            let token_sell = Address::decode(self.token_buy)
+            let token_sell = Address::decode(value.token_buy)
                 .expect("Token_buy should be a valid address");
-            let token_buy = Address::decode(self.token_sell)
+            let token_buy = Address::decode(value.token_sell)
                 .expect("Token_sell should be a valid address");
-            let min_buy = token::Amount::from_str(&self.min_buy)
+            let min_buy = token::Amount::from_str(&value.min_buy)
                 .expect("Min_buy must be convertible to number");
-            let max_sell = token::Amount::from_str(&self.max_sell)
+            let max_sell = token::Amount::from_str(&value.max_sell)
                 .expect("Max_sell must be convertible to number");
-            let rate_min = DecimalWrapper::from_str(&self.rate_min)
+            let rate_min = DecimalWrapper::from_str(&value.rate_min)
                 .expect("Max_sell must be convertible to decimal.");
 
             Ok(Exchange {
@@ -859,8 +863,20 @@ pub mod args {
             let file_path_input = FILE_PATH_INPUT.parse(matches);
             let file = File::open(&file_path_input).expect("File must exist.");
 
-            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
-                .expect("JSON was not well-formatted");
+            let exchange_definitions: Vec<Exchange> =
+                serde_json::from_reader(file)
+                    .expect("JSON was not well-formatted");
+
+            let exchanges: Vec<Exchange> = exchange_definitions
+                .iter()
+                .map(|item| match Exchange::try_from(item.clone()) {
+                    Ok(exchange) => exchange,
+                    Err(_e) => {
+                        // TODO: exit reporting error
+                        todo!()
+                    }
+                })
+                .collect();
 
             Self {
                 key,

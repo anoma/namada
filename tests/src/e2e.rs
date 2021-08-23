@@ -603,7 +603,7 @@ mod tests {
     /// a transfer transaction with the 3 intents.
     #[test]
     fn match_intent() -> Result<()> {
-        setup();
+        let working_dir = setup();
 
         let base_dir = tempdir().unwrap();
         let node_dirs = generate_network_of(
@@ -614,7 +614,7 @@ mod tests {
             true,
         );
 
-        println!("{}", base_dir.path().to_str().unwrap());
+        println!("{}", base_dir.path().to_path_buf().to_string_lossy());
 
         let intent_a_path = base_dir.path().to_path_buf().join("intent.A");
         let intent_b_path = base_dir.path().to_path_buf().join("intent.B");
@@ -627,10 +627,6 @@ mod tests {
         let intent_c_path_input =
             base_dir.path().to_path_buf().join("intent.C.data");
 
-        println!("{:?}, {:?}", intent_a_path, intent_a_path_input);
-        println!("{:?}, {:?}", intent_b_path, intent_b_path_input);
-        println!("{:?}, {:?}", intent_c_path, intent_c_path_input);
-
         let intent_a_json = json!([
             {
                 "key": BERTHA,
@@ -639,7 +635,8 @@ mod tests {
                 "max_sell": "70",
                 "token_buy": XAN,
                 "token_sell": BTC,
-                "rate_min": 2
+                "rate_min": 2,
+                "vp_path": format!("{}/{}", working_dir.to_string_lossy(), VP_ALWAYS_FALSE_WASM)
             }
         ]);
         let intent_b_json = json!([
@@ -724,17 +721,16 @@ mod tests {
         craft_intent_c.spawn().expect("Should create the intent");
 
         //  Start gossip
-        let mut session_gossip = spawn_command(base_node_gossip, Some(40_000))
+        let mut session_gossip = spawn_command(base_node_gossip, Some(60_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         //  Start ledger
-        let mut session_ledger = spawn_command(base_node_ledger, Some(40_000))
+        let mut session_ledger = spawn_command(base_node_ledger, Some(60_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_ledger
             .exp_string("No state could be found")
             .map_err(|e| eyre!(format!("{}", e)))?;
-        drop(session_ledger);
 
         // Wait for ledger and gossip to start
         sleep(3);
@@ -807,7 +803,7 @@ mod tests {
             "asset_v1",
         ]);
         let mut session_send_intent_c =
-            spawn_command(send_intent_c, Some(40_000))
+            spawn_command(send_intent_c, Some(20_000))
                 .map_err(|e| eyre!(format!("{}", e)))?;
 
         // means it sent it correctly but not able to gossip it (which is
@@ -834,6 +830,10 @@ mod tests {
         session_gossip
             .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100")
             .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // session_gossip
+        //     .exp_regex(".*Mempool validation passed*")
+        //     .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
     }
@@ -933,5 +933,9 @@ mod tests {
         pub const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
         pub const VP_USER_WASM: &str = "wasm/vp_user.wasm";
         pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
+        pub const VP_ALWAYS_TRUE_WASM: &str =
+            "wasm_for_tests/vp_always_true.wasm";
+        pub const VP_ALWAYS_FALSE_WASM: &str =
+            "wasm_for_tests/vp_always_false.wasm";
     }
 }
