@@ -107,8 +107,8 @@ where
         conn_id: &ConnectionId,
     ) -> Result<StateChange> {
         let path = Path::Connections(conn_id.clone()).to_string();
-        let key = Key::ibc_key(path)
-            .expect("Creating a key for a client type failed");
+        let key =
+            Key::ibc_key(path).expect("Creating a key for a connection failed");
         self.get_state_change(&key)
             .map_err(|e| Error::InvalidStateChange(e.to_string()))
     }
@@ -301,17 +301,8 @@ where
 
     fn connection_counter_pre(&self) -> Result<u64> {
         let key = Key::ibc_connection_counter();
-        match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => storage::types::decode(&value).map_err(|e| {
-                Error::InvalidConnection(format!(
-                    "Decoding the connection counter failed: {}",
-                    e
-                ))
-            }),
-            _ => Err(Error::InvalidConnection(
-                "The connection counter should exist".to_owned(),
-            )),
-        }
+        self.read_counter_pre(&key)
+            .map_err(|e| Error::InvalidConnection(e.to_string()))
     }
 }
 
@@ -377,22 +368,7 @@ where
 
     fn connection_counter(&self) -> u64 {
         let key = Key::ibc_connection_counter();
-        match self.ctx.read_post(&key) {
-            Ok(Some(value)) => match storage::types::decode(&value) {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!(
-                        "decoding a connection counter failed: {}",
-                        e
-                    );
-                    u64::MIN
-                }
-            },
-            _ => {
-                tracing::error!("connection counter doesn't exist");
-                unreachable!();
-            }
-        }
+        self.read_counter(&key)
     }
 }
 
