@@ -36,6 +36,8 @@ pub enum Error {
     InvalidPort(String),
     #[error("Sequence error: {0}")]
     InvalidSequence(String),
+    #[error("Packet error: {0}")]
+    InvalidPacket(String),
     #[error("Proof verification error: {0}")]
     ProofVerificationFailure(String),
     #[error("Decoding TX data error: {0}")]
@@ -76,10 +78,15 @@ where
                 ));
             }
         };
-        if u64::from(next_seq_pre) + 1 != u64::from(next_seq)
-            || packet.sequence != next_seq
-        {
-            return Ok(false);
+        if u64::from(next_seq_pre) + 1 != u64::from(next_seq) {
+            return Err(Error::InvalidSequence(
+                "The nextSequenceSend is invalid".to_owned(),
+            ));
+        }
+        if packet.sequence != next_seq_pre {
+            return Err(Error::InvalidPacket(
+                "The packet sequence is invalid".to_owned(),
+            ));
         }
 
         self.validate_send_packet(&port_channel_id, &packet)
@@ -105,14 +112,18 @@ where
             }
         };
         if u64::from(next_seq_pre) + 1 != u64::from(next_seq) {
-            return Ok(false);
+            return Err(Error::InvalidSequence(
+                "The nextSequenceRecv is invalid".to_owned(),
+            ));
         }
         // when the ordered channel, the sequence number should be equal to
         // nextSequenceRecv
         if self.is_ordered_channel(&port_channel_id)?
-            && packet.sequence != next_seq
+            && packet.sequence != next_seq_pre
         {
-            return Ok(false);
+            return Err(Error::InvalidPacket(
+                "The packet sequence is invalid".to_owned(),
+            ));
         }
 
         if !self.validate_recv_packet(&port_channel_id, &packet)? {
@@ -149,7 +160,7 @@ where
         // when the ordered channel, the sequence number should be equal to
         // nextSequenceAck
         if self.is_ordered_channel(&port_channel_id)?
-            && packet.sequence != next_seq
+            && packet.sequence != next_seq_pre
         {
             return Ok(false);
         }
@@ -171,9 +182,7 @@ where
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
     ) -> Result<bool> {
-        if !self.validate_packet(packet, Phase::Send)? {
-            return Ok(false);
-        }
+        self.validate_packet(packet, Phase::Send)?;
 
         let key = (
             port_channel_id.0.clone(),
@@ -192,9 +201,7 @@ where
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
     ) -> Result<bool> {
-        if !self.validate_packet(packet, Phase::Recv)? {
-            return Ok(false);
-        }
+        self.validate_packet(packet, Phase::Recv)?;
 
         let key = (
             port_channel_id.0.clone(),
@@ -202,10 +209,17 @@ where
             packet.sequence,
         );
         if self.get_packet_receipt(&key).is_none() {
-            return Ok(false);
+            return Err(Error::InvalidPacket(format!(
+                "The receipt doesn't exist: Port {}, Channel {}, Sequence {}",
+                port_channel_id.0, port_channel_id.1, packet.sequence
+            )));
         }
         if self.get_packet_acknowledgement(&key).is_none() {
-            return Ok(false);
+            return Err(Error::InvalidPacket(format!(
+                "The acknowledgement doesn't exist: Port {}, Channel {}, \
+                 Sequence {}",
+                port_channel_id.0, port_channel_id.1, packet.sequence
+            )));
         }
 
         Ok(true)
@@ -216,9 +230,7 @@ where
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
     ) -> Result<bool> {
-        if !self.validate_packet(packet, Phase::Ack)? {
-            return Ok(false);
-        }
+        self.validate_packet(packet, Phase::Ack)?;
 
         let key = (
             port_channel_id.0.clone(),
@@ -228,19 +240,33 @@ where
         let prev_commitment = self
             .get_packet_commitment_pre(&key)
             .map_err(|e| Error::InvalidSequence(e.to_string()))?;
+        self.validate_packet_commitment(packet, prev_commitment)?;
+
+        if self.get_packet_commitment(&key).is_some() {
+            return Err(Error::InvalidPacket(
+                "The commitment hasn't been deleted yet".to_owned(),
+            ));
+        }
+
+        Ok(true)
+    }
+
+    fn validate_packet_commitment(
+        &self,
+        packet: &Packet,
+        commitment: String,
+    ) -> Result<()> {
         let input = format!(
             "{:?},{:?},{:?}",
             packet.timeout_timestamp, packet.timeout_height, packet.data,
         );
-        if prev_commitment != self.hash(input) {
-            return Ok(false);
+        if commitment == self.hash(input) {
+            Ok(())
+        } else {
+            Err(Error::InvalidPacket(
+                "The commitment and the packet are mismatched".to_owned(),
+            ))
         }
-        if self.get_packet_commitment(&key).is_some() {
-            // the commitment should be already deleted
-            return Ok(false);
-        }
-
-        Ok(true)
     }
 
     fn verify_recv_proof(
@@ -338,7 +364,7 @@ where
         Ok(channel.order_matches(&Order::Ordered))
     }
 
-    fn validate_packet(&self, packet: &Packet, phase: Phase) -> Result<bool> {
+    fn validate_packet(&self, packet: &Packet, phase: Phase) -> Result<()> {
         let port_channel_id = match phase {
             Phase::Send | Phase::Ack => {
                 (packet.source_port.clone(), packet.source_channel.clone())
@@ -368,14 +394,19 @@ where
             }
         };
         if !channel.is_open() {
-            return Ok(false);
+            return Err(Error::InvalidChannel(format!(
+                "The channel isn't open: Port {}, Channel {}",
+                port_channel_id.0, port_channel_id.1
+            )));
         }
 
         let connection = self
             .connection_from_channel(&channel)
             .map_err(|e| Error::InvalidConnection(e.to_string()))?;
         if !connection.is_open() {
-            return Ok(false);
+            return Err(Error::InvalidConnection(
+                "The connection isn't open".to_owned(),
+            ));
         }
 
         // counterparty consistency
@@ -390,7 +421,9 @@ where
             ),
         };
         if !channel.counterparty_matches(&counterparty) {
-            return Ok(false);
+            return Err(Error::InvalidPacket(
+                "The counterpart port or channel is mismatched".to_owned(),
+            ));
         }
 
         // check timeout
@@ -400,13 +433,20 @@ where
                 let client_id = connection.client_id();
                 let height = match self.client_state(client_id) {
                     Some(s) => {
-                        if packet.timeout_height <= s.latest_height() {
-                            return Ok(false);
+                        if !packet.timeout_height.is_zero()
+                            && packet.timeout_height <= s.latest_height()
+                        {
+                            return Err(Error::InvalidPacket(
+                                "The packet has timed out".to_owned(),
+                            ));
                         }
                         s.latest_height()
                     }
                     None => {
-                        return Ok(false);
+                        return Err(Error::InvalidClient(format!(
+                            "The client state doesn't exist: ID {}",
+                            client_id
+                        )));
                     }
                 };
                 // check timeout timestamp
@@ -415,7 +455,9 @@ where
                         if s.timestamp().check_expiry(&packet.timeout_timestamp)
                             != Expiry::NotExpired
                         {
-                            return Ok(false);
+                            return Err(Error::InvalidPacket(
+                                "The packet has timed out".to_owned(),
+                            ));
                         }
                     }
                     None => {
@@ -430,7 +472,9 @@ where
             Phase::Recv => {
                 // check timeout height
                 if packet.timeout_height <= self.host_height() {
-                    return Ok(false);
+                    return Err(Error::InvalidPacket(
+                        "The packet has timed out".to_owned(),
+                    ));
                 }
                 // check timeout timestamp
                 if self
@@ -438,13 +482,15 @@ where
                     .check_expiry(&packet.timeout_timestamp)
                     != Expiry::NotExpired
                 {
-                    return Ok(false);
+                    return Err(Error::InvalidPacket(
+                        "The packet has timed out".to_owned(),
+                    ));
                 }
             }
             Phase::Ack => (),
         }
 
-        Ok(true)
+        Ok(())
     }
 }
 

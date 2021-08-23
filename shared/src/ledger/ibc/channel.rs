@@ -362,7 +362,7 @@ where
 
     fn get_sequence_pre(&self, path: Path) -> Result<Sequence> {
         let key = Key::ibc_key(path.to_string())
-            .expect("Creating akey for a sequence shouldn't fail");
+            .expect("Creating a key for a sequence shouldn't fail");
         match self.ctx.read_pre(&key)? {
             Some(value) => {
                 let index: u64 =
@@ -374,10 +374,9 @@ where
                     })?;
                 Ok(Sequence::from(index))
             }
-            None => Err(Error::InvalidSequence(format!(
-                "The prior sequence doesn't exist: Path {}",
-                path
-            ))),
+            // The sequence is updated for the first time. The previous sequence
+            // is the initial number.
+            None => Ok(Sequence::from(1)),
         }
     }
 
@@ -395,18 +394,16 @@ where
                     })?;
                 Ok(Sequence::from(index))
             }
-            None => Err(Error::InvalidSequence(format!(
-                "The sequence doesn't exist: Path {}",
-                path
-            ))),
+            // The sequence has not been used yet
+            None => Ok(Sequence::from(1)),
         }
     }
 
     fn get_packet_info_pre(&self, path: Path) -> Result<String> {
         let key = Key::ibc_key(path.to_string())
-            .expect("Creating akey for a packet info shouldn't fail");
+            .expect("Creating a key for a packet info shouldn't fail");
         match self.ctx.read_pre(&key)? {
-            Some(value) => String::from_utf8(value.to_vec()).map_err(|e| {
+            Some(value) => storage::types::decode(value).map_err(|e| {
                 Error::InvalidPacketInfo(format!(
                     "Decoding the prior packet info failed: {}",
                     e

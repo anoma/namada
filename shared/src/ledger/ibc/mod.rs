@@ -292,6 +292,7 @@ mod tests {
     use std::time::Duration;
 
     use borsh::ser::BorshSerialize;
+    use chrono::Utc;
     use ibc::ics02_client::client_consensus::ConsensusState;
     use ibc::ics02_client::client_state::ClientState;
     use ibc::ics02_client::client_type::ClientType;
@@ -303,6 +304,7 @@ mod tests {
     use ibc::ics04_channel::channel::{
         ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
     };
+    use ibc::ics04_channel::packet::{Packet, Sequence};
     use ibc::ics23_commitment::commitment::{
         CommitmentPrefix, CommitmentProofBytes,
     };
@@ -312,7 +314,9 @@ mod tests {
     use ibc::ics24_host::Path;
     use ibc::mock::client_state::{MockClientState, MockConsensusState};
     use ibc::mock::header::MockHeader;
+    use ibc::timestamp::Timestamp;
     use ibc::Height;
+    use sha2::Digest;
     use tendermint::account::Id as TmAccountId;
     use tendermint::block::header::{Header as TmHeader, Version as TmVersion};
     use tendermint::block::Height as TmHeight;
@@ -327,9 +331,10 @@ mod tests {
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::ibc::{
-        ChannelOpenAckData, ChannelOpenConfirmData, ChannelOpenTryData,
-        ClientUpdateData, ConnectionOpenAckData, ConnectionOpenConfirmData,
-        ConnectionOpenTryData,
+        encode_packet, ChannelOpenAckData, ChannelOpenConfirmData,
+        ChannelOpenTryData, ClientUpdateData, ConnectionOpenAckData,
+        ConnectionOpenConfirmData, ConnectionOpenTryData, PacketAckData,
+        PacketReceiptData,
     };
 
     fn get_client_id() -> ClientId {
@@ -379,7 +384,10 @@ mod tests {
         // insert a mock client state
         let client_state_key = get_client_state_key();
         let height = Height::new(1, 10);
-        let header = MockHeader::new(height);
+        let header = MockHeader {
+            height,
+            timestamp: Timestamp::now(),
+        };
         let client_state = MockClientState(header).wrap_any();
         let bytes = client_state.encode_vec().expect("encoding failed");
         write_log
@@ -505,7 +513,7 @@ mod tests {
         ChanCounterparty::new(counterpart_port_id, Some(counterpart_channel_id))
     }
 
-    fn set_port(index: u64, write_log: &mut WriteLog) {
+    fn set_port(write_log: &mut WriteLog, index: u64) {
         let port_key = get_port_key();
         write_log
             .write(&port_key, storage::types::encode(&index))
@@ -516,6 +524,37 @@ mod tests {
         write_log
             .write(&cap_key, storage::types::encode(&port_id))
             .expect("write failed");
+    }
+
+    fn get_next_seq(storage: &TestStorage, path: Path) -> Sequence {
+        let key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for a sequence shouldn't fail");
+        let (val, _) = storage.read(&key).expect("read failed");
+        match val {
+            Some(v) => {
+                let index: u64 =
+                    storage::types::decode(v).expect("decoding failed");
+                Sequence::from(index)
+            }
+            // The sequence has not been used yet
+            None => Sequence::from(1),
+        }
+    }
+
+    fn increment_seq(write_log: &mut WriteLog, path: Path, seq: Sequence) {
+        let key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for a sequence shouldn't fail");
+        let value = storage::types::encode(&u64::from(seq.increment()));
+        write_log.write(&key, value).expect("write failed");
+    }
+
+    fn hash(packet: &Packet) -> String {
+        let input = format!(
+            "{:?},{:?},{:?}",
+            packet.timeout_timestamp, packet.timeout_height, packet.data,
+        );
+        let r = sha2::Sha256::digest(input.as_bytes());
+        format!("{:x}", r)
     }
 
     #[test]
@@ -576,7 +615,10 @@ mod tests {
         let client_id = get_client_id();
         let client_state_key = get_client_state_key();
         let height = Height::new(1, 11);
-        let header = MockHeader::new(height);
+        let header = MockHeader {
+            height,
+            timestamp: Timestamp::now(),
+        };
         let client_state = MockClientState(header).wrap_any();
         let bytes = client_state.encode_vec().expect("encoding failed");
         write_log
@@ -690,7 +732,10 @@ mod tests {
         write_log.commit_tx();
 
         let height = Height::new(1, 10);
-        let header = MockHeader::new(height);
+        let header = MockHeader {
+            height,
+            timestamp: Timestamp::now(),
+        };
         let client_state = MockClientState(header).wrap_any();
         let proof_conn = CommitmentProofBytes::from(vec![0]);
         let proof_client = CommitmentProofBytes::from(vec![0]);
@@ -742,7 +787,10 @@ mod tests {
         write_log.commit_tx();
 
         let height = Height::new(1, 10);
-        let header = MockHeader::new(height);
+        let header = MockHeader {
+            height,
+            timestamp: Timestamp::now(),
+        };
         let client_state = MockClientState(header).wrap_any();
         let counterparty = get_conn_counterparty();
         let proof_conn = CommitmentProofBytes::from(vec![0]);
@@ -832,7 +880,7 @@ mod tests {
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // insert an Init channel
-        set_port(0, &mut write_log);
+        set_port(&mut write_log, 0);
         let channel_key = get_channel_key();
         let channel = get_channel(ChanState::Init, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
@@ -868,7 +916,7 @@ mod tests {
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // insert a TryOpen channel
-        set_port(0, &mut write_log);
+        set_port(&mut write_log, 0);
         let channel_key = get_channel_key();
         let channel = get_channel(ChanState::TryOpen, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
@@ -917,7 +965,7 @@ mod tests {
         let bytes = conn.encode_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
         // insert an Init channel
-        set_port(0, &mut write_log);
+        set_port(&mut write_log, 0);
         let channel_key = get_channel_key();
         let channel = get_channel(ChanState::Init, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
@@ -972,7 +1020,7 @@ mod tests {
         let bytes = conn.encode_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
         // insert a TryOpen channel
-        set_port(0, &mut write_log);
+        set_port(&mut write_log, 0);
         let channel_key = get_channel_key();
         let channel = get_channel(ChanState::TryOpen, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
@@ -1020,7 +1068,7 @@ mod tests {
     fn test_validate_port() {
         let (storage, mut write_log) = insert_init_states();
         // insert a port
-        set_port(0, &mut write_log);
+        set_port(&mut write_log, 0);
         write_log.commit_tx();
 
         let tx_code = vec![];
@@ -1046,7 +1094,7 @@ mod tests {
         let (storage, mut write_log) = insert_init_states();
         // insert a port
         let index = 0;
-        set_port(index, &mut write_log);
+        set_port(&mut write_log, index);
         write_log.commit_tx();
 
         let tx_code = vec![];
@@ -1058,6 +1106,232 @@ mod tests {
         let mut keys_changed = HashSet::new();
         let cap_key = Key::ibc_capability(index);
         keys_changed.insert(cap_key);
+
+        let verifiers = HashSet::new();
+
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_validate_seq_send() {
+        let (mut storage, mut write_log) = insert_init_states();
+        // insert an opened connection
+        let conn_key = get_connection_key();
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        write_log.write(&conn_key, bytes).expect("write failed");
+        // insert an opened channel
+        set_port(&mut write_log, 0);
+        let channel_key = get_channel_key();
+        let channel = get_channel(ChanState::Open, Order::Ordered);
+        let bytes = channel.encode_vec().expect("encoding failed");
+        write_log.write(&channel_key, bytes).expect("write failed");
+        write_log.commit_tx();
+        write_log.commit_block(&mut storage).expect("commit failed");
+
+        // get and increment the nextSequenceSend
+        let seq_path = Path::SeqSends(get_port_id(), get_channel_id());
+        let sequence = get_next_seq(&storage, seq_path.clone());
+        increment_seq(&mut write_log, seq_path.clone(), sequence);
+        // make a packet
+        let counterparty = get_channel_counterparty();
+        let timestamp = Utc::now() + chrono::Duration::seconds(100);
+        let timeout_timestamp = Timestamp::from_datetime(timestamp);
+        let packet = Packet {
+            sequence,
+            source_port: get_port_id(),
+            source_channel: get_channel_id(),
+            destination_port: counterparty.port_id().clone(),
+            destination_channel: counterparty.channel_id().unwrap().clone(),
+            data: vec![0],
+            timeout_height: Height::new(1, 100),
+            timeout_timestamp,
+        };
+        // insert a commitment
+        let commitment = hash(&packet);
+        let path = Path::Commitments {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            sequence,
+        };
+        let key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for a commitment shouldn't fail");
+        write_log
+            .write(&key, storage::types::encode(&commitment))
+            .expect("write failed");
+        write_log.commit_tx();
+
+        let tx_code = vec![];
+        let tx_data = encode_packet(&packet);
+        let tx = Tx::new(tx_code, Some(tx_data.clone()));
+        let gas_meter = VpGasMeter::new(0);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+
+        let mut keys_changed = HashSet::new();
+        let seq_key = Key::ibc_key(seq_path.to_string())
+            .expect("Creating a key for nextSequenceSend shouldn't fail");
+        keys_changed.insert(seq_key);
+
+        let verifiers = HashSet::new();
+
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_validate_seq_recv() {
+        let (mut storage, mut write_log) = insert_init_states();
+        // insert an opened connection
+        let conn_key = get_connection_key();
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        write_log.write(&conn_key, bytes).expect("write failed");
+        // insert an opened channel
+        set_port(&mut write_log, 0);
+        let channel_key = get_channel_key();
+        let channel = get_channel(ChanState::Open, Order::Ordered);
+        let bytes = channel.encode_vec().expect("encoding failed");
+        write_log.write(&channel_key, bytes).expect("write failed");
+        write_log.commit_tx();
+        write_log.commit_block(&mut storage).expect("commit failed");
+
+        // get and increment the nextSequenceRecv
+        let seq_path = Path::SeqRecvs(get_port_id(), get_channel_id());
+        let sequence = get_next_seq(&storage, seq_path.clone());
+        increment_seq(&mut write_log, seq_path.clone(), sequence);
+        // insert a receipt and an ack
+        let path = Path::Receipts {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            sequence,
+        };
+        let key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for a receipt shouldn't fail");
+        write_log
+            .write(&key, storage::types::encode(&0))
+            .expect("write failed");
+        let path = Path::Acks {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            sequence,
+        };
+        let key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for an ack shouldn't fail");
+        write_log
+            .write(&key, storage::types::encode(&"test_ack".to_owned()))
+            .expect("write failed");
+        write_log.commit_tx();
+
+        // make a packet
+        let counterparty = get_channel_counterparty();
+        let timestamp = Utc::now() + chrono::Duration::seconds(100);
+        let timeout_timestamp = Timestamp::from_datetime(timestamp);
+        let packet = Packet {
+            sequence,
+            source_port: counterparty.port_id().clone(),
+            source_channel: counterparty.channel_id().unwrap().clone(),
+            destination_port: get_port_id(),
+            destination_channel: get_channel_id(),
+            data: vec![0],
+            timeout_height: Height::new(1, 100),
+            timeout_timestamp,
+        };
+        let proof_packet = CommitmentProofBytes::from(vec![0]);
+        let data =
+            PacketReceiptData::new(packet, Height::new(1, 10), proof_packet);
+        let tx_code = vec![];
+        let tx_data = data.try_to_vec().expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data.clone()));
+        let gas_meter = VpGasMeter::new(0);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+
+        let mut keys_changed = HashSet::new();
+        let seq_key = Key::ibc_key(seq_path.to_string())
+            .expect("Creating a key for nextSequenceSend shouldn't fail");
+        keys_changed.insert(seq_key);
+
+        let verifiers = HashSet::new();
+
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_validate_seq_ack() {
+        let (mut storage, mut write_log) = insert_init_states();
+        // get the nextSequenceAck
+        let seq_path = Path::SeqAcks(get_port_id(), get_channel_id());
+        let sequence = get_next_seq(&storage, seq_path.clone());
+        // make a packet
+        let counterparty = get_channel_counterparty();
+        let timestamp = Utc::now() + chrono::Duration::seconds(100);
+        let timeout_timestamp = Timestamp::from_datetime(timestamp);
+        let packet = Packet {
+            sequence,
+            source_port: get_port_id(),
+            source_channel: get_channel_id(),
+            destination_port: counterparty.port_id().clone(),
+            destination_channel: counterparty.channel_id().unwrap().clone(),
+            data: vec![0],
+            timeout_height: Height::new(1, 100),
+            timeout_timestamp,
+        };
+        // insert an opened connection
+        let conn_key = get_connection_key();
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        write_log.write(&conn_key, bytes).expect("write failed");
+        // insert an opened channel
+        set_port(&mut write_log, 0);
+        let channel_key = get_channel_key();
+        let channel = get_channel(ChanState::Open, Order::Ordered);
+        let bytes = channel.encode_vec().expect("encoding failed");
+        write_log.write(&channel_key, bytes).expect("write failed");
+        // insert a commitment
+        let commitment = hash(&packet);
+        let path = Path::Commitments {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            sequence,
+        };
+        let commitment_key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for a commitment shouldn't fail");
+        write_log
+            .write(&commitment_key, storage::types::encode(&commitment))
+            .expect("write failed");
+        write_log.commit_tx();
+        write_log.commit_block(&mut storage).expect("commit failed");
+
+        // increment the nextSequenceAck
+        increment_seq(&mut write_log, seq_path.clone(), sequence);
+        // delete the commitment
+        write_log.delete(&commitment_key).expect("delete failed");
+        write_log.commit_tx();
+
+        let ack = "test_ack".try_to_vec().expect("encoding failed");
+        let proof_packet = CommitmentProofBytes::from(vec![0]);
+        let data =
+            PacketAckData::new(packet, ack, Height::new(1, 10), proof_packet);
+        let tx_code = vec![];
+        let tx_data = data.try_to_vec().expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data.clone()));
+        let gas_meter = VpGasMeter::new(0);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+
+        let mut keys_changed = HashSet::new();
+        let seq_key = Key::ibc_key(seq_path.to_string())
+            .expect("Creating a key for nextSequenceSend shouldn't fail");
+        keys_changed.insert(seq_key);
 
         let verifiers = HashSet::new();
 
