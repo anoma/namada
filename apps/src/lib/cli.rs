@@ -17,16 +17,18 @@ const APP_NAME: &str = "Anoma";
 const CLI_VERSION: &str = "0.1.0";
 const NODE_VERSION: &str = "0.1.0";
 const CLIENT_VERSION: &str = "0.1.0";
+const WALLET_VERSION: &str = "0.1.0";
 
 // Main Anoma sub-commands
 const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
+const WALLET_CMD: &str = "wallet";
 
 pub mod cmds {
     use clap::AppSettings;
 
     use super::utils::*;
-    use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD};
+    use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
 
     /// Commands for `anoma` binary.
     #[allow(clippy::large_enum_variant)]
@@ -34,6 +36,7 @@ pub mod cmds {
     pub enum Anoma {
         Node(AnomaNode),
         Client(AnomaClient),
+        Wallet(AnomaWallet),
         // Inlined commands from the node and the client.
         Ledger(Ledger),
         Gossip(Gossip),
@@ -47,6 +50,7 @@ pub mod cmds {
         fn add_sub(app: App) -> App {
             app.subcommand(AnomaNode::def())
                 .subcommand(AnomaClient::def())
+                .subcommand(AnomaWallet::def())
                 .subcommand(Ledger::def())
                 .subcommand(Gossip::def())
                 .subcommand(TxCustom::def())
@@ -58,6 +62,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
             let node = SubCmd::parse(matches).map_fst(Self::Node);
             let client = SubCmd::parse(matches).map_fst(Self::Client);
+            let wallet = SubCmd::parse(matches).map_fst(Self::Wallet);
             let ledger = SubCmd::parse(matches).map_fst(Self::Ledger);
             let gossip = SubCmd::parse(matches).map_fst(Self::Gossip);
             let tx_custom = SubCmd::parse(matches).map_fst(Self::TxCustom);
@@ -65,6 +70,7 @@ pub mod cmds {
             let tx_update_vp = SubCmd::parse(matches).map_fst(Self::TxUpdateVp);
             let intent = SubCmd::parse(matches).map_fst(Self::Intent);
             node.or(client)
+                .or(wallet)
                 .or(ledger)
                 .or(gossip)
                 .or(tx_custom)
@@ -201,6 +207,7 @@ pub mod cmds {
                 .or(subscribe_topic)
         }
     }
+
     impl SubCmd for AnomaClient {
         const CMD: &'static str = CLIENT_CMD;
 
@@ -222,7 +229,86 @@ pub mod cmds {
         }
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Debug)]
+    pub enum AnomaWallet {
+        Keypair(Keypair),
+    }
+
+    impl Cmd for AnomaWallet {
+        fn add_sub(app: App) -> App {
+            app.subcommand(Keypair::def())
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            SubCmd::parse(matches).map_fst(Self::Keypair)
+        }
+    }
+
+    impl SubCmd for AnomaWallet {
+        const CMD: &'static str = WALLET_CMD;
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .and_then(|matches| <Self as Cmd>::parse(matches))
+        }
+
+        fn def() -> App {
+            <Self as Cmd>::add_sub(
+                App::new(Self::CMD)
+                    .about("Wallet sub-commands")
+                    .setting(AppSettings::SubcommandRequiredElseHelp),
+            )
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum Keypair {
+        Generate(Generate),
+    }
+
+    impl SubCmd for Keypair {
+        const CMD: &'static str = "keypair";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                SubCmd::parse(matches).map_fst(Keypair::Generate)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Keypair management, including methods to generate and look-up keys")
+                .subcommand(Generate::def())
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Generate(pub args::Generate);
+
+    impl SubCmd for Generate {
+        const CMD: &'static str = "generate";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (Generate(args::Generate::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Generates a keypair with a given alias")
+                .add_args::<args::Generate>()
+        }
+    }
+
+    #[derive(Debug)]
     pub enum Ledger {
         Run(LedgerRun),
         Reset(LedgerReset),
@@ -733,6 +819,7 @@ pub mod args {
     use super::ArgMatches;
 
     const ADDRESS: Arg<Address> = arg("address");
+    const ALIAS: ArgOpt<String> = arg_opt("alias");
     const AMOUNT: Arg<token::Amount> = arg("amount");
     const BASE_DIR: ArgDefault<PathBuf> =
         arg_default("base-dir", DefaultFn(|| ".anoma".into()));
@@ -797,6 +884,23 @@ pub mod args {
                 "The base directory is where the client and nodes \
                  configuration and state is stored.",
             ))
+        }
+    }
+
+    /// Wallet generate arguments
+    #[derive(Debug)]
+    pub struct Generate {
+        pub alias: Option<String>,
+    }
+
+    impl Args for Generate {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            Self { alias }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(ALIAS.def().about("The keypair alias"))
         }
     }
 
@@ -1515,6 +1619,12 @@ pub fn anoma_client_cli() -> (cmds::AnomaClient, args::Global) {
     (cmd, args::Global::parse(&matches))
 }
 
+pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, args::Global) {
+    let app = anoma_wallet_app();
+    let (cmd, matches) = cmds::AnomaWallet::parse_or_print_help(app);
+    (cmd, args::Global::parse(&matches))
+}
+
 fn anoma_app() -> App {
     let app = App::new(APP_NAME)
         .version(CLI_VERSION)
@@ -1543,6 +1653,16 @@ fn anoma_client_app() -> App {
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .add_args::<args::Global>();
     cmds::AnomaClient::add_sub(app)
+}
+
+fn anoma_wallet_app() -> App {
+    let app = App::new(APP_NAME)
+        .version(WALLET_VERSION)
+        .author(AUTHOR)
+        .about("Anoma wallet command line interface.")
+        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .add_args::<args::Global>();
+    cmds::AnomaWallet::add_sub(app)
 }
 
 pub fn update_gossip_config(

@@ -11,6 +11,7 @@ pub mod node;
 pub mod proto;
 pub mod types;
 pub mod wallet;
+pub mod wallet_new;
 
 // This is here only to include the std's docs in our docs.
 // Taken from <https://github.com/rust-lang/rfcs/issues/2324#issuecomment-502437904>.
