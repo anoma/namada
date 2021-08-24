@@ -189,6 +189,8 @@ fn check_intent(
         vp,
     } = &exchange.data;
 
+    log_string(format!("vp is: {}", vp.is_some()));
+
     if let Some(code) = vp {
         let eval_result = eval(code.to_vec(), vec![]);
         log_string(format!("eval result: {}", eval_result));

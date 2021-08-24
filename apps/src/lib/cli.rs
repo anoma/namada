@@ -820,11 +820,12 @@ pub mod args {
             } else {
                 None
             };
+
             let addr = Address::decode(value.addr)
                 .expect("Addr should be a valid address");
-            let token_sell = Address::decode(value.token_buy)
+            let token_buy = Address::decode(value.token_buy)
                 .expect("Token_buy should be a valid address");
-            let token_buy = Address::decode(value.token_sell)
+            let token_sell = Address::decode(value.token_sell)
                 .expect("Token_sell should be a valid address");
             let min_buy = token::Amount::from_str(&value.min_buy)
                 .expect("Min_buy must be convertible to number");
@@ -863,7 +864,7 @@ pub mod args {
             let file_path_input = FILE_PATH_INPUT.parse(matches);
             let file = File::open(&file_path_input).expect("File must exist.");
 
-            let exchange_definitions: Vec<Exchange> =
+            let exchange_definitions: Vec<ExchangeDefinition> =
                 serde_json::from_reader(file)
                     .expect("JSON was not well-formatted");
 

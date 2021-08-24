@@ -635,7 +635,7 @@ mod tests {
                 "max_sell": "70",
                 "token_buy": XAN,
                 "token_sell": BTC,
-                "rate_min": 2,
+                "rate_min": "2",
                 "vp_path": format!("{}/{}", working_dir.to_string_lossy(), VP_ALWAYS_FALSE_WASM)
             }
         ]);
@@ -647,7 +647,7 @@ mod tests {
                 "max_sell": "300",
                 "token_buy": BTC,
                 "token_sell": ETH,
-                "rate_min": 0.7
+                "rate_min": "0.7"
             }
         ]);
         let intent_c_json = json!([
@@ -658,7 +658,7 @@ mod tests {
                 "max_sell": "200",
                 "token_buy": ETH,
                 "token_sell": XAN,
-                "rate_min": 0.5
+                "rate_min": "0.5"
             }
         ]);
         generate_intent_json(intent_a_path_input.clone(), intent_a_json);
@@ -731,6 +731,7 @@ mod tests {
         session_ledger
             .exp_string("No state could be found")
             .map_err(|e| eyre!(format!("{}", e)))?;
+        drop(session_ledger);
 
         // Wait for ledger and gossip to start
         sleep(3);
@@ -815,7 +816,7 @@ mod tests {
 
         // check that the amount matched are correct
         session_gossip
-            .exp_string("amounts: 70, 100, 200")
+            .exp_string("amounts: 100, 200, 70")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // check that the transfers transactions are correct
@@ -831,9 +832,9 @@ mod tests {
             .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        // session_gossip
-        //     .exp_regex(".*Mempool validation passed*")
-        //     .map_err(|e| eyre!(format!("{}", e)))?;
+        session_gossip
+            .exp_regex(".*Mempool validation passed*")
+            .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
     }
