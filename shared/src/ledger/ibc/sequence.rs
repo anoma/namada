@@ -431,19 +431,9 @@ where
         // check timeout
         match phase {
             Phase::Send => {
-                // check timeout height
                 let client_id = connection.client_id();
                 let height = match self.client_state(client_id) {
-                    Some(s) => {
-                        if !packet.timeout_height.is_zero()
-                            && packet.timeout_height <= s.latest_height()
-                        {
-                            return Err(Error::InvalidPacket(
-                                "The packet has timed out".to_owned(),
-                            ));
-                        }
-                        s.latest_height()
-                    }
+                    Some(s) => s.latest_height(),
                     None => {
                         return Err(Error::InvalidClient(format!(
                             "The client state doesn't exist: ID {}",
@@ -451,25 +441,8 @@ where
                         )));
                     }
                 };
-                // check timeout timestamp
-                match self.client_consensus_state(client_id, height) {
-                    Some(s) => {
-                        if s.timestamp().check_expiry(&packet.timeout_timestamp)
-                            != Expiry::NotExpired
-                        {
-                            return Err(Error::InvalidPacket(
-                                "The packet has timed out".to_owned(),
-                            ));
-                        }
-                    }
-                    None => {
-                        return Err(Error::InvalidClient(format!(
-                            "The consensus state doesn't exist: ID {}, Height \
-                             {}",
-                            client_id, height
-                        )));
-                    }
-                }
+                self.check_timeout(client_id, height, packet)
+                    .map_err(|e| Error::InvalidPacket(e.to_string()))?;
             }
             Phase::Recv => {
                 // check timeout height

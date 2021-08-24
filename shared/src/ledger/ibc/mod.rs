@@ -1351,4 +1351,121 @@ mod tests {
                 .expect("validation failed")
         );
     }
+
+    #[test]
+    fn test_validate_commitment() {
+        let (storage, mut write_log) = insert_init_states();
+        // make a packet
+        let counterparty = get_channel_counterparty();
+        let timestamp = Utc::now() + chrono::Duration::seconds(100);
+        let timeout_timestamp = Timestamp::from_datetime(timestamp);
+        let packet = Packet {
+            sequence: Sequence::from(1),
+            source_port: get_port_id(),
+            source_channel: get_channel_id(),
+            destination_port: counterparty.port_id().clone(),
+            destination_channel: counterparty.channel_id().unwrap().clone(),
+            data: vec![0],
+            timeout_height: Height::new(1, 100),
+            timeout_timestamp,
+        };
+        // insert a commitment
+        let commitment = hash(&packet);
+        let path = Path::Commitments {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            sequence: packet.sequence,
+        };
+        let commitment_key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for a commitment shouldn't fail");
+        write_log
+            .write(&commitment_key, storage::types::encode(&commitment))
+            .expect("write failed");
+        write_log.commit_tx();
+
+        let tx_code = vec![];
+        let tx_data = encode_packet(&packet);
+        let tx = Tx::new(tx_code, Some(tx_data.clone()));
+        let gas_meter = VpGasMeter::new(0);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+
+        let mut keys_changed = HashSet::new();
+        keys_changed.insert(commitment_key);
+
+        let verifiers = HashSet::new();
+
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_validate_receipt() {
+        let (storage, mut write_log) = insert_init_states();
+        // insert a receipt
+        let path = Path::Receipts {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            sequence: Sequence::from(1),
+        };
+        let receipt_key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for a commitment shouldn't fail");
+        write_log
+            .write(&receipt_key, storage::types::encode(&0))
+            .expect("write failed");
+        write_log.commit_tx();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+        let tx = Tx::new(tx_code, Some(tx_data.clone()));
+        let gas_meter = VpGasMeter::new(0);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+
+        let mut keys_changed = HashSet::new();
+        keys_changed.insert(receipt_key);
+
+        let verifiers = HashSet::new();
+
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_validate_ack() {
+        let (storage, mut write_log) = insert_init_states();
+        // insert a receipt
+        let path = Path::Acks {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            sequence: Sequence::from(1),
+        };
+        let ack_key = Key::ibc_key(path.to_string())
+            .expect("Creating a key for a commitment shouldn't fail");
+        write_log
+            .write(&ack_key, storage::types::encode(&0))
+            .expect("write failed");
+        write_log.commit_tx();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+        let tx = Tx::new(tx_code, Some(tx_data.clone()));
+        let gas_meter = VpGasMeter::new(0);
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
+
+        let mut keys_changed = HashSet::new();
+        keys_changed.insert(ack_key);
+
+        let verifiers = HashSet::new();
+
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(&tx_data, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
 }

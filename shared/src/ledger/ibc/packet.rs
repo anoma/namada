@@ -186,11 +186,10 @@ where
         match (prev_channel.state(), channel.state()) {
             (State::Open, State::Closed) => {
                 // "Timeout"
-                if !self.is_timed_out(
-                    &client_id,
-                    data.proof_height(),
-                    &packet,
-                )? {
+                if self
+                    .check_timeout(&client_id, data.proof_height(), &packet)
+                    .is_ok()
+                {
                     return Err(Error::InvalidPacket(
                         "The timestamp has not passed yet".to_owned(),
                     ));
@@ -260,17 +259,21 @@ where
         }
     }
 
-    pub(super) fn is_timed_out(
+    pub(super) fn check_timeout(
         &self,
         client_id: &ClientId,
         current_height: Height,
         packet: &Packet,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         // timeout height
         if !packet.timeout_height.is_zero()
             && packet.timeout_height < current_height
         {
-            return Ok(true);
+            return Err(Error::InvalidPacket(format!(
+                "The packet has timed out: Timeout height {}, Current height \
+                 {}",
+                packet.timeout_height, current_height,
+            )));
         }
         // timeout timestamp
         let consensus_state =
@@ -286,8 +289,12 @@ where
             };
         let current_timestamp = consensus_state.timestamp();
         match current_timestamp.check_expiry(&packet.timeout_timestamp) {
-            Expiry::Expired => Ok(true),
-            Expiry::NotExpired => Ok(false),
+            Expiry::NotExpired => Ok(()),
+            Expiry::Expired => Err(Error::InvalidPacket(format!(
+                "The packet has timed out: Timeout timestamp {}, Current \
+                 timestamp {}",
+                packet.timeout_timestamp, current_timestamp
+            ))),
             Expiry::InvalidTimestamp => Err(Error::InvalidPacket(
                 "The timestamp of the packet is invalid".to_owned(),
             )),
