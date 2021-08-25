@@ -1,5 +1,6 @@
 use crate::cli::args;
 
+use aes_gcm::Aes256Gcm;
 use anoma::types::{
     address::Address,
     key::ed25519::{Keypair, PublicKey, PublicKeyHash},
@@ -73,7 +74,7 @@ impl Store {
             .map(|keypair| &keypair.0)
     }
 
-    pub fn insert_new_keypair(&mut self, alias: Option<Alias>) {
+    pub fn insert_new_keypair(&mut self, alias: Option<Alias>) -> Option<KP>{
         let keypair = Self::generate_keypair();
 
         let alias = alias.unwrap_or_else(|| {
@@ -82,18 +83,7 @@ impl Store {
             PublicKeyHash::from(public_key).into()
         });
 
-        let previous = self.keys.insert(alias, KP(keypair));
-
-        match previous {
-            None => self.save().unwrap(),
-            Some(keypair) => {
-                if show_overwrite_confirmation(&keypair.0) {
-                    self.save().unwrap();
-                } else {
-                    return ();
-                }
-            }
-        }
+        self.keys.insert(alias, KP(keypair))
     }
 
     fn generate_keypair() -> Keypair {
@@ -103,51 +93,148 @@ impl Store {
 
         Keypair::generate(&mut csprng)
     }
-
-    fn save(&self) -> std::io::Result<()> {
-        let mut file = File::create("anoma_store")?;
-
-        file.write_all(&self.try_to_vec().unwrap())?;
-
-        Ok(())
-    }
-
-    fn load() -> std::io::Result<Self> {
-        let file = File::open("anoma_store")?;
-
-        let mut reader = BufReader::new(file);
-        let mut buffer = Vec::new();
-
-        reader.read_to_end(&mut buffer)?;
-
-        Store::try_from_slice(&buffer)
-    }
 }
 
 fn show_overwrite_confirmation(_key: &Keypair) -> bool {
     false
 }
 
-// WIP
+#[derive(Debug)]
+pub struct StoreHandler {
+    store: Store,
+    nonce_bytes: [u8; 12],
+    password: String,
+}
+
+impl StoreHandler {
+    pub fn new(password: String) -> Self {
+        use rand::{thread_rng, Rng};
+
+        let mut rng = thread_rng();
+
+        let nonce_bytes: [u8; 12] = rng.gen();
+
+        Self {
+            store: Store::new(),
+            nonce_bytes,
+            password,
+        }
+    }
+
+    pub fn load(password: String, mut bytes: Vec<u8>) -> Self {
+        use aes_gcm::aead::Aead;
+        use aes_gcm::Nonce;
+
+        let cipher = Self::make_cipher(&password);
+
+        println!("{:?}", bytes);
+        let (nonce_bytes, encrypted_data) =
+            Self::split_nonce_encrypted_data(&mut bytes);
+        let nonce = Nonce::from_slice(nonce_bytes.as_ref());
+
+        println!("{:?}\n{:?}", nonce_bytes, encrypted_data);
+
+        let decrypted_data =
+            cipher.decrypt(nonce, encrypted_data.as_ref()).unwrap();
+
+        let store = Store::try_from_slice(decrypted_data.as_ref()).unwrap();
+
+        Self {
+            nonce_bytes,
+            password,
+            store,
+        }
+    }
+
+    pub fn save(&self) -> std::io::Result<()> {
+        use aes_gcm::aead::Aead;
+        use aes_gcm::Nonce;
+
+        let cipher = Self::make_cipher(&self.password);
+
+        println!("{:?}", self.nonce_bytes);
+
+        let nonce = Nonce::from_slice(&self.nonce_bytes);
+
+        let encoded_store = &self
+            .store
+            .try_to_vec()
+            .expect("Store encoding should not fail.");
+
+        let encrypted_data = cipher
+            .encrypt(nonce, encoded_store.as_ref())
+            .unwrap()
+            .try_to_vec()
+            .unwrap();
+
+        let mut file = File::create("anoma_store")?;
+
+        let persistent_data = [&self.nonce_bytes, &encrypted_data[..]].concat();
+
+        file.write_all(persistent_data.as_ref())?;
+
+        Ok(())
+    }
+
+    fn make_cipher(password: &str) -> Aes256Gcm {
+        use aes_gcm::aead::NewAead;
+        use aes_gcm::Key;
+        use argon2::Config;
+
+        let config = Config::default();
+
+        let hash =
+            argon2::hash_raw(password.as_bytes(), b"randomsalt", &config)
+                .unwrap();
+
+        let key = Key::from_slice(hash.as_ref());
+
+        Aes256Gcm::new(key)
+    }
+
+    fn split_nonce_encrypted_data(bytes: &mut Vec<u8>) -> ([u8; 12], Vec<u8>) {
+        use std::convert::TryInto;
+
+        let encrypted_data = bytes.split_off(12);
+        let nonce_bytes: [u8; 12] = (&bytes[0..12]).try_into().unwrap();
+
+        (nonce_bytes, encrypted_data)
+    }
+}
+
 pub fn generate_key(args: args::Generate) {
-    let store = Store::load();
+    let store = File::open("anoma_store");
 
     match store {
         Err(err) => match err.kind() {
             ErrorKind::NotFound => {
-                let mut st = Store::new();
-                insert_keypair_into_store(&mut st, args.alias);
+                println!("Seems like you don't have a store yet. You'll need to have one to use the wallet.");
+                println!("We're going to need you to input a password, so we can encrypt your store.");
+
+                let password = rpassword::read_password_from_tty(Some("Password: ")).unwrap_or_default();
+
+                let mut handler = StoreHandler::new(password);
+                insert_keypair_into_store(&mut handler, args.alias);
             }
             _ => {
                 println!("Error: {:?}", err)
             }
         },
-        Ok(mut st) => {
-            insert_keypair_into_store(&mut st, args.alias);
+        Ok(mut file) => {
+            let password = rpassword::read_password_from_tty(Some("Password: ")).unwrap_or_default();
+
+            let mut store_data = Vec::new();
+
+            file.read_to_end(&mut store_data).unwrap();
+
+            let mut handler = StoreHandler::load(password, store_data);
+
+            insert_keypair_into_store(&mut handler, args.alias);
         }
     }
 }
 
-fn insert_keypair_into_store(store: &mut Store, alias: Option<String>) {
-    store.insert_new_keypair(alias)
+fn insert_keypair_into_store(handler: &mut StoreHandler, alias: Option<Alias>) {
+    handler.store.insert_new_keypair(alias);
+    handler.save().unwrap();
 }
