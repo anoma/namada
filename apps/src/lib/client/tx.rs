@@ -87,7 +87,7 @@ async fn submit_tx(args: args::Tx, tx: Tx) {
     }
 }
 
-async fn broadcast_tx(
+pub async fn broadcast_tx(
     address: tendermint::net::Address,
     tx_bytes: Vec<u8>,
 ) -> Result<(), Error> {

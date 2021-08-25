@@ -13,15 +13,22 @@ pub mod tx_from_intent {
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
+        log_string(format!("starting apply_tx"));
         let signed =
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        log_string(format!("done signed"));
+
+        log_string(format!("{:?}", &signed.data));
+
         let tx_data =
-            intent::IntentTransfers::try_from_slice(&signed.data.unwrap()[..])
-                .unwrap();
+            intent::IntentTransfers::try_from_slice(&signed.data.unwrap()[..]);
+
         log_string(format!(
             "apply_tx called with intent transfers: {:#?}",
             tx_data
         ));
+
+        let tx_data = tx_data.unwrap();
 
         // make sure that the matchmaker has to validate this tx
         insert_verifier(address::matchmaker());
