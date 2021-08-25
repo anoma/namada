@@ -104,10 +104,14 @@ where
                 continue;
             }
 
-            let accepted = match Self::get_ibc_prefix(key) {
+            match Self::get_ibc_prefix(key) {
                 IbcPrefix::Client => {
                     if key.is_ibc_client_counter() {
-                        self.client_counter_pre()? < self.client_counter()
+                        if self.client_counter_pre()? >= self.client_counter() {
+                            return Err(Error::CounterError(
+                                "The client counter is invalid".to_owned(),
+                            ));
+                        }
                     } else {
                         let client_id = Self::get_client_id(key)?;
                         if !clients.insert(client_id.clone()) {
@@ -124,12 +128,12 @@ where
                 IbcPrefix::Port => self.validate_port(key)?,
                 IbcPrefix::Capability => self.validate_capability(key)?,
                 // TODO implement validations for modules
-                IbcPrefix::SeqSend => false,
-                IbcPrefix::SeqRecv => false,
-                IbcPrefix::SeqAck => false,
-                IbcPrefix::Commitment => false,
-                IbcPrefix::Receipt => false,
-                IbcPrefix::Ack => false,
+                IbcPrefix::SeqSend => continue,
+                IbcPrefix::SeqRecv => continue,
+                IbcPrefix::SeqAck => continue,
+                IbcPrefix::Commitment => continue,
+                IbcPrefix::Receipt => continue,
+                IbcPrefix::Ack => continue,
                 IbcPrefix::Unknown => {
                     return Err(Error::KeyError(format!(
                         "Invalid IBC-related key: {}",
@@ -137,9 +141,6 @@ where
                     )));
                 }
             };
-            if !accepted {
-                return Ok(false);
-            }
         }
 
         Ok(true)
