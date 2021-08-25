@@ -64,7 +64,7 @@ where
         &self,
         key: &Key,
         tx_data: &[u8],
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let port_channel_id = Self::get_port_channel_id(key)?;
         let packet = types::decode_packet(tx_data)?;
         let next_seq_pre = self
@@ -96,7 +96,7 @@ where
         &self,
         key: &Key,
         tx_data: &[u8],
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let port_channel_id = Self::get_port_channel_id(key)?;
         let data = PacketReceiptData::try_from_slice(tx_data)?;
         let packet = data.packet()?;
@@ -126,9 +126,7 @@ where
             ));
         }
 
-        if !self.validate_recv_packet(&port_channel_id, &packet)? {
-            return Ok(false);
-        }
+        self.validate_recv_packet(&port_channel_id, &packet)?;
 
         self.verify_recv_proof(&port_channel_id, &packet, &data.proofs()?)
     }
@@ -137,7 +135,7 @@ where
         &self,
         key: &Key,
         tx_data: &[u8],
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let port_channel_id = Self::get_port_channel_id(key)?;
         let data = PacketAckData::try_from_slice(tx_data)?;
         let packet = data.packet()?;
@@ -162,12 +160,12 @@ where
         if self.is_ordered_channel(&port_channel_id)?
             && packet.sequence != next_seq_pre
         {
-            return Ok(false);
+            return Err(Error::InvalidPacket(
+                "The packet sequence is invalid".to_owned(),
+            ));
         }
 
-        if !self.validate_ack_packet(&port_channel_id, &packet)? {
-            return Ok(false);
-        }
+        self.validate_ack_packet(&port_channel_id, &packet)?;
 
         self.verify_ack_proof(
             &port_channel_id,
@@ -181,7 +179,7 @@ where
         &self,
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         self.validate_packet(packet, Phase::Send)?;
 
         let key = (
@@ -190,17 +188,21 @@ where
             packet.sequence,
         );
         if self.get_packet_commitment(&key).is_none() {
-            return Ok(false);
+            return Err(Error::InvalidPacket(format!(
+                "The commitment doesn't exist: Port {}, Channel {}, Sequence \
+                 {}",
+                port_channel_id.0, port_channel_id.1, packet.sequence
+            )));
         }
 
-        Ok(true)
+        Ok(())
     }
 
     fn validate_recv_packet(
         &self,
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         self.validate_packet(packet, Phase::Recv)?;
 
         let key = (
@@ -222,14 +224,14 @@ where
             )));
         }
 
-        Ok(true)
+        Ok(())
     }
 
     fn validate_ack_packet(
         &self,
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         self.validate_packet(packet, Phase::Ack)?;
 
         let key = (
@@ -248,7 +250,7 @@ where
             ));
         }
 
-        Ok(true)
+        Ok(())
     }
 
     fn validate_packet_commitment(
@@ -274,7 +276,7 @@ where
         port_channel_id: &(PortId, ChannelId),
         packet: &Packet,
         proofs: &Proofs,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let channel = match self.channel_end(port_channel_id) {
             Some(c) => c,
             None => {
@@ -290,7 +292,7 @@ where
         let client_id = connection.client_id().clone();
 
         match verify_packet_recv_proofs(self, packet, client_id, proofs) {
-            Ok(_) => Ok(true),
+            Ok(_) => Ok(()),
             Err(e) => Err(Error::ProofVerificationFailure(e.to_string())),
         }
     }
@@ -301,7 +303,7 @@ where
         packet: &Packet,
         ack: Vec<u8>,
         proofs: &Proofs,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let channel = match self.channel_end(port_channel_id) {
             Some(c) => c,
             None => {
@@ -319,7 +321,7 @@ where
         match verify_packet_acknowledgement_proofs(
             self, packet, ack, client_id, proofs,
         ) {
-            Ok(_) => Ok(true),
+            Ok(_) => Ok(()),
             Err(e) => Err(Error::ProofVerificationFailure(e.to_string())),
         }
     }
