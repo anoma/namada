@@ -208,7 +208,7 @@ where
         let data = ConnectionOpenAckData::try_from_slice(tx_data)?;
 
         // version check
-        if conn.versions().contains(&data.version()?) {
+        if !conn.versions().contains(&data.version()?) {
             return Err(Error::InvalidVersion(
                 "The version is unsupported".to_owned(),
             ));
