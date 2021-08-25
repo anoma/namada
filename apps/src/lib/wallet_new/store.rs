@@ -2,12 +2,11 @@ use crate::cli::args;
 
 use anoma::types::{
     address::Address,
-    key::ed25519::{Keypair, PublicKey},
+    key::ed25519::{Keypair, PublicKey, PublicKeyHash},
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io;
 use std::io::{BufReader, ErrorKind, Read, Write};
 
 pub type Alias = String;
@@ -74,8 +73,14 @@ impl Store {
             .map(|keypair| &keypair.0)
     }
 
-    pub fn insert_new_keypair(&mut self, alias: Alias) {
+    pub fn insert_new_keypair(&mut self, alias: Option<Alias>) {
         let keypair = Self::generate_keypair();
+
+        let alias = alias.unwrap_or_else(|| {
+            let public_key = PublicKey::from(keypair.public);
+
+            PublicKeyHash::from(public_key).into()
+        });
 
         let previous = self.keys.insert(alias, KP(keypair));
 
@@ -144,14 +149,5 @@ pub fn generate_key(args: args::Generate) {
 }
 
 fn insert_keypair_into_store(store: &mut Store, alias: Option<String>) {
-    match alias {
-        None => {
-            let mut input = String::new();
-
-            println!("Please type an alias for your new keypair");
-            io::stdin().read_line(&mut input);
-            store.insert_new_keypair(input);
-        }
-        Some(str) => store.insert_new_keypair(str),
-    }
+    store.insert_new_keypair(alias)
 }

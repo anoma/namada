@@ -56,6 +56,12 @@ pub struct Signature(ed25519_dalek::Signature);
 )]
 pub struct PublicKeyHash(pub(crate) String);
 
+impl Into<String> for PublicKeyHash {
+    fn into(self) -> String {
+        self.0
+    }
+}
+
 const PK_STORAGE_KEY: &str = "ed25519_pk";
 
 /// Obtain a storage key for user's public key.
