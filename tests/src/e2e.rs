@@ -8,7 +8,7 @@ mod tests {
     use std::process::Command;
     use std::{fs, thread};
 
-    use anoma_apps::config::{Config, IntentGossiper};
+    use anoma_apps::config::{Config, IntentGossiper, Ledger};
     use assert_cmd::assert::OutputAssertExt;
     use assert_cmd::cargo::CommandCargoExt;
     use color_eyre::eyre::Result;
@@ -636,7 +636,7 @@ mod tests {
                 "token_buy": XAN,
                 "token_sell": BTC,
                 "rate_min": "2",
-                "vp_path": format!("{}/{}", working_dir.to_string_lossy(), VP_ALWAYS_FALSE_WASM)
+                "vp_path": format!("{}/{}", working_dir.to_string_lossy(), VP_ALWAYS_TRUE_WASM)
             }
         ]);
         let intent_b_json = json!([
@@ -724,16 +724,7 @@ mod tests {
         let mut session_gossip = spawn_command(base_node_gossip, Some(60_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        //  Start ledger
-        let mut session_ledger = spawn_command(base_node_ledger, Some(60_000))
-            .map_err(|e| eyre!(format!("{}", e)))?;
-
-        session_ledger
-            .exp_string("No state could be found")
-            .map_err(|e| eyre!(format!("{}", e)))?;
-        drop(session_ledger);
-
-        // Wait for ledger and gossip to start
+        // Wait gossip to start
         sleep(3);
 
         // cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent.A --topic "asset_v1"
@@ -792,6 +783,17 @@ mod tests {
             .exp_regex(".*trying to match new intent*")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
+        //  Start ledger
+        let mut session_ledger = spawn_command(base_node_ledger, Some(60_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session_ledger
+            .exp_string("No state could be found")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // Wait ledger to start
+        sleep(3);
+
         // Send intent C
         let mut send_intent_c = Command::cargo_bin("anomac")?;
         send_intent_c.args(&[
@@ -814,11 +816,6 @@ mod tests {
             .map_err(|e| eyre!(format!("{}", e)))?;
         drop(session_send_intent_c);
 
-        // check that the amount matched are correct
-        session_gossip
-            .exp_string("amounts: 100, 200, 70")
-            .map_err(|e| eyre!(format!("{}", e)))?;
-
         // check that the transfers transactions are correct
         session_gossip
             .exp_string("crafting transfer: Established: a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9, Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, 70")
@@ -832,8 +829,9 @@ mod tests {
             .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
-        session_gossip
-            .exp_regex(".*Mempool validation passed*")
+        // check that the intent vp passes evaluation
+        session_ledger
+            .exp_string("eval result: true")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
@@ -866,7 +864,15 @@ mod tests {
         while index < n_of_peers {
             let node_path = path.join(format!("anoma-{}", index));
 
+            let mut ledger_config = Ledger::default();
+            ledger_config.tendermint =
+                node_path.join("tendermint").to_path_buf();
+            ledger_config.db = node_path.join("db").to_path_buf();
+
             let mut config = Config::default();
+
+            config.ledger = Some(ledger_config);
+
             let info = build_peers(index, node_dirs.clone());
 
             let gossiper_config = IntentGossiper::default_with_address(

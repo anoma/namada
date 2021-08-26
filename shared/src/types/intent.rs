@@ -77,9 +77,12 @@ pub struct IntentTransfers {
     pub intents: HashMap<Address, Signed<FungibleTokenIntent>>,
 }
 
+#[cfg(any(test, feature = "testing"))]
 impl PartialEq for IntentTransfers {
     fn eq(&self, other: &Self) -> bool {
-        return self.exchanges == other.exchanges;
+        return self.exchanges == other.exchanges
+            && self.transfers == other.transfers
+            && self.intents == other.intents;
     }
 }
 
@@ -339,7 +342,14 @@ mod tests {
             max_sell: token::Amount::from(1),
             min_buy: token::Amount::from(100),
             rate_min: DecimalWrapper::from_str("10").unwrap(),
-            vp: None,
+            vp: Some(
+                std::fs::read(format!(
+                    "{}/../{}",
+                    working_dir.to_string_lossy(),
+                    VP_ALWAYS_TRUE_WASM
+                ))
+                .unwrap(),
+            ),
         };
 
         let signed_exchange_one = Signed::new(&bertha_keypair, exchange_one);

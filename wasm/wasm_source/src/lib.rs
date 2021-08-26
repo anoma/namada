@@ -16,17 +16,9 @@ pub mod tx_from_intent {
         log_string(format!("starting apply_tx"));
         let signed =
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-        log_string(format!("done signed"));
-
-        log_string(format!("{:?}", &signed.data));
 
         let tx_data =
             intent::IntentTransfers::try_from_slice(&signed.data.unwrap()[..]);
-
-        log_string(format!(
-            "apply_tx called with intent transfers: {:#?}",
-            tx_data
-        ));
 
         let tx_data = tx_data.unwrap();
 
@@ -64,7 +56,7 @@ pub mod tx_transfer {
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
         let transfer =
             token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
-        log_string(format!("apply_tx called with transfer: {:#?}", transfer));
+        // log_string(format!("apply_tx called with transfer: {:#?}", transfer));
         let token::Transfer {
             source,
             target,
@@ -89,7 +81,7 @@ pub mod tx_update_vp {
         let update_vp =
             transaction::UpdateVp::try_from_slice(&signed.data.unwrap()[..])
                 .unwrap();
-        log_string(format!("update VP for: {:#?}", update_vp.addr));
+        // log_string(format!("update VP for: {:#?}", update_vp.addr));
         update_validity_predicate(update_vp.addr, update_vp.vp_code)
     }
 }
@@ -106,11 +98,11 @@ pub mod vp_token {
         keys_changed: HashSet<storage::Key>,
         verifiers: HashSet<Address>,
     ) -> bool {
-        log_string(format!(
-            "validate_tx called with token addr: {}, key_changed: {:#?}, \
-             tx_data: {:#?}, verifiers: {:?}",
-            addr, keys_changed, tx_data, verifiers
-        ));
+        // log_string(format!(
+        //     "validate_tx called with token addr: {}, key_changed: {:#?}, \
+        //      tx_data: {:#?}, verifiers: {:?}",
+        //     addr, keys_changed, tx_data, verifiers
+        // ));
 
         token::vp(&addr, &keys_changed, &verifiers)
     }
@@ -127,7 +119,7 @@ pub mod mm_filter_token_exch {
         // TODO: check if signature is valid
         let intent = decode_intent_data(intent);
         if intent.is_some() {
-            log_string(format!(r#"intent {:#?} is valid"#, intent));
+            // log_string(format!(r#"intent {:#?} is valid"#, intent));
             true
         } else {
             false
