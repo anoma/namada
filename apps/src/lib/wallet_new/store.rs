@@ -1,12 +1,11 @@
 use crate::cli::args;
 
-use aes_gcm::Aes256Gcm;
 use anoma::types::{
     address::Address,
     key::ed25519::{Keypair, PublicKey, PublicKeyHash},
 };
 use borsh::{BorshDeserialize, BorshSerialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, num::NonZeroU32};
 use std::fs::File;
 use std::io::{BufReader, ErrorKind, Read, Write};
 
@@ -121,51 +120,58 @@ impl StoreHandler {
         }
     }
 
-    pub fn load(password: String, mut bytes: Vec<u8>) -> Self {
-        use aes_gcm::aead::Aead;
-        use aes_gcm::Nonce;
+    // pub fn load(password: String, mut bytes: Vec<u8>) -> Self {
+    //     let cipher = Self::make_cipher(&password);
 
-        let cipher = Self::make_cipher(&password);
+    //     println!("{:?}", bytes);
+    //     let (nonce_bytes, encrypted_data) =
+    //         Self::split_nonce_encrypted_data(&mut bytes);
+    //     let nonce = Nonce::from_slice(nonce_bytes.as_ref());
 
-        println!("{:?}", bytes);
-        let (nonce_bytes, encrypted_data) =
-            Self::split_nonce_encrypted_data(&mut bytes);
-        let nonce = Nonce::from_slice(nonce_bytes.as_ref());
+    //     println!("{:?}\n{:?}", nonce_bytes, encrypted_data);
 
-        println!("{:?}\n{:?}", nonce_bytes, encrypted_data);
+    //     let decrypted_data =
+    //         cipher.decrypt(nonce, encrypted_data.as_ref()).unwrap();
 
-        let decrypted_data =
-            cipher.decrypt(nonce, encrypted_data.as_ref()).unwrap();
+    //     let store = Store::try_from_slice(decrypted_data.as_ref()).unwrap();
 
-        let store = Store::try_from_slice(decrypted_data.as_ref()).unwrap();
-
-        Self {
-            nonce_bytes,
-            password,
-            store,
-        }
-    }
+    //     Self {
+    //         nonce_bytes,
+    //         password,
+    //         store,
+    //     }
+    // }
 
     pub fn save(&self) -> std::io::Result<()> {
-        use aes_gcm::aead::Aead;
-        use aes_gcm::Nonce;
+        use ring::aead::*;
+        use ring::pbkdf2::*;
+        use ring::rand::SystemRandom;
 
-        let cipher = Self::make_cipher(&self.password);
+        let password = self.password.as_bytes();
 
-        println!("{:?}", self.nonce_bytes);
+        let salt = b"randomsalt";
 
-        let nonce = Nonce::from_slice(&self.nonce_bytes);
+        let mut key = [0; 32];
 
-        let encoded_store = &self
-            .store
-            .try_to_vec()
-            .expect("Store encoding should not fail.");
+        let iterations = NonZeroU32::new(100).unwrap();
 
-        let encrypted_data = cipher
-            .encrypt(nonce, encoded_store.as_ref())
-            .unwrap()
-            .try_to_vec()
-            .unwrap();
+        derive(PBKDF2_HMAC_SHA256, iterations, salt, &password, &mut key);
+
+        let content: Vec<u8> = self.store.try_to_vec().expect("Content serialization should not fail");
+
+        let mut in_out = content.clone();
+
+        for _ in 0..CHACHA20_POLY1305.tag_len() {
+            in_out.push(0);
+        }
+
+        let mut nonce = Nonce::assume_unique_for_key(self.nonce_bytes);
+
+
+        let sealing_key = SealingKey::new(&CHACHA20_POLY1305, &key);
+
+        let output_size = seal_in_place(&sealing_key, &nonce, [], &mut in_out,
+                                        CHACHA20_POLY1305.tag_len()).unwrap();
 
         let mut file = File::create("anoma_store")?;
 
@@ -174,22 +180,6 @@ impl StoreHandler {
         file.write_all(persistent_data.as_ref())?;
 
         Ok(())
-    }
-
-    fn make_cipher(password: &str) -> Aes256Gcm {
-        use aes_gcm::aead::NewAead;
-        use aes_gcm::Key;
-        use argon2::Config;
-
-        let config = Config::default();
-
-        let hash =
-            argon2::hash_raw(password.as_bytes(), b"randomsalt", &config)
-                .unwrap();
-
-        let key = Key::from_slice(hash.as_ref());
-
-        Aes256Gcm::new(key)
     }
 
     fn split_nonce_encrypted_data(bytes: &mut Vec<u8>) -> ([u8; 12], Vec<u8>) {
