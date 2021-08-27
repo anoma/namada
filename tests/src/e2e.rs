@@ -671,7 +671,11 @@ mod tests {
         base_node_gossip.args(&["--base-dir", first_node_dir, "gossip"]);
 
         let mut base_node_ledger = Command::cargo_bin("anoman")?;
-        base_node_ledger.args(&["--base-dir", first_node_dir, "ledger"]);
+        base_node_ledger.current_dir(&working_dir).args(&[
+            "--base-dir",
+            first_node_dir,
+            "ledger",
+        ]);
 
         // Craft intents
         // cargo run --bin anomac -- craft-intent --key $BERTHA
@@ -722,6 +726,14 @@ mod tests {
 
         //  Start gossip
         let mut session_gossip = spawn_command(base_node_gossip, Some(60_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        //  Start ledger
+        let mut session_ledger = spawn_command(base_node_ledger, Some(60_000))
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        session_ledger
+            .exp_string("No state could be found")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         // Wait gossip to start
@@ -782,17 +794,6 @@ mod tests {
         session_gossip
             .exp_regex(".*trying to match new intent*")
             .map_err(|e| eyre!(format!("{}", e)))?;
-
-        //  Start ledger
-        let mut session_ledger = spawn_command(base_node_ledger, Some(60_000))
-            .map_err(|e| eyre!(format!("{}", e)))?;
-
-        session_ledger
-            .exp_string("No state could be found")
-            .map_err(|e| eyre!(format!("{}", e)))?;
-
-        // Wait ledger to start
-        sleep(3);
 
         // Send intent C
         let mut send_intent_c = Command::cargo_bin("anomac")?;
@@ -864,12 +865,12 @@ mod tests {
         while index < n_of_peers {
             let node_path = path.join(format!("anoma-{}", index));
 
+            let mut config = Config::default();
+
             let mut ledger_config = Ledger::default();
             ledger_config.tendermint =
                 node_path.join("tendermint").to_path_buf();
             ledger_config.db = node_path.join("db").to_path_buf();
-
-            let mut config = Config::default();
 
             config.ledger = Some(ledger_config);
 
