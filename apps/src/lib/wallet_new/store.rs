@@ -1,7 +1,7 @@
 use crate::cli::args;
 
 use anoma::types::{
-    address::Address,
+    address::{Address, ImplicitAddress},
     key::ed25519::{Keypair, PublicKey, PublicKeyHash},
 };
 
@@ -79,11 +79,16 @@ impl Store {
     pub fn insert_new_keypair(&mut self, alias: Option<Alias>) -> Option<KP> {
         let keypair = Self::generate_keypair();
 
-        let alias = alias.unwrap_or_else(|| {
-            let public_key = PublicKey::from(keypair.public);
+        let public_key_hash: PublicKeyHash =
+            PublicKey::from(keypair.public).into();
 
-            PublicKeyHash::from(public_key).into()
-        });
+        let address = Address::Implicit(ImplicitAddress::Ed25519(
+            public_key_hash.clone(),
+        ));
+
+        let alias = alias.unwrap_or_else(|| public_key_hash.into());
+
+        self.addresses.insert(alias.clone(), address);
 
         self.keys.insert(alias, KP(keypair))
     }
@@ -135,6 +140,8 @@ impl StoreHandler {
         password: String,
         encrypted_data: Vec<u8>,
     ) -> Result<Self, Error> {
+        println!("Decrypting your store...");
+
         let (salt, cipher) = encrypted_data.split_at(16);
 
         let salt = kdf::Salt::from_slice(&salt)
@@ -160,6 +167,8 @@ impl StoreHandler {
     }
 
     pub fn save(&self) -> std::io::Result<()> {
+        println!("Encrypting your store...");
+
         let secret_key = kdf::Password::from_slice(&self.password.as_bytes())
             .and_then(|password| {
                 kdf::derive_key(&password, &self.salt, 3, 1 << 16, 32)
@@ -223,7 +232,50 @@ pub fn generate_key(args: args::Generate) {
     }
 }
 
+enum ConfirmationResponse {
+    Overwrite,
+    Cancel,
+}
+
 fn insert_keypair_into_store(handler: &mut StoreHandler, alias: Option<Alias>) {
-    handler.store.insert_new_keypair(alias);
-    handler.save().unwrap();
+    println!(
+        "Creating keypair and address with {} as alias",
+        alias.as_ref().unwrap_or(&"its public key hash".to_string())
+    );
+
+    match handler.store.insert_new_keypair(alias) {
+        None => handler.save().unwrap(),
+        Some(_) => match show_overwrite_confirmation() {
+            ConfirmationResponse::Overwrite => {
+                handler.save().unwrap();
+                println!("Key and address overwritten successfully.");
+            }
+            _ => println!("Key creation cancelled."),
+        },
+    }
+}
+
+fn show_overwrite_confirmation() -> ConfirmationResponse {
+    use std::io;
+
+    println!(
+        "You're trying to create an alias that already exists in your store."
+    );
+    print!("Would you like to replace it? [y/N]: ");
+
+    io::stdout().flush().unwrap();
+
+    for byte in io::stdin().lock().bytes() {
+        match byte.unwrap() {
+            b'y' | b'Y' => return ConfirmationResponse::Overwrite,
+            b'n' | b'N' | b'\n' => return ConfirmationResponse::Cancel,
+            _ => {
+                print!("Invalid option.");
+                io::stdout().flush().unwrap();
+                return show_overwrite_confirmation();
+            }
+        }
+    }
+
+    return ConfirmationResponse::Cancel;
 }
