@@ -62,7 +62,13 @@ pub struct Exchange {
 
 /// These are transfers crafted from matched [`Exchange`]s.
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    PartialEq,
 )]
 pub struct IntentTransfers {
     /// Transfers crafted from the matched intents
@@ -77,14 +83,14 @@ pub struct IntentTransfers {
     pub intents: HashMap<Address, Signed<FungibleTokenIntent>>,
 }
 
-#[cfg(any(test, feature = "testing"))]
-impl PartialEq for IntentTransfers {
-    fn eq(&self, other: &Self) -> bool {
-        self.exchanges == other.exchanges
-            && self.transfers == other.transfers
-            && self.intents == other.intents
-    }
-}
+// #[cfg(any(test, feature = "testing"))]
+// impl PartialEq for IntentTransfers {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.exchanges == other.exchanges
+//             && self.transfers == other.transfers
+//             && self.intents == other.intents
+//     }
+// }
 
 /// Struct holding a safe rapresentation of a float
 #[derive(
