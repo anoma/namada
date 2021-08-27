@@ -168,7 +168,7 @@ fn check_intent(
     addr: &Address,
     exchange: &Signed<Exchange>,
     intent: &Signed<FungibleTokenIntent>,
-    intent_transfers: &Vec<u8>,
+    intent_transfers: &[u8],
 ) -> bool {
     // verify signature
     let pk = key::ed25519::get(addr);
