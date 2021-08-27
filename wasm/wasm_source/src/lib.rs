@@ -13,7 +13,6 @@ pub mod tx_from_intent {
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
-        log_string(format!("starting apply_tx"));
         let signed =
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
 
@@ -56,7 +55,8 @@ pub mod tx_transfer {
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
         let transfer =
             token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
-        // log_string(format!("apply_tx called with transfer: {:#?}", transfer));
+        // log_string(format!("apply_tx called with transfer: {:#?}",
+        // transfer));
         let token::Transfer {
             source,
             target,
@@ -93,7 +93,7 @@ pub mod vp_token {
 
     #[validity_predicate]
     fn validate_tx(
-        tx_data: Vec<u8>,
+        _tx_data: Vec<u8>,
         addr: Address,
         keys_changed: HashSet<storage::Key>,
         verifiers: HashSet<Address>,
@@ -118,12 +118,7 @@ pub mod mm_filter_token_exch {
     fn validate_intent(intent: Vec<u8>) -> bool {
         // TODO: check if signature is valid
         let intent = decode_intent_data(intent);
-        if intent.is_some() {
-            // log_string(format!(r#"intent {:#?} is valid"#, intent));
-            true
-        } else {
-            false
-        }
+        intent.is_some()
     }
 
     fn decode_intent_data(bytes: Vec<u8>) -> Option<FungibleTokenIntent> {

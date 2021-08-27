@@ -522,13 +522,11 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use anoma::types::intent::DecimalWrapper;
-    use serde::Deserialize;
-
     use anoma::types::address::Address;
-    use anoma::types::intent::Exchange;
+    use anoma::types::intent::{DecimalWrapper, Exchange};
     use anoma::types::token;
     use libp2p::Multiaddr;
+    use serde::Deserialize;
 
     use super::utils::*;
     use super::ArgMatches;

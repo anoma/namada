@@ -867,12 +867,11 @@ mod tests {
 
             let mut config = Config::default();
 
-            let mut ledger_config = Ledger::default();
-            ledger_config.tendermint =
-                node_path.join("tendermint").to_path_buf();
-            ledger_config.db = node_path.join("db").to_path_buf();
-
-            config.ledger = Some(ledger_config);
+            let _ledger_config = Ledger {
+                tendermint: node_path.join("tendermint").to_path_buf(),
+                db: node_path.join("db").to_path_buf(),
+                ..Default::default()
+            };
 
             let info = build_peers(index, node_dirs.clone());
 

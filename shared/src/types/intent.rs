@@ -80,9 +80,9 @@ pub struct IntentTransfers {
 #[cfg(any(test, feature = "testing"))]
 impl PartialEq for IntentTransfers {
     fn eq(&self, other: &Self) -> bool {
-        return self.exchanges == other.exchanges
+        self.exchanges == other.exchanges
             && self.transfers == other.transfers
-            && self.intents == other.intents;
+            && self.intents == other.intents
     }
 }
 
@@ -215,14 +215,15 @@ pub fn is_invalid_intent_key(key: &Key) -> Option<&Address> {
 
 #[cfg(test)]
 mod tests {
+    use std::array::IntoIter;
     use std::env;
-    use std::{array::IntoIter, iter::FromIterator};
+    use std::iter::FromIterator;
+
+    use constants::*;
 
     use super::*;
-    use crate::ledger::storage::types::decode;
-    use crate::ledger::storage::types::encode;
+    use crate::ledger::storage::types::{decode, encode};
     use crate::types::key::ed25519;
-    use constants::*;
     // use crate::{config, wallet};
     // use anoma_apps::{cli, wallet};
 
@@ -268,9 +269,7 @@ mod tests {
                 Signed::new(
                     &bertha_keypair,
                     FungibleTokenIntent {
-                        exchange: HashSet::from_iter(vec![
-                            signed_exchange_one.clone()
-                        ]),
+                        exchange: HashSet::from_iter(vec![signed_exchange_one]),
                     },
                 ),
             ),
@@ -279,9 +278,7 @@ mod tests {
                 Signed::new(
                     &albert_keypair,
                     FungibleTokenIntent {
-                        exchange: HashSet::from_iter(vec![
-                            signed_exchange_two.clone()
-                        ]),
+                        exchange: HashSet::from_iter(vec![signed_exchange_two]),
                     },
                 ),
             ),
@@ -295,8 +292,8 @@ mod tests {
                 amount: token::Amount::from(100),
             },
             token::Transfer {
-                source: albert_addr.clone(),
-                target: bertha_addr.clone(),
+                source: albert_addr,
+                target: bertha_addr,
                 token: Address::from_str(XAN).unwrap(),
                 amount: token::Amount::from(1),
             },
@@ -367,9 +364,7 @@ mod tests {
                 Signed::new(
                     &bertha_keypair,
                     FungibleTokenIntent {
-                        exchange: HashSet::from_iter(vec![
-                            signed_exchange_one.clone()
-                        ]),
+                        exchange: HashSet::from_iter(vec![signed_exchange_one]),
                     },
                 ),
             ),
@@ -378,9 +373,7 @@ mod tests {
                 Signed::new(
                     &albert_keypair,
                     FungibleTokenIntent {
-                        exchange: HashSet::from_iter(vec![
-                            signed_exchange_two.clone()
-                        ]),
+                        exchange: HashSet::from_iter(vec![signed_exchange_two]),
                     },
                 ),
             ),
@@ -394,8 +387,8 @@ mod tests {
                 amount: token::Amount::from(100),
             },
             token::Transfer {
-                source: albert_addr.clone(),
-                target: bertha_addr.clone(),
+                source: albert_addr,
+                target: bertha_addr,
                 token: Address::from_str(XAN).unwrap(),
                 amount: token::Amount::from(1),
             },
