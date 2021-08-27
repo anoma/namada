@@ -4,10 +4,13 @@ use anoma::types::{
     address::Address,
     key::ed25519::{Keypair, PublicKey, PublicKeyHash},
 };
-use borsh::{BorshDeserialize, BorshSerialize};
-use std::{collections::HashMap, num::NonZeroU32};
+
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read, Write};
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use orion::{aead, kdf};
 
 pub type Alias = String;
 
@@ -73,7 +76,7 @@ impl Store {
             .map(|keypair| &keypair.0)
     }
 
-    pub fn insert_new_keypair(&mut self, alias: Option<Alias>) -> Option<KP>{
+    pub fn insert_new_keypair(&mut self, alias: Option<Alias>) -> Option<KP> {
         let keypair = Self::generate_keypair();
 
         let alias = alias.unwrap_or_else(|| {
@@ -94,101 +97,90 @@ impl Store {
     }
 }
 
-fn show_overwrite_confirmation(_key: &Keypair) -> bool {
-    false
-}
-
 #[derive(Debug)]
 pub struct StoreHandler {
     store: Store,
-    nonce_bytes: [u8; 12],
     password: String,
+    salt: orion::kdf::Salt,
+}
+
+pub enum Error {
+    DecryptionError,
+    DeserializingError,
+}
+
+impl Error {
+    pub fn print(&self) {
+        use Error::*;
+
+        match self {
+            DecryptionError => eprint!("There was an error decrypting your storage file. Are you sure you password is correct?"),
+            DeserializingError => eprintln!("There was an error deserializing your file. This means that either your storage file is invalid or was corrupted.")
+        }
+    }
 }
 
 impl StoreHandler {
     pub fn new(password: String) -> Self {
-        use rand::{thread_rng, Rng};
-
-        let mut rng = thread_rng();
-
-        let nonce_bytes: [u8; 12] = rng.gen();
+        let salt = kdf::Salt::default();
 
         Self {
             store: Store::new(),
-            nonce_bytes,
             password,
+            salt,
         }
     }
 
-    // pub fn load(password: String, mut bytes: Vec<u8>) -> Self {
-    //     let cipher = Self::make_cipher(&password);
+    pub fn load(
+        password: String,
+        encrypted_data: Vec<u8>,
+    ) -> Result<Self, Error> {
+        let (salt, cipher) = encrypted_data.split_at(16);
 
-    //     println!("{:?}", bytes);
-    //     let (nonce_bytes, encrypted_data) =
-    //         Self::split_nonce_encrypted_data(&mut bytes);
-    //     let nonce = Nonce::from_slice(nonce_bytes.as_ref());
+        let salt = kdf::Salt::from_slice(&salt)
+            .map_err(|_| Error::DeserializingError)?;
 
-    //     println!("{:?}\n{:?}", nonce_bytes, encrypted_data);
+        let secret_key = kdf::Password::from_slice(&password.as_bytes())
+            .and_then(|password| {
+                kdf::derive_key(&password, &salt, 3, 1 << 16, 32)
+            })
+            .expect("Generation of Secret Key shouldn't faile");
 
-    //     let decrypted_data =
-    //         cipher.decrypt(nonce, encrypted_data.as_ref()).unwrap();
+        let decrypted_data = aead::open(&secret_key, cipher)
+            .map_err(|_| Error::DecryptionError)?;
 
-    //     let store = Store::try_from_slice(decrypted_data.as_ref()).unwrap();
+        let store = Store::try_from_slice(&decrypted_data)
+            .map_err(|_| Error::DeserializingError)?;
 
-    //     Self {
-    //         nonce_bytes,
-    //         password,
-    //         store,
-    //     }
-    // }
+        Ok(Self {
+            store,
+            password,
+            salt,
+        })
+    }
 
     pub fn save(&self) -> std::io::Result<()> {
-        use ring::aead::*;
-        use ring::pbkdf2::*;
-        use ring::rand::SystemRandom;
+        let secret_key = kdf::Password::from_slice(&self.password.as_bytes())
+            .and_then(|password| {
+                kdf::derive_key(&password, &self.salt, 3, 1 << 16, 32)
+            })
+            .expect("Generation of Secret Key shouldn't fail");
 
-        let password = self.password.as_bytes();
+        let data = self
+            .store
+            .try_to_vec()
+            .expect("Serializing of store shouldn't fail");
 
-        let salt = b"randomsalt";
+        let encrypted_data = aead::seal(&secret_key, &data)
+            .expect("Encryption of data shouldn't fail");
 
-        let mut key = [0; 32];
-
-        let iterations = NonZeroU32::new(100).unwrap();
-
-        derive(PBKDF2_HMAC_SHA256, iterations, salt, &password, &mut key);
-
-        let content: Vec<u8> = self.store.try_to_vec().expect("Content serialization should not fail");
-
-        let mut in_out = content.clone();
-
-        for _ in 0..CHACHA20_POLY1305.tag_len() {
-            in_out.push(0);
-        }
-
-        let mut nonce = Nonce::assume_unique_for_key(self.nonce_bytes);
-
-
-        let sealing_key = SealingKey::new(&CHACHA20_POLY1305, &key);
-
-        let output_size = seal_in_place(&sealing_key, &nonce, [], &mut in_out,
-                                        CHACHA20_POLY1305.tag_len()).unwrap();
+        let file_data = [self.salt.as_ref(), &encrypted_data].concat();
 
         let mut file = File::create("anoma_store")?;
 
-        let persistent_data = [&self.nonce_bytes, &encrypted_data[..]].concat();
-
-        file.write_all(persistent_data.as_ref())?;
+        file.write_all(file_data.as_ref())?;
 
         Ok(())
-    }
-
-    fn split_nonce_encrypted_data(bytes: &mut Vec<u8>) -> ([u8; 12], Vec<u8>) {
-        use std::convert::TryInto;
-
-        let encrypted_data = bytes.split_off(12);
-        let nonce_bytes: [u8; 12] = (&bytes[0..12]).try_into().unwrap();
-
-        (nonce_bytes, encrypted_data)
     }
 }
 
@@ -201,25 +193,32 @@ pub fn generate_key(args: args::Generate) {
                 println!("Seems like you don't have a store yet. You'll need to have one to use the wallet.");
                 println!("We're going to need you to input a password, so we can encrypt your store.");
 
-                let password = rpassword::read_password_from_tty(Some("Password: ")).unwrap_or_default();
+                let password =
+                    rpassword::read_password_from_tty(Some("Password: "))
+                        .unwrap_or_default();
 
                 let mut handler = StoreHandler::new(password);
                 insert_keypair_into_store(&mut handler, args.alias);
             }
             _ => {
-                println!("Error: {:?}", err)
+                eprintln!("Error: {:?}", err)
             }
         },
         Ok(mut file) => {
-            let password = rpassword::read_password_from_tty(Some("Password: ")).unwrap_or_default();
+            let password =
+                rpassword::read_password_from_tty(Some("Password: "))
+                    .unwrap_or_default();
 
             let mut store_data = Vec::new();
 
             file.read_to_end(&mut store_data).unwrap();
 
-            let mut handler = StoreHandler::load(password, store_data);
-
-            insert_keypair_into_store(&mut handler, args.alias);
+            match StoreHandler::load(password, store_data) {
+                Ok(mut handler) => {
+                    insert_keypair_into_store(&mut handler, args.alias)
+                }
+                Err(error) => error.print(),
+            }
         }
     }
 }

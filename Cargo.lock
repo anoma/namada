@@ -144,6 +144,7 @@ dependencies = [
  "jsonpath_lib",
  "libc",
  "libp2p",
+ "orion",
  "proptest 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "prost 0.8.0",
  "prost-types 0.8.0",
@@ -151,7 +152,6 @@ dependencies = [
  "rand_core 0.5.1",
  "rayon",
  "regex",
- "ring",
  "rocksdb",
  "rpassword",
  "serde 1.0.127",
@@ -1223,6 +1223,12 @@ dependencies = [
  "generic-array 0.14.4",
  "subtle 2.4.1",
 ]
+
+[[package]]
+name = "ct-codecs"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3b7eb4404b8195a9abb6356f4ac07d8ba267045c8d6d220ac4dc992e6cc75df"
 
 [[package]]
 name = "ct-logs"
@@ -3618,6 +3624,18 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "orion"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "118f94b4ca56d1eb99466a26a216b87fad822a51af8b308264c88a9337eb0a15"
+dependencies = [
+ "ct-codecs",
+ "getrandom 0.2.3",
+ "subtle 2.4.1",
+ "zeroize",
 ]
 
 [[package]]
