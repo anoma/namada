@@ -129,7 +129,9 @@ fn validate_tx(
 fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
     match SignedTxData::try_from_slice(tx_data) {
         Ok(tx) => {
-            match IntentTransfers::try_from_slice(&tx.data.unwrap()[..]) {
+            match IntentTransfers::try_from_slice(
+                &tx.data.as_ref().unwrap()[..],
+            ) {
                 Ok(tx_data) => {
                     log_string(format!(
                         "tx_data.exchanges: {:?}, {}",
@@ -142,7 +144,12 @@ fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
                              linked fungibletokenintent.",
                         );
                         log_string("check intent".to_string());
-                        check_intent(addr, exchange, intent_data)
+                        check_intent(
+                            addr,
+                            exchange,
+                            intent_data,
+                            &tx.data.unwrap(),
+                        )
                     } else {
                         log_string(
                             "no intent with a matching address".to_string(),
@@ -161,6 +168,7 @@ fn check_intent(
     addr: &Address,
     exchange: &Signed<Exchange>,
     intent: &Signed<FungibleTokenIntent>,
+    intent_transfers: &Vec<u8>,
 ) -> bool {
     // verify signature
     let pk = key::ed25519::get(addr);
@@ -192,7 +200,7 @@ fn check_intent(
     log_string(format!("vp is: {}", vp.is_some()));
 
     if let Some(code) = vp {
-        let eval_result = eval(code.to_vec(), vec![]);
+        let eval_result = eval(code.to_vec(), intent_transfers.to_vec());
         log_string(format!("eval result: {}", eval_result));
         if !eval_result {
             return false;

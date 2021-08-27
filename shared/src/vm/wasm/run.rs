@@ -31,7 +31,7 @@ const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
 const MATCHMAKER_ENTRYPOINT: &str = "_match_intent";
 const FILTER_ENTRYPOINT: &str = "_validate_intent";
-const WASM_STACK_LIMIT: u32 = u32::MAX as u32;
+const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
