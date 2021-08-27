@@ -86,18 +86,6 @@ impl Tx {
     }
 }
 
-pub struct Fee {
-    amount: Amount,
-    token: Address,
-}
-
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct EncryptedTx {
-    pub pk: PublicKey,
-    pub fee: Fee
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct IntentGossipMessage {
     pub intent: Intent,

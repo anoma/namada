@@ -297,6 +297,7 @@ impl Shell {
         _req: shim::request::ExtendVote,
     ) -> shim::response::ExtendVote {
         Default::default()
+    }
 
     /// Validate and apply transactions.
     pub fn finalize_block(
@@ -410,7 +411,7 @@ impl Shell {
             &mut write_log,
             &self.storage,
         )
-        .map_err(Error::TxError)
+        .map_err(Error::TxApply)
         {
             Ok(result) => response.info = result.to_string(),
             Err(error) => {
@@ -482,38 +483,38 @@ impl Shell {
             }
         }
     }
-
-    /// Check the fees and signatures of the fee payer for a transaction
-    fn preprocess_tx(pk: &PublicKey, fee: &Fee, sig: &Signature) -> bool {
-        verify_signature_raw(pk, fee,  sig)?;
-        let fee_payer_addr = Address::from(pk);
-        if self.retrieve_balance(pk.into()) < fee {
-
-        }
-    }
-
-    /// Given an address and a type of token, look up the balance of that token at
-    /// the specified address. Charges gas
-    fn retrieve_balance(&mut self, addr: &Address) -> Result<Amount> {
-        let key = balance_key(&xan(), addr);
-        // try to read from the write log first
-        let (log_val, gas) = self.write_log.read(&key);
-        self.gas_meter.add(gas)?;
-        match log_val {
-            Some(&StorageModification::Write { ref value }) |
-            Some(&StorageModification::InitAccount {
-                vp: ref value, ..
-            })=> {
-                BorshDeserialize::try_from_slice(&value).map_err(Error::WriteLog)
-            }
-            _ => {
-                // when not found in write log, try to read from the storage
-                let (value, gas) = self.storage.read(&key)?;
-                self.gas_meter.add(gas)?;
-                value
-                    .map(|v| BorshDeserialize::try_from_slice(&v).map_err(Error::WriteLog))
-                    .unwrap_or(Err(Error::MissingAddress(addr.encode())))
-            }
-        }
-    }
 }
+// Check the fees and signatures of the fee payer for a transaction
+// fn preprocess_tx(pk: &PublicKey, fee: &Fee, sig: &Signature) -> bool {
+// verify_signature_raw(pk, fee,  sig)?;
+// let fee_payer_addr = Address::from(pk);
+// if self.retrieve_balance(pk.into()) < fee {
+//
+// }
+// }
+//
+// Given an address and a type of token, look up the balance of that token at
+// the specified address. Charges gas
+// fn retrieve_balance(&mut self, addr: &Address) -> Result<Amount> {
+// let key = balance_key(&xan(), addr);
+// try to read from the write log first
+// let (log_val, gas) = self.write_log.read(&key);
+// self.gas_meter.add(gas)?;
+// match log_val {
+// Some(&StorageModification::Write { ref value }) |
+// Some(&StorageModification::InitAccount {
+// vp: ref value, ..
+// })=> {
+// BorshDeserialize::try_from_slice(&value).map_err(Error::WriteLog)
+// }
+// _ => {
+// when not found in write log, try to read from the storage
+// let (value, gas) = self.storage.read(&key)?;
+// self.gas_meter.add(gas)?;
+// value
+// .map(|v| BorshDeserialize::try_from_slice(&v).map_err(Error::WriteLog))
+// .unwrap_or(Err(Error::MissingAddress(addr.encode())))
+// }
+// }
+// }
+// }
