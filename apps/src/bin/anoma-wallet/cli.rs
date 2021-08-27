@@ -14,6 +14,9 @@ pub fn main() -> Result<()> {
         cmds::AnomaWallet::Keypair(cmds::Keypair::Generate(
             cmds::Generate(args),
         )) => store::generate_key(args),
+        cmds::AnomaWallet::Keypair(cmds::Keypair::Lookup(cmds::Lookup(
+            args,
+        ))) => store::fetch(args),
     }
     Ok(())
 }

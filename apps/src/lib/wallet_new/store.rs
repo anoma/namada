@@ -232,6 +232,10 @@ pub fn generate_key(args: args::Generate) {
     }
 }
 
+pub fn fetch(_args: args::Lookup) {
+    println!("TODO")
+}
+
 enum ConfirmationResponse {
     Overwrite,
     Cancel,
