@@ -83,15 +83,6 @@ pub struct IntentTransfers {
     pub intents: HashMap<Address, Signed<FungibleTokenIntent>>,
 }
 
-// #[cfg(any(test, feature = "testing"))]
-// impl PartialEq for IntentTransfers {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.exchanges == other.exchanges
-//             && self.transfers == other.transfers
-//             && self.intents == other.intents
-//     }
-// }
-
 /// Struct holding a safe rapresentation of a float
 #[derive(
     Debug,
