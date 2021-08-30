@@ -674,53 +674,6 @@ mod tests {
         let mut base_node_ledger = Command::cargo_bin("anoman")?;
         base_node_ledger.args(&["--base-dir", first_node_dir, "ledger"]);
 
-        // Craft intents
-        // cargo run --bin anomac -- intent --key $BERTHA
-        // --file-path-input intent.A.data --file-path-output intent.A
-
-        // let tx_a = vec![
-        //     "intent",
-        //     "--key",
-        //     BERTHA,
-        //     "--file-path-output",
-        //     intent_a_path.to_str().unwrap(),
-        //     "--file-path-input",
-        //     intent_a_path_input.to_str().unwrap(),
-        // ];
-        // let mut craft_intent_a = Command::cargo_bin("anomac")?;
-        // craft_intent_a.args(tx_a);
-        // craft_intent_a.spawn().expect("Should create the intent");
-
-        // // cargo run --bin anomac -- craft-intent --key $ALBERT
-        // // --file-path-input intent.B.data --file-path-output intent.B
-        // let tx_b = vec![
-        //     "craft-intent",
-        //     "--key",
-        //     ALBERT,
-        //     "--file-path-output",
-        //     intent_b_path.to_str().unwrap(),
-        //     "--file-path-input",
-        //     intent_b_path_input.to_str().unwrap(),
-        // ];
-        // let mut craft_intent_b = Command::cargo_bin("anomac")?;
-        // craft_intent_b.args(tx_b);
-        // craft_intent_b.spawn().expect("Should create the intent");
-
-        // // cargo run --bin anomac -- craft-intent --key $CHRISTEL
-        // // --file-path-input intent.C.data --file-path-output intent.C
-        // let tx_c = vec![
-        //     "craft-intent",
-        //     "--key",
-        //     CHRISTEL,
-        //     "--file-path-output",
-        //     intent_c_path.to_str().unwrap(),
-        //     "--file-path-input",
-        //     intent_c_path_input.to_str().unwrap(),
-        // ];
-        // let mut craft_intent_c = Command::cargo_bin("anomac")?;
-        // craft_intent_c.args(tx_c);
-        // craft_intent_c.spawn().expect("Should create the intent");
-
         //  Start gossip
         let mut session_gossip = spawn_command(base_node_gossip, Some(40_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
