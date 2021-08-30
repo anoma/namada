@@ -232,8 +232,84 @@ pub fn generate_key(args: args::Generate) {
     }
 }
 
-pub fn fetch(_args: args::Lookup) {
-    println!("TODO")
+fn load_store() -> Result<StoreHandler, &'static str> {
+    let store = File::open("anoma_store");
+
+    let password = rpassword::read_password_from_tty(Some("Password: "))
+        .unwrap_or_default();
+
+    let mut store_data = Vec::new();
+
+    match store {
+        Ok(mut file) => {
+            file.read_to_end(&mut store_data).unwrap();
+            match StoreHandler::load(password, store_data) {
+                Ok(handler) => Ok(handler),
+                Err(_) => Err("Could not load store"),
+            }
+        }
+        Err(_) => Err("Could not load store"),
+    }
+}
+
+pub fn export_key_to_file(args: args::Export) {
+    use std::io;
+
+    match load_store() {
+        Ok(handler) => {
+            let mut alias = String::default();
+
+            match args.alias {
+                Some(tmp_alias) => alias = tmp_alias,
+                None => {
+                    // Implement pretty-print and add before reading
+                    io::stdin().read_to_string(&mut alias).unwrap();
+                }
+            }
+
+            let kp = handler.store.fetch_by_alias(alias.clone());
+            match kp {
+                Some(keypair) => {
+                    let file_data = keypair.public.to_bytes().to_vec();
+
+                    let mut file =
+                        File::create(format!("key_{}", alias)).unwrap();
+
+                    file.write_all(file_data.as_ref()).unwrap();
+
+                    ()
+                }
+                None => println!("No keypair was found with the given alias"),
+            }
+        }
+        Err(e) => println!("{}", e),
+    }
+}
+
+// Use later for something
+pub fn list() {
+    match load_store() {
+        Ok(handler) => {
+            println!("{:?}", handler.store.keys)
+        }
+        Err(e) => println!("{}", e),
+    }
+}
+
+// Implement public key exportation to file, fetch by public key
+pub fn fetch(args: args::Lookup) {
+    match (args.alias, args.value) {
+        (None, None) => println!("An alias needs to be supplied"),
+        (Some(key), _) | (_, Some(key)) => match load_store() {
+            Ok(handler) => match handler.store.fetch_by_alias(key) {
+                None => {
+                    println!("No keypairs were found with this alias")
+                }
+                Some(kp) => println!("{:?}", kp),
+            },
+            Err(error) => println!("{}", error),
+        },
+    }
 }
 
 enum ConfirmationResponse {

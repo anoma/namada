@@ -929,6 +929,25 @@ pub mod args {
         pub value: Option<String>,
     }
 
+    #[derive(Debug)]
+    pub struct Export {
+        pub alias: Option<String>,
+    }
+
+    impl Args for Export {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+
+            Self { alias }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS.def().about("The alias of the key you wish to export"),
+            )
+        }
+    }
+
     impl Args for Lookup {
         fn parse(matches: &ArgMatches) -> Self {
             let public_key = PUBLIC_KEY.parse(matches);
