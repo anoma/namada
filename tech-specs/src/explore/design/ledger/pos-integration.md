@@ -34,11 +34,11 @@ The PoS system is initialized via a native VP interface that is given the valida
 
 ## Staking rewards and transaction fees
 
-Staking rewards for validators are rewarded in Tendermint's method `BeginBlock` in the base ledger. If a validator has specified `validator/{validator_address}/staking_reward_address` the rewards are credited to this address, otherwise, the validator's address is used.
+Staking rewards for validators are rewarded in Tendermint's method `BeginBlock` in the base ledger. A validator must specify a `validator/{validator_address}/staking_reward_address` for its rewards to be credited to this address.
 
 To a validator who proposed a block (`block.header.proposer_address`), the system rewards tokens based on the `block_proposer_reward` PoS parameter and each validator that voted on a block (`block.last_commit_info.validator` who `signed_last_block`) receives `block_vote_reward`.
 
-All the fees that are charged in a transaction execution (DKG transaction wrapper fee and transactions applied in a block) are transferred into a fee pool, which is another special account controlled by the PoS module.
+All the fees that are charged in a transaction execution (DKG transaction wrapper fee and transactions applied in a block) are transferred into a fee pool, which is another special account controlled by the PoS module. Note that the fee pool account may contain tokens other than the staking token XAN.
 
 - TODO describe the fee pool, related to <https://github.com/anomanetwork/anoma/issues/48>, <https://github.com/anomanetwork/anoma/issues/51> and <https://github.com/anomanetwork/anoma/issues/72>
 
@@ -46,7 +46,7 @@ All the fees that are charged in a transaction execution (DKG transaction wrappe
 
 The transactions are assumed to be applied in epoch `n`. Any transaction that modifies [epoched data](/explore/design/pos.md#epoched-data) updates the structure as described in [epoched data storage](/explore/design/pos.md#storage).
 
-For transactions that burn tokens, we implement a ["token burner" account](/explore/design/ledger/vp.md#token-burner-vp). Burnt tokens should be credited to this account and no token can be ever be debited by anyone.
+For slashing tokens, we implement a [PoS slash pool account](/explore/design/ledger/vp.md#pos-slash-pool-vp). Slashed tokens should be credited to this account and no token can be ever be debited by anyone.
 
 ### Validator transactions
 
@@ -187,14 +187,12 @@ The validity predicate triggers a validation logic based on the storage keys mod
   ```rust,ignore
   match (pre_state, post_state) {
     (None, Some(post)) => {
-      // - verify signature from tx.data against the post consensus key
       // - check that any other sub-keys for this validator address didn't exist
       // in a pre-state
       // - check that the `state` sub-key for this validator address has been set
       // correctly
     },
     (Some(pre), Some(post)) => {
-      // - verify signature from tx.data against the post consensus key
       // - check that the new consensus key is different from the old consensus
       // key and that it has been set correctly
     },

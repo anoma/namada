@@ -2,7 +2,7 @@
 
 ## Epoch
 
-An epoch is a range of blocks or time that is defined by the base ledger and made available to the PoS system. This document assumes that epochs are identified by consecutive integers. All the data relevant to PoS are [associated with epochs](#epoched-data).
+An epoch is a range of blocks or time that is defined by the base ledger and made available to the PoS system. This document assumes that epochs are identified by consecutive natural numbers. All the data relevant to PoS are [associated with epochs](#epoched-data).
 
 ### Epoched data
 

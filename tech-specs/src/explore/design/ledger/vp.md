@@ -31,9 +31,9 @@ The host functions available to call from inside the VP code can be found in [do
 
 The native VPs follow the same interface as WASM VPs and rules for how they are [triggered by a transaction](tx.md#tx-execution). They can also call the same host functions as those provided in [WASM VPs environment](wasm-vm.md#vps-environment) and must also account any computation for gas usage.
 
-### Token burner
+### PoS slash pool VP
 
-A token burner is a simple account with a native VP which can receive burnt tokens, but no token can ever be withdrawn from it by anyone.
+The Proof-of-Stake slash pool is a simple account with a native VP which can receive slashed tokens, but no token can ever be withdrawn from it by anyone at this point.
 
 ## Fungible token VP
 
