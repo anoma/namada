@@ -96,6 +96,7 @@ where
             "anoma_tx_get_chain_id" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_chain_id),
             "anoma_tx_get_block_height" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_height),
             "anoma_tx_get_block_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_hash),
+            "anoma_tx_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_epoch),
             "anoma_tx_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_log_string),
         },
     }
@@ -129,6 +130,7 @@ where
             "anoma_vp_get_chain_id" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_chain_id),
             "anoma_vp_get_block_height" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_height),
             "anoma_vp_get_block_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_hash),
+            "anoma_vp_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_epoch),
             "anoma_vp_verify_tx_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_verify_tx_signature),
             "anoma_vp_eval" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_eval),
             "anoma_vp_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_log_string),
@@ -155,7 +157,7 @@ where
         "env" => {
             "memory" => initial_memory,
             "anoma_mm_send_match" => Function::new_native_with_env(wasm_store, env.clone(), host_env::mm_send_match),
-            "anoma_mm_update_data" => Function::new_native_with_env(wasm_store, env.clone(), host_env::mm_update_data),
+            "anoma_mm_update_state" => Function::new_native_with_env(wasm_store, env.clone(), host_env::mm_update_state),
             "anoma_mm_remove_intents" => Function::new_native_with_env(wasm_store, env.clone(), host_env::mm_remove_intents),
             "anoma_mm_log_string" => Function::new_native_with_env(wasm_store, env, host_env::mm_log_string),
         },

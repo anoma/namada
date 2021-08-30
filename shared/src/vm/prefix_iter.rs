@@ -33,10 +33,7 @@ where
         &mut self,
         id: PrefixIteratorId,
     ) -> Option<<DB::PrefixIter as Iterator>::Item> {
-        match self.iterators.get_mut(&id) {
-            Some(iter) => iter.next(),
-            None => None,
-        }
+        self.iterators.get_mut(&id).and_then(|i| i.next())
     }
 
     /// Get prefix iterator with the given ID.
@@ -54,14 +51,14 @@ where
 {
     fn default() -> Self {
         Self {
-            index: PrefixIteratorId::new(0),
-            iterators: HashMap::new(),
+            index: PrefixIteratorId::default(),
+            iterators: HashMap::default(),
         }
     }
 }
 
 /// A prefix iterator identifier for the temporary storage [`PrefixIterators`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct PrefixIteratorId(u64);
 
 impl PrefixIteratorId {

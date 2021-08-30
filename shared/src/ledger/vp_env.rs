@@ -9,7 +9,7 @@ use crate::ledger::gas;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
-use crate::types::storage::{BlockHash, BlockHeight, Key};
+use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key};
 
 /// These runtime errors will abort VP execution immediately
 #[allow(missing_docs)]
@@ -25,6 +25,8 @@ pub enum RuntimeError {
     EncodingError(std::io::Error),
     #[error("Numeric conversion error: {0}")]
     NumConversionError(TryFromIntError),
+    #[error("Memory error: {0}")]
+    MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
 }
 
 /// VP environment function result
@@ -50,8 +52,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (value, gas) =
-        storage.read(&key).map_err(RuntimeError::StorageError)?;
+    let (value, gas) = storage.read(key).map_err(RuntimeError::StorageError)?;
     add_gas(gas_meter, gas)?;
     Ok(value)
 }
@@ -69,7 +70,7 @@ where
     H: StorageHasher,
 {
     // Try to read from the write log first
-    let (log_val, gas) = write_log.read(&key);
+    let (log_val, gas) = write_log.read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(&write_log::StorageModification::Write { ref value }) => {
@@ -88,7 +89,7 @@ where
         None => {
             // When not found in write log, try to read from the storage
             let (value, gas) =
-                storage.read(&key).map_err(RuntimeError::StorageError)?;
+                storage.read(key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas)?;
             Ok(value)
         }
@@ -125,7 +126,7 @@ where
     H: StorageHasher,
 {
     // Try to read from the write log first
-    let (log_val, gas) = write_log.read(&key);
+    let (log_val, gas) = write_log.read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
@@ -137,7 +138,7 @@ where
         None => {
             // When not found in write log, try to check the storage
             let (present, gas) =
-                storage.has_key(&key).map_err(RuntimeError::StorageError)?;
+                storage.has_key(key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas)?;
             Ok(present)
         }
@@ -186,6 +187,21 @@ where
     let (hash, gas) = storage.get_block_hash();
     add_gas(gas_meter, gas)?;
     Ok(hash)
+}
+
+/// Getting the block epoch. The epoch is that of the block to which the
+/// current transaction is being applied.
+pub fn get_block_epoch<DB, H>(
+    gas_meter: &mut VpGasMeter,
+    storage: &Storage<DB, H>,
+) -> Result<Epoch>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let (epoch, gas) = storage.get_block_epoch();
+    add_gas(gas_meter, gas)?;
+    Ok(epoch)
 }
 
 /// Storage prefix iterator. It will try to get an iterator from the storage.

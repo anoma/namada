@@ -235,7 +235,7 @@ impl AppExt for App {
 
 impl ArgMatchesExt for ArgMatches {
     fn args_parse<T: Args>(&self) -> T {
-        T::parse(&self)
+        T::parse(self)
     }
 }
 
@@ -271,7 +271,7 @@ impl<A, B, T> OptTupleExt<T> for Option<(A, B)> {
     }
 }
 
-/// A helper to exit after flushing output, borrowed from [`clap::util`].
+/// A helper to exit after flushing output, borrowed from `clap::util` module.
 pub fn safe_exit(code: i32) -> ! {
     use std::io::Write;
 

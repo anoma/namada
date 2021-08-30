@@ -1,7 +1,7 @@
 use std::mem::ManuallyDrop;
 
-use anoma_shared::types::internal::HostEnvResult;
-use anoma_shared::vm::types::KeyVal;
+use anoma::types::internal::HostEnvResult;
+use anoma::vm::types::KeyVal;
 use borsh::BorshDeserialize;
 
 /// This function is a helper to handle the second step of reading var-len
@@ -53,11 +53,11 @@ pub mod tx {
     use std::convert::TryFrom;
     use std::marker::PhantomData;
 
-    use anoma_shared::types::address;
-    use anoma_shared::types::address::Address;
-    use anoma_shared::types::internal::HostEnvResult;
-    use anoma_shared::types::storage::{
-        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+    use anoma::types::address;
+    use anoma::types::address::Address;
+    use anoma::types::internal::HostEnvResult;
+    use anoma::types::storage::{
+        BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -180,12 +180,12 @@ pub mod tx {
         String::from_utf8(slice.to_vec()).expect("Cannot convert the ID string")
     }
 
-    /// Get the committed block height
+    /// Get height of the current block
     pub fn get_block_height() -> BlockHeight {
         BlockHeight(unsafe { anoma_tx_get_block_height() })
     }
 
-    /// Get a block hash
+    /// Get hash of the current block
     pub fn get_block_hash() -> BlockHash {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
@@ -195,6 +195,11 @@ pub mod tx {
             slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH)
         };
         BlockHash::try_from(slice).expect("Cannot convert the hash")
+    }
+
+    /// Get epoch of the current block
+    pub fn get_block_epoch() -> Epoch {
+        Epoch(unsafe { anoma_tx_get_block_epoch() })
     }
 
     /// Log a string. The message will be printed at the `tracing::Level::Info`.
@@ -264,6 +269,9 @@ pub mod tx {
         // Get the current block hash
         fn anoma_tx_get_block_hash(result_ptr: u64);
 
+        // Get the current block epoch
+        fn anoma_tx_get_block_epoch() -> u64;
+
         // Requires a node running with "Info" log level
         fn anoma_tx_log_string(str_ptr: u64, str_len: u64);
     }
@@ -275,10 +283,10 @@ pub mod vp {
     use std::convert::TryFrom;
     use std::marker::PhantomData;
 
-    use anoma_shared::types::internal::HostEnvResult;
-    use anoma_shared::types::key::ed25519::{PublicKey, Signature};
-    use anoma_shared::types::storage::{
-        BlockHash, BlockHeight, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
+    use anoma::types::internal::HostEnvResult;
+    use anoma::types::key::ed25519::{PublicKey, Signature};
+    use anoma::types::storage::{
+        BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH, CHAIN_ID_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -373,7 +381,7 @@ pub mod vp {
         String::from_utf8(slice.to_vec()).expect("Cannot convert the ID string")
     }
 
-    /// Get the committed block height
+    /// Get height of the current block
     pub fn get_block_height() -> BlockHeight {
         BlockHeight(unsafe { anoma_vp_get_block_height() })
     }
@@ -390,9 +398,14 @@ pub mod vp {
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
+    /// Get epoch of the current block
+    pub fn get_block_epoch() -> Epoch {
+        Epoch(unsafe { anoma_vp_get_block_epoch() })
+    }
+
     /// Verify a transaction signature. The signature is expected to have been
-    /// produced on the encoded transaction [`anoma_shared::proto::Tx`]
-    /// using [`anoma_shared::types::key::ed25519::sign_tx`].
+    /// produced on the encoded transaction [`anoma::proto::Tx`]
+    /// using [`anoma::types::key::ed25519::sign_tx`].
     pub fn verify_tx_signature(pk: &PublicKey, sig: &Signature) -> bool {
         let pk = BorshSerialize::try_to_vec(pk).unwrap();
         let sig = BorshSerialize::try_to_vec(sig).unwrap();
@@ -485,6 +498,9 @@ pub mod vp {
         // Get the current block hash
         fn anoma_vp_get_block_hash(result_ptr: u64);
 
+        // Get the current block epoch
+        fn anoma_vp_get_block_epoch() -> u64;
+
         // Verify a transaction signature
         fn anoma_vp_verify_tx_signature(
             pk_ptr: u64,
@@ -522,8 +538,8 @@ pub mod matchmaker {
 
     /// Update the matchmaker state. This state will be pass on the next run of
     /// the matchmaker.
-    pub fn update_data(data: Vec<u8>) {
-        unsafe { anoma_mm_update_data(data.as_ptr() as _, data.len() as _) };
+    pub fn update_state(state: Vec<u8>) {
+        unsafe { anoma_mm_update_state(state.as_ptr() as _, state.len() as _) };
     }
 
     /// Remove the intents from the matchmaker intent mempool, to call when they
@@ -552,7 +568,7 @@ pub mod matchmaker {
         // Inject a transaction from matchmaker's matched intents to the ledger
         fn anoma_mm_send_match(data_ptr: u64, data_len: u64);
 
-        fn anoma_mm_update_data(data_ptr: u64, data_len: u64);
+        fn anoma_mm_update_state(state_ptr: u64, state_len: u64);
 
         fn anoma_mm_remove_intents(intents_id_ptr: u64, intents_id_len: u64);
 

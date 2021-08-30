@@ -1,0 +1,133 @@
+#[cfg(feature = "mm_token_exch")]
+pub mod mm_token_exch;
+
+#[cfg(feature = "vp_user")]
+pub mod vp_user;
+
+/// A tx for a token transfer crafted by matchmaker from intents.
+/// This tx uses `intent::IntentTransfers` wrapped inside
+/// `key::ed25519::SignedTxData` as its input as declared in `shared` crate.
+#[cfg(feature = "tx_from_intent")]
+pub mod tx_from_intent {
+    use anoma_vm_env::tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        let signed =
+            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        let tx_data =
+            intent::IntentTransfers::try_from_slice(&signed.data.unwrap()[..])
+                .unwrap();
+        log_string(format!(
+            "apply_tx called with intent transfers: {:#?}",
+            tx_data
+        ));
+
+        // make sure that the matchmaker has to validate this tx
+        insert_verifier(address::matchmaker());
+
+        for token::Transfer {
+            source,
+            target,
+            token,
+            amount,
+        } in tx_data.transfers
+        {
+            token::transfer(&source, &target, &token, amount);
+        }
+
+        tx_data
+            .exchanges
+            .values()
+            .into_iter()
+            .for_each(intent::invalidate_exchange);
+    }
+}
+
+/// A tx for token transfer.
+/// This tx uses `token::Transfer` wrapped inside `key::ed25519::SignedTxData`
+/// as its input as declared in `shared` crate.
+#[cfg(feature = "tx_transfer")]
+pub mod tx_transfer {
+    use anoma_vm_env::tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        let signed =
+            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        let transfer =
+            token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
+        log_string(format!("apply_tx called with transfer: {:#?}", transfer));
+        let token::Transfer {
+            source,
+            target,
+            token,
+            amount,
+        } = transfer;
+        token::transfer(&source, &target, &token, amount)
+    }
+}
+
+/// A tx for updating an account's validity predicate.
+/// This tx wraps the validity predicate inside `key::ed25519::SignedTxData` as
+/// its input as declared in `shared` crate.
+#[cfg(feature = "tx_update_vp")]
+pub mod tx_update_vp {
+    use anoma_vm_env::tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        let signed =
+            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        let update_vp =
+            transaction::UpdateVp::try_from_slice(&signed.data.unwrap()[..])
+                .unwrap();
+        log_string(format!("update VP for: {:#?}", update_vp.addr));
+        update_validity_predicate(update_vp.addr, update_vp.vp_code)
+    }
+}
+
+/// A VP for a token.
+#[cfg(feature = "vp_token")]
+pub mod vp_token {
+    use anoma_vm_env::vp_prelude::*;
+
+    #[validity_predicate]
+    fn validate_tx(
+        tx_data: Vec<u8>,
+        addr: Address,
+        keys_changed: HashSet<storage::Key>,
+        verifiers: HashSet<Address>,
+    ) -> bool {
+        log_string(format!(
+            "validate_tx called with token addr: {}, key_changed: {:#?}, \
+             tx_data: {:#?}, verifiers: {:?}",
+            addr, keys_changed, tx_data, verifiers
+        ));
+
+        token::vp(&addr, &keys_changed, &verifiers)
+    }
+}
+
+/// Matchmaker filter for token exchange
+#[cfg(feature = "mm_filter_token_exch")]
+pub mod mm_filter_token_exch {
+    use anoma_vm_env::filter_prelude::intent::FungibleTokenIntent;
+    use anoma_vm_env::filter_prelude::*;
+
+    #[filter]
+    fn validate_intent(intent: Vec<u8>) -> bool {
+        // TODO: check if signature is valid
+        let intent = decode_intent_data(intent);
+        if intent.is_some() {
+            log_string(format!(r#"intent {:#?} is valid"#, intent));
+            true
+        } else {
+            false
+        }
+    }
+
+    fn decode_intent_data(bytes: Vec<u8>) -> Option<FungibleTokenIntent> {
+        FungibleTokenIntent::try_from_slice(&bytes[..]).ok()
+    }
+}

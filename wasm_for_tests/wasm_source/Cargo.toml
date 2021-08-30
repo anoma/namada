@@ -2,7 +2,7 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2018"
 license = "GPL-3.0"
-name = "wasm_source"
+name = "anoma_wasm_for_tests"
 resolver = "2"
 version = "0.1.0"
 

@@ -2,6 +2,7 @@
 //! wasm instance.
 
 use std::ptr::NonNull;
+use std::str::Utf8Error;
 use std::sync::Arc;
 
 use borsh::BorshSerialize;
@@ -25,6 +26,12 @@ pub enum Error {
     InitMemoryError(wasmer::MemoryError),
     #[error("Memory ouf of bounds: {0}")]
     MemoryOutOfBounds(wasmer::MemoryError),
+    #[error("Encoding error: {0}")]
+    EncodingError(std::io::Error),
+    #[error("Memory is not initialized")]
+    UninitializedMemory,
+    #[error("Invalid utf8 string read from memory")]
+    InvalidUtf8String(Utf8Error),
 }
 
 /// Result of a function that may fail
@@ -95,10 +102,10 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data_bytes: Vec<u8>,
+    tx_data_bytes: impl AsRef<[u8]>,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
-    let tx_data_len = tx_data_bytes.len() as _;
+    let tx_data_len = tx_data_bytes.as_ref().len() as _;
 
     write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)?;
 
@@ -140,23 +147,19 @@ pub fn write_vp_inputs(
     }: VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
-    let addr_bytes = addr.try_to_vec().expect(
-        "TEMPORARY: failed to serialize address for validity predicate",
-    );
+    let addr_bytes = addr.try_to_vec().map_err(Error::EncodingError)?;
     let addr_len = addr_bytes.len() as _;
 
     let data_ptr = addr_ptr + addr_len;
     let data_len = data.len() as _;
 
-    let keys_changed_bytes = keys_changed.try_to_vec().expect(
-        "TEMPORARY: failed to serialize keys_changed for validity predicate",
-    );
+    let keys_changed_bytes =
+        keys_changed.try_to_vec().map_err(Error::EncodingError)?;
     let keys_changed_ptr = data_ptr + data_len;
     let keys_changed_len = keys_changed_bytes.len() as _;
 
-    let verifiers_bytes = verifiers.try_to_vec().expect(
-        "TEMPORARY: failed to serialize verifiers for validity predicate",
-    );
+    let verifiers_bytes =
+        verifiers.try_to_vec().map_err(Error::EncodingError)?;
     let verifiers_ptr = keys_changed_ptr + keys_changed_len;
     let verifiers_len = verifiers_bytes.len() as _;
 
@@ -269,13 +272,9 @@ fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
         let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
             / wasmer::WASM_PAGE_SIZE) as u32;
         tracing::info!("trying to grow memory by {} pages", req_pages);
-        memory
-            .grow(req_pages)
-            .map(|_pages| ())
-            .map_err(Error::MemoryOutOfBounds)
-    } else {
-        Ok(())
+        memory.grow(req_pages).map_err(Error::MemoryOutOfBounds)?;
     }
+    Ok(())
 }
 
 /// Read bytes from memory at the given offset and length
@@ -294,10 +293,11 @@ fn read_memory_bytes(
 }
 
 /// Write bytes into memory at the given offset
-fn write_memory_bytes<T>(memory: &Memory, offset: u64, bytes: T) -> Result<()>
-where
-    T: AsRef<[u8]>,
-{
+fn write_memory_bytes(
+    memory: &Memory,
+    offset: u64,
+    bytes: impl AsRef<[u8]>,
+) -> Result<()> {
     let slice = bytes.as_ref();
     let len = slice.len();
     check_bounds(memory, offset, len as _)?;
@@ -331,40 +331,38 @@ impl WasmMemory {
 }
 
 impl VmMemory for WasmMemory {
+    type Error = Error;
+
     /// Read bytes from memory at the given offset and length, return the bytes
     /// and the gas cost
-    fn read_bytes(&self, offset: u64, len: usize) -> (Vec<u8>, u64) {
-        let memory =
-            self.inner.get_ref().expect("Memory should be initialized");
-        let bytes = read_memory_bytes(memory, offset, len)
-            .expect("Reading memory shouldn't fail");
+    fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
+        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
+        let bytes = read_memory_bytes(memory, offset, len)?;
         let gas = bytes.len();
-        (bytes, gas as _)
+        Ok((bytes, gas as _))
     }
 
     /// Write bytes into memory at the given offset and return the gas cost
-    fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> u64 {
+    fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> Result<u64> {
         let gas = bytes.as_ref().len();
-        let memory =
-            self.inner.get_ref().expect("Memory should be initialized");
-        write_memory_bytes(memory, offset, bytes)
-            .expect("Writing memory shouldn't fail");
-        gas as _
+        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
+        write_memory_bytes(memory, offset, bytes)?;
+        Ok(gas as _)
     }
 
     /// Read string from memory at the given offset and bytes length, and return
     /// the gas cost
-    fn read_string(&self, offset: u64, len: usize) -> (String, u64) {
-        let (bytes, gas) = self.read_bytes(offset, len);
+    fn read_string(&self, offset: u64, len: usize) -> Result<(String, u64)> {
+        let (bytes, gas) = self.read_bytes(offset, len)?;
         let string = std::str::from_utf8(&bytes)
-            .expect("Decoding string from memory shouldn't fail")
+            .map_err(Error::InvalidUtf8String)?
             .to_string();
-        (string, gas as _)
+        Ok((string, gas as _))
     }
 
     /// Write string into memory at the given offset and return the gas cost
     #[allow(dead_code)]
-    fn write_string(&self, offset: u64, string: String) -> u64 {
+    fn write_string(&self, offset: u64, string: String) -> Result<u64> {
         self.write_bytes(offset, string.as_bytes())
     }
 }

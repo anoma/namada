@@ -1,13 +1,14 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::ops::Add;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
-use crate::types::address::{self, Address};
+use crate::types::address::{self, Address, InternalAddress};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -43,6 +44,7 @@ pub const RESERVED_VP_KEY: &str = "?";
 
 /// Height of a block, i.e. the level.
 #[derive(
+    Default,
     Clone,
     Copy,
     BorshSerialize,
@@ -51,6 +53,7 @@ pub const RESERVED_VP_KEY: &str = "?";
     Eq,
     PartialOrd,
     Ord,
+    Hash,
     Debug,
     Serialize,
     Deserialize,
@@ -63,6 +66,14 @@ impl Display for BlockHeight {
     }
 }
 
+impl Add<u64> for BlockHeight {
+    type Output = BlockHeight;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
 /// Hash of a block as fixed-size byte array
 #[derive(
     Clone,
@@ -72,6 +83,7 @@ impl Display for BlockHeight {
     Eq,
     PartialOrd,
     Ord,
+    Hash,
     Serialize,
     Deserialize,
 )]
@@ -236,6 +248,133 @@ impl Key {
             _ => false,
         }
     }
+
+    /// Check if the given key is a key to IBC-related data
+    pub fn is_ibc_key(&self) -> bool {
+        match self.segments.get(0) {
+            Some(seg) => {
+                *seg == DbKeySeg::AddressSeg(Address::Internal(
+                    InternalAddress::Ibc,
+                ))
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if the given key is a key of the client counter
+    pub fn is_ibc_client_counter(&self) -> bool {
+        *self == Self::ibc_client_counter()
+    }
+
+    /// Check if the given key is a key of the connection counter
+    pub fn is_ibc_connection_counter(&self) -> bool {
+        *self == Self::ibc_connection_counter()
+    }
+
+    /// Check if the given key is a key of the channel counter
+    pub fn is_ibc_channel_counter(&self) -> bool {
+        *self == Self::ibc_channel_counter()
+    }
+
+    /// Check if the given key is a key of the capability index
+    pub fn is_ibc_capability_index(&self) -> bool {
+        *self == Self::ibc_capability_index()
+    }
+
+    /// Returns a key of the IBC-related data
+    /// Only this function can push `InternalAddress::Ibc` segment
+    pub fn ibc_key(path: impl AsRef<str>) -> Result<Self> {
+        let path = Self::parse(path)?;
+        let addr = Address::Internal(InternalAddress::Ibc);
+        let key = Self::from(addr.to_db_key());
+        Ok(key.join(&path))
+    }
+
+    /// Returns a key of the IBC client counter
+    pub fn ibc_client_counter() -> Self {
+        let path = "clients/counter".to_owned();
+        Key::ibc_key(path)
+            .expect("Creating a key for the client counter shouldn't fail")
+    }
+
+    /// Returns a key of the IBC connection counter
+    pub fn ibc_connection_counter() -> Self {
+        let path = "connections/counter".to_owned();
+        Key::ibc_key(path)
+            .expect("Creating a key for the connection counter shouldn't fail")
+    }
+
+    /// Returns a key of the IBC channel counter
+    pub fn ibc_channel_counter() -> Self {
+        let path = "channelEnds/counter".to_owned();
+        Key::ibc_key(path)
+            .expect("Creating a key for the channel counter shouldn't fail")
+    }
+
+    /// Returns a key of the IBC capability index
+    pub fn ibc_capability_index() -> Self {
+        let path = "capabilities/index".to_owned();
+        Key::ibc_key(path)
+            .expect("Creating a key for the capability index shouldn't fail")
+    }
+
+    /// Returns a key of the reversed map for IBC capabilities
+    pub fn ibc_capability(index: u64) -> Self {
+        let path = format!("capabilities/{}", index);
+        Key::ibc_key(path)
+            .expect("Creating a key for a capability shouldn't fail")
+    }
+
+    /// Returns a key from the given DB key path that has the height and
+    /// the space type
+    pub fn parse_db_key(db_key: &str) -> Result<Self> {
+        let mut segments: Vec<&str> =
+            db_key.split(KEY_SEGMENT_SEPARATOR).collect();
+        let key = match segments.get(2) {
+            Some(seg)
+                if *seg == Address::Internal(InternalAddress::Ibc).raw() =>
+            {
+                // the path of IBC-related data should start with
+                // height/subspace/#IBC
+                Self::ibc_key(
+                    segments
+                        .split_off(3)
+                        .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                )
+                .map_err(|e| Error::Temporary {
+                    error: format!(
+                        "Cannot parse key segments {}: {}",
+                        db_key, e
+                    ),
+                })?
+            }
+            _ => match segments.get(3) {
+                Some(seg) if *seg == RESERVED_VP_KEY => {
+                    // the path of a validity predicate should be
+                    // height/subspace/{address}/?
+                    let mut addr_str =
+                        (*segments.get(2).expect("the address not found"))
+                            .to_owned();
+                    let _ = addr_str.remove(0);
+                    let addr = Address::decode(&addr_str)
+                        .expect("cannot decode the address");
+                    Self::validity_predicate(&addr)
+                }
+                _ => Self::parse(
+                    segments
+                        .split_off(2)
+                        .join(&KEY_SEGMENT_SEPARATOR.to_string()),
+                )
+                .map_err(|e| Error::Temporary {
+                    error: format!(
+                        "Cannot parse key segments {}: {}",
+                        db_key, e
+                    ),
+                })?,
+            },
+        };
+        Ok(key)
+    }
 }
 
 impl Display for Key {
@@ -291,6 +430,9 @@ impl KeySeg for DbKeySeg {
     fn parse(mut string: String) -> Result<Self> {
         // a separator should not included
         if string.contains(KEY_SEGMENT_SEPARATOR) {
+            return Err(Error::InvalidKeySeg(string));
+        }
+        if string == Address::Internal(InternalAddress::Ibc).raw() {
             return Err(Error::InvalidKeySeg(string));
         }
         match string.chars().next() {
@@ -374,6 +516,122 @@ impl KeySeg for Address {
     }
 }
 
+/// Epoch identifier. Epochs are identified by consecutive numbers.
+#[derive(
+    Clone,
+    Copy,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct Epoch(pub u64);
+
+impl Display for Epoch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Epoch {
+    /// Change to the next epoch
+    pub fn next(&self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
+impl Add<u64> for Epoch {
+    type Output = Epoch;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+/// Predecessor block epochs
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct Epochs {
+    /// The oldest epoch we can look-up.
+    first_known_epoch: Epoch,
+    /// The block heights of the first block of each known epoch.
+    /// Invariant: the values must be sorted in ascending order.
+    first_block_heights: Vec<BlockHeight>,
+}
+impl Default for Epochs {
+    /// Initialize predecessor epochs, assuming starting on the epoch 0 and
+    /// block height 0.
+    fn default() -> Self {
+        Self {
+            first_known_epoch: Epoch::default(),
+            first_block_heights: vec![BlockHeight::default()],
+        }
+    }
+}
+
+impl Epochs {
+    /// Record start of a new epoch at the given block height and trim any
+    /// epochs that ended more than `max_age_num_blocks` ago.
+    pub fn new_epoch(
+        &mut self,
+        block_height: BlockHeight,
+        max_age_num_blocks: u64,
+    ) {
+        let min_block_height_to_keep = (block_height.0 + 1)
+            .checked_sub(max_age_num_blocks)
+            .unwrap_or_default();
+        // trim off any epochs whose last block is before the limit
+        while let Some((_first_known_epoch_height, rest)) =
+            self.first_block_heights.split_first()
+        {
+            if let Some(second_known_epoch_height) = rest.first() {
+                if second_known_epoch_height.0 < min_block_height_to_keep {
+                    self.first_known_epoch = self.first_known_epoch.next();
+                    self.first_block_heights = rest.to_vec();
+                    continue;
+                }
+            }
+            break;
+        }
+        self.first_block_heights.push(block_height);
+    }
+
+    /// Look-up the epoch of a given block height.
+    pub fn get_epoch(&self, block_height: BlockHeight) -> Option<Epoch> {
+        if let Some((first_known_epoch_height, rest)) =
+            self.first_block_heights.split_first()
+        {
+            if block_height < *first_known_epoch_height {
+                return None;
+            }
+            let mut epoch = self.first_known_epoch;
+            for next_block_height in rest {
+                if block_height < *next_block_height {
+                    return Some(epoch);
+                } else {
+                    epoch = epoch.next();
+                }
+            }
+            return Some(epoch);
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -421,6 +679,13 @@ mod tests {
             Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
             _ => panic!("unexpected error happens"),
         }
+
+        let encoded_ibc_addr = Address::Internal(InternalAddress::Ibc).raw();
+        let target = format!("{}/test", encoded_ibc_addr);
+        match Key::parse(target).expect_err("unexpectedly succeeded") {
+            Error::InvalidKeySeg(s) => assert_eq!(s, encoded_ibc_addr),
+            _ => panic!("unexpected error happens"),
+        }
     }
 
     #[test]
@@ -460,6 +725,89 @@ mod tests {
             Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
             _ => panic!("unexpected error happens"),
         }
+    }
+
+    #[test]
+    fn test_predecessor_epochs() {
+        let mut epochs = Epochs::default();
+        assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        let mut max_age_num_blocks = 100;
+
+        // epoch 1
+        epochs.new_epoch(BlockHeight(10), max_age_num_blocks);
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
+        assert_eq!(epochs.get_epoch(BlockHeight(11)), Some(Epoch(1)));
+        assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(1)));
+
+        // epoch 2
+        epochs.new_epoch(BlockHeight(20), max_age_num_blocks);
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
+        assert_eq!(epochs.get_epoch(BlockHeight(11)), Some(Epoch(1)));
+        assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
+        assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
+
+        // epoch 3, epoch 0 and 1 should be trimmed
+        epochs.new_epoch(BlockHeight(200), max_age_num_blocks);
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_epoch(BlockHeight(0)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(9)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(10)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(11)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
+        assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
+        assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
+
+        // increase the limit
+        max_age_num_blocks = 200;
+
+        // epoch 4
+        epochs.new_epoch(BlockHeight(300), max_age_num_blocks);
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
+        assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
+        assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
+        assert_eq!(epochs.get_epoch(BlockHeight(300)), Some(Epoch(4)));
+
+        // epoch 5, epoch 2 should be trimmed
+        epochs.new_epoch(BlockHeight(499), max_age_num_blocks);
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_epoch(BlockHeight(20)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(100)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
+        assert_eq!(epochs.get_epoch(BlockHeight(300)), Some(Epoch(4)));
+        assert_eq!(epochs.get_epoch(BlockHeight(499)), Some(Epoch(5)));
+
+        // epoch 6, epoch 3 should be trimmed
+        epochs.new_epoch(BlockHeight(500), max_age_num_blocks);
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_epoch(BlockHeight(200)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(300)), Some(Epoch(4)));
+        assert_eq!(epochs.get_epoch(BlockHeight(499)), Some(Epoch(5)));
+        assert_eq!(epochs.get_epoch(BlockHeight(500)), Some(Epoch(6)));
+
+        // decrease the limit
+        max_age_num_blocks = 50;
+
+        // epoch 7, epoch 4 and 5 should be trimmed
+        epochs.new_epoch(BlockHeight(550), max_age_num_blocks);
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_epoch(BlockHeight(300)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(499)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(500)), Some(Epoch(6)));
+        assert_eq!(epochs.get_epoch(BlockHeight(550)), Some(Epoch(7)));
+
+        // epoch 8, epoch 6 should be trimmed
+        epochs.new_epoch(BlockHeight(600), max_age_num_blocks);
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_epoch(BlockHeight(500)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(550)), Some(Epoch(7)));
+        assert_eq!(epochs.get_epoch(BlockHeight(600)), Some(Epoch(8)));
     }
 }
 

@@ -2,7 +2,7 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2018"
 license = "GPL-3.0"
-name = "anoma_shared"
+name = "anoma"
 resolver = "2"
 version = "0.1.0"
 
@@ -26,19 +26,26 @@ wasm-runtime = [
   "wasmer-vm",
   "wasmer",
 ]
+ibc-vp = [
+  "ibc",
+  "ibc-proto",
+  "tendermint-proto",
+]
 
 [dependencies]
 bech32 = "0.8.0"
 borsh = "0.9.0"
 chrono = "0.4.19"
 ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend", "serde"]}
-hex = "0.4.2"
+# TODO temp fork for https://github.com/informalsystems/ibc-rs/issues/1161
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "tomas/update-prost-0.8.0", features = ["mocks"], optional = true}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", branch = "tomas/update-prost-0.8.0", optional = true}
 itertools = "0.10.0"
 loupe = {version = "0.1.3", optional = true}
 parity-wasm = {version = "0.42.2", optional = true}
 proptest = {version = "1.0.0", optional = true}
-prost = "0.7.0"
-prost-types = "0.7.0"
+prost = "0.8.0"
+prost-types = "0.8.0"
 pwasm-utils = {version = "0.18.0", optional = true}
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
 rand = {version = "0.7", optional = true}
@@ -48,7 +55,10 @@ serde = {version = "1.0.125", features = ["derive"]}
 sha2 = "0.9.3"
 # We switch off "blake2b" because it cannot be compiled to wasm
 sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding-0.9.0b", default-features = false, features = ["std", "borsh"]}
-thiserror = "1.0.24"
+# temporarily using fork work-around for https://github.com/informalsystems/tendermint-rs/issues/916
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost"}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/update-genesis-new-prost", optional = true}
+thiserror = "1.0.26"
 tracing = "0.1.26"
 wasmer = {version = "2.0.0", optional = true}
 wasmer-compiler-cranelift = {version = "2.0.0", optional = true}
@@ -59,10 +69,12 @@ wasmparser = "0.79.0"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
+hex = "0.4.3"
 pretty_assertions = "0.7.2"
 proptest = "1.0.0"
+serde_json = "1.0.62"
 test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
 
 [build-dependencies]
-tonic-build = "0.4.0"
+tonic-build = "0.5.0"

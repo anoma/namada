@@ -46,12 +46,6 @@ pub struct VpGasMeter {
     initial_gas: u64,
     /// The current gas usage in the VP
     pub current_gas: u64,
-    /// We store the `error` inside here, because when we run out of gas in VP
-    /// wasm, the execution is immediately shut down with `unreachable!()`
-    /// as we cannot simply return `Result` from wasm. So instead, we store
-    /// the error in this meter, which is accessible from the wasm host
-    /// environment.
-    pub error: Option<Error>,
 }
 
 /// Gas meter for VPs parallel runs
@@ -131,7 +125,6 @@ impl VpGasMeter {
         Self {
             initial_gas,
             current_gas: 0,
-            error: None,
         }
     }
 
@@ -144,7 +137,6 @@ impl VpGasMeter {
                 self.current_gas = gas;
             }
             Err(err) => {
-                self.error = Some(err.clone());
                 return Err(err);
             }
         }
@@ -156,12 +148,10 @@ impl VpGasMeter {
         {
             Ok(gas) => gas,
             Err(err) => {
-                self.error = Some(err.clone());
                 return Err(err);
             }
         };
         if current_total > TRANSACTION_GAS_LIMIT {
-            self.error = Some(Error::TransactionGasExceedededError);
             return Err(Error::TransactionGasExceedededError);
         }
         Ok(())
@@ -258,7 +248,6 @@ mod tests {
         fn test_vp_gas_meter_add(gas in 0..TRANSACTION_GAS_LIMIT) {
             let mut meter = VpGasMeter::new(0);
             meter.add(gas).expect("cannot add the gas");
-            assert_eq!(meter.error, None);
         }
 
         #[test]
@@ -273,46 +262,42 @@ mod tests {
     #[test]
     fn test_vp_gas_overflow() {
         let mut meter = VpGasMeter::new(1);
-        match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
-            err @ Error::GasOverflow => assert_eq!(meter.error, Some(err)),
-            _ => panic!("unexpected error happened"),
-        }
+        assert_matches!(
+            meter.add(u64::MAX).expect_err("unexpectedly succeeded"),
+            Error::GasOverflow
+        );
     }
 
     #[test]
     fn test_vp_gas_limit() {
         let mut meter = VpGasMeter::new(1);
-        match meter
-            .add(TRANSACTION_GAS_LIMIT)
-            .expect_err("unexpectedly succeeded")
-        {
-            err @ Error::TransactionGasExceedededError => {
-                assert_eq!(meter.error, Some(err))
-            }
-            _ => panic!("unexpected error happened"),
-        }
+        assert_matches!(
+            meter
+                .add(TRANSACTION_GAS_LIMIT)
+                .expect_err("unexpectedly succeeded"),
+            Error::TransactionGasExceedededError
+        );
     }
 
     #[test]
     fn test_tx_gas_overflow() {
         let mut meter = BlockGasMeter::default();
         meter.add(1).expect("cannot add the gas");
-        match meter.add(u64::MAX).expect_err("unexpectedly succeeded") {
-            Error::GasOverflow => {}
-            _ => panic!("unexpected error happened"),
-        }
+        assert_matches!(
+            meter.add(u64::MAX).expect_err("unexpectedly succeeded"),
+            Error::GasOverflow
+        );
     }
 
     #[test]
     fn test_tx_gas_limit() {
         let mut meter = BlockGasMeter::default();
-        match meter
-            .add(TRANSACTION_GAS_LIMIT + 1)
-            .expect_err("unexpectedly succeeded")
-        {
-            Error::TransactionGasExceedededError => {}
-            _ => panic!("unexpected error happened"),
-        }
+        assert_matches!(
+            meter
+                .add(TRANSACTION_GAS_LIMIT + 1)
+                .expect_err("unexpectedly succeeded"),
+            Error::TransactionGasExceedededError
+        );
     }
 
     #[test]
