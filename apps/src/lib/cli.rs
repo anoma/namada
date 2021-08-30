@@ -128,7 +128,6 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         QueryBalance(QueryBalance),
         Intent(Intent),
-        CraftIntent(CraftIntent),
         SubscribeTopic(SubscribeTopic),
     }
 
@@ -139,7 +138,6 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def())
                 .subcommand(QueryBalance::def())
                 .subcommand(Intent::def())
-                .subcommand(CraftIntent::def())
                 .subcommand(SubscribeTopic::def())
         }
 
@@ -150,8 +148,6 @@ pub mod cmds {
             let query_balance =
                 SubCmd::parse(matches).map_fst(Self::QueryBalance);
             let intent = SubCmd::parse(matches).map_fst(Self::Intent);
-            let craft_intent =
-                SubCmd::parse(matches).map_fst(Self::CraftIntent);
             let subscribe_topic =
                 SubCmd::parse(matches).map_fst(Self::SubscribeTopic);
             tx_custom
@@ -159,7 +155,6 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(query_balance)
                 .or(intent)
-                .or(craft_intent)
                 .or(subscribe_topic)
         }
     }
@@ -468,28 +463,6 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
-    pub struct CraftIntent(pub args::CraftIntent);
-
-    impl SubCmd for CraftIntent {
-        const CMD: &'static str = "craft-intent";
-
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (CraftIntent(args::CraftIntent::parse(matches)), matches)
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Craft an intent.")
-                .add_args::<args::CraftIntent>()
-        }
-    }
-
-    #[derive(Debug)]
     pub struct SubscribeTopic(pub args::SubscribeTopic);
 
     impl SubCmd for SubscribeTopic {
@@ -559,9 +532,7 @@ pub mod args {
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE: Arg<String> = arg("node");
-    const FILE_PATH_OUTPUT: ArgDefault<String> =
-        arg_default("file-path-output", DefaultFn(|| "intent.data".into()));
-    const FILE_PATH_INPUT: Arg<String> = arg("file-path-input");
+    const TO_STDOUT: ArgFlag = flag("--stdout");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
@@ -750,72 +721,54 @@ pub mod args {
     pub struct Intent {
         /// Gossip node address
         pub node_addr: String,
-        /// Path to the intent file
-        pub data_path: PathBuf,
         /// Intent topic
         pub topic: String,
+        /// Signing key
+        pub key: Address,
+        /// Exchanges description
+        pub exchanges: Vec<Exchange>,
+        /// Print output to stdout
+        pub to_stdout: bool,
     }
 
     impl Args for Intent {
         fn parse(matches: &ArgMatches) -> Self {
+            let key = SIGNING_KEY.parse(matches);
             let node_addr = NODE.parse(matches);
             let data_path = DATA_PATH.parse(matches);
+            let to_stdout = TO_STDOUT.parse(matches);
             let topic = TOPIC.parse(matches);
+
+            let file = File::open(&data_path).expect("File must exist.");
+            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
+                .expect("JSON was not well-formatted");
+
             Self {
                 node_addr,
-                data_path,
                 topic,
+                key,
+                exchanges,
+                to_stdout,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(NODE.def().about("The gossip node address."))
+                .arg(SIGNING_KEY.def().about("The key to sign the intent."))
                 .arg(DATA_PATH.def().about(
                     "The data of the intent, that contains all value \
                      necessary for the matchmaker.",
                 ))
                 .arg(
+                    TO_STDOUT
+                        .def()
+                        .about("Echo the serialized intent to stdout."),
+                )
+                .arg(
                     TOPIC.def().about(
                         "The subnetwork where the intent should be sent to",
                     ),
                 )
-        }
-    }
-
-    /// Craft intent for token exchange arguments
-    #[derive(Debug)]
-    pub struct CraftIntent {
-        /// Signing key
-        pub key: Address,
-        /// Exchange description
-        pub exchanges: Vec<Exchange>,
-        /// Target file path
-        pub file_path: String,
-    }
-
-    impl Args for CraftIntent {
-        fn parse(matches: &ArgMatches) -> Self {
-            let key = SIGNING_KEY.parse(matches);
-            let file_path_output = FILE_PATH_OUTPUT.parse(matches);
-            let file_path_input = FILE_PATH_INPUT.parse(matches);
-            let file = File::open(&file_path_input).expect("File must exist.");
-
-            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
-                .expect("JSON was not well-formatted");
-
-            Self {
-                key,
-                exchanges,
-                file_path: file_path_output,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(SIGNING_KEY.def().about(
-                "Address of the account with key used to sign the intent.",
-            ))
-            .arg(FILE_PATH_OUTPUT.def().about("The output file"))
-            .arg(FILE_PATH_INPUT.def().about("The input file"))
         }
     }
 
