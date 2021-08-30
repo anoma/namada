@@ -116,7 +116,7 @@ where
         {
             StateChange::Created => Ok(()),
             _ => Err(Error::InvalidStateChange(
-                "The state change of the  is invalid".to_owned(),
+                "The state change of the acknowledgment is invalid".to_owned(),
             )),
         }
     }
