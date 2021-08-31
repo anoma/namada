@@ -490,15 +490,17 @@ pub mod cmds {
 
 pub mod args {
 
+    use std::convert::TryFrom;
     use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
 
     use anoma::types::address::Address;
-    use anoma::types::intent::Exchange;
+    use anoma::types::intent::{DecimalWrapper, Exchange};
     use anoma::types::token;
     use libp2p::Multiaddr;
+    use serde::Deserialize;
 
     use super::utils::*;
     use super::ArgMatches;
@@ -717,6 +719,67 @@ pub mod args {
         }
     }
 
+    /// Helper struct for generating intents
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct ExchangeDefinition {
+        /// The source address
+        pub addr: String,
+        /// The token to be sold
+        pub token_sell: String,
+        /// The minimum rate
+        pub rate_min: String,
+        /// The maximum amount of token to be sold
+        pub max_sell: String,
+        /// The token to be bought
+        pub token_buy: String,
+        /// The amount of token to be bought
+        pub min_buy: String,
+        // The path to the wasm vp code
+        pub vp_path: Option<String>,
+    }
+
+    impl TryFrom<ExchangeDefinition> for Exchange {
+        type Error = &'static str;
+
+        fn try_from(
+            value: ExchangeDefinition,
+        ) -> Result<Exchange, Self::Error> {
+            let vp = if let Some(path) = value.vp_path {
+                if let Ok(wasm) = std::fs::read(path.clone()) {
+                    Some(wasm)
+                } else {
+                    eprintln!("File {} was not found.", path);
+                    None
+                }
+            } else {
+                None
+            };
+
+            let addr = Address::decode(value.addr)
+                .expect("Addr should be a valid address");
+            let token_buy = Address::decode(value.token_buy)
+                .expect("Token_buy should be a valid address");
+            let token_sell = Address::decode(value.token_sell)
+                .expect("Token_sell should be a valid address");
+            let min_buy = token::Amount::from_str(&value.min_buy)
+                .expect("Min_buy must be convertible to number");
+            let max_sell = token::Amount::from_str(&value.max_sell)
+                .expect("Max_sell must be convertible to number");
+            let rate_min = DecimalWrapper::from_str(&value.rate_min)
+                .expect("Max_sell must be convertible to decimal.");
+
+            Ok(Exchange {
+                addr,
+                token_sell,
+                rate_min,
+                max_sell,
+                token_buy,
+                min_buy,
+                vp,
+            })
+        }
+    }
+
     /// Intent arguments
     #[derive(Debug)]
     pub struct Intent {
@@ -741,8 +804,19 @@ pub mod args {
             let topic = TOPIC.parse(matches);
 
             let file = File::open(&data_path).expect("File must exist.");
-            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
-                .expect("JSON was not well-formatted");
+            let exchange_definitions: Vec<ExchangeDefinition> =
+                serde_json::from_reader(file)
+                    .expect("JSON was not well-formatted");
+
+            let exchanges: Vec<Exchange> = exchange_definitions
+                .iter()
+                .map(|item| {
+                    Exchange::try_from(item.clone()).expect(
+                        "Conversion from ExchangeDefinition to Exchange \
+                         should not fail.",
+                    )
+                })
+                .collect();
 
             Self {
                 node_addr,
