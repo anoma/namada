@@ -636,9 +636,10 @@ mod tests {
                 "token_buy": XAN,
                 "token_sell": BTC,
                 "rate_min": "2",
-                "vp_path": working_dir.join("..").join(VP_ALWAYS_TRUE_WASM).to_string_lossy().into_owned(),
+                "vp_path": working_dir.join(VP_ALWAYS_TRUE_WASM).to_string_lossy().into_owned(),
             }
         ]);
+
         let intent_b_json = json!([
             {
                 "key": ALBERT,
