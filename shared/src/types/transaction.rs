@@ -252,6 +252,7 @@ pub struct WrapperTx {
     gas_limit: GasLimit,
     /// the encrypted payload
     inner_tx: EncryptedTx,
+    /// A commitment to the inner contents of the decrypted payload
 }
 
 impl WrapperTx {
@@ -263,7 +264,7 @@ impl WrapperTx {
 
     /// Check the signature of the transaction
     pub fn verify_signature(&self) -> Result<(), VerifySigError> {
-        verify_signature(&self.pk, &self.fee, &self.sig)
+        verify_signature(&self.pk, &self.inner_tx, &self.sig)
     }
 
     /// A validity check on the ciphertext. Depends on a canonical choice of
