@@ -36,6 +36,10 @@ impl PublicKey {
     }
 }
 
+/// Ed25519 secret key
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SecretKey(ed25519_dalek::SecretKey);
+
 /// Ed25519 signature
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Signature(ed25519_dalek::Signature);
