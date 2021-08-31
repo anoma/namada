@@ -372,7 +372,7 @@ fn gen_keypair() {
 /// Helpers for testing with keys.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use proptest::prelude::*;
+    use proptest::prelude::{any, Strategy};
     use rand::prelude::StdRng;
     use rand::SeedableRng;
 

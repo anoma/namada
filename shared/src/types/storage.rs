@@ -53,6 +53,7 @@ pub const RESERVED_VP_KEY: &str = "?";
     Eq,
     PartialOrd,
     Ord,
+    Hash,
     Debug,
     Serialize,
     Deserialize,
@@ -82,6 +83,7 @@ impl Add<u64> for BlockHeight {
     Eq,
     PartialOrd,
     Ord,
+    Hash,
     Serialize,
     Deserialize,
 )]

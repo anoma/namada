@@ -103,6 +103,7 @@ dependencies = [
  "prost-types 0.8.0",
  "pwasm-utils",
  "rand 0.7.3",
+ "rand 0.8.4",
  "rand_core 0.5.1",
  "rust_decimal",
  "serde 1.0.127",
