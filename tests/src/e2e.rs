@@ -616,9 +616,9 @@ mod tests {
 
         println!("{}", base_dir.path().to_path_buf().to_string_lossy());
 
-        let intent_a_path = base_dir.path().to_path_buf().join("intent.A");
-        let intent_b_path = base_dir.path().to_path_buf().join("intent.B");
-        let intent_c_path = base_dir.path().to_path_buf().join("intent.C");
+        let _intent_a_path = base_dir.path().to_path_buf().join("intent.A");
+        let _intent_b_path = base_dir.path().to_path_buf().join("intent.B");
+        let _intent_c_path = base_dir.path().to_path_buf().join("intent.C");
 
         let intent_a_path_input =
             base_dir.path().to_path_buf().join("intent.A.data");
@@ -677,53 +677,6 @@ mod tests {
             "ledger",
         ]);
 
-        // Craft intents
-        // cargo run --bin anomac -- craft-intent --key $BERTHA
-        // --file-path-input intent.A.data --file-path-output intent.A
-
-        let tx_a = vec![
-            "craft-intent",
-            "--key",
-            BERTHA,
-            "--file-path-output",
-            intent_a_path.to_str().unwrap(),
-            "--file-path-input",
-            intent_a_path_input.to_str().unwrap(),
-        ];
-        let mut craft_intent_a = Command::cargo_bin("anomac")?;
-        craft_intent_a.args(tx_a);
-        craft_intent_a.spawn().expect("Should create the intent");
-
-        // cargo run --bin anomac -- craft-intent --key $ALBERT
-        // --file-path-input intent.B.data --file-path-output intent.B
-        let tx_b = vec![
-            "craft-intent",
-            "--key",
-            ALBERT,
-            "--file-path-output",
-            intent_b_path.to_str().unwrap(),
-            "--file-path-input",
-            intent_b_path_input.to_str().unwrap(),
-        ];
-        let mut craft_intent_b = Command::cargo_bin("anomac")?;
-        craft_intent_b.args(tx_b);
-        craft_intent_b.spawn().expect("Should create the intent");
-
-        // cargo run --bin anomac -- craft-intent --key $CHRISTEL
-        // --file-path-input intent.C.data --file-path-output intent.C
-        let tx_c = vec![
-            "craft-intent",
-            "--key",
-            CHRISTEL,
-            "--file-path-output",
-            intent_c_path.to_str().unwrap(),
-            "--file-path-input",
-            intent_c_path_input.to_str().unwrap(),
-        ];
-        let mut craft_intent_c = Command::cargo_bin("anomac")?;
-        craft_intent_c.args(tx_c);
-        craft_intent_c.spawn().expect("Should create the intent");
-
         //  Start gossip
         let mut session_gossip = spawn_command(base_node_gossip, Some(60_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
@@ -749,9 +702,11 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_a_path.to_str().unwrap(),
+            intent_a_path_input.to_str().unwrap(),
             "--topic",
             "asset_v1",
+            "--key",
+            BERTHA,
         ]);
 
         let mut session_send_intent_a =
@@ -776,9 +731,11 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_b_path.to_str().unwrap(),
+            intent_b_path_input.to_str().unwrap(),
             "--topic",
             "asset_v1",
+            "--key",
+            ALBERT,
         ]);
         let mut session_send_intent_b =
             spawn_command(send_intent_b, Some(20_000))
@@ -802,9 +759,11 @@ mod tests {
             "--node",
             "http://127.0.0.1:39111",
             "--data-path",
-            intent_c_path.to_str().unwrap(),
+            intent_c_path_input.to_str().unwrap(),
             "--topic",
             "asset_v1",
+            "--key",
+            CHRISTEL,
         ]);
         let mut session_send_intent_c =
             spawn_command(send_intent_c, Some(20_000))

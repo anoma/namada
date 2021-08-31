@@ -95,18 +95,13 @@ echo '[{"addr":"a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3
 
 echo '[{"addr":"a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx","key":"a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx","max_sell":300,"min_buy":50,"min_rate":0.7,"token_buy":"a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc","token_sell":"a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9"}]' > intent.C.data
 
-# 2) craft intents
-cargo run --bin anomac -- craft-intent --key $BERTHA --file-path-input intent.A.data --file-path-output intent.A
-cargo run --bin anomac -- craft-intent --key $ALBERT --file-path-input intent.B.data --file-path-output intent.B
-cargo run --bin anomac -- craft-intent --key $CHRISTEL --file-path-input intent.C.data --file-path-output intent.C
-
-# Subscribe to new network
+# 1.5) Subscribe to new network
 cargo run --bin anomac -- subscribe-topic --node "http://127.0.0.1:39111" --topic "asset_v1"
 
-# Submit the intents (need a rpc server)
-cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_A --topic "asset_v1"
-cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_B --topic "asset_v1"
-cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent_C --topic "asset_v1"
+# 2) Submit the intents (need a rpc server)
+cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent.A.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent.B.data --topic "asset_v1"
+cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent.C.data --topic "asset_v1"
 
 # Format the code
 make fmt

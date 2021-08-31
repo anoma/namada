@@ -128,7 +128,6 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         QueryBalance(QueryBalance),
         Intent(Intent),
-        CraftIntent(CraftIntent),
         SubscribeTopic(SubscribeTopic),
     }
 
@@ -139,7 +138,6 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def())
                 .subcommand(QueryBalance::def())
                 .subcommand(Intent::def())
-                .subcommand(CraftIntent::def())
                 .subcommand(SubscribeTopic::def())
         }
 
@@ -150,8 +148,6 @@ pub mod cmds {
             let query_balance =
                 SubCmd::parse(matches).map_fst(Self::QueryBalance);
             let intent = SubCmd::parse(matches).map_fst(Self::Intent);
-            let craft_intent =
-                SubCmd::parse(matches).map_fst(Self::CraftIntent);
             let subscribe_topic =
                 SubCmd::parse(matches).map_fst(Self::SubscribeTopic);
             tx_custom
@@ -159,7 +155,6 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(query_balance)
                 .or(intent)
-                .or(craft_intent)
                 .or(subscribe_topic)
         }
     }
@@ -468,28 +463,6 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
-    pub struct CraftIntent(pub args::CraftIntent);
-
-    impl SubCmd for CraftIntent {
-        const CMD: &'static str = "craft-intent";
-
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (CraftIntent(args::CraftIntent::parse(matches)), matches)
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Craft an intent.")
-                .add_args::<args::CraftIntent>()
-        }
-    }
-
-    #[derive(Debug)]
     pub struct SubscribeTopic(pub args::SubscribeTopic);
 
     impl SubCmd for SubscribeTopic {
@@ -516,17 +489,16 @@ pub mod cmds {
 }
 
 pub mod args {
-    use std::convert::TryFrom;
+
     use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
 
     use anoma::types::address::Address;
-    use anoma::types::intent::{DecimalWrapper, Exchange};
+    use anoma::types::intent::Exchange;
     use anoma::types::token;
     use libp2p::Multiaddr;
-    use serde::Deserialize;
 
     use super::utils::*;
     use super::ArgMatches;
@@ -561,9 +533,7 @@ pub mod args {
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE: Arg<String> = arg("node");
-    const FILE_PATH_OUTPUT: ArgDefault<String> =
-        arg_default("file-path-output", DefaultFn(|| "intent.data".into()));
-    const FILE_PATH_INPUT: Arg<String> = arg("file-path-input");
+    const TO_STDOUT: ArgFlag = flag("stdout");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
@@ -752,145 +722,54 @@ pub mod args {
     pub struct Intent {
         /// Gossip node address
         pub node_addr: String,
-        /// Path to the intent file
-        pub data_path: PathBuf,
         /// Intent topic
         pub topic: String,
+        /// Signing key
+        pub key: Address,
+        /// Exchanges description
+        pub exchanges: Vec<Exchange>,
+        /// Print output to stdout
+        pub to_stdout: bool,
     }
 
     impl Args for Intent {
         fn parse(matches: &ArgMatches) -> Self {
+            let key = SIGNING_KEY.parse(matches);
             let node_addr = NODE.parse(matches);
             let data_path = DATA_PATH.parse(matches);
+            let to_stdout = TO_STDOUT.parse(matches);
             let topic = TOPIC.parse(matches);
+
+            let file = File::open(&data_path).expect("File must exist.");
+            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
+                .expect("JSON was not well-formatted");
+
             Self {
                 node_addr,
-                data_path,
                 topic,
+                key,
+                exchanges,
+                to_stdout,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(NODE.def().about("The gossip node address."))
+                .arg(SIGNING_KEY.def().about("The key to sign the intent."))
                 .arg(DATA_PATH.def().about(
                     "The data of the intent, that contains all value \
                      necessary for the matchmaker.",
+                ))
+                .arg(TO_STDOUT.def().about(
+                    "Echo the serialized intent to stdout. Note that with \
+                     this option, the intent won't be submitted to the intent \
+                     gossiper RPC.",
                 ))
                 .arg(
                     TOPIC.def().about(
                         "The subnetwork where the intent should be sent to",
                     ),
                 )
-        }
-    }
-
-    /// Helper struct for generating intents
-    #[derive(Debug, Clone, Deserialize)]
-    pub struct ExchangeDefinition {
-        /// The source address
-        pub addr: String,
-        /// The token to be sold
-        pub token_sell: String,
-        /// The minimum rate
-        pub rate_min: String,
-        /// The maximum amount of token to be sold
-        pub max_sell: String,
-        /// The token to be bought
-        pub token_buy: String,
-        /// The amount of token to be bought
-        pub min_buy: String,
-        // The path to the wasm vp code
-        pub vp_path: Option<String>,
-    }
-
-    impl TryFrom<ExchangeDefinition> for Exchange {
-        type Error = &'static str;
-
-        fn try_from(
-            value: ExchangeDefinition,
-        ) -> Result<Exchange, Self::Error> {
-            let vp = if let Some(path) = value.vp_path {
-                if let Ok(wasm) = std::fs::read(path.clone()) {
-                    Some(wasm)
-                } else {
-                    eprintln!("File {} was not found.", path);
-                    None
-                }
-            } else {
-                None
-            };
-
-            let addr = Address::decode(value.addr)
-                .expect("Addr should be a valid address");
-            let token_buy = Address::decode(value.token_buy)
-                .expect("Token_buy should be a valid address");
-            let token_sell = Address::decode(value.token_sell)
-                .expect("Token_sell should be a valid address");
-            let min_buy = token::Amount::from_str(&value.min_buy)
-                .expect("Min_buy must be convertible to number");
-            let max_sell = token::Amount::from_str(&value.max_sell)
-                .expect("Max_sell must be convertible to number");
-            let rate_min = DecimalWrapper::from_str(&value.rate_min)
-                .expect("Max_sell must be convertible to decimal.");
-
-            Ok(Exchange {
-                addr,
-                token_sell,
-                rate_min,
-                max_sell,
-                token_buy,
-                min_buy,
-                vp,
-            })
-        }
-    }
-
-    /// Craft intent for token exchange arguments
-    #[derive(Debug)]
-    pub struct CraftIntent {
-        /// Signing key
-        pub key: Address,
-        /// Exchange description
-        pub exchanges: Vec<Exchange>,
-        /// Target file path
-        pub file_path: String,
-    }
-
-    impl Args for CraftIntent {
-        fn parse(matches: &ArgMatches) -> Self {
-            let key = SIGNING_KEY.parse(matches);
-            let file_path_output = FILE_PATH_OUTPUT.parse(matches);
-            let file_path_input = FILE_PATH_INPUT.parse(matches);
-            let file = File::open(&file_path_input).expect("File must exist.");
-
-            let exchange_definitions: Vec<ExchangeDefinition> =
-                serde_json::from_reader(file)
-                    .expect("JSON was not well-formatted");
-
-            let exchanges: Vec<Exchange> = exchange_definitions
-                .iter()
-                .map(|item| match Exchange::try_from(item.clone()) {
-                    Ok(exchange) => exchange,
-                    Err(_e) => {
-                        // TODO: exit reporting error
-                        todo!()
-                    }
-                })
-                .collect();
-
-            Self {
-                key,
-                exchanges,
-                file_path: file_path_output,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(SIGNING_KEY.def().about(
-                "Address of the account with key used to sign the intent.",
-            ))
-            .arg(FILE_PATH_OUTPUT.def().about("The output file"))
-            .arg(FILE_PATH_INPUT.def().about("The input file"))
         }
     }
 
