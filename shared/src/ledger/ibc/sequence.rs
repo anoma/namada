@@ -17,7 +17,7 @@ use thiserror::Error;
 use super::Ibc;
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::ibc::{
-    self as types, Error as IbcDataError, PacketAckData, PacketReceiptData,
+    Error as IbcDataError, PacketAckData, PacketReceiptData,
 };
 use crate::types::storage::{Key, KeySeg};
 
@@ -66,7 +66,7 @@ where
         tx_data: &[u8],
     ) -> Result<()> {
         let port_channel_id = Self::get_port_channel_id(key)?;
-        let packet = types::decode_packet(tx_data)?;
+        let packet = Packet::try_from_slice(tx_data)?;
         let next_seq_pre = self
             .get_next_sequence_send_pre(&port_channel_id)
             .map_err(|e| Error::InvalidSequence(e.to_string()))?;
@@ -99,7 +99,7 @@ where
     ) -> Result<()> {
         let port_channel_id = Self::get_port_channel_id(key)?;
         let data = PacketReceiptData::try_from_slice(tx_data)?;
-        let packet = data.packet()?;
+        let packet = &data.packet;
         let next_seq_pre = self
             .get_next_sequence_recv_pre(&port_channel_id)
             .map_err(|e| Error::InvalidSequence(e.to_string()))?;
@@ -126,9 +126,9 @@ where
             ));
         }
 
-        self.validate_recv_packet(&port_channel_id, &packet)?;
+        self.validate_recv_packet(&port_channel_id, packet)?;
 
-        self.verify_recv_proof(&port_channel_id, &packet, &data.proofs()?)
+        self.verify_recv_proof(&port_channel_id, packet, &data.proofs()?)
     }
 
     pub(super) fn validate_sequence_ack(
@@ -138,7 +138,7 @@ where
     ) -> Result<()> {
         let port_channel_id = Self::get_port_channel_id(key)?;
         let data = PacketAckData::try_from_slice(tx_data)?;
-        let packet = data.packet()?;
+        let packet = &data.packet;
         let next_seq_pre = self
             .get_next_sequence_ack_pre(&port_channel_id)
             .map_err(|e| Error::InvalidSequence(e.to_string()))?;
@@ -165,12 +165,12 @@ where
             ));
         }
 
-        self.validate_ack_packet(&port_channel_id, &packet)?;
+        self.validate_ack_packet(&port_channel_id, packet)?;
 
         self.verify_ack_proof(
             &port_channel_id,
-            &packet,
-            data.ack(),
+            packet,
+            data.ack.clone(),
             &data.proofs()?,
         )
     }

@@ -11,7 +11,6 @@ use ibc::ics02_client::context::ClientReader;
 use ibc::ics02_client::height::Height;
 use ibc::ics24_host::identifier::ClientId;
 use ibc::ics24_host::Path;
-use tendermint_proto::Protobuf;
 use thiserror::Error;
 
 use super::{Ibc, StateChange};
@@ -145,11 +144,10 @@ where
         client_id: &ClientId,
         data: ClientUpdateData,
     ) -> Result<()> {
-        let id = data.client_id()?;
-        if id != *client_id {
+        if data.client_id != *client_id {
             return Err(Error::InvalidClient(format!(
                 "The client ID is mismatched: {} in the tx data, {} in the key",
-                id, client_id,
+                data.client_id, client_id,
             )));
         }
 
@@ -177,8 +175,7 @@ where
         )?;
 
         let client = AnyClient::from_client_type(client_state.client_type());
-        let headers = data.headers()?;
-        let updated = headers.iter().try_fold(
+        let updated = data.headers.iter().try_fold(
             (prev_client_state, prev_consensus_state),
             |(new_client_state, _), header| {
                 client.check_header_and_update_state(
@@ -213,11 +210,10 @@ where
         client_id: &ClientId,
         data: ClientUpgradeData,
     ) -> Result<()> {
-        let id = data.client_id()?;
-        if id != *client_id {
+        if data.client_id != *client_id {
             return Err(Error::InvalidClient(format!(
                 "The client ID is mismatched: {} in the tx data, {} in the key",
-                id, client_id,
+                data.client_id, client_id,
             )));
         }
 
@@ -272,14 +268,13 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client state shouldn't fail");
         match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => {
-                AnyClientState::decode_vec(&value).map_err(|e| {
+            Ok(Some(value)) => AnyClientState::try_from_slice(&value[..])
+                .map_err(|e| {
                     Error::InvalidClient(format!(
                         "Decoding the client state failed: ID {}, {}",
                         client_id, e
                     ))
-                })
-            }
+                }),
             _ => Err(Error::InvalidClient(format!(
                 "The prior client state doesn't exist: ID {}",
                 client_id
@@ -307,15 +302,14 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a consensus state shouldn't fail");
         match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => {
-                AnyConsensusState::decode_vec(&value).map_err(|e| {
+            Ok(Some(value)) => AnyConsensusState::try_from_slice(&value[..])
+                .map_err(|e| {
                     Error::InvalidClient(format!(
                         "Decoding the consensus state failed: ID {}, Height \
                          {}, {}",
                         client_id, height, e
                     ))
-                })
-            }
+                }),
             _ => Err(Error::InvalidClient(format!(
                 "The prior consensus state doesn't exist: ID {}, Height {}",
                 client_id, height
@@ -335,10 +329,7 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client type shouldn't fail");
         match self.ctx.read_post(&key) {
-            Ok(Some(value)) => {
-                let s: String = storage::types::decode(&value).ok()?;
-                Some(ClientType::from_str(&s).ok()?)
-            }
+            Ok(Some(value)) => ClientType::try_from_slice(&value[..]).ok(),
             // returns None even if DB read fails
             _ => None,
         }
@@ -349,7 +340,7 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a client state shouldn't fail");
         match self.ctx.read_post(&key) {
-            Ok(Some(value)) => AnyClientState::decode_vec(&value).ok(),
+            Ok(Some(value)) => AnyClientState::try_from_slice(&value[..]).ok(),
             // returns None even if DB read fails
             _ => None,
         }
@@ -369,7 +360,9 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a consensus state shouldn't fail");
         match self.ctx.read_post(&key) {
-            Ok(Some(value)) => AnyConsensusState::decode_vec(&value).ok(),
+            Ok(Some(value)) => {
+                AnyConsensusState::try_from_slice(&value[..]).ok()
+            }
             // returns None even if DB read fails
             _ => None,
         }

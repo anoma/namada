@@ -18,7 +18,7 @@ use thiserror::Error;
 
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
-use crate::types::ibc::{self as types, Error as IbcDataError, TimeoutData};
+use crate::types::ibc::{Error as IbcDataError, TimeoutData};
 use crate::types::storage::{Key, KeySeg};
 
 #[allow(missing_docs)]
@@ -72,7 +72,7 @@ where
         {
             StateChange::Created => {
                 // sending a packet
-                let packet = types::decode_packet(tx_data)?;
+                let packet = Packet::try_from_slice(tx_data)?;
                 let commitment = self
                     .get_packet_commitment(&commitment_key)
                     .ok_or_else(|| {
@@ -140,7 +140,7 @@ where
         tx_data: &[u8],
     ) -> Result<()> {
         let data = TimeoutData::try_from_slice(tx_data)?;
-        let packet = data.packet()?;
+        let packet = data.packet.clone();
         let commitment =
             self.get_packet_commitment(commitment_key).ok_or_else(|| {
                 Error::InvalidPacket(format!(
@@ -187,7 +187,7 @@ where
             (State::Open, State::Closed) => {
                 // "Timeout"
                 if self
-                    .check_timeout(&client_id, data.proof_height(), &packet)
+                    .check_timeout(&client_id, data.proof_height, &packet)
                     .is_ok()
                 {
                     return Err(Error::InvalidPacket(
@@ -231,7 +231,7 @@ where
         }
 
         if channel.order_matches(&Order::Ordered) {
-            if packet.sequence < data.sequence() {
+            if packet.sequence < data.sequence {
                 return Err(Error::InvalidPacket(
                     "The sequence is invalid".to_owned(),
                 ));
@@ -240,7 +240,7 @@ where
                 self,
                 client_id,
                 packet,
-                data.sequence(),
+                data.sequence,
                 &data.proofs()?,
             ) {
                 Ok(_) => Ok(()),
