@@ -147,8 +147,6 @@ impl Matchmaker {
                 let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair);
                 let tx_bytes = tx.to_bytes();
 
-                // let client =
-                //     HttpClient::new(self.ledger_address.clone()).unwrap();
                 let response =
                     broadcast_tx(self.ledger_address.clone(), tx_bytes).await;
                 println!("{:#?}", response);

@@ -810,10 +810,11 @@ pub mod args {
             value: ExchangeDefinition,
         ) -> Result<Exchange, Self::Error> {
             let vp = if let Some(path) = value.vp_path {
-                if let Ok(wasm) = std::fs::read(path) {
+                if let Ok(wasm) = std::fs::read(path.clone()) {
                     Some(wasm)
                 } else {
-                    None // maybe here is better to throw an error or inform the user that the path to the VP is invalid
+                    eprintln!("File {} was not found.", path);
+                    None
                 }
             } else {
                 None

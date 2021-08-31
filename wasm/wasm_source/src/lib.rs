@@ -55,8 +55,7 @@ pub mod tx_transfer {
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
         let transfer =
             token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
-        // log_string(format!("apply_tx called with transfer: {:#?}",
-        // transfer));
+        log_string(format!("apply_tx called with transfer: {:#?}", transfer));
         let token::Transfer {
             source,
             target,
@@ -81,7 +80,7 @@ pub mod tx_update_vp {
         let update_vp =
             transaction::UpdateVp::try_from_slice(&signed.data.unwrap()[..])
                 .unwrap();
-        // log_string(format!("update VP for: {:#?}", update_vp.addr));
+        log_string(format!("update VP for: {:#?}", update_vp.addr));
         update_validity_predicate(update_vp.addr, update_vp.vp_code)
     }
 }
@@ -98,11 +97,11 @@ pub mod vp_token {
         keys_changed: HashSet<storage::Key>,
         verifiers: HashSet<Address>,
     ) -> bool {
-        // log_string(format!(
-        //     "validate_tx called with token addr: {}, key_changed: {:#?}, \
-        //      tx_data: {:#?}, verifiers: {:?}",
-        //     addr, keys_changed, tx_data, verifiers
-        // ));
+        log_string(format!(
+            "validate_tx called with token addr: {}, key_changed: {:#?}, \
+             verifiers: {:?}",
+            addr, keys_changed, verifiers
+        ));
 
         token::vp(&addr, &keys_changed, &verifiers)
     }
