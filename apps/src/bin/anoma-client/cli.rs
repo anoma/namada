@@ -65,9 +65,10 @@ async fn gossip_intent(
     let data_bytes = signed_ft.try_to_vec().unwrap();
 
     if to_stdout {
-        let mut out = std::io::stdout();
-        out.write_all(&data_bytes).unwrap();
-        out.flush().unwrap();
+        // let mut out = std::io::stdout();
+        // out.write_all(&data_bytes).unwrap();
+        // out.flush().unwrap();
+        println!("{:?}", data_bytes);
     } else {
         let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
 

@@ -532,7 +532,7 @@ pub mod args {
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE: Arg<String> = arg("node");
-    const TO_STDOUT: ArgFlag = flag("--stdout");
+    const TO_STDOUT: ArgFlag = flag("stdout");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
@@ -759,11 +759,11 @@ pub mod args {
                     "The data of the intent, that contains all value \
                      necessary for the matchmaker.",
                 ))
-                .arg(
-                    TO_STDOUT
-                        .def()
-                        .about("Echo the serialized intent to stdout."),
-                )
+                .arg(TO_STDOUT.def().about(
+                    "Echo the serialized intent to stdout. Note that with \
+                     this option, the intent won't be submitted to the intent \
+                     gossiper RPC.",
+                ))
                 .arg(
                     TOPIC.def().about(
                         "The subnetwork where the intent should be sent to",
