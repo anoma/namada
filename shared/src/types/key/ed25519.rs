@@ -1,13 +1,14 @@
 //! Ed25519 keys and related functionality
 
 use std::convert::TryInto;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::io::{ErrorKind, Write};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::Signer;
-pub use ed25519_dalek::{Keypair, SecretKey, SignatureError};
+pub use ed25519_dalek::{Keypair, SignatureError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -21,6 +22,10 @@ const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
 /// Ed25519 public key
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PublicKey(ed25519_dalek::PublicKey);
+
+/// Ed25519 secret key
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SecretKey(ed25519_dalek::SecretKey);
 
 /// Ed25519 signature
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -236,12 +241,45 @@ impl BorshDeserialize for PublicKey {
 
 impl BorshSerialize for PublicKey {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        // We need to turn the signature to bytes first..
+        // We need to turn the key to bytes first..
         let vec = self.0.as_bytes().to_vec();
         // .. and then encode them with Borsh
         let bytes = vec
             .try_to_vec()
             .expect("Public key bytes encoding shouldn't fail");
+        writer.write_all(&bytes)
+    }
+}
+
+impl BorshDeserialize for SecretKey {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        // deserialize the bytes first
+        let bytes: Vec<u8> =
+            BorshDeserialize::deserialize(buf).map_err(|e| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Error decoding ed25519 secret key: {}", e),
+                )
+            })?;
+        ed25519_dalek::SecretKey::from_bytes(&bytes)
+            .map(SecretKey)
+            .map_err(|e| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Error decoding ed25519 secret key: {}", e),
+                )
+            })
+    }
+}
+
+impl BorshSerialize for SecretKey {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        // We need to turn the key to bytes first..
+        let vec = self.0.as_bytes().to_vec();
+        // .. and then encode them with Borsh
+        let bytes = vec
+            .try_to_vec()
+            .expect("Secret key bytes encoding shouldn't fail");
         writer.write_all(&bytes)
     }
 }
@@ -300,6 +338,62 @@ impl PartialOrd for PublicKey {
     }
 }
 
+impl Display for PublicKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let vec = self
+            .try_to_vec()
+            .expect("Encoding public key shouldn't fail");
+        write!(f, "{}", hex::encode(&vec))
+    }
+}
+
+impl FromStr for PublicKey {
+    type Err = ParsePublicKeyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let vec = hex::decode(s).map_err(ParsePublicKeyError::InvalidHex)?;
+        BorshDeserialize::try_from_slice(&vec)
+            .map_err(ParsePublicKeyError::InvalidEncoding)
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ParsePublicKeyError {
+    #[error("Invalid public key hex: {0}")]
+    InvalidHex(hex::FromHexError),
+    #[error("Invalid public key encoding: {0}")]
+    InvalidEncoding(std::io::Error),
+}
+
+impl Display for SecretKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let vec = self
+            .try_to_vec()
+            .expect("Encoding secret key shouldn't fail");
+        write!(f, "{}", hex::encode(&vec))
+    }
+}
+
+impl FromStr for SecretKey {
+    type Err = ParseSecretKeyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let vec = hex::decode(s).map_err(ParseSecretKeyError::InvalidHex)?;
+        BorshDeserialize::try_from_slice(&vec)
+            .map_err(ParseSecretKeyError::InvalidEncoding)
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ParseSecretKeyError {
+    #[error("Invalid secret key hex: {0}")]
+    InvalidHex(hex::FromHexError),
+    #[error("Invalid secret key encoding: {0}")]
+    InvalidEncoding(std::io::Error),
+}
+
 #[allow(clippy::derive_hash_xor_eq)]
 impl Hash for Signature {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -327,6 +421,12 @@ impl From<ed25519_dalek::PublicKey> for PublicKey {
     }
 }
 
+impl From<PublicKey> for ed25519_dalek::PublicKey {
+    fn from(pk: PublicKey) -> Self {
+        pk.0
+    }
+}
+
 impl From<PublicKey> for PublicKeyHash {
     fn from(pk: PublicKey) -> Self {
         let pk_bytes =
@@ -339,6 +439,18 @@ impl From<PublicKey> for PublicKeyHash {
             hasher.finalize(),
             width = address::HASH_LEN
         ))
+    }
+}
+
+impl From<ed25519_dalek::SecretKey> for SecretKey {
+    fn from(sk: ed25519_dalek::SecretKey) -> Self {
+        Self(sk)
+    }
+}
+
+impl From<SecretKey> for ed25519_dalek::SecretKey {
+    fn from(sk: SecretKey) -> Self {
+        sk.0
     }
 }
 
@@ -395,5 +507,25 @@ pub mod testing {
             let mut rng = StdRng::from_seed(seed);
             Keypair::generate(&mut rng)
         })
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use rand::prelude::ThreadRng;
+    use rand::thread_rng;
+
+    use super::*;
+
+    /// Run `cargo test gen_keypair -- --nocapture` to generate a
+    /// new keypair.
+    #[test]
+    fn gen_keypair() {
+        let mut rng: ThreadRng = thread_rng();
+        let keypair = Keypair::generate(&mut rng);
+        let public_key: PublicKey = keypair.public.into();
+        let secret_key: SecretKey = keypair.secret.into();
+        println!("Public key: {}", public_key);
+        println!("Secret key: {}", secret_key);
     }
 }
