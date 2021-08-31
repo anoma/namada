@@ -35,8 +35,8 @@ impl<T: Ord + Clone> BTreeSetShims<T> for BTreeSet<T> {
     }
 
     fn pop_first_shim(&mut self) -> Option<T> {
-        let iter = self.iter();
-        let first = iter.last().cloned();
+        let mut iter = self.iter();
+        let first = iter.next().cloned();
         if let Some(first) = first {
             return self.take(&first);
         }
