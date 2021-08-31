@@ -1,6 +1,7 @@
 # PoS integration
 
-The [PoS system](/explore/design/pos.md) is integrated into Anoma ledger via:
+The [PoS system](/explore/design/pos.md) is integrated into Anoma ledger at 3 different layers:
+- base ledger that performs genesis initialization, validator set updates on new epoch and applies slashes when they are received from ABCI
 - an account with an internal address and a [native VP](vp.md#native-vps) that validates any changes applied by transactions to the PoS account state
 - transaction WASMs to perform various PoS actions, also available as a library code for custom made transactions
 
@@ -8,29 +9,27 @@ The `votes_per_token` PoS system parameter must be chosen to satisfy the [Tender
 
 All [the data relevant to the PoS system](/explore/design/pos.md#storage) are stored under the PoS account's storage sub-space, with the following key schema (the PoS address prefix is omitted for clarity):
 
-- `parameters`: the system parameters
-- `parameters/{parameters_hash}`: the system parameters value with this `parameters_hash `
-- `parameters/{parameters_hash}/{validator_address}`: a set of validators who want to switch to parameters with this `parameters_hash` (only keys are needed here, so the value can be a `unit`)
+- `params`: the system parameters
 - `validator/{validator_address}/consensus_key`
 - `validator/{validator_address}/state`
 - `validator/{validator_address}/total_deltas`
 - `validator/{validator_address}/voting_power`
 - `slash/{validator_address}`: a list of slashes, where each record contains epoch and slash rate
-- `bond/{bond_source}/{bond_validator}/delta`
-- `unbond/{unbond_source}/{unbond_validator}/deltas`
-- `validator_set/active`
-- `validator_set/inactive`
+- `bond/{bond_source}/{bond_validator}`
+- `unbond/{unbond_source}/{unbond_validator}`
+- `validator_set`
 - `total_voting_power`
 
 - standard validator metadata (these are regular storage values, not epoched data):
-  - `validator/{validator_address}/staking_reward_address`: an address that should receive staking rewards, if not set, the rewards are sent to `validator_address`
+  - `validator/{validator_address}/staking_reward_address`: an address that should receive staking rewards
+  - `validator/{validator_address}/address_raw_hash`: raw hash of validator's address associated with the address is used for look-up of validator address from a raw hash
   - TBA (e.g. alias, website, description, delegation commission rate, etc.)
 
-Additionally, only XAN tokens can be staked. The tokens being staked (bonds and unbonds amounts) are kept in the XAN token account under `{xan_address}/balance/{pos_address}`.
+Only XAN tokens can be staked in bonds. The tokens being staked (bonds and unbonds amounts) are kept in the PoS account under `{xan_address}/balance/{pos_address}` until they are withdrawn.
 
 ## Initialization
 
-The PoS system is initialized via a native VP interface that is given the validator set for the genesis block.
+The PoS system is initialized via the shell on chain initialization. The genesis validator set is given in the genesis configuration. On genesis initialization, all the epoched data is set to be immediately active for the current (the very first) epoch.
 
 ## Staking rewards and transaction fees
 
@@ -46,7 +45,7 @@ All the fees that are charged in a transaction execution (DKG transaction wrappe
 
 The transactions are assumed to be applied in epoch `n`. Any transaction that modifies [epoched data](/explore/design/pos.md#epoched-data) updates the structure as described in [epoched data storage](/explore/design/pos.md#storage).
 
-For slashing tokens, we implement a [PoS slash pool account](/explore/design/ledger/vp.md#pos-slash-pool-vp). Slashed tokens should be credited to this account and no token can be ever be debited by anyone.
+For slashing tokens, we implement a [PoS slash pool account](/explore/design/ledger/vp.md#pos-slash-pool-vp). Slashed tokens should be credited to this account and, for now, no tokens can be be debited by anyone.
 
 ### Validator transactions
 
@@ -92,19 +91,8 @@ The validator transactions are assumed to be applied with an account address `va
     - burn the slashed tokens (`amount - amount_after_slash`), if not zero
 - `change_consensus_key`:
   - creates a record in `validator/{validator_address}/consensus_key` in epoch `n + pipeline_length`
-- `change_system_params(params)`:
-  - let `params_hash = hash(params)`
-  - insert `parameters/{params_hash}/{validator_address}`
-  - write the `params` value into `parameters/{params_hash}`
-  - let `validators = parameters/{param_hash}`:
-    - if the sum of validators' voting power for epoch `n` is > 2/3 of `total_voting_power`:
-      - write the `params` value into `parameters` storage for epoch `n + unbonding_length`
-      - NOTE: because the validators who wanted this change may be slashed after the change is applied, we have to re-check any queued up parameters change in `submit_slashable_evidence` transaction and validate this in the VP
-- `remove_system_params_change(params_hash)`:
-  - remove `parameters/{params_hash}/{validator_address}`
-  - if the validator set with the prefix `parameters/{params_hash}/` is now empty, remove `parameters/{params_hash}` storage with the parameters value
 
-Additionally, `become_validator` and `change_consensus_key` must sign the transaction and attach the signature in the tx data field with the new consensus key to verify its ownership.
+For `self_bond`, `unbond`, `withdraw_unbonds`, `become_validator` and `change_consensus_key` the transaction must be signed with the validator's public key. Additionally, for `become_validator` and `change_consensus_key` we must attach a signature with the validator's consensus key to verify its ownership. Note that for `self_bond`, signature verification is also performed because there are tokens debited from the validator's account.
 
 ### Delegator transactions
 
@@ -144,17 +132,18 @@ The delegator transactions are assumed to be applied with an account address `de
       - credit the `amount_after_slash` to the `delegator_address` and debit the whole `amount` (before slash, if any) from the PoS account
       - burn the slashed tokens (`amount - amount_after_slash`), if not zero
 
-### Other transactions
+For `delegate`, `undelegate`, `redelegate` and `withdraw_unbonds` the transaction must be signed with the delegator's public key. Note that for `delegate`, signature verification is also performed because there are tokens debited from the delegator's account.
 
-- `submit_slashable_evidence(evidence)`:
-  - if `evidence in slash/{evidence.validator_address}`, panic
-  - validate the `evidence`
-  - append the `evidence` into `slash/{evidence.validator_address}`
-  - reduce the `validator/{validator_address}/total_deltas` for the `evidence.validator_address` by the slash rate in and before the `evidence.epoch`
-  - update the `validator/{validator_address}/voting_power` for the `evidence.validator_address` in and after epoch `n`
-  - update the `total_voting_power` in and after epoch `n`
-  - update `validator_set` in and after epoch `n`
-  - if there's a `parameters` change in any epoch after `n`, check that more than 2/3 of validators' voting power agree to the change or remove the queued up change if not
+## Slashing
+
+Evidence for byzantine behaviour is received from Tendermint ABCI on `BeginBlock`. For each evidence:
+
+- append the `evidence` into `slash/{evidence.validator_address}`
+- calculate the slashed amount from deltas in and before the `evidence.epoch` in `validator/{validator_address}/total_deltas` for the `evidence.validator_address` and the slash rate
+- deduct the slashed amount from the `validator/{validator_address}/total_deltas` at `pipeline_length` offset
+- update the `validator/{validator_address}/voting_power` for the `evidence.validator_address` in and after epoch `n + pipeline_length`
+- update the `total_voting_power` in and after epoch `n + pipeline_length`
+- update `validator_set` in and after epoch `n + pipeline_length`
 
 ## Validity predicate
 
@@ -163,26 +152,22 @@ In the following description, "pre-state" is the state prior to transaction exec
 Any changes to PoS epoched data are checked to update the structure as described in [epoched data storage](/explore/design/pos.md#storage).
 
 Because some key changes are expected to relate to others, the VP also accumulates some values that are checked for validity after key specific logic:
-- `validator_total_deltas: HashMap<Address, HashMap<Epoch, token::Change>>`
-- `validator_voting_powers: HashMap<Address, <HashMap<Epoch, u64>>`
-- `bond_deltas: HashMap<Address, HashMap<Epoch, Bond>>`
-- `unbond_deltas: HashMap<Address, HashMap<Epoch, Unbond>>`
-- `slashes: HashMap<Address, HashMap<Epoch, u8>>`
-- `validator_set_changes: HashSet<Epoch>`
+- `balance_delta: token::Change`
+- `bond_delta: HashMap<Address, token::Change>`
+- `unbond_delta: HashMap<Address, token::Change>`
+- `total_deltas: HashMap<Address, token::Change>`
+- `total_stake_by_epoch: HashMap<Epoch, HashMap<Address, token::Amount>>`
+- `expected_voting_power_by_epoch: HashMap<Epoch, HashMap<Address, VotingPower>>`: calculated from the validator's total deltas
+- `expected_total_voting_power_delta_by_epoch: HashMap<Epoch, VotingPowerDelta>`: calculated from the validator's total deltas
+- `voting_power_by_epoch: HashMap<Epoch, <HashMap<Address, VotingPower>>`
+- `validator_set_pre: Option<ValidatorSets<Address>>`
+- `validator_set_post: Option<ValidatorSets<Address>>`
+- `total_voting_power_delta_by_epoch: HashMap<Epoch, VotingPowerDelta>`
 
-The accumulators are initialized to their default values (empty hash maps and hash set).
+The accumulators are initialized to their default values (empty hash maps and hash set). The data keyed by address are using the validator addresses.
 
-All the above are keyed by validator addresses.
+The validity predicate triggers a validation logic based on the storage keys modified by a transaction:
 
-The validity predicate triggers a validation logic based on the storage keys modified by a transaction.
-
-- `parameters`:
-  - if the `parameters` changed in epoch other than `n + unbonding_length`, panic
-  - check that more than 2/3 voting power agreed to the parameters change in `parameters/{parameters_hash}/{any_validator_address}` post-state
-- `parameters/{parameters_hash}`:
-  - check that the hash of value is equal to the `parameters_hash` in the key
-- `parameters/{parameters_hash}/{validator_address}`:
-  - check that the `parameters/{parameters_hash}` exists in the pre-state and post-state
 - `validator/{validator_address}/consensus_key`:
   ```rust,ignore
   match (pre_state, post_state) {
@@ -215,41 +200,37 @@ The validity predicate triggers a validation logic based on the storage keys mod
   }
   ```
 - `validator/{validator_address}/total_deltas`:
-  - find the difference between the pre-state and post-state values and add it to the `validator_total_deltas` accumulator
+  - find the difference between the pre-state and post-state values and add it to the `total_deltas` accumulator and update `total_stake_by_epoch`, `expected_voting_power_by_epoch` and `expected_total_voting_power_delta_by_epoch`
 - `validator/{validator_address}/voting_power`:
-  - find the post-state value and insert it into the `validator_voting_powers` accumulator
-- `slash/{validator_address}`:
-  - find the newly evidence(s), ensure that they're not already present in the pre-state, validate them and add them to the `slashes` accumulator
-  - check that the validator's total deltas have been slashed correctly
-  - check that the validator's voting power has been adjusted correctly
-  - check that the total voting power has been adjusted correctly
-  - check that the the active and inactive validator sets are correct
-  - check that if there's was a `parameters` change in any epoch after `n` in pre-state, more than 2/3 of validators' voting power still agree to the change, otherwise the queued up change must have been removed in the post-state
+  - find the difference between the pre-state and post-state value and insert it into the `voting_power_by_epoch` accumulator
 - `bond/{bond_source}/{bond_validator}/delta`:
   - for each difference between the post-state and pre-state values:
     - if the difference is not in epoch `n` or `n + pipeline_length`, panic
-    - add it to the `bond_deltas` accumulator
+    - find slashes for the `bond_validator`, if any, and apply them to the delta value
+    - add it to the `bond_delta` accumulator
 - `unbond/{unbond_source}/{unbond_validator}/deltas`:
   - for each difference between the post-state and pre-state values:
     - if the difference is not in epoch `n` or `n + unboding_length`, panic
-    - add it to the `unbond_deltas` accumulator
-- `validator_set/active`:
-  - set the accumulator `validator_set_changed` to true in each epoch in which it has changed
-- `validator_set/inactive`:
-  - set the accumulator `validator_set_changed` to true in each epoch in which it has changed
+    - find slashes for the `bond_validator`, if any, and apply them to the delta value
+    - add it to the `unbond_delta` accumulator
+- `validator_set`:
+  - set the accumulators `validator_set_pre` and `validator_set_post`
+- `total_voting_power`:
+  - find the difference between the post-state and pre-state
+  - add it to the `total_voting_power_delta_by_epoch` accumulator
+- PoS account's balance:
+  - find the difference between the post-state and pre-state
+  - add it to the `balance_delta` accumulator
 
 No other storage key changes are permitted by the VP.
 
 After the storage keys iteration, we check the accumulators:
 
-- the `validator_total_deltas` must be equal to the amounts in `bond_deltas` added with the amounts in `unbond_deltas` with slashes applied where the slash's epoch is in bond's or unbond's epoch range
-- the sum of differences between the `validator_total_deltas` in epoch `n + unbonding_length` and epoch `n + pipeline_length` must be equal to the difference in PoS account's token balance between post-state and pre-state
-- for each `validator_voting_powers`:
-  - find the validator's total bonded tokens from post-state
-  - the total bonded tokens divided by `votes_per_token` must be equal to the voting power
-- for each slash in `slashes`, the `validator_total_deltas` must be reduced by the slash rate
-- for each epoch in `validator_set_changes`, the `validator_set/active.first().voting_power` (the lowest active voting power) must be greater than or equal to `validator_set/inactive.last().voting_power` (the greatest inactive voting power)
-- for each `validator_total_deltas`, check that the validator's voting power has been adjusted correctly
-- if `validator_total_deltas` is not empty:
-  - check that the total voting power has been adjusted correctly
-  - check that the the active and inactive validator sets are correct
+- For each `total_deltas`, there must be the same delta value in `bond_delta`.
+- For each `bond_delta`, there must be validator's change in `total_deltas`.
+- Check that all positive `unbond_delta` also have a `total_deltas` update. Negative unbond delta is from withdrawing, which removes tokens from unbond, but doesn't affect total deltas.
+- Check validator sets updates against validator total stakes.
+- Check voting power changes against validator total stakes.
+- Check expected voting power changes against `voting_power_by_epoch`.
+- Check expected total voting power change against `total_voting_power_delta_by_epoch`.
+- Check that the sum of bonds and unbonds deltas is equal to the balance delta.
