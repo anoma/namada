@@ -1,7 +1,6 @@
 //! Anoma client CLI.
 
 use std::collections::HashSet;
-use std::io::Write;
 
 use anoma::types::intent::{Exchange, FungibleTokenIntent};
 use anoma::types::key::ed25519::Signed;
