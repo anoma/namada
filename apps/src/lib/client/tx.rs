@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 
 use anoma::proto::Tx;
+use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::token;
 use anoma::types::transaction::UpdateVp;
@@ -124,6 +125,7 @@ struct TxResponse {
     hash: String,
     code: String,
     gas_used: String,
+    initialized_accounts: Vec<Address>,
 }
 
 impl From<serde_json::Value> for TxResponse {
@@ -134,12 +136,33 @@ impl From<serde_json::Value> for TxResponse {
         let hash = selector("$.events.['applied.hash'][0]").unwrap();
         let code = selector("$.events.['applied.code'][0]").unwrap();
         let gas_used = selector("$.events.['applied.gas_used'][0]").unwrap();
+        let initialized_accounts =
+            selector("$.events.['applied.initialized_accounts'][0]");
+        let initialized_accounts = match initialized_accounts {
+            Ok(values) => {
+                // In a response, the initialized accounts are encoded as e.g.:
+                // ```
+                // "applied.initialized_accounts": Array([
+                //   String(
+                //     "[\"a1qq5qqqqq8qerqv3sxyuyz3zzxgcyxvecgerry333xce5z3fkg4pnj3zxgfqnzd69gsu5gwzr9wpjpe\"]",
+                //   ),
+                // ]),
+                // ...
+                // So we need to decode the inner string first ...
+                let raw: String =
+                    serde_json::from_value(values[0].clone()).unwrap();
+                // ... and then decode the vec from the array inside the string
+                serde_json::from_str(&raw).unwrap()
+            }
+            _ => vec![],
+        };
         TxResponse {
             info: serde_json::from_value(info[0].clone()).unwrap(),
             height: serde_json::from_value(height[0].clone()).unwrap(),
             hash: serde_json::from_value(hash[0].clone()).unwrap(),
             code: serde_json::from_value(code[0].clone()).unwrap(),
             gas_used: serde_json::from_value(gas_used[0].clone()).unwrap(),
+            initialized_accounts,
         }
     }
 }

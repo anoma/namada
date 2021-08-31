@@ -122,7 +122,7 @@ impl WriteLog {
     /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
     /// not possible to delete.
     pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
-        if key.is_validity_predicate() {
+        if key.is_validity_predicate().is_some() {
             return Err(Error::DeleteVp);
         }
         let size_diff = match self
@@ -184,6 +184,27 @@ impl WriteLog {
                 StorageModification::InitAccount { .. } => Either::Right(key),
                 _ => Either::Left(key),
             })
+    }
+
+    /// Get the storage keys changed in the current transaction (left) and
+    /// the keys to the accounts initialized in the current transaction (right).
+    /// The first vector excludes keys of validity predicates of newly
+    /// initialized accounts, but may include keys of other data written
+    /// into newly initialized accounts. The accounts keys point to the validity
+    /// predicates of the newly created accounts.
+    pub fn get_initialized_accounts(&self) -> Vec<Address> {
+        self.tx_write_log
+            .iter()
+            .filter_map(|(key, value)| {
+                match (key.is_validity_predicate(), value) {
+                    (
+                        Some(address),
+                        StorageModification::InitAccount { .. },
+                    ) => Some(address.clone()),
+                    _ => None,
+                }
+            })
+            .collect()
     }
 
     /// Commit the current transaction's write log to the block when it's
