@@ -13,7 +13,7 @@ Epoched data are data associated with a specific epoch that are set in advance. 
 - [Validators' consensus key, state and total bonded tokens](#validator). Identified by the validator's address.
 - [Bonds](#bonds) are created by self-bonding and delegations. They are identified by the pair of source address and the validator's address.
 
-Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + unboding_length` for [unboding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` become immutable.
+Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + unboding_length` for [unboding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` are final and the values become immutable.
 
 ## Entities
 
@@ -34,12 +34,12 @@ A validator may be in one of the following states:
 - *candidate*:
   A validator is considered for block creation and can receive delegations.
 
-For each validator (in any state), the system also tracks total bonded tokens as a sum of the tokens in their self-bonds and delegated bonds, less any unbonded tokens. The total bonded tokens determine their voting voting power by division by the `votes_per_token` [parameter](#system-parameters). The voting power is used for validator selection for block creation and is used in governance related activities.
+For each validator (in any state), the system also tracks total bonded tokens as a sum of the tokens in their self-bonds and delegated bonds, less any unbonded tokens. The total bonded tokens determine their voting voting power by multiplication by the `votes_per_token` [parameter](#system-parameters). The voting power is used for validator selection for block creation and is used in governance related activities.
 
 #### Validator actions
 
 - *become validator*:
-  Any account that is not a validator already and that doesn't have any delegations may request to become a validator. It is required to only provide a public consensus key. For the action applied in epoch `n`, the validator's state will be immediately set to *pending*, it will be set to *candidate* for epoch `n + pipeline_length` and the consensus key is set for epoch `n + pipeline_length`.
+  Any account that is not a validator already and that doesn't have any delegations may request to become a validator. It is required to provide a public consensus key and staking reward address. For the action applied in epoch `n`, the validator's state will be immediately set to *pending*, it will be set to *candidate* for epoch `n + pipeline_length` and the consensus key is set for epoch `n + pipeline_length`.
 - *deactivate*:
   Only a *pending* or *candidate* validator account may *deactivate*. For this action applied in epoch `n`, the validator's account is set to become *inactive* in the epoch `n + pipeline_length`.
 - *reactivate*:
@@ -52,10 +52,6 @@ For each validator (in any state), the system also tracks total bonded tokens as
   Unbonded tokens may be withdrawn in or after the [unbond's epoch](#unbond).
 - *change consensus key*:
   Set the new consensus key. When applied in epoch `n`, the key is set for epoch `n + pipeline_length`.
-- *change system parameters*:
-  Set the wanted change of system parameters for this validator.
-- *remove system parameters change*:
-  Remove a previously wanted change of system parameters for this validator.
 
 #### Active validator set
 
@@ -63,7 +59,7 @@ From all the *candidate* validators, in each epoch the ones with the most voting
 
 ### Delegator
 
-A delegator may have any number number of delegations. Delegations are stored in [bonds](#bonds).
+A delegator may have any number number of delegations to any number of validators. Delegations are stored in [bonds](#bonds).
 
 #### Delegator actions
 
@@ -102,7 +98,7 @@ Instead of absolute values, validators' total bonded token amounts and bonds' an
 
 To disincentivize validators misbehaviour in the PoS system a validator may be slashed for any fault that it has done. An evidence of misbehaviour may be submitted by any account for a fault that occurred in epoch `n` anytime before the beginning of epoch `n + unbonding_length`.
 
-A valid evidence reduces the validator's total bonded token amount by the slash rate in and before the epoch in which the fault occurred. The validator's voting power must also be adjusted to the slashed total bonded token amount. Additionally, a slash is stored with the misbehaving validator's address and the relevant epoch in which the fault occurred. When a bond is being unbonded or an unbond is being withdrawn, we first look-up if any slash occurred within the range of epochs in which these were active and if so, reduce its token amount by the slash rate.
+A valid evidence reduces the validator's total bonded token amount by the slash rate in and before the epoch in which the fault occurred. The validator's voting power must also be adjusted to the slashed total bonded token amount. Additionally, a slash is stored with the misbehaving validator's address and the relevant epoch in which the fault occurred. When an unbond is being withdrawn, we first look-up if any slash occurred within the range of epochs in which these were active and if so, reduce its token amount by the slash rate. Note that bonds and unbonds amounts are not slashed until their tokens are withdrawn.
 
 The invariant is that the sum of amounts that may be withdrawn from a misbehaving validator must always add up to the total bonded token amount.
 
@@ -110,12 +106,14 @@ The invariant is that the sum of amounts that may be withdrawn from a misbehavin
 
 The default values that are relative to epoch duration assume that an epoch last about 24 hours.
 
-- `max_active_validators`: Maximum active validators, default `128`
-- `pipeline_length`: Pipeline length in number of epochs, default `2`
-- `unboding_length`: Unbonding duration in number of epochs, default `6`
-- `votes_per_token`: Used in validators' voting power calculation
+- `max_validator_slots`: Maximum active validators, default `128`
+- `pipeline_len`: Pipeline length in number of epochs, default `2`
+- `unboding_len`: Unbonding duration in number of epochs, default `6`
+- `votes_per_token`: Used in validators' voting power calculation, default 100‱ (1 voting power unit per 1000 tokens)
 - `block_proposer_reward`: Amount of tokens rewarded to a validator for proposing a block
 - `block_vote_reward`: Amount of tokens rewarded to each validator that voted on a block proposal
+- `duplicate_vote_slash_rate`: Portion of validator's stake that should be slashed on a duplicate vote
+- `light_client_attack_slash_rate`: Portion of validator's stake that should be slashed on a light client attack
 
 ## Storage
 
@@ -132,12 +130,12 @@ Epoched data are stored in the following structure:
 struct Epoched<Data> {
   /// The epoch in which this data was last updated
   last_update: Epoch,
-  /// Fixed-size array in which the head is the data for epoch in which the
-  /// `last_update` was performed and every consecutive array element is the
-  /// successor epoch of the predecessor array element.
-  /// For system parameters, validator's consensus key and state,
-  /// `LENGTH = pipeline_length`. For all others, `LENGTH = unbonding_length`.
-  data: [Option<Data>; LENGTH + 1],
+  /// Dynamically sized vector in which the head is the data for epoch in which 
+  /// the `last_update` was performed and every consecutive array element is the
+  /// successor epoch of the predecessor array element. For system parameters, 
+  /// validator's consensus key and state, `LENGTH = pipeline_length + 1`. 
+  /// For all others, `LENGTH = unbonding_length + 1`.
+  data: Vec<Option<Data>>
 }
 ```
 
@@ -255,7 +253,7 @@ struct BondId {
 struct Bond {
   /// A key is a the epoch set for the bond. This is used in unbonding, where
   // it's needed for slash epoch range check.
-  delta: HashMap<Epoch, token::Amount>,
+  deltas: HashMap<Epoch, token::Amount>,
 }
 
 struct Unbond {
@@ -265,14 +263,15 @@ struct Unbond {
 }
 ```
 
-For slashes, we store the epoch, slash rate and the evidence:
+For slashes, we store the epoch and block height at which the fault occurred, slash rate and the slash type:
 
 ```rust,ignore
 struct Slash {
   epoch: Epoch,
+  block_height: u64,
   /// slash token amount ‱ (per ten thousand)
   rate: u8,
-  evidence: Evidence,
+  r#type: SlashType,
 }
 ```
 
