@@ -126,6 +126,7 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxUpdateVp(TxUpdateVp),
+        TxInitAccount(TxInitAccount),
         QueryBalance(QueryBalance),
         Intent(Intent),
         SubscribeTopic(SubscribeTopic),
@@ -136,6 +137,7 @@ pub mod cmds {
             app.subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxUpdateVp::def())
+                .subcommand(TxInitAccount::def())
                 .subcommand(QueryBalance::def())
                 .subcommand(Intent::def())
                 .subcommand(SubscribeTopic::def())
@@ -145,6 +147,8 @@ pub mod cmds {
             let tx_custom = SubCmd::parse(matches).map_fst(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map_fst(Self::TxTransfer);
             let tx_update_vp = SubCmd::parse(matches).map_fst(Self::TxUpdateVp);
+            let tx_init_account =
+                SubCmd::parse(matches).map_fst(Self::TxInitAccount);
             let query_balance =
                 SubCmd::parse(matches).map_fst(Self::QueryBalance);
             let intent = SubCmd::parse(matches).map_fst(Self::Intent);
@@ -153,6 +157,7 @@ pub mod cmds {
             tx_custom
                 .or(tx_transfer)
                 .or(tx_update_vp)
+                .or(tx_init_account)
                 .or(query_balance)
                 .or(intent)
                 .or(subscribe_topic)
@@ -419,6 +424,31 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
+    pub struct TxInitAccount(pub args::TxInitAccount);
+
+    impl SubCmd for TxInitAccount {
+        const CMD: &'static str = "init-account";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (TxInitAccount(args::TxInitAccount::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to create a new established \
+                     account",
+                )
+                .add_args::<args::TxInitAccount>()
+        }
+    }
+
+    #[derive(Debug)]
     pub struct QueryBalance(pub args::QueryBalance);
 
     impl SubCmd for QueryBalance {
@@ -496,6 +526,7 @@ pub mod args {
 
     use anoma::types::address::Address;
     use anoma::types::intent::Exchange;
+    use anoma::types::key::ed25519::PublicKey;
     use anoma::types::token;
     use libp2p::Multiaddr;
 
@@ -507,6 +538,7 @@ pub mod args {
     const BASE_DIR: ArgDefault<PathBuf> =
         arg_default("base-dir", DefaultFn(|| ".anoma".into()));
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
+    const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
@@ -521,23 +553,26 @@ pub mod args {
         }));
     const LEDGER_ADDRESS_OPT: ArgOpt<tendermint::net::Address> =
         LEDGER_ADDRESS.opt();
-    const PEERS: ArgMulti<String> = arg_multi("peers");
-    const TOPIC: Arg<String> = arg("topic");
-    const TOPICS: ArgMulti<String> = TOPIC.multi();
-    // TODO: once we have a wallet, we should also allow to use a key alias
-    // <https://github.com/anoma/anoma/issues/167>
-    const SIGNING_KEY: Arg<Address> = arg("key");
-    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const LEDGER_ADDRESS: Arg<tendermint::net::Address> = arg("ledger-address");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE: Arg<String> = arg("node");
-    const TO_STDOUT: ArgFlag = flag("stdout");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
+    // TODO: once we have a wallet, we should also allow to use a key alias
+    // <https://github.com/anoma/anoma/issues/167>
+    const PUBLIC_KEY: Arg<PublicKey> = arg("public-key");
+    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
+    // TODO: once we have a wallet, we should also allow to use a key alias
+    // <https://github.com/anoma/anoma/issues/167>
+    const SIGNING_KEY: Arg<Address> = arg("key");
+    const PEERS: ArgMulti<String> = arg_multi("peers");
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
-    const TOKEN_OPT: ArgOpt<Address> = TOKEN.opt();
     const TOKEN: Arg<Address> = arg("token");
+    const TOKEN_OPT: ArgOpt<Address> = TOKEN.opt();
+    const TOPIC: Arg<String> = arg("topic");
+    const TOPICS: ArgMulti<String> = TOPIC.multi();
+    const TO_STDOUT: ArgFlag = flag("stdout");
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
 
     /// Global command arguments
@@ -638,6 +673,50 @@ pub mod args {
                 .arg(TARGET.def().about("The target account address."))
                 .arg(TOKEN.def().about("The transfer token."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
+        }
+    }
+
+    /// Transaction to initialize a new account
+    #[derive(Debug)]
+    pub struct TxInitAccount {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Address of the source account
+        pub source: Address,
+        /// Path to the VP WASM code file for the new account
+        pub vp_code_path: Option<PathBuf>,
+        /// Public key for the new account
+        pub public_key: PublicKey,
+    }
+
+    impl Args for TxInitAccount {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SOURCE.parse(matches);
+            let vp_code_path = CODE_PATH_OPT.parse(matches);
+            let public_key = PUBLIC_KEY.parse(matches);
+            Self {
+                tx,
+                source,
+                vp_code_path,
+                public_key,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(SOURCE.def().about(
+                    "The source account's address that signs the transaction.",
+                ))
+                .arg(CODE_PATH_OPT.def().about(
+                    "The path to the validity predicate WASM code to be used \
+                     for the new account. Uses the default user VP if none \
+                     specified.",
+                ))
+                .arg(PUBLIC_KEY.def().about(
+                    "A public key to be used for the new account in \
+                     hexadecimal encoding.",
+                ))
         }
     }
 

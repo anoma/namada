@@ -4,7 +4,7 @@ use anoma::proto::Tx;
 use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::token;
-use anoma::types::transaction::UpdateVp;
+use anoma::types::transaction::{InitAccount, UpdateVp};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
@@ -18,8 +18,10 @@ use crate::client::tendermint_websocket_client::{
 };
 use crate::wallet;
 
+const TX_INIT_ACCOUNT_WASM: &str = "wasm/tx_init_account.wasm";
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
+const VP_USER_WASM: &str = "wasm/vp_user.wasm";
 
 pub async fn submit_custom(args: args::TxCustom) {
     let tx_code = std::fs::read(args.code_path)
@@ -42,7 +44,34 @@ pub async fn submit_update_vp(args: args::TxUpdateVp) {
 
     let update_vp = UpdateVp { addr, vp_code };
     let data = update_vp.try_to_vec().expect(
-        "Encoding transfer data to update a validity predicate shouldn't  fail",
+        "Encoding transfer data to update a validity predicate shouldn't fail",
+    );
+    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
+
+    submit_tx(args.tx, tx).await
+}
+
+pub async fn submit_init_account(args: args::TxInitAccount) {
+    let source_key: Keypair = wallet::key_of(args.source.encode());
+    let public_key = args.public_key;
+    let vp_code = args
+        .vp_code_path
+        .map(|path| {
+            std::fs::read(path).expect("Expected a file at given code path")
+        })
+        .unwrap_or_else(|| {
+            std::fs::read(VP_USER_WASM)
+                .expect("Expected a file at given code path")
+        });
+    let tx_code = std::fs::read(TX_INIT_ACCOUNT_WASM)
+        .expect("Expected a file at given code path");
+
+    let data = InitAccount {
+        public_key,
+        vp_code,
+    };
+    let data = data.try_to_vec().expect(
+        "Encoding transfer data to initialize a new account shouldn't fail",
     );
     let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
 
