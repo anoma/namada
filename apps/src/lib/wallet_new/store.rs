@@ -7,6 +7,8 @@ use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 use borsh::{BorshDeserialize, BorshSerialize};
 use orion::{aead, kdf};
 
+use cli_table::{format::Justify, print_stdout, Table, WithTitle};
+
 use crate::cli::args;
 
 pub type Alias = String;
@@ -14,9 +16,9 @@ pub type Alias = String;
 #[derive(Table)]
 struct KeysTable {
     #[table(title = "Alias")]
-    alias: &'static str,
+    alias: String,
     #[table(title = "Public Key")]
-    public_key: &'static str,
+    public_key: String,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Default)]
@@ -210,9 +212,17 @@ pub fn generate_key(args: args::KeyGen) {
     }
 }
 
-// fn pretty_print(keypair: Keypair) {
-//     keypair.public.
-// }
+fn pretty_print(keys: HashMap<Alias, Keypair>) {
+    let x: Vec<KeysTable> = keys
+        .iter()
+        .map(|item| KeysTable {
+            alias: item.0.to_string(),
+            public_key: item.1.public.to_string(),
+        })
+        .collect();
+
+    print_stdout(x.with_title());
+}
 
 // error enum with different variants
 fn load_store() -> Result<StoreHandler, &'static str> {
@@ -251,7 +261,7 @@ pub fn export_key_to_file(args: args::Export) {
                 .store
                 .fetch_by_alias(alias.clone())
                 .map(|keypair| {
-                    let file_data = keypair.public.to_bytes().to_vec();
+                    let file_data = keypair.public.try_to_vec().unwrap();
 
                     let mut file =
                         File::create(format!("key_{}", alias)).unwrap();

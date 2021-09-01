@@ -68,9 +68,7 @@ pub mod rpc_service_client {
             interceptor: F,
         ) -> RpcServiceClient<InterceptedService<T, F>>
         where
-            F: FnMut(
-                tonic::Request<()>,
-            ) -> Result<tonic::Request<()>, tonic::Status>,
+            F: tonic::service::Interceptor,
             T:
                 tonic::codegen::Service<
                     http::Request<tonic::body::BoxBody>,
@@ -153,9 +151,7 @@ pub mod rpc_service_server {
             interceptor: F,
         ) -> InterceptedService<Self, F>
         where
-            F: FnMut(
-                tonic::Request<()>,
-            ) -> Result<tonic::Request<()>, tonic::Status>,
+            F: tonic::service::Interceptor,
         {
             InterceptedService::new(Self::new(inner), interceptor)
         }
