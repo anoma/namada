@@ -233,7 +233,8 @@ mod tests {
     /// 2. Submit a token transfer tx
     /// 3. Submit a transaction to update an account's validity predicate
     /// 4. Submit a custom tx
-    /// 5. Query token balance
+    /// 5. Submit a tx to initialize a new account
+    /// 6. Query token balance
     #[test]
     fn ledger_txs_and_queries() -> Result<()> {
         let dir = setup();
@@ -275,6 +276,17 @@ mod tests {
                 TX_NO_OP_WASM,
                 "--data-path",
                 "README.md",
+            ],
+            // 5. Submit a tx to initialize a new account
+            vec![
+                "init-account", 
+                "--source", 
+                BERTHA, 
+                "--public-key", 
+                // Value obtained from `anoma::types::key::ed25519::tests::gen_keypair`
+                "200000001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
+                "--code-path",
+                VP_USER_WASM
             ],
         ];
         for tx_args in &txs_args {
@@ -319,7 +331,7 @@ mod tests {
         }
 
         let query_args_and_expected_response = vec![
-            // 5. Query token balance
+            // 6. Query token balance
             (
                 vec!["balance", "--owner", BERTHA, "--token", XAN],
                 // expect a decimal
