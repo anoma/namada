@@ -27,8 +27,8 @@ use crate::types::time::DurationNanos;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Conversion error: {0}")]
-    ConversionError(String),
+    #[error("Invalid proof error: {0}")]
+    InvalidProof(String),
 }
 
 /// Decode result for IBC data
@@ -116,13 +116,13 @@ impl ClientUpgradeData {
     /// Returns the proof for client state
     pub fn proof_client(&self) -> Result<MerkleProof> {
         MerkleProof::decode(&self.proof_client[..])
-            .map_err(|e| Error::ConversionError(e.to_string()))
+            .map_err(|e| Error::InvalidProof(e.to_string()))
     }
 
     /// Returns the proof for consensus state
     pub fn proof_consensus_state(&self) -> Result<MerkleProof> {
         MerkleProof::decode(&self.proof_consensus_state[..])
-            .map_err(|e| Error::ConversionError(e.to_string()))
+            .map_err(|e| Error::InvalidProof(e.to_string()))
     }
 }
 
@@ -223,7 +223,7 @@ impl ConnectionOpenTryData {
             self.proof_consensus.clone(),
             self.proof_height,
         )
-        .map_err(Error::ConversionError)?;
+        .map_err(Error::InvalidProof)?;
         Proofs::new(
             self.proof_connection.clone(),
             Some(self.proof_client.clone()),
@@ -231,7 +231,7 @@ impl ConnectionOpenTryData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 
     /// Returns a connection end
@@ -298,7 +298,7 @@ impl ConnectionOpenAckData {
             self.proof_consensus.clone(),
             self.proof_height,
         )
-        .map_err(Error::ConversionError)?;
+        .map_err(Error::InvalidProof)?;
         Proofs::new(
             self.proof_connection.clone(),
             Some(self.proof_client.clone()),
@@ -306,7 +306,7 @@ impl ConnectionOpenAckData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 }
 
@@ -349,7 +349,7 @@ impl ConnectionOpenConfirmData {
             self.proof_consensus.clone(),
             self.proof_height,
         )
-        .map_err(Error::ConversionError)?;
+        .map_err(Error::InvalidProof)?;
         Proofs::new(
             self.proof_connection.clone(),
             Some(self.proof_client.clone()),
@@ -357,7 +357,7 @@ impl ConnectionOpenConfirmData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 }
 
@@ -466,7 +466,7 @@ impl ChannelOpenTryData {
             self.proof_consensus.clone(),
             self.proof_height,
         )
-        .map_err(Error::ConversionError)?;
+        .map_err(Error::InvalidProof)?;
         Proofs::new(
             self.proof_channel.clone(),
             Some(self.proof_client.clone()),
@@ -474,7 +474,7 @@ impl ChannelOpenTryData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 
     /// Returns a channel end
@@ -541,7 +541,7 @@ impl ChannelOpenAckData {
             self.proof_consensus.clone(),
             self.proof_height,
         )
-        .map_err(Error::ConversionError)?;
+        .map_err(Error::InvalidProof)?;
         Proofs::new(
             self.proof_channel.clone(),
             Some(self.proof_client.clone()),
@@ -549,7 +549,7 @@ impl ChannelOpenAckData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 }
 
@@ -596,7 +596,7 @@ impl ChannelOpenConfirmData {
             self.proof_consensus.clone(),
             self.proof_height,
         )
-        .map_err(Error::ConversionError)?;
+        .map_err(Error::InvalidProof)?;
         Proofs::new(
             self.proof_channel.clone(),
             Some(self.proof_client.clone()),
@@ -604,7 +604,7 @@ impl ChannelOpenConfirmData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 }
 
@@ -670,7 +670,7 @@ impl ChannelCloseConfirmData {
             self.proof_consensus.clone(),
             self.proof_height,
         )
-        .map_err(Error::ConversionError)?;
+        .map_err(Error::InvalidProof)?;
         Proofs::new(
             self.proof_connection.clone(),
             Some(self.proof_client.clone()),
@@ -678,7 +678,7 @@ impl ChannelCloseConfirmData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 }
 
@@ -716,7 +716,7 @@ impl PacketReceiptData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 }
 
@@ -758,7 +758,7 @@ impl PacketAckData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 }
 
@@ -800,6 +800,6 @@ impl TimeoutData {
             None,
             self.proof_height,
         )
-        .map_err(Error::ConversionError)
+        .map_err(Error::InvalidProof)
     }
 }

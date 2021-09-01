@@ -36,7 +36,7 @@ pub enum Error {
     #[error("Decoding TX data error: {0}")]
     DecodingTxData(std::io::Error),
     #[error("IBC data error: {0}")]
-    DecodingIbcData(IbcDataError),
+    InvalidIbcData(IbcDataError),
 }
 
 /// IBC client functions result
@@ -376,7 +376,7 @@ where
 
 impl From<IbcDataError> for Error {
     fn from(err: IbcDataError) -> Self {
-        Self::DecodingIbcData(err)
+        Self::InvalidIbcData(err)
     }
 }
 
