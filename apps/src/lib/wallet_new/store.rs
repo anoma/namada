@@ -11,6 +11,14 @@ use crate::cli::args;
 
 pub type Alias = String;
 
+#[derive(Table)]
+struct KeysTable {
+    #[table(title = "Alias")]
+    alias: &'static str,
+    #[table(title = "Public Key")]
+    public_key: &'static str,
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Debug, Default)]
 pub struct Store {
     keys: HashMap<Alias, Keypair>,
@@ -202,6 +210,11 @@ pub fn generate_key(args: args::KeyGen) {
     }
 }
 
+// fn pretty_print(keypair: Keypair) {
+//     keypair.public.
+// }
+
+// error enum with different variants
 fn load_store() -> Result<StoreHandler, &'static str> {
     let store = File::open("anoma_store");
 
@@ -223,24 +236,22 @@ fn load_store() -> Result<StoreHandler, &'static str> {
 }
 
 pub fn export_key_to_file(args: args::Export) {
-    match load_store() {
-        Ok(handler) => {
-            let mut alias = String::default();
+    use std::io;
 
-            match args.alias {
-                Some(tmp_alias) => alias = tmp_alias,
-                None => {
-                    // Implement pretty-print and add before reading
-                    io::stdin().read_to_string(&mut alias).unwrap();
-                }
-            }
+    load_store()
+        .and_then(|handler| {
+            let alias = args.alias.unwrap_or_else(|| {
+                let mut read_alias = String::new();
 
-            let kp = handler.store.fetch_by_alias(alias.clone());
-            match kp {
-                Some(keypair) => {
-                    let file_data = keypair
-                        .try_to_vec()
-                        .expect("Keypair encoding shouldn't fail");
+                io::stdin().read_to_string(&mut read_alias).unwrap();
+                read_alias
+            });
+
+            handler
+                .store
+                .fetch_by_alias(alias.clone())
+                .map(|keypair| {
+                    let file_data = keypair.public.to_bytes().to_vec();
 
                     let mut file =
                         File::create(format!("key_{}", alias)).unwrap();
@@ -248,12 +259,10 @@ pub fn export_key_to_file(args: args::Export) {
                     file.write_all(file_data.as_ref()).unwrap();
 
                     ()
-                }
-                None => println!("No keypair was found with the given alias"),
-            }
-        }
-        Err(e) => println!("{}", e),
-    }
+                })
+                .ok_or("No keypair was found with the given alias")
+        })
+        .unwrap_or_else(|err| eprintln!("{}", err));
 }
 
 // Implement public key exportation to file, fetch by public key

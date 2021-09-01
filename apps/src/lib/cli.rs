@@ -270,6 +270,7 @@ pub mod cmds {
         Gen(KeyGen),
         Find(KeyFind),
         List(KeyList),
+        Export(Export),
     }
 
     impl SubCmd for Key {
@@ -280,7 +281,8 @@ pub mod cmds {
                 let generate = SubCmd::parse(matches).map_fst(Key::Gen);
                 let lookup = SubCmd::parse(matches).map_fst(Key::Find);
                 let list = SubCmd::parse(matches).map_fst(Key::List);
-                generate.or(lookup).or(list)
+                let export = SubCmd::parse(matches).map_fst(Keypair::Export);
+                generate.or(lookup).or(list).or(export)
             })
         }
 
@@ -294,6 +296,7 @@ pub mod cmds {
                 .subcommand(KeyGen::def())
                 .subcommand(KeyFind::def())
                 .subcommand(KeyList::def())
+                .subcommand(Export::def())
         }
     }
 
@@ -360,6 +363,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("List all known keys")
                 .add_args::<args::KeyList>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Export(pub args::Export);
+
+    impl SubCmd for Export {
+        const CMD: &'static str = "export";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Export(args::Export::parse(matches)), matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Exports a keypair to a file")
+                .add_args::<args::Export>()
         }
     }
 
