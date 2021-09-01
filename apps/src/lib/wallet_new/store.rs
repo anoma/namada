@@ -3,9 +3,7 @@ use std::fs::File;
 use std::io::{self, ErrorKind, Read, Write};
 
 use anoma::types::address::{Address, ImplicitAddress};
-use anoma::types::key::ed25519::{
-    Keypair, PublicKey, PublicKeyHash, SecretKey,
-};
+use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 use borsh::{BorshDeserialize, BorshSerialize};
 use orion::{aead, kdf};
 
@@ -13,51 +11,15 @@ use crate::cli::args;
 
 pub type Alias = String;
 
-#[derive(Debug)]
-pub struct KP(Keypair);
-
 #[derive(BorshSerialize, BorshDeserialize, Debug, Default)]
 pub struct Store {
-    keys: HashMap<Alias, KP>,
+    keys: HashMap<Alias, Keypair>,
     addresses: HashMap<Alias, Address>,
-}
-
-// TODO move to the ed key module
-impl BorshSerialize for KP {
-    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        // We need to turn the keypair to bytes first..
-        let vec = self.0.to_bytes().to_vec();
-        // .. and then encode them with Borsh
-        let bytes = vec.try_to_vec().expect("Keypair bytes shouldn't fail");
-
-        writer.write_all(&bytes)
-    }
-}
-
-impl BorshDeserialize for KP {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        // deserialize the bytes first
-        let bytes: Vec<u8> =
-            BorshDeserialize::deserialize(buf).map_err(|e| {
-                std::io::Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("Error decoding ed25519 public key: {}", e),
-                )
-            })?;
-        ed25519_dalek::Keypair::from_bytes(&bytes)
-            .map(KP)
-            .map_err(|e| {
-                std::io::Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("Error decoding ed25519 keypair: {}", e),
-                )
-            })
-    }
 }
 
 impl Store {
     pub fn fetch_by_alias(&self, alias: Alias) -> Option<&Keypair> {
-        self.keys.get(&alias).map(|keypair| &keypair.0)
+        self.keys.get(&alias)
     }
 
     pub fn fetch_by_public_key(
@@ -66,15 +28,17 @@ impl Store {
     ) -> Option<&Keypair> {
         self.keys
             .values()
-            .find(|keypair| public_key.is_same_key(keypair.0.public))
-            .map(|keypair| &keypair.0)
+            .find(|keypair| public_key == keypair.public)
     }
 
-    pub fn insert_new_keypair(&mut self, alias: Option<Alias>) -> Option<KP> {
+    pub fn insert_new_keypair(
+        &mut self,
+        alias: Option<Alias>,
+    ) -> Option<Keypair> {
         let keypair = Self::generate_keypair();
 
         let public_key_hash: PublicKeyHash =
-            PublicKey::from(keypair.public).into();
+            PublicKeyHash::from(&keypair.public);
 
         let address = Address::Implicit(ImplicitAddress::Ed25519(
             public_key_hash.clone(),
@@ -84,7 +48,7 @@ impl Store {
 
         self.addresses.insert(alias.clone(), address);
 
-        self.keys.insert(alias, KP(keypair))
+        self.keys.insert(alias, keypair)
     }
 
     fn generate_keypair() -> Keypair {
@@ -274,7 +238,9 @@ pub fn export_key_to_file(args: args::Export) {
             let kp = handler.store.fetch_by_alias(alias.clone());
             match kp {
                 Some(keypair) => {
-                    let file_data = keypair.public.to_bytes().to_vec();
+                    let file_data = keypair
+                        .try_to_vec()
+                        .expect("Keypair encoding shouldn't fail");
 
                     let mut file =
                         File::create(format!("key_{}", alias)).unwrap();
@@ -292,6 +258,7 @@ pub fn export_key_to_file(args: args::Export) {
 
 // Implement public key exportation to file, fetch by public key
 pub fn fetch(args: args::KeyFind) {
+    // TODO public key args is unused/unimplemented
     match (args.alias, args.value) {
         (None, None) => println!("An alias needs to be supplied"),
         (Some(key), _) | (_, Some(key)) => match load_store() {
@@ -299,7 +266,12 @@ pub fn fetch(args: args::KeyFind) {
                 None => {
                     println!("No keypairs were found with this alias")
                 }
-                Some(kp) => println!("{:?}", kp),
+                Some(keypair) => {
+                    println!("public key: {}", keypair.public);
+                    if args.show_secret {
+                        println!("secret key: {}", keypair.secret);
+                    }
+                }
             },
             Err(error) => println!("{}", error),
         },
@@ -315,11 +287,9 @@ pub fn list(args: args::KeyList) {
             writeln!(w, "Known keys:").unwrap();
             for (alias, keypair) in handler.store.keys {
                 writeln!(w, "  alias \"{}\":", alias).unwrap();
-                let pk: PublicKey = keypair.0.public.into();
-                writeln!(w, "    public: {}", pk).unwrap();
+                writeln!(w, "    public: {}", keypair.public).unwrap();
                 if args.show_secret {
-                    let sk: SecretKey = keypair.0.secret.into();
-                    writeln!(w, "    secret: {}", sk).unwrap();
+                    writeln!(w, "    secret: {}", keypair.secret).unwrap();
                 }
             }
         }

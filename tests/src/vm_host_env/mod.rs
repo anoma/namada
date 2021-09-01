@@ -371,7 +371,7 @@ mod tests {
         // Write the public key to storage
         let pk_key = key::ed25519::pk_key(&addr);
         let keypair = key::ed25519::testing::keypair_1();
-        let pk = key::ed25519::PublicKey::from(keypair.public);
+        let pk = key::ed25519::PublicKey::from(keypair.public.clone());
         env.storage
             .write(&pk_key, pk.try_to_vec().unwrap())
             .unwrap();
