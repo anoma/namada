@@ -117,11 +117,7 @@ where
         current_epoch: impl Into<Epoch>,
         params: &PosParams,
     ) -> Self {
-        let offset = Offset::value(params);
-        let mut data = vec![];
-        for _ in 0..offset {
-            data.push(None);
-        }
+        let mut data = vec![None; Offset::value(params) as usize];
         data.push(Some(value));
         Self {
             last_update: current_epoch.into(),
@@ -175,10 +171,7 @@ where
     ) -> Option<&Data> {
         let epoch = epoch.into();
         let index: usize = (epoch.sub_or_default(self.last_update)).into();
-        match self.data.get(index) {
-            Some(result) => result.as_ref(),
-            None => None,
-        }
+        self.data.get(index).and_then(|result| result.as_ref())
     }
 
     /// Update the data associated with epochs, if needed. The head element is
@@ -210,11 +203,10 @@ where
             let mut latest_value: Option<Data> = None;
             // Find the latest value in elements before the mid-point and clear
             // them
-            for i in 0..mid_point {
-                if let Some(Some(data)) = self.data.get(i) {
-                    latest_value = Some(data.clone());
+            for data in self.data.iter_mut().take(mid_point) {
+                if data.is_some() {
+                    latest_value = data.take();
                 }
-                self.data[i] = None;
             }
             // Rotate left on the mid-point
             self.data.rotate_left(mid_point);
@@ -261,13 +253,14 @@ where
             update_value(data, self.last_update + offset)
         } else {
             // Try to find if there's any value before `offset`
-            let mut latest_value: Option<Data> = None;
+            let mut latest_value: Option<&Data> = None;
             for i in (0..offset).rev() {
                 if let Some(Some(data)) = self.data.get(i) {
-                    latest_value = Some(data.clone());
+                    latest_value = Some(data);
                     break;
                 }
             }
+            let latest_value = latest_value.cloned();
             // If there's a value before `offset`, update it and use it as the
             // current value
             if let Some(mut latest_value) = latest_value {
@@ -336,10 +329,7 @@ where
         current_epoch: impl Into<Epoch>,
         offset: usize,
     ) -> Self {
-        let mut data = vec![];
-        for _ in 0..offset {
-            data.push(None);
-        }
+        let mut data = vec![None; offset];
         data.push(Some(value));
         Self {
             last_update: current_epoch.into(),
@@ -392,17 +382,15 @@ where
     fn get_at_index(&self, offset: usize) -> Option<Data> {
         let index = cmp::min(offset, self.data.len());
         let mut sum: Option<Data> = None;
-        for i in 0..index + 1 {
-            if let Some(next) = self.data.get(i) {
-                // Add current to the sum, if any
-                match (&sum, next) {
-                    (Some(current_sum), Some(next)) => {
-                        sum = Some(current_sum.clone() + next.clone())
-                    }
-                    (None, Some(next)) => sum = Some(next.clone()),
-                    _ => {}
-                };
-            }
+        for next in self.data.iter().take(index + 1) {
+            // Add current to the sum, if any
+            match (&mut sum, next) {
+                (Some(_), Some(next)) => {
+                    sum = sum.map(|current_sum| current_sum + next.clone())
+                }
+                (None, Some(next)) => sum = Some(next.clone()),
+                _ => {}
+            };
         }
         sum
     }
@@ -414,16 +402,10 @@ where
         epoch: impl Into<Epoch>,
     ) -> Option<&Data> {
         let epoch = epoch.into();
-        match epoch.checked_sub(self.last_update) {
-            Some(index) => {
-                let index: usize = index.into();
-                match self.data.get(index) {
-                    Some(result) => result.as_ref(),
-                    None => None,
-                }
-            }
-            None => None,
-        }
+        epoch.checked_sub(self.last_update).and_then(|index| {
+            let index: usize = index.into();
+            self.data.get(index).and_then(|result| result.as_ref())
+        })
     }
 
     /// Update the data associated with epochs, if needed. Any value before the
@@ -453,30 +435,24 @@ where
             let mid_point = cmp::min(shift, self.data.len());
             let mut sum: Option<Data> = None;
             // Sum and clear all the elements before the mid-point
-            for i in 0..mid_point {
-                if let Some(next) = self.data.get(i) {
-                    // Add current to the sum, if any
-                    match (&sum, next) {
-                        (Some(current_sum), Some(next)) => {
-                            sum = Some(current_sum.clone() + next.clone())
-                        }
-                        (Some(current_sum), None) => {
-                            sum = Some(current_sum.clone())
-                        }
-                        (None, Some(next)) => sum = Some(next.clone()),
-                        _ => {}
-                    };
-                    // Clear the field
-                    self.data[i] = None;
-                }
+            for next in self.data.iter_mut().take(mid_point) {
+                match (&mut sum, next) {
+                    (Some(_), next @ Some(_)) => {
+                        sum = sum.map(|current_sum| {
+                            current_sum + next.take().unwrap()
+                        });
+                    }
+                    (None, next @ Some(_)) => sum = next.take(),
+                    _ => {}
+                };
             }
             // Rotate left on the mid-point
             self.data.rotate_left(mid_point);
             // Add the sum to the head
             let mut current = self.data.get_mut(0).unwrap();
             match (&sum, &mut current) {
-                (Some(sum), Some(current)) => {
-                    *current = current.clone() + sum.clone()
+                (Some(_), first @ Some(_)) => {
+                    *current = sum.map(|sum| sum + first.take().unwrap())
                 }
                 (Some(_), None) => *current = sum,
                 _ => {}
