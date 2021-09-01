@@ -168,7 +168,7 @@ impl From<serde_json::Value> for TxResponse {
         let initialized_accounts =
             selector("$.events.['applied.initialized_accounts'][0]");
         let initialized_accounts = match initialized_accounts {
-            Ok(values) => {
+            Ok(values) if !values.is_empty() => {
                 // In a response, the initialized accounts are encoded as e.g.:
                 // ```
                 // "applied.initialized_accounts": Array([
