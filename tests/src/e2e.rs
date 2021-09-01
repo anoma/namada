@@ -281,7 +281,7 @@ mod tests {
             vec![
                 "init-account", 
                 "--source", 
-                BERTHA, 
+                BERTHA,
                 "--public-key", 
                 // Value obtained from `anoma::types::key::ed25519::tests::gen_keypair`
                 "200000001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",

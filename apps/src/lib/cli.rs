@@ -30,6 +30,7 @@ pub mod cmds {
 
     /// Commands for `anoma` binary.
     #[derive(Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum Anoma {
         Node(AnomaNode),
         Client(AnomaClient),
