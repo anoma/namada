@@ -526,6 +526,7 @@ pub mod args {
         LEDGER_ADDRESS.opt();
     const PEERS: ArgMulti<String> = arg_multi("peers");
     const TOPIC: Arg<String> = arg("topic");
+    const TOPIC_OPT: ArgOpt<String> = arg_opt("topic");
     const TOPICS: ArgMulti<String> = TOPIC.multi();
     // TODO: once we have a wallet, we should also allow to use a key alias
     // <https://github.com/anoma/anoma/issues/167>
@@ -535,6 +536,7 @@ pub mod args {
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE: Arg<String> = arg("node");
+    const NODE_OPT: ArgOpt<String> = arg_opt("node");
     const TO_STDOUT: ArgFlag = flag("stdout");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
     const SOURCE: Arg<Address> = arg("source");
@@ -784,9 +786,9 @@ pub mod args {
     #[derive(Debug)]
     pub struct Intent {
         /// Gossip node address
-        pub node_addr: String,
+        pub node_addr: Option<String>,
         /// Intent topic
-        pub topic: String,
+        pub topic: Option<String>,
         /// Signing key
         pub key: Address,
         /// Exchanges description
@@ -798,10 +800,10 @@ pub mod args {
     impl Args for Intent {
         fn parse(matches: &ArgMatches) -> Self {
             let key = SIGNING_KEY.parse(matches);
-            let node_addr = NODE.parse(matches);
+            let node_addr = NODE_OPT.parse(matches);
             let data_path = DATA_PATH.parse(matches);
             let to_stdout = TO_STDOUT.parse(matches);
-            let topic = TOPIC.parse(matches);
+            let topic = TOPIC_OPT.parse(matches);
 
             let file = File::open(&data_path).expect("File must exist.");
             let exchange_definitions: Vec<ExchangeDefinition> =

@@ -69,6 +69,8 @@ async fn gossip_intent(
         out.write_all(&data_bytes).unwrap();
         out.flush().unwrap();
     } else {
+        let node_addr = node_addr.expect("Ledger address should be defined.");
+        let topic = topic.expect("Ledger address should be defined.");
         let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
 
         let intent = anoma::proto::Intent::new(data_bytes);
