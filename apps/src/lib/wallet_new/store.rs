@@ -1,28 +1,28 @@
-use crate::cli::args;
-
-use anoma::types::{
-    address::{Address, ImplicitAddress},
-    key::ed25519::{Keypair, PublicKey, PublicKeyHash},
-};
-
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{self, ErrorKind, Read, Write};
 
+use anoma::types::address::{Address, ImplicitAddress};
+use anoma::types::key::ed25519::{
+    Keypair, PublicKey, PublicKeyHash, SecretKey,
+};
 use borsh::{BorshDeserialize, BorshSerialize};
 use orion::{aead, kdf};
+
+use crate::cli::args;
 
 pub type Alias = String;
 
 #[derive(Debug)]
 pub struct KP(Keypair);
 
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Debug, Default)]
 pub struct Store {
     keys: HashMap<Alias, KP>,
     addresses: HashMap<Alias, Address>,
 }
 
+// TODO move to the ed key module
 impl BorshSerialize for KP {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         // We need to turn the keypair to bytes first..
@@ -56,12 +56,6 @@ impl BorshDeserialize for KP {
 }
 
 impl Store {
-    pub fn new() -> Self {
-        Self {
-            addresses: HashMap::new(),
-            keys: HashMap::new(),
-        }
-    }
     pub fn fetch_by_alias(&self, alias: Alias) -> Option<&Keypair> {
         self.keys.get(&alias).map(|keypair| &keypair.0)
     }
@@ -119,8 +113,14 @@ impl Error {
         use Error::*;
 
         match self {
-            DecryptionError => eprint!("There was an error decrypting your storage file. Are you sure you password is correct?"),
-            DeserializingError => eprintln!("There was an error deserializing your file. This means that either your storage file is invalid or was corrupted.")
+            DecryptionError => eprint!(
+                "There was an error decrypting your storage file. Are you \
+                 sure you password is correct?"
+            ),
+            DeserializingError => eprintln!(
+                "There was an error deserializing your file. This means that \
+                 either your storage file is invalid or was corrupted."
+            ),
         }
     }
 }
@@ -130,7 +130,7 @@ impl StoreHandler {
         let salt = kdf::Salt::default();
 
         Self {
-            store: Store::new(),
+            store: Store::default(),
             password,
             salt,
         }
@@ -193,14 +193,20 @@ impl StoreHandler {
     }
 }
 
-pub fn generate_key(args: args::Generate) {
+pub fn generate_key(args: args::KeyGen) {
     let store = File::open("anoma_store");
 
     match store {
         Err(err) => match err.kind() {
             ErrorKind::NotFound => {
-                println!("Seems like you don't have a store yet. You'll need to have one to use the wallet.");
-                println!("We're going to need you to input a password, so we can encrypt your store.");
+                println!(
+                    "Seems like you don't have a store yet. You'll need to \
+                     have one to use the wallet."
+                );
+                println!(
+                    "We're going to need you to input a password, so we can \
+                     encrypt your store."
+                );
 
                 let password =
                     rpassword::read_password_from_tty(Some("Password: "))
@@ -253,8 +259,6 @@ fn load_store() -> Result<StoreHandler, &'static str> {
 }
 
 pub fn export_key_to_file(args: args::Export) {
-    use std::io;
-
     match load_store() {
         Ok(handler) => {
             let mut alias = String::default();
@@ -286,18 +290,8 @@ pub fn export_key_to_file(args: args::Export) {
     }
 }
 
-// Use later for something
-pub fn list() {
-    match load_store() {
-        Ok(handler) => {
-            println!("{:?}", handler.store.keys)
-        }
-        Err(e) => println!("{}", e),
-    }
-}
-
 // Implement public key exportation to file, fetch by public key
-pub fn fetch(args: args::Lookup) {
+pub fn fetch(args: args::KeyFind) {
     match (args.alias, args.value) {
         (None, None) => println!("An alias needs to be supplied"),
         (Some(key), _) | (_, Some(key)) => match load_store() {
@@ -309,6 +303,27 @@ pub fn fetch(args: args::Lookup) {
             },
             Err(error) => println!("{}", error),
         },
+    }
+}
+
+// List all known keys
+pub fn list(args: args::KeyList) {
+    match load_store() {
+        Ok(handler) => {
+            let stdout = io::stdout();
+            let mut w = stdout.lock();
+            writeln!(w, "Known keys:").unwrap();
+            for (alias, keypair) in handler.store.keys {
+                writeln!(w, "  alias \"{}\":", alias).unwrap();
+                let pk: PublicKey = keypair.0.public.into();
+                writeln!(w, "    public: {}", pk).unwrap();
+                if args.show_secret {
+                    let sk: SecretKey = keypair.0.secret.into();
+                    writeln!(w, "    secret: {}", sk).unwrap();
+                }
+            }
+        }
+        Err(error) => println!("{}", error),
     }
 }
 
@@ -336,8 +351,6 @@ fn insert_keypair_into_store(handler: &mut StoreHandler, alias: Option<Alias>) {
 }
 
 fn show_overwrite_confirmation() -> ConfirmationResponse {
-    use std::io;
-
     println!(
         "You're trying to create an alias that already exists in your store."
     );

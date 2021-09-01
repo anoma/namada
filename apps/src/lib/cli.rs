@@ -231,12 +231,12 @@ pub mod cmds {
 
     #[derive(Debug)]
     pub enum AnomaWallet {
-        Keypair(Keypair),
+        Keypair(Key),
     }
 
     impl Cmd for AnomaWallet {
         fn add_sub(app: App) -> App {
-            app.subcommand(Keypair::def())
+            app.subcommand(Key::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
@@ -266,58 +266,42 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
-    pub enum Keypair {
-        Generate(Generate),
-        Lookup(Lookup),
+    pub enum Key {
+        Gen(KeyGen),
+        Find(KeyFind),
+        List(KeyList),
     }
 
-    impl SubCmd for Keypair {
-        const CMD: &'static str = "keypair";
+    impl SubCmd for Key {
+        const CMD: &'static str = "key";
 
         fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let generate =
-                    SubCmd::parse(matches).map_fst(Keypair::Generate);
-                let lookup = SubCmd::parse(matches).map_fst(Keypair::Lookup);
-                generate.or(lookup)
+                let generate = SubCmd::parse(matches).map_fst(Key::Gen);
+                let lookup = SubCmd::parse(matches).map_fst(Key::Find);
+                let list = SubCmd::parse(matches).map_fst(Key::List);
+                generate.or(lookup).or(list)
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Keypair management, including methods to generate and look-up keys")
-                .subcommand(Generate::def())
-                .subcommand(Lookup::def())
+                .about(
+                    "Keypair management, including methods to generate and \
+                     look-up keys",
+                )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(KeyGen::def())
+                .subcommand(KeyFind::def())
+                .subcommand(KeyList::def())
         }
     }
 
     #[derive(Debug)]
-    pub struct Generate(pub args::Generate);
+    pub struct KeyGen(pub args::KeyGen);
 
-    impl SubCmd for Generate {
-        const CMD: &'static str = "generate";
-
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (Generate(args::Generate::parse(matches)), matches)
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Generates a keypair with a given alias")
-                .add_args::<args::Generate>()
-        }
-    }
-
-    #[derive(Debug)]
-    pub struct Lookup(pub args::Lookup);
-
-    impl SubCmd for Lookup {
-        const CMD: &'static str = "lookup";
+    impl SubCmd for KeyGen {
+        const CMD: &'static str = "gen";
 
         fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
         where
@@ -325,13 +309,57 @@ pub mod cmds {
         {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Lookup(args::Lookup::parse(matches)), matches))
+                .map(|matches| (KeyGen(args::KeyGen::parse(matches)), matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Generates a keypair with a given alias")
+                .add_args::<args::KeyGen>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct KeyFind(pub args::KeyFind);
+
+    impl SubCmd for KeyFind {
+        const CMD: &'static str = "find";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (KeyFind(args::KeyFind::parse(matches)), matches)
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Searches for a keypair from a public key or an alias")
-                .add_args::<args::Lookup>()
+                .add_args::<args::KeyFind>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct KeyList(pub args::KeyList);
+
+    impl SubCmd for KeyList {
+        const CMD: &'static str = "list";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (KeyList(args::KeyList::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("List all known keys")
+                .add_args::<args::KeyList>()
         }
     }
 
@@ -880,9 +908,11 @@ pub mod args {
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     // <https://github.com/anoma/anoma/issues/167>
     // TODO: once we have a wallet, we should also allow to use a key alias
+    const PUBLIC_KEY_OPT: ArgOpt<String> = PUBLIC_KEY.opt();
+    const SHOW_SECRET: ArgFlag = flag("show-secret");
     const SIGNING_KEY: Arg<Address> = arg("key");
-    const SOURCE_OPT: ArgOpt<Address> = SOURCE.opt();
     const SOURCE: Arg<Address> = arg("source");
+    const SOURCE_OPT: ArgOpt<Address> = SOURCE.opt();
     const TARGET: Arg<Address> = arg("target");
     const TO_STDOUT: ArgFlag = flag("stdout");
     const TOKEN_OPT: ArgOpt<Address> = TOKEN.opt();
@@ -915,20 +945,6 @@ pub mod args {
         }
     }
 
-    /// Wallet generate arguments
-    #[derive(Debug)]
-    pub struct Generate {
-        pub alias: Option<String>,
-    }
-
-    /// Wallet lookup arguments
-    #[derive(Debug)]
-    pub struct Lookup {
-        pub public_key: Option<String>,
-        pub alias: Option<String>,
-        pub value: Option<String>,
-    }
-
     #[derive(Debug)]
     pub struct Export {
         pub alias: Option<String>,
@@ -945,52 +961,6 @@ pub mod args {
             app.arg(
                 ALIAS.def().about("The alias of the key you wish to export"),
             )
-        }
-    }
-
-    impl Args for Lookup {
-        fn parse(matches: &ArgMatches) -> Self {
-            let public_key = PUBLIC_KEY.parse(matches);
-            let alias = ALIAS.parse(matches);
-            let value = VALUE.parse(matches);
-
-            Self {
-                public_key,
-                alias,
-                value,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                PUBLIC_KEY
-                    .def()
-                    .about("A public key associated with the keypair")
-                    .conflicts_with("alias")
-                    .conflicts_with("value"),
-            )
-            .arg(
-                ALIAS
-                    .def()
-                    .about("An alias associated with the keypair")
-                    .conflicts_with("value"),
-            )
-            .arg(
-                VALUE
-                    .def()
-                    .about("A public key or alias associated with the keypair"),
-            )
-        }
-    }
-
-    impl Args for Generate {
-        fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
-            Self { alias }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(ALIAS.def().about("The keypair alias"))
         }
     }
 
@@ -1679,6 +1649,83 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             Self { ledger_address }
+        }
+    }
+
+    /// Wallet generate arguments
+    #[derive(Debug)]
+    pub struct KeyGen {
+        pub alias: Option<String>,
+    }
+
+    impl Args for KeyGen {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            Self { alias }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(ALIAS.def().about("The key alias"))
+        }
+    }
+
+    /// Wallet lookup arguments
+    #[derive(Debug)]
+    pub struct KeyFind {
+        pub public_key: Option<String>,
+        pub alias: Option<String>,
+        pub value: Option<String>,
+    }
+
+    impl Args for KeyFind {
+        fn parse(matches: &ArgMatches) -> Self {
+            let public_key = PUBLIC_KEY_OPT.parse(matches);
+            let alias = ALIAS.parse(matches);
+            let value = VALUE.parse(matches);
+
+            Self {
+                public_key,
+                alias,
+                value,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                PUBLIC_KEY_OPT
+                    .def()
+                    .about("A public key associated with the keypair")
+                    .conflicts_with("alias")
+                    .conflicts_with("value"),
+            )
+            .arg(
+                ALIAS
+                    .def()
+                    .about("An alias associated with the keypair")
+                    .conflicts_with("value"),
+            )
+            .arg(
+                VALUE
+                    .def()
+                    .about("A public key or alias associated with the keypair"),
+            )
+        }
+    }
+
+    /// Wallet list keys arguments
+    #[derive(Debug)]
+    pub struct KeyList {
+        pub show_secret: bool,
+    }
+
+    impl Args for KeyList {
+        fn parse(matches: &ArgMatches) -> Self {
+            let show_secret = SHOW_SECRET.parse(matches);
+            Self { show_secret }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(SHOW_SECRET.def().about("Print the secret keys"))
         }
     }
 }
