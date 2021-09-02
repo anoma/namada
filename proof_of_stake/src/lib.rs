@@ -1617,7 +1617,7 @@ fn update_validator_set<Address, TokenChange>(
                     let min_voting_power = min_active_validator
                         .map(|v| v.voting_power)
                         .unwrap_or_default();
-                    if voting_power_pre > min_voting_power {
+                    if voting_power_post > min_voting_power {
                         let deactivate_min =
                             validator_set.active.pop_first_shim();
                         let popped =
@@ -1640,7 +1640,7 @@ fn update_validator_set<Address, TokenChange>(
                     let max_voting_power = max_inactive_validator
                         .map(|v| v.voting_power)
                         .unwrap_or_default();
-                    if voting_power_pre < max_voting_power {
+                    if voting_power_post < max_voting_power {
                         let activate_max =
                             validator_set.inactive.pop_last_shim();
                         let popped =
