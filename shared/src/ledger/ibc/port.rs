@@ -2,6 +2,7 @@
 
 use std::str::FromStr;
 
+use borsh::BorshDeserialize;
 use ibc::ics04_channel::context::ChannelReader;
 use ibc::ics05_port::capabilities::Capability;
 use ibc::ics05_port::context::PortReader;
@@ -145,15 +146,12 @@ where
         let key = Key::ibc_capability(cap.index());
         match self.ctx.read_post(&key) {
             Ok(Some(value)) => {
-                let id: String =
-                    storage::types::decode(&value).map_err(|e| {
-                        Error::InvalidPort(format!(
-                            "Decoding the port ID failed: {}",
-                            e
-                        ))
-                    })?;
-                PortId::from_str(&id)
-                    .map_err(|e| Error::InvalidPort(e.to_string()))
+                PortId::try_from_slice(&value[..]).map_err(|e| {
+                    Error::InvalidPort(format!(
+                        "Decoding the port ID failed: {}",
+                        e
+                    ))
+                })
             }
             Ok(None) => Err(Error::InvalidPort(
                 "The capability is not mapped to any port".to_owned(),

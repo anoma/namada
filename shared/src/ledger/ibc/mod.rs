@@ -530,10 +530,9 @@ mod tests {
             .expect("write failed");
         // insert to the reverse map
         let cap_key = Key::ibc_capability(index);
-        let port_id = get_port_id().as_str().to_owned();
-        write_log
-            .write(&cap_key, storage::types::encode(&port_id))
-            .expect("write failed");
+        let port_id = get_port_id();
+        let bytes = port_id.try_to_vec().expect("encoding failed");
+        write_log.write(&cap_key, bytes).expect("write failed");
     }
 
     fn get_next_seq(storage: &TestStorage, path: Path) -> Sequence {
