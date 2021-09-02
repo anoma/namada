@@ -237,15 +237,16 @@ impl Key {
         Key { segments }
     }
 
-    /// Check if the given key is a key to a validity predicate.
-    pub fn is_validity_predicate(&self) -> bool {
+    /// Check if the given key is a key to a validity predicate. If it is,
+    /// returns the address of the account.
+    pub fn is_validity_predicate(&self) -> Option<&Address> {
         match &self.segments[..] {
-            [DbKeySeg::AddressSeg(_), DbKeySeg::StringSeg(sub_key)]
+            [DbKeySeg::AddressSeg(address), DbKeySeg::StringSeg(sub_key)]
                 if sub_key == RESERVED_VP_KEY =>
             {
-                true
+                Some(address)
             }
-            _ => false,
+            _ => None,
         }
     }
 

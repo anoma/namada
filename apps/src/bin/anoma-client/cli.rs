@@ -25,6 +25,9 @@ pub async fn main() -> Result<()> {
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
             tx::submit_update_vp(args).await;
         }
+        cmds::AnomaClient::TxInitAccount(cmds::TxInitAccount(args)) => {
+            tx::submit_init_account(args).await;
+        }
         cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
             rpc::query_balance(args).await;
         }

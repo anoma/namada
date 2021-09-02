@@ -49,6 +49,7 @@ pub struct TxResult {
     pub gas_used: u64,
     pub changed_keys: HashSet<Key>,
     pub vps_result: VpsResult,
+    pub initialized_accounts: Vec<Address>,
 }
 
 impl TxResult {
@@ -98,12 +99,14 @@ pub fn apply_tx(
     let gas_used = block_gas_meter
         .finalize_transaction()
         .map_err(Error::GasError)?;
+    let initialized_accounts = write_log.get_initialized_accounts();
     let changed_keys = write_log.get_keys();
 
     Ok(TxResult {
         gas_used,
         changed_keys,
         vps_result,
+        initialized_accounts,
     })
 }
 
