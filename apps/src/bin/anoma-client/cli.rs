@@ -25,6 +25,9 @@ pub async fn main() -> Result<()> {
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
             tx::submit_update_vp(args).await;
         }
+        cmds::AnomaClient::TxInitAccount(cmds::TxInitAccount(args)) => {
+            tx::submit_init_account(args).await;
+        }
         cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
             rpc::query_balance(args).await;
         }
@@ -69,8 +72,12 @@ async fn gossip_intent(
         out.write_all(&data_bytes).unwrap();
         out.flush().unwrap();
     } else {
-        let node_addr = node_addr.expect("Ledger address should be defined.");
-        let topic = topic.expect("Ledger address should be defined.");
+        let node_addr = node_addr.expect(
+            "Gossip node address must be defined to submit the intent to it.",
+        );
+        let topic = topic.expect(
+            "The topic must be defined to submit the intent to a gossip node.",
+        );
         let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
 
         let intent = anoma::proto::Intent::new(data_bytes);

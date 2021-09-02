@@ -4,6 +4,29 @@ pub mod mm_token_exch;
 #[cfg(feature = "vp_user")]
 pub mod vp_user;
 
+/// A tx to initialize a new established address with a given public key and
+/// a validity predicate.
+#[cfg(feature = "tx_init_account")]
+pub mod tx_init_account {
+    use anoma_vm_env::tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        let signed =
+            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        let tx_data =
+            transaction::InitAccount::try_from_slice(&signed.data.unwrap()[..])
+                .unwrap();
+        log_string(
+            "apply_tx called to init a new established account".to_string(),
+        );
+
+        let address = init_account(&tx_data.vp_code);
+        let pk_key = key::ed25519::pk_key(&address);
+        write(&pk_key.to_string(), &tx_data.public_key);
+    }
+}
+
 /// A tx for a token transfer crafted by matchmaker from intents.
 /// This tx uses `intent::IntentTransfers` wrapped inside
 /// `key::ed25519::SignedTxData` as its input as declared in `shared` crate.

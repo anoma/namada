@@ -325,6 +325,21 @@ impl Shell {
                         );
                         self.write_log.commit_tx();
                         tx_result["code"] = "0".into();
+                        match serde_json::to_string(
+                            &result.initialized_accounts,
+                        ) {
+                            Ok(initialized_accounts) => {
+                                tx_result["initialized_accounts"] =
+                                    initialized_accounts;
+                            }
+                            Err(err) => {
+                                tracing::error!(
+                                    "Failed to serialize the initialized \
+                                     accounts: {}",
+                                    err
+                                );
+                            }
+                        }
                     } else {
                         tracing::info!(
                             "some VPs rejected apply_tx storage modification \
