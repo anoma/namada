@@ -222,7 +222,7 @@ pub trait PosActions: PosReadOnly {
         let current_epoch = current_epoch.into();
         let params = self.read_pos_params();
         let mut validator_set = self.read_validator_set();
-        if self.is_validator(address).is_some() {
+        if self.is_validator(address) {
             return Err(BecomeValidatorError::AlreadyValidator(
                 address.clone(),
             ));
@@ -250,11 +250,8 @@ pub trait PosActions: PosReadOnly {
 
     /// Check if the given address is a validator by checking that it has some
     /// state.
-    fn is_validator(
-        &mut self,
-        address: &Self::Address,
-    ) -> Option<Epoched<ValidatorState, OffsetPipelineLen>> {
-        self.read_validator_state(address)
+    fn is_validator(&mut self, address: &Self::Address) -> bool {
+        self.read_validator_state(address).is_some()
     }
 
     /// Self-bond tokens to a validator when `source` is `None` or equal to
@@ -269,16 +266,14 @@ pub trait PosActions: PosReadOnly {
     ) -> Result<(), BondError<Self::Address>> {
         let current_epoch = current_epoch.into();
         if let Some(source) = source {
-            if source != validator {
-                if let Some(_state) = self.is_validator(source) {
-                    return Err(BondError::SourceMustNotBeAValidator(
-                        source.clone(),
-                    ));
-                }
+            if source != validator && self.is_validator(source) {
+                return Err(BondError::SourceMustNotBeAValidator(
+                    source.clone(),
+                ));
             }
         }
         let params = self.read_pos_params();
-        let validator_state = self.is_validator(validator);
+        let validator_state = self.read_validator_state(validator);
         let source = source.unwrap_or(validator);
         let bond_id = BondId {
             source: source.clone(),
@@ -740,12 +735,7 @@ pub trait PosBase {
     ) -> Result<(), SlashError<Self::Address>> {
         let current_epoch = current_epoch.into();
         let evidence_epoch = evidence_epoch.into();
-        let rate = match &slash_type {
-            SlashType::DuplicateVote => params.duplicate_vote_slash_rate,
-            SlashType::LightClientAttack => {
-                params.light_client_attack_slash_rate
-            }
-        };
+        let rate = slash_type.get_slash_rate(params);
         let validator_slash = Slash {
             epoch: evidence_epoch,
             r#type: slash_type,

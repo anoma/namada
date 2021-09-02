@@ -619,6 +619,19 @@ where
     }
 }
 
+impl SlashType {
+    /// Get the slash rate applicable to the given slash type from the PoS
+    /// parameters.
+    pub fn get_slash_rate(&self, params: &PosParams) -> BasisPoints {
+        match self {
+            SlashType::DuplicateVote => params.duplicate_vote_slash_rate,
+            SlashType::LightClientAttack => {
+                params.light_client_attack_slash_rate
+            }
+        }
+    }
+}
+
 impl Display for SlashType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
