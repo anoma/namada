@@ -1059,7 +1059,7 @@ where
                 if let (
                     Some(max_inactive_validator),
                     Some(min_active_validator),
-                ) = (post.inactive.last_shim(), post.active.last_shim())
+                ) = (post.inactive.last_shim(), post.active.first_shim())
                 {
                     if max_inactive_validator.voting_power
                         > min_active_validator.voting_power
