@@ -55,7 +55,7 @@ fn key_find(
         unsafe_show_secret,
     }: args::KeyFind,
 ) {
-    let wallet = Wallet::load(&global.base_dir);
+    let wallet = Wallet::load_or_new(&global.base_dir);
     let found_keypair = match public_key {
         Some(pk) => {
             let pk = PublicKey::from_str(&pk).expect("Invalid public key");
@@ -98,7 +98,7 @@ fn key_list(
         unsafe_show_secret,
     }: args::KeyList,
 ) {
-    let wallet = Wallet::load(&global.base_dir);
+    let wallet = Wallet::load_or_new(&global.base_dir);
     let stdout = io::stdout();
     let mut w = stdout.lock();
     writeln!(w, "Known keys:").unwrap();
@@ -133,7 +133,7 @@ fn key_list(
 
 /// Export a keypair to a file.
 fn key_export(global: args::Global, args::Export { alias }: args::Export) {
-    let wallet = Wallet::load(&global.base_dir);
+    let wallet = Wallet::load_or_new(&global.base_dir);
     // TODO make the alias required
     let alias = alias.unwrap_or_else(|| {
         let mut read_alias = String::new();

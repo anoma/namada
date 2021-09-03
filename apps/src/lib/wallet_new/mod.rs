@@ -1,3 +1,4 @@
+pub mod defaults;
 mod keys;
 mod store;
 
@@ -26,21 +27,10 @@ pub enum FindKeyError {
 }
 
 impl Wallet {
-    /// Load a wallet from the store file or create a new one if not found.
+    /// Load a wallet from the store file or create a new one with the default
+    /// keys and addresses if not found.
     pub fn load_or_new(base_dir: &Path) -> Self {
         let store = Store::load_or_new(base_dir).unwrap_or_else(|err| {
-            eprintln!("Unable to load the wallet: {}", err);
-            cli::safe_exit(1)
-        });
-        Self {
-            base_dir: base_dir.to_path_buf(),
-            store,
-        }
-    }
-
-    /// Load a wallet from the store file.
-    pub fn load(base_dir: &Path) -> Self {
-        let store = Store::load(base_dir).unwrap_or_else(|err| {
             eprintln!("Unable to load the wallet: {}", err);
             cli::safe_exit(1)
         });

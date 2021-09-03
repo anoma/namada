@@ -1,6 +1,18 @@
-//! Temporary helper until we have a proper wallet.
+//! Default addresses and keys.
 
-use anoma::types::key::ed25519::{Keypair, PublicKey};
+use anoma::types::key::ed25519::Keypair;
+
+use super::store::Alias;
+
+/// The default keys with their aliases.
+pub fn keys() -> Vec<(Alias, Keypair)> {
+    vec![
+        ("alberto".into(), alberto_keypair()),
+        ("bertha".into(), bertha_keypair()),
+        ("christel".into(), christel_keypair()),
+        ("matchmaker".into(), matchmaker_keypair()),
+    ]
+}
 
 #[cfg(feature = "dev")]
 pub fn validator_keypair() -> Keypair {
@@ -66,22 +78,6 @@ pub fn matchmaker_keypair() -> Keypair {
         104,
     ];
     Keypair::from_bytes(&bytes).unwrap()
-}
-
-pub fn alberto_pk() -> PublicKey {
-    PublicKey::from(alberto_keypair().public)
-}
-
-pub fn bertha_pk() -> PublicKey {
-    PublicKey::from(bertha_keypair().public)
-}
-
-pub fn christel_pk() -> PublicKey {
-    PublicKey::from(christel_keypair().public)
-}
-
-pub fn matchmaker_pk() -> PublicKey {
-    PublicKey::from(matchmaker_keypair().public)
 }
 
 pub fn key_of(name: impl AsRef<str>) -> Keypair {

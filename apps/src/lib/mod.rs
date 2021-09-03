@@ -10,7 +10,6 @@ pub mod logging;
 pub mod node;
 pub mod proto;
 pub mod types;
-pub mod wallet;
 pub mod wallet_new;
 
 // This is here only to include the std's docs in our docs.

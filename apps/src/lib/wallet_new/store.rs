@@ -11,6 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use cli_table::format::Justify;
 use cli_table::{print_stdout, Table, WithTitle};
 
+use super::defaults;
 use super::keys::StoredKeypair;
 use crate::cli;
 
@@ -37,17 +38,17 @@ pub struct Store {
 
 impl Store {
     fn new() -> Self {
-        // TODO preload with the dev accounts
         let mut store = Self::default();
+        // Pre-load the default keys without encryption
         let no_password = None;
-        let bertha_keypair = crate::wallet::bertha_keypair();
-        let bertha_pkh: PublicKeyHash = (&bertha_keypair.public).into();
-        let alias: String = "Bertha".into();
-        store.keys.insert(
-            alias.clone(),
-            StoredKeypair::new(bertha_keypair, no_password),
-        );
-        store.pkhs.insert(bertha_pkh, alias);
+        for (alias, keypair) in defaults::keys() {
+            let pkh: PublicKeyHash = (&keypair.public).into();
+            store.keys.insert(
+                alias.clone(),
+                StoredKeypair::new(keypair, no_password.clone()),
+            );
+            store.pkhs.insert(pkh, alias);
+        }
         store
     }
 
@@ -59,29 +60,8 @@ impl Store {
     }
 
     // TODO error enum with different variants
-    /// Load a wallet from the store file.
-    pub fn load(base_dir: &Path) -> Result<Self, Cow<'static, str>> {
-        let wallet_file = wallet_file(base_dir);
-        let store = fs::read(&wallet_file);
-        match store {
-            Ok(store_data) => match Store::decode(store_data) {
-                Some(handler) => Ok(handler),
-                None => Err(format!(
-                    "Failed to decode the store from the file {:?}",
-                    wallet_file
-                )
-                .into()),
-            },
-            Err(err) => Err(format!(
-                "Failed reading wallet from {:?} with error {}",
-                wallet_file, err
-            )
-            .into()),
-        }
-    }
-
-    // TODO error enum with different variants
-    /// Load a wallet from the store file or create a new one if not found.
+    /// Load the store file or create a new one with the default keys and
+    /// addresses if not found.
     pub fn load_or_new(base_dir: &Path) -> Result<Self, Cow<'static, str>> {
         let wallet_file = wallet_file(base_dir);
         let store = fs::read(&wallet_file);
@@ -100,7 +80,9 @@ impl Store {
                         "No wallet found at {:?}. Creating a new one.",
                         wallet_file
                     );
-                    Ok(Self::new())
+                    let store = Self::new();
+                    store.save(base_dir);
+                    Ok(store)
                 }
                 _ => Err(format!(
                     "Failed reading wallet from {:?} with error {}",

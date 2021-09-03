@@ -9,7 +9,7 @@ use anoma_apps::cli::{args, cmds};
 use anoma_apps::client::{rpc, tx};
 use anoma_apps::proto::services::rpc_service_client::RpcServiceClient;
 use anoma_apps::proto::{services, RpcMessage};
-use anoma_apps::{cli, wallet};
+use anoma_apps::{cli, wallet_new};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
@@ -65,7 +65,7 @@ pub async fn main() -> Result<()> {
 }
 
 async fn gossip_intent(
-    global_args: args::Global,
+    _global_args: args::Global,
     args::Intent {
         node_addr,
         topic,
@@ -77,12 +77,13 @@ async fn gossip_intent(
     let signed_exchanges: HashSet<Signed<Exchange>> = exchanges
         .iter()
         .map(|exchange| {
-            let source_keypair = wallet::key_of(exchange.addr.encode());
+            let source_keypair =
+                wallet_new::defaults::key_of(exchange.addr.encode());
             Signed::new(&source_keypair, exchange.clone())
         })
         .collect();
 
-    let signing_key = wallet::key_of(key.encode());
+    let signing_key = wallet_new::defaults::key_of(key.encode());
     let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
         &signing_key,
         FungibleTokenIntent {
@@ -116,6 +117,7 @@ async fn gossip_intent(
 }
 
 async fn subscribe_topic(
+    _global_args: args::Global,
     args::SubscribeTopic { node_addr, topic }: args::SubscribeTopic,
 ) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();

@@ -44,7 +44,7 @@ use crate::node::ledger::events::{Event, EventType};
 use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::{protocol, storage, tendermint_node};
-use crate::{config, wallet};
+use crate::{config, wallet_new};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -181,7 +181,9 @@ impl Shell {
 
             // default user's public keys for testing
             let pk_key = key::ed25519::pk_key(user);
-            let pk = PublicKey::from(wallet::key_of(user.encode()).public);
+            let pk = PublicKey::from(
+                wallet_new::defaults::key_of(user.encode()).public,
+            );
             self.storage
                 .write(&pk_key, pk.try_to_vec().expect("encode public key"))
                 .expect("Unable to set genesis user public key");
@@ -197,7 +199,8 @@ impl Shell {
         self.storage
             .write(
                 &matchmaker_pk,
-                wallet::matchmaker_pk()
+                wallet_new::defaults::matchmaker_keypair()
+                    .public
                     .try_to_vec()
                     .expect("encode public key"),
             )
