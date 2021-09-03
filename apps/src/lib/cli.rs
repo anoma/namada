@@ -910,22 +910,32 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(NODE.def().about("The gossip node address."))
-                .arg(SIGNING_KEY.def().about("The key to sign the intent."))
-                .arg(DATA_PATH.def().about(
-                    "The data of the intent, that contains all value \
-                     necessary for the matchmaker.",
-                ))
-                .arg(TO_STDOUT.def().about(
-                    "Echo the serialized intent to stdout. Note that with \
-                     this option, the intent won't be submitted to the intent \
-                     gossiper RPC.",
-                ))
-                .arg(
-                    TOPIC.def().about(
-                        "The subnetwork where the intent should be sent to",
-                    ),
-                )
+            app.arg(
+                NODE_OPT
+                    .def()
+                    .about("The gossip node address.")
+                    .conflicts_with(TO_STDOUT.name),
+            )
+            .arg(SIGNING_KEY.def().about("The key to sign the intent."))
+            .arg(DATA_PATH.def().about(
+                "The data of the intent, that contains all value necessary \
+                 for the matchmaker.",
+            ))
+            .arg(
+                TO_STDOUT
+                    .def()
+                    .about(
+                        "Echo the serialized intent to stdout. Note that with \
+                         this option, the intent won't be submitted to the \
+                         intent gossiper RPC.",
+                    )
+                    .conflicts_with_all(&[NODE_OPT.name, TOPIC.name]),
+            )
+            .arg(
+                TOPIC_OPT
+                    .def()
+                    .about("The subnetwork where the intent should be sent to"),
+            )
         }
     }
 
