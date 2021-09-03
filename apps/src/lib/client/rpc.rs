@@ -11,13 +11,14 @@ use anoma::ledger::pos::{
     self, is_validator_slashes_key, Bonds, Slash, Unbonds,
 };
 use anoma::types::address::Address;
+use anoma::types::key::ed25519;
 use anoma::types::storage::Epoch;
 use anoma::types::{address, storage, token};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
 use tendermint_rpc::{Client, HttpClient};
 
-use crate::cli::args;
+use crate::cli::{self, args};
 use crate::node::ledger::rpc::{Path, PrefixValue};
 
 /// Dry run a transaction
@@ -65,7 +66,10 @@ pub async fn query_epoch(args: args::Query) -> Option<Epoch> {
 }
 
 /// Query token balance(s)
-pub async fn query_balance(args: args::QueryBalance) {
+pub async fn query_balance(
+    _global_args: args::Global,
+    args: args::QueryBalance,
+) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     let tokens = address::tokens();
     match (args.token, args.owner) {
@@ -695,9 +699,9 @@ pub async fn query_voting_power(args: args::QueryVotingPower) {
                         let is_active =
                             validator_set.active.contains(&weighted);
                         if !is_active {
-                            debug_assert!(
-                                validator_set.inactive.contains(&weighted)
-                            );
+                            debug_assert!(validator_set
+                                .inactive
+                                .contains(&weighted));
                         }
                         println!(
                             "Validator {} is {}, voting power: {}",
@@ -829,6 +833,18 @@ pub async fn query_slashes(args: args::QuerySlashes) {
     }
 }
 
+/// Get account's public key stored in its storage sub-space
+pub async fn get_public_key(
+    address: &Address,
+    ledger_address: tendermint::net::Address,
+) -> Option<ed25519::PublicKey> {
+    let client = HttpClient::new(ledger_address).unwrap();
+    let key = ed25519::pk_key(address);
+    // TODO `query_storage_value` is updated in PoS branch to return option,
+    // once merged, we can remove this `Some`
+    Some(query_storage_value(client, key).await)
+}
+
 /// Query a storage value and decode it with [`BorshDeserialize`].
 async fn query_storage_value<T>(
     client: HttpClient,
@@ -861,7 +877,7 @@ where
             }
         }
     }
-    std::process::exit(1)
+    cli::safe_exit(1)
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
@@ -913,5 +929,5 @@ where
             }
         }
     }
-    std::process::exit(1);
+    cli::safe_exit(1)
 }

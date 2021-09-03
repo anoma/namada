@@ -14,17 +14,17 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
 pub async fn main() -> Result<()> {
-    let (cmd, _global_args) = cli::anoma_client_cli();
+    let (cmd, global_args) = cli::anoma_client_cli();
     match cmd {
         // Ledger cmds
         cmds::AnomaClient::TxCustom(cmds::TxCustom(args)) => {
-            tx::submit_custom(args).await;
+            tx::submit_custom(global_args, args).await;
         }
         cmds::AnomaClient::TxTransfer(cmds::TxTransfer(args)) => {
-            tx::submit_transfer(args).await;
+            tx::submit_transfer(global_args, args).await;
         }
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
-            tx::submit_update_vp(args).await;
+            tx::submit_update_vp(global_args, args).await;
         }
         cmds::AnomaClient::TxInitAccount(cmds::TxInitAccount(args)) => {
             tx::submit_init_account(args).await;
@@ -42,7 +42,7 @@ pub async fn main() -> Result<()> {
             rpc::query_epoch(args).await;
         }
         cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
-            rpc::query_balance(args).await;
+            rpc::query_balance(global_args, args).await;
         }
         cmds::AnomaClient::QueryBonds(cmds::QueryBonds(args)) => {
             rpc::query_bonds(args).await;
@@ -55,16 +55,17 @@ pub async fn main() -> Result<()> {
         }
         // Gossip cmds
         cmds::AnomaClient::Intent(cmds::Intent(args)) => {
-            gossip_intent(args).await;
+            gossip_intent(global_args, args).await;
         }
         cmds::AnomaClient::SubscribeTopic(cmds::SubscribeTopic(args)) => {
-            subscribe_topic(args).await;
+            subscribe_topic(global_args, args).await;
         }
     }
     Ok(())
 }
 
 async fn gossip_intent(
+    global_args: args::Global,
     args::Intent {
         node_addr,
         topic,

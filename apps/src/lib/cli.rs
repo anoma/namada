@@ -10,6 +10,7 @@ use clap::{AppSettings, ArgMatches};
 
 use super::config;
 mod utils;
+pub use utils::safe_exit;
 use utils::*;
 
 const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
@@ -907,6 +908,7 @@ pub mod args {
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    const DECRYPT: ArgFlag = flag("decrypt");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
@@ -946,8 +948,10 @@ pub mod args {
     const TOPIC: Arg<String> = arg("topic");
     const TOPICS: ArgMulti<String> = TOPIC.multi();
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
-    const VALIDATOR_OPT: ArgOpt<Address> = VALIDATOR.opt();
+    const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
+    const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     const VALIDATOR: Arg<Address> = arg("validator");
+    const VALIDATOR_OPT: ArgOpt<Address> = VALIDATOR.opt();
     const VALUE: ArgOpt<String> = arg_opt("value");
 
     /// Global command arguments
@@ -1680,17 +1684,31 @@ pub mod args {
     /// Wallet generate arguments
     #[derive(Debug)]
     pub struct KeyGen {
+        /// Key alias
         pub alias: Option<String>,
+        /// Don't encrypt the keypair
+        pub unsafe_dont_encrypt: bool,
     }
 
     impl Args for KeyGen {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
-            Self { alias }
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            Self {
+                alias,
+                unsafe_dont_encrypt,
+            }
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS.def().about("The key alias"))
+            app.arg(ALIAS.def().about(
+                "The key alias. If none provided, the alias will be the \
+                 public key hash.",
+            ))
+            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
+                 used in a live network.",
+            ))
         }
     }
 
@@ -1700,7 +1718,7 @@ pub mod args {
         pub public_key: Option<String>,
         pub alias: Option<String>,
         pub value: Option<String>,
-        pub show_secret: bool,
+        pub unsafe_show_secret: bool,
     }
 
     impl Args for KeyFind {
@@ -1708,13 +1726,13 @@ pub mod args {
             let public_key = PUBLIC_KEY_OPT.parse(matches);
             let alias = ALIAS.parse(matches);
             let value = VALUE.parse(matches);
-            let show_secret = SHOW_SECRET.parse(matches);
+            let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
 
             Self {
                 public_key,
                 alias,
                 value,
-                show_secret,
+                unsafe_show_secret,
             }
         }
 
@@ -1737,24 +1755,38 @@ pub mod args {
                     .def()
                     .about("A public key or alias associated with the keypair"),
             )
-            .arg(SHOW_SECRET.def().about("Print the secret key"))
+            .arg(
+                UNSAFE_SHOW_SECRET
+                    .def()
+                    .about("UNSAFE: Print the secret key"),
+            )
         }
     }
 
     /// Wallet list keys arguments
     #[derive(Debug)]
     pub struct KeyList {
-        pub show_secret: bool,
+        pub decrypt: bool,
+        pub unsafe_show_secret: bool,
     }
 
     impl Args for KeyList {
         fn parse(matches: &ArgMatches) -> Self {
-            let show_secret = SHOW_SECRET.parse(matches);
-            Self { show_secret }
+            let decrypt = DECRYPT.parse(matches);
+            let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
+            Self {
+                decrypt,
+                unsafe_show_secret,
+            }
         }
 
         fn def(app: App) -> App {
-            app.arg(SHOW_SECRET.def().about("Print the secret keys"))
+            app.arg(DECRYPT.def().about("Decrypt keys that are encrypted"))
+                .arg(
+                    UNSAFE_SHOW_SECRET
+                        .def()
+                        .about("UNSAFE: Print the secret keys"),
+                )
         }
     }
 }

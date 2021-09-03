@@ -11,12 +11,12 @@ use serde::Serialize;
 use tendermint_rpc::query::{EventType, Query};
 use tendermint_rpc::Client;
 
-use super::rpc;
+use super::{rpc, signing};
 use crate::cli::args;
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
-use crate::wallet;
+use crate::wallet_new;
 
 const TX_INIT_ACCOUNT_WASM: &str = "wasm/tx_init_account.wasm";
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
@@ -26,7 +26,8 @@ const TX_BOND_WASM: &str = "wasm/tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "wasm/tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "wasm/tx_withdraw.wasm";
 
-pub async fn submit_custom(args: args::TxCustom) {
+pub async fn submit_custom(_global_args: args::Global, args: args::TxCustom) {
+    // TODO add optional signature
     let tx_code = std::fs::read(args.code_path)
         .expect("Expected a file at given code path");
     let data = args.data_path.map(|data_path| {
@@ -37,15 +38,25 @@ pub async fn submit_custom(args: args::TxCustom) {
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_update_vp(args: args::TxUpdateVp) {
-    let addr = args.addr;
-    let source_key: Keypair = wallet::key_of(addr.encode());
+pub async fn submit_update_vp(
+    global_args: args::Global,
+    args: args::TxUpdateVp,
+) {
+    let source = args.addr;
+    let wallet = wallet_new::Wallet::load_or_new(&global_args.base_dir);
+    let keypair =
+        signing::find_keypair(&wallet, &source, args.tx.ledger_address.clone())
+            .await;
+
     let vp_code = std::fs::read(args.vp_code_path)
         .expect("Expected a file at given code path");
     let tx_code = std::fs::read(TX_UPDATE_VP_WASM)
         .expect("Expected a file at given code path");
 
-    let update_vp = UpdateVp { addr, vp_code };
+    let update_vp = UpdateVp {
+        addr: source,
+        vp_code,
+    };
     let data = update_vp.try_to_vec().expect(
         "Encoding transfer data to update a validity predicate shouldn't fail",
     );
@@ -76,17 +87,24 @@ pub async fn submit_init_account(args: args::TxInitAccount) {
     let data = data.try_to_vec().expect(
         "Encoding transfer data to initialize a new account shouldn't fail",
     );
-    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
+    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_transfer(args: args::TxTransfer) {
-    let source_key: Keypair = wallet::key_of(args.source.encode());
-    let tx_code = std::fs::read(TX_TRANSFER_WASM).unwrap();
+pub async fn submit_transfer(
+    global_args: args::Global,
+    args: args::TxTransfer,
+) {
+    let source = args.source;
+    let wallet = wallet_new::Wallet::load_or_new(&global_args.base_dir);
+    let keypair =
+        signing::find_keypair(&wallet, &source, args.tx.ledger_address.clone())
+            .await;
 
+    let tx_code = std::fs::read(TX_TRANSFER_WASM).unwrap();
     let transfer = token::Transfer {
-        source: args.source,
+        source,
         target: args.target,
         token: args.token,
         amount: args.amount,
@@ -95,7 +113,7 @@ pub async fn submit_transfer(args: args::TxTransfer) {
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
+    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
     submit_tx(args.tx, tx).await
 }
