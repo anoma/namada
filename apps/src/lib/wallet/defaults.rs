@@ -8,13 +8,14 @@ use super::store::Alias;
 /// The default keys with their aliases.
 pub fn keys() -> Vec<(Alias, Keypair)> {
     vec![
-        ("alberto".into(), alberto_keypair()),
-        ("bertha".into(), bertha_keypair()),
-        ("christel".into(), christel_keypair()),
+        ("Alberto".into(), alberto_keypair()),
+        ("Bertha".into(), bertha_keypair()),
+        ("Christel".into(), christel_keypair()),
         ("matchmaker".into(), matchmaker_keypair()),
     ]
 }
 
+/// The default addresses with their aliases.
 pub fn addresses() -> Vec<(Alias, Address)> {
     let alberto = Address::decode("a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx")
             .expect("The genesis address shouldn't fail decoding");
@@ -23,9 +24,9 @@ pub fn addresses() -> Vec<(Alias, Address)> {
     let christel = Address::decode("a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s")
             .expect("The genesis address shouldn't fail decoding");
     let mut addresses: Vec<(Alias, Address)> = vec![
-        ("alberto".into(), alberto),
-        ("bertha".into(), bertha),
-        ("christel".into(), christel),
+        ("Alberto".into(), alberto),
+        ("Bertha".into(), bertha),
+        ("Christel".into(), christel),
         ("matchmaker".into(), address::matchmaker()),
     ];
     let token_addresses = address::tokens()

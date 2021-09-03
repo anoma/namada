@@ -232,16 +232,22 @@ pub mod cmds {
 
     #[derive(Debug)]
     pub enum AnomaWallet {
-        Keypair(Key),
+        /// Key management commands
+        Key(WalletKey),
+        /// Address management commands
+        Address(WalletAddress),
     }
 
     impl Cmd for AnomaWallet {
         fn add_sub(app: App) -> App {
-            app.subcommand(Key::def())
+            app.subcommand(WalletKey::def())
+                .subcommand(WalletAddress::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            SubCmd::parse(matches).map_fst(Self::Keypair)
+            let key = SubCmd::parse(matches).map_fst(Self::Key);
+            let address = SubCmd::parse(matches).map_fst(Self::Address);
+            key.or(address)
         }
     }
 
@@ -267,22 +273,22 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
-    pub enum Key {
+    pub enum WalletKey {
         Gen(KeyGen),
         Find(KeyFind),
         List(KeyList),
         Export(Export),
     }
 
-    impl SubCmd for Key {
+    impl SubCmd for WalletKey {
         const CMD: &'static str = "key";
 
         fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let generate = SubCmd::parse(matches).map_fst(Key::Gen);
-                let lookup = SubCmd::parse(matches).map_fst(Key::Find);
-                let list = SubCmd::parse(matches).map_fst(Key::List);
-                let export = SubCmd::parse(matches).map_fst(Keypair::Export);
+                let generate = SubCmd::parse(matches).map_fst(WalletKey::Gen);
+                let lookup = SubCmd::parse(matches).map_fst(WalletKey::Find);
+                let list = SubCmd::parse(matches).map_fst(WalletKey::List);
+                let export = SubCmd::parse(matches).map_fst(WalletKey::Export);
                 generate.or(lookup).or(list).or(export)
             })
         }
@@ -386,6 +392,55 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Exports a keypair to a file")
                 .add_args::<args::Export>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum WalletAddress {
+        // TODO:
+        // Gen(AddressGen),
+        // Find(AddressFind),
+        List(AddressList),
+    }
+
+    impl SubCmd for WalletAddress {
+        const CMD: &'static str = "address";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let list = SubCmd::parse(matches).map_fst(WalletAddress::List);
+                list
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Address management, including methods to generate and \
+                     look-up addresses",
+                )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(KeyList::def())
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct AddressList;
+
+    impl SubCmd for AddressList {
+        const CMD: &'static str = "list";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (AddressList, matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD).about("List all known addresses")
         }
     }
 

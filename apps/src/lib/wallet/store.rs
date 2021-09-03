@@ -126,6 +126,11 @@ impl Store {
         self.keys.get(alias)
     }
 
+    /// Find the stored address by an alias.
+    pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
+        self.addresses.get(alias.as_ref())
+    }
+
     /// Get all known keys by their alias, paired with PKH, if known.
     pub fn get_keys(
         &self,
@@ -144,6 +149,11 @@ impl Store {
             }
         });
         keys
+    }
+
+    /// Get all known addresses by their alias, paired with PKH, if known.
+    pub fn get_addresses(&self) -> &HashMap<Alias, Address> {
+        &self.addresses
     }
 
     fn generate_keypair() -> Keypair {

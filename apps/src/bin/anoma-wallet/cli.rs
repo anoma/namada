@@ -15,18 +15,25 @@ use color_eyre::eyre::Result;
 pub fn main() -> Result<()> {
     let (cmd, global_args) = cli::anoma_wallet_cli();
     match cmd {
-        cmds::AnomaWallet::Keypair(cmds::Key::Gen(cmds::KeyGen(args))) => {
-            key_gen(global_args, args)
-        }
-        cmds::AnomaWallet::Keypair(cmds::Key::Find(cmds::KeyFind(args))) => {
-            key_find(global_args, args)
-        }
-        cmds::AnomaWallet::Keypair(cmds::Key::List(cmds::KeyList(args))) => {
-            key_list(global_args, args)
-        }
-        cmds::AnomaWallet::Keypair(cmds::Key::Export(cmds::Export(args))) => {
-            key_export(global_args, args)
-        }
+        cmds::AnomaWallet::Key(sub) => match sub {
+            cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
+                key_gen(global_args, args)
+            }
+            cmds::WalletKey::Find(cmds::KeyFind(args)) => {
+                key_find(global_args, args)
+            }
+            cmds::WalletKey::List(cmds::KeyList(args)) => {
+                key_list(global_args, args)
+            }
+            cmds::WalletKey::Export(cmds::Export(args)) => {
+                key_export(global_args, args)
+            }
+        },
+        cmds::AnomaWallet::Address(sub) => match sub {
+            cmds::WalletAddress::List(cmds::AddressList) => {
+                address_list(global_args)
+            }
+        },
     }
     Ok(())
 }
@@ -91,6 +98,7 @@ fn key_find(
     }
 }
 
+/// List all known keys.
 fn key_list(
     global: args::Global,
     args::KeyList {
@@ -157,4 +165,15 @@ fn key_export(global: args::Global, args::Export { alias }: args::Export) {
             eprintln!("{}", err);
             cli::safe_exit(1)
         })
+}
+
+/// List all known addresses.
+fn address_list(global: args::Global) {
+    let wallet = Wallet::load_or_new(&global.base_dir);
+    let stdout = io::stdout();
+    let mut w = stdout.lock();
+    writeln!(w, "Known addresses:").unwrap();
+    for (alias, address) in wallet.get_addresses() {
+        writeln!(w, "  \"{}\": {}", alias, address.encode()).unwrap();
+    }
 }

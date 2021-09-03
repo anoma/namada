@@ -5,6 +5,7 @@ mod store;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use anoma::types::address::Address;
 use anoma::types::key::ed25519::{PublicKey, PublicKeyHash};
 use thiserror::Error;
 
@@ -113,6 +114,16 @@ impl Wallet {
         &self,
     ) -> HashMap<Alias, (&StoredKeypair, Option<&PublicKeyHash>)> {
         self.store.get_keys()
+    }
+
+    /// Find the stored address by an alias.
+    pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
+        self.store.find_address(alias)
+    }
+
+    /// Get all known addresses by their alias, paired with PKH, if known.
+    pub fn get_addresses(&self) -> &HashMap<Alias, Address> {
+        self.store.get_addresses()
     }
 }
 
