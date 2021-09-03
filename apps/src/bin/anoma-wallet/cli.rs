@@ -7,32 +7,24 @@ use std::str::FromStr;
 use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 #[cfg(feature = "dev")]
 use anoma_apps::cli;
-use anoma_apps::cli::{args, cmds};
-use anoma_apps::wallet::{DecryptionError, Wallet};
+use anoma_apps::cli::{args, cmds, Context};
+use anoma_apps::wallet::DecryptionError;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
 pub fn main() -> Result<()> {
-    let (cmd, global_args) = cli::anoma_wallet_cli();
+    let (cmd, ctx) = cli::anoma_wallet_cli();
     match cmd {
         cmds::AnomaWallet::Key(sub) => match sub {
-            cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
-                key_gen(global_args, args)
-            }
-            cmds::WalletKey::Find(cmds::KeyFind(args)) => {
-                key_find(global_args, args)
-            }
-            cmds::WalletKey::List(cmds::KeyList(args)) => {
-                key_list(global_args, args)
-            }
+            cmds::WalletKey::Gen(cmds::KeyGen(args)) => key_gen(ctx, args),
+            cmds::WalletKey::Find(cmds::KeyFind(args)) => key_find(ctx, args),
+            cmds::WalletKey::List(cmds::KeyList(args)) => key_list(ctx, args),
             cmds::WalletKey::Export(cmds::Export(args)) => {
-                key_export(global_args, args)
+                key_export(ctx, args)
             }
         },
         cmds::AnomaWallet::Address(sub) => match sub {
-            cmds::WalletAddress::List(cmds::AddressList) => {
-                address_list(global_args)
-            }
+            cmds::WalletAddress::List(cmds::AddressList) => address_list(ctx),
         },
     }
     Ok(())
@@ -40,13 +32,13 @@ pub fn main() -> Result<()> {
 
 /// Generate a new keypair and store it in the wallet.
 fn key_gen(
-    global: args::Global,
+    ctx: Context,
     args::KeyGen {
         alias,
         unsafe_dont_encrypt,
     }: args::KeyGen,
 ) {
-    let mut wallet = Wallet::load_or_new(&global.base_dir);
+    let mut wallet = ctx.wallet;
     let alias = wallet.gen_key(alias, unsafe_dont_encrypt);
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     println!("Successfully added a key with alias: \"{}\"", alias);
@@ -54,7 +46,7 @@ fn key_gen(
 
 /// Find a keypair in the wallet store.
 fn key_find(
-    global: args::Global,
+    ctx: Context,
     args::KeyFind {
         public_key,
         alias,
@@ -62,7 +54,7 @@ fn key_find(
         unsafe_show_secret,
     }: args::KeyFind,
 ) {
-    let wallet = Wallet::load_or_new(&global.base_dir);
+    let wallet = ctx.wallet;
     let found_keypair = match public_key {
         Some(pk) => {
             let pk = PublicKey::from_str(&pk).expect("Invalid public key");
@@ -100,13 +92,13 @@ fn key_find(
 
 /// List all known keys.
 fn key_list(
-    global: args::Global,
+    ctx: Context,
     args::KeyList {
         decrypt,
         unsafe_show_secret,
     }: args::KeyList,
 ) {
-    let wallet = Wallet::load_or_new(&global.base_dir);
+    let wallet = ctx.wallet;
     let stdout = io::stdout();
     let mut w = stdout.lock();
     writeln!(w, "Known keys:").unwrap();
@@ -140,8 +132,8 @@ fn key_list(
 }
 
 /// Export a keypair to a file.
-fn key_export(global: args::Global, args::Export { alias }: args::Export) {
-    let wallet = Wallet::load_or_new(&global.base_dir);
+fn key_export(ctx: Context, args::Export { alias }: args::Export) {
+    let wallet = ctx.wallet;
     // TODO make the alias required
     let alias = alias.unwrap_or_else(|| {
         let mut read_alias = String::new();
@@ -168,8 +160,8 @@ fn key_export(global: args::Global, args::Export { alias }: args::Export) {
 }
 
 /// List all known addresses.
-fn address_list(global: args::Global) {
-    let wallet = Wallet::load_or_new(&global.base_dir);
+fn address_list(ctx: Context) {
+    let wallet = ctx.wallet;
     let stdout = io::stdout();
     let mut w = stdout.lock();
     writeln!(w, "Known addresses:").unwrap();

@@ -9,8 +9,8 @@ use anoma_apps::{cli, config};
 use eyre::{Context, Result};
 
 pub fn main() -> Result<()> {
-    let (cmd, global_args) = cli::anoma_node_cli();
-    let base_dir = &global_args.base_dir;
+    let (cmd, ctx) = cli::anoma_node_cli();
+    let base_dir = &ctx.global_args.base_dir;
     match cmd {
         cli::cmds::AnomaNode::Ledger(sub) => match sub {
             cli::cmds::Ledger::Run(_) => {

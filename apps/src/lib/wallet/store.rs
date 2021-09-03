@@ -82,7 +82,8 @@ impl Store {
                         wallet_file
                     );
                     let store = Self::new();
-                    store.save(base_dir);
+                    // TODO error handling
+                    store.save(base_dir).unwrap();
                     Ok(store)
                 }
                 _ => Err(format!(

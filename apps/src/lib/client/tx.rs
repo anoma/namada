@@ -12,11 +12,10 @@ use tendermint_rpc::query::{EventType, Query};
 use tendermint_rpc::Client;
 
 use super::{rpc, signing};
-use crate::cli::args;
+use crate::cli::{args, Context};
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
-use crate::wallet;
 
 const TX_INIT_ACCOUNT_WASM: &str = "wasm/tx_init_account.wasm";
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
@@ -26,7 +25,7 @@ const TX_BOND_WASM: &str = "wasm/tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "wasm/tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "wasm/tx_withdraw.wasm";
 
-pub async fn submit_custom(_global_args: args::Global, args: args::TxCustom) {
+pub async fn submit_custom(_ctx: &Context, args: args::TxCustom) {
     // TODO add optional signature
     let tx_code = std::fs::read(args.code_path)
         .expect("Expected a file at given code path");
@@ -38,15 +37,14 @@ pub async fn submit_custom(_global_args: args::Global, args: args::TxCustom) {
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_update_vp(
-    global_args: args::Global,
-    args: args::TxUpdateVp,
-) {
+pub async fn submit_update_vp(ctx: &Context, args: args::TxUpdateVp) {
     let source = args.addr;
-    let wallet = wallet::Wallet::load_or_new(&global_args.base_dir);
-    let keypair =
-        signing::find_keypair(&wallet, &source, args.tx.ledger_address.clone())
-            .await;
+    let keypair = signing::find_keypair(
+        &ctx.wallet,
+        &source,
+        args.tx.ledger_address.clone(),
+    )
+    .await;
 
     let vp_code = std::fs::read(args.vp_code_path)
         .expect("Expected a file at given code path");
@@ -92,15 +90,14 @@ pub async fn submit_init_account(args: args::TxInitAccount) {
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_transfer(
-    global_args: args::Global,
-    args: args::TxTransfer,
-) {
+pub async fn submit_transfer(ctx: &Context, args: args::TxTransfer) {
     let source = args.source;
-    let wallet = wallet::Wallet::load_or_new(&global_args.base_dir);
-    let keypair =
-        signing::find_keypair(&wallet, &source, args.tx.ledger_address.clone())
-            .await;
+    let keypair = signing::find_keypair(
+        &ctx.wallet,
+        &source,
+        args.tx.ledger_address.clone(),
+    )
+    .await;
 
     let tx_code = std::fs::read(TX_TRANSFER_WASM).unwrap();
     let transfer = token::Transfer {

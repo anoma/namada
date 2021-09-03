@@ -18,7 +18,7 @@ use borsh::BorshDeserialize;
 use itertools::Itertools;
 use tendermint_rpc::{Client, HttpClient};
 
-use crate::cli::{self, args};
+use crate::cli::{self, args, Context};
 use crate::node::ledger::rpc::{Path, PrefixValue};
 
 /// Dry run a transaction
@@ -66,10 +66,7 @@ pub async fn query_epoch(args: args::Query) -> Option<Epoch> {
 }
 
 /// Query token balance(s)
-pub async fn query_balance(
-    _global_args: args::Global,
-    args: args::QueryBalance,
-) {
+pub async fn query_balance(_ctx: &Context, args: args::QueryBalance) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     let tokens = address::tokens();
     match (args.token, args.owner) {
