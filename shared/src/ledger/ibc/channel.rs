@@ -26,11 +26,12 @@ use thiserror::Error;
 use super::{Ibc, StateChange};
 use crate::ledger::native_vp::Error as NativeVpError;
 use crate::ledger::storage::{self, StorageHasher};
+use crate::types::address::{Address, InternalAddress};
 use crate::types::ibc::{
     ChannelCloseConfirmData, ChannelCloseInitData, ChannelOpenAckData,
     ChannelOpenConfirmData, ChannelOpenTryData, Error as IbcDataError,
 };
-use crate::types::storage::{Key, KeySeg};
+use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -84,18 +85,15 @@ where
             }
         }
 
-        let port_id = Self::get_port_id(key)
-            .map_err(|e| Error::InvalidKey(e.to_string()))?;
-        let channel_id = Self::get_channel_id(key)?;
+        let port_channel_id = Self::get_port_channel_id(key)?;
+        self.authenticated_capability(&port_channel_id.0)
+            .map_err(|e| {
+                Error::InvalidPort(format!(
+                    "The port is not authenticated: ID {}, {}",
+                    port_channel_id.0, e
+                ))
+            })?;
 
-        self.authenticated_capability(&port_id).map_err(|e| {
-            Error::InvalidPort(format!(
-                "The port is not authenticated: ID {}, {}",
-                port_id, e
-            ))
-        })?;
-
-        let port_channel_id = (port_id, channel_id);
         let channel = self.channel_end(&port_channel_id).ok_or_else(|| {
             Error::InvalidChannel(format!(
                 "The channel doesn't exist: Port {}, Channel {}",
@@ -140,25 +138,28 @@ where
         }
     }
 
-    /// Returns the port ID after #IBC/channelEnds/ports
-    pub(super) fn get_port_id(key: &Key) -> Result<PortId> {
-        match key.segments.get(3) {
-            Some(id) => PortId::from_str(&id.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string())),
-            None => Err(Error::InvalidKey(format!(
-                "The key doesn't have a port ID: Key {}",
-                key
-            ))),
-        }
-    }
-
-    /// Returns the channel ID after #IBC/channelEnds/ports/{port_id}/channels
-    pub(super) fn get_channel_id(key: &Key) -> Result<ChannelId> {
-        match key.segments.get(5) {
-            Some(id) => ChannelId::from_str(&id.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string())),
-            None => Err(Error::InvalidKey(format!(
-                "The key doesn't have a channel ID: {}",
+    /// Returns the port ID and the channel ID
+    pub(super) fn get_port_channel_id(
+        key: &Key,
+    ) -> Result<(PortId, ChannelId)> {
+        match &key.segments[..] {
+            [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(module0), DbKeySeg::StringSeg(port_id), DbKeySeg::StringSeg(module1), DbKeySeg::StringSeg(channel_id)]
+                if addr == &Address::Internal(InternalAddress::Ibc)
+                    && (prefix == "channelEnds"
+                        || prefix == "nextSequenceSend"
+                        || prefix == "nextSequenceRecv"
+                        || prefix == "nextSequenceAck")
+                    && module0 == "ports"
+                    && module1 == "channels" =>
+            {
+                let port_id = PortId::from_str(&port_id.raw())
+                    .map_err(|e| Error::InvalidKey(e.to_string()))?;
+                let channel_id = ChannelId::from_str(&channel_id.raw())
+                    .map_err(|e| Error::InvalidKey(e.to_string()))?;
+                Ok((port_id, channel_id))
+            }
+            _ => Err(Error::InvalidKey(format!(
+                "The key doesn't have port ID and channel ID: Key {}",
                 key
             ))),
         }
@@ -570,9 +571,9 @@ where
                 if let Some(id) = channel.connection_hops().get(0) {
                     if id == conn_id {
                         let key = Key::parse(&key).ok()?;
-                        let port_id = Self::get_port_id(&key).ok()?;
-                        let channel_id = Self::get_channel_id(&key).ok()?;
-                        channels.push((port_id, channel_id));
+                        let port_channel_id =
+                            Self::get_port_channel_id(&key).ok()?;
+                        channels.push(port_channel_id);
                     }
                 }
             } else {

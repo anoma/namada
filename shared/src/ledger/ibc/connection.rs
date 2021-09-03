@@ -24,7 +24,7 @@ use crate::types::ibc::{
     ConnectionOpenAckData, ConnectionOpenConfirmData, ConnectionOpenTryData,
     Error as IbcDataError,
 };
-use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg};
+use crate::types::storage::{BlockHeight, DbKeySeg, Epoch, Key, KeySeg};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -95,10 +95,15 @@ where
 
     /// Returns the connection ID after #IBC/connections
     fn get_connection_id(key: &Key) -> Result<ConnectionId> {
-        match key.segments.get(2) {
-            Some(id) => ConnectionId::from_str(&id.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string())),
-            None => Err(Error::InvalidKey(format!(
+        match &key.segments[..] {
+            [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(conn_id)]
+                if addr == &Address::Internal(InternalAddress::Ibc)
+                    && prefix == "connections" =>
+            {
+                ConnectionId::from_str(&conn_id.raw())
+                    .map_err(|e| Error::InvalidKey(e.to_string()))
+            }
+            _ => Err(Error::InvalidKey(format!(
                 "The key doesn't have a connection ID: {}",
                 key
             ))),
