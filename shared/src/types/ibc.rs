@@ -12,7 +12,7 @@ use ibc::ics02_client::height::Height;
 use ibc::ics03_connection::connection::Counterparty as ConnCounterparty;
 use ibc::ics03_connection::version::Version;
 use ibc::ics04_channel::channel::{Counterparty as ChanCounterparty, Order};
-use ibc::ics04_channel::packet::Packet;
+use ibc::ics04_channel::packet::{Packet, Sequence};
 use ibc::ics23_commitment::commitment::CommitmentProofBytes;
 use ibc::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
 use ibc::proofs::{ConsensusProof, Proofs};
@@ -1256,6 +1256,66 @@ impl PacketAckData {
     /// Returns the acknowledgement
     pub fn ack(&self) -> Vec<u8> {
         self.ack.clone()
+    }
+
+    /// Returns the height of the proof
+    pub fn proof_height(&self) -> Height {
+        Height::new(self.proof_height.0, self.proof_height.1)
+    }
+
+    /// Returns the proof of the packet
+    pub fn proof_packet(&self) -> CommitmentProofBytes {
+        self.proof_packets.clone().into()
+    }
+
+    /// Returns the proofs for verification
+    pub fn proofs(&self) -> Result<Proofs> {
+        Proofs::new(self.proof_packet(), None, None, None, self.proof_height())
+            .map_err(Error::DecodingError)
+    }
+}
+
+/// Data for timeout
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct TimeoutData {
+    /// The packet
+    packet: Vec<u8>,
+    /// The nextSequenceRecv
+    sequence: u64,
+    /// The height of the proof
+    proof_height: (u64, u64),
+    /// The proof of the packet
+    proof_packets: Vec<u8>,
+}
+
+impl TimeoutData {
+    /// Create data for packet acknowledgement
+    pub fn new(
+        packet: Packet,
+        sequence: Sequence,
+        proof_height: Height,
+        proof_packets: CommitmentProofBytes,
+    ) -> Self {
+        let bytes = encode_packet(&packet);
+        Self {
+            packet: bytes,
+            sequence: sequence.into(),
+            proof_height: (
+                proof_height.revision_number,
+                proof_height.revision_height,
+            ),
+            proof_packets: proof_packets.into(),
+        }
+    }
+
+    /// Returns the packet
+    pub fn packet(&self) -> Result<Packet> {
+        decode_packet(&self.packet)
+    }
+
+    /// Returns the nextSequenceRecv
+    pub fn sequence(&self) -> Sequence {
+        Sequence::from(self.sequence)
     }
 
     /// Returns the height of the proof

@@ -142,7 +142,7 @@ where
     }
 
     /// Returns the port ID after #IBC/channelEnds/ports
-    fn get_port_id(key: &Key) -> Result<PortId> {
+    pub(super) fn get_port_id(key: &Key) -> Result<PortId> {
         match key.segments.get(3) {
             Some(id) => PortId::from_str(&id.raw())
                 .map_err(|e| Error::InvalidKey(e.to_string())),
@@ -154,7 +154,7 @@ where
     }
 
     /// Returns the channel ID after #IBC/channelEnds/ports/{port_id}/channels
-    fn get_channel_id(key: &Key) -> Result<ChannelId> {
+    pub(super) fn get_channel_id(key: &Key) -> Result<ChannelId> {
         match key.segments.get(5) {
             Some(id) => ChannelId::from_str(&id.raw())
                 .map_err(|e| Error::InvalidKey(e.to_string())),
@@ -453,7 +453,7 @@ where
         }
     }
 
-    fn channel_end_pre(
+    pub(super) fn channel_end_pre(
         &self,
         port_channel_id: (PortId, ChannelId),
     ) -> Result<ChannelEnd> {
