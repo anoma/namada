@@ -11,7 +11,7 @@ use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
 use crate::client::tx::broadcast_tx;
 use crate::types::MatchmakerMessage;
-use crate::{config, wallet_new};
+use crate::{config, wallet};
 
 /// A matchmaker receive intents and tries to find a match with previously
 /// received intent.
@@ -143,7 +143,7 @@ impl Matchmaker {
         match mm_message {
             MatchmakerMessage::InjectTx(tx_data) => {
                 let tx_code = self.tx_code.clone();
-                let keypair = wallet_new::defaults::matchmaker_keypair();
+                let keypair = wallet::defaults::matchmaker_keypair();
                 let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair);
                 let tx_bytes = tx.to_bytes();
 

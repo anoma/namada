@@ -16,7 +16,7 @@ use crate::cli::args;
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
-use crate::wallet_new;
+use crate::wallet;
 
 const TX_INIT_ACCOUNT_WASM: &str = "wasm/tx_init_account.wasm";
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
@@ -43,7 +43,7 @@ pub async fn submit_update_vp(
     args: args::TxUpdateVp,
 ) {
     let source = args.addr;
-    let wallet = wallet_new::Wallet::load_or_new(&global_args.base_dir);
+    let wallet = wallet::Wallet::load_or_new(&global_args.base_dir);
     let keypair =
         signing::find_keypair(&wallet, &source, args.tx.ledger_address.clone())
             .await;
@@ -97,7 +97,7 @@ pub async fn submit_transfer(
     args: args::TxTransfer,
 ) {
     let source = args.source;
-    let wallet = wallet_new::Wallet::load_or_new(&global_args.base_dir);
+    let wallet = wallet::Wallet::load_or_new(&global_args.base_dir);
     let keypair =
         signing::find_keypair(&wallet, &source, args.tx.ledger_address.clone())
             .await;

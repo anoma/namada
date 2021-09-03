@@ -8,7 +8,7 @@ use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 #[cfg(feature = "dev")]
 use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds};
-use anoma_apps::wallet_new::{DecryptionError, Wallet};
+use anoma_apps::wallet::{DecryptionError, Wallet};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 

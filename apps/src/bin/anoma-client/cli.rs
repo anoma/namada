@@ -9,7 +9,7 @@ use anoma_apps::cli::{args, cmds};
 use anoma_apps::client::{rpc, tx};
 use anoma_apps::proto::services::rpc_service_client::RpcServiceClient;
 use anoma_apps::proto::{services, RpcMessage};
-use anoma_apps::{cli, wallet_new};
+use anoma_apps::{cli, wallet};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
@@ -78,12 +78,12 @@ async fn gossip_intent(
         .iter()
         .map(|exchange| {
             let source_keypair =
-                wallet_new::defaults::key_of(exchange.addr.encode());
+                wallet::defaults::key_of(exchange.addr.encode());
             Signed::new(&source_keypair, exchange.clone())
         })
         .collect();
 
-    let signing_key = wallet_new::defaults::key_of(key.encode());
+    let signing_key = wallet::defaults::key_of(key.encode());
     let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
         &signing_key,
         FungibleTokenIntent {
