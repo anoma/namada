@@ -72,6 +72,12 @@ async fn gossip_intent(
         out.write_all(&data_bytes).unwrap();
         out.flush().unwrap();
     } else {
+        let node_addr = node_addr.expect(
+            "Gossip node address must be defined to submit the intent to it.",
+        );
+        let topic = topic.expect(
+            "The topic must be defined to submit the intent to a gossip node.",
+        );
         let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
 
         let intent = anoma::proto::Intent::new(data_bytes);

@@ -38,13 +38,11 @@ pub mod tx_from_intent {
     fn apply_tx(tx_data: Vec<u8>) {
         let signed =
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+
         let tx_data =
-            intent::IntentTransfers::try_from_slice(&signed.data.unwrap()[..])
-                .unwrap();
-        log_string(format!(
-            "apply_tx called with intent transfers: {:#?}",
-            tx_data
-        ));
+            intent::IntentTransfers::try_from_slice(&signed.data.unwrap()[..]);
+
+        let tx_data = tx_data.unwrap();
 
         // make sure that the matchmaker has to validate this tx
         insert_verifier(address::matchmaker());
@@ -117,15 +115,15 @@ pub mod vp_token {
 
     #[validity_predicate]
     fn validate_tx(
-        tx_data: Vec<u8>,
+        _tx_data: Vec<u8>,
         addr: Address,
         keys_changed: HashSet<storage::Key>,
         verifiers: HashSet<Address>,
     ) -> bool {
         log_string(format!(
             "validate_tx called with token addr: {}, key_changed: {:#?}, \
-             tx_data: {:#?}, verifiers: {:?}",
-            addr, keys_changed, tx_data, verifiers
+             verifiers: {:?}",
+            addr, keys_changed, verifiers
         ));
 
         token::vp(&addr, &keys_changed, &verifiers)
@@ -142,12 +140,7 @@ pub mod mm_filter_token_exch {
     fn validate_intent(intent: Vec<u8>) -> bool {
         // TODO: check if signature is valid
         let intent = decode_intent_data(intent);
-        if intent.is_some() {
-            log_string(format!(r#"intent {:#?} is valid"#, intent));
-            true
-        } else {
-            false
-        }
+        intent.is_some()
     }
 
     fn decode_intent_data(bytes: Vec<u8>) -> Option<FungibleTokenIntent> {

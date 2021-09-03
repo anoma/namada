@@ -8,7 +8,7 @@ mod tests {
     use std::process::Command;
     use std::{fs, thread};
 
-    use anoma_apps::config::{Config, IntentGossiper};
+    use anoma_apps::config::{Config, IntentGossiper, Ledger};
     use assert_cmd::assert::OutputAssertExt;
     use assert_cmd::cargo::CommandCargoExt;
     use color_eyre::eyre::Result;
@@ -615,7 +615,7 @@ mod tests {
     /// a transfer transaction with the 3 intents.
     #[test]
     fn match_intent() -> Result<()> {
-        setup();
+        let working_dir = setup();
 
         let base_dir = tempdir().unwrap();
         let node_dirs = generate_network_of(
@@ -626,9 +626,11 @@ mod tests {
             true,
         );
 
-        let intent_a_path = base_dir.path().to_path_buf().join("intent.A");
-        let intent_b_path = base_dir.path().to_path_buf().join("intent.B");
-        let intent_c_path = base_dir.path().to_path_buf().join("intent.C");
+        println!("{}", base_dir.path().to_path_buf().to_string_lossy());
+
+        let _intent_a_path = base_dir.path().to_path_buf().join("intent.A");
+        let _intent_b_path = base_dir.path().to_path_buf().join("intent.B");
+        let _intent_c_path = base_dir.path().to_path_buf().join("intent.C");
 
         let intent_a_path_input =
             base_dir.path().to_path_buf().join("intent.A.data");
@@ -636,10 +638,6 @@ mod tests {
             base_dir.path().to_path_buf().join("intent.B.data");
         let intent_c_path_input =
             base_dir.path().to_path_buf().join("intent.C.data");
-
-        println!("{:?}, {:?}", intent_a_path, intent_a_path_input);
-        println!("{:?}, {:?}", intent_b_path, intent_b_path_input);
-        println!("{:?}, {:?}", intent_c_path, intent_c_path_input);
 
         let intent_a_json = json!([
             {
@@ -649,9 +647,11 @@ mod tests {
                 "max_sell": "70",
                 "token_buy": XAN,
                 "token_sell": BTC,
-                "rate_min": 2
+                "rate_min": "2",
+                "vp_path": working_dir.join(VP_ALWAYS_TRUE_WASM).to_string_lossy().into_owned(),
             }
         ]);
+
         let intent_b_json = json!([
             {
                 "key": ALBERT,
@@ -660,7 +660,7 @@ mod tests {
                 "max_sell": "300",
                 "token_buy": BTC,
                 "token_sell": ETH,
-                "rate_min": 0.7
+                "rate_min": "0.7"
             }
         ]);
         let intent_c_json = json!([
@@ -671,7 +671,7 @@ mod tests {
                 "max_sell": "200",
                 "token_buy": ETH,
                 "token_sell": XAN,
-                "rate_min": 0.5
+                "rate_min": "0.5"
             }
         ]);
         generate_intent_json(intent_a_path_input.clone(), intent_a_json);
@@ -684,22 +684,25 @@ mod tests {
         base_node_gossip.args(&["--base-dir", first_node_dir, "gossip"]);
 
         let mut base_node_ledger = Command::cargo_bin("anoman")?;
-        base_node_ledger.args(&["--base-dir", first_node_dir, "ledger"]);
+        base_node_ledger.current_dir(&working_dir).args(&[
+            "--base-dir",
+            first_node_dir,
+            "ledger",
+        ]);
 
         //  Start gossip
-        let mut session_gossip = spawn_command(base_node_gossip, Some(40_000))
+        let mut session_gossip = spawn_command(base_node_gossip, Some(60_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         //  Start ledger
-        let mut session_ledger = spawn_command(base_node_ledger, Some(40_000))
+        let mut session_ledger = spawn_command(base_node_ledger, Some(60_000))
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         session_ledger
             .exp_string("No state could be found")
             .map_err(|e| eyre!(format!("{}", e)))?;
-        drop(session_ledger);
 
-        // Wait for ledger and gossip to start
+        // Wait gossip to start
         sleep(3);
 
         // cargo run --bin anomac -- intent --node "http://127.0.0.1:39111" --data-path intent.A --topic "asset_v1"
@@ -776,7 +779,7 @@ mod tests {
             CHRISTEL,
         ]);
         let mut session_send_intent_c =
-            spawn_command(send_intent_c, Some(40_000))
+            spawn_command(send_intent_c, Some(20_000))
                 .map_err(|e| eyre!(format!("{}", e)))?;
 
         // means it sent it correctly but not able to gossip it (which is
@@ -785,11 +788,6 @@ mod tests {
             .exp_string("Failed to publish_intent InsufficientPeers")
             .map_err(|e| eyre!(format!("{}", e)))?;
         drop(session_send_intent_c);
-
-        // check that the amount matched are correct
-        session_gossip
-            .exp_string("amounts: 100, 70, 200")
-            .map_err(|e| eyre!(format!("{}", e)))?;
 
         // check that the transfers transactions are correct
         session_gossip
@@ -802,6 +800,11 @@ mod tests {
 
         session_gossip
             .exp_string("crafting transfer: Established: a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx, Established: a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s, 100")
+            .map_err(|e| eyre!(format!("{}", e)))?;
+
+        // check that the intent vp passes evaluation
+        session_ledger
+            .exp_string("eval result: true")
             .map_err(|e| eyre!(format!("{}", e)))?;
 
         Ok(())
@@ -835,6 +838,13 @@ mod tests {
             let node_path = path.join(format!("anoma-{}", index));
 
             let mut config = Config::default();
+
+            let _ledger_config = Ledger {
+                tendermint: node_path.join("tendermint").to_path_buf(),
+                db: node_path.join("db").to_path_buf(),
+                ..Default::default()
+            };
+
             let info = build_peers(index, node_dirs.clone());
 
             let gossiper_config = IntentGossiper::default_with_address(
@@ -902,5 +912,9 @@ mod tests {
         pub const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
         pub const VP_USER_WASM: &str = "wasm/vp_user.wasm";
         pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
+        pub const VP_ALWAYS_TRUE_WASM: &str =
+            "wasm_for_tests/vp_always_true.wasm";
+        pub const VP_ALWAYS_FALSE_WASM: &str =
+            "wasm_for_tests/vp_always_false.wasm";
     }
 }

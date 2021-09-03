@@ -520,16 +520,19 @@ pub mod cmds {
 }
 
 pub mod args {
+
+    use std::convert::TryFrom;
     use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
 
     use anoma::types::address::Address;
-    use anoma::types::intent::Exchange;
+    use anoma::types::intent::{DecimalWrapper, Exchange};
     use anoma::types::key::ed25519::PublicKey;
     use anoma::types::token;
     use libp2p::Multiaddr;
+    use serde::Deserialize;
 
     use super::utils::*;
     use super::ArgMatches;
@@ -554,26 +557,28 @@ pub mod args {
         }));
     const LEDGER_ADDRESS_OPT: ArgOpt<tendermint::net::Address> =
         LEDGER_ADDRESS.opt();
+    const PEERS: ArgMulti<String> = arg_multi("peers");
+    const TOPIC: Arg<String> = arg("topic");
+    const TOPIC_OPT: ArgOpt<String> = arg_opt("topic");
+    const TOPICS: ArgMulti<String> = TOPIC.multi();
+    // TODO: once we have a wallet, we should also allow to use a key alias
+    // <https://github.com/anoma/anoma/issues/167>
+    const SIGNING_KEY: Arg<Address> = arg("key");
+    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const LEDGER_ADDRESS: Arg<tendermint::net::Address> = arg("ledger-address");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE: Arg<String> = arg("node");
+    const NODE_OPT: ArgOpt<String> = arg_opt("node");
+    const TO_STDOUT: ArgFlag = flag("stdout");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
     // TODO: once we have a wallet, we should also allow to use a key alias
     // <https://github.com/anoma/anoma/issues/167>
     const PUBLIC_KEY: Arg<PublicKey> = arg("public-key");
-    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
-    // TODO: once we have a wallet, we should also allow to use a key alias
-    // <https://github.com/anoma/anoma/issues/167>
-    const SIGNING_KEY: Arg<Address> = arg("key");
-    const PEERS: ArgMulti<String> = arg_multi("peers");
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
     const TOKEN: Arg<Address> = arg("token");
     const TOKEN_OPT: ArgOpt<Address> = TOKEN.opt();
-    const TOPIC: Arg<String> = arg("topic");
-    const TOPICS: ArgMulti<String> = TOPIC.multi();
-    const TO_STDOUT: ArgFlag = flag("stdout");
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
 
     /// Global command arguments
@@ -796,13 +801,74 @@ pub mod args {
         }
     }
 
+    /// Helper struct for generating intents
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct ExchangeDefinition {
+        /// The source address
+        pub addr: String,
+        /// The token to be sold
+        pub token_sell: String,
+        /// The minimum rate
+        pub rate_min: String,
+        /// The maximum amount of token to be sold
+        pub max_sell: String,
+        /// The token to be bought
+        pub token_buy: String,
+        /// The amount of token to be bought
+        pub min_buy: String,
+        // The path to the wasm vp code
+        pub vp_path: Option<String>,
+    }
+
+    impl TryFrom<ExchangeDefinition> for Exchange {
+        type Error = &'static str;
+
+        fn try_from(
+            value: ExchangeDefinition,
+        ) -> Result<Exchange, Self::Error> {
+            let vp = if let Some(path) = value.vp_path {
+                if let Ok(wasm) = std::fs::read(path.clone()) {
+                    Some(wasm)
+                } else {
+                    eprintln!("File {} was not found.", path);
+                    None
+                }
+            } else {
+                None
+            };
+
+            let addr = Address::decode(value.addr)
+                .expect("Addr should be a valid address");
+            let token_buy = Address::decode(value.token_buy)
+                .expect("Token_buy should be a valid address");
+            let token_sell = Address::decode(value.token_sell)
+                .expect("Token_sell should be a valid address");
+            let min_buy = token::Amount::from_str(&value.min_buy)
+                .expect("Min_buy must be convertible to number");
+            let max_sell = token::Amount::from_str(&value.max_sell)
+                .expect("Max_sell must be convertible to number");
+            let rate_min = DecimalWrapper::from_str(&value.rate_min)
+                .expect("Max_sell must be convertible to decimal.");
+
+            Ok(Exchange {
+                addr,
+                token_sell,
+                rate_min,
+                max_sell,
+                token_buy,
+                min_buy,
+                vp,
+            })
+        }
+    }
+
     /// Intent arguments
     #[derive(Debug)]
     pub struct Intent {
         /// Gossip node address
-        pub node_addr: String,
+        pub node_addr: Option<String>,
         /// Intent topic
-        pub topic: String,
+        pub topic: Option<String>,
         /// Signing key
         pub key: Address,
         /// Exchanges description
@@ -814,14 +880,25 @@ pub mod args {
     impl Args for Intent {
         fn parse(matches: &ArgMatches) -> Self {
             let key = SIGNING_KEY.parse(matches);
-            let node_addr = NODE.parse(matches);
+            let node_addr = NODE_OPT.parse(matches);
             let data_path = DATA_PATH.parse(matches);
             let to_stdout = TO_STDOUT.parse(matches);
-            let topic = TOPIC.parse(matches);
+            let topic = TOPIC_OPT.parse(matches);
 
             let file = File::open(&data_path).expect("File must exist.");
-            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
-                .expect("JSON was not well-formatted");
+            let exchange_definitions: Vec<ExchangeDefinition> =
+                serde_json::from_reader(file)
+                    .expect("JSON was not well-formatted");
+
+            let exchanges: Vec<Exchange> = exchange_definitions
+                .iter()
+                .map(|item| {
+                    Exchange::try_from(item.clone()).expect(
+                        "Conversion from ExchangeDefinition to Exchange \
+                         should not fail.",
+                    )
+                })
+                .collect();
 
             Self {
                 node_addr,
@@ -833,22 +910,32 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(NODE.def().about("The gossip node address."))
-                .arg(SIGNING_KEY.def().about("The key to sign the intent."))
-                .arg(DATA_PATH.def().about(
-                    "The data of the intent, that contains all value \
-                     necessary for the matchmaker.",
-                ))
-                .arg(TO_STDOUT.def().about(
-                    "Echo the serialized intent to stdout. Note that with \
-                     this option, the intent won't be submitted to the intent \
-                     gossiper RPC.",
-                ))
-                .arg(
-                    TOPIC.def().about(
-                        "The subnetwork where the intent should be sent to",
-                    ),
-                )
+            app.arg(
+                NODE_OPT
+                    .def()
+                    .about("The gossip node address.")
+                    .conflicts_with(TO_STDOUT.name),
+            )
+            .arg(SIGNING_KEY.def().about("The key to sign the intent."))
+            .arg(DATA_PATH.def().about(
+                "The data of the intent, that contains all value necessary \
+                 for the matchmaker.",
+            ))
+            .arg(
+                TO_STDOUT
+                    .def()
+                    .about(
+                        "Echo the serialized intent to stdout. Note that with \
+                         this option, the intent won't be submitted to the \
+                         intent gossiper RPC.",
+                    )
+                    .conflicts_with_all(&[NODE_OPT.name, TOPIC.name]),
+            )
+            .arg(
+                TOPIC_OPT
+                    .def()
+                    .about("The subnetwork where the intent should be sent to"),
+            )
         }
     }
 
