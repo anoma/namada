@@ -1,5 +1,6 @@
 //! Default addresses and keys.
 
+use anoma::types::address::{self, Address};
 use anoma::types::key::ed25519::Keypair;
 
 use super::store::Alias;
@@ -12,6 +13,26 @@ pub fn keys() -> Vec<(Alias, Keypair)> {
         ("christel".into(), christel_keypair()),
         ("matchmaker".into(), matchmaker_keypair()),
     ]
+}
+
+pub fn addresses() -> Vec<(Alias, Address)> {
+    let alberto = Address::decode("a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx")
+            .expect("The genesis address shouldn't fail decoding");
+    let bertha = Address::decode("a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9")
+            .expect("The genesis address shouldn't fail decoding");
+    let christel = Address::decode("a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s")
+            .expect("The genesis address shouldn't fail decoding");
+    let mut addresses: Vec<(Alias, Address)> = vec![
+        ("alberto".into(), alberto),
+        ("bertha".into(), bertha),
+        ("christel".into(), christel),
+        ("matchmaker".into(), address::matchmaker()),
+    ];
+    let token_addresses = address::tokens()
+        .into_iter()
+        .map(|(addr, alias)| (alias.to_owned(), addr));
+    addresses.extend(token_addresses);
+    addresses
 }
 
 #[cfg(feature = "dev")]

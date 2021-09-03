@@ -49,6 +49,7 @@ impl Store {
             );
             store.pkhs.insert(pkh, alias);
         }
+        store.addresses.extend(defaults::addresses().into_iter());
         store
     }
 

@@ -23,7 +23,6 @@ use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::address::Address;
-use anoma::types::key::ed25519::PublicKey;
 use anoma::types::storage::{BlockHash, BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::token::Amount;
@@ -181,8 +180,7 @@ impl Shell {
 
             // default user's public keys for testing
             let pk_key = key::ed25519::pk_key(user);
-            let pk =
-                PublicKey::from(wallet::defaults::key_of(user.encode()).public);
+            let pk = wallet::defaults::key_of(user.encode()).public;
             self.storage
                 .write(&pk_key, pk.try_to_vec().expect("encode public key"))
                 .expect("Unable to set genesis user public key");
