@@ -221,8 +221,6 @@ mod tests {
     use super::*;
     use crate::ledger::storage::types::{decode, encode};
     use crate::types::key::ed25519;
-    // use crate::{config, wallet};
-    // use anoma_apps::{cli, wallet};
 
     #[test]
     fn test_encode_decode_intent_transfer_without_vp() {
