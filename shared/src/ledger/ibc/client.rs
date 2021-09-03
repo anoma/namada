@@ -65,7 +65,6 @@ where
         }
     }
 
-    /// Returns the client ID
     pub(super) fn get_client_id(key: &Key) -> Result<ClientId> {
         match &key.segments[..] {
             [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(client_id), ..]

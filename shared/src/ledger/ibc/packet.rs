@@ -116,7 +116,6 @@ where
         }
     }
 
-    /// Returns the port ID, the channel ID and the sequence
     fn get_port_channel_sequence_id(
         key: &Key,
     ) -> Result<(PortId, ChannelId, Sequence)> {

@@ -55,7 +55,6 @@ where
         }
     }
 
-    /// Returns the port ID after #IBC/ports
     fn get_port_id_for_capability(key: &Key) -> Result<PortId> {
         match &key.segments[..] {
             [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(port_id), ..]

@@ -93,7 +93,6 @@ where
         }
     }
 
-    /// Returns the connection ID after #IBC/connections
     fn get_connection_id(key: &Key) -> Result<ConnectionId> {
         match &key.segments[..] {
             [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(conn_id)]

@@ -250,18 +250,6 @@ impl Key {
         }
     }
 
-    /// Check if the given key is a key to IBC-related data
-    pub fn is_ibc_key(&self) -> bool {
-        match self.segments.get(0) {
-            Some(seg) => {
-                *seg == DbKeySeg::AddressSeg(Address::Internal(
-                    InternalAddress::Ibc,
-                ))
-            }
-            _ => false,
-        }
-    }
-
     /// Check if the given key is a key of the client counter
     pub fn is_ibc_client_counter(&self) -> bool {
         *self == Self::ibc_client_counter()
