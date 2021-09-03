@@ -465,8 +465,7 @@ pub mod testing {
     /// Generate an arbitrary [`ImplicitAddress`].
     pub fn arb_implicit_address() -> impl Strategy<Value = ImplicitAddress> {
         ed25519::testing::arb_keypair().prop_map(|keypair| {
-            let pk = ed25519::PublicKey::from(keypair.public);
-            let pkh = ed25519::PublicKeyHash::from(pk);
+            let pkh = ed25519::PublicKeyHash::from(keypair.public);
             ImplicitAddress::Ed25519(pkh)
         })
     }

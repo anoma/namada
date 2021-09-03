@@ -57,6 +57,7 @@ pub struct Signature(ed25519_dalek::Signature);
 )]
 pub struct PublicKeyHash(pub(crate) String);
 
+const PKH_HASH_LEN: usize = address::HASH_LEN;
 const PK_STORAGE_KEY: &str = "ed25519_pk";
 
 /// Obtain a storage key for user's public key.
@@ -189,7 +190,7 @@ impl Keypair {
 
     /// Construct a `Keypair` from the bytes of a `PublicKey` and `SecretKey`.
     /// Wrapper for [`ed25519_dalek::Keypair::from_bytes`].
-    pub fn from_bytes<'a>(bytes: &'a [u8]) -> Result<Keypair, SignatureError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Keypair, SignatureError> {
         let keypair = ed25519_dalek::Keypair::from_bytes(bytes)?;
         Ok(keypair.into())
     }
@@ -471,7 +472,7 @@ impl PublicKeyHash {
         Self(format!(
             "{:.width$X}",
             hasher.finalize(),
-            width = address::HASH_LEN
+            width = PKH_HASH_LEN
         ))
     }
 }
@@ -480,6 +481,30 @@ impl From<PublicKeyHash> for String {
     fn from(pkh: PublicKeyHash) -> Self {
         pkh.0
     }
+}
+
+impl Display for PublicKeyHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for PublicKeyHash {
+    type Err = PkhFromStringError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != PKH_HASH_LEN {
+            return Err(Self::Err::UnexpectedLen(s.len()));
+        }
+        Ok(Self(s.to_owned()))
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum PkhFromStringError {
+    #[error("Wrong PKH len. Expected {PKH_HASH_LEN}, got {0}")]
+    UnexpectedLen(usize),
 }
 
 impl From<PublicKey> for PublicKeyHash {
@@ -540,7 +565,7 @@ impl Signer<Signature> for Keypair {
     /// Sign a message with this keypair's secret key.
     fn try_sign(&self, message: &[u8]) -> Result<Signature, SignatureError> {
         let expanded: ExpandedSecretKey = (&self.secret.0).into();
-        Ok(expanded.sign(&message, &self.public.0).into())
+        Ok(expanded.sign(message, &self.public.0).into())
     }
 }
 
