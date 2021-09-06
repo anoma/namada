@@ -5,6 +5,7 @@ use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::token;
 use anoma::types::transaction::{pos, InitAccount, UpdateVp};
+use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
@@ -12,7 +13,7 @@ use tendermint_rpc::query::{EventType, Query};
 use tendermint_rpc::Client;
 
 use super::{rpc, signing};
-use crate::cli::{args, Context};
+use crate::cli::{args, safe_exit, Context};
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
@@ -48,7 +49,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         tx
     };
 
-    submit_tx(args.tx, tx).await
+    submit_tx(ctx, args.tx, tx).await
 }
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
@@ -74,7 +75,7 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     );
     let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
-    submit_tx(args.tx, tx).await
+    submit_tx(ctx, args.tx, tx).await
 }
 
 pub async fn submit_init_account(ctx: Context, args: args::TxInitAccount) {
@@ -107,7 +108,7 @@ pub async fn submit_init_account(ctx: Context, args: args::TxInitAccount) {
     );
     let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
-    submit_tx(args.tx, tx).await
+    submit_tx(ctx, args.tx, tx).await
 }
 
 pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
@@ -132,7 +133,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         .expect("Encoding unsigned transfer shouldn't fail");
     let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
-    submit_tx(args.tx, tx).await
+    submit_tx(ctx, args.tx, tx).await
 }
 
 pub async fn submit_bond(args: args::Bond) {
@@ -189,7 +190,7 @@ pub async fn submit_withdraw(args: args::Withdraw) {
     submit_tx(args.tx, tx).await
 }
 
-async fn submit_tx(args: args::Tx, tx: Tx) {
+async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
     let tx_bytes = tx.to_bytes();
 
     // NOTE: use this to print the request JSON body:
@@ -204,15 +205,52 @@ async fn submit_tx(args: args::Tx, tx: Tx) {
 
     if args.dry_run {
         rpc::dry_run_tx(&args.ledger_address, tx_bytes).await
-    } else if let Err(err) = broadcast_tx(args.ledger_address, tx_bytes).await {
-        eprintln!("Encountered error while broadcasting transaction: {}", err);
+    } else {
+        match broadcast_tx(args.ledger_address, tx_bytes).await {
+            Ok(result) => {
+                let len = result.initialized_accounts.len();
+                if len != 0 {
+                    // Store newly initialized account addresses in the wallet
+                    println!(
+                        "The transaction initialized {} new account{}",
+                        len,
+                        if len == 1 { "" } else { "s" }
+                    );
+                    let mut wallet = ctx.wallet;
+                    for address in result.initialized_accounts {
+                        let encoded = address.encode();
+                        print!("Choose an alias for {}: ", encoded);
+                        io::stdout().flush().await.unwrap();
+                        let mut alias = String::new();
+                        io::stdin().read_line(&mut alias).await.unwrap();
+                        if alias.is_empty() {
+                            println!(
+                                "Empty alias given, using {} as the alias",
+                                encoded
+                            );
+                            wallet.add_address(encoded, address);
+                        } else {
+                            wallet.add_address(alias, address);
+                        }
+                    }
+                    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+                }
+            }
+            Err(err) => {
+                eprintln!(
+                    "Encountered error while broadcasting transaction: {}",
+                    err
+                );
+                safe_exit(1)
+            }
+        }
     }
 }
 
 pub async fn broadcast_tx(
     address: tendermint::net::Address,
     tx_bytes: Vec<u8>,
-) -> Result<(), Error> {
+) -> Result<TxResponse, Error> {
     let mut client =
         TendermintWebsocketClient::open(WebSocketAddress::try_from(address)?)?;
     // It is better to subscribe to the transaction before it is broadcast
@@ -236,11 +274,11 @@ pub async fn broadcast_tx(
     );
     client.unsubscribe()?;
     client.close();
-    Ok(())
+    Ok(parsed)
 }
 
-#[derive(Serialize)]
-struct TxResponse {
+#[derive(Debug, Serialize)]
+pub struct TxResponse {
     info: String,
     height: String,
     hash: String,

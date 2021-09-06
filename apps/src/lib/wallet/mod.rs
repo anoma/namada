@@ -125,6 +125,11 @@ impl Wallet {
     pub fn get_addresses(&self) -> &HashMap<Alias, Address> {
         self.store.get_addresses()
     }
+
+    /// Add a new address.
+    pub fn add_address(&mut self, alias: String, address: Address) {
+        self.store.add_address(alias, address)
+    }
 }
 
 /// Read the password for encryption/decryption from the stdin. Panics if the

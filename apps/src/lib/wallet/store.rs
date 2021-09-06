@@ -161,6 +161,11 @@ impl Store {
         &self.addresses
     }
 
+    /// Add a new address.
+    pub fn add_address(&mut self, alias: String, address: Address) {
+        self.addresses.insert(alias, address);
+    }
+
     fn generate_keypair() -> Keypair {
         use rand::rngs::OsRng;
         let mut csprng = OsRng {};
