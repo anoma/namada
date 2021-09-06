@@ -830,7 +830,7 @@ impl PacketAckData {
 pub struct TimeoutData {
     /// The packet
     pub packet: Packet,
-    /// The nextSequenceRecv
+    /// The nextSequenceRecv of the receipt chain
     pub sequence: Sequence,
     /// The height of the proof
     pub proof_height: Height,
@@ -839,7 +839,7 @@ pub struct TimeoutData {
 }
 
 impl TimeoutData {
-    /// Create data for packet acknowledgement
+    /// Create data for timeout
     pub fn new(
         packet: Packet,
         sequence: Sequence,
