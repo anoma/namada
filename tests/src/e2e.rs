@@ -291,7 +291,9 @@ mod tests {
                 // Value obtained from `anoma::types::key::ed25519::tests::gen_keypair`
                 "200000001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
                 "--code-path",
-                VP_USER_WASM
+                VP_USER_WASM,
+                "--alias",
+                "test-account"
             ],
         ];
         for tx_args in &txs_args {
