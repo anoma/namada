@@ -162,6 +162,6 @@ fn address_list(ctx: Context) {
     let mut w = stdout.lock();
     writeln!(w, "Known addresses:").unwrap();
     for (alias, address) in wallet.get_addresses() {
-        writeln!(w, "  \"{}\": {}", alias, address.encode()).unwrap();
+        writeln!(w, "  \"{}\": {}", alias, address).unwrap();
     }
 }
