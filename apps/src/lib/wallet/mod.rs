@@ -127,8 +127,9 @@ impl Wallet {
     }
 
     /// Add a new address with the given alias. If the alias is already used,
-    /// will prompt for overwrite confirmation.
-    pub fn add_address(&mut self, alias: String, address: Address) {
+    /// will prompt for overwrite confirmation, which when declined, the address
+    /// won't be added. Return `true` if the address has been added.
+    pub fn add_address(&mut self, alias: String, address: Address) -> bool {
         self.store.insert_address(alias, address)
     }
 }

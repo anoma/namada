@@ -1675,6 +1675,9 @@ pub mod args {
         pub dry_run: bool,
         /// The address of the ledger node as host:port
         pub ledger_address: tendermint::net::Address,
+        /// If any new account is initialized by the tx, use the given alias to
+        /// save it in the wallet.
+        pub initialized_account_alias: Option<String>,
     }
 
     impl Args for Tx {
@@ -1685,14 +1688,22 @@ pub mod args {
                     .about("Simulate the transaction application."),
             )
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
+            .arg(ALIAS.def().about(
+                "If any new account is initialized by the tx, use the given \
+                 alias to save it in the wallet. If multiple accounts are \
+                 initialized, the alias will be the prefix of each new \
+                 address joined with a number",
+            ))
         }
 
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(ctx, matches);
+            let initialized_account_alias = ALIAS.parse(ctx, matches);
             Self {
                 dry_run,
                 ledger_address,
+                initialized_account_alias,
             }
         }
     }

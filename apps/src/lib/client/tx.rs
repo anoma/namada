@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::convert::TryFrom;
 
 use anoma::proto::Tx;
@@ -206,35 +207,9 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
     if args.dry_run {
         rpc::dry_run_tx(&args.ledger_address, tx_bytes).await
     } else {
-        match broadcast_tx(args.ledger_address, tx_bytes).await {
+        match broadcast_tx(args.ledger_address.clone(), tx_bytes).await {
             Ok(result) => {
-                let len = result.initialized_accounts.len();
-                if len != 0 {
-                    // Store newly initialized account addresses in the wallet
-                    println!(
-                        "The transaction initialized {} new account{}",
-                        len,
-                        if len == 1 { "" } else { "s" }
-                    );
-                    let mut wallet = ctx.wallet;
-                    for address in result.initialized_accounts {
-                        let encoded = address.encode();
-                        print!("Choose an alias for {}: ", encoded);
-                        io::stdout().flush().await.unwrap();
-                        let mut alias = String::new();
-                        io::stdin().read_line(&mut alias).await.unwrap();
-                        if alias.is_empty() {
-                            println!(
-                                "Empty alias given, using {} as the alias",
-                                encoded
-                            );
-                            wallet.add_address(encoded, address);
-                        } else {
-                            wallet.add_address(alias, address);
-                        }
-                    }
-                    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
-                }
+                save_initialized_accounts(ctx, args, result).await;
             }
             Err(err) => {
                 eprintln!(
@@ -244,6 +219,72 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
                 safe_exit(1)
             }
         }
+    }
+}
+
+/// Save accounts initialized from a tx into the wallet, if any.
+async fn save_initialized_accounts(
+    ctx: Context,
+    args: args::Tx,
+    result: TxResponse,
+) {
+    let len = result.initialized_accounts.len();
+    if len != 0 {
+        // Store newly initialized account addresses in the wallet
+        println!(
+            "The transaction initialized {} new account{}",
+            len,
+            if len == 1 { "" } else { "s" }
+        );
+        // Store newly initialized account addresses in the wallet
+        let mut wallet = ctx.wallet;
+        for (ix, address) in result.initialized_accounts.iter().enumerate() {
+            let encoded = address.encode();
+            let mut added = false;
+            while !added {
+                let alias: Cow<str> = match &args.initialized_account_alias {
+                    Some(initialized_account_alias) => {
+                        if len == 1 {
+                            // If there's only one account, use the
+                            // alias as is
+                            initialized_account_alias.into()
+                        } else {
+                            // If there're multiple accounts, use
+                            // the alias as prefix, followed by
+                            // index number
+                            format!("{}{}", initialized_account_alias, ix)
+                                .into()
+                        }
+                    }
+                    None => {
+                        print!("Choose an alias for {}: ", encoded);
+                        io::stdout().flush().await.unwrap();
+                        let mut alias = String::new();
+                        io::stdin().read_line(&mut alias).await.unwrap();
+                        alias.trim().to_owned().into()
+                    }
+                };
+                added = if alias.is_empty() {
+                    println!(
+                        "Empty alias given, using {} as the alias.",
+                        encoded
+                    );
+                    wallet.add_address(encoded.clone(), address.clone())
+                } else {
+                    let alias = alias.into_owned();
+                    let added =
+                        wallet.add_address(alias.clone(), address.clone());
+                    if added {
+                        println!(
+                            "Added alias {} for address {}.",
+                            alias, encoded
+                        );
+                    }
+                    added
+                }
+            }
+        }
+        wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     }
 }
 

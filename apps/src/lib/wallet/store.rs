@@ -181,8 +181,14 @@ impl Store {
         let keypair = StoredKeypair::new(keypair, password);
         let address = Address::Implicit(ImplicitAddress::Ed25519(pkh.clone()));
         let alias = alias.unwrap_or_else(|| pkh.clone().into());
-        self.insert_keypair(alias.clone(), keypair, pkh);
-        self.insert_address(alias.clone(), address);
+        if !self.insert_keypair(alias.clone(), keypair, pkh) {
+            eprintln!("Action cancelled, no changes persisted.");
+            cli::safe_exit(1);
+        }
+        if !self.insert_address(alias.clone(), address) {
+            eprintln!("Action cancelled, no changes persisted.");
+            cli::safe_exit(1);
+        }
         alias
     }
 
@@ -193,31 +199,30 @@ impl Store {
         alias: Alias,
         keypair: StoredKeypair,
         pkh: PublicKeyHash,
-    ) {
-        if self.keys.insert(alias.clone(), keypair).is_some() {
+    ) -> bool {
+        if self.keys.contains_key(&alias) {
             match show_overwrite_confirmation("a key") {
                 ConfirmationResponse::Overwrite => {}
-                ConfirmationResponse::Cancel => {
-                    eprintln!("Action cancelled, no changes persisted.");
-                    cli::safe_exit(1)
-                }
+                ConfirmationResponse::Cancel => return false,
             }
         }
+        self.keys.insert(alias.clone(), keypair);
         self.pkhs.insert(pkh, alias);
+        true
     }
 
     /// Insert a new address with the given alias. If the alias is already used,
-    /// will prompt for overwrite confirmation.
-    pub fn insert_address(&mut self, alias: Alias, address: Address) {
-        if self.addresses.insert(alias, address).is_some() {
+    /// will prompt for overwrite confirmation, which when declined, the address
+    /// won't be added. Return `true` if the address has been added.
+    pub fn insert_address(&mut self, alias: Alias, address: Address) -> bool {
+        if self.addresses.contains_key(&alias) {
             match show_overwrite_confirmation("an address") {
                 ConfirmationResponse::Overwrite => {}
-                ConfirmationResponse::Cancel => {
-                    eprintln!("Action cancelled, no changes persisted.");
-                    cli::safe_exit(1)
-                }
+                ConfirmationResponse::Cancel => return false,
             }
         }
+        self.addresses.insert(alias, address);
+        true
     }
 
     fn decode(data: Vec<u8>) -> Option<Self> {
