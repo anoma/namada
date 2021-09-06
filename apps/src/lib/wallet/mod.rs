@@ -46,10 +46,11 @@ impl Wallet {
         self.store.save(&self.base_dir)
     }
 
-    /// Generate a new keypair and insert it into the store with the provided
-    /// alias. If none provided, the alias will be the public key hash.
-    /// If the key is to be encrypted, will prompt for password from stdin.
-    /// Returns the alias of the key.
+    /// Generate a new keypair and derive an implicit address from its public
+    /// and insert them into the store with the provided alias. If none
+    /// provided, the alias will be the public key hash. If the key is to be
+    /// encrypted, will prompt for password from stdin. Returns the alias of
+    /// the key.
     pub fn gen_key(
         &mut self,
         alias: Option<String>,

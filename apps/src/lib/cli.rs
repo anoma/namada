@@ -313,22 +313,27 @@ pub mod cmds {
         }
     }
 
+    /// Generate a new keypair and an implicit address derived from it
     #[derive(Debug)]
-    pub struct KeyGen(pub args::KeyGen);
+    pub struct KeyGen(pub args::KeyAndAddressGen);
 
     impl SubCmd for KeyGen {
         const CMD: &'static str = "gen";
 
         fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| (Self(args::KeyGen::parse(ctx, matches))))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::KeyAndAddressGen::parse(ctx, matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Generates a keypair with a given alias")
-                .add_args::<args::KeyGen>()
+                .about(
+                    "Generates a keypair with a given alias and derive the \
+                     implicit address from its public key. The address will \
+                     be stored with the same alias.",
+                )
+                .add_args::<args::KeyAndAddressGen>()
         }
     }
 
@@ -391,6 +396,7 @@ pub mod cmds {
 
     #[derive(Debug)]
     pub enum WalletAddress {
+        Gen(AddressGen),
         Find(AddressFind),
         List(AddressList),
     }
@@ -400,9 +406,10 @@ pub mod cmds {
 
         fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let gen = SubCmd::parse(ctx, matches).map(Self::Gen);
                 let find = SubCmd::parse(ctx, matches).map(Self::Find);
                 let list = SubCmd::parse(ctx, matches).map(Self::List);
-                find.or(list)
+                gen.or(find).or(list)
             })
         }
 
@@ -413,8 +420,33 @@ pub mod cmds {
                      look-up addresses",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
-                .subcommand(KeyFind::def())
-                .subcommand(KeyList::def())
+                .subcommand(AddressGen::def())
+                .subcommand(AddressFind::def())
+                .subcommand(AddressList::def())
+        }
+    }
+
+    /// Generate a new keypair and an implicit address derived from it
+    #[derive(Debug)]
+    pub struct AddressGen(pub args::KeyAndAddressGen);
+
+    impl SubCmd for AddressGen {
+        const CMD: &'static str = "gen";
+
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressGen(args::KeyAndAddressGen::parse(ctx, matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Generates a keypair with a given alias and derive the \
+                     implicit address from its public key. The address will \
+                     be stored with the same alias.",
+                )
+                .add_args::<args::KeyAndAddressGen>()
         }
     }
 
@@ -1751,16 +1783,16 @@ pub mod args {
         }
     }
 
-    /// Wallet key generate arguments
+    /// Wallet generate key and implicit address arguments
     #[derive(Debug)]
-    pub struct KeyGen {
+    pub struct KeyAndAddressGen {
         /// Key alias
         pub alias: Option<String>,
         /// Don't encrypt the keypair
         pub unsafe_dont_encrypt: bool,
     }
 
-    impl Args for KeyGen {
+    impl Args for KeyAndAddressGen {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
             let alias = ALIAS_OPT.parse(ctx, matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
@@ -1772,8 +1804,8 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(ALIAS_OPT.def().about(
-                "The key alias. If none provided, the alias will be the \
-                 public key hash.",
+                "The key and address alias. If none provided, the alias will \
+                 be the public key hash.",
             ))
             .arg(UNSAFE_DONT_ENCRYPT.def().about(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \

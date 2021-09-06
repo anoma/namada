@@ -15,7 +15,9 @@ pub fn main() -> Result<()> {
     let (cmd, ctx) = cli::anoma_wallet_cli();
     match cmd {
         cmds::AnomaWallet::Key(sub) => match sub {
-            cmds::WalletKey::Gen(cmds::KeyGen(args)) => key_gen(ctx, args),
+            cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
+                key_and_address_gen(ctx, args)
+            }
             cmds::WalletKey::Find(cmds::KeyFind(args)) => key_find(ctx, args),
             cmds::WalletKey::List(cmds::KeyList(args)) => key_list(ctx, args),
             cmds::WalletKey::Export(cmds::Export(args)) => {
@@ -23,22 +25,26 @@ pub fn main() -> Result<()> {
             }
         },
         cmds::AnomaWallet::Address(sub) => match sub {
-            cmds::WalletAddress::List(cmds::AddressList) => address_list(ctx),
+            cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
+                key_and_address_gen(ctx, args)
+            }
             cmds::WalletAddress::Find(cmds::AddressFind(args)) => {
                 address_find(ctx, args)
             }
+            cmds::WalletAddress::List(cmds::AddressList) => address_list(ctx),
         },
     }
     Ok(())
 }
 
-/// Generate a new keypair and store it in the wallet.
-fn key_gen(
+/// Generate a new keypair and derive implicit address from it and store them in
+/// the wallet.
+fn key_and_address_gen(
     ctx: Context,
-    args::KeyGen {
+    args::KeyAndAddressGen {
         alias,
         unsafe_dont_encrypt,
-    }: args::KeyGen,
+    }: args::KeyAndAddressGen,
 ) {
     let mut wallet = ctx.wallet;
     let alias = wallet.gen_key(alias, unsafe_dont_encrypt);
