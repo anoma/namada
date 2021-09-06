@@ -25,14 +25,28 @@ const TX_BOND_WASM: &str = "wasm/tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "wasm/tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "wasm/tx_withdraw.wasm";
 
-pub async fn submit_custom(_ctx: Context, args: args::TxCustom) {
-    // TODO add optional signature
+pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = std::fs::read(args.code_path)
         .expect("Expected a file at given code path");
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
     let tx = Tx::new(tx_code, data);
+    let tx = if let Some(signing_key) = args.signing_key {
+        let signing_key = signing_key.get(&ctx);
+        signing_key.sign_tx(tx)
+    } else if let Some(signer) = args.signer {
+        let signing_key = signing::find_keypair(
+            &ctx.wallet,
+            &signer,
+            args.tx.ledger_address.clone(),
+        )
+        .await;
+        signing_key.sign_tx(tx)
+    } else {
+        // Unsigned tx
+        tx
+    };
 
     submit_tx(args.tx, tx).await
 }
@@ -71,7 +85,7 @@ pub async fn submit_init_account(ctx: Context, args: args::TxInitAccount) {
         args.tx.ledger_address.clone(),
     )
     .await;
-    let public_key = args.public_key;
+    let public_key = args.public_key.get(&ctx).clone();
     let vp_code = args
         .vp_code_path
         .map(|path| {

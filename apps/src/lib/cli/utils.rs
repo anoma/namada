@@ -141,7 +141,6 @@ impl<T> Arg<T> {
 impl<T> Arg<T>
 where
     T: input::ArgInput,
-    <T as input::ArgInput>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name)
@@ -158,7 +157,6 @@ where
 impl<T> ArgOpt<T>
 where
     T: input::ArgInput,
-    <T as input::ArgInput>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name).long(self.name).takes_value(true)
@@ -196,7 +194,6 @@ where
 impl<T> ArgDefault<T>
 where
     T: input::ArgInput,
-    <T as input::ArgInput>::Err: Debug,
 {
     /// Parse and argument and look-up a values from the context, if necessary
     /// (e.g. to find a key from an alias in the wallet).
@@ -221,7 +218,6 @@ impl ArgFlag {
 impl<T> ArgMulti<T>
 where
     T: input::ArgInput,
-    <T as input::ArgInput>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name).long(self.name).multiple(true)
@@ -231,15 +227,7 @@ where
         matches
             .values_of(self.name)
             .unwrap_or_default()
-            .map(|raw| {
-                T::try_from_raw(ctx, raw).unwrap_or_else(|err| {
-                    panic!(
-                        "Failed to parse the {} argument. Raw value: {}, \
-                         error {}",
-                        self.name, raw, err
-                    )
-                })
-            })
+            .map(|raw| T::from_raw(ctx, raw))
             .collect()
     }
 }
@@ -271,16 +259,8 @@ impl ArgMatchesExt for ArgMatches {
 pub fn parse_opt<T>(ctx: &Context, args: &ArgMatches, field: &str) -> Option<T>
 where
     T: input::ArgInput,
-    T::Err: Debug,
 {
-    args.value_of(field).map(|arg| {
-        T::try_from_raw(ctx, arg).unwrap_or_else(|e| {
-            panic!(
-                "Failed to parse the argument {}. Raw value: {}, error: {}",
-                field, arg, e
-            )
-        })
-    })
+    args.value_of(field).map(|arg| T::from_raw(ctx, arg))
 }
 
 /// A helper to exit after flushing output, borrowed from `clap::util` module.

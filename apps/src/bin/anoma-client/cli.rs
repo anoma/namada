@@ -65,11 +65,11 @@ pub async fn main() -> Result<()> {
 }
 
 async fn gossip_intent(
-    _ctx: Context,
+    ctx: Context,
     args::Intent {
         node_addr,
         topic,
-        key,
+        signing_key,
         exchanges,
         to_stdout,
     }: args::Intent,
@@ -83,9 +83,10 @@ async fn gossip_intent(
         })
         .collect();
 
-    let signing_key = wallet::defaults::key_of(key.encode());
+    let signing_key = signing_key.get(&ctx);
+    let signing_key = signing_key.get();
     let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
-        &signing_key,
+        signing_key,
         FungibleTokenIntent {
             exchange: signed_exchanges,
         },

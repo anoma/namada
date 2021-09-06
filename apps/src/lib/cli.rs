@@ -898,6 +898,7 @@ pub mod args {
     use libp2p::Multiaddr;
     use serde::Deserialize;
 
+    use super::input::{LazyWalletKeypair, LazyWalletPublicKey, RawPublicKey};
     use super::utils::*;
     use super::{ArgMatches, Context};
 
@@ -931,12 +932,13 @@ pub mod args {
     const NODE: Arg<String> = arg("node");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
     const PEERS: ArgMulti<String> = arg_multi("peers");
-    const PUBLIC_KEY: Arg<PublicKey> = arg("public-key");
-    const PUBLIC_KEY_OPT: ArgOpt<PublicKey> = PUBLIC_KEY.opt();
-    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
+    const PUBLIC_KEY: Arg<LazyWalletPublicKey> = arg("public-key");
+    const RAW_PUBLIC_KEY_OPT: ArgOpt<RawPublicKey> = arg_opt("public-key");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const SHOW_SECRET: ArgFlag = flag("show-secret");
-    const SIGNING_KEY: Arg<Address> = arg("key");
+    const SIGNER: ArgOpt<Address> = arg_opt("signer");
+    const SIGNING_KEY_OPT: ArgOpt<LazyWalletKeypair> = SIGNING_KEY.opt();
+    const SIGNING_KEY: Arg<LazyWalletKeypair> = arg("signing-key");
     const SOURCE: Arg<Address> = arg("source");
     const SOURCE_OPT: ArgOpt<Address> = SOURCE.opt();
     const TARGET: Arg<Address> = arg("target");
@@ -1004,6 +1006,10 @@ pub mod args {
         pub code_path: PathBuf,
         /// Path to the data file
         pub data_path: Option<PathBuf>,
+        /// Sign the tx with the key for the given alias from your wallet
+        pub signing_key: Option<LazyWalletKeypair>,
+        /// Sign the tx with the keypair of the public key of the given address
+        pub signer: Option<Address>,
     }
 
     impl Args for TxCustom {
@@ -1011,10 +1017,14 @@ pub mod args {
             let tx = Tx::parse(ctx, matches);
             let code_path = CODE_PATH.parse(ctx, matches);
             let data_path = DATA_PATH_OPT.parse(ctx, matches);
+            let signing_key = SIGNING_KEY_OPT.parse(ctx, matches);
+            let signer = SIGNER.parse(ctx, matches);
             Self {
                 tx,
                 code_path,
                 data_path,
+                signing_key,
+                signer,
             }
         }
 
@@ -1030,6 +1040,25 @@ pub mod args {
                      will be passed to the transaction code when it's \
                      executed.",
                 ))
+                .arg(
+                    SIGNING_KEY_OPT
+                        .def()
+                        .about(
+                            "Sign the transaction with the key for the given \
+                             public key, public key hash or alias from your \
+                             wallet.",
+                        )
+                        .conflicts_with(SIGNER.name),
+                )
+                .arg(
+                    SIGNER
+                        .def()
+                        .about(
+                            "Sign the transaction with the keypair of the \
+                             public key of the given address.",
+                        )
+                        .conflicts_with(SIGNING_KEY_OPT.name),
+                )
         }
     }
 
@@ -1086,7 +1115,7 @@ pub mod args {
         /// Path to the VP WASM code file for the new account
         pub vp_code_path: Option<PathBuf>,
         /// Public key for the new account
-        pub public_key: PublicKey,
+        pub public_key: LazyWalletPublicKey,
     }
 
     impl Args for TxInitAccount {
@@ -1480,7 +1509,7 @@ pub mod args {
         /// Intent topic
         pub topic: Option<String>,
         /// Signing key
-        pub key: Address,
+        pub signing_key: LazyWalletKeypair,
         /// Exchanges description
         pub exchanges: Vec<Exchange>,
         /// Print output to stdout
@@ -1489,7 +1518,7 @@ pub mod args {
 
     impl Args for Intent {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
-            let key = SIGNING_KEY.parse(ctx, matches);
+            let signing_key = SIGNING_KEY.parse(ctx, matches);
             let node_addr = NODE_OPT.parse(ctx, matches);
             let data_path = DATA_PATH.parse(ctx, matches);
             let to_stdout = TO_STDOUT.parse(matches);
@@ -1513,7 +1542,7 @@ pub mod args {
             Self {
                 node_addr,
                 topic,
-                key,
+                signing_key,
                 exchanges,
                 to_stdout,
             }
@@ -1526,7 +1555,10 @@ pub mod args {
                     .about("The gossip node address.")
                     .conflicts_with(TO_STDOUT.name),
             )
-            .arg(SIGNING_KEY.def().about("The key to sign the intent."))
+            .arg(SIGNING_KEY.def().about(
+                "Sign the intent with the key for the given public key, \
+                 public key hash or alias from your wallet.",
+            ))
             .arg(DATA_PATH.def().about(
                 "The data of the intent, that contains all value necessary \
                  for the matchmaker.",
@@ -1725,7 +1757,8 @@ pub mod args {
 
     impl Args for KeyFind {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
-            let public_key = PUBLIC_KEY_OPT.parse(ctx, matches);
+            let public_key =
+                RAW_PUBLIC_KEY_OPT.parse(ctx, matches).map(|pk| pk.0);
             let alias = ALIAS.parse(ctx, matches);
             let value = VALUE.parse(ctx, matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
@@ -1740,7 +1773,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(
-                PUBLIC_KEY_OPT
+                RAW_PUBLIC_KEY_OPT
                     .def()
                     .about("A public key associated with the keypair")
                     .conflicts_with("alias")

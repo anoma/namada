@@ -23,7 +23,8 @@ pub enum StoredKeypair {
 pub struct EncryptedKeypair(Vec<u8>);
 
 /// A key that has been read from the wallet. If the key has been encrypted,
-/// It will be owned, otherwise it's borrowed.
+/// It will be owned, otherwise it's borrowed. You can use its `get` method to
+/// access the inner keypair.
 #[derive(Debug)]
 pub struct DecryptedKeypair<'a>(Either<Keypair, &'a Keypair>);
 
