@@ -35,6 +35,25 @@ impl ArgInput for address::Address {
     }
 }
 
+/// A raw address value that is not being looked-up from the wallet. This
+/// should only be used for wallet commands that expect a address value.
+#[derive(Debug)]
+pub struct RawAddress(pub address::Address);
+
+impl ArgInput for RawAddress {
+    fn from_raw(_ctx: &Context, s: &str) -> Self {
+        let address: address::Address =
+            FromStr::from_str(s).unwrap_or_else(|err| {
+                eprintln!(
+                    "Invalid address: {}. Expected bech32m encoded string",
+                    err
+                );
+                safe_exit(1)
+            });
+        Self(address)
+    }
+}
+
 /// Lazily evaluated public key, either a raw value (hexadecimal encoding), or
 /// looked-up from a wallet by a public key hash or an alias.
 /// We evaluate the public key lazily, because it might need to be decrypted.

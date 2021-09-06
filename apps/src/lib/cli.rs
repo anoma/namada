@@ -399,6 +399,7 @@ pub mod cmds {
         Gen(AddressGen),
         Find(AddressFind),
         List(AddressList),
+        Add(AddressAdd),
     }
 
     impl SubCmd for WalletAddress {
@@ -409,7 +410,8 @@ pub mod cmds {
                 let gen = SubCmd::parse(ctx, matches).map(Self::Gen);
                 let find = SubCmd::parse(ctx, matches).map(Self::Find);
                 let list = SubCmd::parse(ctx, matches).map(Self::List);
-                gen.or(find).or(list)
+                let add = SubCmd::parse(ctx, matches).map(Self::Add);
+                gen.or(find).or(list).or(add)
             })
         }
 
@@ -423,6 +425,7 @@ pub mod cmds {
                 .subcommand(AddressGen::def())
                 .subcommand(AddressFind::def())
                 .subcommand(AddressList::def())
+                .subcommand(AddressAdd::def())
         }
     }
 
@@ -485,6 +488,26 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD).about("List all known addresses")
+        }
+    }
+
+    /// Generate a new keypair and an implicit address derived from it
+    #[derive(Debug)]
+    pub struct AddressAdd(pub args::AddressAdd);
+
+    impl SubCmd for AddressAdd {
+        const CMD: &'static str = "add";
+
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressAdd(args::AddressAdd::parse(ctx, matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Store an alias for an address in the wallet")
+                .add_args::<args::AddressAdd>()
         }
     }
 
@@ -952,7 +975,9 @@ pub mod args {
     use libp2p::Multiaddr;
     use serde::Deserialize;
 
-    use super::input::{LazyWalletKeypair, LazyWalletPublicKey, RawPublicKey};
+    use super::input::{
+        LazyWalletKeypair, LazyWalletPublicKey, RawAddress, RawPublicKey,
+    };
     use super::utils::*;
     use super::{ArgMatches, Context};
 
@@ -988,6 +1013,7 @@ pub mod args {
     const OWNER: ArgOpt<Address> = arg_opt("owner");
     const PEERS: ArgMulti<String> = arg_multi("peers");
     const PUBLIC_KEY: Arg<LazyWalletPublicKey> = arg("public-key");
+    const RAW_ADDRESS: Arg<RawAddress> = arg("address");
     const RAW_PUBLIC_KEY_OPT: ArgOpt<RawPublicKey> = arg_opt("public-key");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const SHOW_SECRET: ArgFlag = flag("show-secret");
@@ -1902,7 +1928,6 @@ pub mod args {
     impl Args for AddressFind {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(ctx, matches);
-
             Self { alias }
         }
 
@@ -1911,6 +1936,34 @@ pub mod args {
                 ALIAS_OPT
                     .def()
                     .about("An alias associated with the address"),
+            )
+        }
+    }
+
+    /// Wallet address add arguments
+    #[derive(Debug)]
+    pub struct AddressAdd {
+        pub alias: String,
+        pub address: Address,
+    }
+
+    impl Args for AddressAdd {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(ctx, matches);
+            let address = RAW_ADDRESS.parse(ctx, matches).0;
+            Self { alias, address }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS
+                    .def()
+                    .about("An alias to be associated with the address"),
+            )
+            .arg(
+                RAW_ADDRESS
+                    .def()
+                    .about("The bech32m encoded address string"),
             )
         }
     }

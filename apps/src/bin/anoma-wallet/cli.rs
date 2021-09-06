@@ -32,6 +32,9 @@ pub fn main() -> Result<()> {
                 address_find(ctx, args)
             }
             cmds::WalletAddress::List(cmds::AddressList) => address_list(ctx),
+            cmds::WalletAddress::Add(cmds::AddressAdd(args)) => {
+                address_add(ctx, args)
+            }
         },
     }
     Ok(())
@@ -187,4 +190,14 @@ fn address_find(ctx: Context, args: args::AddressFind) {
             args.alias
         );
     }
+}
+
+/// Add an address to the wallet.
+fn address_add(ctx: Context, args: args::AddressAdd) {
+    let mut wallet = ctx.wallet;
+    if !wallet.add_address(args.alias, args.address) {
+        eprintln!("Address not added");
+        cli::safe_exit(1);
+    }
+    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 }
