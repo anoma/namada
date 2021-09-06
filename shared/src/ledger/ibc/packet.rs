@@ -19,7 +19,9 @@ use thiserror::Error;
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::{Error as IbcDataError, PacketSendData, TimeoutData};
+use crate::types::ibc::{
+    Error as IbcDataError, PacketAckData, PacketSendData, TimeoutData,
+};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 #[allow(missing_docs)]
@@ -91,7 +93,19 @@ where
                     .map_err(|e| Error::InvalidPacket(e.to_string()))
             }
             StateChange::Deleted => {
-                self.validate_timeout(&commitment_key, tx_data)
+                match PacketAckData::try_from_slice(tx_data) {
+                    Ok(data) => {
+                        let commitment_pre = self
+                            .get_packet_commitment_pre(&commitment_key)
+                            .map_err(|e| Error::InvalidPacket(e.to_string()))?;
+                        self.validate_packet_commitment(
+                            &data.packet,
+                            commitment_pre,
+                        )
+                        .map_err(|e| Error::InvalidPacket(e.to_string()))
+                    }
+                    Err(_) => self.validate_timeout(&commitment_key, tx_data),
+                }
             }
             _ => Err(Error::InvalidStateChange(format!(
                 "The state change of the commitment is invalid: Key {}",
@@ -160,14 +174,9 @@ where
     ) -> Result<()> {
         let data = TimeoutData::try_from_slice(tx_data)?;
         let packet = data.packet.clone();
-        let commitment =
-            self.get_packet_commitment(commitment_key).ok_or_else(|| {
-                Error::InvalidPacket(format!(
-                    "The commitement doesn't exist: Port {}, Channel {}, \
-                     Sequence {}",
-                    commitment_key.0, commitment_key.1, commitment_key.2,
-                ))
-            })?;
+        let commitment = self
+            .get_packet_commitment_pre(commitment_key)
+            .map_err(|e| Error::InvalidPacket(e.to_string()))?;
         self.validate_packet_commitment(&packet, commitment)
             .map_err(|e| Error::InvalidPacket(e.to_string()))?;
 
