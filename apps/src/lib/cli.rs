@@ -391,9 +391,7 @@ pub mod cmds {
 
     #[derive(Debug)]
     pub enum WalletAddress {
-        // TODO:
-        // Gen(AddressGen),
-        // Find(AddressFind),
+        Find(AddressFind),
         List(AddressList),
     }
 
@@ -401,9 +399,11 @@ pub mod cmds {
         const CMD: &'static str = "address";
 
         fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .and_then(|matches| SubCmd::parse(ctx, matches).map(Self::List))
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let find = SubCmd::parse(ctx, matches).map(Self::Find);
+                let list = SubCmd::parse(ctx, matches).map(Self::List);
+                find.or(list)
+            })
         }
 
         fn def() -> App {
@@ -413,10 +413,32 @@ pub mod cmds {
                      look-up addresses",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(KeyFind::def())
                 .subcommand(KeyList::def())
         }
     }
 
+    /// Find an address by its alias
+    #[derive(Debug)]
+    pub struct AddressFind(pub args::AddressFind);
+
+    impl SubCmd for AddressFind {
+        const CMD: &'static str = "find";
+
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressFind(args::AddressFind::parse(ctx, matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Find an address by its alias")
+                .add_args::<args::AddressFind>()
+        }
+    }
+
+    /// List known addresses
     #[derive(Debug)]
     pub struct AddressList;
 
@@ -903,7 +925,8 @@ pub mod args {
     use super::{ArgMatches, Context};
 
     const ADDRESS: Arg<Address> = arg("address");
-    const ALIAS: ArgOpt<String> = arg_opt("alias");
+    const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
+    const ALIAS: Arg<String> = arg("alias");
     const AMOUNT: Arg<token::Amount> = arg("amount");
     const BASE_DIR: ArgDefault<PathBuf> =
         arg_default("base-dir", DefaultFn(|| ".anoma".into()));
@@ -985,14 +1008,16 @@ pub mod args {
 
     impl Args for Export {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(ctx, matches);
+            let alias = ALIAS_OPT.parse(ctx, matches);
 
             Self { alias }
         }
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS.def().about("The alias of the key you wish to export"),
+                ALIAS_OPT
+                    .def()
+                    .about("The alias of the key you wish to export"),
             )
         }
     }
@@ -1688,7 +1713,7 @@ pub mod args {
                     .about("Simulate the transaction application."),
             )
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
-            .arg(ALIAS.def().about(
+            .arg(ALIAS_OPT.def().about(
                 "If any new account is initialized by the tx, use the given \
                  alias to save it in the wallet. If multiple accounts are \
                  initialized, the alias will be the prefix of each new \
@@ -1699,7 +1724,7 @@ pub mod args {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(ctx, matches);
-            let initialized_account_alias = ALIAS.parse(ctx, matches);
+            let initialized_account_alias = ALIAS_OPT.parse(ctx, matches);
             Self {
                 dry_run,
                 ledger_address,
@@ -1726,7 +1751,7 @@ pub mod args {
         }
     }
 
-    /// Wallet generate arguments
+    /// Wallet key generate arguments
     #[derive(Debug)]
     pub struct KeyGen {
         /// Key alias
@@ -1737,7 +1762,7 @@ pub mod args {
 
     impl Args for KeyGen {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(ctx, matches);
+            let alias = ALIAS_OPT.parse(ctx, matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
@@ -1746,7 +1771,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS.def().about(
+            app.arg(ALIAS_OPT.def().about(
                 "The key alias. If none provided, the alias will be the \
                  public key hash.",
             ))
@@ -1757,7 +1782,7 @@ pub mod args {
         }
     }
 
-    /// Wallet lookup arguments
+    /// Wallet key lookup arguments
     #[derive(Debug)]
     pub struct KeyFind {
         pub public_key: Option<PublicKey>,
@@ -1770,7 +1795,7 @@ pub mod args {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
             let public_key =
                 RAW_PUBLIC_KEY_OPT.parse(ctx, matches).map(|pk| pk.0);
-            let alias = ALIAS.parse(ctx, matches);
+            let alias = ALIAS_OPT.parse(ctx, matches);
             let value = VALUE.parse(ctx, matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
 
@@ -1791,7 +1816,7 @@ pub mod args {
                     .conflicts_with("value"),
             )
             .arg(
-                ALIAS
+                ALIAS_OPT
                     .def()
                     .about("An alias associated with the keypair")
                     .conflicts_with("value"),
@@ -1833,6 +1858,28 @@ pub mod args {
                         .def()
                         .about("UNSAFE: Print the secret keys"),
                 )
+        }
+    }
+
+    /// Wallet address lookup arguments
+    #[derive(Debug)]
+    pub struct AddressFind {
+        pub alias: String,
+    }
+
+    impl Args for AddressFind {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(ctx, matches);
+
+            Self { alias }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS_OPT
+                    .def()
+                    .about("An alias associated with the address"),
+            )
         }
     }
 }

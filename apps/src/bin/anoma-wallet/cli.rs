@@ -24,6 +24,9 @@ pub fn main() -> Result<()> {
         },
         cmds::AnomaWallet::Address(sub) => match sub {
             cmds::WalletAddress::List(cmds::AddressList) => address_list(ctx),
+            cmds::WalletAddress::Find(cmds::AddressFind(args)) => {
+                address_find(ctx, args)
+            }
         },
     }
     Ok(())
@@ -163,5 +166,19 @@ fn address_list(ctx: Context) {
     writeln!(w, "Known addresses:").unwrap();
     for (alias, address) in wallet.get_addresses() {
         writeln!(w, "  \"{}\": {}", alias, address).unwrap();
+    }
+}
+
+/// Find address by its alias.
+fn address_find(ctx: Context, args: args::AddressFind) {
+    let wallet = ctx.wallet;
+    if let Some(address) = wallet.find_address(&args.alias) {
+        println!("Found address {}", address.encode());
+    } else {
+        println!(
+            "No address with alias {} found. Use the command `address list` \
+             to see all the known addresses.",
+            args.alias
+        );
     }
 }
