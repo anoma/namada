@@ -18,16 +18,16 @@ pub async fn main() -> Result<()> {
     match cmd {
         // Ledger cmds
         cmds::AnomaClient::TxCustom(cmds::TxCustom(args)) => {
-            tx::submit_custom(&ctx, args).await;
+            tx::submit_custom(ctx, args).await;
         }
         cmds::AnomaClient::TxTransfer(cmds::TxTransfer(args)) => {
-            tx::submit_transfer(&ctx, args).await;
+            tx::submit_transfer(ctx, args).await;
         }
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
-            tx::submit_update_vp(&ctx, args).await;
+            tx::submit_update_vp(ctx, args).await;
         }
         cmds::AnomaClient::TxInitAccount(cmds::TxInitAccount(args)) => {
-            tx::submit_init_account(args).await;
+            tx::submit_init_account(ctx, args).await;
         }
         cmds::AnomaClient::Bond(cmds::Bond(args)) => {
             tx::submit_bond(args).await;
@@ -42,7 +42,7 @@ pub async fn main() -> Result<()> {
             rpc::query_epoch(args).await;
         }
         cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
-            rpc::query_balance(&ctx, args).await;
+            rpc::query_balance(ctx, args).await;
         }
         cmds::AnomaClient::QueryBonds(cmds::QueryBonds(args)) => {
             rpc::query_bonds(args).await;
@@ -55,17 +55,17 @@ pub async fn main() -> Result<()> {
         }
         // Gossip cmds
         cmds::AnomaClient::Intent(cmds::Intent(args)) => {
-            gossip_intent(&ctx, args).await;
+            gossip_intent(ctx, args).await;
         }
         cmds::AnomaClient::SubscribeTopic(cmds::SubscribeTopic(args)) => {
-            subscribe_topic(&ctx, args).await;
+            subscribe_topic(ctx, args).await;
         }
     }
     Ok(())
 }
 
 async fn gossip_intent(
-    _ctx: &Context,
+    _ctx: Context,
     args::Intent {
         node_addr,
         topic,
@@ -117,7 +117,7 @@ async fn gossip_intent(
 }
 
 async fn subscribe_topic(
-    _ctx: &Context,
+    _ctx: Context,
     args::SubscribeTopic { node_addr, topic }: args::SubscribeTopic,
 ) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();

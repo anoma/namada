@@ -66,7 +66,7 @@ pub async fn query_epoch(args: args::Query) -> Option<Epoch> {
 }
 
 /// Query token balance(s)
-pub async fn query_balance(_ctx: &Context, args: args::QueryBalance) {
+pub async fn query_balance(_ctx: Context, args: args::QueryBalance) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     let tokens = address::tokens();
     match (args.token, args.owner) {

@@ -2,9 +2,8 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::str::FromStr;
 
-use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
+use anoma::types::key::ed25519::{Keypair, PublicKeyHash};
 #[cfg(feature = "dev")]
 use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds, Context};
@@ -56,10 +55,7 @@ fn key_find(
 ) {
     let wallet = ctx.wallet;
     let found_keypair = match public_key {
-        Some(pk) => {
-            let pk = PublicKey::from_str(&pk).expect("Invalid public key");
-            wallet.find_key_by_pk(&pk)
-        }
+        Some(pk) => wallet.find_key_by_pk(&pk),
         None => {
             let alias = alias.or(value);
             match alias {

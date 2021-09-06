@@ -192,7 +192,8 @@ pub mod cmds {
             let bond = SubCmd::parse(matches).map_fst(Self::Bond);
             let unbond = SubCmd::parse(matches).map_fst(Self::Unbond);
             let withdraw = SubCmd::parse(matches).map_fst(Self::Withdraw);
-            let query_epoch = SubCmd::parse(matches).map_fst(Self::QueryEpoch);
+            let query_epoch =
+                SubCmd::parse(ctx, matches).map(Self::TxInitAccount);
             let query_balance =
                 SubCmd::parse(matches).map_fst(Self::QueryBalance);
             let query_bonds = SubCmd::parse(matches).map_fst(Self::QueryBonds);
@@ -293,7 +294,7 @@ pub mod cmds {
                 let generate = SubCmd::parse(ctx, matches).map(Self::Gen);
                 let lookup = SubCmd::parse(ctx, matches).map(Self::Find);
                 let list = SubCmd::parse(ctx, matches).map(Self::List);
-                let export = SubCmd::parse(ctx, matches).map_fst(Self::Export);
+                let export = SubCmd::parse(ctx, matches).map(Self::Export);
                 generate.or(lookup).or(list).or(export)
             })
         }
@@ -761,9 +762,9 @@ pub mod cmds {
         const CMD: &'static str = "balance";
 
         fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Intent(args::Intent::parse(ctx, matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryBalance(args::QueryBalance::parse(ctx, matches))
+            })
         }
 
         fn def() -> App {
@@ -933,10 +934,10 @@ pub mod args {
     // TODO: once we have a wallet, we should also allow to use a key alias
     // <https://github.com/anoma/anoma/issues/167>
     const PUBLIC_KEY: Arg<PublicKey> = arg("public-key");
-    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     // <https://github.com/anoma/anoma/issues/167>
     // TODO: once we have a wallet, we should also allow to use a key alias
-    const PUBLIC_KEY_OPT: ArgOpt<String> = PUBLIC_KEY.opt();
+    const PUBLIC_KEY_OPT: ArgOpt<PublicKey> = PUBLIC_KEY.opt();
+    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const SHOW_SECRET: ArgFlag = flag("show-secret");
     const SIGNING_KEY: Arg<Address> = arg("key");
     const SOURCE: Arg<Address> = arg("source");
@@ -1092,11 +1093,11 @@ pub mod args {
     }
 
     impl Args for TxInitAccount {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
-            let vp_code_path = CODE_PATH_OPT.parse(matches);
-            let public_key = PUBLIC_KEY.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(ctx, matches);
+            let source = SOURCE.parse(ctx, matches);
+            let vp_code_path = CODE_PATH_OPT.parse(ctx, matches);
+            let public_key = PUBLIC_KEY.parse(ctx, matches);
             Self {
                 tx,
                 source,
@@ -1719,7 +1720,7 @@ pub mod args {
     /// Wallet lookup arguments
     #[derive(Debug)]
     pub struct KeyFind {
-        pub public_key: Option<String>,
+        pub public_key: Option<PublicKey>,
         pub alias: Option<String>,
         pub value: Option<String>,
         pub unsafe_show_secret: bool,

@@ -96,18 +96,22 @@ impl Store {
     }
 
     /// Find the stored key by an alias, a public key hash or a public key.
-    pub fn find_key(&self, alias_pkh_or_pk: String) -> Option<&StoredKeypair> {
+    pub fn find_key(
+        &self,
+        alias_pkh_or_pk: impl AsRef<str>,
+    ) -> Option<&StoredKeypair> {
+        let alias_pkh_or_pk = alias_pkh_or_pk.as_ref();
         // Try to find by alias
         self.keys
-            .get(&alias_pkh_or_pk)
+            .get(alias_pkh_or_pk)
             // Try to find by PKH
             .or_else(|| {
-                let pkh = PublicKeyHash::from_str(&alias_pkh_or_pk).ok()?;
+                let pkh = PublicKeyHash::from_str(alias_pkh_or_pk).ok()?;
                 self.find_key_by_pkh(&pkh)
             })
             // Try to find by PK
             .or_else(|| {
-                let pk = PublicKey::from_str(&alias_pkh_or_pk).ok()?;
+                let pk = PublicKey::from_str(alias_pkh_or_pk).ok()?;
                 self.find_key_by_pk(&pk)
             })
     }

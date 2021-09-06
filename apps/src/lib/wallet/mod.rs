@@ -68,7 +68,7 @@ impl Wallet {
     /// If the key is encrypted, will prompt for password from stdin.
     pub fn find_key(
         &self,
-        alias_pkh_or_pk: String,
+        alias_pkh_or_pk: impl AsRef<str>,
     ) -> Result<DecryptedKeypair, FindKeyError> {
         let stored_key = self
             .store

@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use anoma::types::key::ed25519::PublicKey;
 use anoma::types::{address, token};
 use libp2p::Multiaddr;
 use thiserror::Error;
@@ -29,7 +30,6 @@ impl ArgInput for address::Address {
     type Err = ArgError;
 
     fn try_from_raw(ctx: &Context, s: &str) -> Result<Self, Self::Err> {
-        println!("PARSING {}", s);
         // An address can be either raw (bech32m encoding)
         FromStr::from_str(s)
             // Or it can be an alias that may be found in the wallet
@@ -38,6 +38,22 @@ impl ArgInput for address::Address {
                     .find_address(s)
                     .ok_or(ArgError::Unknown("address"))
                     .map(|address| address.clone())
+            })
+    }
+}
+
+impl ArgInput for PublicKey {
+    type Err = ArgError;
+
+    fn try_from_raw(ctx: &Context, s: &str) -> Result<Self, Self::Err> {
+        // A public key can be either raw (hex string)
+        FromStr::from_str(s)
+            // Or it can be an alias that may be found in the wallet
+            .or_else(|_| {
+                ctx.wallet
+                    .find_key(s)
+                    .map_err(|_err| ArgError::Unknown("public key"))
+                    .map(|keypair| keypair.get().public.clone())
             })
     }
 }

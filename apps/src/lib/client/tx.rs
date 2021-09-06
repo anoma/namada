@@ -25,7 +25,7 @@ const TX_BOND_WASM: &str = "wasm/tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "wasm/tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "wasm/tx_withdraw.wasm";
 
-pub async fn submit_custom(_ctx: &Context, args: args::TxCustom) {
+pub async fn submit_custom(_ctx: Context, args: args::TxCustom) {
     // TODO add optional signature
     let tx_code = std::fs::read(args.code_path)
         .expect("Expected a file at given code path");
@@ -37,7 +37,7 @@ pub async fn submit_custom(_ctx: &Context, args: args::TxCustom) {
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_update_vp(ctx: &Context, args: args::TxUpdateVp) {
+pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let source = args.addr;
     let keypair = signing::find_keypair(
         &ctx.wallet,
@@ -58,13 +58,19 @@ pub async fn submit_update_vp(ctx: &Context, args: args::TxUpdateVp) {
     let data = update_vp.try_to_vec().expect(
         "Encoding transfer data to update a validity predicate shouldn't fail",
     );
-    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
+    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_init_account(args: args::TxInitAccount) {
-    let source_key: Keypair = wallet::key_of(args.source.encode());
+pub async fn submit_init_account(ctx: Context, args: args::TxInitAccount) {
+    let source = args.source;
+    let keypair = signing::find_keypair(
+        &ctx.wallet,
+        &source,
+        args.tx.ledger_address.clone(),
+    )
+    .await;
     let public_key = args.public_key;
     let vp_code = args
         .vp_code_path
@@ -90,7 +96,7 @@ pub async fn submit_init_account(args: args::TxInitAccount) {
     submit_tx(args.tx, tx).await
 }
 
-pub async fn submit_transfer(ctx: &Context, args: args::TxTransfer) {
+pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let source = args.source;
     let keypair = signing::find_keypair(
         &ctx.wallet,
