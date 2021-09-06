@@ -161,11 +161,6 @@ impl Store {
         &self.addresses
     }
 
-    /// Add a new address.
-    pub fn add_address(&mut self, alias: String, address: Address) {
-        self.addresses.insert(alias, address);
-    }
-
     fn generate_keypair() -> Keypair {
         use rand::rngs::OsRng;
         let mut csprng = OsRng {};
@@ -191,6 +186,8 @@ impl Store {
         alias
     }
 
+    /// Insert a new key with the given alias. If the alias is already used,
+    /// will prompt for overwrite confirmation.
     fn insert_keypair(
         &mut self,
         alias: Alias,
@@ -209,7 +206,9 @@ impl Store {
         self.pkhs.insert(pkh, alias);
     }
 
-    fn insert_address(&mut self, alias: Alias, address: Address) {
+    /// Insert a new address with the given alias. If the alias is already used,
+    /// will prompt for overwrite confirmation.
+    pub fn insert_address(&mut self, alias: Alias, address: Address) {
         if self.addresses.insert(alias, address).is_some() {
             match show_overwrite_confirmation("an address") {
                 ConfirmationResponse::Overwrite => {}

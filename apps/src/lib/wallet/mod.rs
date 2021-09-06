@@ -126,9 +126,10 @@ impl Wallet {
         self.store.get_addresses()
     }
 
-    /// Add a new address.
+    /// Add a new address with the given alias. If the alias is already used,
+    /// will prompt for overwrite confirmation.
     pub fn add_address(&mut self, alias: String, address: Address) {
-        self.store.add_address(alias, address)
+        self.store.insert_address(alias, address)
     }
 }
 
