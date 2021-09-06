@@ -9,6 +9,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use ed25519_dalek::SignatureError;
 use ed25519_dalek::{ExpandedSecretKey, Signer, Verifier};
+#[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -181,6 +182,7 @@ pub struct Signed<T: BorshSerialize + BorshDeserialize> {
 impl Keypair {
     /// Generate an ed25519 keypair.
     /// Wrapper for [`ed25519_dalek::Keypair::generate`].
+    #[cfg(feature = "rand")]
     pub fn generate<R>(csprng: &mut R) -> Keypair
     where
         R: CryptoRng + RngCore,
@@ -680,9 +682,7 @@ pub mod tests {
     fn gen_keypair() {
         let mut rng: ThreadRng = thread_rng();
         let keypair = Keypair::generate(&mut rng);
-        let public_key: PublicKey = keypair.public.into();
-        let secret_key: SecretKey = keypair.secret.into();
-        println!("Public key: {}", public_key);
-        println!("Secret key: {}", secret_key);
+        println!("Public key: {}", keypair.public);
+        println!("Secret key: {}", keypair.secret);
     }
 }

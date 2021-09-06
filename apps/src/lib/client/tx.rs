@@ -87,7 +87,7 @@ pub async fn submit_init_account(ctx: Context, args: args::TxInitAccount) {
         args.tx.ledger_address.clone(),
     )
     .await;
-    let public_key = args.public_key.get(&ctx).clone();
+    let public_key = args.public_key.get(&ctx);
     let vp_code = args
         .vp_code_path
         .map(|path| {
