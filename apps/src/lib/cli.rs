@@ -97,10 +97,10 @@ pub mod cmds {
     /// Used as top-level commands (`Cmd` instance) in `anoman` binary.
     /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
     #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum AnomaNode {
         Ledger(Ledger),
-        // Boxed, because it's larger than other variants
-        Gossip(Box<Gossip>),
+        Gossip(Gossip),
         Config(Config),
     }
 
@@ -113,8 +113,7 @@ pub mod cmds {
 
         fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             let ledger = SubCmd::parse(ctx, matches).map(Self::Ledger);
-            let gossip = SubCmd::parse(ctx, matches)
-                .map(|gossip| Self::Gossip(Box::new(gossip)));
+            let gossip = SubCmd::parse(ctx, matches).map(Self::Gossip);
             let config = SubCmd::parse(ctx, matches).map(Self::Config);
             ledger.or(gossip).or(config)
         }
@@ -279,6 +278,7 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
         Gen(KeyGen),
         Find(KeyFind),
@@ -931,12 +931,9 @@ pub mod args {
     const NODE: Arg<String> = arg("node");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
     const PEERS: ArgMulti<String> = arg_multi("peers");
-    // TODO: once we have a wallet, we should also allow to use a key alias
-    // <https://github.com/anoma/anoma/issues/167>
     const PUBLIC_KEY: Arg<PublicKey> = arg("public-key");
-    // <https://github.com/anoma/anoma/issues/167>
-    // TODO: once we have a wallet, we should also allow to use a key alias
     const PUBLIC_KEY_OPT: ArgOpt<PublicKey> = PUBLIC_KEY.opt();
+    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const SHOW_SECRET: ArgFlag = flag("show-secret");
     const SIGNING_KEY: Arg<Address> = arg("key");

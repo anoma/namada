@@ -25,7 +25,7 @@ pub fn main() -> Result<()> {
                     .wrap_err("Failed to reset Anoma node")?;
             }
         },
-        cli::cmds::AnomaNode::Gossip(sub) => match *sub {
+        cli::cmds::AnomaNode::Gossip(sub) => match sub {
             cli::cmds::Gossip::Run(cli::cmds::GossipRun(args)) => {
                 let config = get_cfg(base_dir);
                 let mut gossip_cfg = config.intent_gossiper.unwrap_or_default();
