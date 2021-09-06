@@ -8,22 +8,12 @@ use std::str::FromStr;
 use anoma::types::address::{Address, ImplicitAddress};
 use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 use borsh::{BorshDeserialize, BorshSerialize};
-use cli_table::format::Justify;
-use cli_table::{print_stdout, Table, WithTitle};
 
 use super::defaults;
 use super::keys::StoredKeypair;
 use crate::cli;
 
 pub type Alias = String;
-
-#[derive(Table)]
-struct KeysTable {
-    #[table(title = "Alias")]
-    alias: String,
-    #[table(title = "Public Key")]
-    public_key: String,
-}
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Default)]
 pub struct Store {
@@ -233,18 +223,6 @@ impl Store {
         self.try_to_vec()
             .expect("Serializing of store shouldn't fail")
     }
-}
-
-fn pretty_print(keys: HashMap<Alias, Keypair>) {
-    let x: Vec<KeysTable> = keys
-        .iter()
-        .map(|item| KeysTable {
-            alias: item.0.to_string(),
-            public_key: item.1.public.to_string(),
-        })
-        .collect();
-
-    print_stdout(x.with_title());
 }
 
 enum ConfirmationResponse {
