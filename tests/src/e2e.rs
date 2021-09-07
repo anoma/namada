@@ -842,6 +842,9 @@ mod tests {
         serde_json::to_writer(intent_writer, &exchange_json).unwrap();
     }
 
+    /// Returns directories with generated config files that should be used as
+    /// the `--base-dir` for Anoma commands. The first intent gossiper node is
+    /// setup to also open RPC for receiving intents and run a matchmaker.
     fn generate_network_of(
         path: PathBuf,
         n_of_peers: u32,
@@ -856,12 +859,13 @@ mod tests {
         while index < n_of_peers {
             let node_path = path.join(format!("anoma-{}", index));
 
-            let mut config = Config::default();
-
-            let _ledger_config = Ledger {
-                tendermint: node_path.join("tendermint").to_path_buf(),
-                db: node_path.join("db").to_path_buf(),
-                ..Default::default()
+            let mut config = Config {
+                ledger: Some(Ledger {
+                    tendermint: node_path.join("tendermint").to_path_buf(),
+                    db: node_path.join("db").to_path_buf(),
+                    ..Default::default()
+                }),
+                ..Config::default()
             };
 
             let info = build_peers(index, node_dirs.clone());
