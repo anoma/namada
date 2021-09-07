@@ -1,10 +1,9 @@
 //! Anoma Wallet CLI.
 
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 
 use anoma::types::key::ed25519::{Keypair, PublicKeyHash};
-#[cfg(feature = "dev")]
 use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds, Context};
 use anoma_apps::wallet::DecryptionError;
@@ -140,16 +139,8 @@ fn key_list(
 }
 
 /// Export a keypair to a file.
-fn key_export(ctx: Context, args::Export { alias }: args::Export) {
+fn key_export(ctx: Context, args::KeyExport { alias }: args::KeyExport) {
     let wallet = ctx.wallet;
-    // TODO make the alias required
-    let alias = alias.unwrap_or_else(|| {
-        let mut read_alias = String::new();
-
-        io::stdin().read_to_string(&mut read_alias).unwrap();
-        read_alias
-    });
-
     wallet
         .find_key(alias.clone())
         .map(|keypair| {
@@ -157,9 +148,11 @@ fn key_export(ctx: Context, args::Export { alias }: args::Export) {
             let file_data = keypair
                 .try_to_vec()
                 .expect("Encoding keypair shouldn't fail");
-            let mut file = File::create(format!("key_{}", alias)).unwrap();
+            let file_name = format!("key_{}", alias);
+            let mut file = File::create(&file_name).unwrap();
 
             file.write_all(file_data.as_ref()).unwrap();
+            println!("Exported to file {}", file_name);
         })
         .unwrap_or_else(|err| {
             eprintln!("{}", err);

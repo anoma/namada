@@ -376,7 +376,7 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
-    pub struct Export(pub args::Export);
+    pub struct Export(pub args::KeyExport);
 
     impl SubCmd for Export {
         const CMD: &'static str = "export";
@@ -384,13 +384,13 @@ pub mod cmds {
         fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Self(args::Export::parse(ctx, matches))))
+                .map(|matches| (Self(args::KeyExport::parse(ctx, matches))))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Exports a keypair to a file")
-                .add_args::<args::Export>()
+                .add_args::<args::KeyExport>()
         }
     }
 
@@ -1056,27 +1056,6 @@ pub mod args {
                 "The base directory is where the client and nodes \
                  configuration and state is stored.",
             ))
-        }
-    }
-
-    #[derive(Debug)]
-    pub struct Export {
-        pub alias: Option<String>,
-    }
-
-    impl Args for Export {
-        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
-            let alias = ALIAS_OPT.parse(ctx, matches);
-
-            Self { alias }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                ALIAS_OPT
-                    .def()
-                    .about("The alias of the key you wish to export"),
-            )
         }
     }
 
@@ -1916,6 +1895,26 @@ pub mod args {
                         .def()
                         .about("UNSAFE: Print the secret keys"),
                 )
+        }
+    }
+
+    /// Wallet key export arguments
+    #[derive(Debug)]
+    pub struct KeyExport {
+        pub alias: String,
+    }
+
+    impl Args for KeyExport {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(ctx, matches);
+
+            Self { alias }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS.def().about("The alias of the key you wish to export"),
+            )
         }
     }
 
