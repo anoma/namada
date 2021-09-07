@@ -2255,9 +2255,10 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.6.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=tomas/update-prost-0.8.0#ddad1d2b294ae2a5e27b39bc0d4f171855cae782"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/borsh_ibc_data#626983b62d0f86c0a01c9a8acc5742261c74e83e"
 dependencies = [
  "anomaly",
+ "borsh",
  "bytes 1.0.1",
  "chrono",
  "dyn-clonable",
@@ -2281,7 +2282,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.8.2"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=tomas/update-prost-0.8.0#ddad1d2b294ae2a5e27b39bc0d4f171855cae782"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/borsh_ibc_data#626983b62d0f86c0a01c9a8acc5742261c74e83e"
 dependencies = [
  "anomaly",
  "bytes 1.0.1",

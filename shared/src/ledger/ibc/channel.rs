@@ -21,7 +21,6 @@ use ibc::ics24_host::Path;
 use ibc::proofs::Proofs;
 use ibc::timestamp::Timestamp;
 use sha2::Digest;
-use tendermint_proto::Protobuf;
 use thiserror::Error;
 
 use super::{Ibc, StateChange};
@@ -465,12 +464,14 @@ where
         let key =
             Key::ibc_key(path).expect("Creating a key for a channel failed");
         match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => ChannelEnd::decode_vec(&value).map_err(|e| {
-                Error::InvalidChannel(format!(
-                    "Decoding the channel failed: Port {}, Channel {}, {}",
-                    port_channel_id.0, port_channel_id.1, e
-                ))
-            }),
+            Ok(Some(value)) => {
+                ChannelEnd::try_from_slice(&value[..]).map_err(|e| {
+                    Error::InvalidChannel(format!(
+                        "Decoding the channel failed: Port {}, Channel {}, {}",
+                        port_channel_id.0, port_channel_id.1, e
+                    ))
+                })
+            }
             Ok(None) => Err(Error::InvalidChannel(format!(
                 "The prior channel doesn't exist: Port {}, Channel {}",
                 port_channel_id.0, port_channel_id.1
@@ -544,7 +545,7 @@ where
         let key =
             Key::ibc_key(path).expect("Creating a key for a channel failed");
         match self.ctx.read_post(&key) {
-            Ok(Some(value)) => ChannelEnd::decode_vec(&value).ok(),
+            Ok(Some(value)) => ChannelEnd::try_from_slice(&value[..]).ok(),
             // returns None even if DB read fails
             _ => None,
         }
@@ -565,7 +566,7 @@ where
         loop {
             let next = self.ctx.iter_post_next(&mut iter).ok()?;
             if let Some((key, value)) = next {
-                let channel = ChannelEnd::decode_vec(&value).ok()?;
+                let channel = ChannelEnd::try_from_slice(&value[..]).ok()?;
                 if let Some(id) = channel.connection_hops().get(0) {
                     if id == conn_id {
                         let key = Key::parse(&key).ok()?;

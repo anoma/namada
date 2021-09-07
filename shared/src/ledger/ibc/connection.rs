@@ -15,7 +15,6 @@ use ibc::ics07_tendermint::consensus_state::ConsensusState as TendermintConsensu
 use ibc::ics23_commitment::commitment::CommitmentPrefix;
 use ibc::ics24_host::identifier::{ClientId, ConnectionId};
 use ibc::ics24_host::Path;
-use tendermint_proto::Protobuf;
 use thiserror::Error;
 
 use super::{Ibc, StateChange};
@@ -45,7 +44,7 @@ pub enum Error {
     #[error("Decoding TX data error: {0}")]
     DecodingTxData(std::io::Error),
     #[error("IBC data error: {0}")]
-    DecodingIbcData(IbcDataError),
+    InvalidIbcData(IbcDataError),
 }
 
 /// IBC connection functions result
@@ -193,7 +192,7 @@ where
         let proofs = data.proofs()?;
         match verify_proofs(
             self,
-            Some(data.client_state()?),
+            Some(data.client_state),
             &conn,
             &expected_conn,
             &proofs,
@@ -212,7 +211,7 @@ where
         let data = ConnectionOpenAckData::try_from_slice(tx_data)?;
 
         // version check
-        if !conn.versions().contains(&data.version()?) {
+        if !conn.versions().contains(&data.version) {
             return Err(Error::InvalidVersion(
                 "The version is unsupported".to_owned(),
             ));
@@ -220,7 +219,7 @@ where
 
         // counterpart connection ID check
         if let Some(counterpart_conn_id) = conn.counterparty().connection_id() {
-            if *counterpart_conn_id != data.counterpart_connection_id()? {
+            if *counterpart_conn_id != data.counterpart_conn_id {
                 return Err(Error::InvalidConnection(format!(
                     "The counterpart connection ID mismatched: ID {}",
                     counterpart_conn_id
@@ -244,7 +243,7 @@ where
         let proofs = data.proofs()?;
         match verify_proofs(
             self,
-            Some(data.client_state()?),
+            Some(data.client_state),
             &conn,
             &expected_conn,
             &proofs,
@@ -290,12 +289,13 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a connection end failed");
         match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => ConnectionEnd::decode_vec(&value).map_err(|e| {
-                Error::InvalidConnection(format!(
-                    "Decoding the connection failed: {}",
-                    e
-                ))
-            }),
+            Ok(Some(value)) => ConnectionEnd::try_from_slice(&value[..])
+                .map_err(|e| {
+                    Error::InvalidConnection(format!(
+                        "Decoding the connection failed: {}",
+                        e
+                    ))
+                }),
             _ => Err(Error::InvalidConnection(format!(
                 "Unable to get the previous connection: ID {}",
                 conn_id
@@ -320,7 +320,7 @@ where
         let key = Key::ibc_key(path)
             .expect("Creating a key for a connection end failed");
         match self.ctx.read_post(&key) {
-            Ok(Some(value)) => ConnectionEnd::decode_vec(&value).ok(),
+            Ok(Some(value)) => ConnectionEnd::try_from_slice(&value[..]).ok(),
             // returns None even if DB read fails
             _ => None,
         }
@@ -378,7 +378,7 @@ where
 
 impl From<IbcDataError> for Error {
     fn from(err: IbcDataError) -> Self {
-        Self::DecodingIbcData(err)
+        Self::InvalidIbcData(err)
     }
 }
 
