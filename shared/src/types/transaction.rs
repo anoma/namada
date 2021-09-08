@@ -1,4 +1,5 @@
 //! Types that are used in transactions.
+use std::convert::TryFrom;
 use std::io::{Error, ErrorKind, Write};
 
 use ark_bls12_381::Bls12_381 as EllipticCurve;
@@ -6,17 +7,33 @@ use ark_ec::{AffineCurve, PairingEngine};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use thiserror::Error;
 use tpke::{encrypt, Ciphertext};
 
+use crate::proto::Tx;
 use crate::types::address::Address;
-use crate::types::key::ed25519::{
-    verify_signature, PublicKey, Signature, VerifySigError,
-};
+use crate::types::key::ed25519::{Keypair, PublicKey, SignedTxData};
 use crate::types::storage::Epoch;
 use crate::types::token::Amount;
 
 /// TODO: Determine a sane number for this
 const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
+
+/// Errors relating to decrypting a wrapper tx and its
+/// encrypted payload from a Tx type
+#[allow(missing_docs)]
+#[derive(Error, Debug, PartialEq)]
+pub enum DecryptionErr {
+    #[error("The hash of the decrypted tx does not match the hash commitment")]
+    DecryptedHash,
+    #[error("The decryption did not produce a valid Tx")]
+    InvalidTx,
+    #[error("The given Tx data did not contain a valid WrapperTx")]
+    InvalidWrapperTx,
+    #[error("Expected a valid signed WrapperTx data")]
+    Unsigned,
+}
 
 /// We use a specific choice of two groups and bilinear pairing
 /// We use a wrapper type to add traits
@@ -243,8 +260,6 @@ pub struct WrapperTx {
     pub fee: Fee,
     /// Used to determine an implicit account of the fee payer
     pub pk: PublicKey,
-    /// The signature from the submitter of the tx
-    pub sig: Signature,
     /// The epoch in which the tx is to be submitted. This determines
     /// which decryption key will be used
     pub epoch: Epoch,
@@ -252,19 +267,44 @@ pub struct WrapperTx {
     gas_limit: GasLimit,
     /// the encrypted payload
     inner_tx: EncryptedTx,
-    /// A commitment to the inner contents of the decrypted payload
+    /// sha-2 hash of the inner transaction acting as a commitment
+    /// the contents of the encrypted payload
+    tx_hash: [u8; 32],
 }
 
 impl WrapperTx {
+    /// Create a new wrapper tx from unencrypted tx, the personal keypair,
+    /// and the metadata surrounding the inclusion of the tx. This method
+    /// constructs the signature of relevant data and encrypts the transaction
+    pub fn new(
+        fee: Fee,
+        keypair: &Keypair,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+        tx: Tx,
+    ) -> WrapperTx {
+        // TODO: Look up current public key from storage
+        let pubkey = <EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator();
+        let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), pubkey);
+        // hash the transaction
+        let digest = Sha256::digest(&tx.to_bytes());
+        let mut tx_hash = [0u8; 32];
+        tx_hash.copy_from_slice(&digest);
+
+        Self {
+            fee,
+            pk: keypair.public.into(),
+            epoch,
+            gas_limit,
+            inner_tx,
+            tx_hash,
+        }
+    }
+
     /// Get the address of the implicit account associated
     /// with the public key
     pub fn fee_payer(&self) -> Address {
         Address::from(&self.pk)
-    }
-
-    /// Check the signature of the transaction
-    pub fn verify_signature(&self) -> Result<(), VerifySigError> {
-        verify_signature(&self.pk, &self.inner_tx, &self.sig)
     }
 
     /// A validity check on the ciphertext. Depends on a canonical choice of
@@ -273,6 +313,55 @@ impl WrapperTx {
         self.inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
             -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
         ))
+    }
+
+    /// Decrypt the wrapped transaction.
+    ///
+    /// Will fail if the inner transaction does match the
+    /// hash commitment or we are unable to recover a
+    /// valid Tx from the decoded byte stream.
+    pub fn decrypt(
+        &self,
+        privkey: <EllipticCurve as PairingEngine>::G2Affine,
+    ) -> Result<Tx, DecryptionErr> {
+        // decrypt the inner tx
+        let decrypted = self.inner_tx.decrypt(privkey);
+        // check that the has equals commitment
+        let digest = Sha256::digest(&decrypted);
+        let mut tx_hash = [0u8; 32];
+        tx_hash.copy_from_slice(&digest);
+        if tx_hash != self.tx_hash {
+            Err(DecryptionErr::DecryptedHash)
+        } else {
+            // convert back to Tx type
+            Tx::try_from(decrypted.as_ref())
+                .map_err(|_| DecryptionErr::InvalidTx)
+        }
+    }
+
+    /// Sign the wrapper transaction and convert to a normal Tx type
+    pub fn sign(&self, keypair: &Keypair) -> Tx {
+        Tx::new(
+            vec![],
+            Some(self.try_to_vec().expect("Could not serialize WrapperTx")),
+        )
+        .sign(keypair)
+    }
+}
+
+impl TryFrom<Tx> for WrapperTx {
+    type Error = DecryptionErr;
+
+    fn try_from(tx: Tx) -> Result<Self, Self::Error> {
+        if let Some(Ok(Some(data))) = tx.data.map(|data| {
+            SignedTxData::try_from_slice(&data[..])
+                .map(|signed| signed.data)
+        }) {
+            BorshDeserialize::deserialize(&mut data.as_ref())
+                .map_err(|_| DecryptionErr::InvalidWrapperTx)
+        } else {
+            Err(DecryptionErr::Unsigned)
+        }
     }
 }
 
@@ -395,5 +484,133 @@ mod test_gas_limits {
         let limit = GasLimit { multiplier: 1 };
         let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION + 1);
         assert_eq!(refund, Amount::from(0u64));
+    }
+}
+
+#[cfg(test)]
+mod test_wrapper_tx {
+    use super::*;
+    use crate::types::address::xan;
+    use crate::types::key::ed25519::{verify_tx_sig, SignedTxData};
+
+    fn gen_keypair() -> Keypair {
+        use rand::prelude::ThreadRng;
+        use rand::thread_rng;
+
+        let mut rng: ThreadRng = thread_rng();
+        Keypair::generate(&mut rng)
+    }
+
+    /// We test that when we feed in a Tx and then decrypt it again
+    /// that we get what we started with.
+    #[test]
+    fn test_encryption_round_trip() {
+        let keypair = gen_keypair();
+        let tx = Tx::new(
+            "wasm code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 10.into(),
+                token: xan(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx.clone(),
+        );
+        assert!(wrapper.validate_ciphertext());
+        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+        let decrypted = wrapper.decrypt(privkey).expect("Test failed");
+        assert_eq!(tx, decrypted);
+    }
+
+    /// We test that when we try to decrpyt a tx and it
+    /// does not match the commitment, an error is returned
+    #[test]
+    fn test_decryption_invalid_hash() {
+        let tx = Tx::new(
+            "wasm code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+
+        let mut wrapper = WrapperTx::new(
+            Fee {
+                amount: 10.into(),
+                token: xan(),
+            },
+            &gen_keypair(),
+            Epoch(0),
+            0.into(),
+            tx,
+        );
+        // give a incorrect commitment to the decrypted contents of the tx
+        wrapper.tx_hash = [0u8; 32];
+        assert!(wrapper.validate_ciphertext());
+        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+        let err = wrapper.decrypt(privkey).expect_err("Test failed");
+        assert_eq!(err, DecryptionErr::DecryptedHash);
+    }
+
+    /// We check that even if the encrypted payload and has of its
+    /// contents are correctly changed, we detect fraudulent activity
+    /// via the signature.
+    #[test]
+    fn test_malleability_attack_detection() {
+        let pubkey = <EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator();
+        let keypair = gen_keypair();
+        // The intendend tx
+        let tx = Tx::new(
+            "wasm code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        // the signed tx
+        let mut tx = WrapperTx::new(
+            Fee {
+                amount: 10.into(),
+                token: xan(),
+            },
+            &gen_keypair(),
+            Epoch(0),
+            0.into(),
+            tx,
+        )
+        .sign(&keypair);
+
+        // we now try to alter the inner tx maliciously
+        let mut wrapper = WrapperTx::try_from(tx.clone()).expect("Test failed");
+        let mut signed_tx_data =
+            SignedTxData::try_from_slice(&tx.data.unwrap()[..])
+                .expect("Test failed");
+
+        // malicious transaction
+        let malicious =
+            Tx::new("Give me all the money".as_bytes().to_owned(), None);
+
+        // We replace the inner tx with a malicious one
+        wrapper.inner_tx = EncryptedTx::encrypt(&malicious.to_bytes(), pubkey);
+
+        // We change the commitment appropriately
+        let digest = Sha256::digest(&malicious.to_bytes());
+        let mut hash_bytes = [0u8; 32];
+        hash_bytes.copy_from_slice(&digest);
+        wrapper.tx_hash = hash_bytes;
+
+        // we check ciphertext validity still passes
+        assert!(wrapper.validate_ciphertext());
+        // we check that decryption still succeeds
+        let decrypted = wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
+            .expect("Test failed");
+        assert_eq!(decrypted, malicious);
+
+        // we substitute in the modified wrapper
+        signed_tx_data.data = Some(wrapper.try_to_vec().expect("Test failed"));
+        tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
+
+        // check that the signature is not valid
+        verify_tx_sig(&keypair.public.into(), &tx, &signed_tx_data.sig)
+            .expect_err("Test failed");
     }
 }

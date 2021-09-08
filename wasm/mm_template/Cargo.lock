@@ -49,6 +49,8 @@ dependencies = [
  "itertools",
  "prost",
  "prost-types",
+ "rand 0.7.3",
+ "rand 0.8.4",
  "rust_decimal",
  "serde",
  "sha2",
