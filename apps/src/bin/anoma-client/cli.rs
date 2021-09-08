@@ -30,13 +30,13 @@ pub async fn main() -> Result<()> {
             tx::submit_init_account(ctx, args).await;
         }
         cmds::AnomaClient::Bond(cmds::Bond(args)) => {
-            tx::submit_bond(args).await;
+            tx::submit_bond(ctx, args).await;
         }
         cmds::AnomaClient::Unbond(cmds::Unbond(args)) => {
-            tx::submit_unbond(args).await;
+            tx::submit_unbond(ctx, args).await;
         }
         cmds::AnomaClient::Withdraw(cmds::Withdraw(args)) => {
-            tx::submit_withdraw(args).await;
+            tx::submit_withdraw(ctx, args).await;
         }
         cmds::AnomaClient::QueryEpoch(cmds::QueryEpoch(args)) => {
             rpc::query_epoch(args).await;

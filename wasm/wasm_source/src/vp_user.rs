@@ -388,7 +388,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::ed25519::testing::keypair_1();
-        let public_key: key::ed25519::PublicKey = keypair.public.into();
+        let public_key = &keypair.public;
         let target = address::testing::established_address_2();
         let token = address::xan();
         let amount = token::Amount::from(10_098_123);
@@ -400,7 +400,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, public_key);
 
         // Initialize VP environment from a transaction
         let mut vp_env =
@@ -517,14 +517,14 @@ mod tests {
             let mut tx_env = TestTxEnv::default();
 
             let keypair = key::ed25519::testing::keypair_1();
-            let public_key: key::ed25519::PublicKey = keypair.public.into();
+            let public_key = &keypair.public;
 
             // Spawn all the accounts in the storage key to be able to modify
             // their storage
             let storage_key_addresses = storage_key.find_addresses();
             tx_env.spawn_accounts(storage_key_addresses);
 
-            tx_env.write_public_key(&vp_owner, &public_key);
+            tx_env.write_public_key(&vp_owner, public_key);
 
             // Initialize VP environment from a transaction
             let mut vp_env =
@@ -584,14 +584,14 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::ed25519::testing::keypair_1();
-        let public_key: key::ed25519::PublicKey = keypair.public.into();
+        let public_key = &keypair.public;
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, public_key);
 
         // Initialize VP environment from a transaction
         let mut vp_env =

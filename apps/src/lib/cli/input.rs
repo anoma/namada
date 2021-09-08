@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anoma::types::key::ed25519::{PublicKey, PublicKeyHash};
+use anoma::types::storage::Epoch;
 use anoma::types::{address, token};
 use libp2p::Multiaddr;
 
@@ -37,7 +38,7 @@ impl ArgInput for address::Address {
 
 /// A raw address value that is not being looked-up from the wallet. This
 /// should only be used for wallet commands that expect a address value.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RawAddress(pub address::Address);
 
 impl ArgInput for RawAddress {
@@ -57,7 +58,7 @@ impl ArgInput for RawAddress {
 /// Lazily evaluated public key, either a raw value (hexadecimal encoding), or
 /// looked-up from a wallet by a public key hash or an alias.
 /// We evaluate the public key lazily, because it might need to be decrypted.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LazyWalletPublicKey {
     raw_arg: String,
 }
@@ -89,7 +90,7 @@ impl ArgInput for LazyWalletPublicKey {
 
 /// A raw public key value that is not being looked-up from the wallet. This
 /// should only be used for wallet commands that expect a raw public key value.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RawPublicKey(pub PublicKey);
 
 impl ArgInput for RawPublicKey {
@@ -107,7 +108,7 @@ impl ArgInput for RawPublicKey {
 
 /// Lazily evaluated keypair, looked-up from a wallet by a public key, public
 /// key hash or an alias.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LazyWalletKeypair {
     raw_arg: String,
 }
@@ -172,6 +173,15 @@ impl ArgInput for tendermint::net::Address {
     fn from_raw(_ctx: &Context, s: &str) -> Self {
         FromStr::from_str(s).unwrap_or_else(|err| {
             eprintln!("Invalid remote address (TCP or UNIX socket): {}", err);
+            safe_exit(1)
+        })
+    }
+}
+
+impl ArgInput for Epoch {
+    fn from_raw(_ctx: &Context, s: &str) -> Self {
+        FromStr::from_str(s).unwrap_or_else(|err| {
+            eprintln!("Invalid epoch: {}", err);
             safe_exit(1)
         })
     }

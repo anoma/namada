@@ -9,6 +9,7 @@ use anoma_apps::cli::{args, cmds, Context};
 use anoma_apps::wallet::DecryptionError;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
+use itertools::sorted;
 
 pub fn main() -> Result<()> {
     let (cmd, ctx) = cli::anoma_wallet_cli();
@@ -166,7 +167,7 @@ fn address_list(ctx: Context) {
     let stdout = io::stdout();
     let mut w = stdout.lock();
     writeln!(w, "Known addresses:").unwrap();
-    for (alias, address) in wallet.get_addresses() {
+    for (alias, address) in sorted(wallet.get_addresses()) {
         writeln!(w, "  \"{}\": {}", alias, address).unwrap();
     }
 }

@@ -354,7 +354,12 @@ pub fn tokens() -> HashMap<Address, &'static str> {
 
 /// Temporary helper for testing
 pub fn matchmaker() -> Address {
-    Address::decode("a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td").expect("The token address decoding shouldn't fail")
+    Address::decode("a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td").expect("The address decoding shouldn't fail")
+}
+
+/// Validator address for development and testing
+pub fn validator() -> Address {
+    Address::decode("a1qq5qqqqqgfqnsd6pxse5zdj9g5crzsf5x4zyzv6yxerr2d2rxpryzwp5g5m5zvfjxv6ygsekjmraj0").expect("The address decoding shouldn't fail")
 }
 
 #[cfg(test)]

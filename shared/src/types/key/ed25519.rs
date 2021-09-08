@@ -180,6 +180,18 @@ pub struct Signed<T: BorshSerialize + BorshDeserialize> {
 }
 
 impl Keypair {
+    /// Convert this keypair to bytes.
+    pub fn to_bytes(&self) -> [u8; 64] {
+        let mut bytes: [u8; ed25519_dalek::KEYPAIR_LENGTH] =
+            [0u8; ed25519_dalek::KEYPAIR_LENGTH];
+
+        bytes[..ed25519_dalek::SECRET_KEY_LENGTH]
+            .copy_from_slice(self.secret.0.as_bytes());
+        bytes[ed25519_dalek::SECRET_KEY_LENGTH..]
+            .copy_from_slice(self.public.0.as_bytes());
+        bytes
+    }
+
     /// Generate an ed25519 keypair.
     /// Wrapper for [`ed25519_dalek::Keypair::generate`].
     #[cfg(feature = "rand")]

@@ -505,7 +505,7 @@ mod tests {
         let data = transfer
             .try_to_vec()
             .expect("Encoding unsigned transfer shouldn't fail");
-        let source_key = wallet::key_of(BERTHA);
+        let source_key = wallet::defaults::key_of(BERTHA);
         let tx_wasm_path = TX_MINT_TOKENS_WASM;
         let tx_wasm_path_abs = working_dir.join(&tx_wasm_path);
         println!("Reading tx wasm for test from {:?}", tx_wasm_path_abs);
@@ -773,7 +773,7 @@ mod tests {
             "--topic",
             "asset_v1",
             "--signing-key",
-            "Alberto",
+            "Albert",
         ]);
         let mut session_send_intent_b =
             spawn_command(send_intent_b, Some(20_000))

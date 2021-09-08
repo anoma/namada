@@ -187,19 +187,19 @@ pub mod cmds {
             let tx_update_vp =
                 SubCmd::parse(ctx, matches).map(Self::TxUpdateVp);
             let tx_init_account =
-                SubCmd::parse(matches).map_fst(Self::TxInitAccount);
-            let bond = SubCmd::parse(matches).map_fst(Self::Bond);
-            let unbond = SubCmd::parse(matches).map_fst(Self::Unbond);
-            let withdraw = SubCmd::parse(matches).map_fst(Self::Withdraw);
+                SubCmd::parse(ctx, matches).map(Self::TxInitAccount);
+            let bond = SubCmd::parse(ctx, matches).map(Self::Bond);
+            let unbond = SubCmd::parse(ctx, matches).map(Self::Unbond);
+            let withdraw = SubCmd::parse(ctx, matches).map(Self::Withdraw);
             let query_epoch =
                 SubCmd::parse(ctx, matches).map(Self::TxInitAccount);
             let query_balance =
-                SubCmd::parse(matches).map_fst(Self::QueryBalance);
-            let query_bonds = SubCmd::parse(matches).map_fst(Self::QueryBonds);
+                SubCmd::parse(ctx, matches).map(Self::QueryBalance);
+            let query_bonds = SubCmd::parse(ctx, matches).map(Self::QueryBonds);
             let query_voting_power =
-                SubCmd::parse(matches).map_fst(Self::QueryVotingPower);
+                SubCmd::parse(ctx, matches).map(Self::QueryVotingPower);
             let query_slashes =
-                SubCmd::parse(matches).map_fst(Self::QuerySlashes);
+                SubCmd::parse(ctx, matches).map(Self::QuerySlashes);
             let intent = SubCmd::parse(ctx, matches).map(Self::Intent);
             let subscribe_topic =
                 SubCmd::parse(ctx, matches).map(Self::SubscribeTopic);
@@ -238,7 +238,7 @@ pub mod cmds {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub enum AnomaWallet {
         /// Key management commands
         Key(WalletKey),
@@ -277,7 +277,7 @@ pub mod cmds {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
         Gen(KeyGen),
@@ -314,7 +314,7 @@ pub mod cmds {
     }
 
     /// Generate a new keypair and an implicit address derived from it
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct KeyGen(pub args::KeyAndAddressGen);
 
     impl SubCmd for KeyGen {
@@ -337,7 +337,7 @@ pub mod cmds {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct KeyFind(pub args::KeyFind);
 
     impl SubCmd for KeyFind {
@@ -356,7 +356,7 @@ pub mod cmds {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct KeyList(pub args::KeyList);
 
     impl SubCmd for KeyList {
@@ -375,7 +375,7 @@ pub mod cmds {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct Export(pub args::KeyExport);
 
     impl SubCmd for Export {
@@ -394,7 +394,7 @@ pub mod cmds {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
         Find(AddressFind),
@@ -430,7 +430,7 @@ pub mod cmds {
     }
 
     /// Generate a new keypair and an implicit address derived from it
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct AddressGen(pub args::KeyAndAddressGen);
 
     impl SubCmd for AddressGen {
@@ -454,7 +454,7 @@ pub mod cmds {
     }
 
     /// Find an address by its alias
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct AddressFind(pub args::AddressFind);
 
     impl SubCmd for AddressFind {
@@ -474,7 +474,7 @@ pub mod cmds {
     }
 
     /// List known addresses
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct AddressList;
 
     impl SubCmd for AddressList {
@@ -492,7 +492,7 @@ pub mod cmds {
     }
 
     /// Generate a new keypair and an implicit address derived from it
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct AddressAdd(pub args::AddressAdd);
 
     impl SubCmd for AddressAdd {
@@ -511,7 +511,7 @@ pub mod cmds {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub enum Ledger {
         Run(LedgerRun),
         Reset(LedgerReset),
@@ -750,13 +750,10 @@ pub mod cmds {
     impl SubCmd for Bond {
         const CMD: &'static str = "bond";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Bond(args::Bond::parse(matches)), matches))
+                .map(|matches| Bond(args::Bond::parse(ctx, matches)))
         }
 
         fn def() -> App {
@@ -772,13 +769,10 @@ pub mod cmds {
     impl SubCmd for Unbond {
         const CMD: &'static str = "unbond";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Unbond(args::Unbond::parse(matches)), matches))
+                .map(|matches| Unbond(args::Unbond::parse(ctx, matches)))
         }
 
         fn def() -> App {
@@ -794,13 +788,10 @@ pub mod cmds {
     impl SubCmd for Withdraw {
         const CMD: &'static str = "withdraw";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (Withdraw(args::Withdraw::parse(matches)), matches)
-            })
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Withdraw(args::Withdraw::parse(ctx, matches)))
         }
 
         fn def() -> App {
@@ -816,13 +807,10 @@ pub mod cmds {
     impl SubCmd for QueryEpoch {
         const CMD: &'static str = "epoch";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (QueryEpoch(args::Query::parse(matches)), matches)
-            })
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryEpoch(args::Query::parse(ctx, matches)))
         }
 
         fn def() -> App {
@@ -857,12 +845,9 @@ pub mod cmds {
     impl SubCmd for QueryBonds {
         const CMD: &'static str = "bonds";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                (QueryBonds(args::QueryBonds::parse(matches)), matches)
+                QueryBonds(args::QueryBonds::parse(ctx, matches))
             })
         }
 
@@ -879,15 +864,9 @@ pub mod cmds {
     impl SubCmd for QueryVotingPower {
         const CMD: &'static str = "voting-power";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                (
-                    QueryVotingPower(args::QueryVotingPower::parse(matches)),
-                    matches,
-                )
+                QueryVotingPower(args::QueryVotingPower::parse(ctx, matches))
             })
         }
 
@@ -904,12 +883,12 @@ pub mod cmds {
     impl SubCmd for QuerySlashes {
         const CMD: &'static str = "slashes";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self>
         where
             Self: Sized,
         {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                (QuerySlashes(args::QuerySlashes::parse(matches)), matches)
+                QuerySlashes(args::QuerySlashes::parse(ctx, matches))
             })
         }
 
@@ -1016,7 +995,6 @@ pub mod args {
     const RAW_ADDRESS: Arg<RawAddress> = arg("address");
     const RAW_PUBLIC_KEY_OPT: ArgOpt<RawPublicKey> = arg_opt("public-key");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
-    const SHOW_SECRET: ArgFlag = flag("show-secret");
     const SIGNER: ArgOpt<Address> = arg_opt("signer");
     const SIGNING_KEY_OPT: ArgOpt<LazyWalletKeypair> = SIGNING_KEY.opt();
     const SIGNING_KEY: Arg<LazyWalletKeypair> = arg("signing-key");
@@ -1263,11 +1241,11 @@ pub mod args {
     }
 
     impl Args for Bond {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let validator = VALIDATOR.parse(matches);
-            let amount = AMOUNT.parse(matches);
-            let source = SOURCE_OPT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(ctx, matches);
+            let validator = VALIDATOR.parse(ctx, matches);
+            let amount = AMOUNT.parse(ctx, matches);
+            let source = SOURCE_OPT.parse(ctx, matches);
             Self {
                 tx,
                 validator,
@@ -1302,11 +1280,11 @@ pub mod args {
     }
 
     impl Args for Unbond {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let validator = VALIDATOR.parse(matches);
-            let amount = AMOUNT.parse(matches);
-            let source = SOURCE_OPT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(ctx, matches);
+            let validator = VALIDATOR.parse(ctx, matches);
+            let amount = AMOUNT.parse(ctx, matches);
+            let source = SOURCE_OPT.parse(ctx, matches);
             Self {
                 tx,
                 validator,
@@ -1344,10 +1322,10 @@ pub mod args {
     }
 
     impl Args for Withdraw {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let validator = VALIDATOR.parse(matches);
-            let source = SOURCE_OPT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(ctx, matches);
+            let validator = VALIDATOR.parse(ctx, matches);
+            let source = SOURCE_OPT.parse(ctx, matches);
             Self {
                 tx,
                 validator,
@@ -1477,10 +1455,10 @@ pub mod args {
     }
 
     impl Args for QueryBonds {
-        fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
-            let owner = OWNER.parse(matches);
-            let validator = VALIDATOR_OPT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let query = Query::parse(ctx, matches);
+            let owner = OWNER.parse(ctx, matches);
+            let validator = VALIDATOR_OPT.parse(ctx, matches);
             Self {
                 query,
                 owner,
@@ -1515,10 +1493,10 @@ pub mod args {
     }
 
     impl Args for QueryVotingPower {
-        fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
-            let validator = VALIDATOR_OPT.parse(matches);
-            let epoch = EPOCH.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let query = Query::parse(ctx, matches);
+            let validator = VALIDATOR_OPT.parse(ctx, matches);
+            let epoch = EPOCH.parse(ctx, matches);
             Self {
                 query,
                 validator,
@@ -1548,9 +1526,9 @@ pub mod args {
     }
 
     impl Args for QuerySlashes {
-        fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
-            let validator = VALIDATOR_OPT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let query = Query::parse(ctx, matches);
+            let validator = VALIDATOR_OPT.parse(ctx, matches);
             Self { query, validator }
         }
 
@@ -1789,7 +1767,7 @@ pub mod args {
     }
 
     /// Wallet generate key and implicit address arguments
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct KeyAndAddressGen {
         /// Key alias
         pub alias: Option<String>,
@@ -1820,7 +1798,7 @@ pub mod args {
     }
 
     /// Wallet key lookup arguments
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct KeyFind {
         pub public_key: Option<PublicKey>,
         pub alias: Option<String>,
@@ -1872,7 +1850,7 @@ pub mod args {
     }
 
     /// Wallet list keys arguments
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct KeyList {
         pub decrypt: bool,
         pub unsafe_show_secret: bool,
@@ -1899,7 +1877,7 @@ pub mod args {
     }
 
     /// Wallet key export arguments
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct KeyExport {
         pub alias: String,
     }
@@ -1919,7 +1897,7 @@ pub mod args {
     }
 
     /// Wallet address lookup arguments
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct AddressFind {
         pub alias: String,
     }
@@ -1940,7 +1918,7 @@ pub mod args {
     }
 
     /// Wallet address add arguments
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub struct AddressAdd {
         pub alias: String,
         pub address: Address,

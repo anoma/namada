@@ -696,9 +696,9 @@ pub async fn query_voting_power(args: args::QueryVotingPower) {
                         let is_active =
                             validator_set.active.contains(&weighted);
                         if !is_active {
-                            debug_assert!(validator_set
-                                .inactive
-                                .contains(&weighted));
+                            debug_assert!(
+                                validator_set.inactive.contains(&weighted)
+                            );
                         }
                         println!(
                             "Validator {} is {}, voting power: {}",
@@ -837,9 +837,7 @@ pub async fn get_public_key(
 ) -> Option<ed25519::PublicKey> {
     let client = HttpClient::new(ledger_address).unwrap();
     let key = ed25519::pk_key(address);
-    // TODO `query_storage_value` is updated in PoS branch to return option,
-    // once merged, we can remove this `Some`
-    Some(query_storage_value(client, key).await)
+    query_storage_value(client, key).await
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].

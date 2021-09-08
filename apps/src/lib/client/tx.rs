@@ -3,7 +3,6 @@ use std::convert::TryFrom;
 
 use anoma::proto::Tx;
 use anoma::types::address::Address;
-use anoma::types::key::ed25519::Keypair;
 use anoma::types::token;
 use anoma::types::transaction::{pos, InitAccount, UpdateVp};
 use async_std::io::{self, WriteExt};
@@ -137,9 +136,14 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_bond(args: args::Bond) {
+pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let source = args.source.as_ref().unwrap_or(&args.validator);
-    let source_key: Keypair = wallet::key_of(source.encode());
+    let keypair = signing::find_keypair(
+        &ctx.wallet,
+        source,
+        args.tx.ledger_address.clone(),
+    )
+    .await;
     let tx_code = std::fs::read(TX_BOND_WASM).unwrap();
 
     let bond = pos::Bond {
@@ -149,14 +153,19 @@ pub async fn submit_bond(args: args::Bond) {
     };
     tracing::debug!("Bond data {:?}", bond);
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
+    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
-    submit_tx(args.tx, tx).await
+    submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_unbond(args: args::Unbond) {
+pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let source = args.source.as_ref().unwrap_or(&args.validator);
-    let source_key: Keypair = wallet::key_of(source.encode());
+    let keypair = signing::find_keypair(
+        &ctx.wallet,
+        source,
+        args.tx.ledger_address.clone(),
+    )
+    .await;
     let tx_code = std::fs::read(TX_UNBOND_WASM).unwrap();
 
     let unbond = pos::Unbond {
@@ -168,14 +177,19 @@ pub async fn submit_unbond(args: args::Unbond) {
     let data = unbond
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
+    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
-    submit_tx(args.tx, tx).await
+    submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_withdraw(args: args::Withdraw) {
+pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let source = args.source.as_ref().unwrap_or(&args.validator);
-    let source_key: Keypair = wallet::key_of(source.encode());
+    let keypair = signing::find_keypair(
+        &ctx.wallet,
+        source,
+        args.tx.ledger_address.clone(),
+    )
+    .await;
     let tx_code = std::fs::read(TX_WITHDRAW_WASM).unwrap();
 
     let withdraw = pos::Withdraw {
@@ -186,9 +200,9 @@ pub async fn submit_withdraw(args: args::Withdraw) {
     let data = withdraw
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
+    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
 
-    submit_tx(args.tx, tx).await
+    submit_tx(ctx, args.tx, tx).await
 }
 
 async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
