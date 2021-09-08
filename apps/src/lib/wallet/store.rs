@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -46,8 +46,17 @@ impl Store {
     /// Save the wallet store to a file.
     pub fn save(&self, base_dir: &Path) -> std::io::Result<()> {
         let data = self.encode();
-        let wallet_file = wallet_file(base_dir);
-        fs::write(wallet_file, data)
+        let wallet_path = wallet_file(base_dir);
+        // Make sure the dir exists
+        let wallet_dir = wallet_path.parent().unwrap();
+        fs::create_dir_all(wallet_dir)?;
+        // Write the file
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&wallet_path)?;
+        file.write_all(&data)
     }
 
     // TODO error enum with different variants
