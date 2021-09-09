@@ -13,7 +13,9 @@ use tpke::{encrypt, Ciphertext};
 
 use crate::proto::Tx;
 use crate::types::address::Address;
-use crate::types::key::ed25519::{Keypair, PublicKey, SignedTxData};
+use crate::types::key::ed25519::{
+    verify_signature_raw, Keypair, PublicKey, SignedTxData,
+};
 use crate::types::storage::Epoch;
 use crate::types::token::Amount;
 
@@ -33,6 +35,8 @@ pub enum DecryptionErr {
     InvalidWrapperTx,
     #[error("Expected a valid signed WrapperTx data")]
     Unsigned,
+    #[error("{0}")]
+    SigError(String),
 }
 
 /// We use a specific choice of two groups and bilinear pairing
@@ -307,8 +311,7 @@ impl WrapperTx {
         Address::from(&self.pk)
     }
 
-    /// A validity check on the ciphertext. Depends on a canonical choice of
-    /// generator for the group G_1. At the moment, a choice is hard coded
+    /// A validity check on the ciphertext.
     pub fn validate_ciphertext(&self) -> bool {
         self.inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
             -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
@@ -352,13 +355,23 @@ impl WrapperTx {
 impl TryFrom<Tx> for WrapperTx {
     type Error = DecryptionErr;
 
-    fn try_from(tx: Tx) -> Result<Self, Self::Error> {
-        if let Some(Ok(Some(data))) = tx.data.map(|data| {
-            SignedTxData::try_from_slice(&data[..])
-                .map(|signed| signed.data)
-        }) {
-            BorshDeserialize::deserialize(&mut data.as_ref())
-                .map_err(|_| DecryptionErr::InvalidWrapperTx)
+    /// We only accept the conversion of a Tx to a Wrapper Tx if
+    /// 1. The Tx data deserializes to a WrapperTx type
+    /// 2. The wrapper tx is signed
+    /// 3. The signature is valid
+    fn try_from(mut tx: Tx) -> Result<Self, Self::Error> {
+        if let Some(Ok(SignedTxData {
+            data: Some(data),
+            ref sig,
+        })) = tx.data.map(|data| SignedTxData::try_from_slice(&data[..]))
+        {
+            let wrapper: WrapperTx =
+                BorshDeserialize::deserialize(&mut data.as_ref())
+                    .map_err(|_| DecryptionErr::InvalidWrapperTx)?;
+            tx.data = Some(data);
+            verify_signature_raw(&wrapper.pk, &tx.to_bytes(), sig)
+                .map_err(|err| DecryptionErr::SigError(err.to_string()))?;
+            Ok(wrapper)
         } else {
             Err(DecryptionErr::Unsigned)
         }
@@ -572,7 +585,7 @@ mod test_wrapper_tx {
                 amount: 10.into(),
                 token: xan(),
             },
-            &gen_keypair(),
+            &keypair,
             Epoch(0),
             0.into(),
             tx,
@@ -601,8 +614,10 @@ mod test_wrapper_tx {
         // we check ciphertext validity still passes
         assert!(wrapper.validate_ciphertext());
         // we check that decryption still succeeds
-        let decrypted = wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
-            .expect("Test failed");
+        let decrypted = wrapper.decrypt(
+            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator()
+        )
+        .expect("Test failed");
         assert_eq!(decrypted, malicious);
 
         // we substitute in the modified wrapper
@@ -612,5 +627,13 @@ mod test_wrapper_tx {
         // check that the signature is not valid
         verify_tx_sig(&keypair.public.into(), &tx, &signed_tx_data.sig)
             .expect_err("Test failed");
+        // check that the try from method also fails
+        let err = WrapperTx::try_from(tx).expect_err("Test failed");
+        assert_eq!(
+            err,
+            DecryptionErr::SigError(
+                "Signature verification failed: signature error".into()
+            )
+        );
     }
 }
