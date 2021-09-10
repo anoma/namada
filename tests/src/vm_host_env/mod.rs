@@ -378,27 +378,32 @@ mod tests {
 
         // Use some arbitrary bytes for tx code
         let code = vec![4, 3, 2, 1, 0];
-        // Use some arbitrary data
-        let data = vec![1, 2, 3, 4].repeat(10);
+        for data in &[
+            // Tx with some arbitrary data
+            Some(vec![1, 2, 3, 4].repeat(10)),
+            // Tx without any data
+            None,
+        ] {
+            env.tx = Tx::new(code.clone(), data.clone()).sign(&keypair);
+            // Initialize the environment
+            init_vp_env(&mut env);
 
-        env.tx = Tx::new(code, Some(data.clone())).sign(&keypair);
-        // Initialize the environment
-        init_vp_env(&mut env);
+            let tx_data = env.tx.data.expect("data should exist");
+            let signed_tx_data =
+                match SignedTxData::try_from_slice(&tx_data[..]) {
+                    Ok(data) => data,
+                    _ => panic!("decoding failed"),
+                };
+            assert_eq!(&signed_tx_data.data, data);
+            assert!(vp_host_env::verify_tx_signature(&pk, &signed_tx_data.sig));
 
-        let tx_data = env.tx.data.expect("data should exist");
-        let signed_tx_data = match SignedTxData::try_from_slice(&tx_data[..]) {
-            Ok(data) => data,
-            _ => panic!("decoding failed"),
-        };
-        assert_eq!(signed_tx_data.data, Some(data));
-        assert!(vp_host_env::verify_tx_signature(&pk, &signed_tx_data.sig));
-
-        let other_keypair = key::ed25519::testing::keypair_2();
-        let other_pk = key::ed25519::PublicKey::from(other_keypair.public);
-        assert!(!vp_host_env::verify_tx_signature(
-            &other_pk,
-            &signed_tx_data.sig
-        ));
+            let other_keypair = key::ed25519::testing::keypair_2();
+            let other_pk = key::ed25519::PublicKey::from(other_keypair.public);
+            assert!(!vp_host_env::verify_tx_signature(
+                &other_pk,
+                &signed_tx_data.sig
+            ));
+        }
     }
 
     #[test]
