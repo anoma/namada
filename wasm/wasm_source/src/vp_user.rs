@@ -43,6 +43,7 @@ fn validate_tx(
 
     let signed_tx_data =
         Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
+
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
         Ok(signed_tx_data) => {
             let pk = key::ed25519::get(&addr);
@@ -54,8 +55,6 @@ fn validate_tx(
         _ => false,
     });
 
-    // TODO this is not needed for matchmaker, maybe we should have a different
-    // VP?
     let valid_intent = Lazy::new(|| match &*signed_tx_data {
         Ok(signed_tx_data) => check_intent_transfers(&addr, signed_tx_data),
         _ => false,
@@ -88,31 +87,35 @@ fn validate_tx(
                     true
                 }
             }
-            KeyType::InvalidIntentSet(owner) if owner == &addr => {
-                let key = key.to_string();
-                let pre: Vec<Vec<u8>> = read_pre(&key).unwrap_or_default();
-                let post: Vec<Vec<u8>> = read_post(&key).unwrap_or_default();
-                // only one sig is added, intent is already checked
-                log_string(format!(
-                    "intent sig set key: {}, valid modification: {}",
-                    key,
-                    pre.len() + 1 != post.len()
-                ));
-                pre.len() + 1 == post.len()
-            }
-            KeyType::InvalidIntentSet(_owner) => {
-                log_string(format!(
-                    "InvalidIntentSet: key {} is not of owner, valid_sig {}, \
-                     owner: {}, address: {}",
-                    key, *valid_sig, _owner, addr
-                ));
-                *valid_sig
+            KeyType::InvalidIntentSet(owner) => {
+                if owner == &addr {
+                    let key = key.to_string();
+                    let pre: Vec<Vec<u8>> = read_pre(&key).unwrap_or_default();
+                    let post: Vec<Vec<u8>> =
+                        read_post(&key).unwrap_or_default();
+                    // only one sig is added, intent is already checked
+                    log_string(format!(
+                        "intent sig set key: {}, valid modification: {}",
+                        key,
+                        pre.len() + 1 != post.len()
+                    ));
+                    pre.len() + 1 == post.len()
+                } else {
+                    log_string(format!(
+                        "This address ({}) is not of owner ({}) of \
+                         InvalidIntentSet key: {}",
+                        addr, owner, key
+                    ));
+                    // If this is not the owner, allow any change
+                    true
+                }
             }
             KeyType::Unknown => {
                 log_string(format!(
                     "Unknown key modified, valid sig {}",
                     *valid_sig
                 ));
+                // Allow any change if authorized by a signature
                 *valid_sig
             }
         };
@@ -262,12 +265,14 @@ fn check_intent(
 
 #[cfg(test)]
 mod tests {
+    // Use this as `#[test]` annotation to enable logging
+    use anoma_tests::log::test;
+    use anoma_tests::tx::{tx_host_env, TestTxEnv};
     use anoma_tests::vp::*;
 
     use super::*;
 
-    /// Test that no-op transaction (i.e. no storage modifications) is deemed
-    /// valid.
+    /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
     fn test_no_op_transaction() {
         let mut env = TestVpEnv::default();
@@ -278,8 +283,109 @@ mod tests {
         let keys_changed: HashSet<storage::Key> = HashSet::default();
         let verifiers: HashSet<Address> = HashSet::default();
 
-        let valid = validate_tx(tx_data, addr, keys_changed, verifiers);
+        assert!(validate_tx(tx_data, addr, keys_changed, verifiers));
+    }
 
-        assert!(valid);
+    /// Test that a credit transfer is accepted.
+    #[test]
+    fn test_credit_transfer_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let source = address::testing::established_address_2();
+        let token = address::xan();
+        let amount = token::Amount::from(10_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &source, &token]);
+
+        // Credit the tokens to the source before running the transaction to be
+        // able to transfer from it
+        tx_env.credit_tokens(&source, &token, amount);
+
+        // Initialize VP environment from a transaction
+        let vp_env =
+            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+                // Apply transfer in a transaction
+                tx_host_env::token::transfer(&source, &address, &token, amount);
+            });
+
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    /// Test that a debit transfer without a valid signature is rejected.
+    #[test]
+    fn test_unsigned_debit_transfer_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let target = address::testing::established_address_2();
+        let token = address::xan();
+        let amount = token::Amount::from(10_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &target, &token]);
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, amount);
+
+        // Initialize VP environment from a transaction
+        let vp_env =
+            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+                // Apply transfer in a transaction
+                tx_host_env::token::transfer(&address, &target, &token, amount);
+            });
+
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(!validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    /// Test that a debit transfer with a valid signature is accepted.
+    #[test]
+    fn test_signed_debit_transfer_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let keypair = key::ed25519::testing::keypair_1();
+        let public_key: key::ed25519::PublicKey = keypair.public.clone().into();
+        let target = address::testing::established_address_2();
+        let token = address::xan();
+        let amount = token::Amount::from(10_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &target, &token]);
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, amount);
+
+        tx_env.write_public_key(&vp_owner, &public_key);
+
+        // Initialize VP environment from a transaction
+        let mut vp_env =
+            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+                // Apply transfer in a transaction
+                tx_host_env::token::transfer(&address, &target, &token, amount);
+            });
+
+        let tx = vp_env.tx.clone();
+        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+        vp_env.tx = signed_tx;
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
     }
 }
