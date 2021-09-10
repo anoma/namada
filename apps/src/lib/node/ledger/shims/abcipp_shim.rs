@@ -4,7 +4,9 @@ use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use anoma::proto::Tx;
 use anoma::types::storage::BlockHeight;
+use anoma::types::transaction::process_tx;
 use futures::future::FutureExt;
 use tower::Service;
 use tower_abci::{BoxError, Request as Req, Response as Resp};
@@ -51,6 +53,16 @@ impl Service<Req> for AbcippShim {
     fn call(&mut self, req: Req) -> Self::Future {
         tracing::debug!(?req);
         let rsp = match req {
+            Req::CheckTx(tx_request) => self
+                .service
+                .call(Request::ProcessProposal(tx_request.tx.into()))
+                .map_err(Error::from)
+                .and_then(|res| match res {
+                    Response::ProcessProposal(resp) => {
+                        Ok(Resp::CheckTx(resp.into()))
+                    }
+                    _ => Err(Error::ConvertResp(res)),
+                }),
             Req::BeginBlock(block) => {
                 // we simply forward BeginBlock request to the PrepareProposal
                 // request
@@ -65,9 +77,15 @@ impl Service<Req> for AbcippShim {
                     })
             }
             Req::DeliverTx(deliver_tx) => {
-                // We store all the transactions to be applied in
-                // bulk at a later step
-                self.block_txs.push(deliver_tx.tx);
+                // We store all the accepted transactions to be applied
+                // in bulk at a later step
+                self.block_txs.push(
+                    Tx::from(
+                        process_tx(Tx::try_from(&deliver_tx.tx[..]).unwrap())
+                            .unwrap(),
+                    )
+                    .to_bytes(),
+                );
                 Ok(Resp::DeliverTx(Default::default()))
             }
             Req::EndBlock(end) => {

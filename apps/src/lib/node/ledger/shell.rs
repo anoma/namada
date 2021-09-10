@@ -11,8 +11,9 @@ use anoma::types::key::ed25519::PublicKey;
 use anoma::types::storage::{BlockHash, BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::token::Amount;
+use anoma::types::transaction::{process_tx, TxType, WrapperTx};
 use anoma::types::{address, key, token};
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Itertools;
 use tendermint::block::Header;
 use thiserror::Error;
@@ -23,6 +24,7 @@ use crate::config::genesis;
 use crate::node::ledger::events::{Event, EventType};
 use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::{config, wallet};
 
@@ -277,12 +279,109 @@ impl Shell {
         Default::default()
     }
 
-    /// Check the fees and signatures of the fee payer for a transaction
+    /// Validate a transaction request. On success, the transaction will
+    /// included in the mempool and propagated to peers, otherwise it will be
+    /// rejected.
+    ///
+    /// Checks if the Tx can be deserialized from bytes. Checks the fees and
+    /// signatures of the fee payer for a transaction if it is a wrapper tx.
     pub fn process_proposal(
         &mut self,
-        _req: shim::request::ProcessProposal,
+        req: shim::request::ProcessProposal,
     ) -> shim::response::ProcessProposal {
-        Default::default()
+        let tx = Tx::try_from(req.tx.as_ref()).map_err(Error::TxDecoding);
+        // If we could not deserialize the Tx, return an error response
+        if let Err(err) = tx {
+            return shim::response::ProcessProposal {
+                result: err.into(),
+                tx: req.tx,
+            };
+        }
+
+        let (result, processed_tx) = match process_tx(tx.unwrap()) {
+            // This occurs if the wrapper tx signature is invalid
+            Err(err) => (TxResult::from(err), None),
+            Ok(result) => match result {
+                // If it is a raw transaction, we do no further validation
+                TxType::Raw(_) => (
+                    TxResult {
+                        code: 0,
+                        info: "Process proposal accepted this transaction"
+                            .into(),
+                    },
+                    None,
+                ),
+                TxType::Wrapper(tx) => {
+                    let wrapper = &WrapperTx::try_from(&tx).unwrap();
+                    // validate the ciphertext via Ferveo
+                    if !wrapper.validate_ciphertext() {
+                        (
+                            shim::response::TxResult {
+                                code: 1,
+                                info: "The ciphertext of the wrapped tx is \
+                                       invalid"
+                                    .into(),
+                            },
+                            None,
+                        )
+                    } else {
+                        // check that the fee payer has sufficient balance
+                        match self.get_balance(
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                        ) {
+                            Ok(balance) if wrapper.fee.amount <= balance => (
+                                shim::response::TxResult {
+                                    code: 0,
+                                    info: "Process proposal accepted this \
+                                           transaction"
+                                        .into(),
+                                },
+                                Some(tx),
+                            ),
+                            Ok(_) => (
+                                shim::response::TxResult {
+                                    code: 1,
+                                    info: "The address given does not have \
+                                           sufficient balance to pay fee"
+                                        .into(),
+                                },
+                                None,
+                            ),
+                            Err(err) => (
+                                shim::response::TxResult { code: 1, info: err },
+                                None,
+                            ),
+                        }
+                    }
+                }
+            },
+        };
+        shim::response::ProcessProposal {
+            result,
+            tx: processed_tx.map(|tx| tx.to_bytes()).unwrap_or(req.tx),
+        }
+    }
+
+    /// Simple helper function for the ledger to get balances
+    /// of the specified token at the specified address
+    fn get_balance(
+        &self,
+        token: &Address,
+        owner: &Address,
+    ) -> std::result::Result<Amount, String> {
+        let query_resp =
+            self.read_storage_value(&token::balance_key(token, owner));
+        if query_resp.code != 0 {
+            Err("Unable to read balance of the given address".into())
+        } else {
+            BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
+                |_| {
+                    "Unable to deserialize the balance of the given address"
+                        .into()
+                },
+            )
+        }
     }
 
     pub fn revert_proposal(
@@ -484,37 +583,3 @@ impl Shell {
         }
     }
 }
-// Check the fees and signatures of the fee payer for a transaction
-// fn preprocess_tx(pk: &PublicKey, fee: &Fee, sig: &Signature) -> bool {
-// verify_signature_raw(pk, fee,  sig)?;
-// let fee_payer_addr = Address::from(pk);
-// if self.retrieve_balance(pk.into()) < fee {
-//
-// }
-// }
-//
-// Given an address and a type of token, look up the balance of that token at
-// the specified address. Charges gas
-// fn retrieve_balance(&mut self, addr: &Address) -> Result<Amount> {
-// let key = balance_key(&xan(), addr);
-// try to read from the write log first
-// let (log_val, gas) = self.write_log.read(&key);
-// self.gas_meter.add(gas)?;
-// match log_val {
-// Some(&StorageModification::Write { ref value }) |
-// Some(&StorageModification::InitAccount {
-// vp: ref value, ..
-// })=> {
-// BorshDeserialize::try_from_slice(&value).map_err(Error::WriteLog)
-// }
-// _ => {
-// when not found in write log, try to read from the storage
-// let (value, gas) = self.storage.read(&key)?;
-// self.gas_meter.add(gas)?;
-// value
-// .map(|v| BorshDeserialize::try_from_slice(&v).map_err(Error::WriteLog))
-// .unwrap_or(Err(Error::MissingAddress(addr.encode())))
-// }
-// }
-// }
-// }

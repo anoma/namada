@@ -14,7 +14,7 @@ use tpke::{encrypt, Ciphertext};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::key::ed25519::{
-    verify_signature_raw, Keypair, PublicKey, SignedTxData,
+    verify_tx_sig, Keypair, PublicKey, SignedTxData,
 };
 use crate::types::storage::Epoch;
 use crate::types::token::Amount;
@@ -26,7 +26,7 @@ const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
 /// encrypted payload from a Tx type
 #[allow(missing_docs)]
 #[derive(Error, Debug, PartialEq)]
-pub enum DecryptionErr {
+pub enum WrapperTxErr {
     #[error("The hash of the decrypted tx does not match the hash commitment")]
     DecryptedHash,
     #[error("The decryption did not produce a valid Tx")]
@@ -37,6 +37,11 @@ pub enum DecryptionErr {
     Unsigned,
     #[error("{0}")]
     SigError(String),
+    #[error(
+        "Attempted to sign WrapperTx with keypair whose public key differs \
+         from that in the WrapperTx"
+    )]
+    InvalidKeyPair,
 }
 
 /// We use a specific choice of two groups and bilinear pairing
@@ -159,8 +164,10 @@ pub struct UpdateVp {
     Deserialize,
 )]
 pub struct Fee {
-    amount: Amount,
-    token: Address,
+    /// amount of the fee
+    pub amount: Amount,
+    /// address of the token
+    pub token: Address,
 }
 
 /// Gas limits must be multiples of GAS_LIMIT_RESOLUTION
@@ -326,7 +333,7 @@ impl WrapperTx {
     pub fn decrypt(
         &self,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
-    ) -> Result<Tx, DecryptionErr> {
+    ) -> Result<Tx, WrapperTxErr> {
         // decrypt the inner tx
         let decrypted = self.inner_tx.decrypt(privkey);
         // check that the has equals commitment
@@ -334,47 +341,105 @@ impl WrapperTx {
         let mut tx_hash = [0u8; 32];
         tx_hash.copy_from_slice(&digest);
         if tx_hash != self.tx_hash {
-            Err(DecryptionErr::DecryptedHash)
+            Err(WrapperTxErr::DecryptedHash)
         } else {
             // convert back to Tx type
             Tx::try_from(decrypted.as_ref())
-                .map_err(|_| DecryptionErr::InvalidTx)
+                .map_err(|_| WrapperTxErr::InvalidTx)
         }
     }
 
     /// Sign the wrapper transaction and convert to a normal Tx type
-    pub fn sign(&self, keypair: &Keypair) -> Tx {
-        Tx::new(
+    pub fn sign(&self, keypair: &Keypair) -> Result<Tx, WrapperTxErr> {
+        if self.pk != keypair.public.into() {
+            return Err(WrapperTxErr::InvalidKeyPair);
+        }
+        Ok(Tx::new(
             vec![],
             Some(self.try_to_vec().expect("Could not serialize WrapperTx")),
         )
-        .sign(keypair)
+        .sign(keypair))
     }
 }
 
-impl TryFrom<Tx> for WrapperTx {
-    type Error = DecryptionErr;
+impl TryFrom<&Tx> for WrapperTx {
+    type Error = WrapperTxErr;
 
-    /// We only accept the conversion of a Tx to a Wrapper Tx if
-    /// 1. The Tx data deserializes to a WrapperTx type
-    /// 2. The wrapper tx is signed
-    /// 3. The signature is valid
-    fn try_from(mut tx: Tx) -> Result<Self, Self::Error> {
+    fn try_from(tx: &Tx) -> Result<Self, Self::Error> {
         if let Some(Ok(SignedTxData {
-            data: Some(data),
-            ref sig,
-        })) = tx.data.map(|data| SignedTxData::try_from_slice(&data[..]))
+            data: Some(data), ..
+        })) = tx
+            .data
+            .as_ref()
+            .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
-            let wrapper: WrapperTx =
-                BorshDeserialize::deserialize(&mut data.as_ref())
-                    .map_err(|_| DecryptionErr::InvalidWrapperTx)?;
-            tx.data = Some(data);
-            verify_signature_raw(&wrapper.pk, &tx.to_bytes(), sig)
-                .map_err(|err| DecryptionErr::SigError(err.to_string()))?;
-            Ok(wrapper)
+            BorshDeserialize::deserialize(&mut data.as_ref())
+                .map_err(|_| WrapperTxErr::InvalidWrapperTx)
         } else {
-            Err(DecryptionErr::Unsigned)
+            Err(WrapperTxErr::Unsigned)
         }
+    }
+}
+
+/// Struct that classifies that kind of Tx
+/// based on the contents of its data.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TxType {
+    /// An ordinary Tx
+    Raw(Tx),
+    /// A Tx that contains an encrypted raw Tx
+    Wrapper(Tx),
+}
+
+impl From<TxType> for Tx {
+    fn from(ty: TxType) -> Self {
+        match ty {
+            TxType::Raw(tx) => tx,
+            TxType::Wrapper(tx) => tx,
+        }
+    }
+}
+
+/// Determines if the input Tx is a raw Tx or a wrapper.
+///
+/// If it is a raw Tx, the Tx is returned unchanged inside an
+/// enum variant stating that it is a raw Tx.
+///
+/// If it is a WrapperTx, we extract the signed data of
+/// the Tx and verify it is of the appropriate form. This means
+/// 1. The signed Tx data deserializes to a WrapperTx type
+/// 2. The wrapper tx is indeed signed
+/// 3. The signature is valid
+///
+/// We modify the data of input Tx to contain only the signed
+/// data if valid and return it wrapped in a enum variant
+/// indicating it is a wrapper. Otherwise, an error is
+/// returned indicating the signature was not valid
+pub fn process_tx(mut tx: Tx) -> Result<TxType, WrapperTxErr> {
+    if let Some(Ok(SignedTxData {
+        data: Some(data),
+        ref sig,
+    })) = tx
+        .data
+        .as_ref()
+        .map(|data| SignedTxData::try_from_slice(&data[..]))
+    {
+        if let Ok(wrapper) =
+            <WrapperTx as BorshDeserialize>::deserialize(&mut data.as_ref())
+        {
+            verify_tx_sig(&wrapper.pk, &tx, sig)
+                .map_err(|err| WrapperTxErr::SigError(err.to_string()))?;
+            tx.data = Some(
+                wrapper
+                    .try_to_vec()
+                    .expect("Serializing WrapperTx should not fail"),
+            );
+            Ok(TxType::Wrapper(tx))
+        } else {
+            Ok(TxType::Raw(tx))
+        }
+    } else {
+        Ok(TxType::Raw(tx))
     }
 }
 
@@ -468,7 +533,7 @@ mod test_gas_limits {
     /// Test that when we deserialize a u64 that is not a multiple of
     /// GAS_LIMIT_RESOLUTION to a GasLimit, it rounds up to the next multiple
     #[test]
-    fn test_deserialize_not_multipe_of_resolution() {
+    fn test_deserialize_not_multiple_of_resolution() {
         let js = serde_json::to_string(&(GAS_LIMIT_RESOLUTION + 1))
             .expect("Test failed");
         let limit: GasLimit = serde_json::from_str(&js).expect("Test failed");
@@ -564,7 +629,7 @@ mod test_wrapper_tx {
         assert!(wrapper.validate_ciphertext());
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
         let err = wrapper.decrypt(privkey).expect_err("Test failed");
-        assert_eq!(err, DecryptionErr::DecryptedHash);
+        assert_eq!(err, WrapperTxErr::DecryptedHash);
     }
 
     /// We check that even if the encrypted payload and has of its
@@ -590,10 +655,11 @@ mod test_wrapper_tx {
             0.into(),
             tx,
         )
-        .sign(&keypair);
+        .sign(&keypair)
+        .expect("Test failed");
 
         // we now try to alter the inner tx maliciously
-        let mut wrapper = WrapperTx::try_from(tx.clone()).expect("Test failed");
+        let mut wrapper = WrapperTx::try_from(&tx).expect("Test failed");
         let mut signed_tx_data =
             SignedTxData::try_from_slice(&tx.data.unwrap()[..])
                 .expect("Test failed");
@@ -628,12 +694,93 @@ mod test_wrapper_tx {
         verify_tx_sig(&keypair.public.into(), &tx, &signed_tx_data.sig)
             .expect_err("Test failed");
         // check that the try from method also fails
-        let err = WrapperTx::try_from(tx).expect_err("Test failed");
+        let err = process_tx(tx).expect_err("Test failed");
         assert_eq!(
             err,
-            DecryptionErr::SigError(
+            WrapperTxErr::SigError(
                 "Signature verification failed: signature error".into()
             )
         );
+    }
+
+    /// Test that process_tx correctly identifies a raw tx with no
+    /// data and returns an identical copy
+    #[test]
+    fn test_process_tx_raw_tx_no_data() {
+        let tx = Tx::new("wasm code".as_bytes().to_owned(), None);
+
+        match process_tx(tx.clone()).expect("Test failed") {
+            TxType::Raw(raw) => assert_eq!(tx, raw),
+            _ => panic!("Test failed: Expected Raw Tx"),
+        }
+    }
+
+    /// Test that process_tx correctly identifies a raw tx with some
+    /// data and returns an identical copy
+    #[test]
+    fn test_process_tx_raw_tx_some_data() {
+        let tx = Tx::new(
+            "wasm code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+
+        match process_tx(tx.clone()).expect("Test failed") {
+            TxType::Raw(raw) => assert_eq!(tx, raw),
+            _ => panic!("Test failed: Expected Raw Tx"),
+        }
+    }
+
+    /// Test that process_tx correctly identifies a raw tx with some
+    /// signed data and returns an identical copy
+    #[test]
+    fn test_process_tx_raw_tx_some_signed_data() {
+        let tx = Tx::new(
+            "wasm code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        )
+        .sign(&gen_keypair());
+
+        match process_tx(tx.clone()).expect("Test failed") {
+            TxType::Raw(raw) => assert_eq!(tx, raw),
+            _ => panic!("Test failed: Expected Raw Tx"),
+        }
+    }
+
+    /// Test that process_tx correctly identifies a wrapper tx with some
+    /// data and extracts the signed data.
+    #[test]
+    fn test_process_tx_wrapper_tx() {
+        let keypair = gen_keypair();
+        let tx = Tx::new(
+            "wasm code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        // the signed tx
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 10.into(),
+                token: xan(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx.clone(),
+        )
+        .sign(&keypair)
+        .expect("Test failed");
+
+        match process_tx(wrapper).expect("Test failed") {
+            TxType::Wrapper(wrapper) => {
+                let wrapper: WrapperTx = BorshDeserialize::deserialize(
+                    &mut wrapper.data.expect("Test failed").as_ref(),
+                )
+                .expect("Test failed");
+                let decrypted =
+                    wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
+                        .expect("Test failed");
+                assert_eq!(tx, decrypted);
+            }
+            _ => panic!("Test failed: Expected Wrapper Tx"),
+        }
     }
 }
