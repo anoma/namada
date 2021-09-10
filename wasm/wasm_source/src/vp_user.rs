@@ -41,24 +41,25 @@ fn validate_tx(
         addr, keys_changed, verifiers
     ));
 
-    let valid_sig =
-        Lazy::new(|| match SignedTxData::try_from_slice(&tx_data[..]) {
-            Ok(tx) => {
-                let pk = key::ed25519::get(&addr);
-                match pk {
-                    Some(pk) => verify_tx_signature(&pk, &tx.sig),
-                    None => false,
-                }
+    let signed_tx_data =
+        Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
+    let valid_sig = Lazy::new(|| match &*signed_tx_data {
+        Ok(signed_tx_data) => {
+            let pk = key::ed25519::get(&addr);
+            match pk {
+                Some(pk) => verify_tx_signature(&pk, &signed_tx_data.sig),
+                None => false,
             }
-            _ => false,
-        });
+        }
+        _ => false,
+    });
 
-    // TODO memoize?
     // TODO this is not needed for matchmaker, maybe we should have a different
     // VP?
-    let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
-
-    log_string(format!("valid transfer {}", valid_intent));
+    let valid_intent = Lazy::new(|| match &*signed_tx_data {
+        Ok(signed_tx_data) => check_intent_transfers(&addr, signed_tx_data),
+        _ => false,
+    });
 
     for key in keys_changed.iter() {
         let is_valid = match KeyType::from(key) {
@@ -70,11 +71,11 @@ fn validate_tx(
                         read_post(&key).unwrap_or_default();
                     let change = post.change() - pre.change();
                     // debit has to signed, credit doesn't
-                    let valid = !(change < 0 && !*valid_sig && !valid_intent);
+                    let valid = !(change < 0 && !*valid_sig && !*valid_intent);
                     log_string(format!(
                         "token key: {}, change: {}, valid_sig: {}, \
                          valid_intent: {}, valid modification: {}",
-                        key, change, *valid_sig, valid_intent, valid
+                        key, change, *valid_sig, *valid_intent, valid
                     ));
                     valid
                 } else {
@@ -122,24 +123,26 @@ fn validate_tx(
     true
 }
 
-fn check_intent_transfers(addr: &Address, tx_data: &[u8]) -> bool {
-    if let Some((intent_transfers, exchange, intent)) =
-        try_decode_intent(addr, tx_data)
+fn check_intent_transfers(
+    addr: &Address,
+    signed_tx_data: &SignedTxData,
+) -> bool {
+    if let Some((raw_intent_transfers, exchange, intent)) =
+        try_decode_intent(addr, signed_tx_data)
     {
         log_string("check intent".to_string());
-        return check_intent(addr, exchange, intent, intent_transfers);
+        return check_intent(addr, exchange, intent, raw_intent_transfers);
     }
     false
 }
 
 fn try_decode_intent(
     addr: &Address,
-    tx_data: &[u8],
+    signed_tx_data: &SignedTxData,
 ) -> Option<(Vec<u8>, Signed<Exchange>, Signed<FungibleTokenIntent>)> {
-    let mut tx = SignedTxData::try_from_slice(tx_data).ok()?;
-    let intent_transfers = tx.data.take()?;
+    let raw_intent_transfers = signed_tx_data.data.as_ref().cloned()?;
     let mut tx_data =
-        IntentTransfers::try_from_slice(&intent_transfers[..]).ok()?;
+        IntentTransfers::try_from_slice(&raw_intent_transfers[..]).ok()?;
     log_string(format!(
         "tx_data.exchanges: {:?}, {}",
         tx_data.exchanges, &addr
@@ -147,7 +150,7 @@ fn try_decode_intent(
     if let (Some(exchange), Some(intent)) =
         (tx_data.exchanges.remove(addr), tx_data.intents.remove(addr))
     {
-        return Some((intent_transfers, exchange, intent));
+        return Some((raw_intent_transfers, exchange, intent));
     } else {
         log_string("no intent with a matching address".to_string());
     }
@@ -158,7 +161,7 @@ fn check_intent(
     addr: &Address,
     exchange: Signed<Exchange>,
     intent: Signed<FungibleTokenIntent>,
-    intent_transfers: Vec<u8>,
+    raw_intent_transfers: Vec<u8>,
 ) -> bool {
     // verify signature
     let pk = key::ed25519::get(addr);
@@ -190,7 +193,7 @@ fn check_intent(
     log_string(format!("vp is: {}", vp.is_some()));
 
     if let Some(code) = vp {
-        let eval_result = eval(code.to_vec(), intent_transfers);
+        let eval_result = eval(code.to_vec(), raw_intent_transfers);
         log_string(format!("eval result: {}", eval_result));
         if !eval_result {
             return false;
