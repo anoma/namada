@@ -4,12 +4,12 @@ use anoma::gossip::mm::MmHost;
 use anoma::proto::{Intent, IntentId, Tx};
 use anoma::vm::wasm;
 use tendermint::net;
-use tendermint_rpc::{Client, HttpClient};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
+use crate::client::tx::broadcast_tx;
 use crate::types::MatchmakerMessage;
 use crate::{config, wallet};
 
@@ -147,10 +147,8 @@ impl Matchmaker {
                 let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair);
                 let tx_bytes = tx.to_bytes();
 
-                let client =
-                    HttpClient::new(self.ledger_address.clone()).unwrap();
                 let response =
-                    client.broadcast_tx_commit(tx_bytes.into()).await;
+                    broadcast_tx(self.ledger_address.clone(), tx_bytes).await;
                 println!("{:#?}", response);
             }
             MatchmakerMessage::RemoveIntents(intents_id) => {

@@ -48,6 +48,7 @@ pub struct TxResult {
     pub gas_used: u64,
     pub changed_keys: HashSet<Key>,
     pub vps_result: VpsResult,
+    pub initialized_accounts: Vec<Address>,
 }
 
 impl TxResult {
@@ -97,12 +98,14 @@ pub fn apply_tx(
     let gas_used = block_gas_meter
         .finalize_transaction()
         .map_err(Error::GasError)?;
+    let initialized_accounts = write_log.get_initialized_accounts();
     let changed_keys = write_log.get_keys();
 
     Ok(TxResult {
         gas_used,
         changed_keys,
         vps_result,
+        initialized_accounts,
     })
 }
 
@@ -217,19 +220,30 @@ fn execute_vps(
                     let accepted: Result<bool> = match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PoS { ctx };
-                            pos.validate_tx(tx_data, keys, &verifiers_addr)
-                                .map_err(Error::PosNativeVpError)
+                            let result = pos
+                                .validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::PosNativeVpError);
+                            // Take the gas meter back out of the context
+                            gas_meter = pos.ctx.gas_meter.into_inner();
+                            result
                         }
                         InternalAddress::Ibc => {
                             let ibc = Ibc { ctx };
-                            ibc.validate_tx(tx_data, keys, &verifiers_addr)
-                                .map_err(Error::IbcNativeVpError)
+                            let result = ibc
+                                .validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::IbcNativeVpError);
+                            // Take the gas meter back out of the context
+                            gas_meter = ibc.ctx.gas_meter.into_inner();
+                            result
                         }
                         InternalAddress::Parameters => {
                             let parameters = ParametersVp { ctx };
-                            parameters
+                            let result = parameters
                                 .validate_tx(tx_data, keys, &verifiers_addr)
-                                .map_err(Error::ParametersNativeVpError)
+                                .map_err(Error::ParametersNativeVpError);
+                            // Take the gas meter back out of the context
+                            gas_meter = parameters.ctx.gas_meter.into_inner();
+                            result
                         }
                     };
 
@@ -240,6 +254,7 @@ fn execute_vps(
             // Returning error from here will short-circuit the VP parallel
             // execution. It's important that we only short-circuit gas
             // errors to get deterministic gas costs
+            result.gas_used.set(&gas_meter).map_err(Error::GasError)?;
             match accept {
                 Ok(accepted) => {
                     if !accepted {

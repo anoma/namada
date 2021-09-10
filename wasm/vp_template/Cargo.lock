@@ -46,6 +46,7 @@ dependencies = [
  "chrono",
  "ed25519-dalek",
  "group-threshold-cryptography",
+ "hex",
  "itertools",
  "loupe",
  "parity-wasm",

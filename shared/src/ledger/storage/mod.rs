@@ -20,7 +20,7 @@ use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::{self, EpochDuration};
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::storage::{
-    BlockHash, BlockHeight, DbKeySeg, Epoch, Key, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, DbKeySeg, Epoch, Epochs, Key, BLOCK_HASH_LENGTH,
     CHAIN_ID_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
@@ -66,6 +66,8 @@ pub struct BlockStorage<H: StorageHasher> {
     pub height: BlockHeight,
     /// Epoch of the block
     pub epoch: Epoch,
+    /// Predecessor block epochs
+    pub pred_epochs: Epochs,
     /// Accounts' subspaces storage for arbitrary key-values
     pub subspaces: HashMap<Key, Vec<u8>>,
 }
@@ -99,6 +101,8 @@ pub struct BlockState {
     pub height: BlockHeight,
     /// Epoch of the block
     pub epoch: Epoch,
+    /// Predecessor block epochs
+    pub pred_epochs: Epochs,
     /// Minimum block height at which the next epoch may start
     pub next_epoch_min_start_height: BlockHeight,
     /// Minimum block time at which the next epoch may start
@@ -160,6 +164,7 @@ where
             hash,
             height,
             epoch,
+            pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
             subspaces,
@@ -170,6 +175,7 @@ where
             self.block.hash = hash;
             self.block.height = height;
             self.block.epoch = epoch;
+            self.block.pred_epochs = pred_epochs;
             self.block.subspaces = subspaces;
             self.last_height = height;
             self.current_epoch = epoch;
@@ -204,6 +210,7 @@ where
             hash: self.block.hash.clone(),
             height: self.block.height,
             epoch: self.block.epoch,
+            pred_epochs: self.block.pred_epochs.clone(),
             next_epoch_min_start_height: self.next_epoch_min_start_height,
             next_epoch_min_start_time: self.next_epoch_min_start_time,
             subspaces: self.block.subspaces.clone(),
@@ -425,6 +432,12 @@ where
             } = parameters.epoch_duration;
             self.next_epoch_min_start_height = height + min_num_of_blocks;
             self.next_epoch_min_start_time = time + min_duration;
+            // TODO put this into PoS parameters and pass it to tendermint
+            // `consensus_params` on `InitChain` and `EndBlock`
+            let evidence_max_age_num_blocks: u64 = 100000;
+            self.block
+                .pred_epochs
+                .new_epoch(height, evidence_max_age_num_blocks);
             tracing::info!("Began a new epoch {}", self.block.epoch);
         }
         self.update_epoch_in_merkle_tree()
@@ -535,6 +548,7 @@ pub mod testing {
                 hash: BlockHash::default(),
                 height: BlockHeight::default(),
                 epoch: Epoch::default(),
+                pred_epochs: Epochs::default(),
                 subspaces,
             };
             Self {
@@ -646,9 +660,11 @@ mod tests {
                     block_height + epoch_duration.min_num_of_blocks);
                 assert_eq!(storage.next_epoch_min_start_time,
                     block_time + epoch_duration.min_duration);
+                assert_eq!(storage.block.pred_epochs.get_epoch(block_height), Some(epoch_before.next()));
             } else {
                 assert_eq!(storage.block.epoch, epoch_before);
                 assert_eq!(storage.current_epoch, epoch_before);
+                assert_eq!(storage.block.pred_epochs.get_epoch(block_height), Some(epoch_before));
             }
 
             // Update the epoch duration parameters
