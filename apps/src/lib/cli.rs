@@ -1112,9 +1112,9 @@ fn anoma_app() -> App {
 
 fn anoma_node_app() -> App {
     let app = App::new(APP_NAME)
-        .version(CLIENT_VERSION)
+        .version(NODE_VERSION)
         .author(AUTHOR)
-        .about("Anoma client command line interface.")
+        .about("Anoma node command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .add_args::<args::Global>();
     cmds::AnomaNode::add_sub(app)
@@ -1122,9 +1122,9 @@ fn anoma_node_app() -> App {
 
 fn anoma_client_app() -> App {
     let app = App::new(APP_NAME)
-        .version(NODE_VERSION)
+        .version(CLIENT_VERSION)
         .author(AUTHOR)
-        .about("Anoma node command line interface.")
+        .about("Anoma client command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .add_args::<args::Global>();
     cmds::AnomaClient::add_sub(app)
