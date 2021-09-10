@@ -95,6 +95,7 @@ dependencies = [
  "anoma_vm_env",
  "borsh",
  "good_lp",
+ "once_cell",
  "petgraph",
  "rust_decimal",
  "serde",
