@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::{Key, KeySeg};
+use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -106,10 +106,6 @@ where
         let mut clients = HashSet::new();
 
         for key in keys_changed {
-            if !key.is_ibc_key() {
-                continue;
-            }
-
             match Self::get_ibc_prefix(key) {
                 IbcPrefix::Client => {
                     if key.is_ibc_client_counter() {
@@ -187,24 +183,27 @@ where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    /// Returns the prefix after #IBC
     fn get_ibc_prefix(key: &Key) -> IbcPrefix {
-        match key.segments.get(1) {
-            Some(prefix) => match &*prefix.raw() {
-                "clients" => IbcPrefix::Client,
-                "connections" => IbcPrefix::Connection,
-                "channelEnds" => IbcPrefix::Channel,
-                "ports" => IbcPrefix::Port,
-                "capabilities" => IbcPrefix::Capability,
-                "nextSequenceSend" => IbcPrefix::SeqSend,
-                "nextSequenceRecv" => IbcPrefix::SeqRecv,
-                "nextSequenceAck" => IbcPrefix::SeqAck,
-                "commitments" => IbcPrefix::Commitment,
-                "receipts" => IbcPrefix::Receipt,
-                "acks" => IbcPrefix::Ack,
-                _ => IbcPrefix::Unknown,
-            },
-            None => IbcPrefix::Unknown,
+        match &key.segments[..] {
+            [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), ..]
+                if addr == &Address::Internal(InternalAddress::Ibc) =>
+            {
+                match &*prefix.raw() {
+                    "clients" => IbcPrefix::Client,
+                    "connections" => IbcPrefix::Connection,
+                    "channelEnds" => IbcPrefix::Channel,
+                    "ports" => IbcPrefix::Port,
+                    "capabilities" => IbcPrefix::Capability,
+                    "nextSequenceSend" => IbcPrefix::SeqSend,
+                    "nextSequenceRecv" => IbcPrefix::SeqRecv,
+                    "nextSequenceAck" => IbcPrefix::SeqAck,
+                    "commitments" => IbcPrefix::Commitment,
+                    "receipts" => IbcPrefix::Receipt,
+                    "acks" => IbcPrefix::Ack,
+                    _ => IbcPrefix::Unknown,
+                }
+            }
+            _ => IbcPrefix::Unknown,
         }
     }
 
