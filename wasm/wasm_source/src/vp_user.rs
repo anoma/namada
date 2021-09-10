@@ -80,11 +80,12 @@ fn validate_tx(
                     valid
                 } else {
                     log_string(format!(
-                        "Token: key {} is not of owner, valid_sig {}, owner: \
-                         {}, address: {}",
-                        key, *valid_sig, owner, addr
+                        "This address ({}) is not of owner ({}) of token key: \
+                         {}",
+                        addr, owner, key
                     ));
-                    *valid_sig
+                    // If this is not the owner, allow any change
+                    true
                 }
             }
             KeyType::InvalidIntentSet(owner) if owner == &addr => {
