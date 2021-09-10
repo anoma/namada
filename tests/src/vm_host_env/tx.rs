@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::HashSet;
 
 use anoma::ledger::gas::BlockGasMeter;
@@ -54,10 +55,10 @@ impl TestTxEnv {
     /// pass account existence check in `tx_write` function.
     pub fn spawn_accounts<'a>(
         &mut self,
-        addresses: impl IntoIterator<Item = &'a Address>,
+        addresses: impl IntoIterator<Item = impl Borrow<Address>>,
     ) {
         for address in addresses {
-            let key = Key::validity_predicate(&address);
+            let key = Key::validity_predicate(address.borrow());
             let vp_code = vec![];
             self.storage
                 .write(&key, vp_code)

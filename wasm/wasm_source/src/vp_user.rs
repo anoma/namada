@@ -267,8 +267,12 @@ fn check_intent(
 mod tests {
     // Use this as `#[test]` annotation to enable logging
     use anoma_tests::log::test;
+    use address::testing::arb_address;
     use anoma_tests::tx::{tx_host_env, TestTxEnv};
+    use anoma_tests::vp::vp_host_env::storage::Key;
     use anoma_tests::vp::*;
+    use proptest::prelude::*;
+    use storage::testing::arb_account_storage_key_no_vp;
 
     use super::*;
 
@@ -305,11 +309,10 @@ mod tests {
         tx_env.credit_tokens(&source, &token, amount);
 
         // Initialize VP environment from a transaction
-        let vp_env =
-            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
-                // Apply transfer in a transaction
-                tx_host_env::token::transfer(&source, &address, &token, amount);
-            });
+        let vp_env = init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(&source, &address, &token, amount);
+        });
 
         let tx_data: Vec<u8> = vec![];
         let keys_changed: HashSet<storage::Key> =
@@ -337,11 +340,10 @@ mod tests {
         tx_env.credit_tokens(&vp_owner, &token, amount);
 
         // Initialize VP environment from a transaction
-        let vp_env =
-            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
-                // Apply transfer in a transaction
-                tx_host_env::token::transfer(&address, &target, &token, amount);
-            });
+        let vp_env = init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(&address, &target, &token, amount);
+        });
 
         let tx_data: Vec<u8> = vec![];
         let keys_changed: HashSet<storage::Key> =
@@ -387,5 +389,134 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: HashSet<Address> = HashSet::default();
         assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    /// Test that a transfer on with accounts other than self is accepted.
+    #[test]
+    fn test_transfer_between_other_parties_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let source = address::testing::established_address_2();
+        let target = address::testing::established_address_3();
+        let token = address::xan();
+        let amount = token::Amount::from(10_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &source, &target, &token]);
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&source, &token, amount);
+
+        // Initialize VP environment from a transaction
+        let vp_env = init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+            tx_host_env::insert_verifier(address.clone());
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(&source, &target, &token, amount);
+        });
+
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    prop_compose! {
+        /// Generates an account address and a storage key inside its storage.
+        fn arb_account_storage_subspace_key()
+            // Generate an address
+            (address in arb_address())
+            // Generate a storage key other than its VP key (VP cannot be
+            // modified directly via `write`, it has to be modified via
+            // `tx::update_validity_predicate`.
+            (storage_key in arb_account_storage_key_no_vp(address.clone()),
+            // Use the generated address too
+            address in Just(address))
+        -> (Address, Key) {
+            (address, storage_key)
+        }
+    }
+
+    proptest! {
+        /// Test that an unsigned tx that performs arbitrary storage writes or
+        /// deletes to  the account is rejected.
+        #[test]
+        fn test_unsigned_arb_storage_write_rejected(
+            (vp_owner, storage_key) in arb_account_storage_subspace_key(),
+            // Generate bytes to write. If `None`, delete from the key instead
+            storage_value in any::<Option<Vec<u8>>>(),
+        ) {
+            // Initialize a tx environment
+            let mut tx_env = TestTxEnv::default();
+
+            // Spawn all the accounts in the storage key to be able to modify
+            // their storage
+            let storage_key_addresses = storage_key.find_addresses();
+            tx_env.spawn_accounts(storage_key_addresses);
+
+            // Initialize VP environment from a transaction
+            let vp_env =
+                init_vp_env_from_tx(vp_owner.clone(), tx_env, |_address| {
+                    // Write or delete some data in the transaction
+                    if let Some(value) = &storage_value {
+                        tx_host_env::write(storage_key.to_string(), value);
+                    } else {
+                        tx_host_env::delete(storage_key.to_string());
+                    }
+                });
+
+            let tx_data: Vec<u8> = vec![];
+            let keys_changed: HashSet<storage::Key> =
+                vp_env.all_touched_storage_keys();
+            let verifiers: HashSet<Address> = HashSet::default();
+            assert!(!validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+        }
+    }
+
+    proptest! {
+        /// Test that a signed tx that performs arbitrary storage writes or
+        /// deletes to the account is accepted.
+        #[test]
+        fn test_signed_arb_storage_write(
+            (vp_owner, storage_key) in arb_account_storage_subspace_key(),
+            // Generate bytes to write. If `None`, delete from the key instead
+            storage_value in any::<Option<Vec<u8>>>(),
+        ) {
+            // Initialize a tx environment
+            let mut tx_env = TestTxEnv::default();
+
+            let keypair = key::ed25519::testing::keypair_1();
+            let public_key: key::ed25519::PublicKey = keypair.public.clone().into();
+
+            // Spawn all the accounts in the storage key to be able to modify
+            // their storage
+            let storage_key_addresses = storage_key.find_addresses();
+            tx_env.spawn_accounts(storage_key_addresses);
+
+            tx_env.write_public_key(&vp_owner, &public_key);
+
+            // Initialize VP environment from a transaction
+            let mut vp_env =
+                init_vp_env_from_tx(vp_owner.clone(), tx_env, |_address| {
+                    // Write or delete some data in the transaction
+                    if let Some(value) = &storage_value {
+                        tx_host_env::write(storage_key.to_string(), value);
+                    } else {
+                        tx_host_env::delete(storage_key.to_string());
+                    }
+                });
+
+            let tx = vp_env.tx.clone();
+            let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+            let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+            vp_env.tx = signed_tx;
+            let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+            let verifiers: HashSet<Address> = HashSet::default();
+            assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+        }
     }
 }
