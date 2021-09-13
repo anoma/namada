@@ -32,7 +32,7 @@ rust_decimal = { version = "1.14.3", optional = true }
 good_lp = { version = "*", features = ["minilp"], default-features = false, optional = true }
 
 [dev-dependencies]
-anoma_tests = {path = "../../tests"}
+anoma_tests = {path = "../../tests", default-features = false, features=["wasm-runtime"]}
 
 [profile.release]
 # smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)
