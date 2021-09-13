@@ -265,9 +265,9 @@ fn check_intent(
 
 #[cfg(test)]
 mod tests {
+    use address::testing::arb_address;
     // Use this as `#[test]` annotation to enable logging
     use anoma_tests::log::test;
-    use address::testing::arb_address;
     use anoma_tests::tx::{tx_host_env, TestTxEnv};
     use anoma_tests::vp::vp_host_env::storage::Key;
     use anoma_tests::vp::*;
@@ -276,7 +276,8 @@ mod tests {
 
     use super::*;
 
-    const VP_ALWAYS_TRUE_WASM: &str = "../../wasm_for_tests/vp_always_true.wasm";
+    const VP_ALWAYS_TRUE_WASM: &str =
+        "../../wasm_for_tests/vp_always_true.wasm";
 
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
@@ -522,7 +523,8 @@ mod tests {
         }
     }
 
-    /// Test that a validity predicate update without a valid signature is rejected.
+    /// Test that a validity predicate update without a valid signature is
+    /// rejected.
     #[test]
     fn test_unsigned_vp_update_rejected() {
         // Initialize a tx environment
@@ -548,7 +550,8 @@ mod tests {
         assert!(!validate_tx(tx_data, vp_owner, keys_changed, verifiers));
     }
 
-    /// Test that a validity predicate update with a valid signature is accepted.
+    /// Test that a validity predicate update with a valid signature is
+    /// accepted.
     #[test]
     fn test_signed_vp_update_accepted() {
         // Initialize a tx environment
@@ -568,8 +571,8 @@ mod tests {
         // Initialize VP environment from a transaction
         let mut vp_env =
             init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
-            // Update VP in a transaction
-            tx_host_env::update_validity_predicate(address, &vp_code);
+                // Update VP in a transaction
+                tx_host_env::update_validity_predicate(address, &vp_code);
             });
 
         let tx = vp_env.tx.clone();
