@@ -154,7 +154,7 @@ mod tests {
 
         assert!(env.verifiers.is_empty(), "pre-condition");
         let verifier = address::testing::established_address_1();
-        tx_host_env::insert_verifier(verifier.clone());
+        tx_host_env::insert_verifier(&verifier);
         assert!(
             env.verifiers.contains(&verifier),
             "The verifier should have been inserted"
