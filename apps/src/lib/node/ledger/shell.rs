@@ -1,5 +1,14 @@
+//! The ledger shell connects the ABCI++ interface with the Anoma ledger app.
+//!
+//! Any changes applied before [`Shell::finalize_block`] might have to be
+//! reverted, so any changes applied in the methods [`Shell::prepare_proposal`],
+//! [`Shell::process_proposal`] must be also reverted (unless we can simply
+//! overwrite them in the next block).
+//! More info in <https://github.com/anoma/anoma/issues/362>.
+
 use std::cmp::max;
 use std::convert::{TryFrom, TryInto};
+use std::mem;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -78,11 +87,15 @@ pub enum MempoolTxType {
 
 #[derive(Debug)]
 pub struct Shell {
+    /// The persistent storage
     pub(super) storage: storage::PersistentStorage,
+    /// Gas meter for the current block
     gas_meter: BlockGasMeter,
+    /// Write log for the current block
     write_log: WriteLog,
-    /// Did the current block start a new epoch?
-    new_epoch: bool,
+    /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
+    /// this field. They will be slashed when we finalize the block.
+    byzantine_validators: Vec<Evidence>,
 }
 
 impl Shell {
@@ -101,7 +114,7 @@ impl Shell {
             storage,
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
-            new_epoch: false,
+            byzantine_validators: vec![],
         }
     }
 
@@ -300,6 +313,7 @@ impl Shell {
     /// Uses `path` in the query to forward the request to the
     /// right query method and returns the result (which may be
     /// the default if `path` is not a supported string.
+    /// INVARIANT: This method must be stateless.
     pub fn query(&self, query: request::Query) -> response::Query {
         use rpc::Path;
         match Path::from_str(&query.path) {
@@ -329,6 +343,10 @@ impl Shell {
     }
 
     /// Begin a new block.
+    ///
+    /// INVARIANT: Any changes applied in this method must be reverted if the
+    /// proposal is rejected (unless we can simply overwrite them in the
+    /// next block).
     pub fn prepare_proposal(
         &mut self,
         hash: BlockHash,
@@ -336,27 +354,30 @@ impl Shell {
         byzantine_validators: Vec<Evidence>,
     ) {
         let height = BlockHeight(header.height.into());
-        let time: DateTime<Utc> = header.time.into();
-        let time: DateTimeUtc = time.into();
 
+        // We can safely reset meter, because if the block is rejected, we'll
+        // reset again on the next proposal, until the proposal is accepted
         self.gas_meter.reset();
+
+        // The values set will be overwritten if this proposal is rejected.
         self.storage
             .begin_block(hash, height)
             .expect("Beginning a block shouldn't fail");
+
+        // The value set will be overwritten if this proposal is rejected.
         self.storage
             .set_header(header)
             .expect("Setting a header shouldn't fail");
-        self.new_epoch = self
-            .storage
-            .update_epoch(height, time)
-            .expect("Must be able to update epoch");
 
-        self.slash(byzantine_validators);
+        // The value set will be overwritten if this proposal is rejected.
+        self.byzantine_validators = byzantine_validators;
     }
 
     /// Apply PoS slashes from the evidence
-    fn slash(&mut self, byzantine_validators: Vec<Evidence>) {
-        if !byzantine_validators.is_empty() {
+    fn slash(&mut self) {
+        if !self.byzantine_validators.is_empty() {
+            let byzantine_validators =
+                mem::take(&mut self.byzantine_validators);
             let pos_params = self.storage.read_pos_params();
             let current_epoch = self.storage.block.epoch;
             for evidence in byzantine_validators {
@@ -466,6 +487,7 @@ impl Shell {
         }
     }
 
+    /// INVARIANT: This method must be stateless.
     pub fn verify_header(
         &self,
         _req: shim::request::VerifyHeader,
@@ -474,6 +496,10 @@ impl Shell {
     }
 
     /// Check the fees and signatures of the fee payer for a transaction
+    ///
+    /// INVARIANT: Any changes applied in this method must be reverted if the
+    /// proposal is rejected (unless we can simply overwrite them in the
+    /// next block).
     pub fn process_proposal(
         &mut self,
         _req: shim::request::ProcessProposal,
@@ -488,8 +514,9 @@ impl Shell {
         Default::default()
     }
 
+    /// INVARIANT: This method must be stateless.
     pub fn extend_vote(
-        &mut self,
+        &self,
         _req: shim::request::ExtendVote,
     ) -> shim::response::ExtendVote {
         Default::default()
@@ -500,6 +527,21 @@ impl Shell {
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
+        let header = self
+            .storage
+            .header
+            .as_ref()
+            .expect("Header must have been set in prepare_proposal.");
+        let height = BlockHeight(header.height.into());
+        let time: DateTime<Utc> = header.time.into();
+        let time: DateTimeUtc = time.into();
+        let new_epoch = self
+            .storage
+            .update_epoch(height, time)
+            .expect("Must be able to update epoch");
+
+        self.slash();
+
         let mut response = shim::response::FinalizeBlock::default();
         for tx in &req.txs {
             let mut tx_result =
@@ -560,7 +602,7 @@ impl Shell {
             response.events.push(tx_result.into());
         }
 
-        if self.new_epoch {
+        if new_epoch {
             // Apply validator set update
             let (current_epoch, _gas) = self.storage.get_current_epoch();
             // TODO ABCI validator updates on block H affects the validator set
@@ -633,8 +675,6 @@ impl Shell {
                 e
             )
         });
-        // Reset `new_epoch`
-        self.new_epoch = false;
 
         let root = self.storage.merkle_root();
         tracing::info!(
