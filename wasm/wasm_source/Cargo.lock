@@ -104,10 +104,14 @@ dependencies = [
  "anoma_vm_env",
  "borsh",
  "good_lp",
+ "once_cell",
  "petgraph",
+ "proptest",
  "rust_decimal",
  "serde",
  "serde_json",
+ "tracing",
+ "tracing-subscriber",
  "wee_alloc",
 ]
 

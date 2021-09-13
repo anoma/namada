@@ -427,7 +427,17 @@ pub mod testing {
         Address::decode("a1qq5qqqqqgcuyxv2pxgcrzdecx4prq3pexccr2vj9xse5gvf3gvmnv3f3xqcyyvjyxv6yvv34e393x7").expect("The token address decoding shouldn't fail")
     }
 
-    /// Generate an arbitrary [`Address`].
+    /// A sampled established address for tests
+    pub fn established_address_3() -> Address {
+        Address::decode("a1qq5qqqqq8pp52dfjxserjwf3g9znzveng9zy2wfcx5cnxs6zxq6nydek8qcrqdjrxucrws3jcq9z7a").expect("The token address decoding shouldn't fail")
+    }
+
+    /// A sampled established address for tests
+    pub fn established_address_4() -> Address {
+        Address::decode("a1qq5qqqqqg56yxdpeg5er2d69g4rrxv2rxdryxdes8yenwvejxpzrvd6r8qcnjsjpxg6nww2r3zt5ax").expect("The token address decoding shouldn't fail")
+    }
+
+    /// Generate an arbitrary [`Address`] (established or implicit).
     pub fn arb_address() -> impl Strategy<Value = Address> {
         prop_oneof![
             arb_established_address().prop_map(Address::Established),
