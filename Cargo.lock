@@ -82,6 +82,7 @@ dependencies = [
 name = "anoma"
 version = "0.1.0"
 dependencies = [
+ "anoma_proof_of_stake",
  "assert_matches",
  "bech32",
  "borsh",
@@ -193,6 +194,7 @@ dependencies = [
  "anoma_apps",
  "anoma_vm_env",
  "assert_cmd",
+ "borsh",
  "color-eyre",
  "concat-idents",
  "eyre",

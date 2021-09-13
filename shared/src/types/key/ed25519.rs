@@ -460,6 +460,12 @@ impl From<SecretKey> for ed25519_dalek::SecretKey {
     }
 }
 
+impl Display for PublicKeyHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Run `cargo test gen_keypair -- --nocapture` to generate a keypair.
 #[cfg(test)]
 #[test]
