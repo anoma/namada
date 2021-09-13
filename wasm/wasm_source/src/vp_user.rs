@@ -276,6 +276,8 @@ mod tests {
 
     use super::*;
 
+    const VP_ALWAYS_TRUE_WASM: &str = "../../wasm_for_tests/vp_always_true.wasm";
+
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
     fn test_no_op_transaction() {
@@ -412,7 +414,7 @@ mod tests {
 
         // Initialize VP environment from a transaction
         let vp_env = init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
-            tx_host_env::insert_verifier(address.clone());
+            tx_host_env::insert_verifier(address);
             // Apply transfer in a transaction
             tx_host_env::token::transfer(&source, &target, &token, amount);
         });
@@ -518,5 +520,65 @@ mod tests {
             let verifiers: HashSet<Address> = HashSet::default();
             assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
         }
+    }
+
+    /// Test that a validity predicate update without a valid signature is rejected.
+    #[test]
+    fn test_unsigned_vp_update_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let vp_code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
+
+        // Initialize VP environment from a transaction
+        let vp_env = init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Update VP in a transaction
+            tx_host_env::update_validity_predicate(address, &vp_code);
+        });
+
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(!validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    /// Test that a validity predicate update with a valid signature is accepted.
+    #[test]
+    fn test_signed_vp_update_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let keypair = key::ed25519::testing::keypair_1();
+        let public_key: key::ed25519::PublicKey = keypair.public.into();
+        let vp_code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
+
+        tx_env.write_public_key(&vp_owner, &public_key);
+
+        // Initialize VP environment from a transaction
+        let mut vp_env =
+            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Update VP in a transaction
+            tx_host_env::update_validity_predicate(address, &vp_code);
+            });
+
+        let tx = vp_env.tx.clone();
+        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+        vp_env.tx = signed_tx;
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
     }
 }
