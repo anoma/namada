@@ -2,16 +2,16 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::str::FromStr;
 
-use anoma::types::key::ed25519::{PublicKey, PublicKeyHash};
+use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 use anoma::types::storage::Epoch;
 use anoma::types::{address, token};
 use libp2p::Multiaddr;
 
 use super::Context;
 use crate::cli::safe_exit;
-use crate::wallet::DecryptedKeypair;
 
 /// CLI argument that can be parsed from a string and/or found via the
 /// [`Context`].
@@ -64,19 +64,19 @@ pub struct LazyWalletPublicKey {
 }
 
 impl LazyWalletPublicKey {
-    pub fn get(&self, ctx: &Context) -> PublicKey {
+    pub fn get(&self, ctx: &mut Context) -> PublicKey {
         // A public key can be either a raw public key in hex string
         FromStr::from_str(&self.raw_arg).unwrap_or_else(|_parse_err| {
             // Or it can be a public key hash in hex string
             FromStr::from_str(&self.raw_arg)
                 .map(|pkh: PublicKeyHash| {
                     let key = ctx.wallet.find_key_by_pkh(&pkh).unwrap();
-                    key.get().public.clone()
+                    key.public.clone()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .unwrap_or_else(|_parse_err| {
                     let key = ctx.wallet.find_key(&self.raw_arg).unwrap();
-                    key.get().public.clone()
+                    key.public.clone()
                 })
         })
     }
@@ -114,7 +114,7 @@ pub struct LazyWalletKeypair {
 }
 
 impl LazyWalletKeypair {
-    pub fn get(&self, ctx: &Context) -> DecryptedKeypair {
+    pub fn get(&self, ctx: &mut Context) -> Rc<Keypair> {
         ctx.wallet
             .find_key(&self.raw_arg)
             .unwrap_or_else(|_find_err| {

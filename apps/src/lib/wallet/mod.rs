@@ -4,12 +4,13 @@ mod store;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use anoma::types::address::Address;
-use anoma::types::key::ed25519::{PublicKey, PublicKeyHash};
+use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 use thiserror::Error;
 
-pub use self::keys::{DecryptedKeypair, DecryptionError, StoredKeypair};
+pub use self::keys::{DecryptionError, StoredKeypair};
 use self::store::{Alias, Store};
 use crate::cli;
 
@@ -17,6 +18,7 @@ use crate::cli;
 pub struct Wallet {
     base_dir: PathBuf,
     store: Store,
+    decrypted_key_cache: HashMap<Alias, Rc<Keypair>>,
 }
 
 #[derive(Error, Debug)]
@@ -38,6 +40,7 @@ impl Wallet {
         Self {
             base_dir: base_dir.to_path_buf(),
             store,
+            decrypted_key_cache: HashMap::default(),
         }
     }
 
@@ -67,47 +70,112 @@ impl Wallet {
 
     /// Find the stored key by an alias, a public key hash or a public key.
     /// If the key is encrypted, will prompt for password from stdin.
+    /// Any keys that are decrypted are stored in and read from a cache to avoid
+    /// prompting for password multiple times.
     pub fn find_key(
-        &self,
+        &mut self,
         alias_pkh_or_pk: impl AsRef<str>,
-    ) -> Result<DecryptedKeypair, FindKeyError> {
+    ) -> Result<Rc<Keypair>, FindKeyError> {
+        // Try cache first
+        if let Some(cached_key) =
+            self.decrypted_key_cache.get(alias_pkh_or_pk.as_ref())
+        {
+            return Ok(cached_key.clone());
+        }
+        // If not cached, look-up in store
         let stored_key = self
             .store
-            .find_key(alias_pkh_or_pk)
+            .find_key(alias_pkh_or_pk.as_ref())
             .ok_or(FindKeyError::KeyNotFound)?;
-        stored_key
-            .get(true)
-            .map_err(FindKeyError::KeyDecryptionError)
+        Self::decrypt_stored_key(
+            &mut self.decrypted_key_cache,
+            stored_key,
+            alias_pkh_or_pk,
+        )
     }
 
     /// Find the stored key by a public key.
     /// If the key is encrypted, will prompt for password from stdin.
+    /// Any keys that are decrypted are stored in and read from a cache to avoid
+    /// prompting for password multiple times.
     pub fn find_key_by_pk(
-        &self,
+        &mut self,
         pk: &PublicKey,
-    ) -> Result<DecryptedKeypair, FindKeyError> {
+    ) -> Result<Rc<Keypair>, FindKeyError> {
+        // Try to look-up alias for the given pk. Otherwise, use the PKH string.
+        let pkh: PublicKeyHash = pk.into();
+        let alias = self
+            .store
+            .find_alias_by_pkh(&pkh)
+            .unwrap_or_else(|| pkh.to_string());
+        // Try read cache
+        if let Some(cached_key) = self.decrypted_key_cache.get(&alias) {
+            return Ok(cached_key.clone());
+        }
+        // Look-up from store
         let stored_key = self
             .store
             .find_key_by_pk(pk)
             .ok_or(FindKeyError::KeyNotFound)?;
-        stored_key
-            .get(true)
-            .map_err(FindKeyError::KeyDecryptionError)
+        Self::decrypt_stored_key(
+            &mut self.decrypted_key_cache,
+            stored_key,
+            alias,
+        )
     }
 
     /// Find the stored key by a public key hash.
     /// If the key is encrypted, will prompt for password from stdin.
+    /// Any keys that are decrypted are stored in and read from a cache to avoid
+    /// prompting for password multiple times.
     pub fn find_key_by_pkh(
-        &self,
+        &mut self,
         pkh: &PublicKeyHash,
-    ) -> Result<DecryptedKeypair, FindKeyError> {
+    ) -> Result<Rc<Keypair>, FindKeyError> {
+        // Try to look-up alias for the given pk. Otherwise, use the PKH string.
+        let alias = self
+            .store
+            .find_alias_by_pkh(pkh)
+            .unwrap_or_else(|| pkh.to_string());
+        // Try read cache
+        if let Some(cached_key) = self.decrypted_key_cache.get(&alias) {
+            return Ok(cached_key.clone());
+        }
+        // Look-up from store
         let stored_key = self
             .store
             .find_key_by_pkh(pkh)
             .ok_or(FindKeyError::KeyNotFound)?;
-        stored_key
-            .get(true)
-            .map_err(FindKeyError::KeyDecryptionError)
+        Self::decrypt_stored_key(
+            &mut self.decrypted_key_cache,
+            stored_key,
+            alias,
+        )
+    }
+
+    /// Decrypt stored key, if it's not stored un-encrypted.
+    /// If a given storage key needs to be decrypted, prompt for password from
+    /// stdin and if successfully decrypted, store it in a cache.
+    fn decrypt_stored_key(
+        decrypted_key_cache: &mut HashMap<String, Rc<Keypair>>,
+        stored_key: &StoredKeypair,
+        alias_pkh_or_pk: impl AsRef<str>,
+    ) -> Result<Rc<Keypair>, FindKeyError> {
+        match stored_key {
+            StoredKeypair::Encrypted(encrypted) => {
+                let password = read_password("Enter decryption password: ");
+                let key = encrypted
+                    .decrypt(password)
+                    .map_err(FindKeyError::KeyDecryptionError)?;
+                let alias = alias_pkh_or_pk.as_ref().to_owned();
+                decrypted_key_cache.insert(alias.clone(), Rc::new(key));
+                decrypted_key_cache
+                    .get(&alias)
+                    .cloned()
+                    .ok_or(FindKeyError::KeyNotFound)
+            }
+            StoredKeypair::Raw(raw) => Ok(raw.clone()),
+        }
     }
 
     /// Get all known keys by their alias, paired with PKH, if known.

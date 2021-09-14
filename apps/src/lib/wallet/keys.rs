@@ -4,10 +4,8 @@ use std::fmt::Display;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use anoma::proto::Tx;
 use anoma::types::key::ed25519::Keypair;
 use borsh::{BorshDeserialize, BorshSerialize};
-use itertools::Either;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -124,28 +122,6 @@ impl FromStr for EncryptedKeypair {
     }
 }
 
-/// A key that has been read from the wallet. If the key has been encrypted,
-/// It will be owned, otherwise it's borrowed. You can use its `get` method to
-/// access the inner keypair.
-#[derive(Debug)]
-pub struct DecryptedKeypair(Either<Keypair, Rc<Keypair>>);
-
-impl DecryptedKeypair {
-    /// Sign a transaction using the decrypted keypair.
-    pub fn sign_tx(&self, tx: Tx) -> Tx {
-        let keypair = self.get();
-        tx.sign(keypair)
-    }
-
-    /// Borrow the inner keypair.
-    pub fn get(&self) -> &Keypair {
-        match &self.0 {
-            itertools::Either::Left(owned) => owned,
-            itertools::Either::Right(borrowed) => borrowed,
-        }
-    }
-}
-
 #[allow(missing_docs)]
 #[derive(Debug, Error)]
 pub enum DecryptionError {
@@ -173,23 +149,18 @@ impl StoredKeypair {
 
     /// Get a raw keypair from a stored keypair. If the keypair is encrypted, a
     /// password will be prompted from stdin.
-    pub fn get(
-        &self,
-        decrypt: bool,
-    ) -> Result<DecryptedKeypair, DecryptionError> {
+    pub fn get(&self, decrypt: bool) -> Result<Rc<Keypair>, DecryptionError> {
         match self {
             StoredKeypair::Encrypted(encrypted_keypair) => {
                 if decrypt {
                     let password = read_password("Enter decryption password: ");
                     let key = encrypted_keypair.decrypt(password)?;
-                    Ok(DecryptedKeypair(Either::Left(key)))
+                    Ok(Rc::new(key))
                 } else {
                     Err(DecryptionError::NotDecrypting)
                 }
             }
-            StoredKeypair::Raw(keypair) => {
-                Ok(DecryptedKeypair(Either::Right(keypair.clone())))
-            }
+            StoredKeypair::Raw(keypair) => Ok(keypair.clone()),
         }
     }
 

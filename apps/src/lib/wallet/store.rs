@@ -125,13 +125,18 @@ impl Store {
         self.find_key_by_pkh(&pkh)
     }
 
-    /// Find the stored key by a public key.
+    /// Find the stored key by a public key hash.
     pub fn find_key_by_pkh(
         &self,
         pkh: &PublicKeyHash,
     ) -> Option<&StoredKeypair> {
         let alias = self.pkhs.get(pkh)?;
         self.keys.get(alias)
+    }
+
+    /// Find the stored alias for a public key hash.
+    pub fn find_alias_by_pkh(&self, pkh: &PublicKeyHash) -> Option<Alias> {
+        self.pkhs.get(pkh).cloned()
     }
 
     /// Find the stored address by an alias.

@@ -26,7 +26,7 @@ const TX_BOND_WASM: &str = "wasm/tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "wasm/tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "wasm/tx_withdraw.wasm";
 
-pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
+pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
     let tx_code = std::fs::read(args.code_path)
         .expect("Expected a file at given code path");
     let data = args.data_path.map(|data_path| {
@@ -34,16 +34,16 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     });
     let tx = Tx::new(tx_code, data);
     let tx = if let Some(signing_key) = args.signing_key {
-        let signing_key = signing_key.get(&ctx);
-        signing_key.sign_tx(tx)
+        let signing_key = signing_key.get(&mut ctx);
+        tx.sign(&signing_key)
     } else if let Some(signer) = args.signer {
         let signing_key = signing::find_keypair(
-            &ctx.wallet,
+            &mut ctx.wallet,
             &signer,
             args.tx.ledger_address.clone(),
         )
         .await;
-        signing_key.sign_tx(tx)
+        tx.sign(&signing_key)
     } else {
         // Unsigned tx
         tx
@@ -52,10 +52,10 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
+pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
     let source = args.addr;
     let keypair = signing::find_keypair(
-        &ctx.wallet,
+        &mut ctx.wallet,
         &source,
         args.tx.ledger_address.clone(),
     )
@@ -73,20 +73,20 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let data = update_vp.try_to_vec().expect(
         "Encoding transfer data to update a validity predicate shouldn't fail",
     );
-    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_init_account(ctx: Context, args: args::TxInitAccount) {
+pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let source = args.source;
     let keypair = signing::find_keypair(
-        &ctx.wallet,
+        &mut ctx.wallet,
         &source,
         args.tx.ledger_address.clone(),
     )
     .await;
-    let public_key = args.public_key.get(&ctx);
+    let public_key = args.public_key.get(&mut ctx);
     let vp_code = args
         .vp_code_path
         .map(|path| {
@@ -106,15 +106,15 @@ pub async fn submit_init_account(ctx: Context, args: args::TxInitAccount) {
     let data = data.try_to_vec().expect(
         "Encoding transfer data to initialize a new account shouldn't fail",
     );
-    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
+pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let source = args.source;
     let keypair = signing::find_keypair(
-        &ctx.wallet,
+        &mut ctx.wallet,
         &source,
         args.tx.ledger_address.clone(),
     )
@@ -131,15 +131,15 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_bond(ctx: Context, args: args::Bond) {
+pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
     let source = args.source.as_ref().unwrap_or(&args.validator);
     let keypair = signing::find_keypair(
-        &ctx.wallet,
+        &mut ctx.wallet,
         source,
         args.tx.ledger_address.clone(),
     )
@@ -153,15 +153,15 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     };
     tracing::debug!("Bond data {:?}", bond);
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
+pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
     let source = args.source.as_ref().unwrap_or(&args.validator);
     let keypair = signing::find_keypair(
-        &ctx.wallet,
+        &mut ctx.wallet,
         source,
         args.tx.ledger_address.clone(),
     )
@@ -177,15 +177,15 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let data = unbond
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx).await
 }
 
-pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
+pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
     let source = args.source.as_ref().unwrap_or(&args.validator);
     let keypair = signing::find_keypair(
-        &ctx.wallet,
+        &mut ctx.wallet,
         source,
         args.tx.ledger_address.clone(),
     )
@@ -200,7 +200,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let data = withdraw
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx = keypair.sign_tx(Tx::new(tx_code, Some(data)));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx).await
 }

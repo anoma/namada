@@ -1,11 +1,13 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use std::rc::Rc;
+
 use anoma::types::address::Address;
+use anoma::types::key::ed25519::Keypair;
 
 use super::rpc;
-use crate::cli;
-use crate::wallet::{self, DecryptedKeypair};
+use crate::{cli, wallet};
 
 /// Find the public key for the given address and try to load the keypair for it
 /// from the wallet. Panics if the key cannot be found or loaded.
@@ -13,10 +15,10 @@ use crate::wallet::{self, DecryptedKeypair};
 // depends on the wallet's lifetime, from which it reads the value.
 #[allow(clippy::needless_lifetimes)]
 pub async fn find_keypair(
-    wallet: &wallet::Wallet,
+    wallet: &mut wallet::Wallet,
     addr: &Address,
     ledger_address: tendermint::net::Address,
-) -> DecryptedKeypair {
+) -> Rc<Keypair> {
     let public_key = rpc::get_public_key(addr, ledger_address)
         .await
         .unwrap_or_else(|| {

@@ -3,7 +3,7 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use anoma::types::key::ed25519::{Keypair, PublicKeyHash};
+use anoma::types::key::ed25519::PublicKeyHash;
 use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds, Context};
 use anoma_apps::wallet::DecryptionError;
@@ -65,7 +65,7 @@ fn key_find(
         unsafe_show_secret,
     }: args::KeyFind,
 ) {
-    let wallet = ctx.wallet;
+    let mut wallet = ctx.wallet;
     let found_keypair = match public_key {
         Some(pk) => wallet.find_key_by_pk(&pk),
         None => {
@@ -84,7 +84,6 @@ fn key_find(
     };
     match found_keypair {
         Ok(keypair) => {
-            let keypair = keypair.get();
             let pkh: PublicKeyHash = (&keypair.public).into();
             println!("Public key hash: {}", pkh);
             println!("Public key: {}", keypair.public);
@@ -122,7 +121,6 @@ fn key_list(
         }
         match stored_keypair.get(decrypt) {
             Ok(keypair) => {
-                let keypair = keypair.get();
                 writeln!(w, "    Public key: {}", keypair.public).unwrap();
                 if unsafe_show_secret {
                     writeln!(w, "    Secret key: {}", keypair.secret).unwrap();
@@ -141,11 +139,10 @@ fn key_list(
 
 /// Export a keypair to a file.
 fn key_export(ctx: Context, args::KeyExport { alias }: args::KeyExport) {
-    let wallet = ctx.wallet;
+    let mut wallet = ctx.wallet;
     wallet
         .find_key(alias.clone())
         .map(|keypair| {
-            let keypair: &Keypair = keypair.get();
             let file_data = keypair
                 .try_to_vec()
                 .expect("Encoding keypair shouldn't fail");
