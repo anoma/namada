@@ -5,7 +5,8 @@ use std::str::FromStr;
 
 use clap::ArgMatches;
 
-use super::{args, input, Context};
+use super::args;
+use super::context::{Context, FromContext};
 use crate::wallet::Wallet;
 
 // We only use static strings
@@ -14,20 +15,21 @@ pub type ClapArg = clap::Arg<'static>;
 
 pub trait Cmd: Sized {
     fn add_sub(app: App) -> App;
-    fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self>;
+    fn parse(matches: &ArgMatches) -> Option<Self>;
 
     fn parse_or_print_help(app: App) -> (Self, Context) {
         let mut app = Self::add_sub(app);
         let matches = app.clone().get_matches();
-        let global_args = args::Global::parse(&matches);
-        let wallet = Wallet::load_or_new(&global_args.base_dir);
-        let context = Context {
-            global_args,
-            wallet,
-        };
-        let result = Self::parse(&context, &matches);
-        match result {
-            Some(cmd) => (cmd, context),
+        match Self::parse(&matches) {
+            Some(cmd) => {
+                let global_args = args::Global::parse(&matches);
+                let wallet = Wallet::load_or_new(&global_args.base_dir);
+                let context = Context {
+                    global_args,
+                    wallet,
+                };
+                (cmd, context)
+            }
             None => {
                 app.print_help().unwrap();
                 safe_exit(2);
@@ -38,12 +40,12 @@ pub trait Cmd: Sized {
 
 pub trait SubCmd: Sized {
     const CMD: &'static str;
-    fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self>;
+    fn parse(matches: &ArgMatches) -> Option<Self>;
     fn def() -> App;
 }
 
 pub trait Args {
-    fn parse(ctx: &Context, matches: &ArgMatches) -> Self;
+    fn parse(matches: &ArgMatches) -> Self;
     fn def(app: App) -> App;
 }
 
@@ -138,38 +140,52 @@ impl<T> Arg<T> {
     }
 }
 
-impl<T> Arg<T>
-where
-    T: input::ArgInput,
-{
+impl<T> Arg<T> {
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name)
             .long(self.name)
             .takes_value(true)
             .required(true)
     }
+}
 
-    pub fn parse(&self, ctx: &Context, matches: &ArgMatches) -> T {
-        parse_opt(ctx, matches, self.name).unwrap()
+impl<T> Arg<T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    pub fn parse(&self, matches: &ArgMatches) -> T {
+        parse_opt(matches, self.name).unwrap()
+    }
+}
+
+impl<T> Arg<FromContext<T>> {
+    pub fn parse(&self, matches: &ArgMatches) -> FromContext<T> {
+        let raw = matches.value_of(self.name).unwrap();
+        FromContext::new(raw.to_string())
+    }
+}
+
+impl<T> ArgOpt<T> {
+    pub fn def(&self) -> ClapArg {
+        ClapArg::new(self.name).long(self.name).takes_value(true)
     }
 }
 
 impl<T> ArgOpt<T>
 where
-    T: input::ArgInput,
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
 {
-    pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true)
-    }
-
-    pub fn parse(&self, ctx: &Context, matches: &ArgMatches) -> Option<T> {
-        parse_opt(ctx, matches, self.name)
+    pub fn parse(&self, matches: &ArgMatches) -> Option<T> {
+        parse_opt(matches, self.name)
     }
 }
 
-impl<T> ArgDefault<T> {
-    pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true)
+impl<T> ArgOpt<FromContext<T>> {
+    pub fn parse(&self, matches: &ArgMatches) -> Option<FromContext<T>> {
+        let raw = matches.value_of(self.name)?;
+        Some(FromContext::new(raw.to_string()))
     }
 }
 
@@ -178,27 +194,12 @@ where
     T: FromStr,
     <T as FromStr>::Err: Debug,
 {
-    /// Global arguments don't have context, because context is created from
-    /// global args.
-    pub fn parse_global(&self, matches: &ArgMatches) -> T {
-        matches
-            .value_of(self.name)
-            .and_then(|arg| arg.parse().ok())
-            .unwrap_or_else(|| {
-                let DefaultFn(default) = self.default;
-                default()
-            })
+    pub fn def(&self) -> ClapArg {
+        ClapArg::new(self.name).long(self.name).takes_value(true)
     }
-}
 
-impl<T> ArgDefault<T>
-where
-    T: input::ArgInput,
-{
-    /// Parse and argument and look-up a values from the context, if necessary
-    /// (e.g. to find a key from an alias in the wallet).
-    pub fn parse(&self, ctx: &Context, matches: &ArgMatches) -> T {
-        parse_opt(ctx, matches, self.name).unwrap_or_else(|| {
+    pub fn parse(&self, matches: &ArgMatches) -> T {
+        parse_opt(matches, self.name).unwrap_or_else(|| {
             let DefaultFn(default) = self.default;
             default()
         })
@@ -217,17 +218,26 @@ impl ArgFlag {
 
 impl<T> ArgMulti<T>
 where
-    T: input::ArgInput,
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name).long(self.name).multiple(true)
     }
 
-    pub fn parse(&self, ctx: &Context, matches: &ArgMatches) -> Vec<T> {
+    pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {
         matches
             .values_of(self.name)
             .unwrap_or_default()
-            .map(|raw| T::from_raw(ctx, raw))
+            .map(|raw| {
+                raw.parse().unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to parse the {} argument. Raw value: {}, \
+                         error: {:?}",
+                        self.name, raw, e
+                    )
+                })
+            })
             .collect()
     }
 }
@@ -241,7 +251,7 @@ pub trait AppExt {
 /// Extensions for finding matching commands and arguments.
 /// The functions match commands and arguments defined in [`AppExt`].
 pub trait ArgMatchesExt {
-    fn args_parse<T: Args>(&self, ctx: &Context) -> T;
+    fn args_parse<T: Args>(&self) -> T;
 }
 
 impl AppExt for App {
@@ -251,16 +261,24 @@ impl AppExt for App {
 }
 
 impl ArgMatchesExt for ArgMatches {
-    fn args_parse<T: Args>(&self, ctx: &Context) -> T {
-        T::parse(ctx, self)
+    fn args_parse<T: Args>(&self) -> T {
+        T::parse(self)
     }
 }
 
-pub fn parse_opt<T>(ctx: &Context, args: &ArgMatches, field: &str) -> Option<T>
+pub fn parse_opt<T>(args: &ArgMatches, field: &str) -> Option<T>
 where
-    T: input::ArgInput,
+    T: FromStr,
+    T::Err: Debug,
 {
-    args.value_of(field).map(|arg| T::from_raw(ctx, arg))
+    args.value_of(field).map(|arg| {
+        arg.parse().unwrap_or_else(|e| {
+            panic!(
+                "Failed to parse the argument {}. Raw value: {}, error: {:?}",
+                field, arg, e
+            )
+        })
+    })
 }
 
 /// A helper to exit after flushing output, borrowed from `clap::util` module.

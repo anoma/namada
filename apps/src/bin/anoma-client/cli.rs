@@ -5,11 +5,12 @@ use std::io::Write;
 
 use anoma::types::intent::{Exchange, FungibleTokenIntent};
 use anoma::types::key::ed25519::Signed;
+use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds, Context};
-use anoma_apps::client::{rpc, tx};
+use anoma_apps::client::{rpc, signing, tx};
 use anoma_apps::proto::services::rpc_service_client::RpcServiceClient;
 use anoma_apps::proto::{services, RpcMessage};
-use anoma_apps::{cli, wallet};
+use anoma_apps::wallet::Wallet;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
@@ -45,13 +46,13 @@ pub async fn main() -> Result<()> {
             rpc::query_balance(ctx, args).await;
         }
         cmds::AnomaClient::QueryBonds(cmds::QueryBonds(args)) => {
-            rpc::query_bonds(args).await;
+            rpc::query_bonds(ctx, args).await;
         }
         cmds::AnomaClient::QueryVotingPower(cmds::QueryVotingPower(args)) => {
-            rpc::query_voting_power(args).await;
+            rpc::query_voting_power(ctx, args).await;
         }
         cmds::AnomaClient::QuerySlashes(cmds::QuerySlashes(args)) => {
-            rpc::query_slashes(args).await;
+            rpc::query_slashes(ctx, args).await;
         }
         // Gossip cmds
         cmds::AnomaClient::Intent(cmds::Intent(args)) => {
@@ -71,19 +72,20 @@ async fn gossip_intent(
         topic,
         signing_key,
         exchanges,
+        ledger_address,
         to_stdout,
     }: args::Intent,
 ) {
-    let signed_exchanges: HashSet<Signed<Exchange>> = exchanges
-        .iter()
-        .map(|exchange| {
-            let source_keypair =
-                wallet::defaults::key_of(exchange.addr.encode());
-            Signed::new(&source_keypair, exchange.clone())
-        })
-        .collect();
+    let mut signed_exchanges: HashSet<Signed<Exchange>> =
+        HashSet::with_capacity(exchanges.len());
+    for exchange in exchanges {
+        let signed =
+            sign_exchange(exchange, &mut ctx.wallet, ledger_address.clone())
+                .await;
+        signed_exchanges.insert(signed);
+    }
 
-    let signing_key = signing_key.get(&mut ctx);
+    let signing_key = ctx.get_cached(signing_key);
     let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
         &signing_key,
         FungibleTokenIntent {
@@ -114,6 +116,16 @@ async fn gossip_intent(
             .expect("failed to send message and/or receive rpc response");
         println!("{:#?}", response);
     }
+}
+
+async fn sign_exchange(
+    exchange: Exchange,
+    wallet: &mut Wallet,
+    ledger_address: tendermint::net::Address,
+) -> Signed<Exchange> {
+    let source_keypair =
+        signing::find_keypair(wallet, &exchange.addr, ledger_address).await;
+    Signed::new(&source_keypair, exchange.clone())
 }
 
 async fn subscribe_topic(

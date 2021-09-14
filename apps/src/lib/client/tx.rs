@@ -34,9 +34,10 @@ pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
     });
     let tx = Tx::new(tx_code, data);
     let tx = if let Some(signing_key) = args.signing_key {
-        let signing_key = signing_key.get(&mut ctx);
+        let signing_key = ctx.get_cached(signing_key);
         tx.sign(&signing_key)
     } else if let Some(signer) = args.signer {
+        let signer = ctx.get(signer);
         let signing_key = signing::find_keypair(
             &mut ctx.wallet,
             &signer,
@@ -53,7 +54,7 @@ pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
 }
 
 pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
-    let source = args.addr;
+    let source = ctx.get(args.addr);
     let keypair = signing::find_keypair(
         &mut ctx.wallet,
         &source,
@@ -79,14 +80,14 @@ pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
-    let source = args.source;
+    let source = ctx.get(args.source);
     let keypair = signing::find_keypair(
         &mut ctx.wallet,
         &source,
         args.tx.ledger_address.clone(),
     )
     .await;
-    let public_key = args.public_key.get(&mut ctx);
+    let public_key = ctx.get_cached(args.public_key);
     let vp_code = args
         .vp_code_path
         .map(|path| {
@@ -112,7 +113,9 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
 }
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
-    let source = args.source;
+    let source = ctx.get(args.source);
+    let target = ctx.get(args.target);
+    let token = ctx.get(args.token);
     let keypair = signing::find_keypair(
         &mut ctx.wallet,
         &source,
@@ -123,8 +126,8 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let tx_code = std::fs::read(TX_TRANSFER_WASM).unwrap();
     let transfer = token::Transfer {
         source,
-        target: args.target,
-        token: args.token,
+        target,
+        token,
         amount: args.amount,
     };
     tracing::debug!("Transfer data {:?}", transfer);
@@ -137,19 +140,21 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
 }
 
 pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
-    let source = args.source.as_ref().unwrap_or(&args.validator);
+    let validator = ctx.get(args.validator);
+    let source = ctx.get_opt(args.source);
+    let signer = source.as_ref().unwrap_or(&validator);
     let keypair = signing::find_keypair(
         &mut ctx.wallet,
-        source,
+        signer,
         args.tx.ledger_address.clone(),
     )
     .await;
     let tx_code = std::fs::read(TX_BOND_WASM).unwrap();
 
     let bond = pos::Bond {
-        validator: args.validator,
+        validator,
         amount: args.amount,
-        source: args.source,
+        source,
     };
     tracing::debug!("Bond data {:?}", bond);
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
@@ -159,19 +164,21 @@ pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
 }
 
 pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
-    let source = args.source.as_ref().unwrap_or(&args.validator);
+    let validator = ctx.get(args.validator);
+    let source = ctx.get_opt(args.source);
+    let signer = source.as_ref().unwrap_or(&validator);
     let keypair = signing::find_keypair(
         &mut ctx.wallet,
-        source,
+        signer,
         args.tx.ledger_address.clone(),
     )
     .await;
     let tx_code = std::fs::read(TX_UNBOND_WASM).unwrap();
 
     let unbond = pos::Unbond {
-        validator: args.validator,
+        validator,
         amount: args.amount,
-        source: args.source,
+        source,
     };
     tracing::debug!("Unbond data {:?}", unbond);
     let data = unbond
@@ -183,19 +190,18 @@ pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
 }
 
 pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
-    let source = args.source.as_ref().unwrap_or(&args.validator);
+    let validator = ctx.get(args.validator);
+    let source = ctx.get_opt(args.source);
+    let signer = source.as_ref().unwrap_or(&validator);
     let keypair = signing::find_keypair(
         &mut ctx.wallet,
-        source,
+        signer,
         args.tx.ledger_address.clone(),
     )
     .await;
     let tx_code = std::fs::read(TX_WITHDRAW_WASM).unwrap();
 
-    let withdraw = pos::Withdraw {
-        validator: args.validator,
-        source: args.source,
-    };
+    let withdraw = pos::Withdraw { validator, source };
     tracing::debug!("Withdraw data {:?}", withdraw);
     let data = withdraw
         .try_to_vec()
