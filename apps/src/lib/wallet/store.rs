@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, ErrorKind, Write};
@@ -8,6 +7,7 @@ use std::str::FromStr;
 use anoma::types::address::{Address, ImplicitAddress};
 use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use super::defaults;
 use super::keys::StoredKeypair;
@@ -24,6 +24,16 @@ pub struct Store {
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.
     pkhs: HashMap<PublicKeyHash, Alias>,
+}
+
+#[derive(Error, Debug)]
+pub enum LoadStoreError {
+    #[error("Failed decoding the wallet store: {0}")]
+    Decode(toml::de::Error),
+    #[error("Failed to read the wallet store from {0}: {1}")]
+    ReadWallet(String, String),
+    #[error("Failed to write the wallet store: {0}")]
+    StoreNewWallet(String),
 }
 
 impl Store {
@@ -59,20 +69,15 @@ impl Store {
         file.write_all(&data)
     }
 
-    // TODO error enum with different variants
     /// Load the store file or create a new one with the default keys and
     /// addresses if not found.
-    pub fn load_or_new(base_dir: &Path) -> Result<Self, Cow<'static, str>> {
+    pub fn load_or_new(base_dir: &Path) -> Result<Self, LoadStoreError> {
         let wallet_file = wallet_file(base_dir);
         let store = fs::read(&wallet_file);
         match store {
-            Ok(store_data) => Store::decode(store_data).map_err(|err| {
-                format!(
-                    "Failed to decode the store from the file {:?} with {}",
-                    wallet_file, err
-                )
-                .into()
-            }),
+            Ok(store_data) => {
+                Store::decode(store_data).map_err(LoadStoreError::Decode)
+            }
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => {
                     println!(
@@ -80,15 +85,15 @@ impl Store {
                         wallet_file
                     );
                     let store = Self::new();
-                    // TODO error handling
-                    store.save(base_dir).unwrap();
+                    store.save(base_dir).map_err(|err| {
+                        LoadStoreError::StoreNewWallet(err.to_string())
+                    })?;
                     Ok(store)
                 }
-                _ => Err(format!(
-                    "Failed reading wallet from {:?} with error {}",
-                    wallet_file, err
-                )
-                .into()),
+                _ => Err(LoadStoreError::ReadWallet(
+                    wallet_file.to_string_lossy().into_owned(),
+                    err.to_string(),
+                )),
             },
         }
     }
