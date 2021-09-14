@@ -12,11 +12,11 @@ use crate::wallet::{self, DecryptedKeypair};
 // The lifetime annotations are required, because the return type's lifetime
 // depends on the wallet's lifetime, from which it reads the value.
 #[allow(clippy::needless_lifetimes)]
-pub async fn find_keypair<'wallet>(
-    wallet: &'wallet wallet::Wallet,
+pub async fn find_keypair(
+    wallet: &wallet::Wallet,
     addr: &Address,
     ledger_address: tendermint::net::Address,
-) -> DecryptedKeypair<'wallet> {
+) -> DecryptedKeypair {
     let public_key = rpc::get_public_key(addr, ledger_address)
         .await
         .unwrap_or_else(|| {

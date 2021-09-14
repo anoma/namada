@@ -1,34 +1,136 @@
 //! Cryptographic keys for digital signatures support for the wallet.
 
+use std::fmt::Display;
+use std::rc::Rc;
+use std::str::FromStr;
+
 use anoma::proto::Tx;
 use anoma::types::key::ed25519::Keypair;
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Either;
 use orion::{aead, kdf};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::read_password;
 
+const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";
+const UNENCRYPTED_KEY_PREFIX: &str = "unencrypted:";
+
 /// A keypair stored in a wallet
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug)]
 pub enum StoredKeypair {
     /// An encrypted keypair
     Encrypted(EncryptedKeypair),
     /// An raw (unencrypted) keypair
-    Raw(Keypair),
+    Raw(
+        // Wrapped in `Rc` to avoid reference lifetimes when we borrow the key
+        Rc<Keypair>,
+    ),
+}
+
+impl Serialize for StoredKeypair {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // String encoded, because toml doesn't support enums
+        match self {
+            StoredKeypair::Encrypted(encrypted) => {
+                let keypair_string = format!(
+                    "{}{}",
+                    ENCRYPTED_KEY_PREFIX,
+                    encrypted.to_string()
+                );
+                serde::Serialize::serialize(&keypair_string, serializer)
+            }
+            StoredKeypair::Raw(raw) => {
+                let keypair_string =
+                    format!("{}{}", UNENCRYPTED_KEY_PREFIX, raw.to_string());
+                serde::Serialize::serialize(&keypair_string, serializer)
+            }
+        }
+    }
+}
+impl<'de> Deserialize<'de> for StoredKeypair {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let keypair_string: String =
+            serde::Deserialize::deserialize(deserializer)
+                .map_err(|err| {
+                    DeserializeStoredKeypairError::InvalidStoredKeypairString(
+                        err.to_string(),
+                    )
+                })
+                .map_err(D::Error::custom)?;
+        if let Some(raw) = keypair_string.strip_prefix(UNENCRYPTED_KEY_PREFIX) {
+            FromStr::from_str(raw)
+                .map(|keypair| Self::Raw(Rc::new(keypair)))
+                .map_err(|err| {
+                    DeserializeStoredKeypairError::InvalidStoredKeypairString(
+                        err.to_string(),
+                    )
+                })
+                .map_err(D::Error::custom)
+        } else if let Some(encrypted) =
+            keypair_string.strip_prefix(ENCRYPTED_KEY_PREFIX)
+        {
+            FromStr::from_str(encrypted)
+                .map(Self::Encrypted)
+                .map_err(|err| {
+                    DeserializeStoredKeypairError::InvalidStoredKeypairString(
+                        err.to_string(),
+                    )
+                })
+                .map_err(D::Error::custom)
+        } else {
+            Err(DeserializeStoredKeypairError::MissingPrefix)
+                .map_err(D::Error::custom)
+        }
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum DeserializeStoredKeypairError {
+    #[error("The stored keypair is not valid: {0}")]
+    InvalidStoredKeypairString(String),
+    #[error("The stored keypair is missing a prefix")]
+    MissingPrefix,
 }
 
 /// An encrypted keypair stored in a wallet
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug)]
 pub struct EncryptedKeypair(Vec<u8>);
+
+impl Display for EncryptedKeypair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(&self.0))
+    }
+}
+
+impl FromStr for EncryptedKeypair {
+    type Err = hex::FromHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        hex::decode(s).map(Self)
+    }
+}
 
 /// A key that has been read from the wallet. If the key has been encrypted,
 /// It will be owned, otherwise it's borrowed. You can use its `get` method to
 /// access the inner keypair.
 #[derive(Debug)]
-pub struct DecryptedKeypair<'a>(Either<Keypair, &'a Keypair>);
+pub struct DecryptedKeypair(Either<Keypair, Rc<Keypair>>);
 
-impl DecryptedKeypair<'_> {
+impl DecryptedKeypair {
     /// Sign a transaction using the decrypted keypair.
     pub fn sign_tx(&self, tx: Tx) -> Tx {
         let keypair = self.get();
@@ -39,7 +141,7 @@ impl DecryptedKeypair<'_> {
     pub fn get(&self) -> &Keypair {
         match &self.0 {
             itertools::Either::Left(owned) => owned,
-            itertools::Either::Right(borrowed) => *borrowed,
+            itertools::Either::Right(borrowed) => borrowed,
         }
     }
 }
@@ -65,7 +167,7 @@ impl StoredKeypair {
             Some(password) => {
                 Self::Encrypted(EncryptedKeypair::new(keypair, password))
             }
-            None => Self::Raw(keypair),
+            None => Self::Raw(Rc::new(keypair)),
         }
     }
 
@@ -86,7 +188,7 @@ impl StoredKeypair {
                 }
             }
             StoredKeypair::Raw(keypair) => {
-                Ok(DecryptedKeypair(Either::Right(keypair)))
+                Ok(DecryptedKeypair(Either::Right(keypair.clone())))
             }
         }
     }

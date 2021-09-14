@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use anoma::types::address::{Address, ImplicitAddress};
 use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
-use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 
 use super::defaults;
 use super::keys::StoredKeypair;
@@ -15,7 +15,7 @@ use crate::cli;
 
 pub type Alias = String;
 
-#[derive(BorshSerialize, BorshDeserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
     /// Cryptographic keypairs
     keys: HashMap<Alias, StoredKeypair>,
@@ -66,14 +66,13 @@ impl Store {
         let wallet_file = wallet_file(base_dir);
         let store = fs::read(&wallet_file);
         match store {
-            Ok(store_data) => match Store::decode(store_data) {
-                Some(handler) => Ok(handler),
-                None => Err(format!(
-                    "Failed to decode the store from the file {:?}",
-                    wallet_file
+            Ok(store_data) => Store::decode(store_data).map_err(|err| {
+                format!(
+                    "Failed to decode the store from the file {:?} with {}",
+                    wallet_file, err
                 )
-                .into()),
-            },
+                .into()
+            }),
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => {
                     println!(
@@ -224,13 +223,12 @@ impl Store {
         true
     }
 
-    fn decode(data: Vec<u8>) -> Option<Self> {
-        Store::try_from_slice(&data).ok()
+    fn decode(data: Vec<u8>) -> Result<Self, toml::de::Error> {
+        toml::from_slice(&data)
     }
 
     fn encode(&self) -> Vec<u8> {
-        self.try_to_vec()
-            .expect("Serializing of store shouldn't fail")
+        toml::to_vec(self).expect("Serializing of store shouldn't fail")
     }
 }
 
@@ -267,8 +265,7 @@ fn show_overwrite_confirmation(alias_for: &str) -> ConfirmationResponse {
 }
 
 /// Wallet file name
-// TODO make this .toml, once the encoding is changed
-const FILE_NAME: &str = "wallet";
+const FILE_NAME: &str = "wallet.toml";
 
 /// Get the path to the wallet store.
 fn wallet_file(base_dir: &Path) -> PathBuf {

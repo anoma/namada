@@ -140,6 +140,7 @@ dependencies = [
  "ed25519-dalek",
  "eyre",
  "futures 0.3.17",
+ "hex",
  "itertools 0.10.1",
  "jsonpath_lib",
  "libc",

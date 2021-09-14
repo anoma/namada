@@ -56,6 +56,7 @@ pub struct Signature(ed25519_dalek::Signature);
     Serialize,
     Deserialize,
 )]
+#[serde(transparent)]
 pub struct PublicKeyHash(pub(crate) String);
 
 const PKH_HASH_LEN: usize = address::HASH_LEN;
@@ -440,6 +441,32 @@ pub enum ParseSecretKeyError {
     #[error("Invalid secret key hex: {0}")]
     InvalidHex(hex::FromHexError),
     #[error("Invalid secret key encoding: {0}")]
+    InvalidEncoding(std::io::Error),
+}
+
+impl Display for Keypair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let vec = self.try_to_vec().expect("Encoding keypair shouldn't fail");
+        write!(f, "{}", hex::encode(&vec))
+    }
+}
+
+impl FromStr for Keypair {
+    type Err = ParseKeypairError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let vec = hex::decode(s).map_err(ParseKeypairError::InvalidHex)?;
+        BorshDeserialize::try_from_slice(&vec)
+            .map_err(ParseKeypairError::InvalidEncoding)
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ParseKeypairError {
+    #[error("Invalid keypair hex: {0}")]
+    InvalidHex(hex::FromHexError),
+    #[error("Invalid keypair encoding: {0}")]
     InvalidEncoding(std::io::Error),
 }
 

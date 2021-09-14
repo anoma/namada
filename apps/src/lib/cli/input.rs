@@ -114,7 +114,7 @@ pub struct LazyWalletKeypair {
 }
 
 impl LazyWalletKeypair {
-    pub fn get<'a>(&'a self, ctx: &'a Context) -> DecryptedKeypair<'a> {
+    pub fn get(&self, ctx: &Context) -> DecryptedKeypair {
         ctx.wallet
             .find_key(&self.raw_arg)
             .unwrap_or_else(|_find_err| {
