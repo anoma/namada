@@ -118,8 +118,24 @@ fn match_intent() -> Result<()> {
         true,
         true,
     );
+    let first_node_dir = node_dirs[0].0.to_str().unwrap();
 
     println!("{}", base_dir.path().to_path_buf().to_string_lossy());
+
+    let mut base_node_ledger = Command::cargo_bin("anoman")?;
+    base_node_ledger.current_dir(&working_dir).args(&[
+        "--base-dir",
+        first_node_dir,
+        "ledger",
+    ]);
+
+    // Start ledger
+    let mut session_ledger = spawn_command(base_node_ledger, Some(60_000))
+        .map_err(|e| eyre!(format!("{}", e)))?;
+
+    session_ledger
+        .exp_string("No state could be found")
+        .map_err(|e| eyre!(format!("{}", e)))?;
 
     let _intent_a_path = base_dir.path().to_path_buf().join("intent.A");
     let _intent_b_path = base_dir.path().to_path_buf().join("intent.B");
@@ -171,28 +187,11 @@ fn match_intent() -> Result<()> {
     generate_intent_json(intent_b_path_input.clone(), intent_b_json);
     generate_intent_json(intent_c_path_input.clone(), intent_c_json);
 
-    let first_node_dir = node_dirs[0].0.to_str().unwrap();
-
     let mut base_node_gossip = Command::cargo_bin("anoman")?;
     base_node_gossip.args(&["--base-dir", first_node_dir, "gossip"]);
 
-    let mut base_node_ledger = Command::cargo_bin("anoman")?;
-    base_node_ledger.current_dir(&working_dir).args(&[
-        "--base-dir",
-        first_node_dir,
-        "ledger",
-    ]);
-
     //  Start gossip
     let mut session_gossip = spawn_command(base_node_gossip, Some(60_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
-
-    //  Start ledger
-    let mut session_ledger = spawn_command(base_node_ledger, Some(60_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
-
-    session_ledger
-        .exp_string("No state could be found")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // Wait gossip to start
