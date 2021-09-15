@@ -11,6 +11,18 @@ use super::args;
 use crate::cli::safe_exit;
 use crate::wallet::Wallet;
 
+/// A raw address (bech32m encoding) or an alias of an address that may be found
+/// in the wallet
+pub type WalletAddress = FromContext<Address>;
+
+/// An alias, a public key or a public key hash of a keypair that may be found
+/// in the wallet
+pub type WalletKeypair = FromContext<Rc<Keypair>>;
+
+/// A raw public key (hex encoding), a public key hash (also hex encoding) or an
+/// alias of an public key that may be found in the wallet
+pub type WalletPublicKey = FromContext<PublicKey>;
+
 /// Command execution context
 #[derive(Debug)]
 pub struct Context {
@@ -104,10 +116,6 @@ pub trait ArgFromContext: Sized {
 pub trait ArgFromMutContext: Sized {
     fn from_mut_ctx(ctx: &mut Context, raw: impl AsRef<str>) -> Self;
 }
-
-pub type WalletAddress = FromContext<Address>;
-pub type WalletKeypair = FromContext<Rc<Keypair>>;
-pub type WalletPublicKey = FromContext<PublicKey>;
 
 impl ArgFromContext for Address {
     fn from_ctx(ctx: &Context, raw: impl AsRef<str>) -> Self {

@@ -1,8 +1,9 @@
 //! Anoma CLI.
 //!
 //! This CLI groups together the most commonly used commands inlined from the
-//! node and the client. The other commands for the node or the client can be
-//! dispatched via `anoma node ...` or `anoma client ...`, respectively.
+//! node and the client. The other commands for the node, client and wallet can
+//! be dispatched via `anoma node ...`, `anoma client ...` or `anoma wallet
+//! ...`, respectively.
 
 use std::env;
 use std::process::Command;
