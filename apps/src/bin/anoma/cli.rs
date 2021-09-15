@@ -20,7 +20,7 @@ pub fn main() -> Result<()> {
 fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
     let args = env::args();
 
-    let is_node_or_client = matches!(
+    let is_bin_sub_cmd = matches!(
         cmd,
         cli::cmds::Anoma::Node(_)
             | cli::cmds::Anoma::Client(_)
@@ -30,7 +30,7 @@ fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
     // Skip the first arg, which is the name of the binary
     let mut sub_args: Vec<String> = args.skip(1).collect();
 
-    if is_node_or_client {
+    if is_bin_sub_cmd {
         // Because there may be global args before the `cmd`, we have to find it
         // before removing it.
         sub_args
