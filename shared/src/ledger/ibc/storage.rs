@@ -16,7 +16,7 @@ use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 
 const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
-const CHANNELS_COUNTER: &str = "channels/counter";
+const CHANNELS_COUNTER: &str = "channelEnds/counter";
 const CAPABILITIES_INDEX: &str = "capabilities/index";
 const CAPABILITIES: &str = "capabilities";
 
