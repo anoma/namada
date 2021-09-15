@@ -38,7 +38,8 @@ pub mod tx_bond {
         let signed =
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
         let bond =
-            pos::Bond::try_from_slice(&signed.data.unwrap()[..]).unwrap();
+            transaction::pos::Bond::try_from_slice(&signed.data.unwrap()[..])
+                .unwrap();
 
         // TODO temporary for logging:
         let bond_id = BondId {
@@ -91,7 +92,8 @@ pub mod tx_unbond {
         let signed =
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
         let unbond =
-            pos::Unbond::try_from_slice(&signed.data.unwrap()[..]).unwrap();
+            transaction::pos::Unbond::try_from_slice(&signed.data.unwrap()[..])
+                .unwrap();
 
         // TODO temporary for logging:
         let bond_id = BondId {
@@ -158,8 +160,10 @@ pub mod tx_withdraw {
     fn apply_tx(tx_data: Vec<u8>) {
         let signed =
             key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-        let withdraw =
-            pos::Withdraw::try_from_slice(&signed.data.unwrap()[..]).unwrap();
+        let withdraw = transaction::pos::Withdraw::try_from_slice(
+            &signed.data.unwrap()[..],
+        )
+        .unwrap();
 
         // TODO temporary for logging:
         let bond_id = BondId {
