@@ -13,7 +13,7 @@ Epoched data are data associated with a specific epoch that are set in advance. 
 - [Validators' consensus key, state and total bonded tokens](#validator). Identified by the validator's address.
 - [Bonds](#bonds) are created by self-bonding and delegations. They are identified by the pair of source address and the validator's address.
 
-Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + unboding_length` for [unboding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` are final and the values become immutable.
+Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + unboding_length` for [unbonding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` are final and the values become immutable.
 
 ## Entities
 
@@ -59,7 +59,7 @@ From all the *candidate* validators, in each epoch the ones with the most voting
 
 ### Delegator
 
-A delegator may have any number number of delegations to any number of validators. Delegations are stored in [bonds](#bonds).
+A delegator may have any number of delegations to any number of validators. Delegations are stored in [bonds](#bonds).
 
 #### Delegator actions
 
