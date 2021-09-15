@@ -23,8 +23,8 @@ use sha2::Digest;
 use thiserror::Error;
 
 use super::storage::{
-    ack_key, channel_key, commitment_key, ibc_channel_counter,
-    is_ibc_channel_counter, next_sequence_ack_key, next_sequence_recv_key,
+    ack_key, channel_counter_key, channel_key, commitment_key,
+    is_channel_counter_key, next_sequence_ack_key, next_sequence_recv_key,
     next_sequence_send_key, port_channel_id, receipt_key,
     Error as IbcStorageError,
 };
@@ -80,7 +80,7 @@ where
         key: &Key,
         tx_data: &[u8],
     ) -> Result<()> {
-        if is_ibc_channel_counter(key) {
+        if is_channel_counter_key(key) {
             if self.channel_counter_pre()? < self.channel_counter() {
                 return Ok(());
             } else {
@@ -512,7 +512,7 @@ where
     }
 
     fn channel_counter_pre(&self) -> Result<u64> {
-        let key = ibc_channel_counter();
+        let key = channel_counter_key();
         self.read_counter_pre(&key)
             .map_err(|e| Error::InvalidChannel(e.to_string()))
     }
@@ -681,7 +681,7 @@ where
     }
 
     fn channel_counter(&self) -> u64 {
-        let key = ibc_channel_counter();
+        let key = channel_counter_key();
         self.read_counter(&key)
     }
 }

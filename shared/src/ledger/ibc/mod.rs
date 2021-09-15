@@ -13,8 +13,8 @@ use std::collections::HashSet;
 use borsh::{BorshDeserialize, BorshSerialize};
 use ibc::ics02_client::context::ClientReader;
 use storage::{
-    client_id, ibc_capability_index, ibc_channel_counter, ibc_client_counter,
-    ibc_connection_counter, ibc_prefix, is_ibc_client_counter, IbcPrefix,
+    capability_index_key, channel_counter_key, client_counter_key, client_id,
+    connection_counter_key, ibc_prefix, is_client_counter_key, IbcPrefix,
 };
 use thiserror::Error;
 
@@ -66,28 +66,28 @@ where
     H: StorageHasher,
 {
     // the client counter
-    let key = ibc_client_counter();
+    let key = client_counter_key();
     let value = 0_u64.try_to_vec().unwrap();
     storage
         .write(&key, value)
         .expect("Unable to write the initial client counter");
 
     // the connection counter
-    let key = ibc_connection_counter();
+    let key = connection_counter_key();
     let value = 0_u64.try_to_vec().unwrap();
     storage
         .write(&key, value)
         .expect("Unable to write the initial connection counter");
 
     // the channel counter
-    let key = ibc_channel_counter();
+    let key = channel_counter_key();
     let value = 0_u64.try_to_vec().unwrap();
     storage
         .write(&key, value)
         .expect("Unable to write the initial channel counter");
 
     // the capability index
-    let key = ibc_capability_index();
+    let key = capability_index_key();
     let value = 0_u64.try_to_vec().unwrap();
     storage
         .write(&key, value)
@@ -114,7 +114,7 @@ where
         for key in keys_changed {
             match ibc_prefix(key) {
                 IbcPrefix::Client => {
-                    if is_ibc_client_counter(key) {
+                    if is_client_counter_key(key) {
                         if self.client_counter_pre()? >= self.client_counter() {
                             return Err(Error::CounterError(
                                 "The client counter is invalid".to_owned(),
@@ -294,8 +294,8 @@ mod tests {
     use ibc::Height;
     use sha2::Digest;
     use storage::{
-        ack_key, channel_key, client_state_key, client_type_key,
-        commitment_key, connection_key, consensus_state_key, ibc_capability,
+        ack_key, capability_key, channel_key, client_state_key,
+        client_type_key, commitment_key, connection_key, consensus_state_key,
         next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
         port_key, receipt_key,
     };
@@ -467,7 +467,7 @@ mod tests {
             .write(&port_key, index.try_to_vec().expect("encoding failed"))
             .expect("write failed");
         // insert to the reverse map
-        let cap_key = ibc_capability(index);
+        let cap_key = capability_key(index);
         let port_id = get_port_id();
         let bytes = port_id.try_to_vec().expect("encoding failed");
         write_log.write(&cap_key, bytes).expect("write failed");
@@ -1086,7 +1086,7 @@ mod tests {
         let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter);
 
         let mut keys_changed = HashSet::new();
-        let cap_key = ibc_capability(index);
+        let cap_key = capability_key(index);
         keys_changed.insert(cap_key);
 
         let verifiers = HashSet::new();

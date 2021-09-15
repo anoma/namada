@@ -8,7 +8,7 @@ use ibc::ics24_host::identifier::PortId;
 use thiserror::Error;
 
 use super::storage::{
-    capability, ibc_capability, ibc_capability_index, is_ibc_capability_index,
+    capability, capability_index_key, capability_key, is_capability_index_key,
     port_id, port_key, Error as IbcStorageError,
 };
 use super::{Ibc, StateChange};
@@ -62,7 +62,7 @@ where
     }
 
     pub(super) fn validate_capability(&self, key: &Key) -> Result<()> {
-        if is_ibc_capability_index(key) {
+        if is_capability_index_key(key) {
             if self.capability_index_pre()? < self.capability_index()? {
                 Ok(())
             } else {
@@ -100,18 +100,18 @@ where
     }
 
     fn capability_index_pre(&self) -> Result<u64> {
-        let key = ibc_capability_index();
+        let key = capability_index_key();
         self.read_counter_pre(&key)
             .map_err(|e| Error::NoCapability(e.to_string()))
     }
 
     fn capability_index(&self) -> Result<u64> {
-        let key = ibc_capability_index();
+        let key = capability_index_key();
         Ok(self.read_counter(&key))
     }
 
     fn get_port_by_capability(&self, cap: &Capability) -> Result<PortId> {
-        let key = ibc_capability(cap.index());
+        let key = capability_key(cap.index());
         match self.ctx.read_post(&key) {
             Ok(Some(value)) => {
                 PortId::try_from_slice(&value[..]).map_err(|e| {

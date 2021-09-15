@@ -76,23 +76,23 @@ pub fn ibc_prefix(key: &Key) -> IbcPrefix {
 }
 
 /// Check if the given key is a key of the client counter
-pub fn is_ibc_client_counter(key: &Key) -> bool {
-    *key == ibc_client_counter()
+pub fn is_client_counter_key(key: &Key) -> bool {
+    *key == client_counter_key()
 }
 
 /// Check if the given key is a key of the connection counter
-pub fn is_ibc_connection_counter(key: &Key) -> bool {
-    *key == ibc_connection_counter()
+pub fn is_connection_counter_key(key: &Key) -> bool {
+    *key == connection_counter_key()
 }
 
 /// Check if the given key is a key of the channel counter
-pub fn is_ibc_channel_counter(key: &Key) -> bool {
-    *key == ibc_channel_counter()
+pub fn is_channel_counter_key(key: &Key) -> bool {
+    *key == channel_counter_key()
 }
 
 /// Check if the given key is a key of the capability index
-pub fn is_ibc_capability_index(key: &Key) -> bool {
-    *key == ibc_capability_index()
+pub fn is_capability_index_key(key: &Key) -> bool {
+    *key == capability_index_key()
 }
 
 /// Returns a key of the IBC-related data
@@ -104,36 +104,30 @@ fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
 }
 
 /// Returns a key of the IBC client counter
-pub fn ibc_client_counter() -> Key {
+pub fn client_counter_key() -> Key {
     let path = CLIENTS_COUNTER.to_owned();
     ibc_key(path).expect("Creating a key for the client counter shouldn't fail")
 }
 
 /// Returns a key of the IBC connection counter
-pub fn ibc_connection_counter() -> Key {
+pub fn connection_counter_key() -> Key {
     let path = CONNECTIONS_COUNTER.to_owned();
     ibc_key(path)
         .expect("Creating a key for the connection counter shouldn't fail")
 }
 
 /// Returns a key of the IBC channel counter
-pub fn ibc_channel_counter() -> Key {
+pub fn channel_counter_key() -> Key {
     let path = CHANNELS_COUNTER.to_owned();
     ibc_key(path)
         .expect("Creating a key for the channel counter shouldn't fail")
 }
 
 /// Returns a key of the IBC capability index
-pub fn ibc_capability_index() -> Key {
+pub fn capability_index_key() -> Key {
     let path = CAPABILITIES_INDEX.to_owned();
     ibc_key(path)
         .expect("Creating a key for the capability index shouldn't fail")
-}
-
-/// Returns a key of the reversed map for IBC capabilities
-pub fn ibc_capability(index: u64) -> Key {
-    let path = format!("{}/{}", CAPABILITIES, index);
-    ibc_key(path).expect("Creating a key for a capability shouldn't fail")
 }
 
 /// Returns a key for the client type
@@ -183,6 +177,12 @@ pub fn port_key(port_id: &PortId) -> Key {
     let path = Path::Ports(port_id.clone());
     ibc_key(path.to_string())
         .expect("Creating a key for the port shouldn't fail")
+}
+
+/// Returns a key of the reversed map for IBC capabilities
+pub fn capability_key(index: u64) -> Key {
+    let path = format!("{}/{}", CAPABILITIES, index);
+    ibc_key(path).expect("Creating a key for a capability shouldn't fail")
 }
 
 /// Returns a key for nextSequenceSend

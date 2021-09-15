@@ -15,8 +15,8 @@ use ibc::ics24_host::identifier::{ClientId, ConnectionId};
 use thiserror::Error;
 
 use super::storage::{
-    connection_id, connection_key, ibc_connection_counter,
-    is_ibc_connection_counter, Error as IbcStorageError,
+    connection_counter_key, connection_id, connection_key,
+    is_connection_counter_key, Error as IbcStorageError,
 };
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
@@ -61,7 +61,7 @@ where
         key: &Key,
         tx_data: &[u8],
     ) -> Result<()> {
-        if is_ibc_connection_counter(key) {
+        if is_connection_counter_key(key) {
             // the counter should be increased
             if self.connection_counter_pre()? < self.connection_counter() {
                 return Ok(());
@@ -289,7 +289,7 @@ where
     }
 
     fn connection_counter_pre(&self) -> Result<u64> {
-        let key = ibc_connection_counter();
+        let key = connection_counter_key();
         self.read_counter_pre(&key)
             .map_err(|e| Error::InvalidConnection(e.to_string()))
     }
@@ -354,7 +354,7 @@ where
     }
 
     fn connection_counter(&self) -> u64 {
-        let key = ibc_connection_counter();
+        let key = connection_counter_key();
         self.read_counter(&key)
     }
 }

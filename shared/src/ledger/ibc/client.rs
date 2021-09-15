@@ -11,7 +11,7 @@ use ibc::ics24_host::identifier::ClientId;
 use thiserror::Error;
 
 use super::storage::{
-    client_state_key, client_type_key, consensus_state_key, ibc_client_counter,
+    client_counter_key, client_state_key, client_type_key, consensus_state_key,
 };
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
@@ -264,7 +264,7 @@ where
     }
 
     pub(super) fn client_counter_pre(&self) -> Result<u64> {
-        let key = ibc_client_counter();
+        let key = client_counter_key();
         self.read_counter_pre(&key)
             .map_err(|e| Error::InvalidClient(e.to_string()))
     }
@@ -332,7 +332,7 @@ where
     }
 
     fn client_counter(&self) -> u64 {
-        let key = ibc_client_counter();
+        let key = client_counter_key();
         self.read_counter(&key)
     }
 }
