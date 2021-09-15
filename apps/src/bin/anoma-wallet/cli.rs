@@ -52,7 +52,10 @@ fn key_and_address_gen(
     let mut wallet = ctx.wallet;
     let alias = wallet.gen_key(alias, unsafe_dont_encrypt);
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
-    println!("Successfully added a key with alias: \"{}\"", alias);
+    println!(
+        "Successfully added a key and an address with alias: \"{}\"",
+        alias
+    );
 }
 
 /// Find a keypair in the wallet store.
@@ -186,9 +189,13 @@ fn address_find(ctx: Context, args: args::AddressFind) {
 /// Add an address to the wallet.
 fn address_add(ctx: Context, args: args::AddressAdd) {
     let mut wallet = ctx.wallet;
-    if !wallet.add_address(args.alias, args.address) {
+    if !wallet.add_address(args.alias.clone(), args.address) {
         eprintln!("Address not added");
         cli::safe_exit(1);
     }
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    println!(
+        "Successfully added a key and an address with alias: \"{}\"",
+        args.alias
+    );
 }
