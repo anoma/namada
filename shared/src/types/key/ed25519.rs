@@ -627,7 +627,6 @@ impl Verifier<Signature> for PublicKey {
     /// # Return
     ///
     /// Returns `Ok(())` if the signature is valid, and `Err` otherwise.
-    #[allow(non_snake_case)]
     fn verify(
         &self,
         message: &[u8],
