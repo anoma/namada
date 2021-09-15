@@ -478,7 +478,7 @@ mod tests {
         };
 
         // get and increment the connection counter
-        let counter_key = Key::ibc_client_counter().to_string();
+        let counter_key = ibc::client_counter_key().to_string();
         let counter =
             tx_host_env::read(&counter_key).expect("no client counter");
         tx_host_env::write(&counter_key, counter + 1);
@@ -594,7 +594,7 @@ mod tests {
             timestamp: DateTimeUtc::now(),
         };
         // get and increment the connection counter
-        let counter_key = Key::ibc_connection_counter().to_string();
+        let counter_key = ibc::connection_counter_key().to_string();
         let counter =
             tx_host_env::read(&counter_key).expect("no connection counter");
         tx_host_env::write(&counter_key, counter + 1);
@@ -666,7 +666,7 @@ mod tests {
             timestamp: DateTimeUtc::now(),
         };
         // get and increment the connection counter
-        let counter_key = Key::ibc_connection_counter().to_string();
+        let counter_key = ibc::connection_counter_key().to_string();
         let counter =
             tx_host_env::read(&counter_key).expect("no connection counter");
         tx_host_env::write(&counter_key, counter + 1);
@@ -739,21 +739,23 @@ mod tests {
             timestamp: DateTimeUtc::now(),
         };
         // bind a port
-        let index_key = Key::ibc_capability_index().to_string();
+        let index_key = ibc::capability_index_key().to_string();
         let cap_index: u64 = tx_host_env::read(&index_key).expect("no index");
         tx_host_env::write(&index_key, cap_index + 1);
         let port_key = ibc::port_key(&port_id).to_string();
         tx_host_env::write(&port_key, cap_index);
-        let cap_key = Key::ibc_capability(cap_index).to_string();
+        let cap_key = ibc::capability_key(cap_index).to_string();
         tx_host_env::write(&cap_key, port_id.clone());
         // get and increment the connection counter
-        let counter_key = Key::ibc_channel_counter().to_string();
+        let counter_key = ibc::channel_counter_key().to_string();
         let counter =
             tx_host_env::read(&counter_key).expect("no channel counter");
         tx_host_env::write(&counter_key, counter + 1);
         // channel
         let channel_id = ibc::channel_id(counter);
-        let channel_key = ibc::channel_key(&port_id, &channel_id).to_string();
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
         tx_host_env::write(&channel_key, data.channel());
 
         // Check
@@ -778,8 +780,9 @@ mod tests {
             timestamp: DateTimeUtc::now(),
         };
         // update the channel
-        let channel_key =
-            ibc::channel_key(&data.port_id, &data.channel_id).to_string();
+        let port_channel_id =
+            ibc::port_channel_id(data.port_id, data.channel_id);
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
         let mut channel = tx_host_env::read(&channel_key).expect("no channel");
         ibc::open_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
@@ -819,21 +822,23 @@ mod tests {
             timestamp: DateTimeUtc::now(),
         };
         // bind a port
-        let index_key = Key::ibc_capability_index().to_string();
+        let index_key = ibc::capability_index_key().to_string();
         let cap_index: u64 = tx_host_env::read(&index_key).expect("no index");
         tx_host_env::write(&index_key, cap_index + 1);
         let port_key = ibc::port_key(&port_id).to_string();
         tx_host_env::write(&port_key, cap_index);
-        let cap_key = Key::ibc_capability(cap_index).to_string();
+        let cap_key = ibc::capability_key(cap_index).to_string();
         tx_host_env::write(&cap_key, port_id.clone());
         // get and increment the connection counter
-        let counter_key = Key::ibc_channel_counter().to_string();
+        let counter_key = ibc::channel_counter_key().to_string();
         let counter =
             tx_host_env::read(&counter_key).expect("no channel counter");
         tx_host_env::write(&counter_key, counter + 1);
         // channel
         let channel_id = ibc::channel_id(counter);
-        let channel_key = ibc::channel_key(&port_id, &channel_id).to_string();
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
         tx_host_env::write(&channel_key, data.channel());
 
         // Check
@@ -858,8 +863,9 @@ mod tests {
             timestamp: DateTimeUtc::now(),
         };
         // update the channel
-        let channel_key =
-            ibc::channel_key(&data.port_id, &data.channel_id).to_string();
+        let port_channel_id =
+            ibc::port_channel_id(data.port_id, data.channel_id);
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
         let mut channel = tx_host_env::read(&channel_key).expect("no channel");
         ibc::open_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
@@ -902,8 +908,9 @@ mod tests {
         };
 
         // close the channel
-        let channel_key =
-            ibc::channel_key(&data.port_id, &data.channel_id).to_string();
+        let port_channel_id =
+            ibc::port_channel_id(data.port_id, data.channel_id);
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
         let mut channel = tx_host_env::read(&channel_key).expect("no channel");
         ibc::close_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
@@ -946,8 +953,9 @@ mod tests {
         };
 
         // close the channel
-        let channel_key =
-            ibc::channel_key(&data.port_id, &data.channel_id).to_string();
+        let port_channel_id =
+            ibc::port_channel_id(data.port_id, data.channel_id);
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
         let mut channel = tx_host_env::read(&channel_key).expect("no channel");
         ibc::close_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
@@ -991,15 +999,17 @@ mod tests {
         // increment nextSequenceSend
         let port_id = data.source_port.clone();
         let channel_id = data.source_channel.clone();
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
         let next_seq_send_key =
-            ibc::next_sequence_send_key(&port_id, &channel_id).to_string();
+            ibc::next_sequence_send_key(&port_channel_id).to_string();
         let seq_index: u64 = tx_host_env::read(&next_seq_send_key).unwrap_or(1);
         tx_host_env::write(&next_seq_send_key, seq_index + 1);
         // make a packet from the given data
         let packet = data.packet(ibc::sequence(seq_index));
         // commitment
         let commitment_key =
-            ibc::commitment_key(port_id, channel_id, packet.sequence)
+            ibc::commitment_key(&port_id, &channel_id, packet.sequence)
                 .to_string();
         let commitment = ibc::commitment(&packet);
         tx_host_env::write(&commitment_key, commitment);
@@ -1032,16 +1042,13 @@ mod tests {
         let packet = data.packet;
         let port_id = packet.source_port;
         let channel_id = packet.source_channel;
-        let commitment_key = ibc::commitment_key(
-            port_id.clone(),
-            channel_id.clone(),
-            packet.sequence,
-        )
-        .to_string();
+        let commitment_key =
+            ibc::commitment_key(&port_id, &channel_id, packet.sequence)
+                .to_string();
         tx_host_env::delete(&commitment_key);
         // increment nextSequenceAck
         let next_seq_ack_key =
-            ibc::next_sequence_ack_key(&port_id, &channel_id).to_string();
+            ibc::next_sequence_ack_key(&port_channel_id).to_string();
         let seq_index: u64 = tx_host_env::read(&next_seq_ack_key).unwrap_or(1);
         tx_host_env::write(&next_seq_ack_key, seq_index + 1);
 
@@ -1077,11 +1084,8 @@ mod tests {
         });
 
         // packet
-        let packet = ibc::received_packet(
-            port_id.clone(),
-            channel_id.clone(),
-            ibc::sequence(1),
-        );
+        let packet =
+            ibc::received_packet(port_id, channel_id, ibc::sequence(1));
 
         // Start a transaction to receive a packet
         // tx (Not need to decode tx_data)
@@ -1093,21 +1097,22 @@ mod tests {
             timestamp: DateTimeUtc::now(),
         };
         // increment nextSequenceRecv
+        let port_id = data.packet.destination_port;
+        let channel_id = data.packet.destination_channel;
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
         let next_seq_recv_key =
-            ibc::next_sequence_recv_key(&port_id, &channel_id).to_string();
+            ibc::next_sequence_recv_key(&port_channel_id).to_string();
         let seq_index: u64 = tx_host_env::read(&next_seq_recv_key).unwrap_or(1);
         tx_host_env::write(&next_seq_recv_key, seq_index + 1);
         // receipt
-        let receipt_key = ibc::receipt_key(
-            port_id.clone(),
-            channel_id.clone(),
-            data.packet.sequence,
-        )
-        .to_string();
+        let receipt_key =
+            ibc::receipt_key(&port_id, &channel_id, data.packet.sequence)
+                .to_string();
         tx_host_env::write(&receipt_key, 0_u64);
         // ack
-        let ack_key =
-            ibc::ack_key(port_id, channel_id, data.packet.sequence).to_string();
+        let ack_key = ibc::ack_key(&port_id, &channel_id, data.packet.sequence)
+            .to_string();
         tx_host_env::write(&ack_key, "ack".try_to_vec().unwrap());
 
         // the transaction does something according to the packet
@@ -1151,15 +1156,17 @@ mod tests {
         // increment nextSequenceSend
         let port_id = data.source_port.clone();
         let channel_id = data.source_channel.clone();
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
         let next_seq_send_key =
-            ibc::next_sequence_send_key(&port_id, &channel_id).to_string();
+            ibc::next_sequence_send_key(&port_channel_id).to_string();
         let seq_index: u64 = tx_host_env::read(&next_seq_send_key).unwrap_or(1);
         tx_host_env::write(&next_seq_send_key, seq_index + 1);
         // make a packet from the given data
         let packet = data.packet(ibc::sequence(seq_index));
         // commitment
         let commitment_key =
-            ibc::commitment_key(port_id, channel_id, packet.sequence)
+            ibc::commitment_key(&port_id, &channel_id, packet.sequence)
                 .to_string();
         let commitment = ibc::commitment(&packet);
         tx_host_env::write(&commitment_key, commitment);
@@ -1192,16 +1199,13 @@ mod tests {
         let packet = data.packet;
         let port_id = packet.source_port;
         let channel_id = packet.source_channel;
-        let commitment_key = ibc::commitment_key(
-            port_id.clone(),
-            channel_id.clone(),
-            packet.sequence,
-        )
-        .to_string();
+        let commitment_key =
+            ibc::commitment_key(&port_id, &channel_id, packet.sequence)
+                .to_string();
         tx_host_env::delete(&commitment_key);
         // increment nextSequenceAck
         let next_seq_ack_key =
-            ibc::next_sequence_ack_key(&port_id, &channel_id).to_string();
+            ibc::next_sequence_ack_key(&port_channel_id).to_string();
         let seq_index: u64 = tx_host_env::read(&next_seq_ack_key).unwrap_or(1);
         tx_host_env::write(&next_seq_ack_key, seq_index + 1);
 
@@ -1237,11 +1241,8 @@ mod tests {
         });
 
         // packet (sequence number isn't checked for the unordered channel)
-        let packet = ibc::received_packet(
-            port_id.clone(),
-            channel_id.clone(),
-            ibc::sequence(100),
-        );
+        let packet =
+            ibc::received_packet(port_id, channel_id, ibc::sequence(100));
 
         // Start a transaction to receive a packet
         // tx (Not need to decode tx_data)
@@ -1254,16 +1255,15 @@ mod tests {
         };
         // not need to increment nextSequenceRecv
         // receipt
-        let receipt_key = ibc::receipt_key(
-            port_id.clone(),
-            channel_id.clone(),
-            data.packet.sequence,
-        )
-        .to_string();
+        let port_id = data.packet.destination_port.clone();
+        let channel_id = data.packet.destination_channel.clone();
+        let receipt_key =
+            ibc::receipt_key(&port_id, &channel_id, data.packet.sequence)
+                .to_string();
         tx_host_env::write(&receipt_key, 0_u64);
         // ack
-        let ack_key =
-            ibc::ack_key(port_id, channel_id, data.packet.sequence).to_string();
+        let ack_key = ibc::ack_key(&port_id, &channel_id, data.packet.sequence)
+            .to_string();
         tx_host_env::write(&ack_key, "ack".try_to_vec().unwrap());
 
         // the transaction does something according to the packet
@@ -1302,15 +1302,17 @@ mod tests {
         // increment nextSequenceSend
         let port_id = data.source_port.clone();
         let channel_id = data.source_channel.clone();
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
         let next_seq_send_key =
-            ibc::next_sequence_send_key(&port_id, &channel_id).to_string();
+            ibc::next_sequence_send_key(&port_channel_id).to_string();
         let seq_index: u64 = tx_host_env::read(&next_seq_send_key).unwrap_or(1);
         tx_host_env::write(&next_seq_send_key, seq_index + 1);
         // make a packet from the given data
         let packet = data.packet(ibc::sequence(seq_index));
         // commitment
         let commitment_key =
-            ibc::commitment_key(port_id, channel_id, packet.sequence)
+            ibc::commitment_key(&port_id, &channel_id, packet.sequence)
                 .to_string();
         let commitment = ibc::commitment(&packet);
         tx_host_env::write(&commitment_key, commitment);
@@ -1332,13 +1334,15 @@ mod tests {
         let packet = data.packet;
         let port_id = packet.source_port;
         let channel_id = packet.source_channel;
-        let channel_key = ibc::channel_key(&port_id, &channel_id).to_string();
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
         let mut channel = tx_host_env::read(&channel_key).expect("no channel");
         ibc::close_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
         // delete the commitment
         let commitment_key =
-            ibc::commitment_key(port_id, channel_id, packet.sequence)
+            ibc::commitment_key(&port_id, &channel_id, packet.sequence)
                 .to_string();
         tx_host_env::delete(&commitment_key);
 
@@ -1375,15 +1379,17 @@ mod tests {
         // increment nextSequenceSend
         let port_id = data.source_port.clone();
         let channel_id = data.source_channel.clone();
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
         let next_seq_send_key =
-            ibc::next_sequence_send_key(&port_id, &channel_id).to_string();
+            ibc::next_sequence_send_key(&port_channel_id).to_string();
         let seq_index: u64 = tx_host_env::read(&next_seq_send_key).unwrap_or(1);
         tx_host_env::write(&next_seq_send_key, seq_index + 1);
         // make a packet from the given data (not timeout)
         let packet = data.packet(ibc::sequence(seq_index));
         // commitment
         let commitment_key =
-            ibc::commitment_key(port_id, channel_id, packet.sequence)
+            ibc::commitment_key(&port_id, &channel_id, packet.sequence)
                 .to_string();
         let commitment = ibc::commitment(&packet);
         tx_host_env::write(&commitment_key, commitment);
@@ -1405,13 +1411,15 @@ mod tests {
         let packet = data.packet;
         let port_id = packet.source_port;
         let channel_id = packet.source_channel;
-        let channel_key = ibc::channel_key(&port_id, &channel_id).to_string();
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
         let mut channel = tx_host_env::read(&channel_key).expect("no channel");
         ibc::close_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
         // delete the commitment
         let commitment_key =
-            ibc::commitment_key(port_id, channel_id, packet.sequence)
+            ibc::commitment_key(&port_id, &channel_id, packet.sequence)
                 .to_string();
         tx_host_env::delete(&commitment_key);
 

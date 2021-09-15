@@ -4,6 +4,13 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anoma::ledger::gas::VpGasMeter;
+pub use anoma::ledger::ibc::storage::{
+    ack_key, capability_index_key, capability_key, channel_counter_key,
+    channel_key, client_counter_key, client_state_key, client_type_key,
+    commitment_key, connection_counter_key, connection_key,
+    consensus_state_key, next_sequence_ack_key, next_sequence_recv_key,
+    next_sequence_send_key, port_key, receipt_key,
+};
 use anoma::ledger::ibc::Ibc;
 use anoma::ledger::native_vp::{Ctx, NativeVp};
 use anoma::ledger::storage::mockdb::MockDB;
@@ -28,8 +35,9 @@ use ibc::ics04_channel::packet::{Packet, Sequence};
 use ibc::ics23_commitment::commitment::{
     CommitmentPrefix, CommitmentProofBytes,
 };
-use ibc::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
-use ibc::ics24_host::Path;
+use ibc::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+};
 use ibc::mock::client_state::{MockClientState, MockConsensusState};
 use ibc::mock::header::MockHeader;
 use ibc::timestamp::Timestamp;
@@ -79,8 +87,6 @@ pub fn init_ibc_vp_from_tx<'a>(
     TestIbcVp { ibc, keys_changed }
 }
 
-// TODO move some functions to shared or wasm
-
 pub fn tm_dummy_header() -> TmHeader {
     TmHeader {
         version: TmVersion { block: 10, app: 0 },
@@ -125,7 +131,7 @@ pub fn prepare_client() -> (ClientId, AnyClientState, HashMap<Key, Vec<u8>>) {
     let bytes = data.consensus_state.try_to_vec().expect("encoding failed");
     writes.insert(key, bytes);
     // client counter
-    let key = Key::ibc_client_counter();
+    let key = client_counter_key();
     let bytes = 1_u64.try_to_vec().unwrap();
     writes.insert(key, bytes);
 
@@ -145,7 +151,7 @@ pub fn prepare_opened_connection(
     let bytes = conn.try_to_vec().expect("encoding failed");
     writes.insert(key, bytes);
     // connection counter
-    let key = Key::ibc_connection_counter();
+    let key = connection_counter_key();
     let bytes = 1_u64.try_to_vec().unwrap();
     writes.insert(key, bytes);
 
@@ -162,12 +168,13 @@ pub fn prepare_opened_channel(
     let key = port_key(&port_id);
     writes.insert(key, 0_u64.try_to_vec().unwrap());
     // capability
-    let key = Key::ibc_capability(0);
+    let key = capability_key(0);
     let bytes = port_id.try_to_vec().expect("encoding failed");
     writes.insert(key, bytes);
     // channel
     let channel_id = channel_id(0);
-    let key = channel_key(&port_id, &channel_id);
+    let port_channel_id = port_channel_id(port_id.clone(), channel_id.clone());
+    let key = channel_key(&port_channel_id);
     let data = channel_open_init_data(port_id.clone(), conn_id.clone());
     let mut channel = data.channel();
     open_channel(&mut channel);
@@ -243,28 +250,6 @@ pub fn client_id(client_state: AnyClientState, counter: u64) -> ClientId {
         .expect("Creating a new client ID shouldn't fail")
 }
 
-pub fn client_type_key(client_id: &ClientId) -> Key {
-    let path = Path::ClientType(client_id.clone());
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the client state shouldn't fail")
-}
-
-pub fn client_state_key(client_id: &ClientId) -> Key {
-    let path = Path::ClientState(client_id.clone());
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the client state shouldn't fail")
-}
-
-pub fn consensus_state_key(client_id: &ClientId, height: Height) -> Key {
-    let path = Path::ClientConsensusState {
-        client_id: client_id.clone(),
-        epoch: height.revision_number,
-        height: height.revision_height,
-    };
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the consensus state shouldn't fail")
-}
-
 pub fn connection_open_init_data(
     client_id: ClientId,
 ) -> ConnectionOpenInitData {
@@ -338,12 +323,6 @@ fn connection_counterparty() -> ConnCounterparty {
 
 pub fn connection_id(counter: u64) -> ConnectionId {
     ConnectionId::new(counter)
-}
-
-pub fn connection_key(conn_id: &ConnectionId) -> Key {
-    let path = Path::Connections(conn_id.clone());
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the connection shouldn't fail")
 }
 
 pub fn open_connection(conn: &mut ConnectionEnd) {
@@ -445,12 +424,6 @@ pub fn channel_id(counter: u64) -> ChannelId {
     ChannelId::new(counter)
 }
 
-pub fn channel_key(port_id: &PortId, channel_id: &ChannelId) -> Key {
-    let path = Path::ChannelEnds(port_id.clone(), channel_id.clone());
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the channel shouldn't fail")
-}
-
 pub fn open_channel(channel: &mut ChannelEnd) {
     channel.set_state(ChanState::Open);
 }
@@ -467,28 +440,14 @@ pub fn port_id(id: &str) -> PortId {
     PortId::from_str(id).expect("Creating a port ID failed")
 }
 
-pub fn port_key(port_id: &PortId) -> Key {
-    let path = Path::Ports(port_id.clone());
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the port shouldn't fail")
-}
-
-pub fn next_sequence_send_key(port_id: &PortId, channel_id: &ChannelId) -> Key {
-    let path = Path::SeqSends(port_id.clone(), channel_id.clone());
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for nextSequenceSend shouldn't fail")
-}
-
-pub fn next_sequence_recv_key(port_id: &PortId, channel_id: &ChannelId) -> Key {
-    let path = Path::SeqRecvs(port_id.clone(), channel_id.clone());
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for nextSequenceRecv shouldn't fail")
-}
-
-pub fn next_sequence_ack_key(port_id: &PortId, channel_id: &ChannelId) -> Key {
-    let path = Path::SeqAcks(port_id.clone(), channel_id.clone());
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for nextSequenceAck shouldn't fail")
+pub fn port_channel_id(
+    port_id: PortId,
+    channel_id: ChannelId,
+) -> PortChannelId {
+    PortChannelId {
+        port_id,
+        channel_id,
+    }
 }
 
 pub fn packet_send_data(
@@ -552,48 +511,6 @@ pub fn commitment(packet: &Packet) -> String {
     );
     let r = sha2::Sha256::digest(input.as_bytes());
     format!("{:x}", r)
-}
-
-pub fn commitment_key(
-    port_id: PortId,
-    channel_id: ChannelId,
-    sequence: Sequence,
-) -> Key {
-    let path = Path::Commitments {
-        port_id,
-        channel_id,
-        sequence,
-    };
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the commitment shouldn't fail")
-}
-
-pub fn receipt_key(
-    port_id: PortId,
-    channel_id: ChannelId,
-    sequence: Sequence,
-) -> Key {
-    let path = Path::Receipts {
-        port_id,
-        channel_id,
-        sequence,
-    };
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the receipt shouldn't fail")
-}
-
-pub fn ack_key(
-    port_id: PortId,
-    channel_id: ChannelId,
-    sequence: Sequence,
-) -> Key {
-    let path = Path::Acks {
-        port_id,
-        channel_id,
-        sequence,
-    };
-    Key::ibc_key(path.to_string())
-        .expect("Creating a key for the ack shouldn't fail")
 }
 
 pub fn timeout_data(packet: Packet, next_seq_recv: Sequence) -> TimeoutData {
