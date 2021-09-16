@@ -17,33 +17,25 @@ use anoma::ledger::storage::mockdb::MockDB;
 use anoma::ledger::storage::testing::Sha256Hasher;
 use anoma::proto::Tx;
 use anoma::types::address::{Address, InternalAddress};
-use anoma::types::ibc::*;
-use anoma::types::storage::{Key, KeySeg};
+pub use anoma::types::ibc::*;
+use anoma::types::storage::Key;
 use anoma_vm_env::tx_prelude::BorshSerialize;
-use ibc::ics02_client::client_consensus::{AnyConsensusState, ConsensusState};
-use ibc::ics02_client::client_def::{AnyClient, ClientDef};
+use ibc::ics02_client::client_consensus::ConsensusState;
 use ibc::ics02_client::client_state::{AnyClientState, ClientState};
-use ibc::ics02_client::header::{AnyHeader, Header};
-use ibc::ics03_connection::connection::{
-    ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
-};
+use ibc::ics02_client::header::Header;
+use ibc::ics03_connection::connection::Counterparty as ConnCounterparty;
 use ibc::ics03_connection::version::Version;
 use ibc::ics04_channel::channel::{
-    ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
+    ChannelEnd, Counterparty as ChanCounterparty, Order,
 };
 use ibc::ics04_channel::packet::{Packet, Sequence};
-use ibc::ics23_commitment::commitment::{
-    CommitmentPrefix, CommitmentProofBytes,
-};
-use ibc::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
-};
+use ibc::ics23_commitment::commitment::CommitmentProofBytes;
+use ibc::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
 use ibc::mock::client_state::{MockClientState, MockConsensusState};
 use ibc::mock::header::MockHeader;
 use ibc::timestamp::Timestamp;
 use ibc::Height;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
-use sha2::Digest;
 use tendermint::account::Id as TmAccountId;
 use tendermint::block::header::{Header as TmHeader, Version as TmVersion};
 use tendermint::block::Height as TmHeight;
@@ -116,7 +108,7 @@ pub fn prepare_client() -> (ClientId, AnyClientState, HashMap<Key, Vec<u8>>) {
     let data = client_creation_data();
     // client state
     let client_state = data.client_state.clone();
-    let client_id = client_id(client_state.clone(), 0);
+    let client_id = data.client_id(0).expect("invalid client ID");
     let key = client_state_key(&client_id);
     let bytes = data.client_state.try_to_vec().expect("encoding failed");
     writes.insert(key, bytes);
@@ -164,7 +156,7 @@ pub fn prepare_opened_channel(
     let mut writes = HashMap::new();
 
     // port
-    let port_id = port_id("test_port");
+    let port_id = port_id("test_port").expect("invalid port ID");
     let key = port_key(&port_id);
     writes.insert(key, 0_u64.try_to_vec().unwrap());
     // capability
@@ -225,37 +217,12 @@ pub fn client_upgrade_data(client_id: ClientId) -> ClientUpgradeData {
     )
 }
 
-pub fn update_client(
-    client_state: AnyClientState,
-    header: AnyHeader,
-) -> (AnyClientState, AnyConsensusState) {
-    let client = AnyClient::from_client_type(client_state.client_type());
-    client
-        .check_header_and_update_state(client_state, header)
-        .expect("updating the client state failed")
-}
-
-fn commitment_prefix() -> CommitmentPrefix {
-    let addr = Address::Internal(InternalAddress::Ibc);
-    let bytes = addr
-        .raw()
-        .try_to_vec()
-        .expect("Encoding an address string shouldn't fail");
-    CommitmentPrefix::from(bytes)
-}
-
-pub fn client_id(client_state: AnyClientState, counter: u64) -> ClientId {
-    let client_type = client_state.client_type();
-    ClientId::new(client_type, counter)
-        .expect("Creating a new client ID shouldn't fail")
-}
-
 pub fn connection_open_init_data(
     client_id: ClientId,
 ) -> ConnectionOpenInitData {
     ConnectionOpenInitData::new(
         client_id,
-        connection_counterparty(),
+        dummy_connection_counterparty(),
         Version::default(),
         Duration::new(100, 0),
     )
@@ -268,7 +235,7 @@ pub fn connection_open_try_data(
     ConnectionOpenTryData::new(
         client_id,
         client_state,
-        connection_counterparty(),
+        dummy_connection_counterparty(),
         vec![Version::default()],
         Height::new(1, 10),
         vec![0].into(),
@@ -308,25 +275,13 @@ pub fn connection_open_confirm_data(
     )
 }
 
-fn connection_counterparty() -> ConnCounterparty {
+fn dummy_connection_counterparty() -> ConnCounterparty {
     let counterpart_client_id = ClientId::from_str("counterpart_test_client")
         .expect("Creating a client ID failed");
     let counterpart_conn_id =
         ConnectionId::from_str("counterpart_test_connection")
             .expect("Creating a connection ID failed");
-    ConnCounterparty::new(
-        counterpart_client_id,
-        Some(counterpart_conn_id),
-        commitment_prefix(),
-    )
-}
-
-pub fn connection_id(counter: u64) -> ConnectionId {
-    ConnectionId::new(counter)
-}
-
-pub fn open_connection(conn: &mut ConnectionEnd) {
-    conn.set_state(ConnState::Open);
+    connection_counterparty(counterpart_client_id, counterpart_conn_id)
 }
 
 pub fn channel_open_init_data(
@@ -336,7 +291,7 @@ pub fn channel_open_init_data(
     ChannelOpenInitData::new(
         port_id,
         Order::Ordered,
-        channel_counterparty(),
+        dummy_channel_counterparty(),
         vec![conn_id],
         Order::Ordered.to_string(),
     )
@@ -349,7 +304,7 @@ pub fn channel_open_try_data(
     ChannelOpenTryData::new(
         port_id,
         Order::Ordered,
-        channel_counterparty(),
+        dummy_channel_counterparty(),
         vec![conn_id],
         Order::Ordered.to_string(),
         Order::Ordered.to_string(),
@@ -367,7 +322,7 @@ pub fn channel_open_ack_data(
     ChannelOpenAckData::new(
         port_id,
         channel_id,
-        channel_counterparty().channel_id().unwrap().clone(),
+        dummy_channel_counterparty().channel_id().unwrap().clone(),
         Order::Ordered.to_string(),
         Height::new(1, 10),
         vec![0].into(),
@@ -411,50 +366,24 @@ pub fn channel_close_confirm_data(
     )
 }
 
-fn channel_counterparty() -> ChanCounterparty {
+fn dummy_channel_counterparty() -> ChanCounterparty {
     let counterpart_port_id = PortId::from_str("counterpart_test_port")
         .expect("Creating a port ID failed");
     let counterpart_channel_id =
         ChannelId::from_str("counterpart_test_channel")
             .expect("Creating a channel ID failed");
-    ChanCounterparty::new(counterpart_port_id, Some(counterpart_channel_id))
-}
-
-pub fn channel_id(counter: u64) -> ChannelId {
-    ChannelId::new(counter)
-}
-
-pub fn open_channel(channel: &mut ChannelEnd) {
-    channel.set_state(ChanState::Open);
-}
-
-pub fn close_channel(channel: &mut ChannelEnd) {
-    channel.set_state(ChanState::Closed);
+    channel_counterparty(counterpart_port_id, counterpart_channel_id)
 }
 
 pub fn unorder_channel(channel: &mut ChannelEnd) {
     channel.ordering = Order::Unordered;
 }
 
-pub fn port_id(id: &str) -> PortId {
-    PortId::from_str(id).expect("Creating a port ID failed")
-}
-
-pub fn port_channel_id(
-    port_id: PortId,
-    channel_id: ChannelId,
-) -> PortChannelId {
-    PortChannelId {
-        port_id,
-        channel_id,
-    }
-}
-
 pub fn packet_send_data(
     port_id: PortId,
     channel_id: ChannelId,
 ) -> PacketSendData {
-    let counterparty = channel_counterparty();
+    let counterparty = dummy_channel_counterparty();
     let timestamp = chrono::Utc::now() + chrono::Duration::seconds(100);
     let timeout_timestamp = Timestamp::from_datetime(timestamp);
     PacketSendData::new(
@@ -485,7 +414,7 @@ pub fn received_packet(
     channel_id: ChannelId,
     sequence: Sequence,
 ) -> Packet {
-    let counterparty = channel_counterparty();
+    let counterparty = dummy_channel_counterparty();
     let timestamp = chrono::Utc::now() + chrono::Duration::seconds(100);
     let timeout_timestamp = Timestamp::from_datetime(timestamp);
     Packet {
@@ -498,19 +427,6 @@ pub fn received_packet(
         timeout_height: Height::new(1, 10),
         timeout_timestamp,
     }
-}
-
-pub fn sequence(sequence_index: u64) -> Sequence {
-    Sequence::from(sequence_index)
-}
-
-pub fn commitment(packet: &Packet) -> String {
-    let input = format!(
-        "{:?},{:?},{:?}",
-        packet.timeout_timestamp, packet.timeout_height, packet.data,
-    );
-    let r = sha2::Sha256::digest(input.as_bytes());
-    format!("{:x}", r)
 }
 
 pub fn timeout_data(packet: Packet, next_seq_recv: Sequence) -> TimeoutData {

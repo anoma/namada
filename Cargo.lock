@@ -93,8 +93,8 @@ dependencies = [
  "ed25519-dalek",
  "group-threshold-cryptography",
  "hex",
- "ibc 0.6.0 (git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id)",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id)",
+ "ibc",
+ "ibc-proto",
  "itertools 0.10.1",
  "loupe",
  "parity-wasm",
@@ -111,8 +111,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.8",
  "sparse-merkle-tree",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint",
  "test-env-log",
  "thiserror",
  "tonic-build",
@@ -168,8 +167,8 @@ dependencies = [
  "signal-hook",
  "sparse-merkle-tree",
  "tempfile",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint",
+ "tendermint-proto",
  "tendermint-rpc",
  "thiserror",
  "tokio",
@@ -207,16 +206,16 @@ dependencies = [
  "color-eyre",
  "concat-idents",
  "eyre",
- "ibc 0.6.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/borsh_ibc_data)",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/borsh_ibc_data)",
+ "ibc",
+ "ibc-proto",
  "itertools 0.10.1",
  "libp2p",
  "pretty_assertions",
  "rexpect",
  "serde_json",
- "sha2 0.9.6",
+ "sha2 0.9.8",
  "tempfile",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost)",
+ "tendermint",
  "test-env-log",
  "tracing",
  "tracing-subscriber",
@@ -2444,34 +2443,7 @@ dependencies = [
  "bytes 1.1.0",
  "chrono",
  "dyn-clonable",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id)",
- "ics23",
- "prost 0.8.0",
- "prost-types 0.8.0",
- "regex",
- "serde 1.0.130",
- "serde_derive",
- "serde_json",
- "sha2 0.9.6",
- "subtle-encoding",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-testgen 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "ibc"
-version = "0.6.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/borsh_ibc_data#626983b62d0f86c0a01c9a8acc5742261c74e83e"
-dependencies = [
- "anomaly",
- "borsh",
- "bytes 1.1.0",
- "chrono",
- "dyn-clonable",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/borsh_ibc_data)",
+ "ibc-proto",
  "ics23",
  "prost 0.8.0",
  "prost-types 0.8.0",
@@ -2481,9 +2453,9 @@ dependencies = [
  "serde_json",
  "sha2 0.9.8",
  "subtle-encoding",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost)",
- "tendermint-testgen 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost)",
+ "tendermint",
+ "tendermint-proto",
+ "tendermint-testgen",
  "thiserror",
  "tracing",
 ]
@@ -2497,21 +2469,7 @@ dependencies = [
  "bytes 1.1.0",
  "prost 0.8.0",
  "prost-types 0.8.0",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "thiserror",
- "tonic",
-]
-
-[[package]]
-name = "ibc-proto"
-version = "0.8.2"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/borsh_ibc_data#626983b62d0f86c0a01c9a8acc5742261c74e83e"
-dependencies = [
- "anomaly",
- "bytes 1.1.0",
- "prost 0.8.0",
- "prost-types 0.8.0",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost)",
+ "tendermint-proto",
  "thiserror",
  "tonic",
 ]
@@ -5483,38 +5441,7 @@ dependencies = [
  "signature",
  "subtle 2.4.1",
  "subtle-encoding",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "thiserror",
- "toml",
- "url 2.2.2",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint"
-version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
-dependencies = [
- "anomaly",
- "async-trait",
- "bytes 1.1.0",
- "chrono",
- "ed25519",
- "ed25519-dalek",
- "futures 0.3.17",
- "num-traits 0.2.14",
- "once_cell",
- "prost 0.8.0",
- "prost-types 0.8.0",
- "serde 1.0.130",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "sha2 0.9.6",
- "signature",
- "subtle 2.4.1",
- "subtle-encoding",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost)",
+ "tendermint-proto",
  "thiserror",
  "toml",
  "url 2.2.2",
@@ -5525,24 +5452,6 @@ dependencies = [
 name = "tendermint-proto"
 version = "0.20.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id#ca0bffdde9a3f1597aea3e0faf518de453b72518"
-dependencies = [
- "anomaly",
- "bytes 1.1.0",
- "chrono",
- "num-derive",
- "num-traits 0.2.14",
- "prost 0.8.0",
- "prost-types 0.8.0",
- "serde 1.0.130",
- "serde_bytes",
- "subtle-encoding",
- "thiserror",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
 dependencies = [
  "anomaly",
  "bytes 1.1.0",
@@ -5577,8 +5486,8 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "subtle-encoding",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint",
+ "tendermint-proto",
  "thiserror",
  "tokio",
  "tracing",
@@ -5598,21 +5507,7 @@ dependencies = [
  "serde_json",
  "simple-error",
  "tempfile",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
-]
-
-[[package]]
-name = "tendermint-testgen"
-version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost#460c428953e298d17344092dab930f371e015657"
-dependencies = [
- "ed25519-dalek",
- "gumdrop",
- "serde 1.0.130",
- "serde_json",
- "simple-error",
- "tempfile",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/update-genesis-new-prost)",
+ "tendermint",
 ]
 
 [[package]]
@@ -6009,7 +5904,7 @@ dependencies = [
  "futures 0.3.17",
  "pin-project 1.0.8",
  "prost 0.8.0",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint-proto",
  "tokio",
  "tokio-stream",
  "tokio-util",

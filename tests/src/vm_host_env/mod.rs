@@ -482,7 +482,7 @@ mod tests {
         let counter =
             tx_host_env::read(&counter_key).expect("no client counter");
         tx_host_env::write(&counter_key, counter + 1);
-        let client_id = ibc::client_id(data.client_state.clone(), counter);
+        let client_id = data.client_id(counter).expect("invalid client ID");
         // client type
         let client_type_key = ibc::client_type_key(&client_id).to_string();
         tx_host_env::write(&client_type_key, data.client_state.client_type());
@@ -520,9 +520,9 @@ mod tests {
         let client_state_key = ibc::client_state_key(&client_id).to_string();
         let client_state =
             tx_host_env::read(&client_state_key).expect("no client state");
-        let header = data.headers.get(0).unwrap();
         let (new_client_state, new_consensus_state) =
-            ibc::update_client(client_state, header.clone());
+            ibc::update_client(client_state, data.headers)
+                .expect("updating a client failed");
         let height = new_client_state.latest_height();
         tx_host_env::write(&client_state_key, new_client_state);
         let consensus_state_key =
@@ -595,7 +595,7 @@ mod tests {
         };
         // get and increment the connection counter
         let counter_key = ibc::connection_counter_key().to_string();
-        let counter =
+        let counter: u64 =
             tx_host_env::read(&counter_key).expect("no connection counter");
         tx_host_env::write(&counter_key, counter + 1);
         // new connection
@@ -730,7 +730,7 @@ mod tests {
 
         // Start a transaction for ChannelOpenInit
         // tx (Not need to decode tx_data)
-        let port_id = ibc::port_id("test_port");
+        let port_id = ibc::port_id("test_port").expect("invalid port ID");
         let data = ibc::channel_open_init_data(port_id.clone(), conn_id);
         let tx_data = data.try_to_vec().expect("encoding failed");
         let tx = Tx {
@@ -746,7 +746,7 @@ mod tests {
         tx_host_env::write(&port_key, cap_index);
         let cap_key = ibc::capability_key(cap_index).to_string();
         tx_host_env::write(&cap_key, port_id.clone());
-        // get and increment the connection counter
+        // get and increment the channel counter
         let counter_key = ibc::channel_counter_key().to_string();
         let counter =
             tx_host_env::read(&counter_key).expect("no channel counter");
@@ -813,7 +813,7 @@ mod tests {
 
         // Start a transaction for ChannelOpenTry
         // tx (Not need to decode tx_data)
-        let port_id = ibc::port_id("test_port");
+        let port_id = ibc::port_id("test_port").expect("invalid port ID");
         let data = ibc::channel_open_try_data(port_id.clone(), conn_id);
         let tx_data = data.try_to_vec().expect("encoding failed");
         let tx = Tx {
