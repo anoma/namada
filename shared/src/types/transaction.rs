@@ -1,4 +1,7 @@
 //! Types that are used in transactions.
+
+pub mod pos;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
