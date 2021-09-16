@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
-use crate::types::address::{self, Address, InternalAddress};
+use crate::types::address::{self, Address};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -343,9 +343,6 @@ impl KeySeg for DbKeySeg {
         if string.contains(KEY_SEGMENT_SEPARATOR) {
             return Err(Error::InvalidKeySeg(string));
         }
-        if string == Address::Internal(InternalAddress::Ibc).raw() {
-            return Err(Error::InvalidKeySeg(string));
-        }
         match string.chars().next() {
             // address hashes are prefixed with `'#'`
             Some(c) if c == RESERVED_ADDRESS_PREFIX => {
@@ -606,13 +603,6 @@ mod tests {
         let target = "?/test".to_owned();
         match Key::parse(target).expect_err("unexpectedly succeeded") {
             Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
-            _ => panic!("unexpected error happens"),
-        }
-
-        let encoded_ibc_addr = Address::Internal(InternalAddress::Ibc).raw();
-        let target = format!("{}/test", encoded_ibc_addr);
-        match Key::parse(target).expect_err("unexpectedly succeeded") {
-            Error::InvalidKeySeg(s) => assert_eq!(s, encoded_ibc_addr),
             _ => panic!("unexpected error happens"),
         }
     }
