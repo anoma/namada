@@ -234,7 +234,7 @@ where
                     )));
                 }
                 match TimeoutData::try_from_slice(tx_data) {
-                    Ok(data) => self.validate_commitment_absense(data),
+                    Ok(data) => self.validate_commitment_absence(data),
                     Err(_) => {
                         match ChannelCloseInitData::try_from_slice(tx_data) {
                             Ok(_) => Ok(()),
@@ -255,7 +255,7 @@ where
         }
     }
 
-    fn validate_commitment_absense(&self, data: TimeoutData) -> Result<()> {
+    fn validate_commitment_absence(&self, data: TimeoutData) -> Result<()> {
         // check if the commitment has been deleted
         let packet = data.packet;
         let commitment_key = Path::Commitments {
