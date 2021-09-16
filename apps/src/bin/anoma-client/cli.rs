@@ -1,7 +1,6 @@
 //! Anoma client CLI.
 
 use std::collections::HashSet;
-use std::fs::File;
 use std::io::Write;
 
 use anoma::types::intent::{Exchange, FungibleTokenIntent};
@@ -17,6 +16,7 @@ use color_eyre::eyre::Result;
 pub async fn main() -> Result<()> {
     let (cmd, _global_args) = cli::anoma_client_cli();
     match cmd {
+        // Ledger cmds
         cmds::AnomaClient::TxCustom(cmds::TxCustom(args)) => {
             tx::submit_custom(args).await;
         }
@@ -26,14 +26,36 @@ pub async fn main() -> Result<()> {
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
             tx::submit_update_vp(args).await;
         }
+        cmds::AnomaClient::TxInitAccount(cmds::TxInitAccount(args)) => {
+            tx::submit_init_account(args).await;
+        }
+        cmds::AnomaClient::Bond(cmds::Bond(args)) => {
+            tx::submit_bond(args).await;
+        }
+        cmds::AnomaClient::Unbond(cmds::Unbond(args)) => {
+            tx::submit_unbond(args).await;
+        }
+        cmds::AnomaClient::Withdraw(cmds::Withdraw(args)) => {
+            tx::submit_withdraw(args).await;
+        }
+        cmds::AnomaClient::QueryEpoch(cmds::QueryEpoch(args)) => {
+            rpc::query_epoch(args).await;
+        }
         cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
             rpc::query_balance(args).await;
         }
+        cmds::AnomaClient::QueryBonds(cmds::QueryBonds(args)) => {
+            rpc::query_bonds(args).await;
+        }
+        cmds::AnomaClient::QueryVotingPower(cmds::QueryVotingPower(args)) => {
+            rpc::query_voting_power(args).await;
+        }
+        cmds::AnomaClient::QuerySlashes(cmds::QuerySlashes(args)) => {
+            rpc::query_slashes(args).await;
+        }
+        // Gossip cmds
         cmds::AnomaClient::Intent(cmds::Intent(args)) => {
             gossip_intent(args).await;
-        }
-        cmds::AnomaClient::CraftIntent(cmds::CraftIntent(args)) => {
-            craft_intent(args);
         }
         cmds::AnomaClient::SubscribeTopic(cmds::SubscribeTopic(args)) => {
             subscribe_topic(args).await;
@@ -45,40 +67,11 @@ pub async fn main() -> Result<()> {
 async fn gossip_intent(
     args::Intent {
         node_addr,
-        data_path,
         topic,
-    }: args::Intent,
-) {
-    let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
-    let data = std::fs::read(data_path).expect("data file IO error");
-    let intent = anoma::proto::Intent::new(data);
-    let message: services::RpcMessage =
-        RpcMessage::new_intent(intent, topic).into();
-    let response = client
-        .send_message(message)
-        .await
-        .expect("failed to send message and/or receive rpc response");
-    println!("{:#?}", response);
-}
-
-async fn subscribe_topic(
-    args::SubscribeTopic { node_addr, topic }: args::SubscribeTopic,
-) {
-    let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
-    let message: services::RpcMessage = RpcMessage::new_topic(topic).into();
-    let response = client
-        .send_message(message)
-        .await
-        .expect("failed to send message and/or receive rpc response");
-    println!("{:#?}", response);
-}
-
-fn craft_intent(
-    args::CraftIntent {
         key,
         exchanges,
-        file_path,
-    }: args::CraftIntent,
+        to_stdout,
+    }: args::Intent,
 ) {
     let signed_exchanges: HashSet<Signed<Exchange>> = exchanges
         .iter()
@@ -97,6 +90,38 @@ fn craft_intent(
     );
     let data_bytes = signed_ft.try_to_vec().unwrap();
 
-    let mut file = File::create(file_path).unwrap();
-    file.write_all(&data_bytes).unwrap();
+    if to_stdout {
+        let mut out = std::io::stdout();
+        out.write_all(&data_bytes).unwrap();
+        out.flush().unwrap();
+    } else {
+        let node_addr = node_addr.expect(
+            "Gossip node address must be defined to submit the intent to it.",
+        );
+        let topic = topic.expect(
+            "The topic must be defined to submit the intent to a gossip node.",
+        );
+        let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
+
+        let intent = anoma::proto::Intent::new(data_bytes);
+        let message: services::RpcMessage =
+            RpcMessage::new_intent(intent, topic).into();
+        let response = client
+            .send_message(message)
+            .await
+            .expect("failed to send message and/or receive rpc response");
+        println!("{:#?}", response);
+    }
+}
+
+async fn subscribe_topic(
+    args::SubscribeTopic { node_addr, topic }: args::SubscribeTopic,
+) {
+    let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
+    let message: services::RpcMessage = RpcMessage::new_topic(topic).into();
+    let response = client
+        .send_message(message)
+        .await
+        .expect("failed to send message and/or receive rpc response");
+    println!("{:#?}", response);
 }

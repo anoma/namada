@@ -1,7 +1,9 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::num::ParseIntError;
 use std::ops::Add;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -71,6 +73,12 @@ impl Add<u64> for BlockHeight {
 
     fn add(self, rhs: u64) -> Self::Output {
         Self(self.0 + rhs)
+    }
+}
+
+impl From<BlockHeight> for u64 {
+    fn from(height: BlockHeight) -> Self {
+        height.0
     }
 }
 
@@ -237,27 +245,16 @@ impl Key {
         Key { segments }
     }
 
-    /// Check if the given key is a key to a validity predicate.
-    pub fn is_validity_predicate(&self) -> bool {
+    /// Check if the given key is a key to a validity predicate. If it is,
+    /// returns the address of the account.
+    pub fn is_validity_predicate(&self) -> Option<&Address> {
         match &self.segments[..] {
-            [DbKeySeg::AddressSeg(_), DbKeySeg::StringSeg(sub_key)]
+            [DbKeySeg::AddressSeg(address), DbKeySeg::StringSeg(sub_key)]
                 if sub_key == RESERVED_VP_KEY =>
             {
-                true
+                Some(address)
             }
-            _ => false,
-        }
-    }
-
-    /// Check if the given key is a key to IBC-related data
-    pub fn is_ibc_key(&self) -> bool {
-        match self.segments.get(0) {
-            Some(seg) => {
-                *seg == DbKeySeg::AddressSeg(Address::Internal(
-                    InternalAddress::Ibc,
-                ))
-            }
-            _ => false,
+            _ => None,
         }
     }
 
@@ -538,6 +535,15 @@ impl Display for Epoch {
     }
 }
 
+impl FromStr for Epoch {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let raw: u64 = u64::from_str(s)?;
+        Ok(Self(raw))
+    }
+}
+
 impl Epoch {
     /// Change to the next epoch
     pub fn next(&self) -> Self {
@@ -550,6 +556,12 @@ impl Add<u64> for Epoch {
 
     fn add(self, rhs: u64) -> Self::Output {
         Self(self.0 + rhs)
+    }
+}
+
+impl From<Epoch> for u64 {
+    fn from(epoch: Epoch) -> Self {
+        epoch.0
     }
 }
 
@@ -572,6 +584,7 @@ pub struct Epochs {
     /// Invariant: the values must be sorted in ascending order.
     first_block_heights: Vec<BlockHeight>,
 }
+
 impl Default for Epochs {
     /// Initialize predecessor epochs, assuming starting on the epoch 0 and
     /// block height 0.
@@ -826,9 +839,39 @@ pub mod testing {
             // a key for a validity predicate
             arb_address().prop_map(|addr| Key::validity_predicate(&addr)),
             // a key from key segments
-            collection::vec(arb_key_seg(), 1..5)
-                .prop_map(|segments| { Key { segments } }),
+            arb_key_no_vp(),
         ]
+    }
+
+    /// Generate an arbitrary [`Key`] other than a validity predicate key.
+    pub fn arb_key_no_vp() -> impl Strategy<Value = Key> {
+        // a key from key segments
+        collection::vec(arb_key_seg(), 1..5)
+            .prop_map(|segments| Key { segments })
+    }
+
+    /// Generate an arbitrary [`Key`] for a given address storage sub-space.
+    pub fn arb_account_storage_key(
+        address: Address,
+    ) -> impl Strategy<Value = Key> {
+        prop_oneof![
+            // a key for a validity predicate
+            Just(Key::validity_predicate(&address)),
+            // a key from key segments
+            arb_account_storage_key_no_vp(address),
+        ]
+    }
+
+    /// Generate an arbitrary [`Key`] other than a validity predicate key for a
+    /// given address storage sub-space.
+    pub fn arb_account_storage_key_no_vp(
+        address: Address,
+    ) -> impl Strategy<Value = Key> {
+        collection::vec(arb_key_seg(), 1..5).prop_map(move |arb_segments| {
+            let mut segments = vec![address.to_db_key()];
+            segments.extend(arb_segments);
+            Key { segments }
+        })
     }
 
     /// Generate an arbitrary [`DbKeySeg`].
