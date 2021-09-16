@@ -17,7 +17,6 @@ default = [
   "rand_core",
   "rand_new"]
 
-wasm = []
 # for integration tests and test utilies
 testing = [
   "proptest",
