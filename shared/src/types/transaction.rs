@@ -47,7 +47,7 @@ pub struct InitAccount {
 /// Integration of Ferveo cryptographic primitives
 /// to enable encrypted txs.
 /// *Not wasm compatible*
-#[cfg(feature = "default")]
+#[cfg(feature = "ferveo-tpke")]
 pub mod wrapper_tx {
     use std::convert::TryFrom;
     use std::io::{Error, ErrorKind, Write};
@@ -827,5 +827,5 @@ pub mod wrapper_tx {
     }
 }
 
-#[cfg(feature = "default")]
+#[cfg(feature = "ferveo-tpke")]
 pub use wrapper_tx::*;

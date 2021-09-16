@@ -8,20 +8,20 @@ resolver = "2"
 version = "0.1.0"
 
 [features]
-default = ["anoma/default", "wasm-runtime"]
+default = ["wasm-runtime"]
 wasm-runtime = ["anoma/wasm-runtime"]
 
 [dependencies]
-anoma = {path = "../shared", default_features = false, features = ["testing"]}
+anoma = {path = "../shared", features = ["testing"]}
 anoma_vm_env = {path = "../vm_env"}
 concat-idents = "1.1.2"
 test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing = "0.1.26"
 tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
 serde_json = { version = "1.0.65" }
+anoma_apps = {path = "../apps", features = ["testing"]}
 
 [dev-dependencies]
-anoma_apps = {path = "../apps", features = ["testing"]}
 assert_cmd = "1.0.7"
 borsh = "0.9.1"
 color-eyre = "0.5.11"
