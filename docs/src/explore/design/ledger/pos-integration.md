@@ -166,6 +166,8 @@ Because some key changes are expected to relate to others, the VP also accumulat
 
 The accumulators are initialized to their default values (empty hash maps and hash set). The data keyed by address are using the validator addresses.
 
+For any updated epoched data, the `last_update` field must be set to the current epoch.
+
 The validity predicate triggers a validation logic based on the storage keys modified by a transaction:
 
 - `validator/{validator_address}/consensus_key`:
@@ -175,11 +177,11 @@ The validity predicate triggers a validation logic based on the storage keys mod
       // - check that any other sub-keys for this validator address didn't exist
       // in a pre-state
       // - check that the `state` sub-key for this validator address has been set
-      // correctly
+      // correctly, i.e. the value should be initialized at `pipeline_length` offset
     },
     (Some(pre), Some(post)) => {
       // - check that the new consensus key is different from the old consensus
-      // key and that it has been set correctly
+      // key and that it has been set correctly, i.e. the value can only be changed at `pipeline_length` offset
     },
     _ => false,
   }
@@ -191,10 +193,15 @@ The validity predicate triggers a validation logic based on the storage keys mod
       // - check that any other sub-keys for this validator address didn't exist
       // in a pre-state
       // - check that a consensus key record is also created
-      // - check that the `post` state is set correctly
+      // - check that the `post` state is set correctly:
+      //   - the state should be set to `pending` in the current epoch and `candidate` at pipeline offset
     },
     (Some(pre), Some(post)) => {
       // - check that a validator has been correctly deactivated or reactivated
+      // - the `state` should only be changed at `pipeline_length` offset
+      // - if the `state` becomes `inactive`, it must have been `pending` or `candidate`
+      // - if the `state` becomes `pending`, it must have been `inactive`
+      // - if the `state` becomes `candidate`, it must have been `pending`
     },
     _ => false,
   }
