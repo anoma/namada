@@ -341,7 +341,7 @@ pub mod wrapper_tx {
 
             Self {
                 fee,
-                pk: keypair.public.into(),
+                pk: keypair.public.clone().into(),
                 epoch,
                 gas_limit,
                 inner_tx,
@@ -388,7 +388,7 @@ pub mod wrapper_tx {
 
         /// Sign the wrapper transaction and convert to a normal Tx type
         pub fn sign(&self, keypair: &Keypair) -> Result<Tx, WrapperTxErr> {
-            if self.pk != keypair.public.into() {
+            if self.pk != keypair.public.clone().into() {
                 return Err(WrapperTxErr::InvalidKeyPair);
             }
             Ok(Tx::new(
