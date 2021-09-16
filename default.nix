@@ -11,6 +11,9 @@
       })
     ];
   }
+, lib ? pkgs.lib
+, stdenv ? pkgs.stdenv
+, xcbuild ? pkgs.xcbuild
 }:
 let
   crateOverrides = pkgs: with pkgs; {
@@ -24,8 +27,13 @@ let
       libp2p-relay = attrs: { buildInputs = [ protobuf ]; PROTOC = "${protobuf}/bin/protoc"; };
       libp2p-noise = attrs: { buildInputs = [ protobuf ]; PROTOC = "${protobuf}/bin/protoc"; };
 
+      # Additional build inputs are needed on OSX (they're using `xcrun`)
+      blake2b-rs = attrs: { buildInputs = lib.optionals stdenv.isDarwin [ xcbuild ]; };
+      wasmer-vm = attrs: { buildInputs = lib.optionals stdenv.isDarwin [ xcbuild ]; };
+
       librocksdb-sys = attrs: {
-        buildInputs = [ clang rustfmt snappy lz4 zstd zlib bzip2 ];
+        buildInputs = [ clang rustfmt snappy lz4 zstd zlib bzip2 ]
+          ++ lib.optionals stdenv.isDarwin [ xcbuild ];
         LIBCLANG_PATH = "${llvmPackages.libclang.lib}/lib";
         # rust-rocksdb uses {}_LIB_DIR to determine whether it embeds compression libs in itself.
         # We need to tell it to use libs from the nix store so that we don't get linker errors later on.
