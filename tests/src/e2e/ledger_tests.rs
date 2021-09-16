@@ -289,14 +289,14 @@ fn ledger_txs_and_queries() -> Result<()> {
                     eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
                 })?;
             if !dry_run {
-                request.exp_string("Process proposal accepted this transaction").map_err(
-                    |e| {
+                request
+                    .exp_string("Process proposal accepted this transaction")
+                    .map_err(|e| {
                         eyre!(format!(
                             "in command: {}\n\nReason: {}",
                             cmd_str, e
                         ))
-                    },
-                )?;
+                    })?;
             }
             request.exp_string("Transaction is valid.").map_err(|e| {
                 eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
