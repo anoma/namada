@@ -720,8 +720,8 @@ pub mod tests {
     fn gen_keypair() {
         let mut rng: ThreadRng = thread_rng();
         let keypair = Keypair::generate(&mut rng);
-        let public_key: PublicKey = keypair.public.into();
-        let secret_key: SecretKey = keypair.secret.into();
+        let public_key: PublicKey = keypair.public;
+        let secret_key: SecretKey = keypair.secret;
         println!("Public key: {}", public_key);
         println!("Secret key: {}", secret_key);
     }

@@ -341,7 +341,7 @@ pub mod wrapper_tx {
 
             Self {
                 fee,
-                pk: keypair.public.clone().into(),
+                pk: keypair.public.clone(),
                 epoch,
                 gas_limit,
                 inner_tx,
@@ -388,7 +388,7 @@ pub mod wrapper_tx {
 
         /// Sign the wrapper transaction and convert to a normal Tx type
         pub fn sign(&self, keypair: &Keypair) -> Result<Tx, WrapperTxErr> {
-            if self.pk != keypair.public.clone().into() {
+            if self.pk != keypair.public {
                 return Err(WrapperTxErr::InvalidKeyPair);
             }
             Ok(Tx::new(
@@ -732,7 +732,7 @@ pub mod wrapper_tx {
             tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
 
             // check that the signature is not valid
-            verify_tx_sig(&keypair.public.into(), &tx, &signed_tx_data.sig)
+            verify_tx_sig(&keypair.public, &tx, &signed_tx_data.sig)
                 .expect_err("Test failed");
             // check that the try from method also fails
             let err = process_tx(tx).expect_err("Test failed");
