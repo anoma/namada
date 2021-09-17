@@ -14,7 +14,6 @@ pub use utils::safe_exit;
 use utils::*;
 
 pub use self::context::Context;
-use super::config;
 
 const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
 const APP_NAME: &str = "Anoma";
@@ -1998,59 +1997,4 @@ fn anoma_wallet_app() -> App {
         .about("Anoma wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaWallet::add_sub(args::Global::def(app))
-}
-
-pub fn update_gossip_config(
-    args: args::GossipRun,
-    config: &mut config::IntentGossiper,
-) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(addr) = args.addr {
-        config.address = addr
-    }
-
-    let matchmaker_arg = args.matchmaker_path;
-    let tx_code_arg = args.tx_code_path;
-    let ledger_address_arg = args.ledger_addr;
-    let filter_arg = args.filter_path;
-    if let Some(mut matchmaker_cfg) = config.matchmaker.as_mut() {
-        if let Some(matchmaker) = matchmaker_arg {
-            matchmaker_cfg.matchmaker = matchmaker
-        }
-        if let Some(tx_code) = tx_code_arg {
-            matchmaker_cfg.tx_code = tx_code
-        }
-        if let Some(ledger_address) = ledger_address_arg {
-            matchmaker_cfg.ledger_address = ledger_address
-        }
-        if let Some(filter) = filter_arg {
-            matchmaker_cfg.filter = Some(filter)
-        }
-    } else if let (Some(matchmaker), Some(tx_code), Some(ledger_address)) = (
-        matchmaker_arg.as_ref(),
-        tx_code_arg.as_ref(),
-        ledger_address_arg.as_ref(),
-    ) {
-        let matchmaker_cfg = Some(config::Matchmaker {
-            matchmaker: matchmaker.clone(),
-            tx_code: tx_code.clone(),
-            ledger_address: ledger_address.clone(),
-            filter: filter_arg,
-        });
-        config.matchmaker = matchmaker_cfg
-    } else if matchmaker_arg.is_some()
-        || tx_code_arg.is_some()
-        || ledger_address_arg.is_some()
-    // if at least one argument is not none then fail
-    {
-        panic!(
-            "No complete matchmaker configuration found (matchmaker code \
-             path, tx code path, and ledger address). Please update the \
-             configuration with default value or use all cli argument to use \
-             the matchmaker"
-        );
-    }
-    if let Some(address) = args.rpc {
-        config.rpc = Some(config::RpcServer { address });
-    }
-    Ok(())
 }
