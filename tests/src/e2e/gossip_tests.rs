@@ -188,7 +188,15 @@ fn match_intent() -> Result<()> {
     generate_intent_json(intent_c_path_input.clone(), intent_c_json);
 
     let mut base_node_gossip = Command::cargo_bin("anoman")?;
-    base_node_gossip.args(&["--base-dir", first_node_dir, "gossip"]);
+    base_node_gossip.args(&[
+        "--base-dir",
+        first_node_dir,
+        "gossip",
+        "--source",
+        "matchmaker",
+        "--signing-key",
+        "matchmaker",
+    ]);
 
     //  Start gossip
     let mut session_gossip = spawn_command(base_node_gossip, Some(100_000))
@@ -222,12 +230,12 @@ fn match_intent() -> Result<()> {
     // means it sent it correctly but not able to gossip it (which is
     // correct since there is only 1 node)
     session_send_intent_a
-        .exp_regex(".*Failed to publish_intent InsufficientPeers*")
+        .exp_string("Failed to publish intent in gossiper: InsufficientPeers")
         .map_err(|e| eyre!(format!("{}", e)))?;
     drop(session_send_intent_a);
 
     session_gossip
-        .exp_regex(".*trying to match new intent*")
+        .exp_string("trying to match new intent")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // Send intent B
@@ -251,12 +259,12 @@ fn match_intent() -> Result<()> {
     // means it sent it correctly but not able to gossip it (which is
     // correct since there is only 1 node)
     session_send_intent_b
-        .exp_regex(".*Failed to publish_intent InsufficientPeers*")
+        .exp_string("Failed to publish intent in gossiper: InsufficientPeers")
         .map_err(|e| eyre!(format!("{}", e)))?;
     drop(session_send_intent_b);
 
     session_gossip
-        .exp_regex(".*trying to match new intent*")
+        .exp_string("trying to match new intent")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // Send intent C
@@ -280,7 +288,7 @@ fn match_intent() -> Result<()> {
     // means it sent it correctly but not able to gossip it (which is
     // correct since there is only 1 node)
     session_send_intent_c
-        .exp_string("Failed to publish_intent InsufficientPeers")
+        .exp_string("Failed to publish intent in gossiper: InsufficientPeers")
         .map_err(|e| eyre!(format!("{}", e)))?;
     drop(session_send_intent_c);
 
