@@ -32,7 +32,10 @@ build-test:
 	$(cargo) build --tests
 
 build-release:
-	$(cargo) build --release
+	$(cargo) build --release --package anoma_apps --no-default-features --features std
+
+check-release:
+	$(cargo) check --release --package anoma_apps --no-default-features --features std
 
 package: build-release
 	mkdir -p $(package-name)/wasm && \
