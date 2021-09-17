@@ -149,12 +149,13 @@ fn try_decode_intent(
     let mut tx_data =
         IntentTransfers::try_from_slice(&raw_intent_transfers[..]).ok()?;
     log_string(format!(
-        "tx_data.exchanges: {:?}, {}",
-        tx_data.exchanges, &addr
+        "tx_data.matches.exchanges: {:?}, {}",
+        tx_data.matches.exchanges, &addr
     ));
-    if let (Some(exchange), Some(intent)) =
-        (tx_data.exchanges.remove(addr), tx_data.intents.remove(addr))
-    {
+    if let (Some(exchange), Some(intent)) = (
+        tx_data.matches.exchanges.remove(addr),
+        tx_data.matches.intents.remove(addr),
+    ) {
         return Some((raw_intent_transfers, exchange, intent));
     } else {
         log_string("no intent with a matching address".to_string());

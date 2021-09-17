@@ -1531,8 +1531,10 @@ pub mod args {
         pub node_addr: Option<String>,
         /// Intent topic
         pub topic: Option<String>,
+        /// Source address
+        pub source: Option<WalletAddress>,
         /// Signing key
-        pub signing_key: WalletKeypair,
+        pub signing_key: Option<WalletKeypair>,
         /// Exchanges description
         pub exchanges: Vec<Exchange>,
         /// The address of the ledger node as host:port
@@ -1543,9 +1545,10 @@ pub mod args {
 
     impl Args for Intent {
         fn parse(matches: &ArgMatches) -> Self {
-            let signing_key = SIGNING_KEY.parse(matches);
             let node_addr = NODE_OPT.parse(matches);
             let data_path = DATA_PATH.parse(matches);
+            let source = SOURCE_OPT.parse(matches);
+            let signing_key = SIGNING_KEY_OPT.parse(matches);
             let to_stdout = TO_STDOUT.parse(matches);
             let topic = TOPIC_OPT.parse(matches);
 
@@ -1568,6 +1571,7 @@ pub mod args {
             Self {
                 node_addr,
                 topic,
+                source,
                 signing_key,
                 exchanges,
                 ledger_address,
@@ -1582,14 +1586,28 @@ pub mod args {
                     .about("The gossip node address.")
                     .conflicts_with(TO_STDOUT.name),
             )
-            .arg(SIGNING_KEY.def().about(
-                "Sign the intent with the key for the given public key, \
-                 public key hash or alias from your wallet.",
-            ))
             .arg(DATA_PATH.def().about(
                 "The data of the intent, that contains all value necessary \
                  for the matchmaker.",
             ))
+            .arg(
+                SOURCE_OPT
+                    .def()
+                    .about(
+                        "Sign the intent with the key of a given address or \
+                         address alias from your wallet.",
+                    )
+                    .conflicts_with(SIGNING_KEY_OPT.name),
+            )
+            .arg(
+                SIGNING_KEY_OPT
+                    .def()
+                    .about(
+                        "Sign the intent with the key for the given public \
+                         key, public key hash or alias from your wallet.",
+                    )
+                    .conflicts_with(SOURCE_OPT.name),
+            )
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
             .arg(
                 TOPIC_OPT
@@ -1645,6 +1663,8 @@ pub mod args {
         pub tx_code_path: Option<PathBuf>,
         pub ledger_addr: Option<tendermint::net::Address>,
         pub filter_path: Option<PathBuf>,
+        pub tx_signing_key: Option<WalletKeypair>,
+        pub tx_source_address: Option<WalletAddress>,
     }
 
     impl Args for GossipRun {
@@ -1657,6 +1677,8 @@ pub mod args {
             let tx_code_path = TX_CODE_PATH.parse(matches);
             let ledger_addr = LEDGER_ADDRESS_OPT.parse(matches);
             let filter_path = FILTER_PATH.parse(matches);
+            let tx_signing_key = SIGNING_KEY_OPT.parse(matches);
+            let tx_source_address = SOURCE_OPT.parse(matches);
             Self {
                 addr,
                 peers,
@@ -1666,6 +1688,8 @@ pub mod args {
                 tx_code_path,
                 ledger_addr,
                 filter_path,
+                tx_signing_key,
+                tx_source_address,
             }
         }
 
@@ -1694,6 +1718,16 @@ pub mod args {
                     .def()
                     .about("The private filter for the matchmaker"),
             )
+            .arg(SIGNING_KEY_OPT.def().about(
+                "Sign the transactions created by the matchmaker (if enabled) \
+                 with the key for the given public key, public key hash or \
+                 alias from your wallet.",
+            ))
+            .arg(SOURCE_OPT.def().about(
+                "Source address or alias of an address of the transactions \
+                 created by the matchmaker (if enabled). This must be \
+                 matching the signing key.",
+            ))
         }
     }
 

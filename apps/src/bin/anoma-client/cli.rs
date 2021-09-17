@@ -70,6 +70,7 @@ async fn gossip_intent(
     args::Intent {
         node_addr,
         topic,
+        source,
         signing_key,
         exchanges,
         ledger_address,
@@ -85,9 +86,23 @@ async fn gossip_intent(
         signed_exchanges.insert(signed);
     }
 
-    let signing_key = ctx.get_cached(signing_key);
+    let source_keypair = match ctx.get_opt_cached(signing_key) {
+        Some(key) => key,
+        None => {
+            let source = ctx.get_opt(source).unwrap_or_else(|| {
+                eprintln!("A source or a signing key is required.");
+                cli::safe_exit(1)
+            });
+            signing::find_keypair(
+                &mut ctx.wallet,
+                &source,
+                ledger_address.clone(),
+            )
+            .await
+        }
+    };
     let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
-        &signing_key,
+        &source_keypair,
         FungibleTokenIntent {
             exchange: signed_exchanges,
         },

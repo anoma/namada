@@ -216,19 +216,20 @@ pub mod tx_from_intent {
         let tx_data = tx_data.unwrap();
 
         // make sure that the matchmaker has to validate this tx
-        insert_verifier(&address::matchmaker());
+        insert_verifier(&tx_data.source);
 
         for token::Transfer {
             source,
             target,
             token,
             amount,
-        } in tx_data.transfers
+        } in tx_data.matches.transfers
         {
             token::transfer(&source, &target, &token, amount);
         }
 
         tx_data
+            .matches
             .exchanges
             .values()
             .into_iter()
