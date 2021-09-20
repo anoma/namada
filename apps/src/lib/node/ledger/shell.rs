@@ -186,22 +186,16 @@ impl Shell {
             self.storage
                 .write(&pk_key, pk.try_to_vec().expect("encode public key"))
                 .expect("Unable to set genesis user public key");
-            // Set the up a mapping to get a the established address of our test
-            // users from both their established address and
-            // implicit addresses
-            self.storage
-                .write(
-                    &address::canonical_address_key(user),
-                    user.try_to_vec().expect("encode address"),
-                )
-                .expect("Unable to set genesis canonical address");
 
+            // default user's  tokens (in their implicit accounts) for testing
             self.storage
                 .write(
-                    &address::canonical_address_key(&Address::from(&pk)),
-                    user.try_to_vec().expect("encode address"),
+                    &token::balance_key(token, &Address::from(&pk)),
+                    Amount::whole(1_000_000)
+                        .try_to_vec()
+                        .expect("encode token amount"),
                 )
-                .expect("Unable to set genesis canonical address");
+                .expect("Unable to set genesis balance");
         }
 
         // Temporary for testing, we have a fixed matchmaker account.  This
@@ -608,21 +602,8 @@ impl Shell {
         token: &Address,
         owner: &Address,
     ) -> std::result::Result<Amount, String> {
-        let canonical_address_resp =
-            self.read_storage_value(&address::canonical_address_key(owner));
-        let addr = if canonical_address_resp.code != 0 {
-            Err("Unable to find the given address".into())
-                as std::result::Result<Address, String>
-        } else {
-            BorshDeserialize::try_from_slice(&canonical_address_resp.value[..])
-                .map_err(|_| {
-                    "Unable to deserialize the canonical address of the given \
-                     address"
-                        .into()
-                })
-        }?;
         let query_resp =
-            self.read_storage_value(&token::balance_key(token, &addr));
+            self.read_storage_value(&token::balance_key(token, owner));
         if query_resp.code != 0 {
             Err("Unable to read balance of the given address".into())
         } else {

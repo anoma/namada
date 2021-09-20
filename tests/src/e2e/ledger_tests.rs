@@ -655,29 +655,23 @@ fn test_wrapper_txs() -> Result<()> {
         })?;
     drop(request);
 
-    // Spend some of Bertha's money so that she cannot afford the fee anymore
-    let tx_args = vec![
-        "transfer", "--source", BERTHA, "--target", ALBERT, "--token", XAN,
-        "--amount", "10.1",
-    ];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    // check that it is accepted by the process proposal method
-    request.exp_string("Transaction is valid").map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    drop(request);
-
     // submit a wrapper tx bertha cannot afford
+    let tx = WrapperTx::new(
+        Fee {
+            amount: Amount::whole(1_000_001),
+            token: xan(),
+        },
+        &keypair,
+        Epoch(1),
+        1.into(),
+        Tx::new(vec![], Some("transaction data".as_bytes().to_owned())),
+    );
+
+    // write out the tx data to file
+    let mut data = PathBuf::from(base_dir.path());
+    data.push("tx_data");
+    std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
+        .expect("Test failed");
     let tx_args = vec![
         "tx",
         "--code-path",
