@@ -526,6 +526,8 @@ impl KeySeg for Address {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 pub struct Epoch(pub u64);
 

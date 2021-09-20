@@ -26,8 +26,9 @@ use anoma::types::address::Address;
 use anoma::types::storage::{BlockHash, BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::token::Amount;
+use anoma::types::transaction::{process_tx, TxType, WrapperTx};
 use anoma::types::{address, key, token};
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Itertools;
 use tendermint::block::Header;
 use tendermint_proto::abci::{
@@ -42,6 +43,7 @@ use crate::config::genesis;
 use crate::node::ledger::events::{Event, EventType};
 use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::{config, wallet};
 
@@ -184,6 +186,16 @@ impl Shell {
             self.storage
                 .write(&pk_key, pk.try_to_vec().expect("encode public key"))
                 .expect("Unable to set genesis user public key");
+
+            // default user's  tokens (in their implicit accounts) for testing
+            self.storage
+                .write(
+                    &token::balance_key(token, &Address::from(&pk)),
+                    Amount::whole(1_000_000)
+                        .try_to_vec()
+                        .expect("encode token amount"),
+                )
+                .expect("Unable to set genesis balance");
         }
 
         // Temporary for testing, we have a fixed matchmaker account.  This
@@ -495,16 +507,113 @@ impl Shell {
         Default::default()
     }
 
-    /// Check the fees and signatures of the fee payer for a transaction
+    /// Validate a transaction request. On success, the transaction will
+    /// included in the mempool and propagated to peers, otherwise it will be
+    /// rejected.
+    ///
+    /// Checks if the Tx can be deserialized from bytes. Checks the fees and
+    /// signatures of the fee payer for a transaction if it is a wrapper tx.
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
     pub fn process_proposal(
         &mut self,
-        _req: shim::request::ProcessProposal,
+        req: shim::request::ProcessProposal,
     ) -> shim::response::ProcessProposal {
-        Default::default()
+        let tx = Tx::try_from(req.tx.as_ref()).map_err(Error::TxDecoding);
+        // If we could not deserialize the Tx, return an error response
+        if let Err(err) = tx {
+            return shim::response::ProcessProposal {
+                result: err.into(),
+                tx: req.tx,
+            };
+        }
+
+        let (result, processed_tx) = match process_tx(tx.unwrap()) {
+            // This occurs if the wrapper tx signature is invalid
+            Err(err) => (TxResult::from(err), None),
+            Ok(result) => match result {
+                // If it is a raw transaction, we do no further validation
+                TxType::Raw(_) => (
+                    TxResult {
+                        code: 0,
+                        info: "Process proposal accepted this transaction"
+                            .into(),
+                    },
+                    None,
+                ),
+                TxType::Wrapper(tx) => {
+                    let wrapper = &WrapperTx::try_from(&tx).unwrap();
+                    // validate the ciphertext via Ferveo
+                    if !wrapper.validate_ciphertext() {
+                        (
+                            shim::response::TxResult {
+                                code: 1,
+                                info: "The ciphertext of the wrapped tx is \
+                                       invalid"
+                                    .into(),
+                            },
+                            None,
+                        )
+                    } else {
+                        // check that the fee payer has sufficient balance
+                        match self.get_balance(
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                        ) {
+                            Ok(balance) if wrapper.fee.amount <= balance => (
+                                shim::response::TxResult {
+                                    code: 0,
+                                    info: "Process proposal accepted this \
+                                           transaction"
+                                        .into(),
+                                },
+                                Some(tx),
+                            ),
+                            Ok(_) => (
+                                shim::response::TxResult {
+                                    code: 1,
+                                    info: "The address given does not have \
+                                           sufficient balance to pay fee"
+                                        .into(),
+                                },
+                                None,
+                            ),
+                            Err(err) => (
+                                shim::response::TxResult { code: 1, info: err },
+                                None,
+                            ),
+                        }
+                    }
+                }
+            },
+        };
+        shim::response::ProcessProposal {
+            result,
+            tx: processed_tx.map(|tx| tx.to_bytes()).unwrap_or(req.tx),
+        }
+    }
+
+    /// Simple helper function for the ledger to get balances
+    /// of the specified token at the specified address
+    fn get_balance(
+        &self,
+        token: &Address,
+        owner: &Address,
+    ) -> std::result::Result<Amount, String> {
+        let query_resp =
+            self.read_storage_value(&token::balance_key(token, owner));
+        if query_resp.code != 0 {
+            Err("Unable to read balance of the given address".into())
+        } else {
+            BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
+                |_| {
+                    "Unable to deserialize the balance of the given address"
+                        .into()
+                },
+            )
+        }
     }
 
     pub fn revert_proposal(

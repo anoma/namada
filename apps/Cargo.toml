@@ -47,7 +47,7 @@ std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 testing = []
 
 [dependencies]
-anoma = {path = "../shared", features = ["ibc-vp", "wasm-runtime"]}
+anoma = {path = "../shared", features = ["ibc-vp", "wasm-runtime", "ferveo-tpke"]}
 async-std = {version = "1.9.0", features = ["unstable"]}
 async-trait = "0.1.51"
 base64 = "0.13.0"
@@ -74,7 +74,7 @@ prost-types = "0.8.0"
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
 rand = {version = "0.7", default-features = false}
 rand_core = {version = "0.5", default-features = false}
-rayon = "1.5.0"
+rayon = "=1.5.0"
 regex = "1.4.5"
 rocksdb = "0.16.0"
 rpassword = "5.0.1"

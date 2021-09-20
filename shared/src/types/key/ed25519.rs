@@ -659,7 +659,7 @@ fn gen_keypair() {
     use rand::thread_rng;
 
     let mut rng: ThreadRng = thread_rng();
-    let keypair = ed25519_dalek::Keypair::generate(&mut rng);
+    let keypair = Keypair::generate(&mut rng);
     println!("keypair {:?}", keypair.to_bytes());
 }
 
@@ -720,7 +720,9 @@ pub mod tests {
     fn gen_keypair() {
         let mut rng: ThreadRng = thread_rng();
         let keypair = Keypair::generate(&mut rng);
-        println!("Public key: {}", keypair.public);
-        println!("Secret key: {}", keypair.secret);
+        let public_key: PublicKey = keypair.public;
+        let secret_key: SecretKey = keypair.secret;
+        println!("Public key: {}", public_key);
+        println!("Secret key: {}", secret_key);
     }
 }
