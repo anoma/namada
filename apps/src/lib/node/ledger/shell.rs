@@ -24,11 +24,12 @@ use anoma::ledger::pos::PosParams;
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
+use anoma::types::address::Address;
 use anoma::types::storage::{BlockHash, BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::transaction::{process_tx, TxType, WrapperTx};
 use anoma::types::{address, key, token};
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use tendermint::block::Header;
 use tendermint_proto::abci::{
     self, ConsensusParams, Evidence, ValidatorUpdate,
@@ -162,7 +163,7 @@ impl Shell {
         // Loaded VP code cache to avoid loading the same files multiple times
         let mut vp_code_cache: HashMap<String, Vec<u8>> = HashMap::default();
 
-        // Initialize genesis accounts
+        // Initialize genesis established accounts
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
@@ -190,6 +191,16 @@ impl Shell {
             for (key, value) in storage {
                 self.storage.write(&key, value).unwrap();
             }
+        }
+
+        // Initialize genesis implicit
+        for genesis::ImplicitAccount { public_key } in genesis.implicit_accounts
+        {
+            let address: address::Address = (&public_key).into();
+            let pk_storage_key = key::ed25519::pk_key(&address);
+            self.storage
+                .write(&pk_storage_key, public_key.try_to_vec().unwrap())
+                .unwrap();
         }
 
         // Initialize genesis token accounts
@@ -588,7 +599,7 @@ impl Shell {
         &self,
         token: &Address,
         owner: &Address,
-    ) -> std::result::Result<Amount, String> {
+    ) -> std::result::Result<token::Amount, String> {
         let query_resp =
             self.read_storage_value(&token::balance_key(token, owner));
         if query_resp.code != 0 {

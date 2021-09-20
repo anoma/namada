@@ -13,6 +13,7 @@ pub fn keys() -> Vec<(Alias, Keypair)> {
         ("Albert".into(), albert_keypair()),
         ("Bertha".into(), bertha_keypair()),
         ("Christel".into(), christel_keypair()),
+        ("Daewon".into(), daewon_keypair()),
         ("matchmaker".into(), matchmaker_keypair()),
         ("validator".into(), validator_keypair()),
     ]
@@ -37,6 +38,7 @@ pub fn addresses() -> Vec<(Alias, Address)> {
             ("Albert".into(), albert_address()),
             ("Bertha".into(), bertha_address()),
             ("Christel".into(), christel_address()),
+            ("Daewon".into(), daewon_address()),
         ]);
     }
     let token_addresses = address::tokens()
@@ -58,31 +60,38 @@ pub fn addresses() -> Vec<(Alias, Address)> {
     addresses
 }
 
-/// A user address for testing & development
+/// An established user address for testing & development
 #[cfg(feature = "dev")]
 pub fn albert_address() -> Address {
     Address::decode("a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx").expect("The token address decoding shouldn't fail")
 }
 
-/// A user address for testing & development
+/// An established user address for testing & development
 #[cfg(feature = "dev")]
 pub fn bertha_address() -> Address {
     Address::decode("a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9").expect("The token address decoding shouldn't fail")
 }
 
-/// A user address for testing & development
+/// An established user address for testing & development
 #[cfg(feature = "dev")]
 pub fn christel_address() -> Address {
     Address::decode("a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s").expect("The token address decoding shouldn't fail")
 }
 
-/// A validator address for testing & development
+/// An implicit user address for testing & development
+#[cfg(feature = "dev")]
+pub fn daewon_address() -> Address {
+    // "a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz"
+    (&daewon_keypair().public).into()
+}
+
+/// An established validator address for testing & development
 #[cfg(feature = "dev")]
 pub fn validator_address() -> Address {
     Address::decode("a1qq5qqqqqgfqnsd6pxse5zdj9g5crzsf5x4zyzv6yxerr2d2rxpryzwp5g5m5zvfjxv6ygsekjmraj0").expect("The token address decoding shouldn't fail")
 }
 
-/// A matchmaker address for testing & development
+/// An established matchmaker address for testing & development
 #[cfg(feature = "dev")]
 pub fn matchmaker_address() -> Address {
     Address::decode("a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td").expect("The address decoding shouldn't fail")
@@ -131,6 +140,20 @@ pub fn christel_keypair() -> Keypair {
 }
 
 #[cfg(feature = "dev")]
+pub fn daewon_keypair() -> Keypair {
+    // generated from
+    // [`anoma::types::key::ed25519::gen_keypair`]
+    let bytes = [
+        235, 250, 15, 1, 145, 250, 172, 218, 247, 27, 63, 212, 60, 47, 164, 57,
+        187, 156, 182, 144, 107, 174, 38, 81, 37, 40, 19, 142, 68, 135, 57, 50,
+        43, 91, 143, 218, 102, 251, 111, 196, 239, 13, 134, 248, 75, 33, 242,
+        80, 3, 64, 119, 239, 252, 69, 159, 194, 64, 58, 119, 163, 90, 169, 94,
+        63,
+    ];
+    Keypair::from_bytes(&bytes).unwrap()
+}
+
+#[cfg(feature = "dev")]
 pub fn validator_keypair() -> Keypair {
     // generated from
     // [`anoma::types::key::ed25519::gen_keypair`]
@@ -164,6 +187,7 @@ pub fn key_of(name: impl AsRef<str>) -> Keypair {
         "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx" => albert_keypair(),
         "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9" => bertha_keypair(),
         "a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s" => christel_keypair(),
+        "a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz" => daewon_keypair(),
         "a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td" => matchmaker_keypair(),
         "a1qq5qqqqqgfqnsd6pxse5zdj9g5crzsf5x4zyzv6yxerr2d2rxpryzwp5g5m5zvfjxv6ygsekjmraj0" => validator_keypair(),
         other => {

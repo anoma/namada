@@ -19,6 +19,7 @@ pub struct Genesis {
     pub validator_consensus_key: Keypair,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
+    pub implicit_accounts: Vec<ImplicitAccount>,
     pub parameters: Parameters,
     pub pos_params: PosParams,
 }
@@ -60,6 +61,13 @@ pub struct TokenAccount {
     pub vp_code_path: String,
     /// Accounts' balances of this token
     pub balances: HashMap<Address, token::Amount>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ImplicitAccount {
+    /// A public key from which the implicit account is derived. This will be
+    /// stored on chain for the account.
+    pub public_key: PublicKey,
 }
 
 #[cfg(feature = "dev")]
@@ -131,11 +139,15 @@ pub fn genesis() -> Genesis {
         public_key: Some(wallet::defaults::matchmaker_keypair().public),
         storage: HashMap::default(),
     };
+    let implicit_accounts = vec![ImplicitAccount {
+        public_key: wallet::defaults::daewon_keypair().public,
+    }];
     let default_user_tokens = token::Amount::whole(1_000_000);
     let balances: HashMap<Address, token::Amount> = HashMap::from_iter([
         (wallet::defaults::albert_address(), default_user_tokens),
         (wallet::defaults::bertha_address(), default_user_tokens),
         (wallet::defaults::christel_address(), default_user_tokens),
+        (wallet::defaults::daewon_address(), default_user_tokens),
     ]);
     let token_accounts = address::tokens()
         .into_iter()
@@ -149,6 +161,7 @@ pub fn genesis() -> Genesis {
         validators: vec![validator],
         validator_consensus_key: consensus_keypair,
         established_accounts: vec![albert, bertha, christel, matchmaker],
+        implicit_accounts,
         token_accounts,
         parameters,
         pos_params: PosParams::default(),
