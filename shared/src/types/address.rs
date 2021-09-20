@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::types::key;
+use crate::types::storage::{Key, KeySeg};
 
 /// The length of [`Address`] encoded with Borsh.
 pub const RAW_ADDRESS_LEN: usize = 45;
@@ -311,6 +312,16 @@ impl Display for InternalAddress {
             }
         )
     }
+}
+
+const CANONICAL_ADDRESS_STORAGE_KEY: &str = "canonical-address";
+
+/// Obtain a storage key for the canonical address
+/// associated with an account
+pub fn canonical_address_key(addr: &Address) -> Key {
+    Key::from(addr.to_db_key())
+        .push(&CANONICAL_ADDRESS_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain storage key")
 }
 
 /// Temporary helper for testing

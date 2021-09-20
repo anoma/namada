@@ -4,9 +4,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use anoma::proto::Tx;
 use anoma::types::storage::BlockHeight;
-use anoma::types::transaction::process_tx;
 use futures::future::FutureExt;
 use tower::Service;
 use tower_abci::{BoxError, Request as Req, Response as Resp};
@@ -77,15 +75,9 @@ impl Service<Req> for AbcippShim {
                     })
             }
             Req::DeliverTx(deliver_tx) => {
-                // We store all the accepted transactions to be applied
-                // in bulk at a later step
-                self.block_txs.push(
-                    Tx::from(
-                        process_tx(Tx::try_from(&deliver_tx.tx[..]).unwrap())
-                            .unwrap(),
-                    )
-                    .to_bytes(),
-                );
+                // We store all the transactions to be applied in
+                // bulk at a later step
+                self.block_txs.push(deliver_tx.tx);
                 Ok(Resp::DeliverTx(Default::default()))
             }
             Req::EndBlock(end) => {

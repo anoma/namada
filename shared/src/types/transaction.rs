@@ -85,7 +85,7 @@ pub mod wrapper_tx {
         InvalidTx,
         #[error("The given Tx data did not contain a valid WrapperTx")]
         InvalidWrapperTx,
-        #[error("Expected a valid signed WrapperTx data")]
+        #[error("Expected signed WrapperTx data")]
         Unsigned,
         #[error("{0}")]
         SigError(String),
@@ -403,13 +403,7 @@ pub mod wrapper_tx {
         type Error = WrapperTxErr;
 
         fn try_from(tx: &Tx) -> Result<Self, Self::Error> {
-            if let Some(Ok(SignedTxData {
-                data: Some(data), ..
-            })) = tx
-                .data
-                .as_ref()
-                .map(|data| SignedTxData::try_from_slice(&data[..]))
-            {
+            if let Some(data) = tx.data.as_ref() {
                 BorshDeserialize::deserialize(&mut data.as_ref())
                     .map_err(|_| WrapperTxErr::InvalidWrapperTx)
             } else {
@@ -476,7 +470,27 @@ pub mod wrapper_tx {
                 Ok(TxType::Raw(tx))
             }
         } else {
-            Ok(TxType::Raw(tx))
+            match WrapperTx::try_from(&tx) {
+                Ok(_) => Err(WrapperTxErr::Unsigned),
+                _ => Ok(TxType::Raw(tx)),
+            }
+        }
+    }
+
+    /// Used to determine if a Tx is a
+    /// wrapper Tx or not
+    impl From<Tx> for TxType {
+        fn from(tx: Tx) -> Self {
+            if let Some(ref data) = tx.data {
+                match <WrapperTx as BorshDeserialize>::deserialize(
+                    &mut data.as_ref(),
+                ) {
+                    Ok(_) => TxType::Wrapper(tx),
+                    _ => TxType::Raw(tx),
+                }
+            } else {
+                TxType::Raw(tx)
+            }
         }
     }
 
@@ -623,6 +637,7 @@ pub mod wrapper_tx {
         #[test]
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
+            println!("{}", keypair.public.to_string());
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
@@ -698,7 +713,10 @@ pub mod wrapper_tx {
             .expect("Test failed");
 
             // we now try to alter the inner tx maliciously
-            let mut wrapper = WrapperTx::try_from(&tx).expect("Test failed");
+            let mut wrapper = WrapperTx::try_from(&Tx::from(
+                process_tx(tx.clone()).expect("Test failed"),
+            ))
+            .expect("Test failed");
             let mut signed_tx_data =
                 SignedTxData::try_from_slice(&tx.data.unwrap()[..])
                     .expect("Test failed");
@@ -823,6 +841,35 @@ pub mod wrapper_tx {
                 }
                 _ => panic!("Test failed: Expected Wrapper Tx"),
             }
+        }
+
+        /// Test that process_tx correctly returns an error on a wrapper tx
+        /// with some unsigned data
+        #[test]
+        fn test_process_tx_wrapper_tx_unsigned() {
+            let keypair = gen_keypair();
+            let tx = Tx::new(
+                "wasm code".as_bytes().to_owned(),
+                Some("transaction data".as_bytes().to_owned()),
+            );
+            // the signed tx
+            let wrapper = WrapperTx::new(
+                Fee {
+                    amount: 10.into(),
+                    token: xan(),
+                },
+                &keypair,
+                Epoch(0),
+                0.into(),
+                tx,
+            );
+
+            let tx = Tx::new(
+                vec![],
+                Some(wrapper.try_to_vec().expect("Test failed")),
+            );
+            let result = process_tx(tx).expect_err("Test failed");
+            assert_eq!(result, WrapperTxErr::Unsigned);
         }
     }
 }

@@ -321,21 +321,25 @@ pub async fn broadcast_tx(
     let query = Query::from(EventType::NewBlock)
         .and_eq("applied.hash", hash_tx(&tx_bytes).to_string());
     client.subscribe(query)?;
-    println!(
-        "Transaction added to mempool: {:?}",
-        client
-            .broadcast_tx_sync(tx_bytes.into())
-            .await
-            .map_err(|err| Error::Response(format!("{:?}", err)))?
-    );
-    let parsed = TxResponse::from(client.receive_response()?);
-    println!(
-        "Transaction applied with result: {}",
-        serde_json::to_string_pretty(&parsed).unwrap()
-    );
+    let response = client
+        .broadcast_tx_sync(tx_bytes.into())
+        .await
+        .map_err(|err| Error::Response(format!("{:?}", err)))?;
+
+    let parsed = if response.code == 0.into() {
+        println!("Transaction added to mempool: {:?}", response);
+        let parsed = TxResponse::from(client.receive_response()?);
+        println!(
+            "Transaction applied with result: {}",
+            serde_json::to_string_pretty(&parsed).unwrap()
+        );
+        Ok(parsed)
+    } else {
+        Err(Error::Response(response.log.to_string()))
+    };
     client.unsubscribe()?;
     client.close();
-    Ok(parsed)
+    parsed
 }
 
 #[derive(Debug, Serialize)]
