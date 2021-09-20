@@ -498,12 +498,11 @@ fn invalid_transactions() -> Result<()> {
 }
 
 /// 1. Start the ledger
-/// 2. Submit a valid wrapper tx and check it is accepted6.
+/// 2. Submit a valid wrapper tx and check it is accepted.
 /// Rejected cases:
 /// 3. Submit a wrapper tx without signing
 /// 4. Submit a wrapper tx signed with wrong key
-/// 5. Submit a wrapper tx where the fee >  user's balance
-/// 6. Submit a wrapper tx whose implicit address is unknown to the ledger
+/// 5. Submit a wrapper tx where the fee > user's balance
 #[test]
 fn test_wrapper_txs() -> Result<()> {
     use wallet::defaults;
@@ -512,8 +511,7 @@ fn test_wrapper_txs() -> Result<()> {
     let base_dir = tempdir().unwrap();
     let base_dir_arg = &base_dir.path().to_string_lossy();
 
-    let bertha = "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9";
-    let keypair = defaults::key_of(&bertha);
+    let keypair = defaults::key_of(DAEWON);
 
     use anoma::types::token::Amount;
     let tx = WrapperTx::new(
@@ -555,8 +553,7 @@ fn test_wrapper_txs() -> Result<()> {
         .exp_string("Started node")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
-    // Submit a valid transaction
-    let public = keypair.public.to_string();
+    // 2. Submit a valid wrapper tx and check it is accepted.
     let tx_args = vec![
         "tx",
         "--code-path",
@@ -564,7 +561,7 @@ fn test_wrapper_txs() -> Result<()> {
         "--data-path",
         data_path,
         "--signing-key",
-        &public,
+        "Daewon",
     ];
     let mut cmd = Command::cargo_bin("anomac")?;
     cmd.current_dir(&working_dir)
@@ -589,7 +586,7 @@ fn test_wrapper_txs() -> Result<()> {
     })?;
     drop(request);
 
-    // Submit the transaction without signing
+    // 3. Submit a wrapper tx without signing
     let tx_args =
         vec!["tx", "--code-path", wasm_path, "--data-path", data_path];
     let mut cmd = Command::cargo_bin("anomac")?;
@@ -611,9 +608,7 @@ fn test_wrapper_txs() -> Result<()> {
         })?;
     drop(request);
 
-    // Submit the transaction signed with wrong key
-    let albert = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx";
-    let signing_key = defaults::key_of(&albert).public.to_string();
+    // 4. Submit a wrapper tx signed with wrong key
     let tx_args = vec![
         "tx",
         "--code-path",
@@ -621,7 +616,7 @@ fn test_wrapper_txs() -> Result<()> {
         "--data-path",
         data_path,
         "--signing-key",
-        &signing_key,
+        "Albert",
     ];
     let mut cmd = Command::cargo_bin("anomac")?;
     cmd.current_dir(&working_dir)
@@ -642,7 +637,7 @@ fn test_wrapper_txs() -> Result<()> {
         })?;
     drop(request);
 
-    // submit a wrapper tx bertha cannot afford
+    // 5. Submit a wrapper tx where the fee > user's balance
     let tx = WrapperTx::new(
         Fee {
             amount: Amount::whole(1_000_001),
@@ -666,7 +661,7 @@ fn test_wrapper_txs() -> Result<()> {
         "--data-path",
         data_path,
         "--signing-key",
-        &public,
+        "Daewon",
     ];
     let mut cmd = Command::cargo_bin("anomac")?;
     cmd.current_dir(&working_dir)
