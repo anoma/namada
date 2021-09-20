@@ -39,7 +39,7 @@ fn run_ledger() -> Result<()> {
         let mut cmd = Command::cargo_bin(cmd_name)?;
 
         cmd.current_dir(&dir)
-            .env("ANOMA_LOG", "debug")
+            .env("ANOMA_LOG", "anoma=debug")
             .args(&["--base-dir", &base_dir.path().to_string_lossy()])
             .args(args);
 
@@ -73,11 +73,9 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 
     // 1. Run the ledger node
     let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
-        "--base-dir",
-        base_dir_arg,
-        "ledger",
-    ]);
+    cmd.current_dir(&dir)
+        .env("ANOMA_LOG", "anoma=debug")
+        .args(&["--base-dir", base_dir_arg, "ledger"]);
     println!("Running {:?}", cmd);
     let mut session = spawn_command(cmd, Some(20_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
@@ -124,11 +122,9 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 1. Run the ledger node
     let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
-        "--base-dir",
-        base_dir_arg,
-        "ledger",
-    ]);
+    cmd.current_dir(&dir)
+        .env("ANOMA_LOG", "anoma=debug")
+        .args(&["--base-dir", base_dir_arg, "ledger"]);
     println!("Running {:?}", cmd);
     let mut session = spawn_command(cmd, Some(20_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
@@ -154,11 +150,9 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 3. Run the ledger again, it should load its previous state
     let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
-        "--base-dir",
-        base_dir_arg,
-        "ledger",
-    ]);
+    cmd.current_dir(&dir)
+        .env("ANOMA_LOG", "anoma=debug")
+        .args(&["--base-dir", base_dir_arg, "ledger"]);
     println!("Running {:?}", cmd);
     let mut session = spawn_command(cmd, Some(20_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
@@ -179,21 +173,16 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 5. Reset the ledger's state
     let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
-        "--base-dir",
-        base_dir_arg,
-        "ledger",
-        "reset",
-    ]);
+    cmd.current_dir(&dir)
+        .env("ANOMA_LOG", "anoma=debug")
+        .args(&["--base-dir", base_dir_arg, "ledger", "reset"]);
     cmd.assert().success();
 
     // 6. Run the ledger again, it should start from fresh state
     let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
-        "--base-dir",
-        &base_dir.path().to_string_lossy(),
-        "ledger",
-    ]);
+    cmd.current_dir(&dir)
+        .env("ANOMA_LOG", "anoma=debug")
+        .args(&["--base-dir", &base_dir.path().to_string_lossy(), "ledger"]);
     let mut session = spawn_command(cmd, Some(20_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
 
@@ -225,11 +214,9 @@ fn ledger_txs_and_queries() -> Result<()> {
 
     // 1. Run the ledger node
     let mut cmd = Command::cargo_bin("anoman")?;
-    cmd.current_dir(&dir).env("ANOMA_LOG", "debug").args(&[
-        "--base-dir",
-        base_dir_arg,
-        "ledger",
-    ]);
+    cmd.current_dir(&dir)
+        .env("ANOMA_LOG", "anoma=debug")
+        .args(&["--base-dir", base_dir_arg, "ledger"]);
     println!("Running {:?}", cmd);
     let mut session = spawn_command(cmd, Some(20_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
@@ -276,7 +263,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         for &dry_run in &[true, false] {
             let mut cmd = Command::cargo_bin("anomac")?;
             cmd.current_dir(&dir)
-                .env("ANOMA_LOG", "debug")
+                .env("ANOMA_LOG", "anoma=debug")
                 .args(&["--base-dir", base_dir_arg])
                 .args(tx_args);
             if dry_run {
@@ -321,7 +308,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     for (query_args, expected) in &query_args_and_expected_response {
         let mut cmd = Command::cargo_bin("anomac")?;
         cmd.current_dir(&dir)
-            .env("ANOMA_LOG", "debug")
+            .env("ANOMA_LOG", "anoma=debug")
             .args(&["--base-dir", base_dir_arg])
             .args(query_args);
         let cmd_str = format!("{:?}", cmd);
@@ -356,7 +343,7 @@ fn invalid_transactions() -> Result<()> {
     // 1. Run the ledger node
     let mut cmd = Command::cargo_bin("anoman")?;
     cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
+        .env("ANOMA_LOG", "anoma=debug")
         .args(&["--base-dir", base_dir_arg, "ledger"]);
     println!("Running {:?}", cmd);
     let mut session = spawn_command(cmd, Some(20_000))
@@ -401,7 +388,7 @@ fn invalid_transactions() -> Result<()> {
 
     let mut cmd = Command::cargo_bin("anomac")?;
     cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
+        .env("ANOMA_LOG", "anoma=debug")
         .args(&["--base-dir", base_dir_arg])
         .args(tx_args);
 
@@ -448,7 +435,7 @@ fn invalid_transactions() -> Result<()> {
     // 4. Restart the ledger
     let mut cmd = Command::cargo_bin("anoma")?;
     cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
+        .env("ANOMA_LOG", "anoma=debug")
         .args(&["--base-dir", base_dir_arg, "ledger"]);
     println!("Running {:?}", cmd);
     let mut session = spawn_command(cmd, Some(20_000))
@@ -477,7 +464,7 @@ fn invalid_transactions() -> Result<()> {
     ];
     let mut cmd = Command::cargo_bin("anomac")?;
     cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
+        .env("ANOMA_LOG", "anoma=debug")
         .args(&["--base-dir", base_dir_arg])
         .args(tx_args);
 

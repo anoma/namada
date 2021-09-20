@@ -49,7 +49,6 @@ impl Service<Req> for AbcippShim {
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        tracing::debug!(?req);
         let rsp = match req {
             Req::BeginBlock(block) => {
                 // we simply forward BeginBlock request to the PrepareProposal

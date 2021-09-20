@@ -35,7 +35,7 @@ fn run_gossip() -> Result<()> {
     let second_node_peer_id = node_dirs[1].1.to_string();
 
     let mut base_node = Command::cargo_bin("anoman")?;
-    base_node.env("ANOMA_LOG", "debug,libp2p=debug");
+    base_node.env("ANOMA_LOG", "anoma=debug,libp2p=debug");
     base_node.args(&["--base-dir", first_node_dir, "gossip", "run"]);
 
     //  Node without peers
@@ -191,7 +191,7 @@ fn match_intent() -> Result<()> {
     base_node_gossip.args(&["--base-dir", first_node_dir, "gossip"]);
 
     //  Start gossip
-    let mut session_gossip = spawn_command(base_node_gossip, Some(60_000))
+    let mut session_gossip = spawn_command(base_node_gossip, Some(100_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // Wait gossip to start
@@ -216,7 +216,7 @@ fn match_intent() -> Result<()> {
         "Bertha",
     ]);
 
-    let mut session_send_intent_a = spawn_command(send_intent_a, Some(20_000))
+    let mut session_send_intent_a = spawn_command(send_intent_a, Some(40_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // means it sent it correctly but not able to gossip it (which is
@@ -245,7 +245,7 @@ fn match_intent() -> Result<()> {
         "--signing-key",
         "Albert",
     ]);
-    let mut session_send_intent_b = spawn_command(send_intent_b, Some(20_000))
+    let mut session_send_intent_b = spawn_command(send_intent_b, Some(40_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // means it sent it correctly but not able to gossip it (which is
@@ -274,7 +274,7 @@ fn match_intent() -> Result<()> {
         "--signing-key",
         "Christel",
     ]);
-    let mut session_send_intent_c = spawn_command(send_intent_c, Some(20_000))
+    let mut session_send_intent_c = spawn_command(send_intent_c, Some(40_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // means it sent it correctly but not able to gossip it (which is
