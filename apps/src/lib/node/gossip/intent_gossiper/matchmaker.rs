@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 
 use anoma::gossip::mm::MmHost;
 use anoma::proto::{Intent, IntentId, Tx};
@@ -33,16 +32,16 @@ pub struct Matchmaker {
     state: Vec<u8>,
     /// The ledger address to send any crafted transaction to
     ledger_address: net::Address,
-    // TODO this doesn't have to be a mutex as it's just a Sender which is
-    // thread-safe
-    wasm_host: Arc<Mutex<WasmHost>>,
+    /// The WASM host allows the WASM runtime to send messages back to this
+    /// matchmaker
+    wasm_host: WasmHost,
     /// A source address for transactions created from intents.
     tx_source_address: Address,
     /// A keypair that will be used to sign transactions.
     tx_signing_key: Rc<Keypair>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct WasmHost(Sender<MatchmakerMessage>);
 
 #[derive(Error, Debug)]
@@ -114,7 +113,7 @@ impl Matchmaker {
                 tx_code,
                 state: Vec::new(),
                 ledger_address: config.ledger_address.clone(),
-                wasm_host: Arc::new(Mutex::new(WasmHost(sender.clone()))),
+                wasm_host: WasmHost(sender.clone()),
                 tx_source_address,
                 tx_signing_key,
             },
