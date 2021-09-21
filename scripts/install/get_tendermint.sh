@@ -20,7 +20,10 @@ error_exit()
 }
 
 # check for existence
-export TM_EXISTS_VER=$(tendermint version)
+export TM_EXECUTABLE=$(which tendermint)
+if [ -x ${TM_EXECUTABLE} ]; then
+  export TM_EXISTS_VER=$(${TM_EXECUTABLE} version)
+fi
 
 if [[ $TM_EXISTS_VER =~ "${TM_MAJORMINOR}" ]]; then
   echo "tendermint already exists in your current PATH with a sufficient version = $TM_EXISTS_VER"
