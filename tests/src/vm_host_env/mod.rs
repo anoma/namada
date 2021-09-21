@@ -545,7 +545,7 @@ mod tests {
             timestamp: DateTimeUtc::now(),
         };
         // get and update the client without a header
-        let client_id = data.client_id.clone();
+        let client_id = data.client_id;
         // update the client with the same state
         let old_data = ibc::client_creation_data();
         let same_client_state = old_data.client_state.clone();
@@ -837,8 +837,7 @@ mod tests {
         tx_host_env::write(&counter_key, counter + 1);
         // channel
         let channel_id = ibc::channel_id(counter);
-        let port_channel_id =
-            ibc::port_channel_id(port_id.clone(), channel_id.clone());
+        let port_channel_id = ibc::port_channel_id(port_id, channel_id);
         let channel_key = ibc::channel_key(&port_channel_id).to_string();
         tx_host_env::write(&channel_key, data.channel());
 
@@ -878,8 +877,7 @@ mod tests {
         tx_host_env::write(&counter_key, counter + 1);
         // insert a opened channel
         let channel_id = ibc::channel_id(counter);
-        let port_channel_id =
-            ibc::port_channel_id(port_id.clone(), channel_id.clone());
+        let port_channel_id = ibc::port_channel_id(port_id, channel_id);
         let channel_key = ibc::channel_key(&port_channel_id).to_string();
         let channel = ibc::open_channel(&mut data.channel());
         tx_host_env::write(&channel_key, channel);
