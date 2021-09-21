@@ -52,20 +52,24 @@ impl Wallet {
     /// Generate a new keypair and derive an implicit address from its public
     /// and insert them into the store with the provided alias. If none
     /// provided, the alias will be the public key hash. If the key is to be
-    /// encrypted, will prompt for password from stdin. Returns the alias of
-    /// the key.
+    /// encrypted, will prompt for password from stdin. Stores the key in
+    /// decrypted key cache and returns the alias of the key and a
+    /// reference-counting pointer to the key.
     pub fn gen_key(
         &mut self,
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
-    ) -> String {
+    ) -> (String, Rc<Keypair>) {
         let password = if unsafe_dont_encrypt {
             println!("Warning: The keypair will NOT be encrypted.");
             None
         } else {
             Some(read_password("Enter encryption password: "))
         };
-        self.store.gen_key(alias, password)
+        let (alias, key) = self.store.gen_key(alias, password);
+        // Cache the newly added key
+        self.decrypted_key_cache.insert(alias.clone(), key.clone());
+        (alias, key)
     }
 
     /// Find the stored key by an alias, a public key hash or a public key.

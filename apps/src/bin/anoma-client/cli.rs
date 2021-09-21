@@ -3,9 +3,9 @@
 use std::collections::HashSet;
 use std::io::Write;
 
-use anoma::types::{address, token};
 use anoma::types::intent::{Exchange, FungibleTokenIntent};
 use anoma::types::key::ed25519::Signed;
+use anoma::types::{address, token};
 use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds, Context};
 use anoma_apps::client::{rpc, signing, tx};
@@ -190,29 +190,27 @@ fn init_genesis_validator(
     let rewards_address =
         address::gen_established_address("genesis validator reward address");
     let rewards_address_alias = format!("{}-rewards", alias);
-    if !wallet.add_address(rewards_address_alias.clone(), rewards_address.clone()) {
+    if !wallet
+        .add_address(rewards_address_alias.clone(), rewards_address.clone())
+    {
         cli::safe_exit(1)
     }
 
     println!("Generating validator account key...");
-    let validator_key_alias = wallet.gen_key(
+    let (validator_key_alias, validator_key) = wallet.gen_key(
         Some(format!("{}-validator-key", alias)),
         unsafe_dont_encrypt,
     );
     println!("Generating consensus key...");
-    let consensus_key_alias = wallet.gen_key(
+    let (consensus_key_alias, consensus_key) = wallet.gen_key(
         Some(format!("{}-consensus-key", alias)),
         unsafe_dont_encrypt,
     );
     println!("Generating staking reward account key...");
-    let rewards_key_alias = wallet
+    let (rewards_key_alias, rewards_key) = wallet
         .gen_key(Some(format!("{}-rewards-key", alias)), unsafe_dont_encrypt);
 
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
-
-    let validator_key = wallet.find_key(&validator_key_alias).unwrap();
-    let consensus_key = wallet.find_key(&consensus_key_alias).unwrap();
-    let rewards_key = wallet.find_key(&rewards_key_alias).unwrap();
 
     let tendermint_home = &ctx.config.ledger.tendermint;
     tendermint_node::write_validator_key(

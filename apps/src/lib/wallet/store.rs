@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::str::FromStr;
 
 use anoma::types::address::{Address, ImplicitAddress};
@@ -45,7 +46,7 @@ impl Store {
             let pkh: PublicKeyHash = (&keypair.public).into();
             store.keys.insert(
                 alias.clone(),
-                StoredKeypair::new(keypair, no_password.clone()),
+                StoredKeypair::new(keypair, no_password.clone()).0,
             );
             store.pkhs.insert(pkh, alias);
         }
@@ -178,18 +179,20 @@ impl Store {
     /// Generate a new keypair and insert it into the store with the provided
     /// alias. If none provided, the alias will be the public key hash.
     /// If no password is provided, the keypair will be stored raw without
-    /// encryption. Returns the alias of the key.
+    /// encryption. Returns the alias of the key and a reference-counting
+    /// pointer to the key.
     pub fn gen_key(
         &mut self,
         alias: Option<String>,
         password: Option<String>,
-    ) -> String {
+    ) -> (String, Rc<Keypair>) {
         let keypair = Self::generate_keypair();
         let pkh: PublicKeyHash = PublicKeyHash::from(&keypair.public);
-        let keypair = StoredKeypair::new(keypair, password);
+        let (keypair_to_store, raw_keypair) =
+            StoredKeypair::new(keypair, password);
         let address = Address::Implicit(ImplicitAddress::Ed25519(pkh.clone()));
         let alias = alias.unwrap_or_else(|| pkh.clone().into());
-        if !self.insert_keypair(alias.clone(), keypair, pkh) {
+        if !self.insert_keypair(alias.clone(), keypair_to_store, pkh) {
             eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1);
         }
@@ -197,7 +200,7 @@ impl Store {
             eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1);
         }
-        alias
+        (alias, raw_keypair)
     }
 
     /// Insert a new key with the given alias. If the alias is already used,
