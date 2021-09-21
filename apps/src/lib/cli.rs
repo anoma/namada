@@ -14,7 +14,6 @@ pub use utils::safe_exit;
 use utils::*;
 
 pub use self::context::Context;
-use super::config;
 
 const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
 const APP_NAME: &str = "Anoma";
@@ -1532,8 +1531,10 @@ pub mod args {
         pub node_addr: Option<String>,
         /// Intent topic
         pub topic: Option<String>,
+        /// Source address
+        pub source: Option<WalletAddress>,
         /// Signing key
-        pub signing_key: WalletKeypair,
+        pub signing_key: Option<WalletKeypair>,
         /// Exchanges description
         pub exchanges: Vec<Exchange>,
         /// The address of the ledger node as host:port
@@ -1544,9 +1545,10 @@ pub mod args {
 
     impl Args for Intent {
         fn parse(matches: &ArgMatches) -> Self {
-            let signing_key = SIGNING_KEY.parse(matches);
             let node_addr = NODE_OPT.parse(matches);
             let data_path = DATA_PATH.parse(matches);
+            let source = SOURCE_OPT.parse(matches);
+            let signing_key = SIGNING_KEY_OPT.parse(matches);
             let to_stdout = TO_STDOUT.parse(matches);
             let topic = TOPIC_OPT.parse(matches);
 
@@ -1569,6 +1571,7 @@ pub mod args {
             Self {
                 node_addr,
                 topic,
+                source,
                 signing_key,
                 exchanges,
                 ledger_address,
@@ -1583,14 +1586,28 @@ pub mod args {
                     .about("The gossip node address.")
                     .conflicts_with(TO_STDOUT.name),
             )
-            .arg(SIGNING_KEY.def().about(
-                "Sign the intent with the key for the given public key, \
-                 public key hash or alias from your wallet.",
-            ))
             .arg(DATA_PATH.def().about(
                 "The data of the intent, that contains all value necessary \
                  for the matchmaker.",
             ))
+            .arg(
+                SOURCE_OPT
+                    .def()
+                    .about(
+                        "Sign the intent with the key of a given address or \
+                         address alias from your wallet.",
+                    )
+                    .conflicts_with(SIGNING_KEY_OPT.name),
+            )
+            .arg(
+                SIGNING_KEY_OPT
+                    .def()
+                    .about(
+                        "Sign the intent with the key for the given public \
+                         key, public key hash or alias from your wallet.",
+                    )
+                    .conflicts_with(SOURCE_OPT.name),
+            )
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
             .arg(
                 TOPIC_OPT
@@ -1646,6 +1663,8 @@ pub mod args {
         pub tx_code_path: Option<PathBuf>,
         pub ledger_addr: Option<tendermint::net::Address>,
         pub filter_path: Option<PathBuf>,
+        pub tx_signing_key: Option<WalletKeypair>,
+        pub tx_source_address: Option<WalletAddress>,
     }
 
     impl Args for GossipRun {
@@ -1658,6 +1677,8 @@ pub mod args {
             let tx_code_path = TX_CODE_PATH.parse(matches);
             let ledger_addr = LEDGER_ADDRESS_OPT.parse(matches);
             let filter_path = FILTER_PATH.parse(matches);
+            let tx_signing_key = SIGNING_KEY_OPT.parse(matches);
+            let tx_source_address = SOURCE_OPT.parse(matches);
             Self {
                 addr,
                 peers,
@@ -1667,6 +1688,8 @@ pub mod args {
                 tx_code_path,
                 ledger_addr,
                 filter_path,
+                tx_signing_key,
+                tx_source_address,
             }
         }
 
@@ -1695,6 +1718,16 @@ pub mod args {
                     .def()
                     .about("The private filter for the matchmaker"),
             )
+            .arg(SIGNING_KEY_OPT.def().about(
+                "Sign the transactions created by the matchmaker (if enabled) \
+                 with the key for the given public key, public key hash or \
+                 alias from your wallet.",
+            ))
+            .arg(SOURCE_OPT.def().about(
+                "Source address or alias of an address of the transactions \
+                 created by the matchmaker (if enabled). This must be \
+                 matching the signing key.",
+            ))
         }
     }
 
@@ -1998,59 +2031,4 @@ fn anoma_wallet_app() -> App {
         .about("Anoma wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaWallet::add_sub(args::Global::def(app))
-}
-
-pub fn update_gossip_config(
-    args: args::GossipRun,
-    config: &mut config::IntentGossiper,
-) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(addr) = args.addr {
-        config.address = addr
-    }
-
-    let matchmaker_arg = args.matchmaker_path;
-    let tx_code_arg = args.tx_code_path;
-    let ledger_address_arg = args.ledger_addr;
-    let filter_arg = args.filter_path;
-    if let Some(mut matchmaker_cfg) = config.matchmaker.as_mut() {
-        if let Some(matchmaker) = matchmaker_arg {
-            matchmaker_cfg.matchmaker = matchmaker
-        }
-        if let Some(tx_code) = tx_code_arg {
-            matchmaker_cfg.tx_code = tx_code
-        }
-        if let Some(ledger_address) = ledger_address_arg {
-            matchmaker_cfg.ledger_address = ledger_address
-        }
-        if let Some(filter) = filter_arg {
-            matchmaker_cfg.filter = Some(filter)
-        }
-    } else if let (Some(matchmaker), Some(tx_code), Some(ledger_address)) = (
-        matchmaker_arg.as_ref(),
-        tx_code_arg.as_ref(),
-        ledger_address_arg.as_ref(),
-    ) {
-        let matchmaker_cfg = Some(config::Matchmaker {
-            matchmaker: matchmaker.clone(),
-            tx_code: tx_code.clone(),
-            ledger_address: ledger_address.clone(),
-            filter: filter_arg,
-        });
-        config.matchmaker = matchmaker_cfg
-    } else if matchmaker_arg.is_some()
-        || tx_code_arg.is_some()
-        || ledger_address_arg.is_some()
-    // if at least one argument is not none then fail
-    {
-        panic!(
-            "No complete matchmaker configuration found (matchmaker code \
-             path, tx code path, and ledger address). Please update the \
-             configuration with default value or use all cli argument to use \
-             the matchmaker"
-        );
-    }
-    if let Some(address) = args.rpc {
-        config.rpc = Some(config::RpcServer { address });
-    }
-    Ok(())
 }

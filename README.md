@@ -134,7 +134,7 @@ cargo run --bin anomac voting-power
 cargo run --bin anoma gossip --rpc "127.0.0.1:39111"
 
 # run gossip node with intent gossip system, matchmaker and rpc (use default config)
-cargo run --bin anoman gossip --rpc "127.0.0.1:39111" --matchmaker-path wasm/mm_token_exch.wasm --tx-code-path wasm/tx_from_intent.wasm --ledger-address "127.0.0.1:26657"
+cargo run --bin anoman gossip --rpc "127.0.0.1:39111" --matchmaker-path wasm/mm_token_exch.wasm --tx-code-path wasm/tx_from_intent.wasm --ledger-address "127.0.0.1:26657" --source matchmaker --signing-key matchmaker
 
 # Prepare intents:
 # 1) We'll be using these addresses in the intents:

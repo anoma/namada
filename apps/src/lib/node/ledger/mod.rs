@@ -58,29 +58,26 @@ impl Shell {
                     Ok(mut resp) => {
                         // Set the initial validator set
                         let genesis = genesis::genesis();
-                        let mut abci_validator =
+                        for validator in genesis.validators {
+                            let mut abci_validator =
                             tendermint_proto::abci::ValidatorUpdate::default();
-                        let consensus_key: ed25519_dalek::PublicKey = genesis
-                            .validator
-                            .pos_data
-                            .consensus_key
-                            .clone()
-                            .into();
-                        let pub_key = tendermint_proto::crypto::PublicKey {
+                            let consensus_key: ed25519_dalek::PublicKey =
+                                validator.pos_data.consensus_key.clone().into();
+                            let pub_key = tendermint_proto::crypto::PublicKey {
                             sum: Some(tendermint_proto::crypto::public_key::Sum::Ed25519(
                                 consensus_key.to_bytes().to_vec(),
                             )),
                         };
-                        abci_validator.pub_key = Some(pub_key);
-                        let power: u64 = genesis
-                            .validator
-                            .pos_data
-                            .voting_power(&genesis.pos_params)
-                            .into();
-                        abci_validator.power = power
-                            .try_into()
-                            .expect("unexpected validator's voting power");
-                        resp.validators.push(abci_validator);
+                            abci_validator.pub_key = Some(pub_key);
+                            let power: u64 = validator
+                                .pos_data
+                                .voting_power(&genesis.pos_params)
+                                .into();
+                            abci_validator.power = power
+                                .try_into()
+                                .expect("unexpected validator's voting power");
+                            resp.validators.push(abci_validator);
+                        }
                         Ok(Response::InitChain(resp))
                     }
                     Err(inner) => Err(inner),

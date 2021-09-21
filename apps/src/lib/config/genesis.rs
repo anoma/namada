@@ -1,23 +1,25 @@
 //! The parameters used for the chain's genesis
 
-use anoma::ledger::parameters::{EpochDuration, Parameters};
+use std::collections::HashMap;
+
+use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::{GenesisValidator, PosParams};
 use anoma::types::address::Address;
 #[cfg(feature = "dev")]
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::key::ed25519::PublicKey;
-use anoma::types::token;
+use anoma::types::{storage, token};
 
 #[derive(Debug)]
 pub struct Genesis {
-    #[cfg(not(feature = "dev"))]
     pub validators: Vec<Validator>,
-    #[cfg(feature = "dev")]
-    pub validator: Validator,
     /// The consensus key will be written into Tendermint node's
     /// `priv_validator_key.json`
     #[cfg(feature = "dev")]
     pub validator_consensus_key: Keypair,
+    pub token_accounts: Vec<TokenAccount>,
+    pub established_accounts: Vec<EstablishedAccount>,
+    pub implicit_accounts: Vec<ImplicitAccount>,
     pub parameters: Parameters,
     pub pos_params: PosParams,
 }
@@ -35,13 +37,50 @@ pub struct Validator {
     /// These tokens are no staked and hence do not contribute to the
     /// validator's voting power
     pub non_staked_balance: token::Amount,
+    /// Validity predicate code WASM
+    pub vp_code_path: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct EstablishedAccount {
+    /// Address
+    pub address: Address,
+    /// Validity predicate code WASM
+    pub vp_code_path: String,
+    /// A public key to be stored in the account's storage, if any
+    pub public_key: Option<PublicKey>,
+    /// Account's sub-space storage. The values must be borsh encoded bytes.
+    pub storage: HashMap<storage::Key, Vec<u8>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TokenAccount {
+    /// Address
+    pub address: Address,
+    /// Validity predicate code WASM
+    pub vp_code_path: String,
+    /// Accounts' balances of this token
+    pub balances: HashMap<Address, token::Amount>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ImplicitAccount {
+    /// A public key from which the implicit account is derived. This will be
+    /// stored on chain for the account.
+    pub public_key: PublicKey,
 }
 
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
+    use std::iter::FromIterator;
+
+    use anoma::ledger::parameters::EpochDuration;
     use anoma::types::address;
 
     use crate::wallet;
+
+    let vp_token_path = "wasm/vp_token.wasm";
+    let vp_user_path = "wasm/vp_user.wasm";
 
     // NOTE When the validator's key changes, tendermint must be reset with
     // `anoma reset` command. To generate a new validator, use the
@@ -55,7 +94,7 @@ pub fn genesis() -> Genesis {
         1, 132, 143, 67, 162, 121, 136, 247, 20, 67, 4, 27, 226, 63, 47, 57,
     ])
     .unwrap();
-    let address = address::validator();
+    let address = wallet::defaults::validator_address();
     let staking_reward_address = Address::decode("a1qq5qqqqqxaz5vven8yu5gdpng9zrys6ygvurwv3sgsmrvd6xgdzrys6yg4pnwd6z89rrqv2xvjcy9t").unwrap();
     let validator = Validator {
         pos_data: GenesisValidator {
@@ -67,6 +106,8 @@ pub fn genesis() -> Genesis {
         },
         account_key: account_keypair.public,
         non_staked_balance: token::Amount::whole(100_000),
+        // TODO replace with https://github.com/anoma/anoma/issues/25)
+        vp_code_path: vp_user_path.into(),
     };
     let parameters = Parameters {
         epoch_duration: EpochDuration {
@@ -74,12 +115,61 @@ pub fn genesis() -> Genesis {
             min_duration: anoma::types::time::Duration::minutes(1).into(),
         },
     };
+    let albert = EstablishedAccount {
+        address: wallet::defaults::albert_address(),
+        vp_code_path: vp_user_path.into(),
+        public_key: Some(wallet::defaults::albert_keypair().public),
+        storage: HashMap::default(),
+    };
+    let bertha = EstablishedAccount {
+        address: wallet::defaults::bertha_address(),
+        vp_code_path: vp_user_path.into(),
+        public_key: Some(wallet::defaults::bertha_keypair().public),
+        storage: HashMap::default(),
+    };
+    let christel = EstablishedAccount {
+        address: wallet::defaults::christel_address(),
+        vp_code_path: vp_user_path.into(),
+        public_key: Some(wallet::defaults::christel_keypair().public),
+        storage: HashMap::default(),
+    };
+    let matchmaker = EstablishedAccount {
+        address: wallet::defaults::matchmaker_address(),
+        vp_code_path: vp_user_path.into(),
+        public_key: Some(wallet::defaults::matchmaker_keypair().public),
+        storage: HashMap::default(),
+    };
+    let implicit_accounts = vec![ImplicitAccount {
+        public_key: wallet::defaults::daewon_keypair().public,
+    }];
+    let default_user_tokens = token::Amount::whole(1_000_000);
+    let balances: HashMap<Address, token::Amount> = HashMap::from_iter([
+        (wallet::defaults::albert_address(), default_user_tokens),
+        (wallet::defaults::bertha_address(), default_user_tokens),
+        (wallet::defaults::christel_address(), default_user_tokens),
+        (wallet::defaults::daewon_address(), default_user_tokens),
+    ]);
+    let token_accounts = address::tokens()
+        .into_iter()
+        .map(|(address, _)| TokenAccount {
+            address,
+            vp_code_path: vp_token_path.into(),
+            balances: balances.clone(),
+        })
+        .collect();
     Genesis {
-        validator,
+        validators: vec![validator],
         validator_consensus_key: consensus_keypair,
+        established_accounts: vec![albert, bertha, christel, matchmaker],
+        implicit_accounts,
+        token_accounts,
         parameters,
         pos_params: PosParams::default(),
     }
+}
+#[cfg(not(feature = "dev"))]
+pub fn genesis() -> Genesis {
+    todo!("load from file")
 }
 
 #[cfg(test)]
