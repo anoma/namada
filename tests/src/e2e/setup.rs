@@ -38,15 +38,6 @@ pub fn generate_network_of(
     while index < n_of_peers {
         let node_path = path.join(format!("anoma-{}", index));
 
-        let mut config = Config {
-            ledger: Some(Ledger {
-                tendermint: node_path.join("tendermint").to_path_buf(),
-                db: node_path.join("db").to_path_buf(),
-                ..Default::default()
-            }),
-            ..Config::default()
-        };
-
         let info = build_peers(index, node_dirs.clone());
 
         let gossiper_config = IntentGossiper::default_with_address(
@@ -63,7 +54,14 @@ pub fn generate_network_of(
 
         node_dirs.push((node_path.clone(), peer_id));
 
-        config.intent_gossiper = Some(gossiper_config);
+        let config = Config {
+            ledger: Ledger {
+                tendermint: node_path.join("tendermint").to_path_buf(),
+                db: node_path.join("db").to_path_buf(),
+                ..Default::default()
+            },
+            intent_gossiper: gossiper_config,
+        };
 
         config.write(&node_path, false).unwrap();
         index += 1;
