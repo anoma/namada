@@ -4,6 +4,9 @@ pub mod mm_token_exch;
 #[cfg(feature = "vp_user")]
 pub mod vp_user;
 
+#[cfg(feature = "vp_testnet_faucet")]
+pub mod vp_testnet_faucet;
+
 /// A tx to initialize a new established address with a given public key and
 /// a validity predicate.
 #[cfg(feature = "tx_init_account")]
