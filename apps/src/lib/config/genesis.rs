@@ -13,9 +13,6 @@ use anoma::types::{storage, token};
 #[derive(Debug)]
 pub struct Genesis {
     pub validators: Vec<Validator>,
-    /// The consensus key will be written into Tendermint node's
-    /// `priv_validator_key.json`
-    #[cfg(feature = "dev")]
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
     pub implicit_accounts: Vec<ImplicitAccount>,

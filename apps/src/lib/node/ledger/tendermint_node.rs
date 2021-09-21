@@ -14,9 +14,8 @@ use signal_hook::iterator::Signals;
 use tendermint::config::TendermintConfig;
 use thiserror::Error;
 
-use crate::config::genesis;
+use crate::config;
 use crate::std::sync::mpsc::Sender;
-use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -58,7 +57,7 @@ pub fn run(
 
     #[cfg(feature = "dev")]
     {
-        let genesis = &genesis::genesis();
+        let genesis = &crate::config::genesis::genesis();
         // override the validator key file
         write_validator_key(
             &home_dir,
@@ -68,7 +67,7 @@ pub fn run(
                 .expect("There should be one genesis validator in \"dev\" mode")
                 .pos_data
                 .address,
-            &wallet::defaults::validator_keypair(),
+            &crate::wallet::defaults::validator_keypair(),
         );
     }
 
