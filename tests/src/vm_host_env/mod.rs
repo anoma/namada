@@ -17,7 +17,7 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
-    use anoma::ledger::ibc::init_genesis_storage;
+    use anoma::ledger::ibc::{init_genesis_storage, Error as IbcError};
     use anoma::proto::Tx;
     use anoma::types::key::ed25519::SignedTxData;
     use anoma::types::storage::{Key, KeySeg};
@@ -468,6 +468,35 @@ mod tests {
         // Set the initial state before starting transactions
         init_genesis_storage(&mut env.storage);
 
+        // Start an invalid transaction
+        let data = ibc::client_creation_data();
+        let tx_data = data.try_to_vec().expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        };
+        // get and increment the connection counter
+        let counter_key = ibc::client_counter_key().to_string();
+        let counter =
+            tx_host_env::read(&counter_key).expect("no client counter");
+        tx_host_env::write(&counter_key, counter + 1);
+        let client_id = data.client_id(counter).expect("invalid client ID");
+        // only insert a client type
+        let client_type_key = ibc::client_type_key(&client_id).to_string();
+        tx_host_env::write(&client_type_key, data.client_state.client_type());
+
+        // Check should fail due to no client state
+        let ibc_vp = ibc::init_ibc_vp_from_tx(&env, &tx);
+        assert!(matches!(
+            ibc_vp
+                .validate(&tx_data)
+                .expect_err("validation succeeded unexpectedly"),
+            IbcError::ClientError(_),
+        ));
+        // drop the transaction
+        env.write_log.drop_tx();
+
         // Start a transaction to create a new client
         let data = ibc::client_creation_data();
         let tx_data = data.try_to_vec().expect("encoding failed");
@@ -506,6 +535,38 @@ mod tests {
         // Commit
         env.write_log.commit_tx();
         env.write_log.commit_block(&mut env.storage).unwrap();
+
+        // Start an invalid transaction
+        let data = ibc::client_update_data(client_id);
+        let tx_data = data.try_to_vec().expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        };
+        // get and update the client without a header
+        let client_id = data.client_id.clone();
+        // update the client with the same state
+        let old_data = ibc::client_creation_data();
+        let same_client_state = old_data.client_state.clone();
+        let height = same_client_state.latest_height();
+        let same_consensus_state = old_data.consensus_state;
+        let client_state_key = ibc::client_state_key(&client_id).to_string();
+        tx_host_env::write(&client_state_key, same_client_state);
+        let consensus_state_key =
+            ibc::consensus_state_key(&client_id, height).to_string();
+        tx_host_env::write(&consensus_state_key, same_consensus_state);
+
+        // Check should fail due to the invalid updating
+        let ibc_vp = ibc::init_ibc_vp_from_tx(&env, &tx);
+        assert!(matches!(
+            ibc_vp
+                .validate(&tx_data)
+                .expect_err("validation succeeded unexpectedly"),
+            IbcError::ClientError(_),
+        ));
+        // drop the transaction
+        env.write_log.drop_tx();
 
         // Start a transaction to update the client
         let data = ibc::client_update_data(client_id);
@@ -583,6 +644,36 @@ mod tests {
         writes.into_iter().for_each(|(key, val)| {
             env.storage.write(&key, val).expect("write error");
         });
+
+        // Start an invalid transaction
+        let data = ibc::connection_open_init_data(client_id.clone());
+        let tx_data = data.try_to_vec().expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        };
+        // get and increment the connection counter
+        let counter_key = ibc::connection_counter_key().to_string();
+        let counter: u64 =
+            tx_host_env::read(&counter_key).expect("no connection counter");
+        tx_host_env::write(&counter_key, counter + 1);
+        // insert a new opened connection
+        let conn_id = ibc::connection_id(counter);
+        let conn_key = ibc::connection_key(&conn_id).to_string();
+        let conn = ibc::open_connection(&mut data.connection());
+        tx_host_env::write(&conn_key, conn);
+
+        // Check should fail due to directly opening a connection
+        let ibc_vp = ibc::init_ibc_vp_from_tx(&env, &tx);
+        assert!(matches!(
+            ibc_vp
+                .validate(&tx_data)
+                .expect_err("validation succeeded unexpectedly"),
+            IbcError::ConnectionError(_),
+        ));
+        // drop the transaction
+        env.write_log.drop_tx();
 
         // Start a transaction for ConnectionOpenInit
         // tx (Not need to decode tx_data)
@@ -727,6 +818,82 @@ mod tests {
         writes.into_iter().for_each(|(key, val)| {
             env.storage.write(&key, val).expect("write error");
         });
+
+        // Start an invalid transaction
+        let port_id = ibc::port_id("test_port").expect("invalid port ID");
+        let data =
+            ibc::channel_open_init_data(port_id.clone(), conn_id.clone());
+        let tx_data = data.try_to_vec().expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        };
+        // not bind a port
+        // get and increment the channel counter
+        let counter_key = ibc::channel_counter_key().to_string();
+        let counter =
+            tx_host_env::read(&counter_key).expect("no channel counter");
+        tx_host_env::write(&counter_key, counter + 1);
+        // channel
+        let channel_id = ibc::channel_id(counter);
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
+        tx_host_env::write(&channel_key, data.channel());
+
+        // Check should fail due to no port binding
+        let ibc_vp = ibc::init_ibc_vp_from_tx(&env, &tx);
+        assert!(matches!(
+            ibc_vp
+                .validate(&tx_data)
+                .expect_err("validation succeeded unexpectedly"),
+            IbcError::ChannelError(_),
+        ));
+        // drop the transaction
+        env.write_log.drop_tx();
+
+        // Start an invalid transaction
+        let port_id = ibc::port_id("test_port").expect("invalid port ID");
+        let data =
+            ibc::channel_open_init_data(port_id.clone(), conn_id.clone());
+        let tx_data = data.try_to_vec().expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        };
+        // bind a port
+        let index_key = ibc::capability_index_key().to_string();
+        let cap_index: u64 = tx_host_env::read(&index_key).expect("no index");
+        tx_host_env::write(&index_key, cap_index + 1);
+        let port_key = ibc::port_key(&port_id).to_string();
+        tx_host_env::write(&port_key, cap_index);
+        let cap_key = ibc::capability_key(cap_index).to_string();
+        tx_host_env::write(&cap_key, port_id.clone());
+        // get and increment the channel counter
+        let counter_key = ibc::channel_counter_key().to_string();
+        let counter =
+            tx_host_env::read(&counter_key).expect("no channel counter");
+        tx_host_env::write(&counter_key, counter + 1);
+        // insert a opened channel
+        let channel_id = ibc::channel_id(counter);
+        let port_channel_id =
+            ibc::port_channel_id(port_id.clone(), channel_id.clone());
+        let channel_key = ibc::channel_key(&port_channel_id).to_string();
+        let channel = ibc::open_channel(&mut data.channel());
+        tx_host_env::write(&channel_key, channel);
+
+        // Check should fail due to directly opening a channel
+        let ibc_vp = ibc::init_ibc_vp_from_tx(&env, &tx);
+        assert!(matches!(
+            ibc_vp
+                .validate(&tx_data)
+                .expect_err("validation succeeded unexpectedly"),
+            IbcError::ChannelError(_),
+        ));
+        // drop the transaction
+        env.write_log.drop_tx();
 
         // Start a transaction for ChannelOpenInit
         // tx (Not need to decode tx_data)
