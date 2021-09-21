@@ -3,11 +3,14 @@
 use std::collections::HashSet;
 use std::io::Write;
 
+use anoma::types::{address, token};
 use anoma::types::intent::{Exchange, FungibleTokenIntent};
 use anoma::types::key::ed25519::Signed;
 use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds, Context};
 use anoma_apps::client::{rpc, signing, tx};
+use anoma_apps::config::genesis;
+use anoma_apps::node::ledger::tendermint_node;
 use anoma_apps::proto::services::rpc_service_client::RpcServiceClient;
 use anoma_apps::proto::{services, RpcMessage};
 use anoma_apps::wallet::Wallet;
@@ -61,6 +64,12 @@ pub async fn main() -> Result<()> {
         cmds::AnomaClient::SubscribeTopic(cmds::SubscribeTopic(args)) => {
             subscribe_topic(ctx, args).await;
         }
+        // Utils cmds
+        cmds::AnomaClient::Utils(cmd) => match cmd {
+            cmds::Utils::InitGenesisValidator(cmds::InitGenesisValidator(
+                args,
+            )) => init_genesis_validator(ctx, args),
+        },
     }
     Ok(())
 }
@@ -154,4 +163,90 @@ async fn subscribe_topic(
         .await
         .expect("failed to send message and/or receive rpc response");
     println!("{:#?}", response);
+}
+
+/// Initialize genesis validator's address, staking reward address, consensus
+/// key, validator account key and staking rewards key and use it in the
+/// ledger's node.",
+fn init_genesis_validator(
+    ctx: Context,
+    args::InitGenesisValidator {
+        alias,
+        unsafe_dont_encrypt,
+    }: args::InitGenesisValidator,
+) {
+    let mut wallet = ctx.wallet;
+
+    // Generate validator address
+    let validator_address =
+        address::gen_established_address("genesis validator address");
+    let validator_address_alias = alias.clone();
+    if !wallet
+        .add_address(validator_address_alias.clone(), validator_address.clone())
+    {
+        cli::safe_exit(1)
+    }
+    // Generate staking reward address
+    let rewards_address =
+        address::gen_established_address("genesis validator reward address");
+    let rewards_address_alias = format!("{}-rewards", alias);
+    if !wallet.add_address(rewards_address_alias.clone(), rewards_address.clone()) {
+        cli::safe_exit(1)
+    }
+
+    println!("Generating validator account key...");
+    let validator_key_alias = wallet.gen_key(
+        Some(format!("{}-validator-key", alias)),
+        unsafe_dont_encrypt,
+    );
+    println!("Generating consensus key...");
+    let consensus_key_alias = wallet.gen_key(
+        Some(format!("{}-consensus-key", alias)),
+        unsafe_dont_encrypt,
+    );
+    println!("Generating staking reward account key...");
+    let rewards_key_alias = wallet
+        .gen_key(Some(format!("{}-rewards-key", alias)), unsafe_dont_encrypt);
+
+    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+
+    let validator_key = wallet.find_key(&validator_key_alias).unwrap();
+    let consensus_key = wallet.find_key(&consensus_key_alias).unwrap();
+    let rewards_key = wallet.find_key(&rewards_key_alias).unwrap();
+
+    let tendermint_home = &ctx.config.ledger.tendermint;
+    tendermint_node::write_validator_key(
+        tendermint_home,
+        &validator_address,
+        &consensus_key,
+    );
+    tendermint_node::write_validator_state(tendermint_home);
+
+    println!();
+    println!("The validator's addresses and keys were stored in the wallet:");
+    println!("  Validator address \"{}\"", validator_address_alias);
+    println!("  Staking reward address \"{}\"", rewards_address_alias);
+    println!("  Validator account key \"{}\"", validator_key_alias);
+    println!("  Consensus key \"{}\"", consensus_key_alias);
+    println!("  Staking reward key \"{}\"", rewards_key_alias);
+    println!(
+        "The ledger node has been setup to use this validator's address and \
+         consensus key."
+    );
+    println!();
+    let genesis_validator = genesis::Validator {
+        pos_data: anoma::ledger::pos::GenesisValidator {
+            address: validator_address,
+            staking_reward_address: rewards_address,
+            tokens: token::Amount::whole(200_000),
+            consensus_key: consensus_key.public.clone(),
+            staking_reward_key: rewards_key.public.clone(),
+        },
+        account_key: validator_key.public.clone(),
+        non_staked_balance: token::Amount::whole(100_000),
+        // TODO replace with https://github.com/anoma/anoma/issues/25)
+        vp_code_path: "wasm/vp_user.wasm".into(),
+    };
+    // TODO print in toml format after we have https://github.com/anoma/anoma/issues/425
+    println!("Genesis validator config: {:#?}", genesis_validator);
 }

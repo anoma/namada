@@ -145,6 +145,8 @@ pub mod cmds {
         // Gossip cmds
         Intent(Intent),
         SubscribeTopic(SubscribeTopic),
+        // Utils cmds
+        Utils(Utils),
     }
 
     impl Cmd for AnomaClient {
@@ -168,6 +170,8 @@ pub mod cmds {
                 // Intents
                 .subcommand(Intent::def().display_order(4))
                 .subcommand(SubscribeTopic::def().display_order(4))
+                // Utils
+                .subcommand(Utils::def().display_order(5))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -188,6 +192,7 @@ pub mod cmds {
             let intent = SubCmd::parse(matches).map(Self::Intent);
             let subscribe_topic =
                 SubCmd::parse(matches).map(Self::SubscribeTopic);
+            let utils = SubCmd::parse(matches).map(Self::Utils);
             tx_custom
                 .or(tx_transfer)
                 .or(tx_update_vp)
@@ -202,6 +207,7 @@ pub mod cmds {
                 .or(query_slashes)
                 .or(intent)
                 .or(subscribe_topic)
+                .or(utils)
         }
     }
 
@@ -919,6 +925,51 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("subscribe to a topic.")
                 .add_args::<args::SubscribeTopic>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum Utils {
+        InitGenesisValidator(InitGenesisValidator),
+    }
+
+    impl SubCmd for Utils {
+        const CMD: &'static str = "utils";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                SubCmd::parse(matches).map(Self::InitGenesisValidator)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Utils sub-commands")
+                .subcommand(InitGenesisValidator::def())
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitGenesisValidator(pub args::InitGenesisValidator);
+
+    impl SubCmd for InitGenesisValidator {
+        const CMD: &'static str = "init-genesis-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::InitGenesisValidator::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Initialize genesis validator's address, staking reward \
+                     address, consensus key, validator account key and \
+                     staking rewards key and use it in the ledger's node.",
+                )
+                .add_args::<args::InitGenesisValidator>()
         }
     }
 }
@@ -1966,7 +2017,33 @@ pub mod args {
             )
         }
     }
+
+    #[derive(Clone, Debug)]
+    pub struct InitGenesisValidator {
+        pub alias: String,
+        pub unsafe_dont_encrypt: bool,
+    }
+
+    impl Args for InitGenesisValidator {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            Self {
+                alias,
+                unsafe_dont_encrypt,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(ALIAS.def().about("The validator address alias"))
+                .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                    "UNSAFE: Do not encrypt the keypair. Do not use this for \
+                     keys used in a live network.",
+                ))
+        }
+    }
 }
+
 pub fn anoma_cli() -> (cmds::Anoma, String) {
     let app = anoma_app();
     let matches = app.get_matches();
