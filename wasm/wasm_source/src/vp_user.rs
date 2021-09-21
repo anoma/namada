@@ -60,7 +60,7 @@ fn validate_tx(
                 let post: token::Amount = read_post(&key).unwrap_or_default();
                 let change = post.change() - pre.change();
                 // debit has to signed, credit doesn't
-                let valid = !(change < 0 && !*valid_sig && !*valid_intent);
+                let valid = change >= 0 || *valid_sig || *valid_intent;
                 log_string(format!(
                     "token key: {}, change: {}, valid_sig: {}, valid_intent: \
                      {}, valid modification: {}",
