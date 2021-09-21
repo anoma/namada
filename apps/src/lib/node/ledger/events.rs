@@ -72,8 +72,8 @@ impl From<Event> for tendermint_proto::abci::Event {
                 .attributes
                 .into_iter()
                 .map(|(key, value)| EventAttribute {
-                    key: key.into_bytes(),
-                    value: value.into_bytes(),
+                    key,
+                    value,
                     index: true,
                 })
                 .collect(),

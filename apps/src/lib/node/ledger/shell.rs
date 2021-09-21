@@ -31,10 +31,11 @@ use anoma::types::{address, key, token};
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Itertools;
 use tendermint::block::Header;
-use tendermint_proto::abci::{
-    self, ConsensusParams, Evidence, ValidatorUpdate,
+use tendermint_proto::abci::{self, ValidatorUpdate, Evidence};
+use tendermint_proto::types::{
+    ConsensusParams, EvidenceParams,
 };
-use tendermint_proto::types::EvidenceParams;
+
 use thiserror::Error;
 use tower_abci::{request, response};
 

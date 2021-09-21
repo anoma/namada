@@ -7,10 +7,10 @@ pub mod shim {
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
         RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
         RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestQuery,
-        RequestSetOption, ResponseApplySnapshotChunk, ResponseCheckTx,
+        ResponseApplySnapshotChunk, ResponseCheckTx,
         ResponseCommit, ResponseEcho, ResponseFlush, ResponseInfo,
         ResponseInitChain, ResponseListSnapshots, ResponseLoadSnapshotChunk,
-        ResponseOfferSnapshot, ResponseQuery, ResponseSetOption,
+        ResponseOfferSnapshot, ResponseQuery,
     };
     use thiserror::Error;
 
@@ -59,7 +59,6 @@ pub mod shim {
         FinalizeBlock(request::FinalizeBlock),
         Commit(RequestCommit),
         Flush(RequestFlush),
-        SetOption(RequestSetOption),
         Echo(RequestEcho),
         CheckTx(RequestCheckTx),
         ListSnapshots(RequestListSnapshots),
@@ -79,7 +78,6 @@ pub mod shim {
                 Req::Query(inner) => Ok(Request::Query(inner)),
                 Req::Commit(inner) => Ok(Request::Commit(inner)),
                 Req::Flush(inner) => Ok(Request::Flush(inner)),
-                Req::SetOption(inner) => Ok(Request::SetOption(inner)),
                 Req::Echo(inner) => Ok(Request::Echo(inner)),
                 Req::CheckTx(inner) => Ok(Request::CheckTx(inner)),
                 Req::ListSnapshots(inner) => Ok(Request::ListSnapshots(inner)),
@@ -112,7 +110,6 @@ pub mod shim {
         FinalizeBlock(response::FinalizeBlock),
         Commit(ResponseCommit),
         Flush(ResponseFlush),
-        SetOption(ResponseSetOption),
         Echo(ResponseEcho),
         CheckTx(ResponseCheckTx),
         ListSnapshots(ResponseListSnapshots),
@@ -132,7 +129,6 @@ pub mod shim {
                 Response::Query(inner) => Ok(Resp::Query(inner)),
                 Response::Commit(inner) => Ok(Resp::Commit(inner)),
                 Response::Flush(inner) => Ok(Resp::Flush(inner)),
-                Response::SetOption(inner) => Ok(Resp::SetOption(inner)),
                 Response::Echo(inner) => Ok(Resp::Echo(inner)),
                 Response::CheckTx(inner) => Ok(Resp::CheckTx(inner)),
                 Response::ListSnapshots(inner) => {
@@ -197,7 +193,8 @@ pub mod shim {
 
     /// Custom types for response payloads
     pub mod response {
-        use tendermint_proto::abci::{ConsensusParams, Event, ValidatorUpdate};
+        use tendermint_proto::abci::{Event, ValidatorUpdate};
+        use tendermint_proto::types::ConsensusParams;
         use tower_abci::response;
 
         #[derive(Debug, Default)]
@@ -236,7 +233,7 @@ pub mod shim {
             pub tx: super::TxBytes,
         }
 
-        impl From<ProcessProposal> for response::CheckTx {
+        impl From<ProcessProposal> for response::DeliverTx {
             fn from(resp: ProcessProposal) -> Self {
                 Self {
                     code: resp.result.code,

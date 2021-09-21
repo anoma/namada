@@ -127,9 +127,6 @@ impl Shell {
             }
             Request::Commit(_) => Ok(Response::Commit(self.commit())),
             Request::Flush(_) => Ok(Response::Flush(Default::default())),
-            Request::SetOption(_) => {
-                Ok(Response::SetOption(Default::default()))
-            }
             Request::Echo(msg) => Ok(Response::Echo(response::Echo {
                 message: msg.message,
             })),
