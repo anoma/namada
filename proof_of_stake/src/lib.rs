@@ -227,6 +227,13 @@ pub trait PosActions: PosReadOnly {
                 address.clone(),
             ));
         }
+        if address == staking_reward_address {
+            return Err(
+                BecomeValidatorError::StakingRewardAddressEqValidatorAddress(
+                    address.clone(),
+                ),
+            );
+        }
         let BecomeValidatorData {
             consensus_key,
             state,
@@ -797,6 +804,11 @@ pub enum GenesisError {
 pub enum BecomeValidatorError<Address: Display + Debug> {
     #[error("The given address {0} is already a validator")]
     AlreadyValidator(Address),
+    #[error(
+        "The staking reward address must be different from the validator's \
+         address {0}"
+    )]
+    StakingRewardAddressEqValidatorAddress(Address),
 }
 
 #[allow(missing_docs)]
