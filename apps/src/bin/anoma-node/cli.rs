@@ -1,8 +1,5 @@
 //! Anoma node CLI.
 
-use std::path::Path;
-
-use anoma_apps::config::Config;
 use anoma_apps::node::{gossip, ledger};
 use anoma_apps::{cli, config};
 use eyre::{Context, Result};
@@ -13,23 +10,19 @@ pub fn main() -> Result<()> {
     match cmd {
         cli::cmds::AnomaNode::Ledger(sub) => match sub {
             cli::cmds::Ledger::Run(_) => {
-                let config = load_config(base_dir);
-                let ledger_cfg = config.ledger.unwrap_or_default();
-                ledger::run(ledger_cfg);
+                ledger::run(ctx.config.ledger);
             }
             cli::cmds::Ledger::Reset(_) => {
-                let config = load_config(base_dir);
-                let ledger_cfg = config.ledger.unwrap_or_default();
-                ledger::reset(ledger_cfg)
+                ledger::reset(ctx.config.ledger)
                     .wrap_err("Failed to reset Anoma node")?;
             }
         },
         cli::cmds::AnomaNode::Gossip(sub) => match sub {
             cli::cmds::Gossip::Run(cli::cmds::GossipRun(args)) => {
-                let config = load_config(base_dir);
-                let mut gossip_cfg = config.intent_gossiper.unwrap_or_default();
                 let tx_source_address = ctx.get_opt(args.tx_source_address);
                 let tx_signing_key = ctx.get_opt_cached(args.tx_signing_key);
+                let config = ctx.config;
+                let mut gossip_cfg = config.intent_gossiper;
                 gossip_cfg.update(
                     args.addr,
                     args.rpc,
@@ -54,20 +47,4 @@ pub fn main() -> Result<()> {
         },
     }
     Ok(())
-}
-
-/// Load config from expected path in the `base_dir` or generate a new one if it
-/// doesn't exist.
-fn load_config(base_dir: &Path) -> Config {
-    match Config::read(base_dir) {
-        Ok(config) => config,
-        Err(err) => {
-            eprintln!(
-                "Tried to read config in {} but failed with: {}",
-                base_dir.display(),
-                err
-            );
-            cli::safe_exit(1)
-        }
-    }
 }

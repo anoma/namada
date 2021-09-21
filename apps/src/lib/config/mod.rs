@@ -246,15 +246,15 @@ impl Default for IntentGossiper {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub ledger: Option<Ledger>,
-    pub intent_gossiper: Option<IntentGossiper>,
+    pub ledger: Ledger,
+    pub intent_gossiper: IntentGossiper,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            ledger: Some(Ledger::default()),
-            intent_gossiper: Some(IntentGossiper::default()),
+            ledger: Ledger::default(),
+            intent_gossiper: IntentGossiper::default(),
         }
     }
 }
@@ -279,10 +279,7 @@ impl Config {
     /// Generate configuration and write it to a file.
     pub fn generate(base_dir: &Path, replace: bool) -> Result<Self> {
         let mut config = Config::default();
-        let mut ledger_cfg = config
-            .ledger
-            .as_mut()
-            .expect("safe because default has ledger");
+        let ledger_cfg = &mut config.ledger;
         ledger_cfg.db = base_dir.join(DB_DIR).join(DEFAULT_CHAIN_ID);
         ledger_cfg.tendermint = base_dir.join(TENDERMINT_DIR);
         config.write(base_dir, replace)?;
