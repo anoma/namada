@@ -33,6 +33,9 @@ pub async fn main() -> Result<()> {
         cmds::AnomaClient::TxInitAccount(cmds::TxInitAccount(args)) => {
             tx::submit_init_account(ctx, args).await;
         }
+        cmds::AnomaClient::TxInitValidator(cmds::TxInitValidator(args)) => {
+            tx::submit_init_validator(ctx, args).await;
+        }
         cmds::AnomaClient::Bond(cmds::Bond(args)) => {
             tx::submit_bond(ctx, args).await;
         }

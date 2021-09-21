@@ -849,6 +849,21 @@ pub async fn get_public_key(
     query_storage_value(client, key).await
 }
 
+/// Check if the given address is a known validator.
+pub async fn is_validator(
+    address: &Address,
+    ledger_address: tendermint::net::Address,
+) -> bool {
+    let client = HttpClient::new(ledger_address).unwrap();
+    // Check if there's any validator state
+    let key = pos::validator_state_key(address);
+    // We do not need to decode it
+    let state: Option<pos::ValidatorStates> =
+        query_storage_value(client, key).await;
+    // If there is, then the address is a validator
+    state.is_some()
+}
+
 /// Query a storage value and decode it with [`BorshDeserialize`].
 async fn query_storage_value<T>(
     client: HttpClient,
