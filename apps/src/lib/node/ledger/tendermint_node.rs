@@ -14,9 +14,9 @@ use signal_hook::iterator::Signals;
 use tendermint::config::TendermintConfig;
 use thiserror::Error;
 
-use crate::config;
 use crate::config::genesis;
 use crate::std::sync::mpsc::Sender;
+use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -68,7 +68,7 @@ pub fn run(
                 .expect("There should be one genesis validator in \"dev\" mode")
                 .pos_data
                 .address,
-            &genesis.validator_consensus_key,
+            &wallet::defaults::validator_keypair(),
         );
     }
 

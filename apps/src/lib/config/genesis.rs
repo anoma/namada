@@ -16,7 +16,6 @@ pub struct Genesis {
     /// The consensus key will be written into Tendermint node's
     /// `priv_validator_key.json`
     #[cfg(feature = "dev")]
-    pub validator_consensus_key: Keypair,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
     pub implicit_accounts: Vec<ImplicitAccount>,
@@ -101,7 +100,7 @@ pub fn genesis() -> Genesis {
             address,
             staking_reward_address,
             tokens: token::Amount::whole(200_000),
-            consensus_key: consensus_keypair.public.clone(),
+            consensus_key: consensus_keypair.public,
             staking_reward_key: staking_reward_keypair.public,
         },
         account_key: account_keypair.public,
@@ -159,7 +158,6 @@ pub fn genesis() -> Genesis {
         .collect();
     Genesis {
         validators: vec![validator],
-        validator_consensus_key: consensus_keypair,
         established_accounts: vec![albert, bertha, christel, matchmaker],
         implicit_accounts,
         token_accounts,
