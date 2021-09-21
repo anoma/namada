@@ -398,12 +398,29 @@ pub mod tests {
     }
 }
 
+/// Generate a new established address.
+#[cfg(feature = "rand")]
+pub fn gen_established_address(seed: impl AsRef<str>) -> Address {
+    use rand::prelude::ThreadRng;
+    use rand::{thread_rng, RngCore};
+
+    let mut key_gen = EstablishedAddressGen::new(seed);
+
+    let mut rng: ThreadRng = thread_rng();
+    let mut rng_bytes = vec![0u8; 32];
+    rng.fill_bytes(&mut rng_bytes[..]);
+    let rng_source = rng_bytes
+        .iter()
+        .map(|b| format!("{:02X}", b))
+        .collect::<Vec<String>>()
+        .join("");
+    key_gen.generate_address(rng_source)
+}
+
 /// Helpers for testing with addresses.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use proptest::prelude::*;
-    use rand::prelude::ThreadRng;
-    use rand::{thread_rng, RngCore};
 
     use super::*;
     use crate::types::key::ed25519;
@@ -411,17 +428,7 @@ pub mod testing {
     /// Generate a new established address.
     pub fn gen_established_address() -> Address {
         let seed = "such randomness, much wow";
-        let mut key_gen = EstablishedAddressGen::new(seed);
-
-        let mut rng: ThreadRng = thread_rng();
-        let mut rng_bytes = vec![0u8; 32];
-        rng.fill_bytes(&mut rng_bytes[..]);
-        let rng_source = rng_bytes
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<String>>()
-            .join("");
-        key_gen.generate_address(rng_source)
+        super::gen_established_address(seed)
     }
 
     /// A sampled established address for tests
