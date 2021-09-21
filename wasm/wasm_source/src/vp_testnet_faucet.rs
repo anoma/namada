@@ -47,10 +47,8 @@ fn validate_tx(
                 let pre: token::Amount = read_pre(&key).unwrap_or_default();
                 let post: token::Amount = read_post(&key).unwrap_or_default();
                 let change = post.change() - pre.change();
-                // debit has to signed, credit doesn't
-                let valid =
-                    !(change < 0 && !*valid_sig) || change >= -MAX_FREE_DEBIT;
-                valid
+                // Debit over `MAX_FREE_DEBIT` has to signed, credit doesn't
+                change >= -MAX_FREE_DEBIT || change >= 0 || *valid_sig
             } else {
                 // If this is not the owner, allow any change
                 true
