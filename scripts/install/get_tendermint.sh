@@ -42,7 +42,7 @@ if [[ $MACHINE -eq "x86_64" ]]; then
   ARCH="amd64"
 fi
 
-export RELEASE_URL="${TM_REPO}/releases/download/v${TM_VERSION}/tendermint_${TM_VERSION}_${SYSTEM,,}_${ARCH}.tar.gz"
+export RELEASE_URL="${TM_REPO}/releases/download/v${TM_VERSION}/tendermint_${TM_VERSION}_$(echo ${SYSTEM} | tr '[:upper:]' '[:lower:]')_${ARCH}.tar.gz"
 echo $RELEASE_URL
 
 curl -Lo $TMP_PATH/tendermint.tar.gz $RELEASE_URL || error_exit "tendermint release download failed"
