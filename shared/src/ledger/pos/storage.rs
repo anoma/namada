@@ -78,6 +78,18 @@ pub fn validator_address_raw_hash_key(raw_hash: impl AsRef<str>) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Is storage key for validator's address raw hash?
+pub fn is_validator_address_raw_hash_key(key: &Key) -> Option<&str> {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(raw_hash)]
+            if addr == &ADDRESS && prefix == VALIDATOR_ADDRESS_RAW_HASH =>
+        {
+            Some(raw_hash)
+        }
+        _ => None,
+    }
+}
+
 /// Storage key for validator's staking reward address.
 pub fn validator_staking_reward_address_key(validator: &Address) -> Key {
     validator_prefix(validator)
