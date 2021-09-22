@@ -13,6 +13,8 @@ use super::super::Shell;
 use super::abcipp_shim_types::shim::{
     request, Error, Request, Response, TxBytes,
 };
+use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 
 /// The shim wraps the shell, which implements ABCI++
 /// The shim makes a crude translation between the ABCI
@@ -20,7 +22,7 @@ use super::abcipp_shim_types::shim::{
 /// interface
 pub struct AbcippShim {
     service: Shell,
-    block_txs: Vec<TxBytes>,
+    block_txs: Vec<ProcessedTx>,
 }
 
 impl AbcippShim {
@@ -64,20 +66,24 @@ impl Service<Req> for AbcippShim {
                     })
             }
             Req::DeliverTx(deliver_tx) => {
-                // We store all the transactions to be applied in
-                // bulk at a later step
-                self.block_txs.push(deliver_tx.clone().tx);
-                // We call process proposal to report back the validity
+                // We call [`process_proposal`] to report back the validity
                 // of the tx to tendermint
                 self.service
-                    .call(Request::ProcessProposal(deliver_tx.tx.into()))
+                    .call(Request::ProcessProposal(deliver_tx.tx.clone().into()))
                     .map_err(Error::from)
                     .and_then(|res| match res {
                         Response::ProcessProposal(resp) => {
-                            Ok(Resp::DeliverTx(resp.into()))
+                            self.block_txs.push(
+                                ProcessedTx {
+                                    tx: deliver_tx.tx,
+                                    result: resp.result
+                                }
+                            );
+                            Ok(())
                         }
-                        _ => Err(Error::ConvertResp(res)),
-                    })
+                        _ => unreachable!(),
+                    });
+                Ok(Resp::DeliverTx(Default::default()))
             }
             Req::EndBlock(end) => {
                 BlockHeight::try_from(end.height).unwrap_or_else(|_| {

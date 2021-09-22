@@ -95,6 +95,9 @@ pub struct Shell {
     gas_meter: BlockGasMeter,
     /// Write log for the current block
     write_log: WriteLog,
+    /// The set of wrapper txs from last committed block
+    /// that are to be decrypted and included in the current block
+    wrapper_txs:
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
@@ -527,73 +530,54 @@ impl Shell {
         if let Err(err) = tx {
             return shim::response::ProcessProposal {
                 result: err.into(),
-                tx: req.tx,
             };
         }
 
-        let (result, processed_tx) = match process_tx(tx.unwrap()) {
+        match process_tx(tx.unwrap()) {
             // This occurs if the wrapper tx signature is invalid
-            Err(err) => (TxResult::from(err), None),
+            Err(err) => TxResult::from(err),
             Ok(result) => match result {
                 // If it is a raw transaction, we do no further validation
-                TxType::Raw(_) => (
-                    TxResult {
-                        code: 0,
-                        info: "Process proposal accepted this transaction"
-                            .into(),
-                    },
-                    None,
-                ),
+                TxType::Raw(_) => TxResult {
+                    code: 0,
+                    info: "Process proposal accepted this transaction"
+                        .into(),
+                },
                 TxType::Wrapper(tx) => {
                     let wrapper = &WrapperTx::try_from(&tx).unwrap();
                     // validate the ciphertext via Ferveo
                     if !wrapper.validate_ciphertext() {
-                        (
-                            shim::response::TxResult {
-                                code: 1,
-                                info: "The ciphertext of the wrapped tx is \
-                                       invalid"
-                                    .into(),
-                            },
-                            None,
-                        )
+                        shim::response::TxResult {
+                            code: 1,
+                            info: "The ciphertext of the wrapped tx is \
+                                   invalid"
+                                .into(),
+                        }
                     } else {
                         // check that the fee payer has sufficient balance
                         match self.get_balance(
                             &wrapper.fee.token,
                             &wrapper.fee_payer(),
                         ) {
-                            Ok(balance) if wrapper.fee.amount <= balance => (
-                                shim::response::TxResult {
-                                    code: 0,
-                                    info: "Process proposal accepted this \
-                                           transaction"
-                                        .into(),
-                                },
-                                Some(tx),
-                            ),
-                            Ok(_) => (
-                                shim::response::TxResult {
-                                    code: 1,
-                                    info: "The address given does not have \
-                                           sufficient balance to pay fee"
-                                        .into(),
-                                },
-                                None,
-                            ),
-                            Err(err) => (
-                                shim::response::TxResult { code: 1, info: err },
-                                None,
-                            ),
+                            Ok(balance) if wrapper.fee.amount <= balance =>
+                            shim::response::TxResult {
+                                code: 0,
+                                info: "Process proposal accepted this \
+                                       transaction"
+                                    .into(),
+                            },
+                            Ok(_) => shim::response::TxResult {
+                                code: 1,
+                                info: "The address given does not have \
+                                       sufficient balance to pay fee"
+                                    .into(),
+                            },
+                            Err(err) => shim::response::TxResult { code: 1, info: err },
                         }
                     }
                 }
             },
-        };
-        shim::response::ProcessProposal {
-            result,
-            tx: processed_tx.map(|tx| tx.to_bytes()).unwrap_or(req.tx),
-        }
+        }.into()
     }
 
     /// Simple helper function for the ledger to get balances
@@ -654,8 +638,26 @@ impl Shell {
 
         let mut response = shim::response::FinalizeBlock::default();
         for tx in &req.txs {
-            let mut tx_result =
-                Event::new_tx_event(EventType::Applied, tx, req.height);
+            // If [`process_proposal`] rejected a Tx, emit an event here and
+            // move on to next tx
+            if tx.result.code != 0 {
+                let mut tx_result = Event::new_tx_event(EventType::Accepted, &tx.tx, req.height);
+                tx_result["code"] = "1".into();
+                tx_result["info"] = format!("Tx rejected: {}", &tx.result.info).into();
+                response.events.push(tx_result.into());
+                continue;
+            }
+            // Base gas cost for applying the tx
+            block_gas_meter
+                .add_base_transaction_fee(tx.tx.len())
+                .map_err(Error::GasError)?;
+            // This has already been verified as safe by [`process_proposal`]
+            let tx = process_tx(Tx::try_from(&tx.tx).unwrap()).unwrap();
+            let mut tx_result = match &tx {
+                TxType::Raw(_) => Event::new_tx_event(EventType::Accepted, &tx.tx, req.height),
+                TxType::Wrapper(_) => Event::new_tx_event(EventType::Applied, &tx.tx, req.height),
+            };
+
             match protocol::apply_tx(
                 tx,
                 &mut self.gas_meter,

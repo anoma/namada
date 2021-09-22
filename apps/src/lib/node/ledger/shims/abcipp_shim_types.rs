@@ -185,9 +185,15 @@ pub mod shim {
         pub struct ExtendVote;
         pub struct VerifyVoteExtension;
 
+        /// A Tx and the result of calling Process Proposal on it
+        pub struct ProcessedTx {
+            pub tx: super::TxBytes,
+            pub result: super::response::TxResult,
+        }
+
         pub struct FinalizeBlock {
             pub height: i64,
-            pub txs: Vec<super::TxBytes>,
+            pub txs: Vec<ProcessedTx>,
         }
     }
 
@@ -230,15 +236,12 @@ pub mod shim {
         #[derive(Debug, Default)]
         pub struct ProcessProposal {
             pub result: TxResult,
-            pub tx: super::TxBytes,
         }
 
-        impl From<ProcessProposal> for response::DeliverTx {
-            fn from(resp: ProcessProposal) -> Self {
-                Self {
-                    code: resp.result.code,
-                    log: resp.result.info,
-                    ..Default::default()
+        impl From<TxResult> for ProcessProposal {
+            fn from(result: TxResult) -> Self {
+                ProcessProposal{
+                    result
                 }
             }
         }

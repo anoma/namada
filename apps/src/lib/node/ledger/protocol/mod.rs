@@ -84,18 +84,13 @@ impl Default for VpsResult {
 
 /// Apply a given transaction
 pub fn apply_tx(
-    tx_bytes: &[u8],
+    tx: TxType,
     block_gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
     storage: &PersistentStorage,
 ) -> Result<TxResult> {
-    block_gas_meter
-        .add_base_transaction_fee(tx_bytes.len())
-        .map_err(Error::GasError)?;
 
-    let tx = Tx::try_from(tx_bytes).map_err(Error::TxDecodingError)?;
-
-    match process_tx(tx).unwrap() {
+    match tx {
         TxType::Raw(tx) => {
             let verifiers =
                 execute_tx(&tx, storage, block_gas_meter, write_log)?;
