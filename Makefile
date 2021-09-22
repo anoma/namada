@@ -60,9 +60,12 @@ clippy:
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
-install:
+install: tendermint
 	# Warning: built in debug mode for now
 	$(cargo) install --path ./apps --debug
+
+tendermint:
+	./scripts/install/get_tendermint.sh
 
 run-ledger:
 	# runs the node
