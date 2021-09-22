@@ -119,7 +119,7 @@ pub mod cmds {
         fn def() -> App {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
-                    .about("Node sub-commands")
+                    .about("Node sub-commands.")
                     .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
@@ -228,7 +228,7 @@ pub mod cmds {
         fn def() -> App {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
-                    .about("Client sub-commands")
+                    .about("Client sub-commands.")
                     .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
@@ -267,7 +267,7 @@ pub mod cmds {
         fn def() -> App {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
-                    .about("Wallet sub-commands")
+                    .about("Wallet sub-commands.")
                     .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
@@ -299,7 +299,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Keypair management, including methods to generate and \
-                     look-up keys",
+                     look-up keys.",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(KeyGen::def())
@@ -347,7 +347,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Searches for a keypair from a public key or an alias")
+                .about("Searches for a keypair from a public key or an alias.")
                 .add_args::<args::KeyFind>()
         }
     }
@@ -366,7 +366,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("List all known keys")
+                .about("List all known keys.")
                 .add_args::<args::KeyList>()
         }
     }
@@ -385,7 +385,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Exports a keypair to a file")
+                .about("Exports a keypair to a file.")
                 .add_args::<args::KeyExport>()
         }
     }
@@ -415,7 +415,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Address management, including methods to generate and \
-                     look-up addresses",
+                     look-up addresses.",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(AddressGen::def())
@@ -464,7 +464,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Find an address by its alias")
+                .about("Find an address by its alias.")
                 .add_args::<args::AddressFind>()
         }
     }
@@ -483,7 +483,7 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("List all known addresses")
+            App::new(Self::CMD).about("List all known addresses.")
         }
     }
 
@@ -502,7 +502,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Store an alias for an address in the wallet")
+                .about("Store an alias for an address in the wallet.")
                 .add_args::<args::AddressAdd>()
         }
     }
@@ -616,7 +616,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Run a gossip node")
+                .about("Run a gossip node.")
                 .add_args::<args::GossipRun>()
         }
     }
@@ -638,7 +638,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .setting(AppSettings::SubcommandRequiredElseHelp)
-                .about("Configuration sub-commands")
+                .about("Configuration sub-commands.")
                 .subcommand(ConfigGen::def())
         }
     }
@@ -654,7 +654,8 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("Generate the default configuration file")
+            App::new(Self::CMD)
+                .about("Generate the default configuration file.")
         }
     }
 
@@ -672,7 +673,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Send a transaction with custom WASM code")
+                .about("Send a transaction with custom WASM code.")
                 .add_args::<args::TxCustom>()
         }
     }
@@ -691,7 +692,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Send a signed transfer transaction")
+                .about("Send a signed transfer transaction.")
                 .add_args::<args::TxTransfer>()
         }
     }
@@ -712,7 +713,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Send a signed transaction to update account's validity \
-                     predicate",
+                     predicate.",
                 )
                 .add_args::<args::TxUpdateVp>()
         }
@@ -734,7 +735,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Send a signed transaction to create a new established \
-                     account",
+                     account.",
                 )
                 .add_args::<args::TxInitAccount>()
         }
@@ -833,7 +834,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query the epoch of the last committed block")
+                .about("Query the epoch of the last committed block.")
                 .add_args::<args::Query>()
         }
     }
@@ -852,7 +853,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query balance(s) of tokens")
+                .about("Query balance(s) of tokens.")
                 .add_args::<args::QueryBalance>()
         }
     }
@@ -871,7 +872,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS bond(s)")
+                .about("Query PoS bond(s).")
                 .add_args::<args::QueryBonds>()
         }
     }
@@ -890,7 +891,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS voting power")
+                .about("Query PoS voting power.")
                 .add_args::<args::QueryVotingPower>()
         }
     }
@@ -912,7 +913,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS voting power")
+                .about("Query PoS applied slashes.")
                 .add_args::<args::QuerySlashes>()
         }
     }
@@ -950,7 +951,10 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("subscribe to a topic.")
+                .about(
+                    "Subscribe intent gossip node with a matchmaker to a \
+                     topic.",
+                )
                 .add_args::<args::SubscribeTopic>()
         }
     }
@@ -971,7 +975,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Utils sub-commands")
+                .about("Utilities.")
                 .subcommand(InitGenesisValidator::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
@@ -1397,7 +1401,7 @@ pub mod args {
                 .arg(AMOUNT.def().about("Amount of tokens to stake in a bond."))
                 .arg(SOURCE_OPT.def().about(
                     "Source address for delegations. For self-bonds, the \
-                     validator is also the source",
+                     validator is also the source.",
                 ))
         }
     }
@@ -1441,7 +1445,7 @@ pub mod args {
                 .arg(SOURCE_OPT.def().about(
                     "Source address for unbonding from delegations. For \
                      unbonding from self-bonds, the validator is also the \
-                     source",
+                     source.",
                 ))
         }
     }
@@ -1476,7 +1480,7 @@ pub mod args {
                 .arg(SOURCE_OPT.def().about(
                     "Source address for withdrawing from delegations. For \
                      withdrawing from self-bonds, the validator is also the \
-                     source",
+                     source.",
                 ))
         }
     }
@@ -1509,12 +1513,12 @@ pub mod args {
                 .arg(
                     OWNER
                         .def()
-                        .about("The account address whose balance to query"),
+                        .about("The account address whose balance to query."),
                 )
                 .arg(
                     TOKEN_OPT
                         .def()
-                        .about("The token's address whose balance to query"),
+                        .about("The token's address whose balance to query."),
                 )
         }
     }
@@ -1607,13 +1611,13 @@ pub mod args {
             app.add_args::<Query>()
                 .arg(
                     OWNER.def().about(
-                        "The owner account address whose bonds to query",
+                        "The owner account address whose bonds to query.",
                     ),
                 )
                 .arg(
                     VALIDATOR_OPT
                         .def()
-                        .about("The validator's address whose bonds to query"),
+                        .about("The validator's address whose bonds to query."),
                 )
         }
     }
@@ -1644,11 +1648,11 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query>()
                 .arg(VALIDATOR_OPT.def().about(
-                    "The validator's address whose voting power to query",
+                    "The validator's address whose voting power to query.",
                 ))
                 .arg(EPOCH.def().about(
                     "The epoch at which to query (last committed, if not \
-                     specified)",
+                     specified).",
                 ))
         }
     }
@@ -1673,7 +1677,7 @@ pub mod args {
             app.add_args::<Query>().arg(
                 VALIDATOR_OPT
                     .def()
-                    .about("The validator's address whose slashes to query"),
+                    .about("The validator's address whose slashes to query."),
             )
         }
     }
@@ -1766,7 +1770,7 @@ pub mod args {
             .arg(
                 TOPIC_OPT
                     .def()
-                    .about("The subnetwork where the intent should be sent to")
+                    .about("The subnetwork where the intent should be sent to.")
                     .conflicts_with(TO_STDOUT.name),
             )
             .arg(
@@ -1860,7 +1864,7 @@ pub mod args {
             .arg(
                 TX_CODE_PATH
                     .def()
-                    .about("The transaction code to use with the matchmaker"),
+                    .about("The transaction code to use with the matchmaker."),
             )
             .arg(LEDGER_ADDRESS_OPT.def().about(
                 "The address of the ledger as \"{scheme}://{host}:{port}\" \
@@ -1870,7 +1874,7 @@ pub mod args {
             .arg(
                 FILTER_PATH
                     .def()
-                    .about("The private filter for the matchmaker"),
+                    .about("The private filter for the matchmaker."),
             )
             .arg(SIGNING_KEY_OPT.def().about(
                 "Sign the transactions created by the matchmaker (if enabled) \
@@ -1909,7 +1913,7 @@ pub mod args {
                 "If any new account is initialized by the tx, use the given \
                  alias to save it in the wallet. If multiple accounts are \
                  initialized, the alias will be the prefix of each new \
-                 address joined with a number",
+                 address joined with a number.",
             ))
         }
 
@@ -2002,25 +2006,24 @@ pub mod args {
             app.arg(
                 RAW_PUBLIC_KEY_OPT
                     .def()
-                    .about("A public key associated with the keypair")
-                    .conflicts_with("alias")
-                    .conflicts_with("value"),
+                    .about("A public key associated with the keypair.")
+                    .conflicts_with_all(&[ALIAS_OPT.name, VALUE.name]),
             )
             .arg(
                 ALIAS_OPT
                     .def()
-                    .about("An alias associated with the keypair")
-                    .conflicts_with("value"),
+                    .about("An alias associated with the keypair.")
+                    .conflicts_with(VALUE.name),
             )
             .arg(
-                VALUE
-                    .def()
-                    .about("A public key or alias associated with the keypair"),
+                VALUE.def().about(
+                    "A public key or alias associated with the keypair.",
+                ),
             )
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
-                    .about("UNSAFE: Print the secret key"),
+                    .about("UNSAFE: Print the secret key."),
             )
         }
     }
@@ -2043,11 +2046,11 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(DECRYPT.def().about("Decrypt keys that are encrypted"))
+            app.arg(DECRYPT.def().about("Decrypt keys that are encrypted."))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
-                        .about("UNSAFE: Print the secret keys"),
+                        .about("UNSAFE: Print the secret keys."),
                 )
         }
     }
@@ -2067,7 +2070,9 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS.def().about("The alias of the key you wish to export"),
+                ALIAS
+                    .def()
+                    .about("The alias of the key you wish to export."),
             )
         }
     }
@@ -2088,7 +2093,7 @@ pub mod args {
             app.arg(
                 ALIAS_OPT
                     .def()
-                    .about("An alias associated with the address"),
+                    .about("An alias associated with the address."),
             )
         }
     }
@@ -2111,12 +2116,12 @@ pub mod args {
             app.arg(
                 ALIAS
                     .def()
-                    .about("An alias to be associated with the address"),
+                    .about("An alias to be associated with the address."),
             )
             .arg(
                 RAW_ADDRESS
                     .def()
-                    .about("The bech32m encoded address string"),
+                    .about("The bech32m encoded address string."),
             )
         }
     }
@@ -2138,7 +2143,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS.def().about("The validator address alias"))
+            app.arg(ALIAS.def().about("The validator address alias."))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
