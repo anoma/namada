@@ -21,7 +21,7 @@ error_exit()
 
 # check for existence
 export TM_EXECUTABLE=$(which tendermint)
-if [ -x ${TM_EXECUTABLE} ]; then
+if [ -x "$TM_EXECUTABLE" ]; then
   export TM_EXISTS_VER=$(${TM_EXECUTABLE} version)
 fi
 
