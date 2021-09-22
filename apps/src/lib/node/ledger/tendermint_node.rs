@@ -44,6 +44,13 @@ pub fn run(
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
 
+    #[cfg(feature = "dev")]
+    // This has to be checked before we run tendermint init
+    let has_validator_key = {
+        let path = home_dir.join("config").join("priv_validator_key.json");
+        Path::new(&path).exists()
+    };
+
     // init and run a tendermint node child process
     let output = Command::new("tendermint")
         .args(&["init", "--home", &home_dir_string])
@@ -58,17 +65,21 @@ pub fn run(
     #[cfg(feature = "dev")]
     {
         let genesis = &crate::config::genesis::genesis();
-        // override the validator key file
-        write_validator_key(
-            &home_dir,
-            &genesis
-                .validators
-                .first()
-                .expect("There should be one genesis validator in \"dev\" mode")
-                .pos_data
-                .address,
-            &crate::wallet::defaults::validator_keypair(),
-        );
+        // write the validator key file if it didn't already exist
+        if !has_validator_key {
+            write_validator_key(
+                &home_dir,
+                &genesis
+                    .validators
+                    .first()
+                    .expect(
+                        "There should be one genesis validator in \"dev\" mode",
+                    )
+                    .pos_data
+                    .address,
+                &crate::wallet::defaults::validator_keypair(),
+            );
+        }
     }
 
     update_tendermint_config(&home_dir)?;
@@ -156,8 +167,16 @@ pub fn write_validator_key(
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
-    let file =
-        File::create(path).expect("Couldn't create private validator key file");
+    // Make sure the dir exists
+    let wallet_dir = path.parent().unwrap();
+    fs::create_dir_all(wallet_dir)
+        .expect("Couldn't create private validator key directory");
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .expect("Couldn't create private validator key file");
     let pk: ed25519_dalek::PublicKey = consensus_key.public.clone().into();
     let pk = base64::encode(pk.as_bytes());
     let sk = base64::encode(consensus_key.to_bytes());
@@ -181,7 +200,15 @@ pub fn write_validator_key(
 pub fn write_validator_state(home_dir: impl AsRef<Path>) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("data").join("priv_validator_state.json");
-    let file = File::create(path)
+    // Make sure the dir exists
+    let wallet_dir = path.parent().unwrap();
+    fs::create_dir_all(wallet_dir)
+        .expect("Couldn't create private validator state directory");
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
         .expect("Couldn't create private validator state file");
     let state = json!({
        "height": "0",
