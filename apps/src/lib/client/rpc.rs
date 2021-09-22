@@ -11,13 +11,14 @@ use anoma::ledger::pos::{
     self, is_validator_slashes_key, Bonds, Slash, Unbonds,
 };
 use anoma::types::address::Address;
+use anoma::types::key::ed25519;
 use anoma::types::storage::Epoch;
 use anoma::types::{address, storage, token};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
 use tendermint_rpc::{Client, HttpClient};
 
-use crate::cli::args;
+use crate::cli::{self, args, Context};
 use crate::node::ledger::rpc::{Path, PrefixValue};
 
 /// Dry run a transaction
@@ -61,15 +62,17 @@ pub async fn query_epoch(args: args::Query) -> Option<Epoch> {
             response.info, err
         ),
     }
-    std::process::exit(1)
+    cli::safe_exit(1)
 }
 
 /// Query token balance(s)
-pub async fn query_balance(args: args::QueryBalance) {
+pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     let tokens = address::tokens();
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
+            let token = ctx.get(token);
+            let owner = ctx.get(owner);
             let key = token::balance_key(&token, &owner);
             let currency_code = tokens
                 .get(&token)
@@ -85,6 +88,7 @@ pub async fn query_balance(args: args::QueryBalance) {
             }
         }
         (None, Some(owner)) => {
+            let owner = ctx.get(owner);
             let mut found_any = false;
             for (token, currency_code) in tokens {
                 let key = token::balance_key(&token, &owner);
@@ -101,6 +105,7 @@ pub async fn query_balance(args: args::QueryBalance) {
             }
         }
         (Some(token), None) => {
+            let token = ctx.get(token);
             let key = token::balance_prefix(&token);
             let balances =
                 query_storage_prefix::<token::Amount>(client, key).await;
@@ -282,17 +287,16 @@ fn process_unbonds_query(
 }
 
 /// Query PoS bond(s)
-pub async fn query_bonds(args: args::QueryBonds) {
+pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
     let epoch = query_epoch(args.query.clone()).await;
     if let Some(epoch) = epoch {
         let client = HttpClient::new(args.query.ledger_address).unwrap();
         match (args.owner, args.validator) {
             (Some(owner), Some(validator)) => {
+                let source = ctx.get(owner);
+                let validator = ctx.get(validator);
                 // Find owner's delegations to the given validator
-                let bond_id = pos::BondId {
-                    source: owner.clone(),
-                    validator: validator.clone(),
-                };
+                let bond_id = pos::BondId { source, validator };
                 let bond_key = pos::bond_key(&bond_id);
                 let bonds =
                     query_storage_value::<pos::Bonds>(client.clone(), bond_key)
@@ -305,7 +309,8 @@ pub async fn query_bonds(args: args::QueryBonds) {
                 )
                 .await;
                 // Find validator's slashes, if any
-                let slashes_key = pos::validator_slashes_key(&validator);
+                let slashes_key =
+                    pos::validator_slashes_key(&bond_id.validator);
                 let slashes =
                     query_storage_value::<pos::Slashes>(client, slashes_key)
                         .await
@@ -315,7 +320,7 @@ pub async fn query_bonds(args: args::QueryBonds) {
                 let mut w = stdout.lock();
 
                 if let Some(bonds) = &bonds {
-                    let bond_type = if owner == validator {
+                    let bond_type = if bond_id.source == bond_id.validator {
                         "Self-bonds"
                     } else {
                         "Delegations"
@@ -327,7 +332,7 @@ pub async fn query_bonds(args: args::QueryBonds) {
                 }
 
                 if let Some(unbonds) = &unbonds {
-                    let bond_type = if owner == validator {
+                    let bond_type = if bond_id.source == bond_id.validator {
                         "Unbonded self-bonds"
                     } else {
                         "Unbonded delegations"
@@ -342,17 +347,18 @@ pub async fn query_bonds(args: args::QueryBonds) {
                     writeln!(
                         w,
                         "No delegations found for {} to validator {}",
-                        owner,
-                        validator.encode()
+                        bond_id.source,
+                        bond_id.validator.encode()
                     )
                     .unwrap();
                 }
             }
             (None, Some(validator)) => {
+                let validator = ctx.get(validator);
                 // Find validator's self-bonds
                 let bond_id = pos::BondId {
                     source: validator.clone(),
-                    validator: validator.clone(),
+                    validator,
                 };
                 let bond_key = pos::bond_key(&bond_id);
                 let bonds =
@@ -366,7 +372,8 @@ pub async fn query_bonds(args: args::QueryBonds) {
                 )
                 .await;
                 // Find validator's slashes, if any
-                let slashes_key = pos::validator_slashes_key(&validator);
+                let slashes_key =
+                    pos::validator_slashes_key(&bond_id.validator);
                 let slashes =
                     query_storage_value::<pos::Slashes>(client, slashes_key)
                         .await
@@ -393,12 +400,13 @@ pub async fn query_bonds(args: args::QueryBonds) {
                     writeln!(
                         w,
                         "No self-bonds found for validator {}",
-                        validator.encode()
+                        bond_id.validator.encode()
                     )
                     .unwrap();
                 }
             }
             (Some(owner), None) => {
+                let owner = ctx.get(owner);
                 // Find owner's bonds to any validator
                 let bonds_prefix = pos::bonds_for_source_prefix(&owner);
                 let bonds = query_storage_prefix::<pos::Bonds>(
@@ -651,7 +659,7 @@ pub async fn query_bonds(args: args::QueryBonds) {
 }
 
 /// Query PoS voting power
-pub async fn query_voting_power(args: args::QueryVotingPower) {
+pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     let epoch = match args.epoch {
         Some(_) => args.epoch,
         None => query_epoch(args.query.clone()).await,
@@ -672,6 +680,7 @@ pub async fn query_voting_power(args: args::QueryVotingPower) {
             .expect("Validator set should be always set in the current epoch");
         match args.validator {
             Some(validator) => {
+                let validator = ctx.get(validator);
                 // Find voting power for the given validator
                 let voting_power_key =
                     pos::validator_voting_power_key(&validator);
@@ -757,10 +766,11 @@ pub async fn query_voting_power(args: args::QueryVotingPower) {
 }
 
 /// Query PoS slashes
-pub async fn query_slashes(args: args::QuerySlashes) {
+pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     match args.validator {
         Some(validator) => {
+            let validator = ctx.get(validator);
             // Find slashes for the given validator
             let slashes_key = pos::validator_slashes_key(&validator);
             let slashes = query_storage_value::<pos::Slashes>(
@@ -829,6 +839,16 @@ pub async fn query_slashes(args: args::QuerySlashes) {
     }
 }
 
+/// Get account's public key stored in its storage sub-space
+pub async fn get_public_key(
+    address: &Address,
+    ledger_address: tendermint::net::Address,
+) -> Option<ed25519::PublicKey> {
+    let client = HttpClient::new(ledger_address).unwrap();
+    let key = ed25519::pk_key(address);
+    query_storage_value(client, key).await
+}
+
 /// Query a storage value and decode it with [`BorshDeserialize`].
 async fn query_storage_value<T>(
     client: HttpClient,
@@ -861,7 +881,7 @@ where
             }
         }
     }
-    std::process::exit(1)
+    cli::safe_exit(1)
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
@@ -913,5 +933,5 @@ where
             }
         }
     }
-    std::process::exit(1);
+    cli::safe_exit(1)
 }

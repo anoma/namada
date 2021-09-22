@@ -60,7 +60,8 @@ pub struct Exchange {
     pub vp: Option<Vec<u8>>,
 }
 
-/// These are transfers crafted from matched [`Exchange`]s.
+/// These are transfers crafted from matched [`Exchange`]s created by a
+/// matchmaker program.
 #[derive(
     Debug,
     Clone,
@@ -70,7 +71,7 @@ pub struct Exchange {
     Deserialize,
     PartialEq,
 )]
-pub struct IntentTransfers {
+pub struct MatchedExchanges {
     /// Transfers crafted from the matched intents
     pub transfers: HashSet<token::Transfer>,
     // TODO benchmark between an map or a set, see which is less costly
@@ -81,6 +82,24 @@ pub struct IntentTransfers {
     // `exchanges` hashmap are already contained in the FungibleTokenIntents
     // belows
     pub intents: HashMap<Address, Signed<FungibleTokenIntent>>,
+}
+
+/// These are transfers crafted from matched [`Exchange`]s with a source address
+/// that is expected to sign this data.
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    PartialEq,
+)]
+pub struct IntentTransfers {
+    /// Matched exchanges
+    pub matches: MatchedExchanges,
+    /// Source address that should sign this data
+    pub source: Address,
 }
 
 /// Struct holding a safe rapresentation of a float
@@ -177,8 +196,8 @@ impl BorshDeserialize for DecimalWrapper {
     }
 }
 
-impl IntentTransfers {
-    /// Create an empty [`IntentTransfers`].
+impl MatchedExchanges {
+    /// Create an empty [`MatchedExchanges`].
     pub fn empty() -> Self {
         Self {
             transfers: HashSet::new(),
@@ -252,7 +271,7 @@ mod tests {
         let signed_exchange_one = Signed::new(&bertha_keypair, exchange_one);
         let signed_exchange_two = Signed::new(&bertha_keypair, exchange_two);
 
-        let mut it = IntentTransfers::empty();
+        let mut it = MatchedExchanges::empty();
         it.exchanges = HashMap::<_, _>::from_iter(IntoIter::new([
             (bertha_addr.clone(), signed_exchange_one.clone()),
             (albert_addr.clone(), signed_exchange_two.clone()),
@@ -295,7 +314,7 @@ mod tests {
         ]));
 
         let encoded_intent_transfer = encode(&it);
-        let decoded_intent_transfer: IntentTransfers =
+        let decoded_intent_transfer: MatchedExchanges =
             decode(encoded_intent_transfer).unwrap();
 
         assert!(decoded_intent_transfer == it);
@@ -347,7 +366,7 @@ mod tests {
         let signed_exchange_one = Signed::new(&bertha_keypair, exchange_one);
         let signed_exchange_two = Signed::new(&bertha_keypair, exchange_two);
 
-        let mut it = IntentTransfers::empty();
+        let mut it = MatchedExchanges::empty();
         it.exchanges = HashMap::<_, _>::from_iter(IntoIter::new([
             (bertha_addr.clone(), signed_exchange_one.clone()),
             (albert_addr.clone(), signed_exchange_two.clone()),
@@ -390,7 +409,7 @@ mod tests {
         ]));
 
         let encoded_intent_transfer = encode(&it);
-        let decoded_intent_transfer: IntentTransfers =
+        let decoded_intent_transfer: MatchedExchanges =
             decode(encoded_intent_transfer).unwrap();
 
         assert!(decoded_intent_transfer == it);

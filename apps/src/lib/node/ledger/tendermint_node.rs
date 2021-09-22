@@ -8,13 +8,13 @@ use std::time::Duration;
 
 #[cfg(feature = "dev")]
 use anoma::types::key::ed25519::Keypair;
-use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
 use tendermint::config::TendermintConfig;
 use thiserror::Error;
 
 use crate::config;
+#[cfg(feature = "dev")]
 use crate::config::genesis::{self, Validator};
 use crate::std::sync::mpsc::Sender;
 
@@ -54,15 +54,19 @@ pub fn run(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    if cfg!(feature = "dev") {
+    write_chain_id(&home_dir, config::DEFAULT_CHAIN_ID);
+
+    #[cfg(feature = "dev")]
+    {
         let genesis = &genesis::genesis();
         // override the validator key file
         write_validator_key(
             &home_dir,
-            &genesis.validator,
+            genesis.validators.first().expect(
+                "There should be one genesis validator in \"dev\" mode",
+            ),
             &genesis.validator_consensus_key,
         );
-        write_chain_id(&home_dir, config::DEFAULT_CHAIN_ID);
     }
 
     update_tendermint_config(&home_dir)?;
@@ -171,8 +175,7 @@ fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
         .map_err(Error::OpenWriteConfig)?;
     let config_str =
         toml::to_string(&config).map_err(Error::ConfigSerializeToml)?;
-    file.write(config_str.as_bytes())
-        .map(|_| ())
+    file.write_all(config_str.as_bytes())
         .map_err(Error::WriteConfig)
 }
 
@@ -182,6 +185,8 @@ fn write_validator_key(
     validator: &Validator,
     validator_key: &Keypair,
 ) {
+    use serde_json::json;
+
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
     let file =
@@ -206,7 +211,6 @@ fn write_validator_key(
         .expect("Couldn't write private validator key file");
 }
 
-#[cfg(feature = "dev")]
 fn write_chain_id(home_dir: impl AsRef<Path>, chain_id: impl AsRef<str>) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");

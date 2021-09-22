@@ -261,6 +261,18 @@ pub enum ImplicitAddress {
     Ed25519(key::ed25519::PublicKeyHash),
 }
 
+impl From<&key::ed25519::PublicKey> for ImplicitAddress {
+    fn from(pk: &key::ed25519::PublicKey) -> Self {
+        ImplicitAddress::Ed25519(pk.into())
+    }
+}
+
+impl From<&key::ed25519::PublicKey> for Address {
+    fn from(pk: &key::ed25519::PublicKey) -> Self {
+        Self::Implicit(pk.into())
+    }
+}
+
 /// An internal address represents a module with a native VP
 #[derive(
     Debug,
@@ -350,11 +362,6 @@ pub fn tokens() -> HashMap<Address, &'static str> {
     ]
     .into_iter()
     .collect()
-}
-
-/// Temporary helper for testing
-pub fn matchmaker() -> Address {
-    Address::decode("a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td").expect("The token address decoding shouldn't fail")
 }
 
 #[cfg(test)]
@@ -465,8 +472,7 @@ pub mod testing {
     /// Generate an arbitrary [`ImplicitAddress`].
     pub fn arb_implicit_address() -> impl Strategy<Value = ImplicitAddress> {
         ed25519::testing::arb_keypair().prop_map(|keypair| {
-            let pk = ed25519::PublicKey::from(keypair.public);
-            let pkh = ed25519::PublicKeyHash::from(pk);
+            let pkh = ed25519::PublicKeyHash::from(keypair.public);
             ImplicitAddress::Ed25519(pkh)
         })
     }
