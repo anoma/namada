@@ -85,6 +85,10 @@ pub fn init_genesis_validator(
         // TODO replace with https://github.com/anoma/anoma/issues/25)
         vp_code_path: "wasm/vp_user.wasm".into(),
     };
+    println!("Validator account key {}", validator_key.public);
+    println!("Consensus key {}", consensus_key.public);
+    println!("Staking reward key {}", rewards_key.public);
+    println!("{}", validator_key.public);
     // TODO print in toml format after we have https://github.com/anoma/anoma/issues/425
     println!("Genesis validator config: {:#?}", genesis_validator);
 }
