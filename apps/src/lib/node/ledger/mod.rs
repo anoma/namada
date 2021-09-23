@@ -4,7 +4,7 @@ pub mod rpc;
 mod shell;
 mod shims;
 pub mod storage;
-mod tendermint_node;
+pub mod tendermint_node;
 
 use std::convert::{TryFrom, TryInto};
 use std::sync::mpsc::channel;

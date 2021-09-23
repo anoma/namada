@@ -1,6 +1,7 @@
 //! CLI input types can be used for command arguments
 
 use std::marker::PhantomData;
+use std::path::Path;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -9,6 +10,7 @@ use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 
 use super::args;
 use crate::cli::safe_exit;
+use crate::config::Config;
 use crate::wallet::Wallet;
 
 /// A raw address (bech32m encoding) or an alias of an address that may be found
@@ -30,9 +32,21 @@ pub struct Context {
     pub global_args: args::Global,
     /// The wallet
     pub wallet: Wallet,
+    /// The configuration
+    pub config: Config,
 }
 
 impl Context {
+    pub fn new(global_args: args::Global) -> Self {
+        let wallet = Wallet::load_or_new(&global_args.base_dir);
+        let config = load_config(&global_args.base_dir);
+        Self {
+            global_args,
+            wallet,
+            config,
+        }
+    }
+
     /// Parse and/or look-up the value from the context.
     pub fn get<T>(&self, from_context: FromContext<T>) -> T
     where
@@ -67,6 +81,22 @@ impl Context {
         T: ArgFromMutContext,
     {
         from_context.map(|from_context| from_context.from_mut_ctx(self))
+    }
+}
+
+/// Load config from expected path in the `base_dir` or generate a new one if it
+/// doesn't exist.
+fn load_config(base_dir: &Path) -> Config {
+    match Config::read(base_dir) {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!(
+                "Tried to read config in {} but failed with: {}",
+                base_dir.display(),
+                err
+            );
+            super::safe_exit(1)
+        }
     }
 }
 
