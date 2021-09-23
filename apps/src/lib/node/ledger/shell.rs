@@ -902,8 +902,9 @@ impl Shell {
         pos_params: &PosParams,
     ) -> EvidenceParams {
         // Minimum number of epochs before tokens are unbonded and can be
-        // withdrawn
-        let len_before_unbonded = max(pos_params.unbonding_len as i64 - 1, 0);
+        // withdrawn. This must be greater than 0, otherwise Tendermint won't be
+        // happy and will fail updating the consensus parameters.
+        let len_before_unbonded = max(pos_params.unbonding_len as i64 - 1, 1);
         let max_age_num_blocks: i64 =
             protocol_params.epoch_duration.min_num_of_blocks as i64
                 * len_before_unbonded;
