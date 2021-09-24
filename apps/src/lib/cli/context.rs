@@ -1,7 +1,7 @@
 //! CLI input types can be used for command arguments
 
 use std::marker::PhantomData;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -81,6 +81,23 @@ impl Context {
         T: ArgFromMutContext,
     {
         from_context.map(|from_context| from_context.from_mut_ctx(self))
+    }
+
+    /// Read the given WASM file from the WASM directory.
+    pub fn read_wasm(
+        &self,
+        file_name: impl AsRef<Path>,
+    ) -> std::io::Result<Vec<u8>> {
+        std::fs::read(self.wasm_path(file_name))
+    }
+
+    /// Find the path to the given WASM file name.
+    pub fn wasm_path(&self, file_name: impl AsRef<Path>) -> PathBuf {
+        let file_path = file_name.as_ref();
+        if file_path.is_absolute() {
+            return file_path.into();
+        }
+        self.global_args.wasm_dir.join(file_name)
     }
 }
 
