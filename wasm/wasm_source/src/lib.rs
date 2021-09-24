@@ -30,6 +30,40 @@ pub mod tx_init_account {
     }
 }
 
+/// A tx to initialize a new validator account and staking reward account with a
+/// given public keys and a validity predicates.
+#[cfg(feature = "tx_init_validator")]
+pub mod tx_init_validator {
+    use anoma_vm_env::tx_prelude::transaction::InitValidator;
+    use anoma_vm_env::tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        let signed =
+            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        let init_validator =
+            InitValidator::try_from_slice(&signed.data.unwrap()[..]).unwrap();
+        log_string(
+            "apply_tx called to init a new established account".to_string(),
+        );
+
+        // Register the validator in PoS
+        match proof_of_stake::init_validator(init_validator) {
+            Ok((validator_address, staking_reward_address)) => {
+                log_string(format!(
+                    "Created validator {} and staking reward account {}",
+                    validator_address.encode(),
+                    staking_reward_address.encode()
+                ))
+            }
+            Err(err) => {
+                log_string(format!("Validator creation failed with: {}", err));
+                panic!()
+            }
+        }
+    }
+}
+
 /// A tx for a PoS bond that stakes tokens via a self-bond or delegation.
 #[cfg(feature = "tx_bond")]
 pub mod tx_bond {

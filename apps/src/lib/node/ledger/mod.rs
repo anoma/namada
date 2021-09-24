@@ -198,8 +198,10 @@ async fn run_shell(
         .unwrap();
 
     // Run the server with the shell
-    let future =
-        Abortable::new(server.listen(config.address), abort_registration);
+    let future = Abortable::new(
+        server.listen(config.ledger_address),
+        abort_registration,
+    );
     let _ = future.await;
 }
 
@@ -214,7 +216,9 @@ async fn run_shell(
 /// did we stop the tendermint node with a channel that acts as a kill switch.
 pub fn run(config: config::Ledger) {
     let home_dir = config.tendermint.clone();
-    let socket_address = config.address.to_string();
+    let ledger_address = config.ledger_address.to_string();
+    let rpc_address = config.rpc_address.to_string();
+    let p2p_address = config.p2p_address.to_string();
 
     // used for shutting down Tendermint node in case the shell panics
     let (sender, receiver) = channel();
@@ -225,9 +229,14 @@ pub fn run(config: config::Ledger) {
 
     // start Tendermint node
     let tendermint_handle = std::thread::spawn(move || {
-        if let Err(err) =
-            tendermint_node::run(home_dir, &socket_address, sender, receiver)
-        {
+        if let Err(err) = tendermint_node::run(
+            home_dir,
+            ledger_address,
+            rpc_address,
+            p2p_address,
+            sender,
+            receiver,
+        ) {
             tracing::error!(
                 "Failed to start-up a Tendermint node with {}",
                 err

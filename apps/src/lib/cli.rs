@@ -119,7 +119,7 @@ pub mod cmds {
         fn def() -> App {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
-                    .about("Node sub-commands")
+                    .about("Node sub-commands.")
                     .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
@@ -134,6 +134,7 @@ pub mod cmds {
         TxTransfer(TxTransfer),
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
+        TxInitValidator(TxInitValidator),
         Bond(Bond),
         Unbond(Unbond),
         Withdraw(Withdraw),
@@ -157,6 +158,7 @@ pub mod cmds {
                 .subcommand(TxTransfer::def().display_order(1))
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
+                .subcommand(TxInitValidator::def().display_order(1))
                 // PoS transactions
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
@@ -180,6 +182,8 @@ pub mod cmds {
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
             let tx_init_account =
                 SubCmd::parse(matches).map(Self::TxInitAccount);
+            let tx_init_validator =
+                SubCmd::parse(matches).map(Self::TxInitValidator);
             let bond = SubCmd::parse(matches).map(Self::Bond);
             let unbond = SubCmd::parse(matches).map(Self::Unbond);
             let withdraw = SubCmd::parse(matches).map(Self::Withdraw);
@@ -197,6 +201,7 @@ pub mod cmds {
                 .or(tx_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_account)
+                .or(tx_init_validator)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -223,7 +228,7 @@ pub mod cmds {
         fn def() -> App {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
-                    .about("Client sub-commands")
+                    .about("Client sub-commands.")
                     .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
@@ -262,7 +267,7 @@ pub mod cmds {
         fn def() -> App {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
-                    .about("Wallet sub-commands")
+                    .about("Wallet sub-commands.")
                     .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
@@ -294,7 +299,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Keypair management, including methods to generate and \
-                     look-up keys",
+                     look-up keys.",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(KeyGen::def())
@@ -342,7 +347,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Searches for a keypair from a public key or an alias")
+                .about("Searches for a keypair from a public key or an alias.")
                 .add_args::<args::KeyFind>()
         }
     }
@@ -361,7 +366,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("List all known keys")
+                .about("List all known keys.")
                 .add_args::<args::KeyList>()
         }
     }
@@ -380,7 +385,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Exports a keypair to a file")
+                .about("Exports a keypair to a file.")
                 .add_args::<args::KeyExport>()
         }
     }
@@ -410,7 +415,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Address management, including methods to generate and \
-                     look-up addresses",
+                     look-up addresses.",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(AddressGen::def())
@@ -459,7 +464,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Find an address by its alias")
+                .about("Find an address by its alias.")
                 .add_args::<args::AddressFind>()
         }
     }
@@ -478,7 +483,7 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("List all known addresses")
+            App::new(Self::CMD).about("List all known addresses.")
         }
     }
 
@@ -497,7 +502,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Store an alias for an address in the wallet")
+                .about("Store an alias for an address in the wallet.")
                 .add_args::<args::AddressAdd>()
         }
     }
@@ -611,7 +616,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Run a gossip node")
+                .about("Run a gossip node.")
                 .add_args::<args::GossipRun>()
         }
     }
@@ -633,7 +638,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .setting(AppSettings::SubcommandRequiredElseHelp)
-                .about("Configuration sub-commands")
+                .about("Configuration sub-commands.")
                 .subcommand(ConfigGen::def())
         }
     }
@@ -649,7 +654,8 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("Generate the default configuration file")
+            App::new(Self::CMD)
+                .about("Generate the default configuration file.")
         }
     }
 
@@ -667,7 +673,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Send a transaction with custom WASM code")
+                .about("Send a transaction with custom WASM code.")
                 .add_args::<args::TxCustom>()
         }
     }
@@ -686,7 +692,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Send a signed transfer transaction")
+                .about("Send a signed transfer transaction.")
                 .add_args::<args::TxTransfer>()
         }
     }
@@ -707,7 +713,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Send a signed transaction to update account's validity \
-                     predicate",
+                     predicate.",
                 )
                 .add_args::<args::TxUpdateVp>()
         }
@@ -729,9 +735,31 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Send a signed transaction to create a new established \
-                     account",
+                     account.",
                 )
                 .add_args::<args::TxInitAccount>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxInitValidator(pub args::TxInitValidator);
+
+    impl SubCmd for TxInitValidator {
+        const CMD: &'static str = "init-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxInitValidator(args::TxInitValidator::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to create a new validator and \
+                     its staking reward account.",
+                )
+                .add_args::<args::TxInitValidator>()
         }
     }
 
@@ -806,7 +834,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query the epoch of the last committed block")
+                .about("Query the epoch of the last committed block.")
                 .add_args::<args::Query>()
         }
     }
@@ -825,7 +853,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query balance(s) of tokens")
+                .about("Query balance(s) of tokens.")
                 .add_args::<args::QueryBalance>()
         }
     }
@@ -844,7 +872,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS bond(s)")
+                .about("Query PoS bond(s).")
                 .add_args::<args::QueryBonds>()
         }
     }
@@ -863,7 +891,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS voting power")
+                .about("Query PoS voting power.")
                 .add_args::<args::QueryVotingPower>()
         }
     }
@@ -885,7 +913,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS voting power")
+                .about("Query PoS applied slashes.")
                 .add_args::<args::QuerySlashes>()
         }
     }
@@ -923,7 +951,10 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("subscribe to a topic.")
+                .about(
+                    "Subscribe intent gossip node with a matchmaker to a \
+                     topic.",
+                )
                 .add_args::<args::SubscribeTopic>()
         }
     }
@@ -944,7 +975,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Utils sub-commands")
+                .about("Utilities.")
                 .subcommand(InitGenesisValidator::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
@@ -1028,6 +1059,8 @@ pub mod args {
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_PUBLIC_KEY_OPT: ArgOpt<PublicKey> = arg_opt("public-key");
+    const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
+    const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
@@ -1046,6 +1079,11 @@ pub mod args {
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     const VALIDATOR: Arg<WalletAddress> = arg("validator");
     const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
+    const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
+        arg_opt("account-key");
+    const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
+        arg_opt("consensus-key");
+    const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
     const VALUE: ArgOpt<String> = arg_opt("value");
 
     /// Global command arguments
@@ -1223,6 +1261,75 @@ pub mod args {
         }
     }
 
+    /// Transaction to initialize a new account
+    #[derive(Clone, Debug)]
+    pub struct TxInitValidator {
+        pub tx: Tx,
+        pub source: WalletAddress,
+        pub account_key: Option<WalletPublicKey>,
+        pub consensus_key: Option<WalletKeypair>,
+        pub rewards_account_key: Option<WalletPublicKey>,
+        pub validator_vp_code_path: Option<PathBuf>,
+        pub rewards_vp_code_path: Option<PathBuf>,
+        pub unsafe_dont_encrypt: bool,
+    }
+
+    impl Args for TxInitValidator {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SOURCE.parse(matches);
+            let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
+            let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
+            let rewards_account_key = REWARDS_KEY.parse(matches);
+            let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
+            let rewards_vp_code_path = REWARDS_CODE_PATH.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            Self {
+                tx,
+                source,
+                account_key,
+                consensus_key,
+                rewards_account_key,
+                validator_vp_code_path,
+                rewards_vp_code_path,
+                unsafe_dont_encrypt,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(SOURCE.def().about(
+                    "The source account's address that signs the transaction.",
+                ))
+                .arg(VALIDATOR_ACCOUNT_KEY.def().about(
+                    "A public key for the validator account. A new one will \
+                     be generated if none given.",
+                ))
+                .arg(VALIDATOR_CONSENSUS_KEY.def().about(
+                    "A consensus key for the validator account. A new one \
+                     will be generated if none given.",
+                ))
+                .arg(REWARDS_KEY.def().about(
+                    "A public key for the staking reward account. A new one \
+                     will be generated if none given.",
+                ))
+                .arg(VALIDATOR_CODE_PATH.def().about(
+                    "The path to the validity predicate WASM code to be used \
+                     for the validator account. Uses the default validator VP \
+                     if none specified.",
+                ))
+                .arg(REWARDS_CODE_PATH.def().about(
+                    "The path to the validity predicate WASM code to be used \
+                     for the staking reward account. Uses the default staking \
+                     reward VP if none specified.",
+                ))
+                .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
+                     use this for keys used in a live network.",
+                ))
+        }
+    }
+
     /// Transaction to update a VP arguments
     #[derive(Clone, Debug)]
     pub struct TxUpdateVp {
@@ -1294,7 +1401,7 @@ pub mod args {
                 .arg(AMOUNT.def().about("Amount of tokens to stake in a bond."))
                 .arg(SOURCE_OPT.def().about(
                     "Source address for delegations. For self-bonds, the \
-                     validator is also the source",
+                     validator is also the source.",
                 ))
         }
     }
@@ -1338,7 +1445,7 @@ pub mod args {
                 .arg(SOURCE_OPT.def().about(
                     "Source address for unbonding from delegations. For \
                      unbonding from self-bonds, the validator is also the \
-                     source",
+                     source.",
                 ))
         }
     }
@@ -1373,7 +1480,7 @@ pub mod args {
                 .arg(SOURCE_OPT.def().about(
                     "Source address for withdrawing from delegations. For \
                      withdrawing from self-bonds, the validator is also the \
-                     source",
+                     source.",
                 ))
         }
     }
@@ -1406,12 +1513,12 @@ pub mod args {
                 .arg(
                     OWNER
                         .def()
-                        .about("The account address whose balance to query"),
+                        .about("The account address whose balance to query."),
                 )
                 .arg(
                     TOKEN_OPT
                         .def()
-                        .about("The token's address whose balance to query"),
+                        .about("The token's address whose balance to query."),
                 )
         }
     }
@@ -1504,13 +1611,13 @@ pub mod args {
             app.add_args::<Query>()
                 .arg(
                     OWNER.def().about(
-                        "The owner account address whose bonds to query",
+                        "The owner account address whose bonds to query.",
                     ),
                 )
                 .arg(
                     VALIDATOR_OPT
                         .def()
-                        .about("The validator's address whose bonds to query"),
+                        .about("The validator's address whose bonds to query."),
                 )
         }
     }
@@ -1541,11 +1648,11 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query>()
                 .arg(VALIDATOR_OPT.def().about(
-                    "The validator's address whose voting power to query",
+                    "The validator's address whose voting power to query.",
                 ))
                 .arg(EPOCH.def().about(
                     "The epoch at which to query (last committed, if not \
-                     specified)",
+                     specified).",
                 ))
         }
     }
@@ -1570,7 +1677,7 @@ pub mod args {
             app.add_args::<Query>().arg(
                 VALIDATOR_OPT
                     .def()
-                    .about("The validator's address whose slashes to query"),
+                    .about("The validator's address whose slashes to query."),
             )
         }
     }
@@ -1663,7 +1770,7 @@ pub mod args {
             .arg(
                 TOPIC_OPT
                     .def()
-                    .about("The subnetwork where the intent should be sent to")
+                    .about("The subnetwork where the intent should be sent to.")
                     .conflicts_with(TO_STDOUT.name),
             )
             .arg(
@@ -1757,7 +1864,7 @@ pub mod args {
             .arg(
                 TX_CODE_PATH
                     .def()
-                    .about("The transaction code to use with the matchmaker"),
+                    .about("The transaction code to use with the matchmaker."),
             )
             .arg(LEDGER_ADDRESS_OPT.def().about(
                 "The address of the ledger as \"{scheme}://{host}:{port}\" \
@@ -1767,7 +1874,7 @@ pub mod args {
             .arg(
                 FILTER_PATH
                     .def()
-                    .about("The private filter for the matchmaker"),
+                    .about("The private filter for the matchmaker."),
             )
             .arg(SIGNING_KEY_OPT.def().about(
                 "Sign the transactions created by the matchmaker (if enabled) \
@@ -1806,7 +1913,7 @@ pub mod args {
                 "If any new account is initialized by the tx, use the given \
                  alias to save it in the wallet. If multiple accounts are \
                  initialized, the alias will be the prefix of each new \
-                 address joined with a number",
+                 address joined with a number.",
             ))
         }
 
@@ -1899,25 +2006,24 @@ pub mod args {
             app.arg(
                 RAW_PUBLIC_KEY_OPT
                     .def()
-                    .about("A public key associated with the keypair")
-                    .conflicts_with("alias")
-                    .conflicts_with("value"),
+                    .about("A public key associated with the keypair.")
+                    .conflicts_with_all(&[ALIAS_OPT.name, VALUE.name]),
             )
             .arg(
                 ALIAS_OPT
                     .def()
-                    .about("An alias associated with the keypair")
-                    .conflicts_with("value"),
+                    .about("An alias associated with the keypair.")
+                    .conflicts_with(VALUE.name),
             )
             .arg(
-                VALUE
-                    .def()
-                    .about("A public key or alias associated with the keypair"),
+                VALUE.def().about(
+                    "A public key or alias associated with the keypair.",
+                ),
             )
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
-                    .about("UNSAFE: Print the secret key"),
+                    .about("UNSAFE: Print the secret key."),
             )
         }
     }
@@ -1940,11 +2046,11 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(DECRYPT.def().about("Decrypt keys that are encrypted"))
+            app.arg(DECRYPT.def().about("Decrypt keys that are encrypted."))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
-                        .about("UNSAFE: Print the secret keys"),
+                        .about("UNSAFE: Print the secret keys."),
                 )
         }
     }
@@ -1964,7 +2070,9 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS.def().about("The alias of the key you wish to export"),
+                ALIAS
+                    .def()
+                    .about("The alias of the key you wish to export."),
             )
         }
     }
@@ -1985,7 +2093,7 @@ pub mod args {
             app.arg(
                 ALIAS_OPT
                     .def()
-                    .about("An alias associated with the address"),
+                    .about("An alias associated with the address."),
             )
         }
     }
@@ -2008,12 +2116,12 @@ pub mod args {
             app.arg(
                 ALIAS
                     .def()
-                    .about("An alias to be associated with the address"),
+                    .about("An alias to be associated with the address."),
             )
             .arg(
                 RAW_ADDRESS
                     .def()
-                    .about("The bech32m encoded address string"),
+                    .about("The bech32m encoded address string."),
             )
         }
     }
@@ -2035,10 +2143,10 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS.def().about("The validator address alias"))
+            app.arg(ALIAS.def().about("The validator address alias."))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
-                    "UNSAFE: Do not encrypt the keypair. Do not use this for \
-                     keys used in a live network.",
+                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
+                     use this for keys used in a live network.",
                 ))
         }
     }

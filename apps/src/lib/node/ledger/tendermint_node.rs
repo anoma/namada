@@ -12,6 +12,7 @@ use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
 use tendermint::config::TendermintConfig;
+use tendermint::net;
 use thiserror::Error;
 
 use crate::config;
@@ -38,11 +39,24 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Run the tendermint node.
 pub fn run(
     home_dir: PathBuf,
-    socket_address: &str,
+    ledger_address: String,
+    rpc_address: String,
+    p2p_address: String,
     kill_switch: Sender<bool>,
     receiver: Receiver<bool>,
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
+    let rpc_address: net::Address =
+        net::Address::from_str(&rpc_address).unwrap();
+    let p2p_address: net::Address =
+        net::Address::from_str(&p2p_address).unwrap();
+
+    #[cfg(feature = "dev")]
+    // This has to be checked before we run tendermint init
+    let has_validator_key = {
+        let path = home_dir.join("config").join("priv_validator_key.json");
+        Path::new(&path).exists()
+    };
 
     // init and run a tendermint node child process
     let output = Command::new("tendermint")
@@ -58,25 +72,30 @@ pub fn run(
     #[cfg(feature = "dev")]
     {
         let genesis = &crate::config::genesis::genesis();
-        // override the validator key file
-        write_validator_key(
-            &home_dir,
-            &genesis
-                .validators
-                .first()
-                .expect("There should be one genesis validator in \"dev\" mode")
-                .pos_data
-                .address,
-            &crate::wallet::defaults::validator_keypair(),
-        );
+        // write the validator key file if it didn't already exist
+        if !has_validator_key {
+            write_validator_key(
+                &home_dir,
+                &genesis
+                    .validators
+                    .first()
+                    .expect(
+                        "There should be one genesis validator in \"dev\" mode",
+                    )
+                    .pos_data
+                    .address,
+                &crate::wallet::defaults::validator_keypair(),
+            );
+        }
     }
 
-    update_tendermint_config(&home_dir)?;
+    update_tendermint_config(&home_dir, rpc_address, p2p_address)?;
+
     let tendermint_node = Command::new("tendermint")
         .args(&[
             "node",
             "--proxy_app",
-            socket_address,
+            &ledger_address,
             "--home",
             &home_dir_string,
         ])
@@ -156,8 +175,16 @@ pub fn write_validator_key(
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
-    let file =
-        File::create(path).expect("Couldn't create private validator key file");
+    // Make sure the dir exists
+    let wallet_dir = path.parent().unwrap();
+    fs::create_dir_all(wallet_dir)
+        .expect("Couldn't create private validator key directory");
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .expect("Couldn't create private validator key file");
     let pk: ed25519_dalek::PublicKey = consensus_key.public.clone().into();
     let pk = base64::encode(pk.as_bytes());
     let sk = base64::encode(consensus_key.to_bytes());
@@ -181,7 +208,15 @@ pub fn write_validator_key(
 pub fn write_validator_state(home_dir: impl AsRef<Path>) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("data").join("priv_validator_state.json");
-    let file = File::create(path)
+    // Make sure the dir exists
+    let wallet_dir = path.parent().unwrap();
+    fs::create_dir_all(wallet_dir)
+        .expect("Couldn't create private validator state directory");
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
         .expect("Couldn't create private validator state file");
     let state = json!({
        "height": "0",
@@ -192,11 +227,18 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) {
         .expect("Couldn't write private validator state file");
 }
 
-fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
+fn update_tendermint_config(
+    home_dir: impl AsRef<Path>,
+    rpc_address: net::Address,
+    p2p_address: net::Address,
+) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
     let mut config =
         TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
+
+    config.rpc.laddr = rpc_address;
+    config.p2p.laddr = p2p_address;
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes

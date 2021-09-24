@@ -21,22 +21,11 @@ use tendermint_rpc::{Client, HttpClient};
 use crate::cli::{self, args, Context};
 use crate::node::ledger::rpc::{Path, PrefixValue};
 
-/// Dry run a transaction
-pub async fn dry_run_tx(
-    ledger_address: &tendermint::net::Address,
-    tx_bytes: Vec<u8>,
-) {
-    let client = HttpClient::new(ledger_address.clone()).unwrap();
-    let path = Path::DryRunTx;
-    let response = client
-        .abci_query(Some(path.into()), tx_bytes, None, false)
-        .await
-        .unwrap();
-    println!("{:#?}", response);
-}
-
 /// Query the epoch of the last committed block
-pub async fn query_epoch(args: args::Query) -> Option<Epoch> {
+pub async fn query_epoch(
+    ctx: Context,
+    args: args::Query,
+) -> (Context, Option<Epoch>) {
     let client = HttpClient::new(args.ledger_address).unwrap();
     let path = Path::Epoch;
     let data = vec![];
@@ -49,7 +38,7 @@ pub async fn query_epoch(args: args::Query) -> Option<Epoch> {
             match Epoch::try_from_slice(&response.value[..]) {
                 Ok(epoch) => {
                     println!("Last committed epoch: {}", epoch);
-                    return Some(epoch);
+                    return (ctx, Some(epoch));
                 }
 
                 Err(err) => {
@@ -125,7 +114,9 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
                             .unwrap();
                     }
                 }
-                None => println!("No balances for token {}", token.encode()),
+                None => {
+                    println!("No balances for token {}", token.encode())
+                }
             }
         }
         (None, None) => {
@@ -155,140 +146,9 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
     }
 }
 
-/// Accumulate slashes starting from `epoch_start` until (optionally)
-/// `withdraw_epoch` and apply them to the token amount `delta`.
-fn apply_slashes(
-    slashes: &[Slash],
-    mut delta: token::Amount,
-    epoch_start: PosEpoch,
-    withdraw_epoch: Option<PosEpoch>,
-    w: &mut std::io::StdoutLock,
-) -> token::Amount {
-    let mut slashed = token::Amount::default();
-    for slash in slashes {
-        if slash.epoch >= epoch_start
-            && slash.epoch < withdraw_epoch.unwrap_or_else(|| u64::MAX.into())
-        {
-            writeln!(
-                w,
-                "    ⚠ Slash: {} from epoch {}",
-                slash.rate, slash.epoch
-            )
-            .unwrap();
-            let raw_delta: u64 = delta.into();
-            let current_slashed = token::Amount::from(slash.rate * raw_delta);
-            slashed += current_slashed;
-            delta -= current_slashed;
-        }
-    }
-    if slashed != 0.into() {
-        writeln!(w, "    ⚠ Slash total: {}", slashed).unwrap();
-        writeln!(w, "    ⚠ After slashing: Δ {}", delta).unwrap();
-    }
-    delta
-}
-
-/// Process the result of a blonds query to determine total bonds
-/// and total active bonds. This includes taking into account
-/// an aggregation of slashes since the start of the given epoch.
-fn process_bonds_query(
-    bonds: &Bonds,
-    slashes: &[Slash],
-    epoch: &Epoch,
-    source: Option<&Address>,
-    total: Option<token::Amount>,
-    total_active: Option<token::Amount>,
-    w: &mut std::io::StdoutLock,
-) -> (token::Amount, token::Amount) {
-    let mut total_active = total_active.unwrap_or_else(|| 0.into());
-    let mut current_total: token::Amount = 0.into();
-    for bond in bonds.iter() {
-        for (epoch_start, &(mut delta)) in bond.deltas.iter().sorted() {
-            writeln!(w, "  Active from epoch {}: Δ {}", epoch_start, delta)
-                .unwrap();
-            delta = apply_slashes(slashes, delta, *epoch_start, None, w);
-            current_total += delta;
-            let epoch_start: Epoch = (*epoch_start).into();
-            if epoch >= &epoch_start {
-                total_active += delta;
-            }
-        }
-    }
-    let total = total.unwrap_or_else(|| 0.into()) + current_total;
-    match source {
-        Some(addr) => {
-            writeln!(w, "  Bonded total from {}: {}", addr, current_total)
-                .unwrap();
-        }
-        None => {
-            if total_active != 0.into() && total_active != total {
-                writeln!(w, "Active bonds total: {}", total_active).unwrap();
-            }
-            writeln!(w, "Bonds total: {}", total).unwrap();
-        }
-    }
-    (total, total_active)
-}
-
-/// Process the result of an unbonds query to determine total bonds
-/// and total withdrawable bonds. This includes taking into account
-/// an aggregation of slashes since the start of the given epoch up
-/// until the withdrawal epoch.
-fn process_unbonds_query(
-    unbonds: &Unbonds,
-    slashes: &[Slash],
-    epoch: &Epoch,
-    source: Option<&Address>,
-    total: Option<token::Amount>,
-    total_withdrawable: Option<token::Amount>,
-    w: &mut std::io::StdoutLock,
-) -> (token::Amount, token::Amount) {
-    let mut withdrawable = total_withdrawable.unwrap_or_else(|| 0.into());
-    let mut current_total: token::Amount = 0.into();
-    for deltas in unbonds.iter() {
-        for ((epoch_start, epoch_end), &(mut delta)) in
-            deltas.deltas.iter().sorted()
-        {
-            let withdraw_epoch = *epoch_end + 1_u64;
-            writeln!(
-                w,
-                "  Withdrawable from epoch {} (active from {}): Δ {}",
-                withdraw_epoch, epoch_start, delta
-            )
-            .unwrap();
-            delta = apply_slashes(
-                slashes,
-                delta,
-                *epoch_start,
-                Some(withdraw_epoch),
-                w,
-            );
-            current_total += delta;
-            let epoch_end: Epoch = (*epoch_end).into();
-            if epoch > &epoch_end {
-                withdrawable += delta;
-            }
-        }
-    }
-    let total = total.unwrap_or_else(|| 0.into()) + current_total;
-    match source {
-        Some(addr) => {
-            writeln!(w, "  Unbonded total from {}: {}", addr, current_total)
-                .unwrap();
-        }
-        None => {
-            if withdrawable != 0.into() {
-                writeln!(w, "Withdrawable total: {}", withdrawable).unwrap();
-            }
-            writeln!(w, "Unbonded total: {}", total).unwrap();
-        }
-    }
-    (total, withdrawable)
-}
-
 /// Query PoS bond(s)
 pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
-    let epoch = query_epoch(args.query.clone()).await;
+    let (ctx, epoch) = query_epoch(ctx, args.query.clone()).await;
     if let Some(epoch) = epoch {
         let client = HttpClient::new(args.query.ledger_address).unwrap();
         match (args.owner, args.validator) {
@@ -301,7 +161,8 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                 let bonds =
                     query_storage_value::<pos::Bonds>(client.clone(), bond_key)
                         .await;
-                // Find owner's unbonded delegations from the given validator
+                // Find owner's unbonded delegations from the given
+                // validator
                 let unbond_key = pos::unbond_key(&bond_id);
                 let unbonds = query_storage_value::<pos::Unbonds>(
                     client.clone(),
@@ -463,7 +324,9 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                                 total = tot;
                                 total_active = tot_active;
                             }
-                            None => panic!("Unexpected storage key {}", key),
+                            None => {
+                                panic!("Unexpected storage key {}", key)
+                            }
                         }
                     }
                 }
@@ -515,7 +378,9 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                                 total = tot;
                                 total_withdrawable = tot_withdrawable;
                             }
-                            None => panic!("Unexpected storage key {}", key),
+                            None => {
+                                panic!("Unexpected storage key {}", key)
+                            }
                         }
                     }
                 }
@@ -590,7 +455,9 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                                 total = tot;
                                 total_active = tot_active;
                             }
-                            None => panic!("Unexpected storage key {}", key),
+                            None => {
+                                panic!("Unexpected storage key {}", key)
+                            }
                         }
                     }
                 }
@@ -645,7 +512,9 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                                 total = tot;
                                 total_withdrawable = tot_withdrawable;
                             }
-                            None => panic!("Unexpected storage key {}", key),
+                            None => {
+                                panic!("Unexpected storage key {}", key)
+                            }
                         }
                     }
                 }
@@ -660,9 +529,9 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
 
 /// Query PoS voting power
 pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
-    let epoch = match args.epoch {
-        Some(_) => args.epoch,
-        None => query_epoch(args.query.clone()).await,
+    let (ctx, epoch) = match args.epoch {
+        Some(_) => (ctx, args.epoch),
+        None => query_epoch(ctx, args.query.clone()).await,
     };
     if let Some(epoch) = epoch {
         let client = HttpClient::new(args.query.ledger_address).unwrap();
@@ -839,6 +708,20 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
     }
 }
 
+/// Dry run a transaction
+pub async fn dry_run_tx(
+    ledger_address: &tendermint::net::Address,
+    tx_bytes: Vec<u8>,
+) {
+    let client = HttpClient::new(ledger_address.clone()).unwrap();
+    let path = Path::DryRunTx;
+    let response = client
+        .abci_query(Some(path.into()), tx_bytes, None, false)
+        .await
+        .unwrap();
+    println!("{:#?}", response);
+}
+
 /// Get account's public key stored in its storage sub-space
 pub async fn get_public_key(
     address: &Address,
@@ -847,6 +730,152 @@ pub async fn get_public_key(
     let client = HttpClient::new(ledger_address).unwrap();
     let key = ed25519::pk_key(address);
     query_storage_value(client, key).await
+}
+
+/// Check if the given address is a known validator.
+pub async fn is_validator(
+    address: &Address,
+    ledger_address: tendermint::net::Address,
+) -> bool {
+    let client = HttpClient::new(ledger_address).unwrap();
+    // Check if there's any validator state
+    let key = pos::validator_state_key(address);
+    // We do not need to decode it
+    let state: Option<pos::ValidatorStates> =
+        query_storage_value(client, key).await;
+    // If there is, then the address is a validator
+    state.is_some()
+}
+
+/// Accumulate slashes starting from `epoch_start` until (optionally)
+/// `withdraw_epoch` and apply them to the token amount `delta`.
+fn apply_slashes(
+    slashes: &[Slash],
+    mut delta: token::Amount,
+    epoch_start: PosEpoch,
+    withdraw_epoch: Option<PosEpoch>,
+    w: &mut std::io::StdoutLock,
+) -> token::Amount {
+    let mut slashed = token::Amount::default();
+    for slash in slashes {
+        if slash.epoch >= epoch_start
+            && slash.epoch < withdraw_epoch.unwrap_or_else(|| u64::MAX.into())
+        {
+            writeln!(
+                w,
+                "    ⚠ Slash: {} from epoch {}",
+                slash.rate, slash.epoch
+            )
+            .unwrap();
+            let raw_delta: u64 = delta.into();
+            let current_slashed = token::Amount::from(slash.rate * raw_delta);
+            slashed += current_slashed;
+            delta -= current_slashed;
+        }
+    }
+    if slashed != 0.into() {
+        writeln!(w, "    ⚠ Slash total: {}", slashed).unwrap();
+        writeln!(w, "    ⚠ After slashing: Δ {}", delta).unwrap();
+    }
+    delta
+}
+
+/// Process the result of a blonds query to determine total bonds
+/// and total active bonds. This includes taking into account
+/// an aggregation of slashes since the start of the given epoch.
+fn process_bonds_query(
+    bonds: &Bonds,
+    slashes: &[Slash],
+    epoch: &Epoch,
+    source: Option<&Address>,
+    total: Option<token::Amount>,
+    total_active: Option<token::Amount>,
+    w: &mut std::io::StdoutLock,
+) -> (token::Amount, token::Amount) {
+    let mut total_active = total_active.unwrap_or_else(|| 0.into());
+    let mut current_total: token::Amount = 0.into();
+    for bond in bonds.iter() {
+        for (epoch_start, &(mut delta)) in bond.deltas.iter().sorted() {
+            writeln!(w, "  Active from epoch {}: Δ {}", epoch_start, delta)
+                .unwrap();
+            delta = apply_slashes(slashes, delta, *epoch_start, None, w);
+            current_total += delta;
+            let epoch_start: Epoch = (*epoch_start).into();
+            if epoch >= &epoch_start {
+                total_active += delta;
+            }
+        }
+    }
+    let total = total.unwrap_or_else(|| 0.into()) + current_total;
+    match source {
+        Some(addr) => {
+            writeln!(w, "  Bonded total from {}: {}", addr, current_total)
+                .unwrap();
+        }
+        None => {
+            if total_active != 0.into() && total_active != total {
+                writeln!(w, "Active bonds total: {}", total_active).unwrap();
+            }
+            writeln!(w, "Bonds total: {}", total).unwrap();
+        }
+    }
+    (total, total_active)
+}
+
+/// Process the result of an unbonds query to determine total bonds
+/// and total withdrawable bonds. This includes taking into account
+/// an aggregation of slashes since the start of the given epoch up
+/// until the withdrawal epoch.
+fn process_unbonds_query(
+    unbonds: &Unbonds,
+    slashes: &[Slash],
+    epoch: &Epoch,
+    source: Option<&Address>,
+    total: Option<token::Amount>,
+    total_withdrawable: Option<token::Amount>,
+    w: &mut std::io::StdoutLock,
+) -> (token::Amount, token::Amount) {
+    let mut withdrawable = total_withdrawable.unwrap_or_else(|| 0.into());
+    let mut current_total: token::Amount = 0.into();
+    for deltas in unbonds.iter() {
+        for ((epoch_start, epoch_end), &(mut delta)) in
+            deltas.deltas.iter().sorted()
+        {
+            let withdraw_epoch = *epoch_end + 1_u64;
+            writeln!(
+                w,
+                "  Withdrawable from epoch {} (active from {}): Δ {}",
+                withdraw_epoch, epoch_start, delta
+            )
+            .unwrap();
+            delta = apply_slashes(
+                slashes,
+                delta,
+                *epoch_start,
+                Some(withdraw_epoch),
+                w,
+            );
+            current_total += delta;
+            let epoch_end: Epoch = (*epoch_end).into();
+            if epoch > &epoch_end {
+                withdrawable += delta;
+            }
+        }
+    }
+    let total = total.unwrap_or_else(|| 0.into()) + current_total;
+    match source {
+        Some(addr) => {
+            writeln!(w, "  Unbonded total from {}: {}", addr, current_total)
+                .unwrap();
+        }
+        None => {
+            if withdrawable != 0.into() {
+                writeln!(w, "Withdrawable total: {}", withdrawable).unwrap();
+            }
+            writeln!(w, "Unbonded total: {}", total).unwrap();
+        }
+    }
+    (total, withdrawable)
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].

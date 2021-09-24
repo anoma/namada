@@ -7,12 +7,13 @@ use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 
 use super::rpc;
-use crate::{cli, wallet};
+use crate::cli;
+use crate::wallet::Wallet;
 
-/// Find the public key for the given address and try to load the keypair for it
-/// from the wallet. Panics if the key cannot be found or loaded.
+/// Find the public key for the given address and try to load the keypair
+/// for it from the wallet. Panics if the key cannot be found or loaded.
 pub async fn find_keypair(
-    wallet: &mut wallet::Wallet,
+    wallet: &mut Wallet,
     addr: &Address,
     ledger_address: tendermint::net::Address,
 ) -> Rc<Keypair> {

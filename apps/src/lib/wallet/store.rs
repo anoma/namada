@@ -212,7 +212,7 @@ impl Store {
         pkh: PublicKeyHash,
     ) -> bool {
         if self.keys.contains_key(&alias) {
-            match show_overwrite_confirmation("a key") {
+            match show_overwrite_confirmation(&alias, "a key") {
                 ConfirmationResponse::Overwrite => {}
                 ConfirmationResponse::Cancel => return false,
             }
@@ -227,7 +227,7 @@ impl Store {
     /// won't be added. Return `true` if the address has been added.
     pub fn insert_address(&mut self, alias: Alias, address: Address) -> bool {
         if self.addresses.contains_key(&alias) {
-            match show_overwrite_confirmation("an address") {
+            match show_overwrite_confirmation(&alias, "an address") {
                 ConfirmationResponse::Overwrite => {}
                 ConfirmationResponse::Cancel => return false,
             }
@@ -250,11 +250,14 @@ enum ConfirmationResponse {
     Cancel,
 }
 
-fn show_overwrite_confirmation(alias_for: &str) -> ConfirmationResponse {
+fn show_overwrite_confirmation(
+    alias: &str,
+    alias_for: &str,
+) -> ConfirmationResponse {
     println!(
-        "You're trying to create an alias that already exists for {} in your \
-         store.",
-        alias_for
+        "You're trying to create an alias \"{}\" that already exists for {} \
+         in your store.",
+        alias, alias_for
     );
     print!("Would you like to replace it? [y/N]: ");
 
@@ -269,7 +272,7 @@ fn show_overwrite_confirmation(alias_for: &str) -> ConfirmationResponse {
                 'n' | 'N' | '\n' => ConfirmationResponse::Cancel,
                 _ => {
                     println!("Invalid option, try again.");
-                    show_overwrite_confirmation(alias_for)
+                    show_overwrite_confirmation(alias, alias_for)
                 }
             }
         }

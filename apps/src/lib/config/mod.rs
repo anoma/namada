@@ -88,8 +88,9 @@ And this is correct
 pub struct Ledger {
     pub tendermint: PathBuf,
     pub db: PathBuf,
-    pub address: SocketAddr,
-    pub network: String,
+    pub ledger_address: SocketAddr,
+    pub rpc_address: SocketAddr,
+    pub p2p_address: SocketAddr,
 }
 
 impl Default for Ledger {
@@ -99,11 +100,18 @@ impl Default for Ledger {
             // config::generate(base_dir). There must be a better way ?
             tendermint: PathBuf::from(BASEDIR).join(TENDERMINT_DIR),
             db: PathBuf::from(BASEDIR).join(DB_DIR).join(DEFAULT_CHAIN_ID),
-            address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+            ledger_address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 26658,
             ),
-            network: String::from("mainnet"),
+            rpc_address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                26657,
+            ),
+            p2p_address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                26656,
+            ),
         }
     }
 }

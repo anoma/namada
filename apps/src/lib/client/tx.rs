@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use anoma::proto::Tx;
 use anoma::types::address::Address;
 use anoma::types::token;
-use anoma::types::transaction::{pos, InitAccount, UpdateVp};
+use anoma::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
@@ -17,8 +17,10 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
+use crate::node::ledger::tendermint_node;
 
 const TX_INIT_ACCOUNT_WASM: &str = "wasm/tx_init_account.wasm";
+const TX_INIT_VALIDATOR_WASM: &str = "wasm/tx_init_validator.wasm";
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
 const VP_USER_WASM: &str = "wasm/vp_user.wasm";
@@ -50,7 +52,8 @@ pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
         tx
     };
 
-    submit_tx(ctx, args.tx, tx).await
+    let (ctx, initialized_accounts) = submit_tx(ctx, &args.tx, tx).await;
+    save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
 pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
@@ -76,7 +79,7 @@ pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
     );
     let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, &args.tx, tx).await;
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
@@ -109,7 +112,201 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     );
     let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
-    submit_tx(ctx, args.tx, tx).await
+    let (ctx, initialized_accounts) = submit_tx(ctx, &args.tx, tx).await;
+    save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
+}
+
+pub async fn submit_init_validator(
+    mut ctx: Context,
+    args::TxInitValidator {
+        tx: tx_args,
+        source,
+        account_key,
+        consensus_key,
+        rewards_account_key,
+        validator_vp_code_path,
+        rewards_vp_code_path,
+        unsafe_dont_encrypt,
+    }: args::TxInitValidator,
+) {
+    let source = ctx.get(source);
+    let keypair = signing::find_keypair(
+        &mut ctx.wallet,
+        &source,
+        tx_args.ledger_address.clone(),
+    )
+    .await;
+
+    let alias = tx_args
+        .initialized_account_alias
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| "validator".to_string());
+
+    let validator_key_alias = format!("{}-key", alias);
+    let consensus_key_alias = format!("{}-consensus-key", alias);
+    let rewards_key_alias = format!("{}-rewards-key", alias);
+    let account_key = ctx.get_opt_cached(account_key).unwrap_or_else(|| {
+        println!("Generating validator account key...");
+        ctx.wallet
+            .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
+            .1
+            .public
+            .clone()
+    });
+
+    let consensus_key =
+        ctx.get_opt_cached(consensus_key).unwrap_or_else(|| {
+            println!("Generating consensus key...");
+            ctx.wallet
+                .gen_key(Some(consensus_key_alias.clone()), unsafe_dont_encrypt)
+                .1
+        });
+
+    let rewards_account_key =
+        ctx.get_opt_cached(rewards_account_key).unwrap_or_else(|| {
+            println!("Generating staking reward account key...");
+            ctx.wallet
+                .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
+                .1
+                .public
+                .clone()
+        });
+
+    ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+
+    let validator_vp_code = validator_vp_code_path
+        .map(|path| {
+            std::fs::read(path).expect("Expected a file at given code path")
+        })
+        .unwrap_or_else(|| {
+            std::fs::read(VP_USER_WASM)
+                .expect("Expected a file at given code path")
+        });
+    let rewards_vp_code = rewards_vp_code_path
+        .map(|path| {
+            std::fs::read(path).expect("Expected a file at given code path")
+        })
+        .unwrap_or_else(|| {
+            std::fs::read(VP_USER_WASM)
+                .expect("Expected a file at given code path")
+        });
+    let tx_code = std::fs::read(TX_INIT_VALIDATOR_WASM)
+        .expect("Expected a file at given code path");
+
+    let data = InitValidator {
+        account_key,
+        consensus_key: consensus_key.public.clone(),
+        rewards_account_key,
+        validator_vp_code,
+        rewards_vp_code,
+    };
+    let data = data.try_to_vec().expect(
+        "Encoding transfer data to initialize a new account shouldn't fail",
+    );
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+
+    let (mut ctx, initialized_accounts) = submit_tx(ctx, &tx_args, tx).await;
+    if !tx_args.dry_run {
+        let (validator_address_alias, validator_address, rewards_address_alias) =
+            match &initialized_accounts[..] {
+                // There should be 2 accounts, one for the validator itself, one
+                // for its staking reward address.
+                [account_1, account_2] => {
+                    // We need to find out which address is which
+                    let (validator_address, rewards_address) =
+                        if rpc::is_validator(account_1, tx_args.ledger_address)
+                            .await
+                        {
+                            (account_1, account_2)
+                        } else {
+                            (account_2, account_1)
+                        };
+
+                    let validator_address_alias = match tx_args
+                        .initialized_account_alias
+                    {
+                        Some(alias) => alias,
+                        None => {
+                            print!(
+                                "Choose an alias for the validator address: "
+                            );
+                            io::stdout().flush().await.unwrap();
+                            let mut alias = String::new();
+                            io::stdin().read_line(&mut alias).await.unwrap();
+                            alias.trim().to_owned()
+                        }
+                    };
+                    let validator_address_alias =
+                        if validator_address_alias.is_empty() {
+                            println!(
+                                "Empty alias given, using {} as the alias.",
+                                validator_address.encode()
+                            );
+                            validator_address.encode()
+                        } else {
+                            validator_address_alias
+                        };
+                    if ctx.wallet.add_address(
+                        validator_address_alias.clone(),
+                        validator_address.clone(),
+                    ) {
+                        println!(
+                            "Added alias {} for address {}.",
+                            validator_address_alias,
+                            validator_address.encode()
+                        );
+                    }
+                    let rewards_address_alias =
+                        format!("{}-rewards", validator_address_alias);
+                    if ctx.wallet.add_address(
+                        rewards_address_alias.clone(),
+                        rewards_address.clone(),
+                    ) {
+                        println!(
+                            "Added alias {} for address {}.",
+                            rewards_address_alias,
+                            rewards_address.encode()
+                        );
+                    }
+                    (
+                        validator_address_alias,
+                        validator_address.clone(),
+                        rewards_address_alias,
+                    )
+                }
+                _ => {
+                    eprintln!("Expected two accounts to be created");
+                    safe_exit(1)
+                }
+            };
+
+        ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+
+        let tendermint_home = &ctx.config.ledger.tendermint;
+        tendermint_node::write_validator_key(
+            tendermint_home,
+            &validator_address,
+            &consensus_key,
+        );
+        tendermint_node::write_validator_state(tendermint_home);
+
+        println!();
+        println!(
+            "The validator's addresses and keys were stored in the wallet:"
+        );
+        println!("  Validator address \"{}\"", validator_address_alias);
+        println!("  Staking reward address \"{}\"", rewards_address_alias);
+        println!("  Validator account key \"{}\"", validator_key_alias);
+        println!("  Consensus key \"{}\"", consensus_key_alias);
+        println!("  Staking reward key \"{}\"", rewards_key_alias);
+        println!(
+            "The ledger node has been setup to use this validator's address \
+             and consensus key."
+        );
+    } else {
+        println!("Transaction dry run. No addresses have been saved.")
+    }
 }
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
@@ -136,7 +333,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         .expect("Encoding unsigned transfer shouldn't fail");
     let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, &args.tx, tx).await;
 }
 
 pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
@@ -160,7 +357,7 @@ pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, &args.tx, tx).await;
 }
 
 pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
@@ -186,7 +383,7 @@ pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
         .expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, &args.tx, tx).await;
 }
 
 pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
@@ -208,10 +405,16 @@ pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
         .expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, &args.tx, tx).await;
 }
 
-async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
+/// Submit transaction and wait for result. Returns a list of addresses
+/// initialized in the transaction if any. In dry run, this is always empty.
+async fn submit_tx(
+    ctx: Context,
+    args: &args::Tx,
+    tx: Tx,
+) -> (Context, Vec<Address>) {
     let tx_bytes = tx.to_bytes();
 
     // NOTE: use this to print the request JSON body:
@@ -225,12 +428,11 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
     // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
-        rpc::dry_run_tx(&args.ledger_address, tx_bytes).await
+        rpc::dry_run_tx(&args.ledger_address, tx_bytes).await;
+        (ctx, vec![])
     } else {
         match broadcast_tx(args.ledger_address.clone(), tx_bytes).await {
-            Ok(result) => {
-                save_initialized_accounts(ctx, args, result).await;
-            }
+            Ok(result) => (ctx, result.initialized_accounts),
             Err(err) => {
                 eprintln!(
                     "Encountered error while broadcasting transaction: {}",
@@ -244,11 +446,11 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
 
 /// Save accounts initialized from a tx into the wallet, if any.
 async fn save_initialized_accounts(
-    ctx: Context,
-    args: args::Tx,
-    result: TxResponse,
+    mut ctx: Context,
+    args: &args::Tx,
+    initialized_accounts: Vec<Address>,
 ) {
-    let len = result.initialized_accounts.len();
+    let len = initialized_accounts.len();
     if len != 0 {
         // Store newly initialized account addresses in the wallet
         println!(
@@ -257,8 +459,8 @@ async fn save_initialized_accounts(
             if len == 1 { "" } else { "s" }
         );
         // Store newly initialized account addresses in the wallet
-        let mut wallet = ctx.wallet;
-        for (ix, address) in result.initialized_accounts.iter().enumerate() {
+        let wallet = &mut ctx.wallet;
+        for (ix, address) in initialized_accounts.iter().enumerate() {
             let encoded = address.encode();
             let mut added = false;
             while !added {
@@ -304,7 +506,11 @@ async fn save_initialized_accounts(
                 }
             }
         }
-        wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+        if !args.dry_run {
+            wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+        } else {
+            println!("Transaction dry run. No addresses have been saved.")
+        }
     }
 }
 
