@@ -1008,6 +1008,7 @@ pub mod cmds {
 pub mod args {
 
     use std::convert::TryFrom;
+    use std::env;
     use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
@@ -1029,8 +1030,13 @@ pub mod args {
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     const ALIAS: Arg<String> = arg("alias");
     const AMOUNT: Arg<token::Amount> = arg("amount");
-    const BASE_DIR: ArgDefault<PathBuf> =
-        arg_default("base-dir", DefaultFn(|| ".anoma".into()));
+    const BASE_DIR: ArgDefault<PathBuf> = arg_default(
+        "base-dir",
+        DefaultFn(|| match env::var("ANOMA_BASE_DIR") {
+            Ok(dir) => dir.into(),
+            Err(_) => ".anoma".into(),
+        }),
+    );
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
@@ -1085,26 +1091,45 @@ pub mod args {
         arg_opt("consensus-key");
     const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
     const VALUE: ArgOpt<String> = arg_opt("value");
+    const WASM_DIR: ArgDefault<PathBuf> = arg_default(
+        "wasm-dir",
+        DefaultFn(|| match env::var("ANOMA_WASM_DIR") {
+            Ok(wasm_dir) => wasm_dir.into(),
+            Err(_) => "wasm".into(),
+        }),
+    );
 
     /// Global command arguments
     #[derive(Clone, Debug)]
     pub struct Global {
         pub base_dir: PathBuf,
+        pub wasm_dir: PathBuf,
     }
 
     impl Global {
         /// Parse global arguments
         pub fn parse(matches: &ArgMatches) -> Self {
             let base_dir = BASE_DIR.parse(matches);
-            Global { base_dir }
+            let wasm_dir = WASM_DIR.parse(matches);
+            Global { base_dir, wasm_dir }
         }
 
         /// Add global args definition. Should be added to every top-level
         /// command.
         pub fn def(app: App) -> App {
             app.arg(BASE_DIR.def().about(
-                "The base directory is where the client and nodes \
-                 configuration and state is stored.",
+                "The base directory is where the nodes, client and wallet \
+                 configuration and state is stored. This value can also be \
+                 set via `ANOMA_BASE_DIR` environment variable, but the \
+                 argument takes precedence, if specified. Defaults to \
+                 `.anoma`.",
+            ))
+            .arg(WASM_DIR.def().about(
+                "Directory with built WASM validity predicates, transactions \
+                 and matchmaker files. This value can also be set via \
+                 `ANOMA_WASM_DIR` environment variable, but the argument \
+                 takes precedence, if specified. Defaults to `wasm` path, \
+                 relative to current working directory.",
             ))
         }
     }
