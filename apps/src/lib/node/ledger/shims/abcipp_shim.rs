@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -24,9 +24,13 @@ pub struct AbcippShim {
 }
 
 impl AbcippShim {
-    pub fn new(db_path: impl AsRef<Path>, chain_id: String) -> Self {
+    pub fn new(
+        db_path: impl AsRef<Path>,
+        chain_id: String,
+        wasm_dir: PathBuf,
+    ) -> Self {
         Self {
-            service: Shell::new(db_path, chain_id),
+            service: Shell::new(db_path, chain_id, wasm_dir),
             block_txs: vec![],
         }
     }

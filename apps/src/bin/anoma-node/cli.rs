@@ -10,7 +10,7 @@ pub fn main() -> Result<()> {
     match cmd {
         cli::cmds::AnomaNode::Ledger(sub) => match sub {
             cli::cmds::Ledger::Run(_) => {
-                ledger::run(ctx.config.ledger);
+                ledger::run(ctx.config.ledger, ctx.global_args.wasm_dir);
             }
             cli::cmds::Ledger::Reset(_) => {
                 ledger::reset(ctx.config.ledger)

@@ -75,8 +75,8 @@ pub fn genesis() -> Genesis {
 
     use crate::wallet;
 
-    let vp_token_path = "wasm/vp_token.wasm";
-    let vp_user_path = "wasm/vp_user.wasm";
+    let vp_token_path = "vp_token.wasm";
+    let vp_user_path = "vp_user.wasm";
 
     // NOTE When the validator's key changes, tendermint must be reset with
     // `anoma reset` command. To generate a new validator, use the
