@@ -1,4 +1,4 @@
-pub mod events;
+mod events;
 pub mod protocol;
 pub mod rpc;
 mod shell;
@@ -20,6 +20,7 @@ use crate::config::genesis;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
+use anoma::types::transaction::BlockProposal;
 
 /// A panic-proof handle for aborting a future. Will abort during
 /// stack unwinding as its drop method calls abort.
@@ -89,23 +90,10 @@ impl Shell {
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
             Request::PrepareProposal(block) => {
-                match (
-                    BlockHash::try_from(&*block.hash),
-                    block.header.expect("missing block's header").try_into(),
-                ) {
-                    (Ok(hash), Ok(header)) => {
-                        let _ = self.prepare_proposal(
-                            hash,
-                            header,
-                            block.byzantine_validators,
-                        );
-                    }
-                    (Ok(_), Err(msg)) => {
-                        tracing::error!("Unexpected block header {}", msg);
-                    }
-                    (err @ Err(_), _) => tracing::error!("{:#?}", err),
-                };
-                Ok(Response::PrepareProposal(Default::default()))
+                match BlockProposal::try_from(block) {
+                    Ok(BlockProposal{txs, ..}) => self.prepare_proposal(txs),
+                    Err(msg) => tracing::error!("Unexpected block proposal {}", msg)
+                }
             }
             Request::VerifyHeader(_req) => {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))

@@ -16,3 +16,4 @@ pub mod wallet;
 // Taken from <https://github.com/rust-lang/rfcs/issues/2324#issuecomment-502437904>.
 #[doc(inline)]
 pub use std;
+

@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -13,8 +13,9 @@ use super::super::Shell;
 use super::abcipp_shim_types::shim::{
     request, Error, Request, Response, TxBytes,
 };
-use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
+use crate::node::ledger::shims::abcipp_shim_types::shim::request::{ProcessedTx, BeginBlock};
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
+
 
 /// The shim wraps the shell, which implements ABCI++
 /// The shim makes a crude translation between the ABCI
@@ -22,6 +23,7 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 /// interface
 pub struct AbcippShim {
     service: Shell,
+    begin_block_request: Option<BeginBlock>,
     block_txs: Vec<ProcessedTx>,
 }
 
@@ -29,6 +31,7 @@ impl AbcippShim {
     pub fn new(db_path: impl AsRef<Path>, chain_id: String) -> Self {
         Self {
             service: Shell::new(db_path, chain_id),
+            begin_block_request: None,
             block_txs: vec![],
         }
     }
@@ -53,17 +56,9 @@ impl Service<Req> for AbcippShim {
     fn call(&mut self, req: Req) -> Self::Future {
         let rsp = match req {
             Req::BeginBlock(block) => {
-                // we simply forward BeginBlock request to the PrepareProposal
-                // request
-                self.service
-                    .call(Request::PrepareProposal(block.into()))
-                    .map_err(Error::from)
-                    .and_then(|res| match res {
-                        Response::PrepareProposal(resp) => {
-                            Ok(Resp::BeginBlock(resp.into()))
-                        }
-                        _ => Err(Error::ConvertResp(res)),
-                    })
+                // we save this data to be forwarded to finalize later
+                self.begin_block_request = Some(block.try_into()?);
+                Ok(Resp::BeginBlock(Default::default()))
             }
             Req::DeliverTx(deliver_tx) => {
                 // We call [`process_proposal`] to report back the validity
@@ -91,10 +86,12 @@ impl Service<Req> for AbcippShim {
                 });
                 let mut txs = vec![];
                 std::mem::swap(&mut txs, &mut self.block_txs);
-
+                let begin_block_request = self.begin_block_request.take().unwrap();
                 self.service
                     .call(Request::FinalizeBlock(request::FinalizeBlock {
-                        height: end.height,
+                        hash: begin_block_request.hash,
+                        header: begin_block_request.header.expect("Missing block's header"),
+                        byzantine_validators: begin_block_request.byzantine_validators,
                         txs,
                     }))
                     .map_err(Error::from)

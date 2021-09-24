@@ -4,8 +4,8 @@ use std::fmt::{Display, Formatter};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 
+use anoma::types::transaction::{Hash, hash_tx as hash_tx_bytes};
 use async_trait::async_trait;
-use sha2::{Digest, Sha256};
 use tendermint::abci::transaction;
 use tendermint::net::Address;
 use tendermint_rpc::query::Query;
@@ -382,9 +382,7 @@ impl Client for TendermintWebsocketClient {
 }
 
 pub fn hash_tx(tx_bytes: &[u8]) -> transaction::Hash {
-    let digest = Sha256::digest(tx_bytes);
-    let mut hash_bytes = [0u8; 32];
-    hash_bytes.copy_from_slice(&digest);
+    let Hash(hash_bytes) = hash_tx_bytes(tx_bytes);
     transaction::Hash::new(hash_bytes)
 }
 

@@ -5,8 +5,10 @@
 //! [`Shell::process_proposal`] must be also reverted (unless we can simply
 //! overwrite them in the next block).
 //! More info in <https://github.com/anoma/anoma/issues/362>.
+mod queries;
 
 use std::cmp::max;
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::Path;
@@ -26,27 +28,31 @@ use anoma::types::address::Address;
 use anoma::types::storage::{BlockHash, BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::token::Amount;
-use anoma::types::transaction::{process_tx, TxType, WrapperTx};
+use anoma::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve, Hash, PairingEngine, process_tx, TxType, WrapperTx, verify_decrypted, hash_tx, verify_not_decryptable};
 use anoma::types::{address, key, token};
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Itertools;
 use tendermint::block::Header;
-use tendermint_proto::abci::{self, ValidatorUpdate, Evidence};
+use tendermint_proto::abci::{
+    self, ValidatorUpdate, Evidence, RequestPrepareProposal,
+    ResponsePrepareProposal
+};
 use tendermint_proto::types::{
     ConsensusParams, EvidenceParams,
 };
-
 use thiserror::Error;
 use tower_abci::{request, response};
 
 use super::rpc;
+use crate::{config, wallet, Hash, hash_tx};
 use crate::config::genesis;
+use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::node::ledger::events::{Event, EventType};
 use crate::node::ledger::rpc::PrefixValue;
+use crate::node::ledger::shell::queries::WrappedTx;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
+use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::node::ledger::{protocol, storage, tendermint_node};
-use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -91,13 +97,14 @@ pub enum MempoolTxType {
 pub struct Shell {
     /// The persistent storage
     pub(super) storage: storage::PersistentStorage,
+    ///
     /// Gas meter for the current block
     gas_meter: BlockGasMeter,
     /// Write log for the current block
     write_log: WriteLog,
     /// The set of wrapper txs from last committed block
     /// that are to be decrypted and included in the current block
-    wrapper_txs:
+    wrapped_txs: HashMap<Hash, WrappedTx>,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
@@ -119,8 +126,35 @@ impl Shell {
             storage,
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
+            wrapped_txs: queries::restore_wrapper_txs(&storage.last_height),
             byzantine_validators: vec![],
         }
+    }
+
+    /// Load the Merkle root hash and the height of the last committed block, if
+    /// any. This is returned when ABCI sends an `info` request.
+    pub fn last_state(storage: &storage::PersistentStorage,) -> response::Info {
+        let mut response = response::Info::default();
+        let result = storage.get_state();
+        match result {
+            Some((root, height)) => {
+                tracing::info!(
+                    "Last state root hash: {}, height: {}",
+                    root,
+                    height
+                );
+                response.last_block_app_hash = root.0;
+                response.last_block_height =
+                    height.try_into().expect("Invalid block height");
+            }
+            None => {
+                tracing::info!(
+                    "No state could be found, chain is not initialized"
+                );
+            }
+        };
+
+        response
     }
 
     /// Create a new genesis for the chain with specified id. This includes
@@ -292,7 +326,7 @@ impl Shell {
         ibc::init_genesis_storage(&mut self.storage);
 
         let evidence_params =
-            self.get_evidence_params(&genesis.parameters, &genesis.pos_params);
+            queries::get_evidence_params( &genesis.parameters, &genesis.pos_params);
         response.consensus_params = Some(ConsensusParams {
             evidence: Some(evidence_params),
             ..response.consensus_params.unwrap_or_default()
@@ -300,31 +334,7 @@ impl Shell {
         Ok(response)
     }
 
-    /// Load the Merkle root hash and the height of the last committed block, if
-    /// any. This is returned when ABCI sends an `info` request.
-    pub fn last_state(&self) -> response::Info {
-        let mut response = response::Info::default();
-        let result = self.storage.get_state();
-        match result {
-            Some((root, height)) => {
-                tracing::info!(
-                    "Last state root hash: {}, height: {}",
-                    root,
-                    height
-                );
-                response.last_block_app_hash = root.0;
-                response.last_block_height =
-                    height.try_into().expect("Invalid block height");
-            }
-            None => {
-                tracing::info!(
-                    "No state could be found, chain is not initialized"
-                );
-            }
-        };
 
-        response
-    }
 
     /// Uses `path` in the query to forward the request to the
     /// right query method and returns the result (which may be
@@ -344,10 +354,10 @@ impl Shell {
                     }
                 }
                 Path::Value(storage_key) => {
-                    self.read_storage_value(&storage_key)
+                    queries::read_storage_value(&self.storage, &storage_key)
                 }
                 Path::Prefix(storage_key) => {
-                    self.read_storage_prefix(&storage_key)
+                    queries::read_storage_prefix(&self.storage, &storage_key)
                 }
             },
             Err(err) => response::Query {
@@ -365,28 +375,38 @@ impl Shell {
     /// next block).
     pub fn prepare_proposal(
         &mut self,
-        hash: BlockHash,
-        header: Header,
-        byzantine_validators: Vec<Evidence>,
-    ) {
-        let height = BlockHeight(header.height.into());
-
+        req: RequestPrepareProposal,
+    ) -> ResponsePrepareProposal {
         // We can safely reset meter, because if the block is rejected, we'll
         // reset again on the next proposal, until the proposal is accepted
         self.gas_meter.reset();
+        // TODO: This should not be hardcoded
+        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        // The values set will be overwritten if this proposal is rejected.
-        self.storage
-            .begin_block(hash, height)
-            .expect("Beginning a block shouldn't fail");
+        // filter in half of the new txs from Tendermint, only keeping wrappers
+        let mut txs: Vec<TxBytes> = req.block_data
+            .iter()
+            .filter_map(| tx | match TxType::from(Tx::try_from(tx_bytes).unwrap()) {
+                    TxType::Wrapper(tx) => Some(tx.to_bytes()),
+                    _ => None
+                })
+            .collect()
+            .resize(req.block_data / 2);
 
-        // The value set will be overwritten if this proposal is rejected.
-        self.storage
-            .set_header(header)
-            .expect("Setting a header shouldn't fail");
+        // decrypt the wrapper txs included in the previous block
+        let mut decrypted_txs = self.wrapped_txs
+            .iter()
+            .map(|(_, tx)| Tx::from(match tx.wrapper.decrypt(privkey) {
+                Ok(tx) => DecryptedTx::Decrypted(tx),
+                _ => DecryptedTx::Undecryptable(tx.wrapper.clone())
+            }))
+            .collect();
 
-        // The value set will be overwritten if this proposal is rejected.
-        self.byzantine_validators = byzantine_validators;
+        txs.append(&mut decrypted_txs);
+
+        ResponsePrepareProposal {
+            block_data: txs
+        }
     }
 
     /// Apply PoS slashes from the evidence
@@ -525,13 +545,10 @@ impl Shell {
         &mut self,
         req: shim::request::ProcessProposal,
     ) -> shim::response::ProcessProposal {
-        let tx = Tx::try_from(req.tx.as_ref()).map_err(Error::TxDecoding);
-        // If we could not deserialize the Tx, return an error response
-        if let Err(err) = tx {
-            return shim::response::ProcessProposal {
-                result: err.into(),
-            };
-        }
+        let tx = Tx::try_from(req.tx.as_ref())
+            .expect("Deserializing tx should not fail");
+        // TODO: This should not be hardcoded
+        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
         match process_tx(tx.unwrap()) {
             // This occurs if the wrapper tx signature is invalid
@@ -539,23 +556,54 @@ impl Shell {
             Ok(result) => match result {
                 // If it is a raw transaction, we do no further validation
                 TxType::Raw(_) => TxResult {
-                    code: 0,
-                    info: "Process proposal accepted this transaction"
+                    code: 2,
+                    info: "Transaction rejected: Non-encrypted transactions are not supported"
                         .into(),
                 },
+                TxType::Decrypted(tx) => {
+                    // [`process_tx`] guarantees the unwrap can't fail
+                    let decrypted = DecryptedTx::try_from(&tx).unwrap();
+                    match self.wrapped_txs.get(&hash_tx(&decrypted.to_bytes())){
+                        Some(wrapped) => {
+                            if verify_not_decryptable(&decrypted, privkey) {
+                                TxResult {
+                                    code: 0,
+                                    info: "Process Proposal accepted this transaction".into(),
+                                }
+                            } else {
+                                TxResult {
+                                    code: 1,
+                                    info: format!(
+                                        "The encrypted payload of tx {} was incorrectly marked as \
+                                        un-decryptable",
+                                        wrapped.hash
+                                    )
+                                }
+                            }
+                        },
+                        None => TxResult {
+                            code: 1,
+                            info: format!(
+                                "No wrapper tx found whose encrypted payload commitment matched {}",
+                                hash_tx(&decrypted.to_bytes())
+                            )
+                        }
+                    }
+                }
                 TxType::Wrapper(tx) => {
                     let wrapper = &WrapperTx::try_from(&tx).unwrap();
                     // validate the ciphertext via Ferveo
                     if !wrapper.validate_ciphertext() {
-                        shim::response::TxResult {
+                        TxResult {
                             code: 1,
-                            info: "The ciphertext of the wrapped tx is \
-                                   invalid"
-                                .into(),
+                            info: format!(
+                                "The ciphertext of the wrapped tx {} is invalid",
+                                hash_tx(&tx.to_bytes()))
                         }
                     } else {
                         // check that the fee payer has sufficient balance
-                        match self.get_balance(
+                        match queries::get_balance(
+                            &self.storage,
                             &wrapper.fee.token,
                             &wrapper.fee_payer(),
                         ) {
@@ -580,26 +628,6 @@ impl Shell {
         }.into()
     }
 
-    /// Simple helper function for the ledger to get balances
-    /// of the specified token at the specified address
-    fn get_balance(
-        &self,
-        token: &Address,
-        owner: &Address,
-    ) -> std::result::Result<Amount, String> {
-        let query_resp =
-            self.read_storage_value(&token::balance_key(token, owner));
-        if query_resp.code != 0 {
-            Err("Unable to read balance of the given address".into())
-        } else {
-            BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
-                |_| {
-                    "Unable to deserialize the balance of the given address"
-                        .into()
-                },
-            )
-        }
-    }
 
     pub fn revert_proposal(
         &mut self,
@@ -621,6 +649,17 @@ impl Shell {
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
+        let height = BlockHeight(req.header.height.into());
+        self.storage
+            .begin_block(req.hash, height)
+            .expect("Beginning a block shouldn't fail");
+
+        self.storage
+            .set_header(req.header)
+            .expect("Setting a header shouldn't fail");
+
+        self.byzantine_validators = byzantine_validators;
+
         let header = self
             .storage
             .header
@@ -642,24 +681,37 @@ impl Shell {
             // move on to next tx
             if tx.result.code != 0 {
                 let mut tx_result = Event::new_tx_event(EventType::Accepted, &tx.tx, req.height);
-                tx_result["code"] = "1".into();
+                tx_result["code"] = tx.result.code.into();
                 tx_result["info"] = format!("Tx rejected: {}", &tx.result.info).into();
                 response.events.push(tx_result.into());
                 continue;
             }
-            // Base gas cost for applying the tx
-            block_gas_meter
-                .add_base_transaction_fee(tx.tx.len())
-                .map_err(Error::GasError)?;
             // This has already been verified as safe by [`process_proposal`]
+            let tx_length = tx.tx.len();
             let tx = process_tx(Tx::try_from(&tx.tx).unwrap()).unwrap();
             let mut tx_result = match &tx {
-                TxType::Raw(_) => Event::new_tx_event(EventType::Accepted, &tx.tx, req.height),
-                TxType::Wrapper(_) => Event::new_tx_event(EventType::Applied, &tx.tx, req.height),
+                TxType::Wrapper(wrapper) => {
+                    self.wrapped_txs.insert(
+                        wrapper.tx_hash.clone(),
+                        WrappedTx{
+                            wrapper: WrapperTx::try_from(wrapper)
+                                .unwrap(),
+                            hash: hash_tx(&tx.tx)
+                        });
+                    Event::new_tx_event(EventType::Accepted, &tx.tx, req.height)
+                },
+                TxType::Decrypted(decrypted) => {
+                    self.wrapped_txs.remove(
+                        &hash_tx(DecryptedTx::try_from(decrypted).to_bytes())
+                    );
+                    Event::new_tx_event(EventType::Applied, &tx.tx, req.height)
+                },
+                TxType::Raw(_) => unreachable!(),
             };
 
             match protocol::apply_tx(
                 tx,
+                tx_length,
                 &mut self.gas_meter,
                 &mut self.write_log,
                 &self.storage,
@@ -758,7 +810,7 @@ impl Shell {
                 .expect("Couldn't read protocol parameters");
             let pos_params = self.storage.read_pos_params();
             let evidence_params =
-                self.get_evidence_params(&parameters, &pos_params);
+                queries::get_evidence_params(&parameters, &pos_params);
             response.consensus_param_updates = Some(ConsensusParams {
                 evidence: Some(evidence_params),
                 ..response.consensus_param_updates.unwrap_or_default()
@@ -822,107 +874,33 @@ impl Shell {
         let mut response = response::Query::default();
         let mut gas_meter = BlockGasMeter::default();
         let mut write_log = WriteLog::default();
-        match protocol::apply_tx(
-            tx_bytes,
-            &mut gas_meter,
-            &mut write_log,
-            &self.storage,
-        )
-        .map_err(Error::TxApply)
-        {
-            Ok(result) => response.info = result.to_string(),
-            Err(error) => {
-                response.code = 1;
-                response.log = format!("{}", error);
-            }
-        }
-        response
-    }
-
-    /// Query to read a value from storage
-    fn read_storage_value(&self, key: &Key) -> response::Query {
-        match self.storage.read(key) {
-            Ok((Some(value), _gas)) => response::Query {
-                value,
-                ..Default::default()
-            },
-            Ok((None, _gas)) => response::Query {
-                code: 1,
-                info: format!("No value found for key: {}", key),
-                ..Default::default()
-            },
-            Err(err) => response::Query {
-                code: 2,
-                info: format!("Storage error: {}", err),
-                ..Default::default()
-            },
-        }
-    }
-
-    /// Query to read a range of values from storage with a matching prefix. The
-    /// value in successful response is a [`Vec<PrefixValue>`] encoded with
-    /// [`BorshSerialize`].
-    fn read_storage_prefix(&self, key: &Key) -> response::Query {
-        let (iter, _gas) = self.storage.iter_prefix(key);
-        let mut iter = iter.peekable();
-        if iter.peek().is_none() {
-            response::Query {
-                code: 1,
-                info: format!("No value found for key: {}", key),
-                ..Default::default()
-            }
-        } else {
-            let values: std::result::Result<
-                Vec<PrefixValue>,
-                anoma::types::storage::Error,
-            > = iter
-                .map(|(key, value, _gas)| {
-                    let key = Key::parse(key)?;
-                    Ok(PrefixValue { key, value })
-                })
-                .collect();
-            match values {
-                Ok(values) => {
-                    let value = values.try_to_vec().unwrap();
-                    response::Query {
-                        value,
-                        ..Default::default()
+        match Tx::try_from(&tx_bytes) {
+            Ok(tx) => {
+                let tx = TxType::from(tx);
+                match protocol::apply_tx(
+                    tx,
+                    tx_bytes.len(),
+                    &mut gas_meter,
+                    &mut write_log,
+                    &self.storage,
+                )
+                    .map_err(Error::TxApply)
+                {
+                    Ok(result) => response.info = result.to_string(),
+                    Err(error) => {
+                        response.code = 1;
+                        response.log = format!("{}", error);
                     }
                 }
-                Err(err) => response::Query {
-                    code: 1,
-                    info: format!(
-                        "Error parsing a storage key {}: {}",
-                        key, err
-                    ),
-                    ..Default::default()
-                },
+                response
+            }
+            Err(err) => {
+                response.code = 1;
+                response.log = format!("{}", Error::TxDecoding(err));
+                response
             }
         }
+
     }
 
-    fn get_evidence_params(
-        &self,
-        protocol_params: &Parameters,
-        pos_params: &PosParams,
-    ) -> EvidenceParams {
-        // Minimum number of epochs before tokens are unbonded and can be
-        // withdrawn
-        let len_before_unbonded = max(pos_params.unbonding_len as i64 - 1, 0);
-        let max_age_num_blocks: i64 =
-            protocol_params.epoch_duration.min_num_of_blocks as i64
-                * len_before_unbonded;
-        let min_duration_secs =
-            protocol_params.epoch_duration.min_duration.0 as i64;
-        let max_age_duration =
-            Some(tendermint_proto::google::protobuf::Duration {
-                seconds: min_duration_secs * len_before_unbonded,
-                nanos: 0,
-            });
-        EvidenceParams {
-            max_age_num_blocks,
-            max_age_duration,
-            ..EvidenceParams::default()
-        }
-    }
 }

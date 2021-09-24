@@ -85,11 +85,15 @@ impl Default for VpsResult {
 /// Apply a given transaction
 pub fn apply_tx(
     tx: TxType,
+    tx_length: usize,
     block_gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
     storage: &PersistentStorage,
 ) -> Result<TxResult> {
-
+    // Base gas cost for applying the tx
+    block_gas_meter
+        .add_base_transaction_fee(tx_length)
+        .map_err(Error::GasError)?;
     match tx {
         TxType::Raw(tx) => {
             let verifiers =

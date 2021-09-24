@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
-use sha2::{Digest, Sha256};
 use tendermint_proto::abci::EventAttribute;
+use crate::hash_tx;
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
@@ -40,7 +39,7 @@ impl Event {
             event_type: ty,
             attributes: HashMap::new(),
         };
-        event["hash"] = hash_tx(tx);
+        event["hash"] = hash_tx(tx).to_string();
         event["height"] = height.to_string();
         event
     }
@@ -79,23 +78,4 @@ impl From<Event> for tendermint_proto::abci::Event {
                 .collect(),
         }
     }
-}
-
-struct Hash([u8; 32]);
-
-impl Display for Hash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in &self.0 {
-            write!(f, "{:02X}", byte)?;
-        }
-        Ok(())
-    }
-}
-
-/// Get the hash of a transaction and convert to a string
-fn hash_tx(tx_bytes: &[u8]) -> String {
-    let digest = Sha256::digest(tx_bytes);
-    let mut hash_bytes = [0u8; 32];
-    hash_bytes.copy_from_slice(&digest);
-    Hash(hash_bytes).to_string()
 }
