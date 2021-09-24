@@ -29,15 +29,18 @@ const ADDRESS_BECH32_VARIANT: bech32::Variant = Variant::Bech32m;
 pub(crate) const HASH_LEN: usize = 40;
 
 /// An address string before bech32m encoding must be this size.
-pub const FIXED_LEN_STRING: usize = 45;
+pub const FIXED_LEN_STRING_BYTES: usize = 45;
 
 /// Raw strings used to produce internal addresses. All the strings must begin
-/// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING` characters long.
+/// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING_BYTES` characters long.
+#[rustfmt::skip]
 mod internal {
-    pub const POS: &str = "ano::Proof of Stake                          ";
+    pub const POS: &str = 
+        "ano::Proof of Stake                          ";
     pub const POS_SLASH_POOL: &str =
         "ano::Proof of Stake Slash Pool               ";
-    pub const IBC: &str = "ano::Inter-Blockchain Communication          ";
+    pub const IBC: &str = 
+        "ano::Inter-Blockchain Communication          ";
     pub const PARAMETERS: &str =
         "ano::Protocol Parameters                     ";
 }
@@ -139,22 +142,28 @@ impl Address {
 
     /// Convert an address to a fixed length 7-bit ascii string bytes
     fn to_fixed_len_string(&self) -> Vec<u8> {
-        match self {
+        let mut string = match self {
             Address::Established(EstablishedAddress { hash }) => {
                 format!("{}::{}", PREFIX_ESTABLISHED, hash)
             }
             Address::Implicit(ImplicitAddress::Ed25519(pkh)) => {
                 format!("{}::{}", PREFIX_IMPLICIT, pkh)
             }
-            Address::Internal(internal) => match internal {
-                InternalAddress::PoS => internal::POS,
-                InternalAddress::PosSlashPool => internal::POS_SLASH_POOL,
-                InternalAddress::Ibc => internal::IBC,
-                InternalAddress::Parameters => internal::PARAMETERS,
+            Address::Internal(internal) => {
+                let string = match internal {
+                    InternalAddress::PoS => internal::POS,
+                    InternalAddress::PosSlashPool => internal::POS_SLASH_POOL,
+                    InternalAddress::Ibc => internal::IBC,
+                    InternalAddress::Parameters => internal::PARAMETERS,
+                }
+                .to_string();
+                debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
+                string
             }
-            .to_string(),
         }
-        .into_bytes()
+        .into_bytes();
+        string.resize(FIXED_LEN_STRING_BYTES, b' ');
+        string
     }
 
     /// Try to parse an address from fixed-length utf-8 encoded address string.
@@ -162,7 +171,7 @@ impl Address {
         use std::io::{Error, ErrorKind};
         let string = std::str::from_utf8(buf)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        if string.len() != FIXED_LEN_STRING {
+        if string.len() != FIXED_LEN_STRING_BYTES {
             return Err(Error::new(ErrorKind::InvalidData, "Invalid length"));
         }
         match string.split_once("::") {
