@@ -146,9 +146,8 @@ pub fn restore_wrapper_txs(height: &BlockHeight) -> HashMap<Hash, WrappedTx> {
         .data()
         .iter()
         .filter_map(|Transaction(tx) |
-            match TxType::from(Tx::try_from(tx.as_ref()).unwrap()) {
-                TxType::Wrapper(w) => {
-                    let wrapper = WrapperTx::try_from(&w).unwrap();
+            match TxType::try_from(tx.as_ref()).unwrap() {
+                TxType::Wrapper(wrapper) => {
                     Some((
                         wrapper.tx_hash.clone(),
                         WrappedTx {

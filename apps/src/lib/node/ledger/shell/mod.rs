@@ -386,8 +386,8 @@ impl Shell {
         // filter in half of the new txs from Tendermint, only keeping wrappers
         let mut txs: Vec<TxBytes> = req.block_data
             .iter()
-            .filter_map(| tx | match TxType::from(Tx::try_from(tx_bytes).unwrap()) {
-                    TxType::Wrapper(tx) => Some(tx.to_bytes()),
+            .filter_map(| tx | match TxType::try_from(tx_bytes).unwrap() {
+                    TxType::Wrapper(_) => Some(tx),
                     _ => None
                 })
             .collect()
@@ -561,9 +561,7 @@ impl Shell {
                         .into(),
                 },
                 TxType::Decrypted(tx) => {
-                    // [`process_tx`] guarantees the unwrap can't fail
-                    let decrypted = DecryptedTx::try_from(&tx).unwrap();
-                    match self.wrapped_txs.get(&hash_tx(&decrypted.to_bytes())){
+                    match self.wrapped_txs.get(&hash_tx(&tx.to_bytes().unwrap())){
                         Some(wrapped) => {
                             if verify_not_decryptable(&decrypted, privkey) {
                                 TxResult {
@@ -585,29 +583,28 @@ impl Shell {
                             code: 1,
                             info: format!(
                                 "No wrapper tx found whose encrypted payload commitment matched {}",
-                                hash_tx(&decrypted.to_bytes())
+                                hash_tx(&tx.to_bytes().unwrap())
                             )
                         }
                     }
                 }
                 TxType::Wrapper(tx) => {
-                    let wrapper = &WrapperTx::try_from(&tx).unwrap();
                     // validate the ciphertext via Ferveo
-                    if !wrapper.validate_ciphertext() {
+                    if !tx.validate_ciphertext() {
                         TxResult {
                             code: 1,
                             info: format!(
                                 "The ciphertext of the wrapped tx {} is invalid",
-                                hash_tx(&tx.to_bytes()))
+                                hash_tx(&req.tx))
                         }
                     } else {
                         // check that the fee payer has sufficient balance
                         match queries::get_balance(
                             &self.storage,
-                            &wrapper.fee.token,
-                            &wrapper.fee_payer(),
+                            &tx.fee.token,
+                            &tx.fee_payer(),
                         ) {
-                            Ok(balance) if wrapper.fee.amount <= balance =>
+                            Ok(balance) if tx.fee.amount <= balance =>
                             shim::response::TxResult {
                                 code: 0,
                                 info: "Process proposal accepted this \
@@ -688,21 +685,20 @@ impl Shell {
             }
             // This has already been verified as safe by [`process_proposal`]
             let tx_length = tx.tx.len();
-            let tx = process_tx(Tx::try_from(&tx.tx).unwrap()).unwrap();
-            let mut tx_result = match &tx {
+            let processed_tx =  process_tx(Tx::try_from(&tx.tx).unwrap()).unwrap();
+            let mut tx_result = match &processed_tx {
                 TxType::Wrapper(wrapper) => {
                     self.wrapped_txs.insert(
                         wrapper.tx_hash.clone(),
                         WrappedTx{
-                            wrapper: WrapperTx::try_from(wrapper)
-                                .unwrap(),
+                            wrapper: wrapper.clone(),
                             hash: hash_tx(&tx.tx)
                         });
                     Event::new_tx_event(EventType::Accepted, &tx.tx, req.height)
                 },
                 TxType::Decrypted(decrypted) => {
                     self.wrapped_txs.remove(
-                        &hash_tx(DecryptedTx::try_from(decrypted).to_bytes())
+                        &hash_tx(&decrypted.to_bytes().unwrap())
                     );
                     Event::new_tx_event(EventType::Applied, &tx.tx, req.height)
                 },
@@ -710,7 +706,7 @@ impl Shell {
             };
 
             match protocol::apply_tx(
-                tx,
+                processed_tx,
                 tx_length,
                 &mut self.gas_meter,
                 &mut self.write_log,

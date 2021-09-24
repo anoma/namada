@@ -12,7 +12,7 @@ use anoma::ledger::storage::write_log::WriteLog;
 use anoma::proto::{self, Tx};
 use anoma::types::address::{Address, InternalAddress};
 use anoma::types::storage::Key;
-use anoma::types::transaction::{process_tx, TxType};
+use anoma::types::transaction::{process_tx, TxType, DecryptedTx};
 use anoma::vm::{self, wasm};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -95,7 +95,7 @@ pub fn apply_tx(
         .add_base_transaction_fee(tx_length)
         .map_err(Error::GasError)?;
     match tx {
-        TxType::Raw(tx) => {
+        TxType::Decrypted(DecryptedTx::Decrypted(tx)) => {
             let verifiers =
                 execute_tx(&tx, storage, block_gas_meter, write_log)?;
 
@@ -120,7 +120,7 @@ pub fn apply_tx(
                 initialized_accounts,
             })
         }
-        TxType::Wrapper(_) => {
+        _ => {
             let gas_used = block_gas_meter
                 .finalize_transaction()
                 .map_err(Error::GasError)?;

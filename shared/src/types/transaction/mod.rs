@@ -11,7 +11,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use decrypted::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tendermint_proto::abci::RequestPrepareProposal;
 pub use wrapper::*;
 
 use crate::proto::Tx;
@@ -97,17 +96,17 @@ pub mod tx_types {
         /// An ordinary tx
         Raw(Tx),
         /// A Tx that contains an encrypted raw tx
-        Wrapper(Tx),
+        Wrapper(WrapperTx),
         /// An attempted decryption of a wrapper tx
-        Decrypted(Tx),
+        Decrypted(DecryptedTx),
     }
 
     impl From<TxType> for Tx {
         fn from(ty: TxType) -> Self {
             match ty {
                 TxType::Raw(tx) => tx,
-                TxType::Wrapper(tx) => tx,
-                TxType::Decrypted(tx) => tx,
+                TxType::Wrapper(tx) => Tx::new(vec![], tx.try_to_vec().ok()),
+                TxType::Decrypted(tx) => Tx::new(vec![], tx.try_to_vec().ok()),
             }
         }
     }
@@ -119,14 +118,21 @@ pub mod tx_types {
             if let Some(ref data) = tx.data {
                 if let Ok(wrapper) =  <WrapperTx as BorshDeserialize>::deserialize(&mut data.as_ref()) {
                     TxType::Wrapper(wrapper)
-                } else if <DecryptedTx as BorshDeserialize>::deserialize(&mut dat.as_ref()).is_ok() {
-                    TxType::Decrypted(tx)
+                } else if let Ok(decrypted) = <DecryptedTx as BorshDeserialize>::deserialize(&mut data.as_ref()) {
+                    TxType::Decrypted(decrypted)
                 } else {
                     TxType::Raw(tx)
                 }
             } else {
                 TxType::Raw(tx)
             }
+        }
+    }
+
+    impl<'a> TryFrom<&'a [u8]> for TxType {
+        type Error = <Tx as TryFrom<&'a [u8]>>::Error;
+        fn try_from(tx_bytes: &[u8]) -> Result<Self, Self::Error> {
+            Ok(TxType::from(Tx::try_from(tx_bytes)?))
         }
     }
 
@@ -159,7 +165,7 @@ pub mod tx_types {
             .as_ref()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
-            match TxType::from(Tx{code: tx.code.clone(), data: Some(data), timestamp: tx.timestamp}) {
+            match TxType::from(Tx{ code: vec![], data: Some(data), timestamp: tx.timestamp }) {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
                     verify_tx_sig(&wrapper.pk, &tx, sig)
@@ -250,15 +256,11 @@ pub mod tx_types {
                 0.into(),
                 tx.clone(),
             )
-                .sign(&keypair)
-                .expect("Test failed");
+            .sign(&keypair)
+            .expect("Test failed");
 
             match process_tx(wrapper).expect("Test failed") {
                 TxType::Wrapper(wrapper) => {
-                    let wrapper: WrapperTx = BorshDeserialize::deserialize(
-                        &mut wrapper.data.expect("Test failed").as_ref(),
-                    )
-                        .expect("Test failed");
                     let decrypted =
                         wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
                             .expect("Test failed");

@@ -6,12 +6,12 @@ pub mod decrypted_tx {
     use std::convert::TryFrom;
 
     use ark_bls12_381::Bls12_381 as EllipticCurve;
-    use ark_ec::{AffineCurve, PairingEngine};
+    use ark_ec::PairingEngine;
     use borsh::{BorshDeserialize, BorshSerialize};
     use serde::{Deserialize, Serialize};
 
     use crate::proto::Tx;
-    use crate::types::transaction::{WrapperTx, hash_tx};
+    use crate::types::transaction::WrapperTx;
 
     #[derive(
       Clone,
@@ -34,10 +34,10 @@ pub mod decrypted_tx {
     }
 
     impl DecryptedTx {
-        pub fn to_bytes(&self) -> Vec<u8> {
+        pub fn to_bytes(&self) -> Option<Vec<u8>> {
             match self {
-                DecryptedTx::Decrypted(tx) => tx.to_bytes(),
-                DecryptedTx::Undecryptable(tx) => tx.to_bytes()
+                DecryptedTx::Decrypted(tx) => Some(tx.to_bytes()),
+                DecryptedTx::Undecryptable(_) => None
             }
         }
     }
@@ -76,9 +76,9 @@ pub mod decrypted_tx {
         fn try_from(tx: &Tx) -> Result<Self, Self::Error> {
             if let Some(data) = tx.data.as_ref() {
                 <Self as BorshDeserialize>::deserialize(&mut data.as_ref())
-                    .map_err(crate::types::transaction::WrapperTxErr::InvalidTx)
+                    .map_err(|_| crate::types::transaction::WrapperTxErr::InvalidTx)
             } else {
-                crate::types::transaction::WrapperTxErr::InvalidTx
+                Err(crate::types::transaction::WrapperTxErr::InvalidTx)
             }
         }
     }

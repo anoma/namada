@@ -14,9 +14,7 @@ pub mod wrapper_tx {
 
     use crate::proto::Tx;
     use crate::types::address::Address;
-    use crate::types::key::ed25519::{
-        verify_tx_sig, Keypair, PublicKey, SignedTxData,
-    };
+    use crate::types::key::ed25519::{Keypair, PublicKey};
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
     use crate::types::transaction::{hash_tx, Hash};
@@ -161,7 +159,7 @@ pub mod wrapper_tx {
     /// as some non-encrypted metadata for inclusion
     /// and / or verification purposes
     #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug, Clone, Hash, BorshSerialize, BorshDeserialize, Serialize, Deserialize, PartialEq,
     )]
     pub struct WrapperTx {
         /// The fee to be payed for including the tx

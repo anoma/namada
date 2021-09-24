@@ -5,14 +5,16 @@
 pub mod encrypted_tx {
     use std::io::{Error, ErrorKind, Write};
 
-    use ark_ec::{AffineCurve, PairingEngine};
+    use ark_ec::PairingEngine;
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use borsh::{BorshDeserialize, BorshSerialize};
+    use serde::{Serialize, Deserialize};
     use tpke::{encrypt, Ciphertext};
+    use crate::types::transaction::EllipticCurve;
 
     /// We use a specific choice of two groups and bilinear pairing
     /// We use a wrapper type to add traits
-    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
     #[serde(from = "SerializedCiphertext")]
     #[serde(into = "SerializedCiphertext")]
     pub struct EncryptedTx(pub Ciphertext<EllipticCurve>);
