@@ -89,6 +89,8 @@ fn build_peers(
 
 #[allow(dead_code)]
 pub mod constants {
+    use std::fs;
+    use std::path::PathBuf;
 
     // User addresses
     pub const ALBERT: &str = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx";
@@ -115,4 +117,10 @@ pub mod constants {
     pub const VP_ALWAYS_FALSE_WASM: &str =
         "wasm_for_tests/vp_always_false.wasm";
     pub const TX_MINT_TOKENS_WASM: &str = "wasm_for_tests/tx_mint_tokens.wasm";
+
+    /// Find the absolute path to one of the WASM files above
+    pub fn wasm_abs_path(file_name: &str) -> PathBuf {
+        let working_dir = fs::canonicalize("..").unwrap();
+        working_dir.join(file_name)
+    }
 }
