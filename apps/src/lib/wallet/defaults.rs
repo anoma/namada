@@ -180,18 +180,3 @@ pub fn matchmaker_keypair() -> Keypair {
     ];
     Keypair::from_bytes(&bytes).unwrap()
 }
-
-#[cfg(feature = "dev")]
-pub fn key_of(name: impl AsRef<str>) -> Keypair {
-    match name.as_ref() {
-        "atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4" => albert_keypair(),
-        "atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw" => bertha_keypair(),
-        "atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p" => christel_keypair(),
-        "atest1d9khqw36xprrzdpk89rrws69g4z5vd6pgv65gvjrgeqnv3pcg4zns335xymry335gcerqs3etd0xfa" => daewon_keypair(),
-        "atest1v4ehgw36x5mnswphx565gv2yxdprzvf5gdp523jpxy6rvv6zxaznzsejxeznzseh8pp5ywz93xwala" => matchmaker_keypair(),
-        "atest1v4ehgw36ggcnsdee8qerswph8y6ry3p5xgunvve3xaqngd3kxc6nqwz9gseyydzzg5unys3ht2n48q" => validator_keypair(),
-        other => {
-            panic!("Dont' have keys for: {}", other)
-        }
-    }
-}

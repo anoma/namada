@@ -376,7 +376,7 @@ fn invalid_transactions() -> Result<()> {
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let source_key = wallet::defaults::key_of(BERTHA);
+    let source_key = wallet::defaults::bertha_keypair();
     let tx_wasm_path = wasm_abs_path(TX_MINT_TOKENS_WASM);
     let tx_code = fs::read(&tx_wasm_path).unwrap();
     let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
@@ -515,7 +515,7 @@ fn test_wrapper_txs() -> Result<()> {
     let base_dir = tempdir().unwrap();
     let base_dir_arg = &base_dir.path().to_string_lossy();
 
-    let keypair = defaults::key_of(DAEWON);
+    let keypair = defaults::daewon_keypair();
 
     use anoma::types::token::Amount;
     let tx = WrapperTx::new(
