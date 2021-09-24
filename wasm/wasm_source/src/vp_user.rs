@@ -267,7 +267,7 @@ fn check_intent(
 
 #[cfg(test)]
 mod tests {
-    use address::testing::arb_address;
+    use address::testing::arb_non_internal_address;
     // Use this as `#[test]` annotation to enable logging
     use anoma_tests::log::test;
     use anoma_tests::tx::{tx_host_env, TestTxEnv};
@@ -433,7 +433,7 @@ mod tests {
         /// Generates an account address and a storage key inside its storage.
         fn arb_account_storage_subspace_key()
             // Generate an address
-            (address in arb_address())
+            (address in arb_non_internal_address())
             // Generate a storage key other than its VP key (VP cannot be
             // modified directly via `write`, it has to be modified via
             // `tx::update_validity_predicate`.

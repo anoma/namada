@@ -558,6 +558,14 @@ pub mod testing {
         Address::decode("atest1v4ehgw36gscrw333g3z5zvjzg4rrq3psxu6rqd2xxqc5gs35gerrs3pjgfprvdejxqunxs29t6p5s9").expect("The token address decoding shouldn't fail")
     }
 
+    /// Generate an arbitrary [`Address`] (established or implicit).
+    pub fn arb_non_internal_address() -> impl Strategy<Value = Address> {
+        prop_oneof![
+            arb_established_address().prop_map(Address::Established),
+            arb_implicit_address().prop_map(Address::Implicit),
+        ]
+    }
+
     /// Generate an arbitrary [`Address`] (established, implicit or internal).
     pub fn arb_address() -> impl Strategy<Value = Address> {
         prop_oneof![

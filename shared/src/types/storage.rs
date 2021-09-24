@@ -737,13 +737,16 @@ pub mod testing {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::address::testing::arb_address;
+    use crate::types::address::testing::{
+        arb_address, arb_non_internal_address,
+    };
 
     /// Generate an arbitrary [`Key`].
     pub fn arb_key() -> impl Strategy<Value = Key> {
         prop_oneof![
             // a key for a validity predicate
-            arb_address().prop_map(|addr| Key::validity_predicate(&addr)),
+            arb_non_internal_address()
+                .prop_map(|addr| Key::validity_predicate(&addr)),
             // a key from key segments
             arb_key_no_vp(),
         ]
