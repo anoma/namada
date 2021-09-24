@@ -91,6 +91,7 @@ pub struct Ledger {
     pub ledger_address: SocketAddr,
     pub rpc_address: SocketAddr,
     pub p2p_address: SocketAddr,
+    pub wasm_dir: PathBuf,
 }
 
 impl Default for Ledger {
@@ -112,6 +113,7 @@ impl Default for Ledger {
                 IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                 26656,
             ),
+            wasm_dir: "wasm".into(),
         }
     }
 }

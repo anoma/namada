@@ -1,5 +1,6 @@
 //! CLI input types can be used for command arguments
 
+use std::env;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -39,7 +40,19 @@ pub struct Context {
 impl Context {
     pub fn new(global_args: args::Global) -> Self {
         let wallet = Wallet::load_or_new(&global_args.base_dir);
-        let config = load_config(&global_args.base_dir);
+        let mut config = load_config(&global_args.base_dir);
+
+        // If the WASM dir specified, put it in the config
+        match global_args.wasm_dir.as_ref() {
+            Some(wasm_dir) => {
+                config.ledger.wasm_dir = wasm_dir.clone();
+            }
+            None => {
+                if let Ok(wasm_dir) = env::var("ANOMA_WASM_DIR") {
+                    config.ledger.wasm_dir = wasm_dir.into();
+                }
+            }
+        }
         Self {
             global_args,
             wallet,
@@ -97,7 +110,7 @@ impl Context {
         if file_path.is_absolute() {
             return file_path.into();
         }
-        self.global_args.wasm_dir.join(file_name)
+        self.config.ledger.wasm_dir.join(file_name)
     }
 }
 

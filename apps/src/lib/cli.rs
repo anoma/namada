@@ -1091,19 +1091,13 @@ pub mod args {
         arg_opt("consensus-key");
     const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
     const VALUE: ArgOpt<String> = arg_opt("value");
-    const WASM_DIR: ArgDefault<PathBuf> = arg_default(
-        "wasm-dir",
-        DefaultFn(|| match env::var("ANOMA_WASM_DIR") {
-            Ok(wasm_dir) => wasm_dir.into(),
-            Err(_) => "wasm".into(),
-        }),
-    );
+    const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
 
     /// Global command arguments
     #[derive(Clone, Debug)]
     pub struct Global {
         pub base_dir: PathBuf,
-        pub wasm_dir: PathBuf,
+        pub wasm_dir: Option<PathBuf>,
     }
 
     impl Global {

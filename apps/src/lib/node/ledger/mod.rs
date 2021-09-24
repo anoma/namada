@@ -7,7 +7,6 @@ pub mod storage;
 pub mod tendermint_node;
 
 use std::convert::{TryFrom, TryInto};
-use std::path::PathBuf;
 use std::sync::mpsc::channel;
 
 use anoma::types::storage::BlockHash;
@@ -169,13 +168,12 @@ pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
 async fn run_shell(
     config: config::Ledger,
     abort_registration: AbortRegistration,
-    wasm_dir: PathBuf,
 ) {
     // Construct our ABCI application.
     let service = AbcippShim::new(
         &config.db,
         config::DEFAULT_CHAIN_ID.to_owned(),
-        wasm_dir,
+        config.wasm_dir,
     );
 
     // Split it into components.
@@ -219,7 +217,7 @@ async fn run_shell(
 ///
 /// When the shell process finishes, we check if it finished with a panic. If it
 /// did we stop the tendermint node with a channel that acts as a kill switch.
-pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
+pub fn run(config: config::Ledger) {
     let home_dir = config.tendermint.clone();
     let ledger_address = config.ledger_address.to_string();
     let rpc_address = config.rpc_address.to_string();
@@ -256,7 +254,7 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
 
     // start the shell + ABCI server
     let shell_handle = std::thread::spawn(move || {
-        run_shell(config, abort_registration, wasm_dir);
+        run_shell(config, abort_registration);
     });
 
     tracing::info!("Anoma ledger node started.");
