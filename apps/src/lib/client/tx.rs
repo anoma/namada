@@ -19,17 +19,18 @@ use crate::client::tendermint_websocket_client::{
 };
 use crate::node::ledger::tendermint_node;
 
-const TX_INIT_ACCOUNT_WASM: &str = "wasm/tx_init_account.wasm";
-const TX_INIT_VALIDATOR_WASM: &str = "wasm/tx_init_validator.wasm";
-const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
-const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
-const VP_USER_WASM: &str = "wasm/vp_user.wasm";
-const TX_BOND_WASM: &str = "wasm/tx_bond.wasm";
-const TX_UNBOND_WASM: &str = "wasm/tx_unbond.wasm";
-const TX_WITHDRAW_WASM: &str = "wasm/tx_withdraw.wasm";
+const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+const VP_USER_WASM: &str = "vp_user.wasm";
+const TX_BOND_WASM: &str = "tx_bond.wasm";
+const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 
 pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
-    let tx_code = std::fs::read(args.code_path)
+    let tx_code = ctx
+        .read_wasm(args.code_path)
         .expect("Expected a file at given code path");
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
@@ -65,9 +66,11 @@ pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
     )
     .await;
 
-    let vp_code = std::fs::read(args.vp_code_path)
+    let vp_code = ctx
+        .read_wasm(args.vp_code_path)
         .expect("Expected a file at given code path");
-    let tx_code = std::fs::read(TX_UPDATE_VP_WASM)
+    let tx_code = ctx
+        .read_wasm(TX_UPDATE_VP_WASM)
         .expect("Expected a file at given code path");
 
     let update_vp = UpdateVp {
@@ -94,13 +97,15 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let vp_code = args
         .vp_code_path
         .map(|path| {
-            std::fs::read(path).expect("Expected a file at given code path")
+            ctx.read_wasm(path)
+                .expect("Expected a file at given code path")
         })
         .unwrap_or_else(|| {
-            std::fs::read(VP_USER_WASM)
+            ctx.read_wasm(VP_USER_WASM)
                 .expect("Expected a file at given code path")
         });
-    let tx_code = std::fs::read(TX_INIT_ACCOUNT_WASM)
+    let tx_code = ctx
+        .read_wasm(TX_INIT_ACCOUNT_WASM)
         .expect("Expected a file at given code path");
 
     let data = InitAccount {
@@ -177,21 +182,24 @@ pub async fn submit_init_validator(
 
     let validator_vp_code = validator_vp_code_path
         .map(|path| {
-            std::fs::read(path).expect("Expected a file at given code path")
+            ctx.read_wasm(path)
+                .expect("Expected a file at given code path")
         })
         .unwrap_or_else(|| {
-            std::fs::read(VP_USER_WASM)
+            ctx.read_wasm(VP_USER_WASM)
                 .expect("Expected a file at given code path")
         });
     let rewards_vp_code = rewards_vp_code_path
         .map(|path| {
-            std::fs::read(path).expect("Expected a file at given code path")
+            ctx.read_wasm(path)
+                .expect("Expected a file at given code path")
         })
         .unwrap_or_else(|| {
-            std::fs::read(VP_USER_WASM)
+            ctx.read_wasm(VP_USER_WASM)
                 .expect("Expected a file at given code path")
         });
-    let tx_code = std::fs::read(TX_INIT_VALIDATOR_WASM)
+    let tx_code = ctx
+        .read_wasm(TX_INIT_VALIDATOR_WASM)
         .expect("Expected a file at given code path");
 
     let data = InitValidator {
@@ -320,7 +328,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     )
     .await;
 
-    let tx_code = std::fs::read(TX_TRANSFER_WASM).unwrap();
+    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM).unwrap();
     let transfer = token::Transfer {
         source,
         target,
@@ -346,7 +354,7 @@ pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
         args.tx.ledger_address.clone(),
     )
     .await;
-    let tx_code = std::fs::read(TX_BOND_WASM).unwrap();
+    let tx_code = ctx.read_wasm(TX_BOND_WASM).unwrap();
 
     let bond = pos::Bond {
         validator,
@@ -370,7 +378,7 @@ pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
         args.tx.ledger_address.clone(),
     )
     .await;
-    let tx_code = std::fs::read(TX_UNBOND_WASM).unwrap();
+    let tx_code = ctx.read_wasm(TX_UNBOND_WASM).unwrap();
 
     let unbond = pos::Unbond {
         validator,
@@ -396,7 +404,7 @@ pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
         args.tx.ledger_address.clone(),
     )
     .await;
-    let tx_code = std::fs::read(TX_WITHDRAW_WASM).unwrap();
+    let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM).unwrap();
 
     let withdraw = pos::Withdraw { validator, source };
     tracing::debug!("Withdraw data {:?}", withdraw);

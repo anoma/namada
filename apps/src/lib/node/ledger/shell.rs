@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::hash::Hash;
 use std::mem;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anoma::ledger::gas::BlockGasMeter;
@@ -97,12 +97,18 @@ pub struct Shell {
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
+    /// Path to the WASM directory for files used in the genesis block.
+    wasm_dir: PathBuf,
 }
 
 impl Shell {
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
-    pub fn new(db_path: impl AsRef<Path>, chain_id: String) -> Self {
+    pub fn new(
+        db_path: impl AsRef<Path>,
+        chain_id: String,
+        wasm_dir: PathBuf,
+    ) -> Self {
         let mut storage = storage::open(db_path, chain_id);
         storage
             .load_last_state()
@@ -116,6 +122,7 @@ impl Shell {
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
             byzantine_validators: vec![],
+            wasm_dir,
         }
     }
 
@@ -173,9 +180,10 @@ impl Shell {
         {
             let vp_code =
                 vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
-                    std::fs::read(&vp_code_path).unwrap_or_else(|_| {
-                        panic!("cannot load genesis VP {}.", vp_code_path)
-                    })
+                    std::fs::read(self.wasm_dir.join(&vp_code_path))
+                        .unwrap_or_else(|_| {
+                            panic!("cannot load genesis VP {}.", vp_code_path)
+                        })
                 });
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
@@ -212,9 +220,10 @@ impl Shell {
         {
             let vp_code =
                 vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
-                    std::fs::read(&vp_code_path).unwrap_or_else(|_| {
-                        panic!("cannot load genesis VP {}.", vp_code_path)
-                    })
+                    std::fs::read(self.wasm_dir.join(&vp_code_path))
+                        .unwrap_or_else(|_| {
+                            panic!("cannot load genesis VP {}.", vp_code_path)
+                        })
                 });
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
@@ -235,14 +244,13 @@ impl Shell {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.vp_code_path.clone(),
                 || {
-                    std::fs::read(&validator.vp_code_path).unwrap_or_else(
-                        |_| {
+                    std::fs::read(self.wasm_dir.join(&validator.vp_code_path))
+                        .unwrap_or_else(|_| {
                             panic!(
                                 "cannot load genesis VP {}.",
                                 validator.vp_code_path
                             )
-                        },
-                    )
+                        })
                 },
             );
             let addr = &validator.pos_data.address;

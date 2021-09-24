@@ -1,7 +1,8 @@
 //! CLI input types can be used for command arguments
 
+use std::env;
 use std::marker::PhantomData;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -39,7 +40,19 @@ pub struct Context {
 impl Context {
     pub fn new(global_args: args::Global) -> Self {
         let wallet = Wallet::load_or_new(&global_args.base_dir);
-        let config = load_config(&global_args.base_dir);
+        let mut config = load_config(&global_args.base_dir);
+
+        // If the WASM dir specified, put it in the config
+        match global_args.wasm_dir.as_ref() {
+            Some(wasm_dir) => {
+                config.ledger.wasm_dir = wasm_dir.clone();
+            }
+            None => {
+                if let Ok(wasm_dir) = env::var("ANOMA_WASM_DIR") {
+                    config.ledger.wasm_dir = wasm_dir.into();
+                }
+            }
+        }
         Self {
             global_args,
             wallet,
@@ -81,6 +94,23 @@ impl Context {
         T: ArgFromMutContext,
     {
         from_context.map(|from_context| from_context.from_mut_ctx(self))
+    }
+
+    /// Read the given WASM file from the WASM directory.
+    pub fn read_wasm(
+        &self,
+        file_name: impl AsRef<Path>,
+    ) -> std::io::Result<Vec<u8>> {
+        std::fs::read(self.wasm_path(file_name))
+    }
+
+    /// Find the path to the given WASM file name.
+    pub fn wasm_path(&self, file_name: impl AsRef<Path>) -> PathBuf {
+        let file_path = file_name.as_ref();
+        if file_path.is_absolute() {
+            return file_path.into();
+        }
+        self.config.ledger.wasm_dir.join(file_name)
     }
 }
 

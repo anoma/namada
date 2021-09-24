@@ -231,6 +231,11 @@ fn ledger_txs_and_queries() -> Result<()> {
         .exp_string("Started node")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
+    let vp_user = wasm_abs_path(VP_USER_WASM);
+    let vp_user = vp_user.to_string_lossy();
+    let tx_no_op = wasm_abs_path(TX_NO_OP_WASM);
+    let tx_no_op = tx_no_op.to_string_lossy();
+
     let txs_args = vec![
             // 2. Submit a token transfer tx
             vec![
@@ -239,12 +244,12 @@ fn ledger_txs_and_queries() -> Result<()> {
             ],
             // 3. Submit a transaction to update an account's validity
             // predicate
-            vec!["update", "--address", BERTHA, "--code-path", VP_USER_WASM],
+            vec!["update", "--address", BERTHA, "--code-path", &vp_user],
             // 4. Submit a custom tx
             vec![
                 "tx",
                 "--code-path",
-                TX_NO_OP_WASM,
+                &tx_no_op,
                 "--data-path",
                 "README.md",
             ],
@@ -257,7 +262,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 // Value obtained from `anoma::types::key::ed25519::tests::gen_keypair`
                 "200000001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
                 "--code-path",
-                VP_USER_WASM,
+                &vp_user,
                 "--alias",
                 "test-account"
             ],
@@ -372,19 +377,18 @@ fn invalid_transactions() -> Result<()> {
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
     let source_key = wallet::defaults::key_of(BERTHA);
-    let tx_wasm_path = TX_MINT_TOKENS_WASM;
-    let tx_wasm_path_abs = working_dir.join(&tx_wasm_path);
-    println!("Reading tx wasm for test from {:?}", tx_wasm_path_abs);
-    let tx_code = fs::read(tx_wasm_path_abs).unwrap();
+    let tx_wasm_path = wasm_abs_path(TX_MINT_TOKENS_WASM);
+    let tx_code = fs::read(&tx_wasm_path).unwrap();
     let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
 
     let tx_data = tx.data.unwrap();
     std::fs::write(&tx_data_path, tx_data).unwrap();
+    let tx_wasm_path = tx_wasm_path.to_string_lossy();
     let tx_data_path = tx_data_path.to_string_lossy();
     let tx_args = vec![
         "tx",
         "--code-path",
-        tx_wasm_path,
+        &tx_wasm_path,
         "--data-path",
         &tx_data_path,
     ];
