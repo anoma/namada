@@ -91,7 +91,7 @@ pub fn genesis() -> Genesis {
     ])
     .unwrap();
     let address = wallet::defaults::validator_address();
-    let staking_reward_address = Address::decode("a1qq5qqqqqxaz5vven8yu5gdpng9zrys6ygvurwv3sgsmrvd6xgdzrys6yg4pnwd6z89rrqv2xvjcy9t").unwrap();
+    let staking_reward_address = Address::decode("atest1v4ehgw36xcersvee8qerxd35x9prsw2xg5erxv6pxfpygd2x89z5xsf5xvmnysejgv6rwd2rnj2avt").unwrap();
     let validator = Validator {
         pos_data: GenesisValidator {
             address,

@@ -582,7 +582,7 @@ impl From<serde_json::Value> for TxResponse {
                 // ```
                 // "applied.initialized_accounts": Array([
                 //   String(
-                //     "[\"a1qq5qqqqq8qerqv3sxyuyz3zzxgcyxvecgerry333xce5z3fkg4pnj3zxgfqnzd69gsu5gwzr9wpjpe\"]",
+                //     "[\"atest1...\"]",
                 //   ),
                 // ]),
                 // ...
