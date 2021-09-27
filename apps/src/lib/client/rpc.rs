@@ -60,8 +60,8 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
     let tokens = address::tokens();
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
-            let token = ctx.get(token);
-            let owner = ctx.get(owner);
+            let token = ctx.get(&token);
+            let owner = ctx.get(&owner);
             let key = token::balance_key(&token, &owner);
             let currency_code = tokens
                 .get(&token)
@@ -77,7 +77,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             }
         }
         (None, Some(owner)) => {
-            let owner = ctx.get(owner);
+            let owner = ctx.get(&owner);
             let mut found_any = false;
             for (token, currency_code) in tokens {
                 let key = token::balance_key(&token, &owner);
@@ -94,7 +94,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             }
         }
         (Some(token), None) => {
-            let token = ctx.get(token);
+            let token = ctx.get(&token);
             let key = token::balance_prefix(&token);
             let balances =
                 query_storage_prefix::<token::Amount>(client, key).await;
@@ -153,8 +153,8 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
         let client = HttpClient::new(args.query.ledger_address).unwrap();
         match (args.owner, args.validator) {
             (Some(owner), Some(validator)) => {
-                let source = ctx.get(owner);
-                let validator = ctx.get(validator);
+                let source = ctx.get(&owner);
+                let validator = ctx.get(&validator);
                 // Find owner's delegations to the given validator
                 let bond_id = pos::BondId { source, validator };
                 let bond_key = pos::bond_key(&bond_id);
@@ -215,7 +215,7 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                 }
             }
             (None, Some(validator)) => {
-                let validator = ctx.get(validator);
+                let validator = ctx.get(&validator);
                 // Find validator's self-bonds
                 let bond_id = pos::BondId {
                     source: validator.clone(),
@@ -267,7 +267,7 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                 }
             }
             (Some(owner), None) => {
-                let owner = ctx.get(owner);
+                let owner = ctx.get(&owner);
                 // Find owner's bonds to any validator
                 let bonds_prefix = pos::bonds_for_source_prefix(&owner);
                 let bonds = query_storage_prefix::<pos::Bonds>(
@@ -549,7 +549,7 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
             .expect("Validator set should be always set in the current epoch");
         match args.validator {
             Some(validator) => {
-                let validator = ctx.get(validator);
+                let validator = ctx.get(&validator);
                 // Find voting power for the given validator
                 let voting_power_key =
                     pos::validator_voting_power_key(&validator);
@@ -639,7 +639,7 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     match args.validator {
         Some(validator) => {
-            let validator = ctx.get(validator);
+            let validator = ctx.get(&validator);
             // Find slashes for the given validator
             let slashes_key = pos::validator_slashes_key(&validator);
             let slashes = query_storage_value::<pos::Slashes>(

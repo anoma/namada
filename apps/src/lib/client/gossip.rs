@@ -34,10 +34,10 @@ pub async fn gossip_intent(
         signed_exchanges.insert(signed);
     }
 
-    let source_keypair = match ctx.get_opt_cached(signing_key) {
+    let source_keypair = match ctx.get_opt_cached(&signing_key) {
         Some(key) => key,
         None => {
-            let source = ctx.get_opt(source).unwrap_or_else(|| {
+            let source = ctx.get_opt(&source).unwrap_or_else(|| {
                 eprintln!("A source or a signing key is required.");
                 cli::safe_exit(1)
             });

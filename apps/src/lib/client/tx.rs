@@ -13,6 +13,7 @@ use tendermint_rpc::query::{EventType, Query};
 use tendermint_rpc::Client;
 
 use super::{rpc, signing};
+use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
@@ -28,7 +29,7 @@ const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 
-pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
+pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx
         .read_wasm(args.code_path)
         .expect("Expected a file at given code path");
@@ -36,64 +37,30 @@ pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
     let tx = Tx::new(tx_code, data);
-    let tx = if let Some(signing_key) = args.signing_key {
-        let signing_key = ctx.get_cached(signing_key);
-        tx.sign(&signing_key)
-    } else if let Some(signer) = args.signer {
-        let signer = ctx.get(signer);
-        let signing_key = signing::find_keypair(
-            &mut ctx.wallet,
-            &signer,
-            args.tx.ledger_address.clone(),
-        )
-        .await;
-        tx.sign(&signing_key)
-    } else {
-        // Unsigned tx
-        tx
-    };
 
+    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, None).await;
     let (ctx, initialized_accounts) = submit_tx(ctx, &args.tx, tx).await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
-pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
-    let source = ctx.get(args.addr);
-    let keypair = signing::find_keypair(
-        &mut ctx.wallet,
-        &source,
-        args.tx.ledger_address.clone(),
-    )
-    .await;
-
+pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
+    let addr = ctx.get(&args.addr);
     let vp_code = ctx
         .read_wasm(args.vp_code_path)
         .expect("Expected a file at given code path");
     let tx_code = ctx
         .read_wasm(TX_UPDATE_VP_WASM)
         .expect("Expected a file at given code path");
+    let data = UpdateVp { addr, vp_code };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let update_vp = UpdateVp {
-        addr: source,
-        vp_code,
-    };
-    let data = update_vp.try_to_vec().expect(
-        "Encoding transfer data to update a validity predicate shouldn't fail",
-    );
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
-
+    let tx = Tx::new(tx_code, Some(data));
+    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.addr)).await;
     submit_tx(ctx, &args.tx, tx).await;
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
-    let source = ctx.get(args.source);
-    let keypair = signing::find_keypair(
-        &mut ctx.wallet,
-        &source,
-        args.tx.ledger_address.clone(),
-    )
-    .await;
-    let public_key = ctx.get_cached(args.public_key);
+    let public_key = ctx.get_cached(&args.public_key);
     let vp_code = args
         .vp_code_path
         .map(|path| {
@@ -107,16 +74,14 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let tx_code = ctx
         .read_wasm(TX_INIT_ACCOUNT_WASM)
         .expect("Expected a file at given code path");
-
     let data = InitAccount {
         public_key,
         vp_code,
     };
-    let data = data.try_to_vec().expect(
-        "Encoding transfer data to initialize a new account shouldn't fail",
-    );
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
+    let tx = Tx::new(tx_code, Some(data));
+    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.source)).await;
     let (ctx, initialized_accounts) = submit_tx(ctx, &args.tx, tx).await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
@@ -134,14 +99,6 @@ pub async fn submit_init_validator(
         unsafe_dont_encrypt,
     }: args::TxInitValidator,
 ) {
-    let source = ctx.get(source);
-    let keypair = signing::find_keypair(
-        &mut ctx.wallet,
-        &source,
-        tx_args.ledger_address.clone(),
-    )
-    .await;
-
     let alias = tx_args
         .initialized_account_alias
         .as_ref()
@@ -151,7 +108,7 @@ pub async fn submit_init_validator(
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
     let rewards_key_alias = format!("{}-rewards-key", alias);
-    let account_key = ctx.get_opt_cached(account_key).unwrap_or_else(|| {
+    let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
             .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
@@ -161,7 +118,7 @@ pub async fn submit_init_validator(
     });
 
     let consensus_key =
-        ctx.get_opt_cached(consensus_key).unwrap_or_else(|| {
+        ctx.get_opt_cached(&consensus_key).unwrap_or_else(|| {
             println!("Generating consensus key...");
             ctx.wallet
                 .gen_key(Some(consensus_key_alias.clone()), unsafe_dont_encrypt)
@@ -169,7 +126,7 @@ pub async fn submit_init_validator(
         });
 
     let rewards_account_key =
-        ctx.get_opt_cached(rewards_account_key).unwrap_or_else(|| {
+        ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
             println!("Generating staking reward account key...");
             ctx.wallet
                 .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
@@ -209,10 +166,9 @@ pub async fn submit_init_validator(
         validator_vp_code,
         rewards_vp_code,
     };
-    let data = data.try_to_vec().expect(
-        "Encoding transfer data to initialize a new account shouldn't fail",
-    );
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let tx = Tx::new(tx_code, Some(data));
+    let (ctx, tx) = sign_tx(ctx, tx, &tx_args, Some(&source)).await;
 
     let (mut ctx, initialized_accounts) = submit_tx(ctx, &tx_args, tx).await;
     if !tx_args.dry_run {
@@ -317,17 +273,10 @@ pub async fn submit_init_validator(
     }
 }
 
-pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
-    let source = ctx.get(args.source);
-    let target = ctx.get(args.target);
-    let token = ctx.get(args.token);
-    let keypair = signing::find_keypair(
-        &mut ctx.wallet,
-        &source,
-        args.tx.ledger_address.clone(),
-    )
-    .await;
-
+pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
+    let source = ctx.get(&args.source);
+    let target = ctx.get(&args.target);
+    let token = ctx.get(&args.token);
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM).unwrap();
     let transfer = token::Transfer {
         source,
@@ -338,82 +287,87 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer
         .try_to_vec()
-        .expect("Encoding unsigned transfer shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+        .expect("Encoding tx data shouldn't fail");
 
+    let tx = Tx::new(tx_code, Some(data));
+    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.source)).await;
     submit_tx(ctx, &args.tx, tx).await;
 }
 
-pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
-    let validator = ctx.get(args.validator);
-    let source = ctx.get_opt(args.source);
-    let signer = source.as_ref().unwrap_or(&validator);
-    let keypair = signing::find_keypair(
-        &mut ctx.wallet,
-        signer,
-        args.tx.ledger_address.clone(),
-    )
-    .await;
+pub async fn submit_bond(ctx: Context, args: args::Bond) {
+    let validator = ctx.get(&args.validator);
+    let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_BOND_WASM).unwrap();
-
     let bond = pos::Bond {
         validator,
         amount: args.amount,
         source,
     };
-    tracing::debug!("Bond data {:?}", bond);
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.source.as_ref().unwrap_or(&args.validator);
+    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
     submit_tx(ctx, &args.tx, tx).await;
 }
 
-pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
-    let validator = ctx.get(args.validator);
-    let source = ctx.get_opt(args.source);
-    let signer = source.as_ref().unwrap_or(&validator);
-    let keypair = signing::find_keypair(
-        &mut ctx.wallet,
-        signer,
-        args.tx.ledger_address.clone(),
-    )
-    .await;
+pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
+    let validator = ctx.get(&args.validator);
+    let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_UNBOND_WASM).unwrap();
 
-    let unbond = pos::Unbond {
+    let data = pos::Unbond {
         validator,
         amount: args.amount,
         source,
     };
-    tracing::debug!("Unbond data {:?}", unbond);
-    let data = unbond
-        .try_to_vec()
-        .expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.source.as_ref().unwrap_or(&args.validator);
+    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
     submit_tx(ctx, &args.tx, tx).await;
 }
 
-pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
-    let validator = ctx.get(args.validator);
-    let source = ctx.get_opt(args.source);
-    let signer = source.as_ref().unwrap_or(&validator);
-    let keypair = signing::find_keypair(
-        &mut ctx.wallet,
-        signer,
-        args.tx.ledger_address.clone(),
-    )
-    .await;
+pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
+    let validator = ctx.get(&args.validator);
+    let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM).unwrap();
+    let data = pos::Withdraw { validator, source };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let withdraw = pos::Withdraw { validator, source };
-    tracing::debug!("Withdraw data {:?}", withdraw);
-    let data = withdraw
-        .try_to_vec()
-        .expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
-
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.source.as_ref().unwrap_or(&args.validator);
+    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
     submit_tx(ctx, &args.tx, tx).await;
+}
+
+/// Sign a transaction with a given signing key or public key of a given signer.
+/// If no explicit signer given, use the `default`. If no `default` is given,
+/// returns unsigned transaction.
+async fn sign_tx(
+    mut ctx: Context,
+    tx: Tx,
+    args: &args::Tx,
+    default: Option<&WalletAddress>,
+) -> (Context, Tx) {
+    let tx = if let Some(signing_key) = &args.signing_key {
+        let signing_key = ctx.get_cached(signing_key);
+        tx.sign(&signing_key)
+    } else if let Some(signer) = args.signer.as_ref().or(default) {
+        let signer = ctx.get(signer);
+        let signing_key = signing::find_keypair(
+            &mut ctx.wallet,
+            &signer,
+            args.ledger_address.clone(),
+        )
+        .await;
+        tx.sign(&signing_key)
+    } else {
+        // Unsigned tx
+        tx
+    };
+    (ctx, tx)
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses

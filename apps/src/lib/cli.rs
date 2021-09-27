@@ -6,7 +6,7 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
-mod context;
+pub mod context;
 mod utils;
 
 use clap::{AppSettings, ArgMatches};
@@ -1137,10 +1137,6 @@ pub mod args {
         pub code_path: PathBuf,
         /// Path to the data file
         pub data_path: Option<PathBuf>,
-        /// Sign the tx with the key for the given alias from your wallet
-        pub signing_key: Option<WalletKeypair>,
-        /// Sign the tx with the keypair of the public key of the given address
-        pub signer: Option<WalletAddress>,
     }
 
     impl Args for TxCustom {
@@ -1148,14 +1144,10 @@ pub mod args {
             let tx = Tx::parse(matches);
             let code_path = CODE_PATH.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
-            let signing_key = SIGNING_KEY_OPT.parse(matches);
-            let signer = SIGNER.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
-                signing_key,
-                signer,
             }
         }
 
@@ -1171,25 +1163,6 @@ pub mod args {
                      will be passed to the transaction code when it's \
                      executed.",
                 ))
-                .arg(
-                    SIGNING_KEY_OPT
-                        .def()
-                        .about(
-                            "Sign the transaction with the key for the given \
-                             public key, public key hash or alias from your \
-                             wallet.",
-                        )
-                        .conflicts_with(SIGNER.name),
-                )
-                .arg(
-                    SIGNER
-                        .def()
-                        .about(
-                            "Sign the transaction with the keypair of the \
-                             public key of the given address.",
-                        )
-                        .conflicts_with(SIGNING_KEY_OPT.name),
-                )
         }
     }
 
@@ -1918,6 +1891,10 @@ pub mod args {
         /// If any new account is initialized by the tx, use the given alias to
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
+        /// Sign the tx with the key for the given alias from your wallet
+        pub signing_key: Option<WalletKeypair>,
+        /// Sign the tx with the keypair of the public key of the given address
+        pub signer: Option<WalletAddress>,
     }
 
     impl Args for Tx {
@@ -1934,16 +1911,39 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
+            .arg(
+                SIGNING_KEY_OPT
+                    .def()
+                    .about(
+                        "Sign the transaction with the key for the given \
+                         public key, public key hash or alias from your \
+                         wallet.",
+                    )
+                    .conflicts_with(SIGNER.name),
+            )
+            .arg(
+                SIGNER
+                    .def()
+                    .about(
+                        "Sign the transaction with the keypair of the public \
+                         key of the given address.",
+                    )
+                    .conflicts_with(SIGNING_KEY_OPT.name),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
+            let signing_key = SIGNING_KEY_OPT.parse(matches);
+            let signer = SIGNER.parse(matches);
             Self {
                 dry_run,
                 ledger_address,
                 initialized_account_alias,
+                signing_key,
+                signer,
             }
         }
     }
