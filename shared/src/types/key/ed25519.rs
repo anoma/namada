@@ -211,6 +211,14 @@ impl Keypair {
     }
 }
 
+impl PublicKey {
+    /// Construct a PublicKey from bytes
+    pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, SignatureError> {
+        let pk = ed25519_dalek::PublicKey::from_bytes(bytes)?;
+        Ok(pk.into())
+    }
+}
+
 impl<T> PartialEq for Signed<T>
 where
     T: BorshSerialize + BorshDeserialize + PartialEq,
