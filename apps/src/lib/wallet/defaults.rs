@@ -63,38 +63,38 @@ pub fn addresses() -> Vec<(Alias, Address)> {
 /// An established user address for testing & development
 #[cfg(feature = "dev")]
 pub fn albert_address() -> Address {
-    Address::decode("a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx").expect("The token address decoding shouldn't fail")
+    Address::decode("atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4").expect("The token address decoding shouldn't fail")
 }
 
 /// An established user address for testing & development
 #[cfg(feature = "dev")]
 pub fn bertha_address() -> Address {
-    Address::decode("a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9").expect("The token address decoding shouldn't fail")
+    Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw").expect("The token address decoding shouldn't fail")
 }
 
 /// An established user address for testing & development
 #[cfg(feature = "dev")]
 pub fn christel_address() -> Address {
-    Address::decode("a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s").expect("The token address decoding shouldn't fail")
+    Address::decode("atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p").expect("The token address decoding shouldn't fail")
 }
 
 /// An implicit user address for testing & development
 #[cfg(feature = "dev")]
 pub fn daewon_address() -> Address {
-    // "a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz"
+    // "atest1d9khqw36xprrzdpk89rrws69g4z5vd6pgv65gvjrgeqnv3pcg4zns335xymry335gcerqs3etd0xfa"
     (&daewon_keypair().public).into()
 }
 
 /// An established validator address for testing & development
 #[cfg(feature = "dev")]
 pub fn validator_address() -> Address {
-    Address::decode("a1qq5qqqqqgfqnsd6pxse5zdj9g5crzsf5x4zyzv6yxerr2d2rxpryzwp5g5m5zvfjxv6ygsekjmraj0").expect("The token address decoding shouldn't fail")
+    Address::decode("atest1v4ehgw36ggcnsdee8qerswph8y6ry3p5xgunvve3xaqngd3kxc6nqwz9gseyydzzg5unys3ht2n48q").expect("The token address decoding shouldn't fail")
 }
 
 /// An established matchmaker address for testing & development
 #[cfg(feature = "dev")]
 pub fn matchmaker_address() -> Address {
-    Address::decode("a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td").expect("The address decoding shouldn't fail")
+    Address::decode("atest1v4ehgw36x5mnswphx565gv2yxdprzvf5gdp523jpxy6rvv6zxaznzsejxeznzseh8pp5ywz93xwala").expect("The address decoding shouldn't fail")
 }
 
 #[cfg(feature = "dev")]
@@ -179,19 +179,4 @@ pub fn matchmaker_keypair() -> Keypair {
         104,
     ];
     Keypair::from_bytes(&bytes).unwrap()
-}
-
-#[cfg(feature = "dev")]
-pub fn key_of(name: impl AsRef<str>) -> Keypair {
-    match name.as_ref() {
-        "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx" => albert_keypair(),
-        "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9" => bertha_keypair(),
-        "a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s" => christel_keypair(),
-        "a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz" => daewon_keypair(),
-        "a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td" => matchmaker_keypair(),
-        "a1qq5qqqqqgfqnsd6pxse5zdj9g5crzsf5x4zyzv6yxerr2d2rxpryzwp5g5m5zvfjxv6ygsekjmraj0" => validator_keypair(),
-        other => {
-            panic!("Dont' have keys for: {}", other)
-        }
-    }
 }
