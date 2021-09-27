@@ -17,8 +17,8 @@ pub mod wrapper_tx {
     use crate::types::key::ed25519::{Keypair, PublicKey};
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
-    use crate::types::transaction::{hash_tx, Hash};
     use crate::types::transaction::encrypted::EncryptedTx;
+    use crate::types::transaction::{hash_tx, Hash};
 
     /// TODO: Determine a sane number for this
     const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
@@ -29,7 +29,7 @@ pub mod wrapper_tx {
     #[derive(Error, Debug, PartialEq)]
     pub enum WrapperTxErr {
         #[error(
-        "The hash of the decrypted tx does not match the hash commitment"
+            "The hash of the decrypted tx does not match the hash commitment"
         )]
         DecryptedHash,
         #[error("The decryption did not produce a valid Tx")]
@@ -41,7 +41,7 @@ pub mod wrapper_tx {
         #[error("{0}")]
         SigError(String),
         #[error(
-        "Attempted to sign WrapperTx with keypair whose public key \
+            "Attempted to sign WrapperTx with keypair whose public key \
              differs from that in the WrapperTx"
         )]
         InvalidKeyPair,
@@ -49,13 +49,13 @@ pub mod wrapper_tx {
 
     /// A fee is an amount of a specified token
     #[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
+        Debug,
+        Clone,
+        PartialEq,
+        BorshSerialize,
+        BorshDeserialize,
+        Serialize,
+        Deserialize,
     )]
     pub struct Fee {
         /// amount of the fee
@@ -91,7 +91,7 @@ pub mod wrapper_tx {
                 // compute refund
                 u64::from(self) - used_gas
             }
-                .into()
+            .into()
         }
     }
 
@@ -159,7 +159,7 @@ pub mod wrapper_tx {
     /// as some non-encrypted metadata for inclusion
     /// and / or verification purposes
     #[derive(
-    Debug, Clone, Hash, BorshSerialize, BorshDeserialize, Serialize, Deserialize, PartialEq,
+        Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
     )]
     pub struct WrapperTx {
         /// The fee to be payed for including the tx
@@ -246,7 +246,7 @@ pub mod wrapper_tx {
                 vec![],
                 Some(self.try_to_vec().expect("Could not serialize WrapperTx")),
             )
-                .sign(keypair))
+            .sign(keypair))
         }
     }
 
@@ -416,14 +416,15 @@ pub mod wrapper_tx {
                 0.into(),
                 tx,
             )
-                .sign(&keypair)
-                .expect("Test failed");
+            .sign(&keypair)
+            .expect("Test failed");
 
             // we now try to alter the inner tx maliciously
             let mut wrapper = WrapperTx::try_from(&Tx::from(
-                crate::types::transaction::process_tx(tx.clone()).expect("Test failed"),
+                crate::types::transaction::process_tx(tx.clone())
+                    .expect("Test failed"),
             ))
-                .expect("Test failed");
+            .expect("Test failed");
             let mut signed_tx_data =
                 SignedTxData::try_from_slice(&tx.data.unwrap()[..])
                     .expect("Test failed");
@@ -457,7 +458,8 @@ pub mod wrapper_tx {
             verify_tx_sig(&keypair.public, &tx, &signed_tx_data.sig)
                 .expect_err("Test failed");
             // check that the try from method also fails
-            let err = crate::types::transaction::process_tx(tx).expect_err("Test failed");
+            let err = crate::types::transaction::process_tx(tx)
+                .expect_err("Test failed");
             assert_eq!(
                 err,
                 WrapperTxErr::SigError(

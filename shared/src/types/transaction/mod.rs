@@ -1,10 +1,13 @@
 //! Types that are used in transactions.
-pub mod wrapper;
+
+/// txs that contain decrypted payloads or assertions of
+/// non-decryptability
 pub mod decrypted;
 mod encrypted;
 pub mod pos;
+/// wrapper txs with encrypted payloads
+pub mod wrapper;
 
-use std::convert::TryFrom;
 use std::fmt::{self, Display};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -13,22 +16,22 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
-use crate::proto::Tx;
 use crate::types::address::Address;
-use crate::types::key::ed25519::{PublicKey, SignedTxData, verify_tx_sig};
-
+use crate::types::key::ed25519::PublicKey;
 
 #[derive(
-  Clone,
-  Debug,
-  Hash,
-  PartialEq,
-  BorshSerialize,
-  BorshDeserialize,
-  Serialize,
-  Deserialize,
+    Clone,
+    Debug,
+    Hash,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
-pub struct Hash([u8; 32]);
+/// A hash, typically a sha-2 hash of a tx
+pub struct Hash(pub [u8; 32]);
 
 impl Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -49,13 +52,13 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 
 /// A tx data type to update an account's validity predicate
 #[derive(
-  Debug,
-  Clone,
-  PartialEq,
-  BorshSerialize,
-  BorshDeserialize,
-  Serialize,
-  Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 pub struct UpdateVp {
     /// An address of the account
@@ -66,13 +69,13 @@ pub struct UpdateVp {
 
 /// A tx data type to initialize a new established account
 #[derive(
-  Debug,
-  Clone,
-  PartialEq,
-  BorshSerialize,
-  BorshDeserialize,
-  Serialize,
-  Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 pub struct InitAccount {
     /// Public key to be written into the account's storage. This can be used
@@ -83,15 +86,21 @@ pub struct InitAccount {
     pub vp_code: Vec<u8>,
 }
 
-
-
+/// Module that includes helper functions for classifying
+/// different types of transactions that the ledger
+/// must support as well as conversion functions
+/// between them.
 #[cfg(feature = "ferveo-tpke")]
 pub mod tx_types {
+    use std::convert::TryFrom;
+
     use super::*;
+    use crate::proto::Tx;
+    use crate::types::key::ed25519::{verify_tx_sig, SignedTxData};
 
     /// Struct that classifies that kind of Tx
     /// based on the contents of its data.
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, Debug)]
     pub enum TxType {
         /// An ordinary tx
         Raw(Tx),
@@ -111,14 +120,21 @@ pub mod tx_types {
         }
     }
 
-
     /// Used to determine the type of a Tx
     impl From<Tx> for TxType {
         fn from(tx: Tx) -> Self {
             if let Some(ref data) = tx.data {
-                if let Ok(wrapper) =  <WrapperTx as BorshDeserialize>::deserialize(&mut data.as_ref()) {
+                if let Ok(wrapper) =
+                    <WrapperTx as BorshDeserialize>::deserialize(
+                        &mut data.as_ref(),
+                    )
+                {
                     TxType::Wrapper(wrapper)
-                } else if let Ok(decrypted) = <DecryptedTx as BorshDeserialize>::deserialize(&mut data.as_ref()) {
+                } else if let Ok(decrypted) =
+                    <DecryptedTx as BorshDeserialize>::deserialize(
+                        &mut data.as_ref(),
+                    )
+                {
                     TxType::Decrypted(decrypted)
                 } else {
                     TxType::Raw(tx)
@@ -131,6 +147,7 @@ pub mod tx_types {
 
     impl<'a> TryFrom<&'a [u8]> for TxType {
         type Error = <Tx as TryFrom<&'a [u8]>>::Error;
+
         fn try_from(tx_bytes: &[u8]) -> Result<Self, Self::Error> {
             Ok(TxType::from(Tx::try_from(tx_bytes)?))
         }
@@ -156,33 +173,38 @@ pub mod tx_types {
     /// data if valid and return it wrapped in a enum variant
     /// indicating it is a wrapper. Otherwise, an error is
     /// returned indicating the signature was not valid
-    pub fn process_tx(mut tx: Tx) -> Result<TxType, WrapperTxErr> {
+    pub fn process_tx(tx: Tx) -> Result<TxType, WrapperTxErr> {
         if let Some(Ok(SignedTxData {
-                           data: Some(data),
-                           ref sig,
-                       })) = tx
+            data: Some(data),
+            ref sig,
+        })) = tx
             .data
             .as_ref()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
-            match TxType::from(Tx{ code: vec![], data: Some(data), timestamp: tx.timestamp }) {
+            match TxType::from(Tx {
+                code: vec![],
+                data: Some(data),
+                timestamp: tx.timestamp,
+            }) {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
-                    verify_tx_sig(&wrapper.pk, &tx, sig)
-                        .map_err(|err| WrapperTxErr::SigError(err.to_string()))?;
+                    verify_tx_sig(&wrapper.pk, &tx, sig).map_err(|err| {
+                        WrapperTxErr::SigError(err.to_string())
+                    })?;
                     Ok(TxType::Wrapper(wrapper))
                 }
                 // we extract the signed data, but don't check the signature
                 decrypted @ TxType::Decrypted(_) => Ok(decrypted),
                 // return as is
-                TxType::Raw(_) => Ok(TxType::Raw(tx))
+                TxType::Raw(_) => Ok(TxType::Raw(tx)),
             }
         } else {
             match TxType::from(tx) {
                 // we only accept signed wrappers
                 TxType::Wrapper(_) => Err(WrapperTxErr::Unsigned),
                 // return as is
-                val @ _ => Ok(val),
+                val => Ok(val),
             }
         }
     }
@@ -191,7 +213,16 @@ pub mod tx_types {
     mod test_process_tx {
         use super::*;
         use crate::types::address::xan;
+        use crate::types::key::ed25519::Keypair;
         use crate::types::storage::Epoch;
+
+        fn gen_keypair() -> Keypair {
+            use rand::prelude::ThreadRng;
+            use rand::thread_rng;
+
+            let mut rng: ThreadRng = thread_rng();
+            Keypair::generate(&mut rng)
+        }
 
         /// Test that process_tx correctly identifies a raw tx with no
         /// data and returns an identical copy
@@ -228,7 +259,7 @@ pub mod tx_types {
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             )
-                .sign(&gen_keypair());
+            .sign(&gen_keypair());
 
             match process_tx(tx.clone()).expect("Test failed") {
                 TxType::Raw(raw) => assert_eq!(tx, raw),

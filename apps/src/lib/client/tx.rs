@@ -319,8 +319,9 @@ pub async fn broadcast_tx(
     //
     // Note that the `applied.hash` key comes from a custom event
     // created by the shell
+    let tx_hash = hash_tx(&tx_bytes);
     let query = Query::from(EventType::NewBlock)
-        .and_eq("accepted.hash", hash_tx(&tx_bytes).to_string());
+        .and_eq("accepted.hash", tx_hash.to_string());
     client.subscribe(query)?;
 
     let response = client
@@ -330,19 +331,26 @@ pub async fn broadcast_tx(
 
     let parsed = if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
-        let parsed = TxResponse::from((client.receive_response()?, TmEventType::Accepted));
+        let parsed = TxResponse::from((
+            client.receive_response()?,
+            TmEventType::Accepted,
+        ));
         println!(
             "Transaction accepted with result: {}",
             serde_json::to_string_pretty(&parsed).unwrap()
         );
 
-        // The transaction is now on chain. We wait for it to be decrypted and applied
-        if parsed.code == 0 {
+        // The transaction is now on chain. We wait for it to be decrypted and
+        // applied
+        if parsed.code == 0.to_string() {
             client.unsubscribe()?;
             let query = Query::from(EventType::NewBlock)
-                .and_eq("applied.hash", hash_tx(&tx_bytes).to_string());
+                .and_eq("applied.hash", tx_hash.to_string());
             client.subscribe(query)?;
-            let parsed = TxResponse::from((client.receive_response()?, TmEventType::Applied));
+            let parsed = TxResponse::from((
+                client.receive_response()?,
+                TmEventType::Applied,
+            ));
             println!(
                 "Transaction applied with result: {}",
                 serde_json::to_string_pretty(&parsed).unwrap()
@@ -370,16 +378,33 @@ pub struct TxResponse {
 }
 
 impl From<(serde_json::Value, TmEventType)> for TxResponse {
-    fn from((json, event_type) : (serde_json::Value, TmEventType)) -> Self {
+    fn from((json, event_type): (serde_json::Value, TmEventType)) -> Self {
         let mut selector = jsonpath::selector(&json);
-        let info = selector(&format!("$.events.['{}.info'][0]", event_type.to_string())).unwrap();
-        let height = selector(&format!("$.events.['{}.height'][0]", event_type.to_string())).unwrap();
-        let hash = selector(&format!("$.events.['{}.hash'][0]", event_type.to_string()).unwrap();
-        let code = selector(&format!("$.events.['{}.code'][0]", event_type.to_string()).unwrap();
-        let gas_used: String = match selector("$.events.['applied.gas_used'][0]") {
-            Ok(gas) => serde_json::from_value(gas[0].clone()).unwrap(),
-            _ => "0".into()
-        };
+        let info = selector(&format!(
+            "$.events.['{}.info'][0]",
+            event_type.to_string()
+        ))
+        .unwrap();
+        let height = selector(&format!(
+            "$.events.['{}.height'][0]",
+            event_type.to_string()
+        ))
+        .unwrap();
+        let hash = selector(&format!(
+            "$.events.['{}.hash'][0]",
+            event_type.to_string()
+        ))
+        .unwrap();
+        let code = selector(&format!(
+            "$.events.['{}.code'][0]",
+            event_type.to_string()
+        ))
+        .unwrap();
+        let gas_used: String =
+            match selector("$.events.['applied.gas_used'][0]") {
+                Ok(gas) => serde_json::from_value(gas[0].clone()).unwrap(),
+                _ => "0".into(),
+            };
         let initialized_accounts =
             selector("$.events.['applied.initialized_accounts'][0]");
         let initialized_accounts = match initialized_accounts {

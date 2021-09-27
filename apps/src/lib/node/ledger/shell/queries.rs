@@ -1,21 +1,20 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
+
 use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::PosParams;
-use anoma::proto::Tx;
 use anoma::types::address::Address;
-use anoma::types::storage::{Key, BlockHeight};
-use anoma::types::token::Amount;
-use anoma::types::transaction::{Hash, hash_tx, WrapperTx, TxType};
+use anoma::types::storage::{BlockHeight, Key};
+use anoma::types::token::{self, Amount};
+use anoma::types::transaction::{hash_tx, Hash, TxType, WrapperTx};
 use borsh::{BorshDeserialize, BorshSerialize};
+use tendermint::block::Height;
 use tendermint_proto::types::EvidenceParams;
-use tendermint_rpc::{HttpClient, Client};
+use tendermint_rpc::{Client, HttpClient};
 
-use crate::node::ledger::{response, storage};
 use crate::node::ledger::rpc::PrefixValue;
-use tendermint::abci::Transaction;
-
+use crate::node::ledger::{response, storage};
 
 /// We use the default socket for tendermint to listen to RPC queries
 const TENDERMINT_RPC_ADDRESS: &str = "tcp://0.0.0.0:26657";
@@ -28,21 +27,21 @@ pub fn get_balance(
     owner: &Address,
 ) -> std::result::Result<Amount, String> {
     let query_resp =
-        read_storage_value(&storage,&token::balance_key(token, owner));
+        read_storage_value(storage, &token::balance_key(token, owner));
     if query_resp.code != 0 {
         Err("Unable to read balance of the given address".into())
     } else {
-        BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
-            |_| {
-                "Unable to deserialize the balance of the given address"
-                    .into()
-            },
-        )
+        BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(|_| {
+            "Unable to deserialize the balance of the given address".into()
+        })
     }
 }
 
 /// Query to read a value from storage
-pub fn read_storage_value(storage: &storage::PersistentStorage, key: &Key) -> response::Query {
+pub fn read_storage_value(
+    storage: &storage::PersistentStorage,
+    key: &Key,
+) -> response::Query {
     match storage.read(key) {
         Ok((Some(value), _gas)) => response::Query {
             value,
@@ -64,7 +63,10 @@ pub fn read_storage_value(storage: &storage::PersistentStorage, key: &Key) -> re
 /// Query to read a range of values from storage with a matching prefix. The
 /// value in successful response is a [`Vec<PrefixValue>`] encoded with
 /// [`BorshSerialize`].
-pub fn read_storage_prefix(storage: &storage::PersistentStorage, key: &Key) -> response::Query {
+pub fn read_storage_prefix(
+    storage: &storage::PersistentStorage,
+    key: &Key,
+) -> response::Query {
     let (iter, _gas) = storage.iter_prefix(key);
     let mut iter = iter.peekable();
     if iter.peek().is_none() {
@@ -93,10 +95,7 @@ pub fn read_storage_prefix(storage: &storage::PersistentStorage, key: &Key) -> r
             }
             Err(err) => response::Query {
                 code: 1,
-                info: format!(
-                    "Error parsing a storage key {}: {}",
-                    key, err
-                ),
+                info: format!("Error parsing a storage key {}: {}", key, err),
                 ..Default::default()
             },
         }
@@ -115,11 +114,10 @@ pub fn get_evidence_params(
             * len_before_unbonded;
     let min_duration_secs =
         protocol_params.epoch_duration.min_duration.0 as i64;
-    let max_age_duration =
-        Some(tendermint_proto::google::protobuf::Duration {
-            seconds: min_duration_secs * len_before_unbonded,
-            nanos: 0,
-        });
+    let max_age_duration = Some(tendermint_proto::google::protobuf::Duration {
+        seconds: min_duration_secs * len_before_unbonded,
+        nanos: 0,
+    });
     EvidenceParams {
         max_age_num_blocks,
         max_age_duration,
@@ -127,6 +125,7 @@ pub fn get_evidence_params(
     }
 }
 
+#[derive(Debug)]
 /// A struct to hold a extracted wrapper and
 /// the hash of the Tx that submitted it
 pub struct WrappedTx {
@@ -137,27 +136,34 @@ pub struct WrappedTx {
 /// Query tendermint to find the encrypted tx included in the
 /// last committed block
 pub fn restore_wrapper_txs(height: &BlockHeight) -> HashMap<Hash, WrappedTx> {
-    let client = HttpClient::new(TENDERMINT_RPC_ADDRESS).unwrap();
-    client
-        .block(height)
-        .await
-        .unwrap()
-        .block
-        .data()
-        .iter()
-        .filter_map(|Transaction(tx) |
-            match TxType::try_from(tx.as_ref()).unwrap() {
-                TxType::Wrapper(wrapper) => {
-                    Some((
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async move {
+        let client = HttpClient::new(TENDERMINT_RPC_ADDRESS).unwrap();
+        let height =
+            Height::try_from(height.0).expect("Unexpected block height");
+        client
+            .block(height)
+            .await
+            .unwrap()
+            .block
+            .data()
+            .iter()
+            .filter_map(|tx| {
+                let tx_bytes = Vec::<u8>::from(tx.clone());
+                match TxType::try_from(tx_bytes.as_slice()).unwrap() {
+                    TxType::Wrapper(wrapper) => Some((
                         wrapper.tx_hash.clone(),
                         WrappedTx {
                             wrapper,
-                            hash: hash_tx(&tx),
-                        }
-                    ))
+                            hash: hash_tx(&tx_bytes),
+                        },
+                    )),
+                    _ => None,
                 }
-                _ => None,
-            }
-        )
-        .collect()
+            })
+            .collect()
+    })
 }

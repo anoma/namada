@@ -10,12 +10,10 @@ use tower::Service;
 use tower_abci::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
-use super::abcipp_shim_types::shim::{
-    request, Error, Request, Response, TxBytes,
+use super::abcipp_shim_types::shim::{request, Error, Request, Response};
+use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
+    BeginBlock, ProcessedTx,
 };
-use crate::node::ledger::shims::abcipp_shim_types::shim::request::{ProcessedTx, BeginBlock};
-use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-
 
 /// The shim wraps the shell, which implements ABCI++
 /// The shim makes a crude translation between the ABCI
@@ -57,28 +55,30 @@ impl Service<Req> for AbcippShim {
         let rsp = match req {
             Req::BeginBlock(block) => {
                 // we save this data to be forwarded to finalize later
-                self.begin_block_request = Some(block.try_into()?);
+                self.begin_block_request =
+                    Some(block.try_into().unwrap_or_else(|_| {
+                        panic!("Could not read begin block request");
+                    }));
                 Ok(Resp::BeginBlock(Default::default()))
             }
             Req::DeliverTx(deliver_tx) => {
                 // We call [`process_proposal`] to report back the validity
                 // of the tx to tendermint
                 self.service
-                    .call(Request::ProcessProposal(deliver_tx.tx.clone().into()))
+                    .call(Request::ProcessProposal(
+                        deliver_tx.tx.clone().into(),
+                    ))
                     .map_err(Error::from)
                     .and_then(|res| match res {
                         Response::ProcessProposal(resp) => {
-                            self.block_txs.push(
-                                ProcessedTx {
-                                    tx: deliver_tx.tx,
-                                    result: resp.result
-                                }
-                            );
-                            Ok(())
+                            self.block_txs.push(ProcessedTx {
+                                tx: deliver_tx.tx,
+                                result: resp.result,
+                            });
+                            Ok(Resp::DeliverTx(Default::default()))
                         }
                         _ => unreachable!(),
-                    });
-                Ok(Resp::DeliverTx(Default::default()))
+                    })
             }
             Req::EndBlock(end) => {
                 BlockHeight::try_from(end.height).unwrap_or_else(|_| {
@@ -86,12 +86,14 @@ impl Service<Req> for AbcippShim {
                 });
                 let mut txs = vec![];
                 std::mem::swap(&mut txs, &mut self.block_txs);
-                let begin_block_request = self.begin_block_request.take().unwrap();
+                let begin_block_request =
+                    self.begin_block_request.take().unwrap();
                 self.service
                     .call(Request::FinalizeBlock(request::FinalizeBlock {
                         hash: begin_block_request.hash,
-                        header: begin_block_request.header.expect("Missing block's header"),
-                        byzantine_validators: begin_block_request.byzantine_validators,
+                        header: begin_block_request.header,
+                        byzantine_validators: begin_block_request
+                            .byzantine_validators,
                         txs,
                     }))
                     .map_err(Error::from)

@@ -7,7 +7,6 @@
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod queries;
 
-use std::cmp::max;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::mem;
@@ -15,44 +14,41 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anoma::ledger::gas::BlockGasMeter;
-use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::anoma_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
 use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
-use anoma::ledger::pos::PosParams;
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::address::Address;
-use anoma::types::storage::{BlockHash, BlockHeight, Key};
+use anoma::types::storage::{BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::token::Amount;
-use anoma::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve, Hash, PairingEngine, process_tx, TxType, WrapperTx, verify_decrypted, hash_tx, verify_not_decryptable};
+use anoma::types::transaction::{
+    hash_tx, process_tx, verify_not_decryptable, AffineCurve, DecryptedTx,
+    EllipticCurve, Hash, PairingEngine, TxType,
+};
 use anoma::types::{address, key, token};
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshSerialize;
 use itertools::Itertools;
-use tendermint::block::Header;
 use tendermint_proto::abci::{
-    self, ValidatorUpdate, Evidence, RequestPrepareProposal,
-    ResponsePrepareProposal
+    self, Evidence, RequestPrepareProposal, ResponsePrepareProposal,
+    ValidatorUpdate,
 };
-use tendermint_proto::types::{
-    ConsensusParams, EvidenceParams,
-};
+use tendermint_proto::types::ConsensusParams;
 use thiserror::Error;
 use tower_abci::{request, response};
 
 use super::rpc;
-use crate::{config, wallet, Hash, hash_tx};
 use crate::config::genesis;
-use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::node::ledger::events::{Event, EventType};
-use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::shell::queries::WrappedTx;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
-use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
+use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+use crate::node::ledger::{protocol, storage, tendermint_node};
+use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -97,7 +93,6 @@ pub enum MempoolTxType {
 pub struct Shell {
     /// The persistent storage
     pub(super) storage: storage::PersistentStorage,
-    ///
     /// Gas meter for the current block
     gas_meter: BlockGasMeter,
     /// Write log for the current block
@@ -121,21 +116,21 @@ impl Shell {
                 tracing::error!("Cannot load the last state from the DB {}", e);
             })
             .expect("PersistentStorage cannot be initialized");
-
+        let wrapped_txs = queries::restore_wrapper_txs(&storage.last_height);
         Self {
             storage,
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
-            wrapped_txs: queries::restore_wrapper_txs(&storage.last_height),
+            wrapped_txs,
             byzantine_validators: vec![],
         }
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
-    pub fn last_state(storage: &storage::PersistentStorage,) -> response::Info {
+    pub fn last_state(&self) -> response::Info {
         let mut response = response::Info::default();
-        let result = storage.get_state();
+        let result = self.storage.get_state();
         match result {
             Some((root, height)) => {
                 tracing::info!(
@@ -325,16 +320,16 @@ impl Shell {
         );
         ibc::init_genesis_storage(&mut self.storage);
 
-        let evidence_params =
-            queries::get_evidence_params( &genesis.parameters, &genesis.pos_params);
+        let evidence_params = queries::get_evidence_params(
+            &genesis.parameters,
+            &genesis.pos_params,
+        );
         response.consensus_params = Some(ConsensusParams {
             evidence: Some(evidence_params),
             ..response.consensus_params.unwrap_or_default()
         });
         Ok(response)
     }
-
-
 
     /// Uses `path` in the query to forward the request to the
     /// right query method and returns the result (which may be
@@ -384,29 +379,35 @@ impl Shell {
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
         // filter in half of the new txs from Tendermint, only keeping wrappers
-        let mut txs: Vec<TxBytes> = req.block_data
-            .iter()
-            .filter_map(| tx | match TxType::try_from(tx_bytes).unwrap() {
-                    TxType::Wrapper(_) => Some(tx),
-                    _ => None
-                })
-            .collect()
-            .resize(req.block_data / 2);
+        let number_of_new_txs = req.block_data.len() / 2;
+        let mut txs: Vec<TxBytes> = req
+            .block_data
+            .into_iter()
+            .take(number_of_new_txs)
+            .filter(|tx| {
+                matches!(
+                    TxType::try_from(tx.as_slice()).unwrap(),
+                    TxType::Wrapper(_)
+                )
+            })
+            .collect();
 
         // decrypt the wrapper txs included in the previous block
-        let mut decrypted_txs = self.wrapped_txs
+        let mut decrypted_txs = self
+            .wrapped_txs
             .iter()
-            .map(|(_, tx)| Tx::from(match tx.wrapper.decrypt(privkey) {
-                Ok(tx) => DecryptedTx::Decrypted(tx),
-                _ => DecryptedTx::Undecryptable(tx.wrapper.clone())
-            }))
+            .map(|(_, tx)| {
+                Tx::from(match tx.wrapper.decrypt(privkey) {
+                    Ok(tx) => DecryptedTx::Decrypted(tx),
+                    _ => DecryptedTx::Undecryptable(tx.wrapper.clone()),
+                })
+                .to_bytes()
+            })
             .collect();
 
         txs.append(&mut decrypted_txs);
 
-        ResponsePrepareProposal {
-            block_data: txs
-        }
+        ResponsePrepareProposal { block_data: txs }
     }
 
     /// Apply PoS slashes from the evidence
@@ -550,42 +551,46 @@ impl Shell {
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        match process_tx(tx.unwrap()) {
+        match process_tx(tx) {
             // This occurs if the wrapper tx signature is invalid
             Err(err) => TxResult::from(err),
             Ok(result) => match result {
                 // If it is a raw transaction, we do no further validation
                 TxType::Raw(_) => TxResult {
                     code: 2,
-                    info: "Transaction rejected: Non-encrypted transactions are not supported"
+                    info: "Transaction rejected: Non-encrypted transactions \
+                           are not supported"
                         .into(),
                 },
                 TxType::Decrypted(tx) => {
-                    match self.wrapped_txs.get(&hash_tx(&tx.to_bytes().unwrap())){
+                    match self.wrapped_txs.get(&hash_tx(&tx.to_bytes())) {
                         Some(wrapped) => {
-                            if verify_not_decryptable(&decrypted, privkey) {
+                            if verify_not_decryptable(&tx, privkey) {
                                 TxResult {
                                     code: 0,
-                                    info: "Process Proposal accepted this transaction".into(),
+                                    info: "Process Proposal accepted this \
+                                           transaction"
+                                        .into(),
                                 }
                             } else {
                                 TxResult {
                                     code: 1,
                                     info: format!(
-                                        "The encrypted payload of tx {} was incorrectly marked as \
-                                        un-decryptable",
+                                        "The encrypted payload of tx {} was \
+                                         incorrectly marked as un-decryptable",
                                         wrapped.hash
-                                    )
+                                    ),
                                 }
                             }
-                        },
+                        }
                         None => TxResult {
                             code: 1,
                             info: format!(
-                                "No wrapper tx found whose encrypted payload commitment matched {}",
-                                hash_tx(&tx.to_bytes().unwrap())
-                            )
-                        }
+                                "No wrapper tx found whose encrypted payload \
+                                 commitment matched {}",
+                                hash_tx(&tx.to_bytes())
+                            ),
+                        },
                     }
                 }
                 TxType::Wrapper(tx) => {
@@ -594,8 +599,10 @@ impl Shell {
                         TxResult {
                             code: 1,
                             info: format!(
-                                "The ciphertext of the wrapped tx {} is invalid",
-                                hash_tx(&req.tx))
+                                "The ciphertext of the wrapped tx {} is \
+                                 invalid",
+                                hash_tx(&req.tx)
+                            ),
                         }
                     } else {
                         // check that the fee payer has sufficient balance
@@ -604,27 +611,30 @@ impl Shell {
                             &tx.fee.token,
                             &tx.fee_payer(),
                         ) {
-                            Ok(balance) if tx.fee.amount <= balance =>
-                            shim::response::TxResult {
-                                code: 0,
-                                info: "Process proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            },
+                            Ok(balance) if tx.fee.amount <= balance => {
+                                shim::response::TxResult {
+                                    code: 0,
+                                    info: "Process proposal accepted this \
+                                           transaction"
+                                        .into(),
+                                }
+                            }
                             Ok(_) => shim::response::TxResult {
                                 code: 1,
                                 info: "The address given does not have \
                                        sufficient balance to pay fee"
                                     .into(),
                             },
-                            Err(err) => shim::response::TxResult { code: 1, info: err },
+                            Err(err) => {
+                                shim::response::TxResult { code: 1, info: err }
+                            }
                         }
                     }
                 }
             },
-        }.into()
+        }
+        .into()
     }
-
 
     pub fn revert_proposal(
         &mut self,
@@ -655,7 +665,7 @@ impl Shell {
             .set_header(req.header)
             .expect("Setting a header shouldn't fail");
 
-        self.byzantine_validators = byzantine_validators;
+        self.byzantine_validators = req.byzantine_validators;
 
         let header = self
             .storage
@@ -677,31 +687,32 @@ impl Shell {
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
             if tx.result.code != 0 {
-                let mut tx_result = Event::new_tx_event(EventType::Accepted, &tx.tx, req.height);
-                tx_result["code"] = tx.result.code.into();
-                tx_result["info"] = format!("Tx rejected: {}", &tx.result.info).into();
+                let mut tx_result =
+                    Event::new_tx_event(EventType::Accepted, &tx.tx, height.0);
+                tx_result["code"] = tx.result.code.to_string();
+                tx_result["info"] = format!("Tx rejected: {}", &tx.result.info);
                 response.events.push(tx_result.into());
                 continue;
             }
             // This has already been verified as safe by [`process_proposal`]
             let tx_length = tx.tx.len();
-            let processed_tx =  process_tx(Tx::try_from(&tx.tx).unwrap()).unwrap();
+            let processed_tx =
+                process_tx(Tx::try_from(&tx.tx as &[u8]).unwrap()).unwrap();
             let mut tx_result = match &processed_tx {
                 TxType::Wrapper(wrapper) => {
                     self.wrapped_txs.insert(
                         wrapper.tx_hash.clone(),
-                        WrappedTx{
+                        WrappedTx {
                             wrapper: wrapper.clone(),
-                            hash: hash_tx(&tx.tx)
-                        });
-                    Event::new_tx_event(EventType::Accepted, &tx.tx, req.height)
-                },
-                TxType::Decrypted(decrypted) => {
-                    self.wrapped_txs.remove(
-                        &hash_tx(&decrypted.to_bytes().unwrap())
+                            hash: hash_tx(&tx.tx),
+                        },
                     );
-                    Event::new_tx_event(EventType::Applied, &tx.tx, req.height)
-                },
+                    Event::new_tx_event(EventType::Accepted, &tx.tx, height.0)
+                }
+                TxType::Decrypted(decrypted) => {
+                    self.wrapped_txs.remove(&hash_tx(&decrypted.to_bytes()));
+                    Event::new_tx_event(EventType::Applied, &tx.tx, height.0)
+                }
                 TxType::Raw(_) => unreachable!(),
             };
 
@@ -870,7 +881,7 @@ impl Shell {
         let mut response = response::Query::default();
         let mut gas_meter = BlockGasMeter::default();
         let mut write_log = WriteLog::default();
-        match Tx::try_from(&tx_bytes) {
+        match Tx::try_from(tx_bytes) {
             Ok(tx) => {
                 let tx = TxType::from(tx);
                 match protocol::apply_tx(
@@ -880,7 +891,7 @@ impl Shell {
                     &mut write_log,
                     &self.storage,
                 )
-                    .map_err(Error::TxApply)
+                .map_err(Error::TxApply)
                 {
                     Ok(result) => response.info = result.to_string(),
                     Err(error) => {
@@ -896,7 +907,5 @@ impl Shell {
                 response
             }
         }
-
     }
-
 }

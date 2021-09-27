@@ -8,13 +8,14 @@ pub mod encrypted_tx {
     use ark_ec::PairingEngine;
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use borsh::{BorshDeserialize, BorshSerialize};
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
     use tpke::{encrypt, Ciphertext};
+
     use crate::types::transaction::EllipticCurve;
 
     /// We use a specific choice of two groups and bilinear pairing
     /// We use a wrapper type to add traits
-    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+    #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(from = "SerializedCiphertext")]
     #[serde(into = "SerializedCiphertext")]
     pub struct EncryptedTx(pub Ciphertext<EllipticCurve>);
@@ -106,6 +107,8 @@ pub mod encrypted_tx {
 
     #[cfg(test)]
     mod test_encrypted_tx {
+        use ark_ec::AffineCurve;
+
         use super::*;
 
         /// Test that encryption and decryption are inverses.

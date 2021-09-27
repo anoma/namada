@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 
-use anoma::types::transaction::{Hash, hash_tx as hash_tx_bytes};
+use anoma::types::transaction::{hash_tx as hash_tx_bytes, Hash};
 use async_trait::async_trait;
 use tendermint::abci::transaction;
 use tendermint::net::Address;

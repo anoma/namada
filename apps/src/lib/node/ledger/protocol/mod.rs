@@ -1,6 +1,5 @@
 //! The ledger's protocol
 use std::collections::HashSet;
-use std::convert::TryFrom;
 use std::{fmt, panic};
 
 use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
@@ -12,7 +11,7 @@ use anoma::ledger::storage::write_log::WriteLog;
 use anoma::proto::{self, Tx};
 use anoma::types::address::{Address, InternalAddress};
 use anoma::types::storage::Key;
-use anoma::types::transaction::{process_tx, TxType, DecryptedTx};
+use anoma::types::transaction::{DecryptedTx, TxType};
 use anoma::vm::{self, wasm};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;

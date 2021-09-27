@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
+use anoma::types::transaction::hash_tx;
 use tendermint_proto::abci::EventAttribute;
-use crate::hash_tx;
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
@@ -34,7 +35,7 @@ impl Display for EventType {
 impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
-    pub fn new_tx_event(ty: EventType, tx: &[u8], height: i64) -> Self {
+    pub fn new_tx_event(ty: EventType, tx: &[u8], height: u64) -> Self {
         let mut event = Event {
             event_type: ty,
             attributes: HashMap::new(),

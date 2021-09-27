@@ -1,4 +1,4 @@
-mod events;
+pub mod events;
 pub mod protocol;
 pub mod rpc;
 mod shell;
@@ -6,10 +6,9 @@ mod shims;
 pub mod storage;
 mod tendermint_node;
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::sync::mpsc::channel;
 
-use anoma::types::storage::BlockHash;
 use futures::future::{AbortHandle, AbortRegistration, Abortable};
 use tendermint_proto::abci::CheckTxType;
 use tower::ServiceBuilder;
@@ -20,7 +19,6 @@ use crate::config::genesis;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
-use anoma::types::transaction::BlockProposal;
 
 /// A panic-proof handle for aborting a future. Will abort during
 /// stack unwinding as its drop method calls abort.
@@ -90,10 +88,7 @@ impl Shell {
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
             Request::PrepareProposal(block) => {
-                match BlockProposal::try_from(block) {
-                    Ok(BlockProposal{txs, ..}) => self.prepare_proposal(txs),
-                    Err(msg) => tracing::error!("Unexpected block proposal {}", msg)
-                }
+                Ok(Response::PrepareProposal(self.prepare_proposal(block)))
             }
             Request::VerifyHeader(_req) => {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))

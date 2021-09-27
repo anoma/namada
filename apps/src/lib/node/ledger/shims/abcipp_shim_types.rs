@@ -3,7 +3,15 @@ use tower_abci::{Request, Response};
 pub mod shim {
     use std::convert::TryFrom;
 
-    use tendermint_proto::abci::{RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho, RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots, RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestQuery, RequestPrepareProposal, ResponseApplySnapshotChunk, ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots, ResponseLoadSnapshotChunk, ResponseOfferSnapshot, ResponseQuery, ResponsePrepareProposal};
+    use tendermint_proto::abci::{
+        RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
+        RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
+        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
+        RequestQuery, ResponseApplySnapshotChunk, ResponseCheckTx,
+        ResponseCommit, ResponseEcho, ResponseFlush, ResponseInfo,
+        ResponseInitChain, ResponseListSnapshots, ResponseLoadSnapshotChunk,
+        ResponseOfferSnapshot, ResponsePrepareProposal, ResponseQuery,
+    };
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
@@ -27,6 +35,7 @@ pub mod shim {
         }
     }
 
+    #[allow(clippy::large_enum_variant)]
     /// Our custom request types. It is the duty of the shim to change
     /// the request types coming from tower-abci to these before forwarding
     /// it to the shell
@@ -82,7 +91,7 @@ pub mod shim {
                 }
                 Req::PrepareProposal(inner) => {
                     Ok(Request::PrepareProposal(inner))
-                },
+                }
                 _ => Err(Error::ConvertReq(req)),
             }
         }
@@ -149,9 +158,10 @@ pub mod shim {
     /// Custom types for request payloads
     pub mod request {
         use std::convert::{TryFrom, TryInto};
-        use tendermint_proto::abci::{Evidence, RequestBeginBlock};
-        use tendermint::block::Header;
+
         use anoma::types::storage::BlockHash;
+        use tendermint::block::Header;
+        use tendermint_proto::abci::{Evidence, RequestBeginBlock};
 
         pub struct VerifyHeader;
 
@@ -187,23 +197,28 @@ pub mod shim {
             fn try_from(req: RequestBeginBlock) -> Result<Self, super::Error> {
                 match (
                     BlockHash::try_from(&*req.hash),
-                    req.header.try_into(),
+                    req.header
+                        .clone()
+                        .expect("Missing block's header")
+                        .try_into(),
                 ) {
-                    (Ok(hash), Ok(header)) => {
-                        Ok(BeginBlock {
-                            hash,
-                            header,
-                            byzantine_validators: block.byzantine_validators,
-                        })
-                    }
-                    (Ok(_), err @ Err(msg)) => {
+                    (Ok(hash), Ok(header)) => Ok(BeginBlock {
+                        hash,
+                        header,
+                        byzantine_validators: req.byzantine_validators,
+                    }),
+                    (Ok(_), Err(msg)) => {
                         tracing::error!("Unexpected block header {}", msg);
-                        super::Error::ConvertReq(super::Req::BeginBlock(req))
+                        Err(super::Error::ConvertReq(super::Req::BeginBlock(
+                            req,
+                        )))
                     }
                     (err @ Err(_), _) => {
                         tracing::error!("{:#?}", err);
-                        super::Error::ConvertReq(super::Req::BeginBlock(req))
-                    },
+                        Err(super::Error::ConvertReq(super::Req::BeginBlock(
+                            req,
+                        )))
+                    }
                 }
             }
         }
@@ -250,9 +265,7 @@ pub mod shim {
 
         impl From<TxResult> for ProcessProposal {
             fn from(result: TxResult) -> Self {
-                ProcessProposal{
-                    result
-                }
+                ProcessProposal { result }
             }
         }
 

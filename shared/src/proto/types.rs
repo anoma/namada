@@ -4,7 +4,6 @@ use std::hash::{Hash, Hasher};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use prost::Message;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::generated::types;
@@ -31,7 +30,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, Hash)]
 pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
