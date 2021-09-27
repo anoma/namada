@@ -19,8 +19,8 @@ pub fn main() -> Result<()> {
         },
         cli::cmds::AnomaNode::Gossip(sub) => match sub {
             cli::cmds::Gossip::Run(cli::cmds::GossipRun(args)) => {
-                let tx_source_address = ctx.get_opt(args.tx_source_address);
-                let tx_signing_key = ctx.get_opt_cached(args.tx_signing_key);
+                let tx_source_address = ctx.get_opt(&args.tx_source_address);
+                let tx_signing_key = ctx.get_opt_cached(&args.tx_signing_key);
                 let config = ctx.config;
                 let mut gossip_cfg = config.intent_gossiper;
                 gossip_cfg.update(

@@ -61,7 +61,7 @@ impl Context {
     }
 
     /// Parse and/or look-up the value from the context.
-    pub fn get<T>(&self, from_context: FromContext<T>) -> T
+    pub fn get<T>(&self, from_context: &FromContext<T>) -> T
     where
         T: ArgFromContext,
     {
@@ -69,15 +69,17 @@ impl Context {
     }
 
     /// Try to parse and/or look-up an optional value from the context.
-    pub fn get_opt<T>(&self, from_context: Option<FromContext<T>>) -> Option<T>
+    pub fn get_opt<T>(&self, from_context: &Option<FromContext<T>>) -> Option<T>
     where
         T: ArgFromContext,
     {
-        from_context.map(|from_context| from_context.from_ctx(self))
+        from_context
+            .as_ref()
+            .map(|from_context| from_context.from_ctx(self))
     }
 
     /// Parse and/or look-up the value from the context with cache.
-    pub fn get_cached<T>(&mut self, from_context: FromContext<T>) -> T
+    pub fn get_cached<T>(&mut self, from_context: &FromContext<T>) -> T
     where
         T: ArgFromMutContext,
     {
@@ -88,12 +90,14 @@ impl Context {
     /// cache.
     pub fn get_opt_cached<T>(
         &mut self,
-        from_context: Option<FromContext<T>>,
+        from_context: &Option<FromContext<T>>,
     ) -> Option<T>
     where
         T: ArgFromMutContext,
     {
-        from_context.map(|from_context| from_context.from_mut_ctx(self))
+        from_context
+            .as_ref()
+            .map(|from_context| from_context.from_mut_ctx(self))
     }
 
     /// Read the given WASM file from the WASM directory.
