@@ -1,36 +1,44 @@
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: 1}
 kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [echo "23b892f57324bc5d3ca100e95e8581dbb26132a0e7a7c756790fd401fd45e5f0  Makefile"
-      | sha256sum -c -, echo "3e1736793ae000d7ae7660105d106b017f23cffaa8ad50de5f47831202f5f2e5  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
-      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
-      | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh false]
-  image: alpine/git:v2.30.1
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
-  pull: if-not-exists
+  pull: never
 - depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
   name: restore-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/build/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -43,7 +51,7 @@ steps:
     SCCACHE_S3_KEY_PREFIX: sccache-build
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build
-  pull: if-not-exists
+  pull: never
 - commands: [sccache --start-server, make build-test]
   depends_on: [build]
   environment:
@@ -53,7 +61,7 @@ steps:
     SCCACHE_S3_KEY_PREFIX: sccache-build-test
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-test
-  pull: if-not-exists
+  pull: never
 - commands: [sccache --start-server, make test-unit]
   depends_on: [build-test]
   environment:
@@ -62,36 +70,28 @@ steps:
     SCCACHE_BUCKET: heliax-drone-cache-v2
     SCCACHE_S3_KEY_PREFIX: sccache-test-unit
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: test
-  pull: if-not-exists
-- commands: [sccache --start-server, make test-e2e]
-  depends_on: [build-test]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-test-e2e
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: test-e2e
-  pull: if-not-exists
-- commands: [cargo-cache]
-  depends_on: [test, test-e2e]
+  name: test-unit
+  pull: never
+- commands: [cargo cache]
+  depends_on: [test-unit]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
-  pull: if-not-exists
+  pull: never
+  when:
+    status: [success, failure]
 - depends_on: [clean-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache
+  image: meltwater/drone-cache:latest
   name: rebuild-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/build/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -103,38 +103,47 @@ trigger:
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [echo "23b892f57324bc5d3ca100e95e8581dbb26132a0e7a7c756790fd401fd45e5f0  Makefile"
-      | sha256sum -c -, echo "3e1736793ae000d7ae7660105d106b017f23cffaa8ad50de5f47831202f5f2e5  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
-      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
-      | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh false]
-  image: alpine/git:v2.30.1
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
-  pull: if-not-exists
+  pull: never
 - depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
   name: restore-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/nightly/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/checks/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -144,38 +153,40 @@ steps:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-check
+    SCCACHE_S3_KEY_PREFIX: sccache-clippy
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clippy
-  pull: if-not-exists
+  pull: never
 - commands: [sccache --start-server, make fmt-check]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-check
+    SCCACHE_S3_KEY_PREFIX: sccache-format
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: fmt-check
-  pull: if-not-exists
-- commands: [cargo-cache]
-  depends_on: [clippy, fmt-check]
+  name: format
+  pull: never
+- commands: [cargo cache]
+  depends_on: [clippy, format]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
-  pull: if-not-exists
+  pull: never
+  when:
+    status: [success, failure]
 - depends_on: [clean-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache
+  image: meltwater/drone-cache:latest
   name: rebuild-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/nightly/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/checks/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -184,85 +195,91 @@ steps:
     status: [success, failure]
 trigger:
   branch: [develop, master]
-  event: [pull_request, push]
+  event: [push, pull_request]
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [echo "23b892f57324bc5d3ca100e95e8581dbb26132a0e7a7c756790fd401fd45e5f0  Makefile"
-      | sha256sum -c -, echo "3e1736793ae000d7ae7660105d106b017f23cffaa8ad50de5f47831202f5f2e5  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
-      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
-      | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
-  image: alpine/git:v2.30.1
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
-  pull: if-not-exists
+  pull: never
 - depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
   name: restore-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
 - commands: [make build-wasm-scripts]
   depends_on: [restore-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
-  pull: if-not-exists
+  pull: never
 - commands: [make test-wasm]
   depends_on: [build-wasm]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: test-wasm
-  pull: if-not-exists
+  pull: never
 - commands: [sh scripts/ci/update-wasm.sh]
   depends_on: [test-wasm]
   environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  name: push-wasm
-  pull: if-not-exists
-- depends_on: [push-wasm]
+  name: update-wasm
+  pull: never
+- commands: [cargo cache]
+  depends_on: [update-wasm]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clean-cache
+  pull: never
+  when:
+    status: [success, failure]
+- depends_on: [clean-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache
+  image: meltwater/drone-cache:latest
   name: rebuild-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -272,70 +289,169 @@ steps:
 trigger:
   event: [pull_request]
 type: docker
-workspace: {path: /usr/local/rust/project}
+workspace: {path: /usr/local/rust/wasm}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
-name: anoma-ci-cron
+name: anoma-ci-misc-pr
 node: {project: anoma}
 steps:
-- commands: [echo "23b892f57324bc5d3ca100e95e8581dbb26132a0e7a7c756790fd401fd45e5f0  Makefile"
-      | sha256sum -c -, echo "3e1736793ae000d7ae7660105d106b017f23cffaa8ad50de5f47831202f5f2e5  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
-      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
-      | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
-  image: alpine/git:v2.30.1
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_TARGET_BRANCH,
+    git merge $DRONE_COMMIT, CONFLICTS=$(git ls-files -u | wc -l), 'if [ "$CONFLICTS"
+      -gt 0 ]; then exit 1; fi;exit 0']
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
-  pull: if-not-exists
+  pull: never
 - depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
   name: restore-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/audit/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    region: eu-west-1
+    restore: true
+- commands: [make build-wasm-scripts, "for wasm in $(ls wasm/*.wasm)\ndo\n  shasum
+      -a 256 ${wasm} >> checksum.sha256\ndone\n", make clean-wasm-scripts, make build-wasm-scripts,
+    shasum -c checksum.sha256, rm checksum.sha256]
+  depends_on: [restore-cache]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  name: check-wasm
+  pull: never
+- commands: [cargo cache]
+  depends_on: [check-wasm]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clean-cache
+  pull: never
+  when:
+    status: [success, failure]
+- depends_on: [clean-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    BACKEND_OPERATION_TIMEOUT: 8m
+  image: meltwater/drone-cache:latest
+  name: rebuild-cache
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    override: false
+    rebuild: true
+    region: eu-west-1
+  when:
+    status: [success, failure]
+trigger:
+  event: [pull_request]
+type: docker
+workspace: {path: /usr/local/rust/wasm}
+---
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1'}
+kind: pipeline
+name: anoma-ci-cron
+node: {project: anoma}
+steps:
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: check-scripts-integrity
+  pull: never
+- depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
+  name: restore-cache
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/cron/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
 - commands: [python3 scripts/ci/audit.py]
   depends_on: [restore-cache]
-  environment:
-    GITHUB_TOKEN: {from_secret: github_token}
+  environment: {GITHUB_TOKEN: '{from_secret: github_token}'}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: audit
-  pull: if-not-exists
+  pull: never
 - commands: [python3 scripts/ci/udeps.py]
-  depends_on: [restore-cache]
+  depends_on: [audit]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: udeps
-  pull: if-not-exists
-- depends_on: [audit, udeps]
+  pull: never
+- commands: [cargo cache]
+  depends_on: [udeps]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clean-cache
+  pull: never
+  when:
+    status: [success, failure]
+- depends_on: [clean-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache
+  image: meltwater/drone-cache:latest
   name: rebuild-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/audit/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/cron/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -346,35 +462,44 @@ trigger:
   cron: [audit]
   event: [cron]
 type: docker
-workspace: {path: /drone/workspace}
+workspace: {path: /usr/local/rust/project}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
-name: anoma-ci-miri-pr
+name: anoma-ci-miri-master
 node: {project: anoma}
 steps:
-- commands: [echo "23b892f57324bc5d3ca100e95e8581dbb26132a0e7a7c756790fd401fd45e5f0  Makefile"
-      | sha256sum -c -, echo "3e1736793ae000d7ae7660105d106b017f23cffaa8ad50de5f47831202f5f2e5  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
-      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
-      | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
-  image: alpine/git:v2.30.1
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
-  pull: if-not-exists
+  pull: never
 - depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
   name: restore-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
@@ -392,15 +517,22 @@ steps:
     SCCACHE_S3_KEY_PREFIX: sccache-miri
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-miri
-  pull: if-not-exists
-- depends_on: [test-miri]
+  pull: never
+- commands: [cargo cache]
+  depends_on: [test-miri]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clean-cache
+  pull: never
+  when:
+    status: [success, failure]
+- depends_on: [clean-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache
+  image: meltwater/drone-cache:latest
   name: rebuild-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
@@ -416,77 +548,78 @@ trigger:
   branch: [master]
   event: [push]
 type: docker
-workspace: {path: /drone/workspace}
+workspace: {path: /usr/local/rust/project}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1',
-  GIT_TERMINAL_PROMP: '1'}
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1', GIT_TERMINAL_PROMP: '1'}
 kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [echo "23b892f57324bc5d3ca100e95e8581dbb26132a0e7a7c756790fd401fd45e5f0  Makefile"
-      | sha256sum -c -, echo "3e1736793ae000d7ae7660105d106b017f23cffaa8ad50de5f47831202f5f2e5  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
-      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
-      | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
-  image: alpine/git:v2.30.1
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
-  pull: if-not-exists
+  pull: never
 - depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
   name: restore-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: gh-pages/{{ checksum "Cargo.lock" }}
-    mount: [target/doc]
+    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, make build-doc, mkdir docs/book/rustdoc, mv -v
-      target/doc/* docs/book/rustdoc/]
+- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/]
   depends_on: [restore-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-docs
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: generate-docs
-  pull: if-not-exists
-- depends_on: [generate-docs]
-  image: plugins/gh-pages
-  name: publish-gh-pages
-  pull: if-not-exists
-  settings:
-    pages_directory: ./docs/book
-    password: {from_secret: github_token}
-    username: DroneCI
-- depends_on: [publish-gh-pages]
+  name: docs
+  pull: never
+- commands: [cargo cache]
+  depends_on: [docs]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clean-cache
+  pull: never
+  when:
+    status: [success, failure]
+- depends_on: [clean-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache
+  image: meltwater/drone-cache:latest
   name: rebuild-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: gh-pages/{{ checksum "Cargo.lock" }}
-    mount: [target/doc]
+    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -498,38 +631,47 @@ trigger:
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [echo "23b892f57324bc5d3ca100e95e8581dbb26132a0e7a7c756790fd401fd45e5f0  Makefile"
-      | sha256sum -c -, echo "3e1736793ae000d7ae7660105d106b017f23cffaa8ad50de5f47831202f5f2e5  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
-      | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
-      | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
-  image: alpine/git:v2.30.1
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
-  pull: if-not-exists
+  pull: never
 - depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
   name: restore-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/build/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
@@ -542,7 +684,7 @@ steps:
     SCCACHE_S3_KEY_PREFIX: sccache-build
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build
-  pull: if-not-exists
+  pull: never
 - commands: [sccache --start-server, make build-test]
   depends_on: [build]
   environment:
@@ -552,7 +694,7 @@ steps:
     SCCACHE_S3_KEY_PREFIX: sccache-build-test
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-test
-  pull: if-not-exists
+  pull: never
 - commands: [sccache --start-server, make test-unit]
   depends_on: [build-test]
   environment:
@@ -561,8 +703,8 @@ steps:
     SCCACHE_BUCKET: heliax-drone-cache-v2
     SCCACHE_S3_KEY_PREFIX: sccache-test-unit
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: test
-  pull: if-not-exists
+  name: test-unit
+  pull: never
 - commands: [sccache --start-server, make test-e2e]
   depends_on: [build-test]
   environment:
@@ -572,25 +714,27 @@ steps:
     SCCACHE_S3_KEY_PREFIX: sccache-test-e2e
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-e2e
-  pull: if-not-exists
-- commands: [cargo-cache]
-  depends_on: [test, test-e2e]
+  pull: never
+- commands: [cargo cache]
+  depends_on: [test-unit, test-e2e]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
-  pull: if-not-exists
+  pull: never
+  when:
+    status: [success, failure]
 - depends_on: [clean-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache
+  image: meltwater/drone-cache:latest
   name: rebuild-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/build/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -603,9 +747,96 @@ trigger:
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: '1'}
+clone: {disable: true}
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-wasm-master
+node: {project: anoma}
+steps:
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh false]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: check-scripts-integrity
+  pull: never
+- depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
+  name: restore-cache
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    region: eu-west-1
+    restore: true
+- commands: [make build-wasm-scripts]
+  depends_on: [restore-cache]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  name: build-wasm
+  pull: never
+- commands: [make test-wasm]
+  depends_on: [build-wasm]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  name: test-wasm
+  pull: never
+- commands: [cargo cache]
+  depends_on: [test-wasm]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clean-cache
+  pull: never
+  when:
+    status: [success, failure]
+- depends_on: [clean-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    BACKEND_OPERATION_TIMEOUT: 8m
+  image: meltwater/drone-cache:latest
+  name: rebuild-cache
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    override: false
+    rebuild: true
+    region: eu-west-1
+  when:
+    status: [success, failure]
+trigger:
+  branch: [master]
+  event: [push]
+type: docker
+workspace: {path: /usr/local/rust/wasm}
+---
+environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
+  GIT_LFS_SKIP_SMUDGE: '1'}
+kind: pipeline
+name: anoma-ci-release
 node: {project: anoma}
 steps:
 - commands: [echo "23b892f57324bc5d3ca100e95e8581dbb26132a0e7a7c756790fd401fd45e5f0  Makefile"
@@ -617,58 +848,67 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "41822bf4f6129822a461d87b8448eedbdd78e68f28e2f661896dcd208ed99c26  scripts/ci/release.sh"
       | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
       | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
-  image: alpine/git:v2.30.1
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
-  pull: if-not-exists
+  pull: never
 - depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
   name: restore-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/build-release/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-wasm-scripts, "for wasm in $(ls wasm/*.wasm)\ndo\n  shasum
-      -a 256 ${wasm} >> checksum.sha256\ndone\n", make clean-wasm-scripts, make build-wasm-scripts,
-    shasum -c checksum.sha256, rm checksum.sha256]
+- commands: [sccache --start-server, make package]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  name: build-check-wasm
-  pull: if-not-exists
-- commands: [make test-wasm]
-  depends_on: [build-check-wasm]
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build-release
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: build-package
+  pull: never
+- commands: [sh scripts/ci/create-release.sh]
+  depends_on: [build-release]
   environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  name: test-wasm
-  pull: if-not-exists
-- depends_on: [test-wasm]
+    GITHUB_TOKEN: {from_secret: github_token}
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: create-release
+  pull: never
+- commands: [cargo cache]
+  depends_on: [build-release]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clean-cache
+  pull: never
+  when:
+    status: [success, failure]
+- depends_on: [clean-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache
+  image: meltwater/drone-cache:latest
   name: rebuild-cache
-  pull: if-not-exists
+  pull: never
   settings:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/{{ checksum "Cargo.lock" }}
+    cache_key: 1-54-0/build-release/{{ checksum "Cargo.lock" }}
     mount: [.cargo]
     override: false
     rebuild: true
@@ -676,12 +916,11 @@ steps:
   when:
     status: [success, failure]
 trigger:
-  branch: [master]
-  event: [push]
+  event: [tag]
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 72e6ac3d5415ec4b94ff1fb76892f6a8d79835b4c43462610d61a6e22f8bd793
+hmac: 4068f7278ca67da0ffd7c99fcb28d545a6837cd549b3c8f68313238ba71ef798
 
 ...
