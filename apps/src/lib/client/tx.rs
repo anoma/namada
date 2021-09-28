@@ -3,8 +3,9 @@ use std::convert::TryFrom;
 
 use anoma::proto::Tx;
 use anoma::types::address::Address;
+use anoma::types::key::ed25519::Keypair;
 use anoma::types::token;
-use anoma::types::transaction::{pos, InitAccount, UpdateVp};
+use anoma::types::transaction::{pos, Fee, InitAccount, UpdateVp, WrapperTx};
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
@@ -13,6 +14,7 @@ use tendermint_rpc::query::{EventType, Query};
 use tendermint_rpc::Client;
 
 use super::{rpc, signing};
+use crate::cli::args::SigningMethod;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
@@ -33,25 +35,20 @@ pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
-    let tx = Tx::new(tx_code, data);
-    let tx = if let Some(signing_key) = args.signing_key {
-        let signing_key = ctx.get_cached(signing_key);
-        tx.sign(&signing_key)
-    } else if let Some(signer) = args.signer {
-        let signer = ctx.get(signer);
-        let signing_key = signing::find_keypair(
-            &mut ctx.wallet,
-            &signer,
-            args.tx.ledger_address.clone(),
-        )
-        .await;
-        tx.sign(&signing_key)
-    } else {
-        // Unsigned tx
-        tx
+    let keypair = match args.signing_method {
+        SigningMethod::SigningKey(signing_key) => ctx.get_cached(signing_key),
+        SigningMethod::Signer(signer) => {
+            let signer = ctx.get(signer);
+            signing::find_keypair(
+                &mut ctx.wallet,
+                &signer,
+                args.tx.ledger_address.clone(),
+            )
+            .await
+        }
     };
-
-    submit_tx(ctx, args.tx, tx).await
+    let tx = Tx::new(tx_code, data);
+    submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
 pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
@@ -75,9 +72,9 @@ pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
     let data = update_vp.try_to_vec().expect(
         "Encoding transfer data to update a validity predicate shouldn't fail",
     );
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let tx = Tx::new(tx_code, Some(data));
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
@@ -108,9 +105,9 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let data = data.try_to_vec().expect(
         "Encoding transfer data to initialize a new account shouldn't fail",
     );
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let tx = Tx::new(tx_code, Some(data));
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
@@ -135,9 +132,9 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let tx = Tx::new(tx_code, Some(data));
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
 pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
@@ -159,9 +156,9 @@ pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
     };
     tracing::debug!("Bond data {:?}", bond);
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let tx = Tx::new(tx_code, Some(data));
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
 pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
@@ -185,9 +182,9 @@ pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
     let data = unbond
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let tx = Tx::new(tx_code, Some(data));
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
 pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
@@ -207,12 +204,36 @@ pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
     let data = withdraw
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
+    let tx = Tx::new(tx_code, Some(data));
 
-    submit_tx(ctx, args.tx, tx).await
+    submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
-async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
+async fn submit_tx(
+    ctx: Context,
+    args: args::Tx,
+    tx: Tx,
+    keypair: &Keypair,
+) {
+    let tx = WrapperTx::new(
+        Fee {
+            amount: args.fee_amount,
+            token: ctx.get(args.fee_token),
+        },
+        keypair,
+        rpc::query_epoch(args::Query {
+            ledger_address: args.ledger_address.clone(),
+        })
+        .await
+        .expect(
+            "Getting the epoch of the last committed block should not fail",
+        ),
+        args.gas_limit,
+        tx,
+    )
+    .sign(keypair)
+    .expect("Signing of the wrapper transaction should not fail");
+
     let tx_bytes = tx.to_bytes();
 
     // NOTE: use this to print the request JSON body:
@@ -230,7 +251,12 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
     } else {
         match broadcast_tx(args.ledger_address.clone(), tx_bytes).await {
             Ok(result) => {
-                save_initialized_accounts(ctx, args, result).await;
+                save_initialized_accounts(
+                    ctx,
+                    args.initialized_account_alias,
+                    result,
+                )
+                .await;
             }
             Err(err) => {
                 eprintln!(
@@ -246,7 +272,7 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx) {
 /// Save accounts initialized from a tx into the wallet, if any.
 async fn save_initialized_accounts(
     ctx: Context,
-    args: args::Tx,
+    initialized_account_alias: Option<String>,
     result: TxResponse,
 ) {
     let len = result.initialized_accounts.len();
@@ -263,7 +289,7 @@ async fn save_initialized_accounts(
             let encoded = address.encode();
             let mut added = false;
             while !added {
-                let alias: Cow<str> = match &args.initialized_account_alias {
+                let alias: Cow<str> = match &initialized_account_alias {
                     Some(initialized_account_alias) => {
                         if len == 1 {
                             // If there's only one account, use the

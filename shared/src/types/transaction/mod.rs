@@ -330,6 +330,50 @@ pub mod tx_types {
             assert_eq!(result, WrapperTxErr::Unsigned);
         }
     }
+
+    /// Test that process_tx correctly identifies a DecryptedTx
+    /// with some unsigned data and returns an identical copy
+    #[test]
+    fn test_process_tx_decrypted_unsigned() {
+        let payload = Tx::new(
+            "transaction data".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let decrypted = DecryptedTx::Decrypted(payload.clone());
+        let tx = Tx::from(TxType::Decrypted(decrypted));
+        match process_tx(tx).expect("Test failed") {
+            TxType::Decrypted(DecryptedTx::Decrypted(processed)) => {
+                assert_eq!(payload, processed);
+            }
+            _ => panic!("Test failed"),
+        }
+    }
+
+    /// Test that process_tx correctly identifies a DecryptedTx
+    /// with some signed data and extracts it without checking
+    /// signature
+    #[test]
+    fn test_process_tx_decrypted_signed() {
+        let payload = Tx::new(
+            "transaction data".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let decrypted = DecryptedTx::Decrypted(payload.clone());
+        // Invalid signed data
+        let signed = SignedTxData {
+            data: Some(decrypted.try_to_vec().expect("Test failed")),
+            sig: ed25519_dalek::Signature::from([0u8; 64]).into(),
+        };
+        // create the tx with signed decrypted data
+        let tx =
+            Tx::new(vec![], Some(signed.try_to_vec().expect("Test failed")));
+        match process_tx(tx).expect("Test failed") {
+            TxType::Decrypted(DecryptedTx::Decrypted(processed)) => {
+                assert_eq!(payload, processed);
+            }
+            _ => panic!("Test failed"),
+        }
+    }
 }
 
 #[cfg(feature = "ferveo-tpke")]

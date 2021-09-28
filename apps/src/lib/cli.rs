@@ -937,6 +937,7 @@ pub mod args {
     use anoma::types::key::ed25519::PublicKey;
     use anoma::types::storage::Epoch;
     use anoma::types::token;
+    use anoma::types::transaction::GasLimit;
     use libp2p::Multiaddr;
     use serde::Deserialize;
 
@@ -957,7 +958,10 @@ pub mod args {
     const DECRYPT: ArgFlag = flag("decrypt");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
+    const FEE_AMOUNT: Arg<token::Amount> = arg("fee-amount");
+    const FEE_TOKEN: Arg<token::Amount> = arg("fee-token");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
+    const GAS_LIMIT: Arg<token::Amount> = arg("gas-limit");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -1030,10 +1034,8 @@ pub mod args {
         pub code_path: PathBuf,
         /// Path to the data file
         pub data_path: Option<PathBuf>,
-        /// Sign the tx with the key for the given alias from your wallet
-        pub signing_key: Option<WalletKeypair>,
-        /// Sign the tx with the keypair of the public key of the given address
-        pub signer: Option<WalletAddress>,
+        /// The method by which the tx shall be signed
+        pub signing_method: SigningMethod,
     }
 
     impl Args for TxCustom {
@@ -1043,12 +1045,21 @@ pub mod args {
             let data_path = DATA_PATH_OPT.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
+            let signing_method = match (signing_key, signer) {
+                (Some(key), _) => SigningMethod::SigningKey(key),
+                (_, Some(signer)) => SigningMethod::Signer(signer),
+                _ => panic!(
+                    "All transactions must be signed; please either specify \
+                     the key or the address from which to look up the signing \
+                     key."
+                ),
+            };
+
             Self {
                 tx,
                 code_path,
                 data_path,
-                signing_key,
-                signer,
+                signing_method,
             }
         }
 
@@ -1698,6 +1709,15 @@ pub mod args {
         }
     }
 
+    /// How a transaction will be signed
+    #[derive(Clone, Debug)]
+    pub enum SigningMethod {
+        /// Sign the tx with the key for the given alias from your wallet
+        SigningKey(WalletKeypair),
+        /// Sign the tx with the keypair of the public key of the given address
+        Signer(WalletAddress),
+    }
+
     /// Common transaction arguments
     #[derive(Clone, Debug)]
     pub struct Tx {
@@ -1708,6 +1728,12 @@ pub mod args {
         /// If any new account is initialized by the tx, use the given alias to
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
+        /// The amount being payed to include the transaction
+        pub fee_amount: token::Amount,
+        /// The token in which the fee is being paid
+        pub fee_token: WalletAddress,
+        /// The max amount of gas used to process tx
+        pub gas_limit: GasLimit,
     }
 
     impl Args for Tx {
@@ -1724,16 +1750,32 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number",
             ))
+            .arg(FEE_AMOUNT.def().about(
+                "The amount being paid for the inclusion of this transaction",
+            ))
+            .arg(FEE_TOKEN.def().about("The token for paying the fee"))
+            .arg(
+                GAS_LIMIT.def().about(
+                    "The maximum amount of gas needed to run transaction",
+                ),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
+            let fee_amount = AMOUNT.parse(matches);
+            let fee_token = TOKEN.parse(matches);
+            let gas_limit = GAS_LIMIT.parse(matches).into();
+
             Self {
                 dry_run,
                 ledger_address,
                 initialized_account_alias,
+                fee_amount,
+                fee_token,
+                gas_limit,
             }
         }
     }
