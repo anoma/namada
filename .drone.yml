@@ -62,8 +62,16 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-test
   pull: never
-- commands: [sccache --start-server, make test-unit]
+- commands: ['aws s3 cp heliax-drone-wasm-v2/${DRONE_SOURCE_BRANCH}.json wasm --acl
+      public-readcp wasm/${DRONE_SOURCE_BRANCH}.json wasm/checksums.json', 'jq -r
+      -c ''.[]'' wasm/checksums.json | parallel aws s3 cp s3://heliax-drone-wasm-v2/{}
+      wasm']
   depends_on: [build-test]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  name: download-wasm
+  pull: never
+- commands: [sccache --start-server, make test-unit]
+  depends_on: [download-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -248,17 +256,21 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
   pull: never
-- commands: [make test-wasm]
+- commands: ['aws s3 sync wasm/*.wasm heliax-drone-wasm-v2 --acl public-readcp wasm/checksums.json
+      ${DRONE_SOURCE_BRANCH}.jsonaws s3 cp ${DRONE_SOURCE_BRANCH}.json heliax-drone-wasm-v2
+      --acl public-read']
   depends_on: [build-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    GITHUB_TOKEN: {from_secret: github_token}
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: update-wasm
+  pull: never
+- commands: [make test-wasm]
+  depends_on: [update-wasm]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: test-wasm
-  pull: never
-- commands: [sh scripts/ci/update-wasm.sh]
-  depends_on: [test-wasm]
-  environment:
-    GITHUB_TOKEN: {from_secret: github_token}
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  name: update-wasm
   pull: never
 - commands: [cargo cache]
   depends_on: [update-wasm]
@@ -337,9 +349,8 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-wasm-scripts, "for wasm in $(ls wasm/*.wasm)\ndo\n  shasum
-      -a 256 ${wasm} >> checksum.sha256\ndone\n", make clean-wasm-scripts, make build-wasm-scripts,
-    shasum -c checksum.sha256, rm checksum.sha256]
+- commands: [make build-wasm-scripts, cp wasm/checksums.json wasm/original-checksums.json,
+    python3 wasm/checksums.py, cmp --silent -- wasm/checksums.json wasm/original-checksums.json]
   depends_on: [restore-cache]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: check-wasm
@@ -848,7 +859,7 @@ steps:
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
       | sha256sum -c -, echo "3ed5190a36ae374bceff55e2dce7302f9e1d1a30570ad0e700aade76e69ea1ef  scripts/ci/update-wasm.sh"
       | sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "41822bf4f6129822a461d87b8448eedbdd78e68f28e2f661896dcd208ed99c26  scripts/ci/release.sh"
+      | sha256sum -c -, echo "b36d4bc2fe64e2928fde493e504fa52c524ac8d9338f54dd068753616ffe7390  scripts/ci/release.sh"
       | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
       | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
@@ -886,7 +897,7 @@ steps:
   depends_on: [build-release]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: create-release
   pull: never
 - commands: [cargo cache]
@@ -921,6 +932,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 4068f7278ca67da0ffd7c99fcb28d545a6837cd549b3c8f68313238ba71ef798
+hmac: 6e25654e7fc0ebe6648ae0f299d630c8d2cee38def93d350dcb145daf8e63398
 
 ...
