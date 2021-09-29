@@ -7,7 +7,6 @@
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod queries;
 
-use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::Path;
@@ -27,7 +26,7 @@ use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::token::Amount;
 use anoma::types::transaction::{
     hash_tx, process_tx, verify_not_decryptable, AffineCurve, DecryptedTx,
-    EllipticCurve, Hash, PairingEngine, TxType,
+    EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
 use anoma::types::{address, key, token};
 use borsh::BorshSerialize;
@@ -43,7 +42,6 @@ use tower_abci::{request, response};
 use super::rpc;
 use crate::config::genesis;
 use crate::node::ledger::events::{Event, EventType};
-use crate::node::ledger::shell::queries::WrappedTx;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -97,12 +95,11 @@ pub struct Shell {
     gas_meter: BlockGasMeter,
     /// Write log for the current block
     write_log: WriteLog,
-    /// The set of wrapper txs from last committed block
-    /// that are to be decrypted and included in the current block
-    wrapped_txs: HashMap<Hash, WrappedTx>,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
+    /// Index of next wrapper_tx to fetch from storage
+    next_wrapper: usize,
 }
 
 impl Shell {
@@ -116,21 +113,39 @@ impl Shell {
                 tracing::error!("Cannot load the last state from the DB {}", e);
             })
             .expect("PersistentStorage cannot be initialized");
-        let wrapped_txs = queries::restore_wrapper_txs(&storage.last_height);
+
+        let next_wrapper = storage.wrapper_txs.len();
         Self {
             storage,
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
-            wrapped_txs,
             byzantine_validators: vec![],
+            next_wrapper,
         }
+    }
+
+    /// Iterate lazily over the wrapper txs in order
+    fn get_next_wrapper(&mut self) -> Option<&WrapperTx> {
+        if self.next_wrapper == 0 {
+            None
+        } else {
+            self.next_wrapper -= 1;
+            Some(&self.storage.wrapper_txs[self.next_wrapper])
+        }
+    }
+
+    /// If we reject the decrypted txs because they were out of
+    /// order, reset the iterator.
+    pub fn revert_wrapper_txs(&mut self) {
+        self.next_wrapper = self.storage.wrapper_txs.len();
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
-    pub fn last_state(&self) -> response::Info {
+    pub fn last_state(&mut self) -> response::Info {
         let mut response = response::Info::default();
         let result = self.storage.get_state();
+
         match result {
             Some((root, height)) => {
                 tracing::info!(
@@ -365,6 +380,10 @@ impl Shell {
 
     /// Begin a new block.
     ///
+    /// We include half of the new wrapper txs given to us from the mempool
+    /// by tendermint. The rest of the block is filled with decryptions
+    /// of the wrapper txs from the previously committed block.
+    ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
@@ -379,7 +398,7 @@ impl Shell {
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
         // filter in half of the new txs from Tendermint, only keeping wrappers
-        let number_of_new_txs = req.block_data.len() / 2;
+        let number_of_new_txs = 1 + req.block_data.len() / 2;
         let mut txs: Vec<TxBytes> = req
             .block_data
             .into_iter()
@@ -394,12 +413,14 @@ impl Shell {
 
         // decrypt the wrapper txs included in the previous block
         let mut decrypted_txs = self
-            .wrapped_txs
+            .storage
+            .wrapper_txs
             .iter()
-            .map(|(_, tx)| {
-                Tx::from(match tx.wrapper.decrypt(privkey) {
+            .rev()
+            .map(|tx| {
+                Tx::from(match tx.decrypt(privkey) {
                     Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(tx.wrapper.clone()),
+                    _ => DecryptedTx::Undecryptable(tx.clone()),
                 })
                 .to_bytes()
             })
@@ -539,6 +560,16 @@ impl Shell {
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
     /// signatures of the fee payer for a transaction if it is a wrapper tx.
     ///
+    /// Checks validity of a decrypted tx or that a tx marked un-decryptable
+    /// is in fact so. Also checks that decrypted txs were submitted in
+    /// correct order.
+    ///
+    /// Error codes:
+    ///   0: Ok
+    ///   1: Invalid tx
+    ///   2: Invalid order of decrypted txs
+    ///   3. More decrypted txs than expected
+    ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
@@ -557,42 +588,43 @@ impl Shell {
             Ok(result) => match result {
                 // If it is a raw transaction, we do no further validation
                 TxType::Raw(_) => TxResult {
-                    code: 2,
+                    code: 1,
                     info: "Transaction rejected: Non-encrypted transactions \
                            are not supported"
                         .into(),
                 },
-                TxType::Decrypted(tx) => {
-                    match self.wrapped_txs.get(&hash_tx(&tx.to_bytes())) {
-                        Some(wrapped) => {
-                            if verify_not_decryptable(&tx, privkey) {
-                                TxResult {
-                                    code: 0,
-                                    info: "Process Proposal accepted this \
-                                           transaction"
-                                        .into(),
-                                }
-                            } else {
-                                TxResult {
-                                    code: 1,
-                                    info: format!(
-                                        "The encrypted payload of tx {} was \
-                                         incorrectly marked as un-decryptable",
-                                        wrapped.hash
-                                    ),
-                                }
+                TxType::Decrypted(tx) => match self.get_next_wrapper() {
+                    Some(wrapper) => {
+                        if wrapper.tx_hash != hash_tx(&tx.to_bytes()) {
+                            TxResult {
+                                code: 2,
+                                info: "Process proposal rejected a decrypted \
+                                       transaction that violated the tx order \
+                                       determined in the previous block"
+                                    .into(),
+                            }
+                        } else if verify_not_decryptable(&tx, privkey) {
+                            TxResult {
+                                code: 0,
+                                info: "Process Proposal accepted this \
+                                       transaction"
+                                    .into(),
+                            }
+                        } else {
+                            TxResult {
+                                code: 1,
+                                info: "The encrypted payload of tx was \
+                                       incorrectly marked as un-decryptable"
+                                    .into(),
                             }
                         }
-                        None => TxResult {
-                            code: 1,
-                            info: format!(
-                                "No wrapper tx found whose encrypted payload \
-                                 commitment matched {}",
-                                hash_tx(&tx.to_bytes())
-                            ),
-                        },
                     }
-                }
+                    None => TxResult {
+                        code: 3,
+                        info: "Received more decrypted txs than expected"
+                            .into(),
+                    },
+                },
                 TxType::Wrapper(tx) => {
                     // validate the ciphertext via Ferveo
                     if !tx.validate_ciphertext() {
@@ -651,7 +683,25 @@ impl Shell {
         Default::default()
     }
 
-    /// Validate and apply transactions.
+    /// Updates the chain with new header, height, etc. Also keeps track
+    /// of epoch changes and applies associated updates to validator sets,
+    /// etc. as necessary.
+    ///
+    /// Validate and apply decrypted transactions unless [`process_proposal`]
+    /// detected that they were not submitted in correct order or more
+    /// decrypted txs arrived than expected. In that case, all decrypted
+    /// transactions are not applied and must be included in the next
+    /// [`prepare_proposal`] call.
+    ///
+    /// Incoming wrapper txs need no further validation. They
+    /// are added to the block.
+    ///
+    /// Error codes:
+    ///   0: Ok
+    ///   1: Invalid tx
+    ///   2: Invalid order of decrypted txs
+    ///   3. More decrypted txs than expected
+    ///   4. Runtime error in WASM
     pub fn finalize_block(
         &mut self,
         req: shim::request::FinalizeBlock,
@@ -686,7 +736,9 @@ impl Shell {
         for tx in &req.txs {
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
-            if tx.result.code != 0 {
+            // If we are rejecting all decrypted txs because they were submitted
+            // in an incorrect order, we do that later.
+            if tx.result.code != 0 && !req.reject_all_decrypted {
                 let mut tx_result =
                     Event::new_tx_event(EventType::Accepted, &tx.tx, height.0);
                 tx_result["code"] = tx.result.code.to_string();
@@ -700,17 +752,28 @@ impl Shell {
                 process_tx(Tx::try_from(&tx.tx as &[u8]).unwrap()).unwrap();
             let mut tx_result = match &processed_tx {
                 TxType::Wrapper(wrapper) => {
-                    self.wrapped_txs.insert(
-                        wrapper.tx_hash.clone(),
-                        WrappedTx {
-                            wrapper: wrapper.clone(),
-                            hash: hash_tx(&tx.tx),
-                        },
-                    );
+                    self.storage.wrapper_txs.push(wrapper.clone());
                     Event::new_tx_event(EventType::Accepted, &tx.tx, height.0)
                 }
-                TxType::Decrypted(decrypted) => {
-                    self.wrapped_txs.remove(&hash_tx(&decrypted.to_bytes()));
+                TxType::Decrypted(_) => {
+                    // If [`process_proposal`] detected that decrypted txs were
+                    // submitted out of order, we apply none
+                    // of those. New encrypted txs may still
+                    // be accepted.
+                    if req.reject_all_decrypted {
+                        let mut tx_result = Event::new_tx_event(
+                            EventType::Accepted,
+                            &tx.tx,
+                            height.0,
+                        );
+                        tx_result["code"] = "2".into();
+                        tx_result["info"] = "All decrypted txs rejected as \
+                                             they were not submitted in \
+                                             correct order"
+                            .into();
+                        response.events.push(tx_result.into());
+                        continue;
+                    }
                     Event::new_tx_event(EventType::Applied, &tx.tx, height.0)
                 }
                 TxType::Raw(_) => unreachable!(),
@@ -767,7 +830,7 @@ impl Shell {
                         .get_current_transaction_gas()
                         .to_string();
                     tx_result["info"] = msg.to_string();
-                    tx_result["code"] = "2".into();
+                    tx_result["code"] = "4".into();
                 }
             }
             response.events.push(tx_result.into());

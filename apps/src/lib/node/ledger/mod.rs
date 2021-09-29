@@ -197,6 +197,7 @@ async fn run_shell(
 /// did we stop the tendermint node with a channel that acts as a kill switch.
 pub fn run(config: config::Ledger) {
     let home_dir = config.tendermint.clone();
+    let mode = config.tendermint_mode.clone();
     let socket_address = config.address.to_string();
 
     // used for shutting down Tendermint node in case the shell panics
@@ -208,9 +209,13 @@ pub fn run(config: config::Ledger) {
 
     // start Tendermint node
     let tendermint_handle = std::thread::spawn(move || {
-        if let Err(err) =
-            tendermint_node::run(home_dir, &socket_address, sender, receiver)
-        {
+        if let Err(err) = tendermint_node::run(
+            home_dir,
+            mode,
+            &socket_address,
+            sender,
+            receiver,
+        ) {
             tracing::error!(
                 "Failed to start-up a Tendermint node with {}",
                 err

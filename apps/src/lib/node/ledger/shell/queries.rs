@@ -1,23 +1,15 @@
 use std::cmp::max;
-use std::collections::HashMap;
-use std::convert::TryFrom;
 
 use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::PosParams;
 use anoma::types::address::Address;
-use anoma::types::storage::{BlockHeight, Key};
+use anoma::types::storage::Key;
 use anoma::types::token::{self, Amount};
-use anoma::types::transaction::{hash_tx, Hash, TxType, WrapperTx};
 use borsh::{BorshDeserialize, BorshSerialize};
-use tendermint::block::Height;
 use tendermint_proto::types::EvidenceParams;
-use tendermint_rpc::{Client, HttpClient};
 
 use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::{response, storage};
-
-/// We use the default socket for tendermint to listen to RPC queries
-const TENDERMINT_RPC_ADDRESS: &str = "tcp://0.0.0.0:26657";
 
 /// Simple helper function for the ledger to get balances
 /// of the specified token at the specified address
@@ -123,47 +115,4 @@ pub fn get_evidence_params(
         max_age_duration,
         ..EvidenceParams::default()
     }
-}
-
-#[derive(Debug)]
-/// A struct to hold a extracted wrapper and
-/// the hash of the Tx that submitted it
-pub struct WrappedTx {
-    pub wrapper: WrapperTx,
-    pub hash: Hash,
-}
-
-/// Query tendermint to find the encrypted tx included in the
-/// last committed block
-pub fn restore_wrapper_txs(height: &BlockHeight) -> HashMap<Hash, WrappedTx> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-    rt.block_on(async move {
-        let client = HttpClient::new(TENDERMINT_RPC_ADDRESS).unwrap();
-        let height =
-            Height::try_from(height.0).expect("Unexpected block height");
-        client
-            .block(height)
-            .await
-            .unwrap()
-            .block
-            .data()
-            .iter()
-            .filter_map(|tx| {
-                let tx_bytes = Vec::<u8>::from(tx.clone());
-                match TxType::try_from(tx_bytes.as_slice()).unwrap() {
-                    TxType::Wrapper(wrapper) => Some((
-                        wrapper.tx_hash.clone(),
-                        WrappedTx {
-                            wrapper,
-                            hash: hash_tx(&tx_bytes),
-                        },
-                    )),
-                    _ => None,
-                }
-            })
-            .collect()
-    })
 }

@@ -228,6 +228,7 @@ pub mod shim {
             pub header: Header,
             pub byzantine_validators: Vec<Evidence>,
             pub txs: Vec<ProcessedTx>,
+            pub reject_all_decrypted: bool,
         }
     }
 

@@ -2432,7 +2432,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.6.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration#ce137daf46b95d00a0bf7d8f2108aaedb1a0ac2a"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration#740058b9b6f0c3f075768e23478e137abdd92a3a"
 dependencies = [
  "anomaly",
  "borsh",
@@ -2459,7 +2459,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.8.2"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration#ce137daf46b95d00a0bf7d8f2108aaedb1a0ac2a"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration#740058b9b6f0c3f075768e23478e137abdd92a3a"
 dependencies = [
  "anomaly",
  "bytes 1.1.0",
@@ -5416,7 +5416,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#814fdaca4562fc33fba4a1ed823cf872243ef0af"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -5447,7 +5447,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#814fdaca4562fc33fba4a1ed823cf872243ef0af"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "anomaly",
  "bytes 1.1.0",
@@ -5465,7 +5465,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#814fdaca4562fc33fba4a1ed823cf872243ef0af"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -5495,7 +5495,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#814fdaca4562fc33fba4a1ed823cf872243ef0af"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
@@ -5894,7 +5894,7 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci?branch=bat/abci++-integration#bd2da882eb32c21495d5522730d8090838e92d82"
+source = "git+https://github.com/heliaxdev/tower-abci?branch=bat/abci++-integration#d46a6b439bf1855cd29be2efd0f88e77348b81ce"
 dependencies = [
  "bytes 1.1.0",
  "futures 0.3.17",

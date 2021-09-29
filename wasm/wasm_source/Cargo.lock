@@ -1736,7 +1736,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#814fdaca4562fc33fba4a1ed823cf872243ef0af"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -1767,7 +1767,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#814fdaca4562fc33fba4a1ed823cf872243ef0af"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "anomaly",
  "bytes",

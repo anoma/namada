@@ -209,12 +209,7 @@ pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
     submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
-async fn submit_tx(
-    ctx: Context,
-    args: args::Tx,
-    tx: Tx,
-    keypair: &Keypair,
-) {
+async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx, keypair: &Keypair) {
     let tx = WrapperTx::new(
         Fee {
             amount: args.fee_amount,

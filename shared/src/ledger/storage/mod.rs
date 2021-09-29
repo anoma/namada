@@ -25,6 +25,11 @@ use crate::types::storage::{
     CHAIN_ID_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::WrapperTx;
+// TODO: What a miserable hack. But it's soooo much less typing
+#[cfg(not(feature = "ferveo-tpke"))]
+type WrapperTx = ();
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -54,6 +59,8 @@ where
     pub next_epoch_min_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
+    /// The encrypted transactions not yet decrypted and applied
+    pub wrapper_txs: Vec<WrapperTx>,
 }
 
 /// The block storage data
@@ -112,6 +119,8 @@ pub struct BlockState {
     pub subspaces: HashMap<Key, Vec<u8>>,
     /// Established address generator
     pub address_gen: EstablishedAddressGen,
+    /// The encrypted transactions not yet decrypted and applied
+    pub wrapper_txs: Vec<WrapperTx>,
 }
 
 /// A database backend.
@@ -170,6 +179,7 @@ where
             next_epoch_min_start_time,
             subspaces,
             address_gen,
+            wrapper_txs,
         }) = self.db.read_last_block()?
         {
             self.block.tree = MerkleTree(SparseMerkleTree::new(root, store));
@@ -183,6 +193,7 @@ where
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
+            self.wrapper_txs = wrapper_txs;
             tracing::debug!("Loaded storage from DB");
         } else {
             tracing::info!("No state could be found");
@@ -216,6 +227,7 @@ where
             next_epoch_min_start_time: self.next_epoch_min_start_time,
             subspaces: self.block.subspaces.clone(),
             address_gen: self.address_gen.clone(),
+            wrapper_txs: self.wrapper_txs.clone(),
         };
         self.db.write_block(state)?;
         self.last_height = self.block.height;
@@ -570,6 +582,7 @@ pub mod testing {
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),
+                wrapper_txs: Vec::default(),
             }
         }
     }

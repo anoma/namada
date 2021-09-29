@@ -16,6 +16,7 @@ use thiserror::Error;
 
 use crate::config;
 use crate::config::genesis::{self, Validator};
+use crate::config::TendermintMode;
 use crate::std::sync::mpsc::Sender;
 
 #[derive(Error, Debug)]
@@ -32,22 +33,48 @@ pub enum Error {
     WriteConfig(std::io::Error),
     #[error("Failed to start up Tendermint node: {0}")]
     StartUp(std::io::Error),
+    #[error("Failed to convert to String: {0:?}")]
+    TendermintPath(std::ffi::OsString),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Check if the TENDERMINT env var has been set and use that as the
+/// location of the tendermint binary. Otherwise, assume it is on path
+///
+/// Can return an error if the env var is defined but cannot be interpreted
+/// as String
+fn from_env_or_default() -> Result<String> {
+    if let Some(str) = std::env::var_os("TENDERMINT") {
+        match str.into_string() {
+            Ok(path) => {
+                tracing::info!(
+                    "Using tendermint path from env variable: {}",
+                    &path
+                );
+                Ok(path)
+            }
+            Err(msg) => Err(Error::TendermintPath(msg)),
+        }
+    } else {
+        Ok(String::from("tendermint"))
+    }
+}
+
 /// Run the tendermint node.
 pub fn run(
     home_dir: PathBuf,
+    mode: TendermintMode,
     socket_address: &str,
     kill_switch: Sender<bool>,
     receiver: Receiver<bool>,
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
+    let tendermint_path = from_env_or_default()?;
 
     // init and run a tendermint node child process
-    let output = Command::new("tendermint")
-        .args(&["init", "--home", &home_dir_string])
+    let output = Command::new(&tendermint_path)
+        .args(&["init", mode.to_str(), "--home", &home_dir_string])
         .output()
         .map_err(Error::Init)?;
     if !output.status.success() {
@@ -66,10 +93,10 @@ pub fn run(
     }
 
     update_tendermint_config(&home_dir)?;
-    let tendermint_node = Command::new("tendermint")
+    let tendermint_node = Command::new(&tendermint_path)
         .args(&[
             "node",
-            "--proxy_app",
+            "--proxy-app",
             socket_address,
             "--home",
             &home_dir_string,
