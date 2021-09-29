@@ -1,25 +1,224 @@
-use std::path::PathBuf;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::{fs, thread, time};
+use std::{env, fs, thread, time};
 
 use anoma::types::chain::ChainId;
 use anoma_apps::config::{Config, IntentGossiper, Ledger};
 use assert_cmd::assert::OutputAssertExt;
+use color_eyre::eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
+use escargot::CargoBuild;
+use eyre::eyre;
 use libp2p::identity::Keypair;
 use libp2p::PeerId;
+use rexpect::session::{spawn_command, PtySession};
+use tempfile::{tempdir, TempDir};
+
+const APPS_PACKAGE: &str = "anoma_apps";
+
+/// Env. var for running e2e tests in debug mode
+const ENV_VAR_DEBUG: &str = "ANOMA_E2E_DEBUG";
+
+/// Anoma binaries
+#[derive(Debug)]
+pub enum Bin {
+    Node,
+    Client,
+    Wallet,
+}
+
+#[derive(Debug)]
+pub struct Test {
+    pub working_dir: PathBuf,
+    pub base_dir: TempDir,
+}
+
+/// Get an [`AnomaCmd`] to run an Anoma binary. By default, these will run in
+/// release mode. This can be disabled by setting environment variable
+/// `ANOMA_E2E_DEBUG=true`.
+/// On [`AnomaCmd`], you can then call e.g. `exp_string` or `exp_regex` to look
+/// for an expected output from the command.
+///
+/// This is a helper macro that adds file and line location to the [`run_cmd`]
+/// function call.
+#[macro_export]
+macro_rules! run {
+    ($test:expr, $bin:expr, $args:expr, $timeout_sec:expr) => {{
+        // The file and line will expand to the location that invoked `run_cmd!`
+        let loc = format!("{}:{}", std::file!(), std::line!());
+        $test.run_cmd($bin, $args, $timeout_sec, loc)
+    }};
+}
+
+impl Test {
+    /// Start a new E2E test
+    pub fn new() -> Self {
+        let working_dir = working_dir();
+        let base_dir = tempdir().unwrap();
+        Self {
+            working_dir,
+            base_dir,
+        }
+    }
+
+    /// Use the `run!` macro instead of calling this method directly to get
+    /// automatic source location reporting.
+    ///
+    /// Get an [`AnomaCmd`] to run an Anoma binary. By default, these will run
+    /// in release mode. This can be disabled by setting environment
+    /// variable `ANOMA_E2E_DEBUG=true`.
+    pub fn run_cmd<I, S>(
+        &self,
+        bin: Bin,
+        args: I,
+        timeout_sec: Option<u64>,
+        loc: String,
+    ) -> Result<AnomaCmd>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        run_cmd(
+            bin,
+            args,
+            timeout_sec,
+            &self.working_dir,
+            &self.base_dir,
+            loc,
+        )
+    }
+}
 
 /// A helper that should be ran on start of every e2e test case.
 pub fn working_dir() -> PathBuf {
     let working_dir = fs::canonicalize("..").unwrap();
-    // Build the workspace
-    Command::new("cargo")
-        .arg("build")
-        .current_dir(&working_dir)
-        .output()
-        .unwrap();
     // Check that tendermint is on $PATH
     Command::new("which").arg("tendermint").assert().success();
     working_dir
+}
+
+/// A command under test
+pub struct AnomaCmd {
+    pub session: PtySession,
+    /// The command that ran this session, used in error reporting
+    cmd_str: String,
+}
+
+/// Wrappers over the inner `PtySession`'s functions with custom error
+/// reporting.
+impl AnomaCmd {
+    /// Wait until provided string is seen on stdout of child process.
+    /// Return the yet unread output (without the matched string)
+    pub fn exp_string(&mut self, needle: &str) -> Result<String> {
+        self.session.exp_string(needle).map_err(|e| {
+            eyre!(format!("\n\nIn command: {}\n\nReason: {}", self.cmd_str, e))
+        })
+    }
+
+    /// Wait until provided regex is seen on stdout of child process.
+    /// Return a tuple:
+    /// 1. the yet unread output
+    /// 2. the matched regex
+    pub fn exp_regex(&mut self, regex: &str) -> Result<(String, String)> {
+        self.session.exp_regex(regex).map_err(|e| {
+            eyre!(format!("\n\nIn command: {}\n\nReason: {}", self.cmd_str, e))
+        })
+    }
+
+    /// Send a control code to the running process and consume resulting output
+    /// line (which is empty because echo is off)
+    ///
+    /// E.g. `send_control('c')` sends ctrl-c. Upper/smaller case does not
+    /// matter.
+    pub fn send_control(&mut self, c: char) -> Result<()> {
+        self.session.send_control(c).map_err(|e| {
+            eyre!(format!("\n\nIn command: {}\n\nReason: {}", self.cmd_str, e))
+        })
+    }
+}
+
+/// Get a [`Command`] to run an Anoma binary. By default, these will run in
+/// release mode. This can be disabled by setting environment variable
+/// `ANOMA_E2E_DEBUG=true`.
+pub fn run_cmd<I, S>(
+    bin: Bin,
+    args: I,
+    timeout_sec: Option<u64>,
+    working_dir: impl AsRef<Path>,
+    base_dir: impl AsRef<Path>,
+    loc: String,
+) -> Result<AnomaCmd>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    // Root cargo workspace manifest path
+    let manifest_path = working_dir.as_ref().join("Cargo.toml");
+    let bin_name = match bin {
+        Bin::Node => "anoman",
+        Bin::Client => "anomac",
+        Bin::Wallet => "anomaw",
+    };
+    // Use the same build settings as `make build-release`
+    let cmd = CargoBuild::new()
+        .package(APPS_PACKAGE)
+        .no_default_features()
+        .features("std")
+        .manifest_path(manifest_path)
+        .bin(bin_name);
+    // Allow to run in debug
+    let run_debug = match env::var(ENV_VAR_DEBUG) {
+        Ok(val) => val.to_ascii_lowercase() != "false",
+        _ => false,
+    };
+    let cmd = if run_debug { cmd } else { cmd.release() };
+    let mut cmd = cmd.run().unwrap().command();
+    cmd.env("ANOMA_LOG", "anoma=debug")
+        .args(&["--base-dir", &base_dir.as_ref().to_string_lossy()])
+        .args(args);
+
+    let cmd_str = format!("{:?}", cmd);
+
+    let timeout_ms = timeout_sec.map(|sec| sec * 1_000);
+    let mut session = spawn_command(cmd, timeout_ms).map_err(|e| {
+        eyre!(
+            "\n\n{}: {}\n{}: {}\n{}: {}",
+            "Failed to run".underline().red(),
+            cmd_str,
+            "Location".underline().red(),
+            loc,
+            "Error".underline().red(),
+            e
+        )
+    })?;
+
+    if let Bin::Node = &bin {
+        // When running a node command, we need to wait a bit before checking
+        // status
+        sleep(1);
+
+        // If the command failed, try print out its output
+        if let Some(rexpect::process::wait::WaitStatus::Exited(_, result)) =
+            session.process.status()
+        {
+            if result != 0 {
+                return Err(eyre!(
+                    "\n\n{}: {}\n{}: {} \n\n{}: {}",
+                    "Failed to run".underline().red(),
+                    cmd_str,
+                    "Location".underline().red(),
+                    loc,
+                    "Output".underline().red(),
+                    session.exp_eof().unwrap_or_else(|err| format!(
+                        "No output found, error: {}",
+                        err
+                    ))
+                ));
+            }
+        }
+    }
+    Ok(AnomaCmd { session, cmd_str })
 }
 
 /// Returns directories with generated config files that should be used as

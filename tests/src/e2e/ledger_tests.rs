@@ -8,7 +8,6 @@ use anoma::types::storage::Epoch;
 use anoma::types::token;
 use anoma::types::transaction::{Fee, WrapperTx};
 use anoma_apps::wallet;
-use assert_cmd::assert::OutputAssertExt;
 use assert_cmd::cargo::CommandCargoExt;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
@@ -18,45 +17,20 @@ use rexpect::session::spawn_command;
 use setup::constants::*;
 use tempfile::tempdir;
 
-use crate::e2e::setup::{self, sleep};
+use crate::e2e::setup::{self, sleep, Bin, Test};
+use crate::run;
 
 /// Test that when we "run-ledger" with all the possible command
 /// combinations from fresh state, the node starts-up successfully.
 #[test]
 fn run_ledger() -> Result<()> {
-    let dir = setup::working_dir();
-
-    let base_dir = tempdir().unwrap();
-
-    let cmd_combinations = vec![
-        ("anoma", vec!["ledger"]),
-        ("anoma", vec!["ledger", "run"]),
-        ("anoma", vec!["node", "ledger"]),
-        ("anoma", vec!["node", "ledger", "run"]),
-        ("anoman", vec!["ledger"]),
-        ("anoman", vec!["ledger", "run"]),
-    ];
+    let test = Test::new();
+    let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
     // Start the ledger
-    for (cmd_name, args) in cmd_combinations {
-        let mut cmd = Command::cargo_bin(cmd_name)?;
-
-        cmd.current_dir(&dir)
-            .env("ANOMA_LOG", "anoma=debug")
-            .args(&["--base-dir", &base_dir.path().to_string_lossy()])
-            .args(args);
-
-        let cmd_str = format!("{:?}", cmd);
-
-        let mut session = spawn_command(cmd, Some(20_000)).map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-
-        session
-            .exp_string("Anoma ledger node started")
-            .map_err(|e| {
-                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-            })?;
+    for args in cmd_combinations {
+        let mut session = run!(test, Bin::Node, args, Some(20_000))?;
+        session.exp_string("Anoma ledger node started")?;
     }
 
     Ok(())
@@ -69,23 +43,12 @@ fn run_ledger() -> Result<()> {
 /// 4. Check that the node shuts down
 #[test]
 fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
-    let dir = setup::working_dir();
-
-    let base_dir = tempdir().unwrap();
-    let base_dir_arg = &base_dir.path().to_string_lossy();
+    let test = Test::new();
 
     // 1. Run the ledger node
-    let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg, "ledger"]);
-    println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
 
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("Anoma ledger node started")?;
 
     // 2. Kill the tendermint node
     sleep(1);
@@ -97,14 +60,10 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
         .expect("Test failed");
 
     // 3. Check that anoma detects that the tendermint node is dead
-    session
-        .exp_string("Tendermint node is no longer running.")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("Tendermint node is no longer running.")?;
 
     // 4. Check that the ledger node shuts down
-    session
-        .exp_string("Shutting down Anoma node")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("Shutting down Anoma node")?;
 
     Ok(())
 }
@@ -118,85 +77,44 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 /// 6. Run the ledger again, it should start from fresh state
 #[test]
 fn run_ledger_load_state_and_reset() -> Result<()> {
-    let dir = setup::working_dir();
-
-    let base_dir = tempdir().unwrap();
-    let base_dir_arg = &base_dir.path().to_string_lossy();
+    let test = Test::new();
 
     // 1. Run the ledger node
-    let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg, "ledger"]);
-    println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
 
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("Anoma ledger node started")?;
 
     // There should be no previous state
-    session
-        .exp_string("No state could be found")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("No state could be found")?;
 
     // Wait to commit a block
-    session
-        .exp_regex(r"Committed block hash.*, height: 2")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_regex(r"Committed block hash.*, height: 2")?;
     // 2. Shut it down
-    session
-        .send_control('c')
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.send_control('c')?;
     drop(session);
 
     // 3. Run the ledger again, it should load its previous state
-    let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg, "ledger"]);
-    println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
 
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("Anoma ledger node started")?;
 
     // There should be previous state now
-    session
-        .exp_string("Last state root hash:")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("Last state root hash:")?;
+
     // 4. Shut it down
-    session
-        .send_control('c')
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.send_control('c')?;
     drop(session);
 
     // 5. Reset the ledger's state
-    let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg, "ledger", "reset"]);
-    cmd.assert().success();
+    run!(test, Bin::Node, &["ledger", "reset"], Some(10_000))?;
 
     // 6. Run the ledger again, it should start from fresh state
-    let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", &base_dir.path().to_string_lossy(), "ledger"]);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
 
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("Anoma ledger node started")?;
 
     // There should be no previous state
-    session
-        .exp_string("No state could be found")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("No state could be found")?;
 
     Ok(())
 }
@@ -210,26 +128,13 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 6. Query token balance
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
-    let dir = setup::working_dir();
-
-    let base_dir = tempdir().unwrap();
-    let base_dir_arg = &base_dir.path().to_string_lossy();
+    let test = Test::new();
 
     // 1. Run the ledger node
-    let mut cmd = Command::cargo_bin("anoman")?;
-    cmd.current_dir(&dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg, "ledger"]);
-    println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
 
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
-    session
-        .exp_string("Started node")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    session.exp_string("Anoma ledger node started")?;
+    session.exp_string("Started node")?;
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
     let vp_user = vp_user.to_string_lossy();
@@ -269,37 +174,22 @@ fn ledger_txs_and_queries() -> Result<()> {
         ];
     for tx_args in &txs_args {
         for &dry_run in &[true, false] {
-            let mut cmd = Command::cargo_bin("anomac")?;
-            cmd.current_dir(&dir)
-                .env("ANOMA_LOG", "anoma=debug")
-                .args(&["--base-dir", base_dir_arg])
-                .args(tx_args);
-            if dry_run {
-                cmd.arg("--dry-run");
-            }
-            let cmd_str = format!("{:?}", cmd);
+            let tx_args = if dry_run {
+                vec![tx_args.clone(), vec!["--dry-run"]].concat()
+            } else {
+                tx_args.clone()
+            };
+            let mut session = run!(test, Bin::Client, tx_args, Some(20_000))?;
 
-            let mut request =
-                spawn_command(cmd, Some(20_000)).map_err(|e| {
-                    eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-                })?;
             if !dry_run {
-                request
-                    .exp_string("Process proposal accepted this transaction")
-                    .map_err(|e| {
-                        eyre!(format!(
-                            "in command: {}\n\nReason: {}",
-                            cmd_str, e
-                        ))
-                    })?;
+                session
+                    .exp_string("Process proposal accepted this transaction")?;
             }
-            request.exp_string("Transaction is valid.").map_err(|e| {
-                eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-            })?;
+            session.exp_string("Transaction is valid.")?;
 
-            let status = request.process.wait().unwrap();
+            let status = session.session.process.wait().unwrap();
             assert_eq!(
-                WaitStatus::Exited(request.process.child_pid, 0),
+                WaitStatus::Exited(session.session.process.child_pid, 0),
                 status
             );
         }
@@ -314,22 +204,14 @@ fn ledger_txs_and_queries() -> Result<()> {
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
-        let mut cmd = Command::cargo_bin("anomac")?;
-        cmd.current_dir(&dir)
-            .env("ANOMA_LOG", "anoma=debug")
-            .args(&["--base-dir", base_dir_arg])
-            .args(query_args);
-        let cmd_str = format!("{:?}", cmd);
+        let mut session = run!(test, Bin::Client, query_args, Some(20_000))?;
+        session.exp_regex(expected)?;
 
-        let mut session = spawn_command(cmd, Some(10_000)).map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-        session.exp_regex(expected).map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-
-        let status = session.process.wait().unwrap();
-        assert_eq!(WaitStatus::Exited(session.process.child_pid, 0), status);
+        let status = session.session.process.wait().unwrap();
+        assert_eq!(
+            WaitStatus::Exited(session.session.process.child_pid, 0),
+            status
+        );
     }
 
     Ok(())

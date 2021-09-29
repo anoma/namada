@@ -32,6 +32,7 @@ anoma_apps = {path = "../apps", features = ["testing"]}
 assert_cmd = "1.0.7"
 borsh = "0.9.1"
 color-eyre = "0.5.11"
+escargot = "0.5.2"
 eyre = "0.6.5"
 itertools = "0.10.0"
 libp2p = "0.38.0"

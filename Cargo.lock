@@ -207,6 +207,7 @@ dependencies = [
  "chrono",
  "color-eyre",
  "concat-idents",
+ "escargot",
  "eyre",
  "ibc",
  "ibc-proto",
@@ -1746,6 +1747,18 @@ checksum = "2d2f06b9cac1506ece98fe3231e3cc9c4410ec3d5b1f24ae1c8946f0742cdefc"
 dependencies = [
  "backtrace",
  "version_check 0.9.3",
+]
+
+[[package]]
+name = "escargot"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44bb3f795fe1b9d34f089c7fab034c2b757998d65361d95ef008045b57665262"
+dependencies = [
+ "log 0.4.14",
+ "once_cell",
+ "serde 1.0.130",
+ "serde_json",
 ]
 
 [[package]]
