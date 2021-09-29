@@ -256,16 +256,16 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
   pull: never
-- commands: [aws s3 sync wasm/*.wasm heliax-drone-wasm-v2 --acl public-read, 'cp wasm/checksums.json
-      ${DRONE_SOURCE_BRANCH}.json', 'aws s3 cp ${DRONE_SOURCE_BRANCH}.json heliax-drone-wasm-v2
-      --acl public-read']
+- commands: ['aws s3 sync wasm s3://heliax-drone-wasm-v2 --acl public-read --exclude
+      "*" --include "*.wasm"', 'cp wasm/checksums.json ${DRONE_SOURCE_BRANCH}.json',
+    'aws s3 cp ${DRONE_SOURCE_BRANCH}.json heliax-drone-wasm-v2 --acl public-read']
   depends_on: [build-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
-  name: update-wasm
+  name: -wasm
   pull: never
 - commands: [make test-wasm]
   depends_on: [update-wasm]
@@ -932,6 +932,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 057c1441f32c961a4601cbeaeb086a3d52695d5f465e3d69039ad84afaf61e59
+hmac: 3a46df5aa1b23f6e9010d9a454cc18ec71c0250d4ca9b175c69cbe24b3d94346
 
 ...
