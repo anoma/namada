@@ -10,6 +10,168 @@ use anoma::types::key::ed25519::Keypair;
 use anoma::types::key::ed25519::PublicKey;
 use anoma::types::{storage, token};
 
+/// Genesis configuration file format
+mod genesis_config {
+    use std::str::FromStr;
+
+    use anoma::ledger::parameters::{EpochDuration, Parameters};
+    use anoma::ledger::pos::{GenesisValidator, PosParams};
+    use anoma::ledger::pos::types::BasisPoints;
+    use anoma::types::address::Address;
+    use anoma::types::key::ed25519::{ParsePublicKeyError, PublicKey};
+    use anoma::types::token;
+    use hex;
+    use serde::Deserialize;
+
+    use super::{Genesis,Validator};
+
+    #[derive(Debug,Deserialize)]
+    struct HexString(String);
+
+    impl HexString {
+        pub fn to_bytes(&self) -> Result<Vec<u8>, HexKeyError> {
+            let bytes = hex::decode(self.0.to_owned())?;
+            Ok(bytes)
+        }
+
+        pub fn to_public_key(&self) -> Result<PublicKey, HexKeyError> {
+            let key = PublicKey::from_str(&self.0)?;
+            Ok(key)
+        }
+    }
+
+    #[derive(Debug)]
+    enum HexKeyError {
+        InvalidHexString(hex::FromHexError),
+        InvalidPublicKey(ParsePublicKeyError),
+    }
+
+    impl From<hex::FromHexError> for HexKeyError {
+        fn from(err: hex::FromHexError) -> Self {
+            Self::InvalidHexString(err)
+        }
+    }
+
+    impl From<ParsePublicKeyError> for HexKeyError {
+        fn from(err: ParsePublicKeyError) -> Self {
+            Self::InvalidPublicKey(err)
+        }
+    }
+
+    #[derive(Debug,Deserialize)]
+    struct GenesisConfig {
+        // Initial validator set
+        pub validator: Vec<ValidatorConfig>,
+        // Protocol parameters
+        pub parameters: ParametersConfig,
+        // PoS parameters
+        pub pos_params: PosParamsConfig,
+    }
+
+    #[derive(Debug,Deserialize)]
+    struct ValidatorConfig {
+        // Public key for consensus. (default: generate)
+        consensus_public_key: Option<HexString>,
+        // Public key for validator account. (default: generate)
+        account_public_key: Option<HexString>,
+        // Public key for staking reward account. (default: generate)
+        staking_reward_public_key: Option<HexString>,
+        // Validator address.
+        address: String,
+        // Staking reward account address.
+        staking_reward_address: String,
+        // Total number of tokens held at genesis.
+        tokens: u64,
+        // Unstaked balance at genesis.
+        non_staked_balance: u64,
+        // Filename of validator VP. (default: default validator VP)
+        validator_vp: Option<String>,
+        // Filename of staking reward account VP. (default: user VP)
+        staking_reward_vp: Option<String>,
+    }
+
+    #[derive(Debug,Deserialize)]
+    struct ParametersConfig {
+        // Minimum number of blocks per epoch.
+        min_num_of_blocks: u64,
+        // Minimum duration of an epoch (in seconds).
+        min_duration: i64,
+    }
+
+    #[derive(Debug,Deserialize)]
+    struct PosParamsConfig {
+        // Maximum number of active validators.
+        max_validator_slots: u64,
+        // Pipeline length (in epochs).
+        pipeline_len: u64,
+        // Unbonding length (in epochs).
+        unbonding_len: u64,
+        // Votes per token (in basis points).
+        votes_per_token: u64,
+        // Reward for proposing a block.
+        block_proposer_reward: u64,
+        // Reward for voting on a block.
+        block_vote_reward: u64,
+        // Portion of a validator's stake that should be slashed on a
+        // duplicate vote (in basis points).
+        duplicate_vote_slash_rate: u64,
+        // Portion of a validator's stake that should be slashed on a
+        // light client attack (in basis points).
+        light_client_attack_slash_rate: u64,
+    }
+
+    fn load_validator(config: &ValidatorConfig) -> Validator {
+        Validator {
+            pos_data: GenesisValidator {
+                address: Address::decode(&config.address).unwrap(),
+                staking_reward_address: Address::decode(&config.staking_reward_address).unwrap(),
+                tokens: token::Amount::whole(config.tokens),
+                consensus_key: config.consensus_public_key.as_ref().unwrap().to_public_key().unwrap(),
+                staking_reward_key: config.staking_reward_public_key.as_ref().unwrap().to_public_key().unwrap(),
+            },
+            account_key: config.account_public_key.as_ref().unwrap().to_public_key().unwrap(),
+            non_staked_balance: token::Amount::whole(config.non_staked_balance),
+            vp_code_path: config.validator_vp.as_ref().unwrap().to_string(),
+        }
+    }
+
+    fn load_genesis_config(config: GenesisConfig) -> Genesis {
+        let validators = config.validator.iter().map(load_validator).collect();
+
+        let parameters = Parameters {
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: config.parameters.min_num_of_blocks,
+                min_duration: anoma::types::time::Duration::seconds(config.parameters.min_duration).into(),
+            },
+        };
+
+        let pos_params = PosParams {
+            max_validator_slots: config.pos_params.max_validator_slots,
+            pipeline_len: config.pos_params.pipeline_len,
+            unbonding_len: config.pos_params.unbonding_len,
+            votes_per_token: BasisPoints::new(config.pos_params.votes_per_token),
+            block_proposer_reward: config.pos_params.block_proposer_reward,
+            block_vote_reward: config.pos_params.block_vote_reward,
+            duplicate_vote_slash_rate: BasisPoints::new(config.pos_params.duplicate_vote_slash_rate),
+            light_client_attack_slash_rate: BasisPoints::new(config.pos_params.light_client_attack_slash_rate),
+        };
+
+        Genesis {
+            validators: validators,
+            token_accounts: vec![],
+            established_accounts: vec![],
+            implicit_accounts: vec![],
+            parameters: parameters,
+            pos_params: pos_params,
+        }
+    }
+
+    pub fn read_genesis_config(path: &str) -> Genesis {
+        let config_file = std::fs::read_to_string(path).unwrap();
+        load_genesis_config(toml::from_str(&config_file).unwrap())
+    }
+}
+
 #[derive(Debug)]
 pub struct Genesis {
     pub validators: Vec<Validator>,
@@ -164,7 +326,7 @@ pub fn genesis() -> Genesis {
 }
 #[cfg(not(feature = "dev"))]
 pub fn genesis() -> Genesis {
-    todo!("load from file")
+    genesis_config::read_genesis_config("genesis/genesis.toml")
 }
 
 #[cfg(test)]
