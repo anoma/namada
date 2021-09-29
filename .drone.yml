@@ -257,9 +257,9 @@ steps:
   name: build-wasm
   pull: never
 - commands: ['aws s3 sync wasm s3://heliax-drone-wasm-v2 --acl public-read --exclude
-      "*" --exclude "*" --include "*.wasm" --exclude "*/*"', 'cp wasm/checksums.json
-      ${DRONE_SOURCE_BRANCH}.json', 'aws s3 cp ${DRONE_SOURCE_BRANCH}.json heliax-drone-wasm-v2
-      --acl public-read']
+      "*" --exclude "*" --include "*.wasm" --exclude "*/*"', 'CHECKSUM_FILE=$(echo
+      ${DRONE_SOURCE_BRANCH} | tr "/" "-")', 'cp wasm/checksums.json ${CHECKSUM_FILE}.json',
+    'aws s3 cp ${CHECKSUM_FILE}.json heliax-drone-wasm-v2 --acl public-read']
   depends_on: [build-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -933,6 +933,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 164efa98442683b70c1e825b3c391b280dc9f009109299eaa7951bb79345668b
+hmac: 6b7a7dc0141db4283ff8abf57a8180240bdad8eeb7fc5e7ac5626ff162c1a07b
 
 ...
