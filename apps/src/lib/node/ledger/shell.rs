@@ -246,13 +246,15 @@ impl Shell {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
                 || {
-                    std::fs::read(self.wasm_dir.join(&validator.validator_vp_code_path))
-                        .unwrap_or_else(|_| {
-                            panic!(
-                                "cannot load genesis VP {}.",
-                                validator.validator_vp_code_path
-                            )
-                        })
+                    std::fs::read(
+                        self.wasm_dir.join(&validator.validator_vp_code_path),
+                    )
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "cannot load genesis VP {}.",
+                            validator.validator_vp_code_path
+                        )
+                    })
                 },
             );
             let addr = &validator.pos_data.address;
@@ -301,6 +303,27 @@ impl Shell {
             evidence: Some(evidence_params),
             ..response.consensus_params.unwrap_or_default()
         });
+
+        // Set the initial validator set
+        for validator in genesis.validators {
+            let mut abci_validator =
+                tendermint_proto::abci::ValidatorUpdate::default();
+            let consensus_key: ed25519_dalek::PublicKey =
+                validator.pos_data.consensus_key.clone().into();
+            let pub_key = tendermint_proto::crypto::PublicKey {
+                sum: Some(tendermint_proto::crypto::public_key::Sum::Ed25519(
+                    consensus_key.to_bytes().to_vec(),
+                )),
+            };
+            abci_validator.pub_key = Some(pub_key);
+            let power: u64 =
+                validator.pos_data.voting_power(&genesis.pos_params).into();
+            abci_validator.power = power
+                .try_into()
+                .expect("unexpected validator's voting power");
+            response.validators.push(abci_validator);
+        }
+
         Ok(response)
     }
 
