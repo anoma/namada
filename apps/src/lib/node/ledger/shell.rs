@@ -174,6 +174,7 @@ impl Shell {
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
+            vp_sha256,
             public_key,
             storage,
         } in genesis.established_accounts
@@ -215,6 +216,7 @@ impl Shell {
         for genesis::TokenAccount {
             address,
             vp_code_path,
+            vp_sha256,
             balances,
         } in genesis.token_accounts
         {
@@ -242,13 +244,13 @@ impl Shell {
         // Initialize genesis validator accounts
         for validator in &genesis.validators {
             let vp_code = vp_code_cache.get_or_insert_with(
-                validator.vp_code_path.clone(),
+                validator.validator_vp_code_path.clone(),
                 || {
-                    std::fs::read(self.wasm_dir.join(&validator.vp_code_path))
+                    std::fs::read(self.wasm_dir.join(&validator.validator_vp_code_path))
                         .unwrap_or_else(|_| {
                             panic!(
                                 "cannot load genesis VP {}.",
-                                validator.vp_code_path
+                                validator.validator_vp_code_path
                             )
                         })
                 },

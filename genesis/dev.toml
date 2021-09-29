@@ -17,16 +17,16 @@ tokens                    = 200000
 # Amount of the validator's genesis token balance which is not staked.
 non_staked_balance        = 100000
 # VP for the validator account
-validator_vp              = "vp_user.wasm"
+validator_vp              = "vp_user"
 # VP for the staking reward account
-staking_reward_vp         = "vp_user.wasm"
+staking_reward_vp         = "vp_user"
 
 # Some tokens present at genesis.
 
 # XAN
 [[token]]
 address = "a1qq5qqqqqxuc5gvz9gycryv3sgye5v3j9gvurjv34g9prsd6x8qu5xs2ygdzrzsf38q6rss33xf42f3"
-vp = "vp_token.wasm"
+vp = "vp_token"
 [token.balances]
 a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx   = 1000000
 a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9   = 1000000
@@ -36,7 +36,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 # BTC
 [[token]]
 address = "a1qq5qqqqq8q6yy3p4xyurys3n8qerz3zxxeryyv6rg4pnxdf3x3pyv32rx3zrgwzpxu6ny32r3laduc"
-vp = "vp_token.wasm"
+vp = "vp_token"
 [token.balances]
 a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx   = 1000000
 a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9   = 1000000
@@ -46,7 +46,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 # ETH
 [[token]]
 address = "a1qq5qqqqqx3z5xd3ngdqnzwzrgfpnxd3hgsuyx3phgfry2s3kxsc5xves8qe5x33sgdprzvjptzfry9"
-vp = "vp_token.wasm"
+vp = "vp_token"
 [token.balances]
 a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx   = 1000000
 a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9   = 1000000
@@ -56,7 +56,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 # DOT
 [[token]]
 address = "a1qq5qqqqqxq652v3sxap523fs8pznjse5g3pyydf3xqurws6ygvc5gdfcxyuy2deeggenjsjrjrl2ph"
-vp = "vp_token.wasm"
+vp = "vp_token"
 [token.balances]
 a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx   = 1000000
 a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9   = 1000000
@@ -66,7 +66,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 # Schnitzel
 [[token]]
 address = "a1qq5qqqqq8prrzv6xxcury3p4xucygdp5gfprzdfex9prz3jyg56rxv69gvenvsj9g5enswpcl8npyz"
-vp = "vp_token.wasm"
+vp = "vp_token"
 [token.balances]
 a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx   = 1000000
 a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9   = 1000000
@@ -76,7 +76,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 # Apfel
 [[token]]
 address = "a1qq5qqqqqgfp52de4x56nqd3ex56y2wph8pznssjzx5ersw2pxfznsd3jxeqnjd3cxapnqsjz2fyt3j"
-vp = "vp_token.wasm"
+vp = "vp_token"
 [token.balances]
 a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx   = 1000000
 a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9   = 1000000
@@ -87,7 +87,7 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 [[token]]
 address = "a1qq5qqqqqxs6yvsekxuuyy3pjxsmrgd2rxuungdzpgsmyydjrxsenjdp5xaqn233sgccnjs3eak5wwh"
 public_key = ""
-vp = "vp_token.wasm"
+vp = "vp_token"
 [token.balances]
 a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx   = 1000000
 a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9   = 1000000
@@ -100,31 +100,45 @@ a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6m
 [[established]]
 address = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx"
 public_key = "a57281e1dd9fd39ec3e8a162a1643ca7c836c0f2dae3bef1412a3a61a2fde1a7"
-vp = "vp_user.wasm"
+vp = "vp_user"
 
 # Bertha
 [[established]]
 address = "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9"
 public_key = "572512a95b190d615b1987f7072572a64951ad50f4f97ef9dbb83545c46ae600"
-vp = "vp_user.wasm"
+vp = "vp_user"
 
 # Christel
 [[established]]
 address = "a1qq5qqqqqxsuygd2x8pq5yw2ygdryxs6xgsmrsdzx8pryxv34gfrrssfjgccyg3zpxezrqd2y2s3g5s"
 public_key = "d06f8d4f897f329a50fd23ba5d2503bbe22fab2f14d5f625e07a65f617eb2778"
-vp = "vp_user.wasm"
+vp = "vp_user"
 
 # Matchmaker
 [[established]]
 address = "a1qq5qqqqqxu6rvdzpxymnqwfkxfznvsjxggunyd3jg5erg3p3geqnvv35gep5yvzxx5m5x3fsfje8td"
 public_key = "f4fe03b0d3130f077e4d51cc7748baac998750476bef994a0a73ac4e7d183168"
-vp = "vp_user.wasm"
+vp = "vp_user"
 
 # An implicit account present at genesis.
 
 # Daewon (a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz)
 [[implicit]]
 public_key = "2b5b8fda66fb6fc4ef0d86f84b21f250034077effc459fc2403a77a35aa95e3f"
+
+# Wasm VP definitions
+
+# Default user VP
+[wasm.vp_user]
+# filename (relative to wasm path used by the node)
+filename = "vp_user.wasm"
+# SHA-256 hash of the wasm file
+sha256   = "dc7b97f0448f2369bd2401c3c1d8898f53cac8c464a8c1b1f7f81415a658625d"
+
+# Token VP
+[wasm.vp_token]
+filename = "vp_token.wasm"
+sha256   = "e428a11f570d21dd3c871f5d35de6fe18098eb8ee0456b3e11a72ccdd8685cd0"
 
 # General protocol parameters.
 [parameters]
