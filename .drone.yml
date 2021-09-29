@@ -265,7 +265,7 @@ steps:
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
-  name: -wasm
+  name: update-wasm
   pull: never
 - commands: [make test-wasm]
   depends_on: [update-wasm]
@@ -932,6 +932,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 3a46df5aa1b23f6e9010d9a454cc18ec71c0250d4ca9b175c69cbe24b3d94346
+hmac: bd36f04c61b4bceafcd981d3830d031cec2af099002799a3985f5d68107ee0d4
 
 ...
