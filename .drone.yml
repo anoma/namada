@@ -63,9 +63,9 @@ steps:
   name: build-test
   pull: never
 - commands: ['aws s3 cp heliax-drone-wasm-v2/${DRONE_SOURCE_BRANCH}.json wasm --acl
-      public-read', 'cp wasm/${DRONE_SOURCE_BRANCH}.json wasm/checksums.json', 'jq
-      -r -c ''.[]'' wasm/checksums.json | parallel aws s3 cp s3://heliax-drone-wasm-v2/{}
-      wasm']
+      public-read', 'CHECKSUM_FILE=$(echo ${DRONE_SOURCE_BRANCH} | tr "/" "-")', 'cp
+      wasm/${CHECKSUM_FILE}.json wasm/checksums.json', 'jq -r -c ''.[]'' wasm/checksums.json
+      | parallel aws s3 cp s3://heliax-drone-wasm-v2/{} wasm']
   depends_on: [build-test]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: download-wasm
@@ -933,6 +933,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 6b7a7dc0141db4283ff8abf57a8180240bdad8eeb7fc5e7ac5626ff162c1a07b
+hmac: 71c31d2512d3081614006054f7ff30d68e00ed3f62609b92c12fbfc475009d0e
 
 ...
