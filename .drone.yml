@@ -236,6 +236,23 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
+- depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: meltwater/drone-cache:latest
+  name: restore-cache
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    region: eu-west-1
+    restore: true
 - commands: [cp wasm/checksums.json wasm/original-checksums.json, make build-wasm-scripts]
   depends_on: [restore-cache]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
@@ -853,6 +870,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 4728b03eed6c1450e8801a28c826f959497d4c34611623f3889d6200c7b529ce
+hmac: 017f4373a937fe2c7547121b4e8e2613526b428b80254bf06e6006ad0b9ebcc3
 
 ...
