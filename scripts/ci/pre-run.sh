@@ -1,13 +1,7 @@
 # script used only during CI execution.
 
-SKIP=${1:-true}
-
 # we don't want to skip pipeline execution if event is push
 if [[ "push" == "$DRONE_BUILD_EVENT" ]]; then
-  exit 0
-fi
-
-if [ "$SKIP" = false ] ; then 
   exit 0
 fi
 
