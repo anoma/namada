@@ -253,7 +253,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-wasm-scripts]
+- commands: [cp wasm/checksums.json wasm/original-checksums.json, make build-wasm-scripts]
   depends_on: [restore-cache]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
@@ -275,8 +275,13 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: test-wasm
   pull: never
+- commands: [cmp -- wasm/checksums.json wasm/original-checksums.json]
+  depends_on: [update-wasm]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  name: check-wasm
+  pull: never
 - commands: [cargo cache]
-  depends_on: [test-wasm]
+  depends_on: [test-wasm, check-wasm]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
   pull: never
@@ -335,55 +340,6 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
-    region: eu-west-1
-    restore: true
-- commands: [cp wasm/checksums.json wasm/original-checksums.json, make build-wasm-scripts,
-    python3 wasm/checksums.py, cmp --silent -- wasm/checksums.json wasm/original-checksums.json]
-  depends_on: [restore-cache]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  name: check-wasm
-  pull: never
-- commands: [cargo cache]
-  depends_on: [check-wasm]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   event: [pull_request]
 type: docker
@@ -810,7 +766,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-wasm-scripts]
+- commands: [cp wasm/checksums.json wasm/original-checksums.json, make build-wasm-scripts]
   depends_on: [restore-cache]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
@@ -940,6 +896,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 4a70262dd57068d4b131066fdf11e5d90170e5272cdc1d1c43a6460ffdbe16a4
+hmac: 505bb12a1ae22532da0cb36a06c0969803f1c24b52201922b5962bdfd41a1213
 
 ...
