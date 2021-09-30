@@ -252,14 +252,19 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-wasm-scripts]
+- commands: [sccache --start-server, make build-wasm-scripts]
   depends_on: [restore-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build-wasm
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
   pull: never
 - commands: ['aws s3 sync wasm s3://heliax-drone-wasm-v2 --acl public-read --exclude
       "*" --exclude "*" --include "*.wasm" --exclude "*/*"', 'cp wasm/checksums.json
-      wasm/${DRONE_COMMIT}.json', 'aws s3 cp wasm/${DRONE_COMMIT}.json heliax-drone-wasm-v2
+      wasm/${DRONE_COMMIT}.json', 'aws s3 cp wasm/${DRONE_COMMIT}.json s3://heliax-drone-wasm-v2
       --acl public-read']
   depends_on: [build-wasm]
   environment:
@@ -804,8 +809,13 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-wasm-scripts]
+- commands: [sccache --start-server, make build-wasm-scripts]
   depends_on: [restore-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build-wasm
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
   pull: never
@@ -934,6 +944,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 46b9d4b00c2faf4e4f43f99abf43ffef934833b089275e84365fd05218a14640
+hmac: 1a1a84ebec5be7173de866b0fef3a80658a86d35747bfca24a5922a213234927
 
 ...
