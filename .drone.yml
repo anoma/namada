@@ -5,7 +5,8 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
+      --quiet]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -117,7 +118,8 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
+      --quiet]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -213,7 +215,8 @@ kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
+      --quiet]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -393,7 +396,8 @@ kind: pipeline
 name: anoma-ci-cron
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
+      --quiet]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -482,7 +486,8 @@ kind: pipeline
 name: anoma-ci-miri-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
+      --quiet]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -568,7 +573,8 @@ kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
+      --quiet]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -649,7 +655,8 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
+      --quiet]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -765,7 +772,8 @@ kind: pipeline
 name: anoma-ci-wasm-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT]
+- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
+      --quiet]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -932,6 +940,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 396bd31c4051b4af034cb3264a20ee74494f1ec106871b1f33966858041f0cdf
+hmac: 4a70262dd57068d4b131066fdf11e5d90170e5272cdc1d1c43a6460ffdbe16a4
 
 ...

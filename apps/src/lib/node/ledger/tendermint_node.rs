@@ -32,6 +32,8 @@ pub enum Error {
     WriteConfig(std::io::Error),
     #[error("Failed to start up Tendermint node: {0}")]
     StartUp(std::io::Error),
+    #[error("Runtime error")]
+    Runtime,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -42,8 +44,8 @@ pub fn run(
     ledger_address: String,
     rpc_address: String,
     p2p_address: String,
-    kill_switch: Sender<bool>,
-    receiver: Receiver<bool>,
+    abort_sender: Sender<bool>,
+    abort_receiver: Receiver<bool>,
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
     let rpc_address: net::Address =
@@ -104,20 +106,26 @@ pub fn run(
     let pid = tendermint_node.id();
     tracing::info!("Tendermint node started");
     // make sure to shut down when receiving a termination signal
-    kill_on_term_signal(kill_switch.clone());
-    // shut down the anoma node if tendermint unexpectedly stops
-    monitor_process(tendermint_node, kill_switch);
-    if receiver.recv().unwrap() {
-        unsafe {
-            libc::kill(pid as i32, libc::SIGTERM);
-        };
+    kill_on_term_signal(abort_sender.clone());
+    // shut down the anoma node if tendermint stops
+    monitor_process(tendermint_node, abort_sender);
+
+    // Wait for abort signal (blocking)
+    let exit_gracefully = abort_receiver.recv().unwrap_or_default();
+    // Send signal to shut down Tendermint node
+    unsafe {
+        libc::kill(pid as i32, libc::SIGTERM);
+    };
+    if exit_gracefully {
+        Ok(())
+    } else {
+        Err(Error::Runtime)
     }
-    Ok(())
 }
 
 /// Listens for termination signals and forwards a kill command to the
 /// tendermint node when it encounters one.
-fn kill_on_term_signal(kill_switch: Sender<bool>) {
+fn kill_on_term_signal(abort_sender: Sender<bool>) {
     let _ = std::thread::spawn(move || {
         let mut signals = Signals::new(TERM_SIGNALS)
             .expect("Failed to creat OS signal handlers");
@@ -127,7 +135,7 @@ fn kill_on_term_signal(kill_switch: Sender<bool>) {
                     "Received termination signal, shutting down Tendermint \
                      node"
                 );
-                let _ = kill_switch.send(true);
+                let _ = abort_sender.send(true);
                 break;
             }
         }
@@ -138,12 +146,12 @@ fn kill_on_term_signal(kill_switch: Sender<bool>) {
 /// shuts down the anoma node
 fn monitor_process(
     mut process: std::process::Child,
-    kill_switch: Sender<bool>,
+    abort_sender: Sender<bool>,
 ) {
     std::thread::spawn(move || {
-        process.wait().expect("Tendermint was not running");
+        let status = process.wait().expect("Tendermint was not running");
         tracing::info!("Tendermint node is no longer running.");
-        let _ = kill_switch.send(true);
+        let _ = abort_sender.send(status.success());
     });
 }
 
