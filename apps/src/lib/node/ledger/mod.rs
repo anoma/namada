@@ -7,6 +7,7 @@ pub mod storage;
 pub mod tendermint_node;
 
 use std::convert::{TryFrom, TryInto};
+use std::mem;
 use std::sync::mpsc::channel;
 
 use anoma::types::storage::BlockHash;
@@ -185,11 +186,12 @@ async fn run_shell(
 ///
 /// When the shell process finishes, we check if it finished with a panic. If it
 /// did we stop the tendermint node with a channel that acts as a kill switch.
-pub fn run(config: config::Ledger) {
+pub fn run(mut config: config::Ledger) {
     let home_dir = config.tendermint.clone();
     let ledger_address = config.ledger_address.to_string();
     let rpc_address = config.rpc_address.to_string();
     let p2p_address = config.p2p_address.to_string();
+    let p2p_persistent_peers = mem::take(&mut config.p2p_persistent_peers);
     let chain_id = config.chain_id.clone();
 
     // used for shutting down Tendermint node in case the shell panics
@@ -207,6 +209,7 @@ pub fn run(config: config::Ledger) {
             ledger_address,
             rpc_address,
             p2p_address,
+            p2p_persistent_peers,
             sender,
             receiver,
         ) {

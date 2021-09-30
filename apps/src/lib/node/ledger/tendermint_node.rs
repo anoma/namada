@@ -44,6 +44,7 @@ pub fn run(
     ledger_address: String,
     rpc_address: String,
     p2p_address: String,
+    p2p_persistent_peers: Vec<net::Address>,
     kill_switch: Sender<bool>,
     receiver: Receiver<bool>,
 ) -> Result<()> {
@@ -91,7 +92,12 @@ pub fn run(
         }
     }
 
-    update_tendermint_config(&home_dir, rpc_address, p2p_address)?;
+    update_tendermint_config(
+        &home_dir,
+        rpc_address,
+        p2p_address,
+        p2p_persistent_peers,
+    )?;
 
     let tendermint_node = Command::new("tendermint")
         .args(&[
@@ -233,6 +239,7 @@ fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
     rpc_address: net::Address,
     p2p_address: net::Address,
+    p2p_persistent_peers: Vec<net::Address>,
 ) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
@@ -241,6 +248,7 @@ fn update_tendermint_config(
 
     config.rpc.laddr = rpc_address;
     config.p2p.laddr = p2p_address;
+    config.p2p.persistent_peers = p2p_persistent_peers;
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes

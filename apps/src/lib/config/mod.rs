@@ -89,12 +89,37 @@ pub struct Ledger {
     pub ledger_address: SocketAddr,
     pub rpc_address: SocketAddr,
     pub p2p_address: SocketAddr,
+    /// The persistent peers addresses must include node ID
+    pub p2p_persistent_peers: Vec<tendermint::net::Address>,
     pub wasm_dir: PathBuf,
 }
 
 impl Ledger {
     pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
         let sub_dir = base_dir.as_ref().join(chain_id.as_str());
+
+        #[cfg(feature = "dev")]
+        let p2p_persistent_peers = vec![];
+        #[cfg(not(feature = "dev"))]
+        let p2p_persistent_peers = vec![
+            tendermint::net::Address::from_str(
+                "72eb02444a4736d569734675c6ba893aadb3fb99@52.210.23.30:26656",
+            )
+            .unwrap(),
+            tendermint::net::Address::from_str(
+                "39f31bcf0a0b73a08d9e18f4e9cada33d4997779@63.34.55.152:26656",
+            )
+            .unwrap(),
+            tendermint::net::Address::from_str(
+                "d7d2e6e942b157df4137ca3b47258ca20db00416@54.195.72.213:26656",
+            )
+            .unwrap(),
+            tendermint::net::Address::from_str(
+                "31752d323de34e4dcd36ecf30b4ed179de7dc48a@79.125.112.218:26656",
+            )
+            .unwrap(),
+        ];
+
         Self {
             chain_id,
             tendermint: sub_dir.join(TENDERMINT_DIR),
@@ -111,6 +136,7 @@ impl Ledger {
                 IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                 26656,
             ),
+            p2p_persistent_peers,
             wasm_dir: "wasm".into(),
         }
     }

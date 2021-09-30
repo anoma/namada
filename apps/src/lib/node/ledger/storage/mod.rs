@@ -95,7 +95,6 @@ fn new_blake2b() -> Blake2b {
 #[cfg(test)]
 mod tests {
     use anoma::ledger::storage::types;
-    use anoma::types::chain;
     use tempfile::TempDir;
 
     use super::*;
