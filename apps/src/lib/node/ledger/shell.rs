@@ -25,6 +25,7 @@ use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::address::Address;
+use anoma::types::chain::ChainId;
 use anoma::types::storage::{BlockHash, BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::transaction::{process_tx, TxType, WrapperTx};
@@ -106,7 +107,7 @@ impl Shell {
     /// up the database with this data and tries to load the last state.
     pub fn new(
         db_path: impl AsRef<Path>,
-        chain_id: String,
+        chain_id: ChainId,
         wasm_dir: PathBuf,
     ) -> Self {
         let mut storage = storage::open(db_path, chain_id);

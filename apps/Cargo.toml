@@ -41,10 +41,10 @@ path = "src/bin/anoma-wallet/main.rs"
 [features]
 default = ["std", "dev"]
 # NOTE "dev" features that shouldn't be used in live networks are enabled by default for now
-dev = []
+dev = ["anoma/dev"]
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
-testing = []
+testing = ["dev"]
 
 [dependencies]
 anoma = {path = "../shared", features = ["ibc-vp", "wasm-runtime", "ferveo-tpke", "rand"]}

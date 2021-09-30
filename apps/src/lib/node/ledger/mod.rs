@@ -142,11 +142,7 @@ async fn run_shell(
     abort_registration: AbortRegistration,
 ) {
     // Construct our ABCI application.
-    let service = AbcippShim::new(
-        &config.db,
-        config::DEFAULT_CHAIN_ID.to_owned(),
-        config.wasm_dir,
-    );
+    let service = AbcippShim::new(&config.db, config.chain_id, config.wasm_dir);
 
     // Split it into components.
     let (consensus, mempool, snapshot, info) = split::service(service, 5);
@@ -194,6 +190,7 @@ pub fn run(config: config::Ledger) {
     let ledger_address = config.ledger_address.to_string();
     let rpc_address = config.rpc_address.to_string();
     let p2p_address = config.p2p_address.to_string();
+    let chain_id = config.chain_id.clone();
 
     // used for shutting down Tendermint node in case the shell panics
     let (sender, receiver) = channel();
@@ -206,6 +203,7 @@ pub fn run(config: config::Ledger) {
     let tendermint_handle = std::thread::spawn(move || {
         if let Err(err) = tendermint_node::run(
             home_dir,
+            chain_id,
             ledger_address,
             rpc_address,
             p2p_address,

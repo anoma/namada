@@ -1015,6 +1015,7 @@ pub mod args {
     use std::str::FromStr;
 
     use anoma::types::address::Address;
+    use anoma::types::chain::ChainId;
     use anoma::types::intent::{DecimalWrapper, Exchange};
     use anoma::types::key::ed25519::PublicKey;
     use anoma::types::storage::Epoch;
@@ -1037,6 +1038,7 @@ pub mod args {
             Err(_) => ".anoma".into(),
         }),
     );
+    const CHAIN_ID: ArgOpt<ChainId> = arg_opt("chain-id");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
@@ -1096,6 +1098,7 @@ pub mod args {
     /// Global command arguments
     #[derive(Clone, Debug)]
     pub struct Global {
+        pub chain_id: Option<ChainId>,
         pub base_dir: PathBuf,
         pub wasm_dir: Option<PathBuf>,
     }
@@ -1103,28 +1106,34 @@ pub mod args {
     impl Global {
         /// Parse global arguments
         pub fn parse(matches: &ArgMatches) -> Self {
+            let chain_id = CHAIN_ID.parse(matches);
             let base_dir = BASE_DIR.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches);
-            Global { base_dir, wasm_dir }
+            Global {
+                chain_id,
+                base_dir,
+                wasm_dir,
+            }
         }
 
         /// Add global args definition. Should be added to every top-level
         /// command.
         pub fn def(app: App) -> App {
-            app.arg(BASE_DIR.def().about(
-                "The base directory is where the nodes, client and wallet \
-                 configuration and state is stored. This value can also be \
-                 set via `ANOMA_BASE_DIR` environment variable, but the \
-                 argument takes precedence, if specified. Defaults to \
-                 `.anoma`.",
-            ))
-            .arg(WASM_DIR.def().about(
-                "Directory with built WASM validity predicates, transactions \
-                 and matchmaker files. This value can also be set via \
-                 `ANOMA_WASM_DIR` environment variable, but the argument \
-                 takes precedence, if specified. Defaults to `wasm` path, \
-                 relative to current working directory.",
-            ))
+            app.arg(CHAIN_ID.def().about("The chain ID."))
+                .arg(BASE_DIR.def().about(
+                    "The base directory is where the nodes, client and wallet \
+                     configuration and state is stored. This value can also \
+                     be set via `ANOMA_BASE_DIR` environment variable, but \
+                     the argument takes precedence, if specified. Defaults to \
+                     `.anoma`.",
+                ))
+                .arg(WASM_DIR.def().about(
+                    "Directory with built WASM validity predicates, \
+                     transactions and matchmaker files. This value can also \
+                     be set via `ANOMA_WASM_DIR` environment variable, but \
+                     the argument takes precedence, if specified. Defaults to \
+                     `wasm` path, relative to current working directory.",
+                ))
         }
     }
 

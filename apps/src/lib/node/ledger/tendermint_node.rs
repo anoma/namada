@@ -7,6 +7,7 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use anoma::types::address::Address;
+use anoma::types::chain::ChainId;
 use anoma::types::key::ed25519::Keypair;
 use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
@@ -39,6 +40,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Run the tendermint node.
 pub fn run(
     home_dir: PathBuf,
+    chain_id: ChainId,
     ledger_address: String,
     rpc_address: String,
     p2p_address: String,
@@ -67,7 +69,7 @@ pub fn run(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    write_chain_id(&home_dir, config::DEFAULT_CHAIN_ID);
+    write_chain_id(&home_dir, chain_id);
 
     #[cfg(feature = "dev")]
     {
@@ -267,7 +269,7 @@ fn update_tendermint_config(
         .map_err(Error::WriteConfig)
 }
 
-fn write_chain_id(home_dir: impl AsRef<Path>, chain_id: impl AsRef<str>) {
+fn write_chain_id(home_dir: impl AsRef<Path>, chain_id: ChainId) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
     let file = File::open(&path).unwrap_or_else(|err| {
@@ -280,7 +282,7 @@ fn write_chain_id(home_dir: impl AsRef<Path>, chain_id: impl AsRef<str>) {
     let mut genesis: tendermint::Genesis = serde_json::from_reader(reader)
         .expect("Couldn't deserialize the genesis file");
     genesis.chain_id =
-        FromStr::from_str(chain_id.as_ref()).expect("Invalid chain ID");
+        FromStr::from_str(chain_id.as_str()).expect("Invalid chain ID");
 
     let file = OpenOptions::new()
         .write(true)
