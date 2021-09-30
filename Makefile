@@ -136,7 +136,7 @@ build-wasm-scripts:
 
 # need python
 checksum-wasm:
-	python -c 'import json; import glob; import hashlib; json.dump({wasm: hashlib.sha256(open(wasm, "rb").read()).hexdigest() for wasm in glob.glob("wasm/*.wasm")}, open("wasm/checksums.json", "w"))'
+	python wasm/checksums.py
 
 # this command needs wasm-opt installed
 opt-wasm:

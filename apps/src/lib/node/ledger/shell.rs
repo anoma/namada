@@ -39,14 +39,13 @@ use thiserror::Error;
 use tower_abci::{request, response};
 
 use super::rpc;
-use crate::config;
 use crate::config::genesis;
 use crate::node::ledger::events::{Event, EventType};
 use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
-use crate::wasm;
+use crate::{config, wasm};
 
 #[derive(Error, Debug)]
 pub enum Error {

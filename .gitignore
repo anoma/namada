@@ -23,4 +23,4 @@ anoma-*.tar.gz
 /.idea
 
 # wasm artifacts
-wasm/*.wasm
+*.wasm
