@@ -12,6 +12,7 @@ use escargot::CargoBuild;
 use eyre::eyre;
 use libp2p::identity::Keypair;
 use libp2p::PeerId;
+use rexpect::process::wait::WaitStatus;
 use rexpect::session::{spawn_command, PtySession};
 use tempfile::{tempdir, TempDir};
 
@@ -105,11 +106,21 @@ pub struct AnomaCmd {
     cmd_str: String,
 }
 
-/// Wrappers over the inner `PtySession`'s functions with custom error
-/// reporting.
 impl AnomaCmd {
+    /// Assert that the process exited with success
+    pub fn assert_success(&self) {
+        let status = self.session.process.wait().unwrap();
+        assert_eq!(
+            WaitStatus::Exited(self.session.process.child_pid, 0),
+            status
+        );
+    }
+
     /// Wait until provided string is seen on stdout of child process.
     /// Return the yet unread output (without the matched string)
+    ///
+    /// Wrapper over the inner `PtySession`'s functions with custom error
+    /// reporting.
     pub fn exp_string(&mut self, needle: &str) -> Result<String> {
         self.session.exp_string(needle).map_err(|e| {
             eyre!(format!("\n\nIn command: {}\n\nReason: {}", self.cmd_str, e))
@@ -120,6 +131,9 @@ impl AnomaCmd {
     /// Return a tuple:
     /// 1. the yet unread output
     /// 2. the matched regex
+    ///
+    /// Wrapper over the inner `PtySession`'s functions with custom error
+    /// reporting.
     pub fn exp_regex(&mut self, regex: &str) -> Result<(String, String)> {
         self.session.exp_regex(regex).map_err(|e| {
             eyre!(format!("\n\nIn command: {}\n\nReason: {}", self.cmd_str, e))
@@ -131,10 +145,20 @@ impl AnomaCmd {
     ///
     /// E.g. `send_control('c')` sends ctrl-c. Upper/smaller case does not
     /// matter.
+    ///
+    /// Wrapper over the inner `PtySession`'s functions with custom error
+    /// reporting.
     pub fn send_control(&mut self, c: char) -> Result<()> {
         self.session.send_control(c).map_err(|e| {
             eyre!(format!("\n\nIn command: {}\n\nReason: {}", self.cmd_str, e))
         })
+    }
+}
+
+impl Drop for AnomaCmd {
+    fn drop(&mut self) {
+        // Clean up the process, if its still running
+        let _ = self.session.process.exit();
     }
 }
 
@@ -160,27 +184,31 @@ where
         Bin::Client => "anomac",
         Bin::Wallet => "anomaw",
     };
-    // Use the same build settings as `make build-release`
-    let cmd = CargoBuild::new()
-        .package(APPS_PACKAGE)
-        .no_default_features()
-        .features("std")
-        .manifest_path(manifest_path)
-        .bin(bin_name);
     // Allow to run in debug
     let run_debug = match env::var(ENV_VAR_DEBUG) {
         Ok(val) => val.to_ascii_lowercase() != "false",
         _ => false,
     };
-    let cmd = if run_debug { cmd } else { cmd.release() };
+    let cmd = CargoBuild::new()
+        .package(APPS_PACKAGE)
+        .manifest_path(manifest_path)
+        .bin(bin_name);
+    let cmd = if run_debug {
+        cmd
+    } else {
+        // Use the same build settings as `make build-release`
+        cmd.release().no_default_features().features("std")
+    };
     let mut cmd = cmd.run().unwrap().command();
     cmd.env("ANOMA_LOG", "anoma=debug")
+        .current_dir(working_dir)
         .args(&["--base-dir", &base_dir.as_ref().to_string_lossy()])
         .args(args);
 
     let cmd_str = format!("{:?}", cmd);
 
     let timeout_ms = timeout_sec.map(|sec| sec * 1_000);
+    println!("Starting cmd {}", cmd_str);
     let mut session = spawn_command(cmd, timeout_ms).map_err(|e| {
         eyre!(
             "\n\n{}: {}\n{}: {}\n{}: {}",

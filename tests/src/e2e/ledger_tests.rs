@@ -8,14 +8,9 @@ use anoma::types::storage::Epoch;
 use anoma::types::token;
 use anoma::types::transaction::{Fee, WrapperTx};
 use anoma_apps::wallet;
-use assert_cmd::cargo::CommandCargoExt;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
-use eyre::eyre;
-use rexpect::process::wait::WaitStatus;
-use rexpect::session::spawn_command;
 use setup::constants::*;
-use tempfile::tempdir;
 
 use crate::e2e::setup::{self, sleep, Bin, Test};
 use crate::run;
@@ -29,8 +24,8 @@ fn run_ledger() -> Result<()> {
 
     // Start the ledger
     for args in cmd_combinations {
-        let mut session = run!(test, Bin::Node, args, Some(20_000))?;
-        session.exp_string("Anoma ledger node started")?;
+        let mut ledger = run!(test, Bin::Node, args, Some(20))?;
+        ledger.exp_string("Anoma ledger node started")?;
     }
 
     Ok(())
@@ -46,9 +41,9 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = Test::new();
 
     // 1. Run the ledger node
-    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
+    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
 
-    session.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Anoma ledger node started")?;
 
     // 2. Kill the tendermint node
     sleep(1);
@@ -60,10 +55,10 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
         .expect("Test failed");
 
     // 3. Check that anoma detects that the tendermint node is dead
-    session.exp_string("Tendermint node is no longer running.")?;
+    ledger.exp_string("Tendermint node is no longer running.")?;
 
     // 4. Check that the ledger node shuts down
-    session.exp_string("Shutting down Anoma node")?;
+    ledger.exp_string("Shutting down Anoma node")?;
 
     Ok(())
 }
@@ -80,36 +75,36 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = Test::new();
 
     // 1. Run the ledger node
-    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
+    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
 
-    session.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Anoma ledger node started")?;
 
     // There should be no previous state
-    session.exp_string("No state could be found")?;
+    ledger.exp_string("No state could be found")?;
 
     // Wait to commit a block
-    session.exp_regex(r"Committed block hash.*, height: 2")?;
+    ledger.exp_regex(r"Committed block hash.*, height: 2")?;
     // 2. Shut it down
-    session.send_control('c')?;
-    drop(session);
+    ledger.send_control('c')?;
+    drop(ledger);
 
     // 3. Run the ledger again, it should load its previous state
-    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
+    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
 
-    session.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Anoma ledger node started")?;
 
     // There should be previous state now
-    session.exp_string("Last state root hash:")?;
+    ledger.exp_string("Last state root hash:")?;
 
     // 4. Shut it down
-    session.send_control('c')?;
-    drop(session);
+    ledger.send_control('c')?;
+    drop(ledger);
 
     // 5. Reset the ledger's state
-    run!(test, Bin::Node, &["ledger", "reset"], Some(10_000))?;
+    let _session = run!(test, Bin::Node, &["ledger", "reset"], Some(10))?;
 
     // 6. Run the ledger again, it should start from fresh state
-    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
+    let mut session = run!(test, Bin::Node, &["ledger"], Some(20))?;
 
     session.exp_string("Anoma ledger node started")?;
 
@@ -131,10 +126,10 @@ fn ledger_txs_and_queries() -> Result<()> {
     let test = Test::new();
 
     // 1. Run the ledger node
-    let mut session = run!(test, Bin::Node, &["ledger"], Some(20_000))?;
+    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
 
-    session.exp_string("Anoma ledger node started")?;
-    session.exp_string("Started node")?;
+    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Started node")?;
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
     let vp_user = vp_user.to_string_lossy();
@@ -179,19 +174,15 @@ fn ledger_txs_and_queries() -> Result<()> {
             } else {
                 tx_args.clone()
             };
-            let mut session = run!(test, Bin::Client, tx_args, Some(20_000))?;
+            let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
 
             if !dry_run {
-                session
+                client
                     .exp_string("Process proposal accepted this transaction")?;
             }
-            session.exp_string("Transaction is valid.")?;
+            client.exp_string("Transaction is valid.")?;
 
-            let status = session.session.process.wait().unwrap();
-            assert_eq!(
-                WaitStatus::Exited(session.session.process.child_pid, 0),
-                status
-            );
+            client.assert_success();
         }
     }
 
@@ -204,14 +195,10 @@ fn ledger_txs_and_queries() -> Result<()> {
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
-        let mut session = run!(test, Bin::Client, query_args, Some(20_000))?;
-        session.exp_regex(expected)?;
+        let mut client = run!(test, Bin::Client, query_args, Some(20))?;
+        client.exp_regex(expected)?;
 
-        let status = session.session.process.wait().unwrap();
-        assert_eq!(
-            WaitStatus::Exited(session.session.process.child_pid, 0),
-            status
-        );
+        client.assert_success();
     }
 
     Ok(())
@@ -225,30 +212,16 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// 5. Submit and invalid transactions (malformed)
 #[test]
 fn invalid_transactions() -> Result<()> {
-    let working_dir = setup::working_dir();
-
-    let base_dir = tempdir().unwrap();
-    let base_dir_arg = &base_dir.path().to_string_lossy();
+    let test = Test::new();
 
     // 1. Run the ledger node
-    let mut cmd = Command::cargo_bin("anoman")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg, "ledger"]);
-    println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
-
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
-    session
-        .exp_string("Started node")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Started node")?;
 
     // 2. Submit a an invalid transaction (trying to mint tokens should fail
     // in the token's VP)
-    let tx_data_path = base_dir.path().join("tx.data");
+    let tx_data_path = test.base_dir.path().join("tx.data");
     let transfer = token::Transfer {
         source: Address::decode(BERTHA).unwrap(),
         target: Address::decode(ALBERT).unwrap(),
@@ -275,69 +248,32 @@ fn invalid_transactions() -> Result<()> {
         &tx_data_path,
     ];
 
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
 
-    let cmd_str = format!("{:?}", cmd);
+    client.exp_string("Process proposal accepted this transaction")?;
 
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
+    client.exp_string("Transaction is invalid")?;
 
-    request
-        .exp_string("Process proposal accepted this transaction")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+    client.exp_string(r#""code": "1"#)?;
 
-    request.exp_string("Transaction is invalid").map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
+    client.assert_success();
 
-    request.exp_string(r#""code": "1"#).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-
-    let status = request.process.wait().unwrap();
-    assert_eq!(WaitStatus::Exited(request.process.child_pid, 0), status);
-
-    session
-        .exp_string("some VPs rejected apply_tx storage modification")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+    ledger.exp_string("some VPs rejected apply_tx storage modification")?;
 
     // Wait to commit a block
-    session
-        .exp_regex(r"Committed block hash.*, height: 2")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    ledger.exp_regex(r"Committed block hash.*, height: 2")?;
 
     // 3. Shut it down
-    session
-        .send_control('c')
-        .map_err(|e| eyre!(format!("{}", e)))?;
-    drop(session);
+    ledger.send_control('c')?;
+    drop(ledger);
 
     // 4. Restart the ledger
-    let mut cmd = Command::cargo_bin("anoma")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg, "ledger"]);
-    println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
 
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    ledger.exp_string("Anoma ledger node started")?;
 
     // There should be previous state now
-    session
-        .exp_string("Last state root hash:")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    ledger.exp_string("Last state root hash:")?;
 
     // 5. Submit and invalid transactions (invalid token address)
     let tx_args = vec![
@@ -351,35 +287,16 @@ fn invalid_transactions() -> Result<()> {
         "--amount",
         "1_000_000.1",
     ];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "anoma=debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
 
-    let cmd_str = format!("{:?}", cmd);
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
 
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
+    client.exp_string("Process proposal accepted this transaction")?;
 
-    request
-        .exp_string("Process proposal accepted this transaction")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+    client.exp_string("Error trying to apply a transaction")?;
 
-    request
-        .exp_string("Error trying to apply a transaction")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+    client.exp_string(r#""code": "2"#)?;
 
-    request.exp_string(r#""code": "2"#).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    let status = request.process.wait().unwrap();
-    assert_eq!(WaitStatus::Exited(request.process.child_pid, 0), status);
+    client.assert_success();
     Ok(())
 }
 
@@ -392,11 +309,8 @@ fn invalid_transactions() -> Result<()> {
 #[test]
 fn test_wrapper_txs() -> Result<()> {
     use wallet::defaults;
-    let working_dir = setup::working_dir();
 
-    let base_dir = tempdir().unwrap();
-    let base_dir_arg = &base_dir.path().to_string_lossy();
-
+    let test = Test::new();
     let keypair = defaults::daewon_keypair();
 
     use anoma::types::token::Amount;
@@ -412,32 +326,20 @@ fn test_wrapper_txs() -> Result<()> {
     );
 
     // write out the tx code and data to files
-    let mut wasm = PathBuf::from(base_dir.path());
+    let mut wasm = PathBuf::from(test.base_dir.path());
     wasm.push("tx_wasm");
     std::fs::write(&wasm, vec![]).expect("Test failed");
     let wasm_path = wasm.to_str().unwrap();
-    let mut data = PathBuf::from(base_dir.path());
+    let mut data = PathBuf::from(test.base_dir.path());
     data.push("tx_data");
     std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
         .expect("Test failed");
     let data_path = data.to_str().unwrap();
 
     // 1. Run the ledger node
-    let mut cmd = Command::cargo_bin("anoman")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg, "ledger"]);
-
-    println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
-
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
-    session
-        .exp_string("Started node")
-        .map_err(|e| eyre!(format!("{}", e)))?;
+    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Started node")?;
 
     // 2. Submit a valid wrapper tx and check it is accepted.
     let tx_args = vec![
@@ -449,50 +351,20 @@ fn test_wrapper_txs() -> Result<()> {
         "--signing-key",
         "Daewon",
     ];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     // check that it is accepted by the process proposal method
-    request
-        .exp_string("Process proposal accepted this transaction")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+    client.exp_string("Process proposal accepted this transaction")?;
     // check that it is placed on - chain
-    request.exp_string("Transaction is valid.").map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    drop(request);
+    client.exp_string("Transaction is valid.")?;
+    drop(client);
 
     // 3. Submit a wrapper tx without signing
     let tx_args =
         vec!["tx", "--code-path", wasm_path, "--data-path", data_path];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     // check that it is rejected by the process proposal method
-    request
-        .exp_string("Expected signed WrapperTx data")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-    drop(request);
+    client.exp_string("Expected signed WrapperTx data")?;
+    drop(client);
 
     // 4. Submit a wrapper tx signed with wrong key
     let tx_args = vec![
@@ -504,24 +376,10 @@ fn test_wrapper_txs() -> Result<()> {
         "--signing-key",
         "Albert",
     ];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     // check that it is rejected by the process proposal method
-    request
-        .exp_string("Signature verification failed")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-    drop(request);
+    client.exp_string("Signature verification failed")?;
+    drop(client);
 
     // 5. Submit a wrapper tx where the fee > user's balance
     let tx = WrapperTx::new(
@@ -536,7 +394,7 @@ fn test_wrapper_txs() -> Result<()> {
     );
 
     // write out the tx data to file
-    let mut data = PathBuf::from(base_dir.path());
+    let mut data = PathBuf::from(test.base_dir.path());
     data.push("tx_data");
     std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
         .expect("Test failed");
@@ -549,25 +407,11 @@ fn test_wrapper_txs() -> Result<()> {
         "--signing-key",
         "Daewon",
     ];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     // check that it is rejected by the process proposal method
-    request
-        .exp_string(
-            "The address given does not have sufficient balance to pay fee",
-        )
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+    client.exp_string(
+        "The address given does not have sufficient balance to pay fee",
+    )?;
 
     Ok(())
 }
