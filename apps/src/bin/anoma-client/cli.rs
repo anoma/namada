@@ -62,6 +62,9 @@ pub async fn main() -> Result<()> {
         }
         cli::AnomaClient::WithoutContext(cmd, global_args) => match cmd {
             // Utils cmds
+            Utils::InitNetwork(InitNetwork(args)) => {
+                utils::init_network(global_args, args)
+            }
             Utils::InitGenesisValidator(InitGenesisValidator(args)) => {
                 utils::init_genesis_validator(global_args, args)
             }

@@ -181,8 +181,7 @@ pub mod cmds {
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
             let intent = Self::parse_with_ctx(matches, Intent);
             let subscribe_topic = Self::parse_with_ctx(matches, SubscribeTopic);
-            let utils =
-                SubCmd::parse(matches).map(|sub| Self::WithoutContext(sub));
+            let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
                 .or(tx_update_vp)
@@ -979,6 +978,7 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub enum Utils {
+        InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
     }
 
@@ -987,15 +987,39 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                SubCmd::parse(matches).map(Self::InitGenesisValidator)
+                let init_network =
+                    SubCmd::parse(matches).map(Self::InitNetwork);
+                let init_genesis =
+                    SubCmd::parse(matches).map(Self::InitGenesisValidator);
+                init_network.or(init_genesis)
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Utilities.")
+                .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitNetwork(pub args::InitNetwork);
+
+    impl SubCmd for InitNetwork {
+        const CMD: &'static str = "init-network";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::InitNetwork::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Initialize a new test network.")
+                .add_args::<args::InitNetwork>()
         }
     }
 
@@ -1033,7 +1057,7 @@ pub mod args {
     use std::str::FromStr;
 
     use anoma::types::address::Address;
-    use anoma::types::chain::ChainId;
+    use anoma::types::chain::{ChainId, ChainIdPrefix};
     use anoma::types::intent::{DecimalWrapper, Exchange};
     use anoma::types::key::ed25519::PublicKey;
     use anoma::types::storage::Epoch;
@@ -1058,6 +1082,7 @@ pub mod args {
     );
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
+    const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
@@ -1066,6 +1091,7 @@ pub mod args {
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
+    const GENESIS_VALIDATORS: ArgMulti<SocketAddr> = arg_multi("validators");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -2170,6 +2196,42 @@ pub mod args {
                     .def()
                     .about("The bech32m encoded address string."),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitNetwork {
+        pub validators: Vec<SocketAddr>,
+        pub chain_id_prefix: ChainIdPrefix,
+        pub unsafe_dont_encrypt: bool,
+    }
+
+    impl Args for InitNetwork {
+        fn parse(matches: &ArgMatches) -> Self {
+            let validators = GENESIS_VALIDATORS.parse(matches);
+            let chain_id_prefix = CHAIN_ID_PREFIX.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            Self {
+                validators,
+                chain_id_prefix,
+                unsafe_dont_encrypt,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(GENESIS_VALIDATORS.def().about(
+                "The genesis validators addresses in the format \
+                 `{ip}:{port}`. Multiple values are accepted, separated by \
+                 space.",
+            ))
+            .arg(CHAIN_ID_PREFIX.def().about(
+                "The chain ID prefix. Up to 19 alphanumeric or punctuation \
+                 ASCII characters.",
+            ))
+            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                "UNSAFE: Do not encrypt the generated keypairs. Do not use \
+                 this for keys used in a live network.",
+            ))
         }
     }
 
