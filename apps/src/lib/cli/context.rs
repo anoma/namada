@@ -50,8 +50,10 @@ impl Context {
     pub fn new(global_args: args::Global) -> Self {
         let global_config = read_or_try_new_global_config(&global_args);
 
-        let mut config =
-            load_config(&global_args.base_dir, &global_config.default_chain_id);
+        let mut config = Config::load(
+            &global_args.base_dir,
+            &global_config.default_chain_id,
+        );
 
         let chain_dir = global_args
             .base_dir
@@ -161,22 +163,6 @@ pub fn read_or_try_new_global_config(
             super::safe_exit(1)
         }
     })
-}
-
-/// Load config from expected path in the `base_dir` or generate a new one if it
-/// doesn't exist.
-fn load_config(base_dir: &Path, chain_id: &ChainId) -> Config {
-    match Config::read(base_dir, chain_id) {
-        Ok(config) => config,
-        Err(err) => {
-            eprintln!(
-                "Tried to read config in {} but failed with: {}",
-                base_dir.display(),
-                err
-            );
-            super::safe_exit(1)
-        }
-    }
 }
 
 /// Argument that can be given raw or found in the [`Context`].

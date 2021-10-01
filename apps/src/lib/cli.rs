@@ -129,25 +129,11 @@ pub mod cmds {
     /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
     #[derive(Clone, Debug)]
     pub enum AnomaClient {
-        // Ledger cmds
-        TxCustom(TxCustom),
-        TxTransfer(TxTransfer),
-        TxUpdateVp(TxUpdateVp),
-        TxInitAccount(TxInitAccount),
-        TxInitValidator(TxInitValidator),
-        Bond(Bond),
-        Unbond(Unbond),
-        Withdraw(Withdraw),
-        QueryEpoch(QueryEpoch),
-        QueryBalance(QueryBalance),
-        QueryBonds(QueryBonds),
-        QueryVotingPower(QueryVotingPower),
-        QuerySlashes(QuerySlashes),
-        // Gossip cmds
-        Intent(Intent),
-        SubscribeTopic(SubscribeTopic),
-        // Utils cmds
-        Utils(Utils),
+        /// The [`Context`] provides access to the wallet and the config.
+        /// It will generate a new wallet and config, if they don't exist.
+        WithContext(AnomaClientWithContext),
+        /// Utils don't have [`Context`], only the global arguments.
+        WithoutContext(Utils),
     }
 
     impl Cmd for AnomaClient {
@@ -177,26 +163,26 @@ pub mod cmds {
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
-            let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
-            let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
-            let tx_init_account =
-                SubCmd::parse(matches).map(Self::TxInitAccount);
+            use AnomaClientWithContext::*;
+            let tx_custom = Self::parse_with_ctx(matches, TxCustom);
+            let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
+            let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
+            let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
-                SubCmd::parse(matches).map(Self::TxInitValidator);
-            let bond = SubCmd::parse(matches).map(Self::Bond);
-            let unbond = SubCmd::parse(matches).map(Self::Unbond);
-            let withdraw = SubCmd::parse(matches).map(Self::Withdraw);
-            let query_epoch = SubCmd::parse(matches).map(Self::TxInitAccount);
-            let query_balance = SubCmd::parse(matches).map(Self::QueryBalance);
-            let query_bonds = SubCmd::parse(matches).map(Self::QueryBonds);
+                Self::parse_with_ctx(matches, TxInitValidator);
+            let bond = Self::parse_with_ctx(matches, Bond);
+            let unbond = Self::parse_with_ctx(matches, Unbond);
+            let withdraw = Self::parse_with_ctx(matches, Withdraw);
+            let query_epoch = Self::parse_with_ctx(matches, TxInitAccount);
+            let query_balance = Self::parse_with_ctx(matches, QueryBalance);
+            let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_voting_power =
-                SubCmd::parse(matches).map(Self::QueryVotingPower);
-            let query_slashes = SubCmd::parse(matches).map(Self::QuerySlashes);
-            let intent = SubCmd::parse(matches).map(Self::Intent);
-            let subscribe_topic =
-                SubCmd::parse(matches).map(Self::SubscribeTopic);
-            let utils = SubCmd::parse(matches).map(Self::Utils);
+                Self::parse_with_ctx(matches, QueryVotingPower);
+            let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
+            let intent = Self::parse_with_ctx(matches, Intent);
+            let subscribe_topic = Self::parse_with_ctx(matches, SubscribeTopic);
+            let utils =
+                SubCmd::parse(matches).map(|sub| Self::WithoutContext(sub));
             tx_custom
                 .or(tx_transfer)
                 .or(tx_update_vp)
@@ -216,6 +202,17 @@ pub mod cmds {
         }
     }
 
+    impl AnomaClient {
+        /// A helper method to parse sub cmds with context
+        fn parse_with_ctx<T: SubCmd>(
+            matches: &ArgMatches,
+            sub_to_self: impl Fn(T) -> AnomaClientWithContext,
+        ) -> Option<Self> {
+            SubCmd::parse(matches)
+                .map(|sub| Self::WithContext(sub_to_self(sub)))
+        }
+    }
+
     impl SubCmd for AnomaClient {
         const CMD: &'static str = CLIENT_CMD;
 
@@ -232,6 +229,27 @@ pub mod cmds {
                     .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum AnomaClientWithContext {
+        // Ledger cmds
+        TxCustom(TxCustom),
+        TxTransfer(TxTransfer),
+        TxUpdateVp(TxUpdateVp),
+        TxInitAccount(TxInitAccount),
+        TxInitValidator(TxInitValidator),
+        Bond(Bond),
+        Unbond(Unbond),
+        Withdraw(Withdraw),
+        QueryEpoch(QueryEpoch),
+        QueryBalance(QueryBalance),
+        QueryBonds(QueryBonds),
+        QueryVotingPower(QueryVotingPower),
+        QuerySlashes(QuerySlashes),
+        // Gossip cmds
+        Intent(Intent),
+        SubscribeTopic(SubscribeTopic),
     }
 
     #[derive(Clone, Debug)]
@@ -1038,7 +1056,8 @@ pub mod args {
             Err(_) => ".anoma".into(),
         }),
     );
-    const CHAIN_ID: ArgOpt<ChainId> = arg_opt("chain-id");
+    const CHAIN_ID: Arg<ChainId> = arg("chain-id");
+    const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
@@ -1106,7 +1125,7 @@ pub mod args {
     impl Global {
         /// Parse global arguments
         pub fn parse(matches: &ArgMatches) -> Self {
-            let chain_id = CHAIN_ID.parse(matches);
+            let chain_id = CHAIN_ID_OPT.parse(matches);
             let base_dir = BASE_DIR.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches);
             Global {
@@ -1119,7 +1138,7 @@ pub mod args {
         /// Add global args definition. Should be added to every top-level
         /// command.
         pub fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID."))
+            app.arg(CHAIN_ID_OPT.def().about("The chain ID."))
                 .arg(BASE_DIR.def().about(
                     "The base directory is where the nodes, client and wallet \
                      configuration and state is stored. This value can also \
@@ -2157,21 +2176,25 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
+        pub chain_id: ChainId,
         pub unsafe_dont_encrypt: bool,
     }
 
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let chain_id = CHAIN_ID.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
+                chain_id,
                 unsafe_dont_encrypt,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(ALIAS.def().about("The validator address alias."))
+                .arg(CHAIN_ID.def().about("The chain ID."))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
@@ -2200,9 +2223,33 @@ pub fn anoma_node_cli() -> (cmds::AnomaNode, Context) {
     cmds::AnomaNode::parse_or_print_help(app)
 }
 
-pub fn anoma_client_cli() -> (cmds::AnomaClient, Context) {
+pub enum AnomaClient {
+    WithoutContext(cmds::Utils, args::Global),
+    WithContext(cmds::AnomaClientWithContext, Context),
+}
+
+pub fn anoma_client_cli() -> AnomaClient {
     let app = anoma_client_app();
-    cmds::AnomaClient::parse_or_print_help(app)
+    let mut app = cmds::AnomaClient::add_sub(app);
+    let matches = app.clone().get_matches();
+    match Cmd::parse(&matches) {
+        Some(cmd) => {
+            let global_args = args::Global::parse(&matches);
+            match cmd {
+                cmds::AnomaClient::WithContext(sub_cmd) => {
+                    let context = Context::new(global_args);
+                    AnomaClient::WithContext(sub_cmd, context)
+                }
+                cmds::AnomaClient::WithoutContext(sub_cmd) => {
+                    AnomaClient::WithoutContext(sub_cmd, global_args)
+                }
+            }
+        }
+        None => {
+            app.print_help().unwrap();
+            safe_exit(2);
+        }
+    }
 }
 
 pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {

@@ -22,6 +22,8 @@ use serde::{de, Deserialize, Serialize};
 use tendermint::net;
 use thiserror::Error;
 
+use crate::cli;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error while reading config: {0}")]
@@ -289,6 +291,23 @@ impl Config {
         Self {
             ledger: Ledger::new(base_dir, chain_id),
             intent_gossiper: IntentGossiper::default(),
+        }
+    }
+
+    /// Load config from expected path in the `base_dir` or generate a new one
+    /// if it doesn't exist. Terminates with an error if the config loading
+    /// fails.
+    pub fn load(base_dir: &Path, chain_id: &ChainId) -> Self {
+        match Self::read(base_dir, chain_id) {
+            Ok(config) => config,
+            Err(err) => {
+                eprintln!(
+                    "Tried to read config in {} but failed with: {}",
+                    base_dir.display(),
+                    err
+                );
+                cli::safe_exit(1)
+            }
         }
     }
 }

@@ -1,25 +1,30 @@
 use anoma::types::{address, token};
 
-use crate::cli::{self, args, Context};
-use crate::config::genesis;
+use crate::cli::{self, args};
+use crate::config::{genesis, Config};
 use crate::node::ledger::tendermint_node;
+use crate::wallet::Wallet;
 
 /// Initialize genesis validator's address, staking reward address,
 /// consensus key, validator account key and staking rewards key and use
 /// it in the ledger's node.",
 pub fn init_genesis_validator(
-    mut ctx: Context,
+    global_args: args::Global,
     args::InitGenesisValidator {
         alias,
+        chain_id,
         unsafe_dont_encrypt,
     }: args::InitGenesisValidator,
 ) {
+    let chain_dir = global_args.base_dir.join(chain_id.as_str());
+    let mut wallet = Wallet::load_or_new(&chain_dir);
+    let config = Config::load(&global_args.base_dir, &chain_id);
+
     // Generate validator address
     let validator_address =
         address::gen_established_address("genesis validator address");
     let validator_address_alias = alias.clone();
-    if !ctx
-        .wallet
+    if !wallet
         .add_address(validator_address_alias.clone(), validator_address.clone())
     {
         cli::safe_exit(1)
@@ -28,31 +33,29 @@ pub fn init_genesis_validator(
     let rewards_address =
         address::gen_established_address("genesis validator reward address");
     let rewards_address_alias = format!("{}-rewards", alias);
-    if !ctx
-        .wallet
+    if !wallet
         .add_address(rewards_address_alias.clone(), rewards_address.clone())
     {
         cli::safe_exit(1)
     }
 
     println!("Generating validator account key...");
-    let (validator_key_alias, validator_key) = ctx.wallet.gen_key(
+    let (validator_key_alias, validator_key) = wallet.gen_key(
         Some(format!("{}-validator-key", alias)),
         unsafe_dont_encrypt,
     );
     println!("Generating consensus key...");
-    let (consensus_key_alias, consensus_key) = ctx.wallet.gen_key(
+    let (consensus_key_alias, consensus_key) = wallet.gen_key(
         Some(format!("{}-consensus-key", alias)),
         unsafe_dont_encrypt,
     );
     println!("Generating staking reward account key...");
-    let (rewards_key_alias, rewards_key) = ctx
-        .wallet
+    let (rewards_key_alias, rewards_key) = wallet
         .gen_key(Some(format!("{}-rewards-key", alias)), unsafe_dont_encrypt);
 
-    ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
-    let tendermint_home = &ctx.config.ledger.tendermint;
+    let tendermint_home = &config.ledger.tendermint;
     tendermint_node::write_validator_key(
         tendermint_home,
         &validator_address,
