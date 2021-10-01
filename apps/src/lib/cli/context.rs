@@ -48,12 +48,15 @@ pub struct Context {
 
 impl Context {
     pub fn new(global_args: args::Global) -> Self {
-        let wallet = Wallet::load_or_new(&global_args.base_dir);
-
         let global_config = read_or_try_new_global_config(&global_args);
 
         let mut config =
             load_config(&global_args.base_dir, &global_config.default_chain_id);
+
+        let chain_dir = global_args
+            .base_dir
+            .join(&global_config.default_chain_id.as_str());
+        let wallet = Wallet::load_or_new(&chain_dir);
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
