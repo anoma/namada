@@ -37,7 +37,7 @@ pub fn pre_fetch_wasm(
     let checksums = Checksums::read_checksums(checksums_path);
 
     for (name, hash) in checksums.0 {
-        let wasm_path = wasm_directory.as_ref().join(&name);
+        let wasm_path = wasm_directory.as_ref().join(&hash);
 
         match fs::read(&wasm_path) {
             // if the file exist, first check the hash. If not matching download

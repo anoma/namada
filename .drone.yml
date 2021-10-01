@@ -30,8 +30,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -154,8 +152,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -251,8 +247,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -260,8 +254,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    mount: [.cargo, wasm/wasm_source/target]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, cp wasm/checksums.json wasm/original-checksums.json,
@@ -302,6 +296,25 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: check-wasm
   pull: never
+- depends_on: [check-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    BACKEND_OPERATION_TIMEOUT: 8m
+  image: meltwater/drone-cache:latest
+  name: rebuild-cache
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    mount: [.cargo, wasm/wasm_source/target]
+    override: false
+    rebuild: true
+    region: eu-west-1
+  when:
+    status: [success, failure]
 trigger:
   event: [pull_request]
 type: docker
@@ -373,8 +386,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -463,8 +474,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -550,8 +559,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -632,8 +639,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -749,8 +754,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -842,8 +845,6 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
   image: meltwater/drone-cache:latest
   name: restore-cache
   pull: never
@@ -904,6 +905,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 87d6933b725a274cdf1fbfb281d0b2768b2c0c2333a4935a2ddb1cb43b8e4e95
+hmac: 62584b3e060d8bc4ff7701186631ee4a097c6c932c29bf27d6ba22751d2c88a7
 
 ...
