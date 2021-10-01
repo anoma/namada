@@ -63,8 +63,8 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-test
   pull: never
-- commands: ['aws s3api head-object --bucket heliax-drone-wasm-v2 --key ${DRONE_COMMIT}.jsonif
-      [ $? -ne 0  ]; then exit 1; fiaws s3 cp s3://heliax-drone-wasm-v2/${DRONE_COMMIT}.json
+- commands: ['aws s3api head-object --bucket heliax-drone-wasm-v2 --key ${DRONE_COMMIT}.json',
+    'if [ $? -ne 0  ]; then exit 1; fi', 'aws s3 cp s3://heliax-drone-wasm-v2/${DRONE_COMMIT}.json
       wasm', 'cp wasm/${DRONE_COMMIT}.json wasm/checksums.json', 'jq -r -c ''.[]''
       wasm/checksums.json | parallel aws s3 cp s3://heliax-drone-wasm-v2/{} wasm']
   depends_on: [build-test]
@@ -904,6 +904,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: edc0a8161161a8c83f51a3a560ed5ff5ed12946c4ae272722382996af251ceb8
+hmac: 87d6933b725a274cdf1fbfb281d0b2768b2c0c2333a4935a2ddb1cb43b8e4e95
 
 ...
