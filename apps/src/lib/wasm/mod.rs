@@ -40,7 +40,8 @@ pub fn pre_fetch_wasm(
         let wasm_path = wasm_directory.as_ref().join(&name);
 
         match fs::read(&wasm_path) {
-            // if the file exist, first check the hash. If not matching download it again.
+            // if the file exist, first check the hash. If not matching download
+            // it again.
             Ok(bytes) => {
                 let mut hasher = Sha256::new();
                 hasher.update(bytes);
