@@ -30,6 +30,7 @@ files_to_check = [
     'scripts/ci/release.sh',
     'scripts/ci/audit.py',
     'scripts/ci/udeps.py',
+    'wasm/checksums.py'
 ]
 
 scripts_to_run = [

@@ -10,4 +10,11 @@ for wasm in sorted(glob.glob("wasm/*.wasm")):
     checksums["{}.wasm".format(file_name)] = "{}.{}.wasm".format(file_name, hashlib.sha256(open(wasm, "rb").read()).hexdigest())
     os.rename(wasm, 'wasm/{}'.format(checksums["{}.wasm".format(file_name)]))
 
+updated_wasms = list(checksums.values())
+
+for wasm in sorted(glob.glob("wasm/*.wasm")):
+    basename = os.path.basename(wasm)
+    if not basename in updated_wasms:
+        os.remove(wasm)
+
 json.dump(checksums, open("wasm/checksums.json", "w"))

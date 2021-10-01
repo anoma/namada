@@ -286,8 +286,13 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: update-wasm
   pull: never
-- commands: [make test-wasm]
+- commands: [sccache --start-server, make test-wasm]
   depends_on: [update-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-test-wasm
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: test-wasm
   pull: never
@@ -767,8 +772,13 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
   pull: never
-- commands: [make test-wasm]
+- commands: [sccache --start-server, make test-wasm]
   depends_on: [build-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-test-wasm
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: test-wasm
   pull: never
@@ -822,6 +832,7 @@ steps:
       | sha256sum -c -, echo "b36d4bc2fe64e2928fde493e504fa52c524ac8d9338f54dd068753616ffe7390  scripts/ci/release.sh"
       | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
       | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      | sha256sum -c -, echo "7f5673f0fa47cbb82f83b112dd6a4dd08dd1d4422fcc02c8537b0ac589f16f15  wasm/checksums.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -892,6 +903,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 0b25c22697557aaac8154158f5d4ae2a2ea696e229900fce664d251717fcd800
+hmac: 1237df9d352adad2bd7fe121540a143cc52434c7232a143a27abf9f95aaf7cc8
 
 ...
