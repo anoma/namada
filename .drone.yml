@@ -268,10 +268,9 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
   pull: never
-- commands: ['aws s3 sync wasm s3://heliax-drone-wasm-v2 --acl public-read --exclude
-      "*" --exclude "*" --include "*.wasm" --exclude "*/*"', 'cp wasm/checksums.json
-      wasm/${DRONE_COMMIT}.json', 'aws s3 cp wasm/${DRONE_COMMIT}.json s3://heliax-drone-wasm-v2
-      --acl public-read']
+- commands: ['aws s3 sync wasm s3://heliax-drone-wasm-v2 --exclude "*" --exclude "*"
+      --include "*.wasm" --exclude "*/*"', 'cp wasm/checksums.json wasm/${DRONE_COMMIT}.json',
+    'aws s3 cp wasm/${DRONE_COMMIT}.json s3://heliax-drone-wasm-v2']
   depends_on: [build-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -783,10 +782,9 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: build-wasm
   pull: never
-- commands: ['aws s3 sync wasm s3://heliax-drone-wasm-v2 --acl public-read --exclude
-      "*" --exclude "*" --include "*.wasm" --exclude "*/*"', 'cp wasm/checksums.json
-      wasm/${DRONE_COMMIT}.json', 'aws s3 cp wasm/${DRONE_COMMIT}.json s3://heliax-drone-wasm-v2
-      --acl public-read']
+- commands: ['aws s3 sync wasm s3://heliax-drone-wasm-v2 --exclude "*" --exclude "*"
+      --include "*.wasm" --exclude "*/*"', 'cp wasm/checksums.json wasm/${DRONE_COMMIT}.json',
+    'aws s3 cp wasm/${DRONE_COMMIT}.json s3://heliax-drone-wasm-v2']
   depends_on: [build-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -810,10 +808,22 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: check-wasm
   pull: never
+- commands: ['aws s3 sync wasm s3://heliax-anoma-wasm-v1 --acl public-read --exclude
+      "*" --exclude "*" --include "*.wasm" --exclude "*/*"', 'cp wasm/checksums.json
+      wasm/${DRONE_COMMIT}.json', 'aws s3 cp wasm/${DRONE_COMMIT}.json s3://heliax-anoma-wasm-v1
+      --acl public-read']
+  depends_on: [update-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    GITHUB_TOKEN: {from_secret: github_token}
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: upload-wasm
+  pull: never
 - commands: [rm -f  ./wasm/wasm_source/target/.rustc_info.json, rm -rf ./wasm/wasm_source/target/debug,
     find ./wasm/wasm_source/target/release -maxdepth 1 -type f -delete, find ./wasm/wasm_source/target/wasm32-unknown-unknown
       -maxdepth 1 -type f -delete]
-  depends_on: [test-wasm, check-wasm]
+  depends_on: [test-wasm, check-wasm, upload-wasm]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: clean-cache
   pull: never
@@ -931,6 +941,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 303bb45dc39760d5a8fb60ba61bbd1eef5cb039d86064db649cb9fac9ee9db06
+hmac: 46f3af29b8718a082aa28d71a9d7b99e7c4ecf61e471d71e323f83919f9e95e2
 
 ...

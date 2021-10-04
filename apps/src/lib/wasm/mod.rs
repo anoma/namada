@@ -20,7 +20,7 @@ pub enum Error {
 #[serde(transparent)]
 struct Checksums(HashMap<String, String>);
 
-const S3_URL: &str = "https://heliax-drone-wasm-v2.s3.eu-west-1.amazonaws.com";
+const S3_URL: &str = "https://heliax-anoma-wasm-v1.s3.eu-west-1.amazonaws.com";
 
 impl Checksums {
     pub fn read_checksums(path: impl AsRef<Path>) -> Self {
