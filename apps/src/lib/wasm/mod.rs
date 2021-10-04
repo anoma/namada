@@ -14,6 +14,10 @@ pub enum Error {
     Download(String),
     #[error("Error writing to {0}")]
     FileWrite(String),
+    #[error("Cannot download {0}")]
+    WasmNotFound(String),
+    #[error("Error while downloading {0}: {1}")]
+    ServerError(String, String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,7 +50,12 @@ pub fn pre_fetch_wasm(
                 let mut hasher = Sha256::new();
                 hasher.update(bytes);
                 let result = hex::encode(hasher.finalize());
-                if hash == result {
+                let checksum = format!(
+                    "{}.{}.wasm",
+                    &name.split(".").collect::<Vec<&str>>()[0],
+                    result
+                );
+                if hash == checksum {
                     continue;
                 }
                 tracing::info!(
@@ -87,12 +96,15 @@ pub fn pre_fetch_wasm(
                                         &name,
                                         e
                                     );
+                                } else {
+                                    tracing::info!(
+                                        "Created {} in {} folder",
+                                        &name,
+                                        &wasm_directory
+                                            .as_ref()
+                                            .to_string_lossy()
+                                    );
                                 }
-                                tracing::info!(
-                                    "Created {} in {} folder",
-                                    &name,
-                                    &wasm_directory.as_ref().to_string_lossy()
-                                );
                             }
                             Err(_) => {
                                 tracing::error!(
@@ -142,11 +154,18 @@ fn download_wasm(url: String) -> Result<Vec<u8>, Error> {
     let response = reqwest::blocking::get(&url);
     match response {
         Ok(body) => {
-            let bytes = body.bytes().unwrap();
-            let bytes: &[u8] = bytes.borrow();
-            let bytes: Vec<u8> = bytes.to_owned();
+            let status = body.status();
+            if status.is_success() {
+                let bytes = body.bytes().unwrap();
+                let bytes: &[u8] = bytes.borrow();
+                let bytes: Vec<u8> = bytes.to_owned();
 
-            Ok(bytes)
+                Ok(bytes)
+            } else if status.is_server_error() {
+                Err(Error::WasmNotFound(url))
+            } else {
+                Err(Error::ServerError(url, status.to_string()))
+            }
         }
         Err(e) => {
             tracing::error!(
