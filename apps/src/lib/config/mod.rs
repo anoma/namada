@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anoma::types::chain::ChainId;
+use anoma::types::time::Rfc3339String;
 use gossiper::Gossiper;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::multihash::Multihash;
@@ -87,6 +88,7 @@ And this is correct
 pub struct Ledger {
     pub base_dir: PathBuf,
     pub chain_id: ChainId,
+    pub genesis_time: Rfc3339String,
     pub tendermint: PathBuf,
     pub db: PathBuf,
     pub ledger_address: SocketAddr,
@@ -130,6 +132,7 @@ impl Ledger {
         Self {
             base_dir,
             chain_id,
+            genesis_time: Rfc3339String("1970-01-01T00:00:00Z".to_owned()),
             tendermint: sub_dir.join(TENDERMINT_DIR),
             db: sub_dir.join(DB_DIR),
             ledger_address: SocketAddr::new(

@@ -9,6 +9,7 @@ use std::time::Duration;
 use anoma::types::address::Address;
 use anoma::types::chain::ChainId;
 use anoma::types::key::ed25519::Keypair;
+use anoma::types::time::DateTimeUtc;
 use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
@@ -42,6 +43,7 @@ pub fn run(
     // TODO we should just use ledger config replace all the args
     home_dir: PathBuf,
     chain_id: ChainId,
+    genesis_time: DateTimeUtc,
     ledger_address: String,
     rpc_address: String,
     p2p_address: String,
@@ -92,7 +94,7 @@ pub fn run(
         }
     }
 
-    write_chain_id(&home_dir, chain_id);
+    write_tm_genesis(&home_dir, chain_id, genesis_time);
 
     update_tendermint_config(
         &home_dir,
@@ -282,7 +284,7 @@ fn update_tendermint_config(
         .map_err(Error::WriteConfig)
 }
 
-fn write_chain_id(home_dir: impl AsRef<Path>, chain_id: ChainId) {
+fn write_tm_genesis(home_dir: impl AsRef<Path>, chain_id: ChainId, genesis_time: DateTimeUtc) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
     let file = File::open(&path).unwrap_or_else(|err| {
@@ -296,6 +298,7 @@ fn write_chain_id(home_dir: impl AsRef<Path>, chain_id: ChainId) {
         .expect("Couldn't deserialize the genesis file");
     genesis.chain_id =
         FromStr::from_str(chain_id.as_str()).expect("Invalid chain ID");
+    genesis.genesis_time = genesis_time.into();
 
     let file = OpenOptions::new()
         .write(true)

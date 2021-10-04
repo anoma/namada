@@ -198,6 +198,8 @@ pub fn run(mut config: config::Ledger) {
     let p2p_address = config.p2p_address.to_string();
     let p2p_persistent_peers = mem::take(&mut config.p2p_persistent_peers);
     let chain_id = config.chain_id.clone();
+    let genesis_time = config.genesis_time.clone().try_into()
+                                  .expect("expected RFC3339 genesis_time");
     let p2p_pex = config.p2p_pex;
 
     // used for shutting down Tendermint node in case the shell panics
@@ -212,6 +214,7 @@ pub fn run(mut config: config::Ledger) {
         if let Err(err) = tendermint_node::run(
             home_dir,
             chain_id,
+            genesis_time,
             ledger_address,
             rpc_address,
             p2p_address,

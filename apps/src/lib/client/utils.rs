@@ -263,6 +263,7 @@ pub fn init_network(
     // Update the ledger config persistent peers and save it
     let mut config = Config::load(&global_args.base_dir, &chain_id);
     config.ledger.p2p_persistent_peers = persistent_peers;
+    config.ledger.genesis_time = genesis.genesis_time.into();
     config
         .write(&global_args.base_dir, &chain_id, true)
         .unwrap();

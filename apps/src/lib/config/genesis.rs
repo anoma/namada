@@ -12,6 +12,7 @@ use anoma::types::chain::ChainId;
 #[cfg(feature = "dev")]
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::key::ed25519::PublicKey;
+use anoma::types::time::DateTimeUtc;
 use anoma::types::{storage, token};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -29,6 +30,7 @@ pub mod genesis_config {
     use anoma::ledger::pos::types::BasisPoints;
     use anoma::types::address::Address;
     use anoma::types::key::ed25519::{ParsePublicKeyError, PublicKey};
+    use anoma::types::time::Rfc3339String;
     use anoma::types::{storage, token};
     use hex;
     use serde::{Deserialize, Serialize};
@@ -85,7 +87,7 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct GenesisConfig {
         // Genesis timestamp
-        pub genesis_time: String,
+        pub genesis_time: Rfc3339String,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
@@ -316,6 +318,7 @@ pub mod genesis_config {
         };
 
         let mut genesis = Genesis {
+            genesis_time: config.genesis_time.try_into().unwrap(),
             validators: validators,
             token_accounts: tokens,
             established_accounts: established,
@@ -345,6 +348,7 @@ pub mod genesis_config {
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 #[borsh_init(init)]
 pub struct Genesis {
+    pub genesis_time: DateTimeUtc,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -548,6 +552,7 @@ pub fn genesis() -> Genesis {
         })
         .collect();
     Genesis {
+        genesis_time: DateTimeUtc::now(),
         validators: vec![validator],
         established_accounts: vec![albert, bertha, christel, matchmaker],
         implicit_accounts,
