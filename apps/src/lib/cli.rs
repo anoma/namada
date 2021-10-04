@@ -1091,7 +1091,7 @@ pub mod args {
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
-    const GENESIS_VALIDATORS: ArgMulti<SocketAddr> = arg_multi("validators");
+    const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -2201,28 +2201,26 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct InitNetwork {
-        pub validators: Vec<SocketAddr>,
+        pub genesis_path: PathBuf,
         pub chain_id_prefix: ChainIdPrefix,
         pub unsafe_dont_encrypt: bool,
     }
 
     impl Args for InitNetwork {
         fn parse(matches: &ArgMatches) -> Self {
-            let validators = GENESIS_VALIDATORS.parse(matches);
+            let genesis_path = GENESIS_PATH.parse(matches);
             let chain_id_prefix = CHAIN_ID_PREFIX.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
-                validators,
+                genesis_path,
                 chain_id_prefix,
                 unsafe_dont_encrypt,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(GENESIS_VALIDATORS.def().about(
-                "The genesis validators addresses in the format \
-                 `{ip}:{port}`. Multiple values are accepted, separated by \
-                 space.",
+            app.arg(GENESIS_PATH.def().about(
+                "Path to the preliminary genesis configuration file.",
             ))
             .arg(CHAIN_ID_PREFIX.def().about(
                 "The chain ID prefix. Up to 19 alphanumeric or punctuation \

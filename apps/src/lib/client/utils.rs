@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::btree_map::VacantEntry;
 use std::fs::{self, OpenOptions};
 use std::iter::FromIterator;
 use std::path::PathBuf;
@@ -12,6 +13,7 @@ use rand::thread_rng;
 use serde_json::json;
 
 use crate::cli::{self, args};
+use crate::config::genesis::genesis_config::{self, EstablishedAccountConfig, ImplicitAccountConfig, TokenAccountConfig, ValidatorConfig};
 use crate::config::{genesis, Config};
 use crate::node::ledger::tendermint_node;
 use crate::wallet::Wallet;
@@ -20,34 +22,39 @@ use crate::wallet::Wallet;
 pub fn init_network(
     global_args: args::Global,
     args::InitNetwork {
-        validators,
+        genesis_path,
         chain_id_prefix,
         unsafe_dont_encrypt,
     }: args::InitNetwork,
 ) {
-    let temp_chain_id = chain_id_prefix.temp_chain_id();
-    let temp_chain_dir = global_args.base_dir.join(chain_id_prefix.as_str());
-    let accounts_dir = temp_chain_dir.join("setup");
+    let mut config = genesis_config::open_genesis_config(&genesis_path);
+
+    let temp_dir = global_args.base_dir.join("init-network");
+    let accounts_dir = temp_dir.join("setup");
+
+    let mut rng: ThreadRng = thread_rng();
 
     let mut persistent_peers: Vec<tendermint::net::Address> =
-        Vec::with_capacity(validators.len());
-    // Generated node keys for each validator first to get their node ID
-    let validators_aliases_and_dirs: Vec<(String, PathBuf)> =
-        validators.iter().enumerate().map(|(n, validator_addr)| {
-            let alias = format!("validator_{}", n);
-            let validator_dir = accounts_dir.join(&alias);
+        Vec::with_capacity(config.validator.len());
+    // Iterate over each validator, generating keys and addresses
+    config.validator =
+        config.validator.iter().map(|(name, config)| {
+            let validator_dir = accounts_dir.join(name);
+            let mut new_config = config.to_owned();
 
             // Generate a node key
-            let mut rng: ThreadRng = thread_rng();
-            let node_key = Keypair::generate(&mut rng);
+            let node_keypair = Keypair::generate(&mut rng);
             let node_pk: ed25519_dalek::PublicKey =
-                node_key.public.clone().into();
+                node_keypair.public.clone().into();
+            // add the node public key to genesis config
+            new_config.consensus_public_key =
+                Some(genesis_config::HexString(hex::encode(node_pk.to_bytes())));
 
             // Derive the node ID from the node key
             let node_id: tendermint::node::Id = node_pk.into();
 
             // Convert and write the keypair into Tendermint node_key.json file
-            let node_key: ed25519_dalek::Keypair = node_key.into();
+            let node_key: ed25519_dalek::Keypair = node_keypair.into();
             let tm_node_key = base64::encode(node_key.to_bytes());
             let tm_node_keypair_json = json!({
                 "priv_key": {
@@ -55,9 +62,8 @@ pub fn init_network(
                     "value": tm_node_key,
                 }
             });
-            // TODO the `temp_chain_id` must be later renamed
             let tm_config_dir = validator_dir
-                .join(&temp_chain_dir)
+                .join(&temp_dir)
                 .join("tendermint")
                 .join("config");
             fs::create_dir_all(&tm_config_dir)
@@ -76,82 +82,86 @@ pub fn init_network(
             let peer = tendermint::net::Address::from_str(&format!(
                 "{}@{}",
                 node_id,
-                validator_addr.to_string()
+                config.net_address.as_ref().unwrap(),
             ))
             .expect("Validator address must be valid");
             persistent_peers.push(peer);
-            (alias, validator_dir)
+
+            // Clear the net address from the config now that it's been set
+            new_config.net_address = None;
+
+            // Generate the account and reward keys
+            let account_keypair = Keypair::generate(&mut rng);
+            let reward_keypair = Keypair::generate(&mut rng);
+            new_config.account_public_key =
+                Some(genesis_config::HexString(account_keypair.public.to_string()));
+            new_config.staking_reward_public_key =
+                Some(genesis_config::HexString(reward_keypair.public.to_string()));
+
+            // Generate account and reward addresses
+            let address = address::gen_established_address("validator account");
+            let reward_address = address::gen_established_address("validator reward account");
+            new_config.address = Some(address.to_string());
+            new_config.staking_reward_address = Some(reward_address.to_string());
+
+            // Write keypairs to wallet
+            let mut wallet = Wallet::load_or_new(&validator_dir);
+            wallet.add_address(name.to_string(), address);
+            wallet.add_address(format!("{}-reward", &name), reward_address);
+            // XXX impossible to add actual keys to wallet??? look more
+            // can't generate them using wallet methods, have to
+            // generate them here to have them for the configuration
+            // especially the node key, which is written above
+
+            // write the anoma config here
+
+            (name.to_string(), new_config)
         }).collect();
 
-    // Generate genesis validator accounts and faucet account
-    let mut faucet_account: Option<genesis::EstablishedAccount> = None;
-    let genesis_validators: Vec<genesis::Validator> = validators_aliases_and_dirs
-        .into_iter()
-        .enumerate()
-        .map(|(n, (alias, validator_dir))| {
-            // TODO the `temp_chain_id` must be later renamed
-            let chain_dir = validator_dir.join(temp_chain_id.as_str());
-            let mut wallet = Wallet::load_or_new(&chain_dir);
-            // TODO the `temp_chain_id` must be later renamed
-            let mut config = Config::load(&validator_dir, &temp_chain_id);
-            config.ledger.p2p_persistent_peers = persistent_peers.clone();
-            config.write(&validator_dir, &temp_chain_id, true).unwrap();
-            let genesis_validator = init_genesis_validator_aux(
-                &mut wallet,
-                &config,
-                alias,
-                unsafe_dont_encrypt,
-            );
-            // Add faucet account to the first validator node
-            if n == 0 {
-                let (_alias, key) = wallet
-                    .gen_key(Some("faucet".to_owned()), unsafe_dont_encrypt);
-                let public_key = Some(key.public.clone());
-                let faucet = genesis::EstablishedAccount {
-                    address: address::gen_established_address(
-                        "testnet faucet account",
-                    ),
-                    vp_code_path: "vp_testnet_faucet.wasm".to_owned(),
-                    // TODO: very fake hash
-                    vp_sha256: Default::default(),
-                    public_key,
-                    storage: Default::default(),
-                };
-                faucet_account = Some(faucet);
-                wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
-            }
-            genesis_validator
-        })
-        .collect();
+    let established =
+        config.established.unwrap_or(HashMap::default())
+        .iter().map(|(name, config)| {
+            let address = address::gen_established_address("established");
+            let keypair = Keypair::generate(&mut rng);
+            // write to wallet here
+            let new_config = EstablishedAccountConfig {
+                address: Some(address.to_string()),
+                vp: Some(config.vp.to_owned().unwrap_or("vp_user".to_string())),
+                public_key: Some(genesis_config::HexString(keypair.public.to_string())),
+                storage: config.storage.to_owned(),
+            };
+            (name.to_string(), new_config)
+    }).collect();
+    config.established = Some(established);
 
-    // Token accounts
-    let default_faucet_tokens = token::Amount::whole(
-        // TODO this could be u64, but toml fails to parse it (https://github.com/alexcrichton/toml-rs/issues/256)
-        // i64::MAX - 1 / 10^6
-        9223372036854,
-    );
-    let balances: HashMap<Address, token::Amount> = match faucet_account {
-        Some(acc) => {
-            HashMap::from_iter([(acc.address.clone(), default_faucet_tokens)])
-        }
-        None => Default::default(),
-    };
-    let token_accounts: Vec<genesis::TokenAccount> = address::tokens()
-        .into_iter()
-        .map(|(address, _)| genesis::TokenAccount {
-            address,
-            vp_code_path: "vp_token.wasm".into(),
-            vp_sha256: Default::default(),
-            balances: balances.clone(),
-        })
-        .collect();
+    let token =
+        config.token.unwrap_or(HashMap::default())
+        .iter().map(|(name, config)| {
+            let address = address::gen_established_address("token");
+            // write to wallet here
+            let new_config = TokenAccountConfig {
+                address: Some(address.to_string()),
+                vp: Some(config.vp.to_owned().unwrap_or("vp_token".to_string())),
+                balances: config.balances.to_owned(),
+            };
+            (name.to_string(), new_config)
+    }).collect();
+    config.token = Some(token);
 
-    // Update the ledger config persistent peers and save it
-    let mut config = Config::load(&temp_chain_dir, &temp_chain_id);
-    config.ledger.p2p_persistent_peers = persistent_peers.clone();
-    config.write(&temp_chain_dir, &temp_chain_id, true).unwrap();
-    // TODO write the genesis file
-    // TODO print the path to the file
+    let implicit =
+        config.implicit.unwrap_or(HashMap::default())
+        .iter().map(|(name, _config)| {
+            let keypair = Keypair::generate(&mut rng);
+            // write to wallet here
+            let new_config = ImplicitAccountConfig {
+                public_key: Some(genesis_config::HexString(keypair.public.to_string())),
+            };
+            (name.to_string(), new_config)
+    }).collect();
+    config.implicit = Some(implicit);
+
+    // generate the chain id first
+    genesis_config::write_genesis_config(config, genesis_path);
 }
 
 /// Initialize genesis validator's address, staking reward address,

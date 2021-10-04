@@ -15,12 +15,12 @@ use anoma::types::key::ed25519::PublicKey;
 use anoma::types::{storage, token};
 
 /// Genesis configuration file format
-mod genesis_config {
-    use std::str::FromStr;
+pub mod genesis_config {
     use std::array::TryFromSliceError;
     use std::collections::HashMap;
     use std::convert::TryInto;
     use std::path::Path;
+    use std::str::FromStr;
 
     use anoma::ledger::parameters::{EpochDuration, Parameters};
     use anoma::ledger::pos::{GenesisValidator, PosParams};
@@ -29,12 +29,12 @@ mod genesis_config {
     use anoma::types::key::ed25519::{ParsePublicKeyError, PublicKey};
     use anoma::types::{storage, token};
     use hex;
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
 
     use super::{EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator};
 
-    #[derive(Debug,Deserialize)]
-    struct HexString(String);
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct HexString(pub String);
 
     impl HexString {
         pub fn to_bytes(&self) -> Result<Vec<u8>, HexKeyError> {
@@ -56,7 +56,7 @@ mod genesis_config {
     }
 
     #[derive(Debug)]
-    enum HexKeyError {
+    pub enum HexKeyError {
         InvalidHexString(hex::FromHexError),
         InvalidSha256(TryFromSliceError),
         InvalidPublicKey(ParsePublicKeyError),
@@ -80,16 +80,18 @@ mod genesis_config {
         }
     }
 
-    #[derive(Debug,Deserialize)]
-    struct GenesisConfig {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct GenesisConfig {
+        // Genesis timestamp
+        pub genesis_time: String,
         // Initial validator set
-        pub validator: Vec<ValidatorConfig>,
+        pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
-        pub token: Option<Vec<TokenAccountConfig>>,
+        pub token: Option<HashMap<String, TokenAccountConfig>>,
         // Established accounts present at genesis
-        pub established: Option<Vec<EstablishedAccountConfig>>,
+        pub established: Option<HashMap<String, EstablishedAccountConfig>>,
         // Implicit accounts present at genesis
-        pub implicit: Option<Vec<ImplicitAccountConfig>>,
+        pub implicit: Option<HashMap<String, ImplicitAccountConfig>>,
         // Protocol parameters
         pub parameters: ParametersConfig,
         // PoS parameters
@@ -98,88 +100,103 @@ mod genesis_config {
         pub wasm: HashMap<String, WasmConfig>,
     }
 
-    #[derive(Debug,Deserialize)]
-    struct ValidatorConfig {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct ValidatorConfig {
         // Public key for consensus. (default: generate)
-        consensus_public_key: Option<HexString>,
+        pub consensus_public_key: Option<HexString>,
         // Public key for validator account. (default: generate)
-        account_public_key: Option<HexString>,
+        pub account_public_key: Option<HexString>,
         // Public key for staking reward account. (default: generate)
-        staking_reward_public_key: Option<HexString>,
-        // Validator address.
-        address: String,
-        // Staking reward account address.
-        staking_reward_address: String,
+        pub staking_reward_public_key: Option<HexString>,
+        // Validator address (default: generate).
+        pub address: Option<String>,
+        // Staking reward account address (default: generate).
+        pub staking_reward_address: Option<String>,
         // Total number of tokens held at genesis.
-        tokens: u64,
+        // XXX: u64 doesn't work with toml-rs!
+        pub tokens: u64,
         // Unstaked balance at genesis.
-        non_staked_balance: u64,
+        // XXX: u64 doesn't work with toml-rs!
+        pub non_staked_balance: u64,
         // Filename of validator VP. (default: default validator VP)
-        validator_vp: Option<String>,
+        pub validator_vp: Option<String>,
         // Filename of staking reward account VP. (default: user VP)
-        staking_reward_vp: Option<String>,
+        pub staking_reward_vp: Option<String>,
+        // IP:port of the validator. (used in generation only)
+        pub net_address: Option<String>,
     }
 
-    #[derive(Debug,Deserialize)]
-    struct TokenAccountConfig {
-        // Address of token account.
-        address: String,
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct TokenAccountConfig {
+        // Address of token account (default: generate).
+        pub address: Option<String>,
         // Filename of token account VP. (default: token VP)
-        vp: Option<String>,
-        // Initial balances held by addresses.
-        balances: Option<HashMap<String, u64>>,
+        pub vp: Option<String>,
+        // Initial balances held by accounts defined elsewhere.
+        // XXX: u64 doesn't work with toml-rs!
+        pub balances: Option<HashMap<String, u64>>,
     }
 
-    #[derive(Debug,Deserialize)]
-    struct EstablishedAccountConfig {
-        // Address of established account.
-        address: String,
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct EstablishedAccountConfig {
+        // Address of established account (default: generate).
+        pub address: Option<String>,
         // Filename of established account VP. (default: user VP)
-        vp: Option<String>,
+        pub vp: Option<String>,
         // Public key of established account. (default: generate)
-        public_key: Option<HexString>,
+        pub public_key: Option<HexString>,
         // Initial storage key values.
-        storage: Option<HashMap<String, HexString>>,
+        pub storage: Option<HashMap<String, HexString>>,
     }
 
-    #[derive(Debug,Deserialize)]
-    struct ImplicitAccountConfig {
-        // Public key of implicit account.
-        public_key: HexString,
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct ImplicitAccountConfig {
+        // Public key of implicit account (default: generate).
+        pub public_key: Option<HexString>,
     }
 
-    #[derive(Debug,Deserialize)]
-    struct ParametersConfig {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct ParametersConfig {
         // Minimum number of blocks per epoch.
+        // XXX: u64 doesn't work with toml-rs!
         min_num_of_blocks: u64,
         // Minimum duration of an epoch (in seconds).
+        // TODO: this is i64 because datetime wants it
         min_duration: i64,
     }
 
-    #[derive(Debug,Deserialize)]
-    struct PosParamsConfig {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PosParamsConfig {
         // Maximum number of active validators.
+        // XXX: u64 doesn't work with toml-rs!
         max_validator_slots: u64,
         // Pipeline length (in epochs).
+        // XXX: u64 doesn't work with toml-rs!
         pipeline_len: u64,
         // Unbonding length (in epochs).
+        // XXX: u64 doesn't work with toml-rs!
         unbonding_len: u64,
         // Votes per token (in basis points).
+        // XXX: u64 doesn't work with toml-rs!
         votes_per_token: u64,
         // Reward for proposing a block.
+        // XXX: u64 doesn't work with toml-rs!
         block_proposer_reward: u64,
         // Reward for voting on a block.
+        // XXX: u64 doesn't work with toml-rs!
         block_vote_reward: u64,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote (in basis points).
+        // XXX: u64 doesn't work with toml-rs!
         duplicate_vote_slash_rate: u64,
         // Portion of a validator's stake that should be slashed on a
         // light client attack (in basis points).
+        // XXX: u64 doesn't work with toml-rs!
         light_client_attack_slash_rate: u64,
     }
 
-    #[derive(Debug,Deserialize)]
-    struct WasmConfig {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct WasmConfig {
         filename: String,
         sha256: HexString,
     }
@@ -192,8 +209,11 @@ mod genesis_config {
 
         Validator {
             pos_data: GenesisValidator {
-                address: Address::decode(&config.address).unwrap(),
-                staking_reward_address: Address::decode(&config.staking_reward_address).unwrap(),
+                address: Address::decode(&config.address.as_ref().unwrap()).unwrap(),
+                staking_reward_address: Address::decode(
+                    &config.staking_reward_address.as_ref().unwrap(),
+                )
+                .unwrap(),
                 tokens: token::Amount::whole(config.tokens),
                 consensus_key: config.consensus_public_key.as_ref().unwrap().to_public_key().unwrap(),
                 staking_reward_key: config.staking_reward_public_key.as_ref().unwrap().to_public_key().unwrap(),
@@ -212,7 +232,7 @@ mod genesis_config {
         let token_vp_config = wasm.get(token_vp_name).unwrap();
 
         TokenAccount {
-            address: Address::decode(&config.address).unwrap(),
+            address: Address::decode(&config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: token_vp_config.filename.to_owned(),
             vp_sha256: token_vp_config.sha256.to_sha256_bytes().unwrap(),
             balances: config.balances.as_ref().unwrap_or(&HashMap::default())
@@ -228,7 +248,7 @@ mod genesis_config {
         let account_vp_config = wasm.get(account_vp_name).unwrap();
 
         EstablishedAccount {
-            address: Address::decode(&config.address).unwrap(),
+            address: Address::decode(&config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: account_vp_config.filename.to_owned(),
             vp_sha256: account_vp_config.sha256.to_sha256_bytes().unwrap(),
             public_key: match &config.public_key {
@@ -245,20 +265,35 @@ mod genesis_config {
 
     fn load_implicit(config: &ImplicitAccountConfig) -> ImplicitAccount {
         ImplicitAccount {
-            public_key: config.public_key.to_public_key().unwrap(),
+            public_key: config.public_key.as_ref().unwrap().to_public_key().unwrap(),
         }
     }
 
     fn load_genesis_config(config: GenesisConfig) -> Genesis {
         let wasms = config.wasm;
-        let validators = config.validator
-            .iter().map(|cfg|{load_validator(cfg, &wasms)}).collect();
-        let tokens = config.token.unwrap_or(vec![])
-            .iter().map(|cfg|{load_token(cfg, &wasms)}).collect();
-        let established = config.established.unwrap_or(vec![])
-            .iter().map(|cfg|{load_established(cfg, &wasms)}).collect();
-        let implicit = config.implicit.unwrap_or(vec![])
-            .iter().map(load_implicit).collect();
+        let validators = config
+            .validator
+            .iter()
+            .map(|(_name, cfg)| load_validator(cfg, &wasms))
+            .collect();
+        let tokens = config
+            .token
+            .unwrap_or(HashMap::default())
+            .iter()
+            .map(|(_name, cfg)| load_token(cfg, &wasms))
+            .collect();
+        let established = config
+            .established
+            .unwrap_or(HashMap::default())
+            .iter()
+            .map(|(_name, cfg)| load_established(cfg, &wasms))
+            .collect();
+        let implicit = config
+            .implicit
+            .unwrap_or(HashMap::default())
+            .iter()
+            .map(|(_name, cfg)| load_implicit(cfg))
+            .collect();
 
         let parameters = Parameters {
             epoch_duration: EpochDuration {
@@ -288,9 +323,18 @@ mod genesis_config {
         }
     }
 
-    pub fn read_genesis_config(path: impl AsRef<Path>) -> Genesis {
+    pub fn open_genesis_config(path: impl AsRef<Path>) -> GenesisConfig {
         let config_file = std::fs::read_to_string(path).unwrap();
-        load_genesis_config(toml::from_str(&config_file).unwrap())
+        toml::from_str(&config_file).unwrap()
+    }
+
+    pub fn write_genesis_config(config: GenesisConfig, path: impl AsRef<Path>) {
+        let toml = toml::to_string(&config).unwrap();
+        std::fs::write(path, toml).unwrap();
+    }
+
+    pub fn read_genesis_config(path: impl AsRef<Path>) -> Genesis {
+        load_genesis_config(open_genesis_config(path))
     }
 }
 
