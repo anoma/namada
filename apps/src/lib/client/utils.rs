@@ -1,4 +1,6 @@
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
+use std::net::SocketAddr;
 use std::str::FromStr;
 
 use anoma::types::chain::ChainId;
@@ -11,7 +13,7 @@ use serde_json::json;
 use crate::cli::{self, args};
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
-use crate::config::{genesis, Config};
+use crate::config::{Config, IntentGossiper, PeerAddress, genesis};
 use crate::node::ledger::tendermint_node;
 use crate::wallet::Wallet;
 
@@ -34,6 +36,10 @@ pub fn init_network(
 
     let mut persistent_peers: Vec<tendermint::net::Address> =
         Vec::with_capacity(config.validator.len());
+    // Intent gossiper config bootstrap peers where we'll add the address for each validator's node
+    let mut bootstrap_peers: HashSet<PeerAddress> = HashSet::with_capacity(config.validator.len());
+    let mut gossiper_configs: HashMap<String, IntentGossiper> = HashMap::with_capacity(config.validator.len());
+
     // Iterate over each validator, generating keys and addresses
     config.validator.iter_mut().for_each(|(name, config)| {
         let validator_dir = accounts_dir.join(name);
@@ -79,9 +85,22 @@ pub fn init_network(
         ))
         .expect("Validator address must be valid");
         persistent_peers.push(peer);
-
-        // Clear the net address from the config now that it's been set
-        config.net_address = None;
+        // Add a Intent gossiper bootstrap peer from the validator's IP
+        let mut gossiper_config = IntentGossiper::default();
+        let peer_key = libp2p::identity::Keypair::Ed25519(gossiper_config.gossiper.key.clone());
+        let peer_id = libp2p::PeerId::from(peer_key.public());
+        let first_port = SocketAddr::from_str(config.net_address.as_ref().unwrap()).unwrap().port();
+        let intent_address =  libp2p::Multiaddr::from_str(
+                format!("/ip4/0.0.0.0/tcp/{}", first_port + 3).as_str(),
+            )
+            .unwrap();
+        gossiper_config.address = intent_address.clone();
+        let intent_peer = PeerAddress {
+            address: intent_address,
+            peer_id,
+        };
+        gossiper_configs.insert(name.clone(), gossiper_config);
+        bootstrap_peers.insert(intent_peer);
 
         // Generate the consensus, account and reward keys
         // The `temp_chain_id` gets renamed after we have chain ID
@@ -114,11 +133,22 @@ pub fn init_network(
     });
 
     // Generate the ledger and intent gossip config with the persistent peers
-    config.validator.iter().for_each(|(name, _config)| {
+    config.validator.iter_mut().for_each(|(name, validator_config)| {
         let validator_dir = accounts_dir.join(name).join(&global_args.base_dir);
         // The `temp_chain_id` gets renamed after we have chain ID
         let mut config = Config::load(&validator_dir, &temp_chain_id);
+        // Add a ledger P2P persistent peers
         config.ledger.p2p_persistent_peers = persistent_peers.clone();
+        // Clear the net address from the config and use it to set ports
+        let net_address = validator_config.net_address.take().unwrap();
+        let first_port = SocketAddr::from_str(&net_address).unwrap().port();
+        config.ledger.p2p_address.set_port(first_port);
+        config.ledger.ledger_address.set_port(first_port + 1);
+        config.ledger.rpc_address.set_port(first_port + 2);
+        config.intent_gossiper = gossiper_configs.remove(name).unwrap();
+        if let Some(discover) = &mut config.intent_gossiper.discover_peer {
+            discover.bootstrap_peers = bootstrap_peers.clone();
+        }
         config.write(&validator_dir, &temp_chain_id, true).unwrap();
     });
 

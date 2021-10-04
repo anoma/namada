@@ -269,7 +269,7 @@ pub struct IntentGossiper {
 impl Default for IntentGossiper {
     fn default() -> Self {
         Self {
-            address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/20201").unwrap(),
+            address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/26659").unwrap(),
             rpc: None,
             subscription_filter: SubscriptionFilter::RegexFilter(
                 Regex::new("asset_v\\d{1,2}").unwrap(),
