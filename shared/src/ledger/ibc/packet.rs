@@ -585,7 +585,9 @@ where
             }
             if packet.sequence < data.sequence {
                 return Err(Error::InvalidPacket(
-                    "The sequence is invalid".to_owned(),
+                    "The sequence is invalid. The packet might have been \
+                     already received"
+                        .to_owned(),
                 ));
             }
             match verify_next_sequence_recv(

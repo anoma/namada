@@ -2,7 +2,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 mod vm_host_env;
-pub use vm_host_env::{tx, vp};
+pub use vm_host_env::{ibc, tx, vp};
 #[cfg(test)]
 mod e2e;
 
