@@ -1,4 +1,5 @@
 # Example genesis with dev settings.
+genesis_time = "2021-09-30:10:00.00Z"
 
 # A genesis validator.
 [validator.dev]
@@ -20,6 +21,8 @@ non_staked_balance = 100000
 validator_vp = "vp_user"
 # VP for the staking reward account
 staking_reward_vp = "vp_user"
+# Public IP:port address
+net_address = "127.0.0.1:26656"
 
 # Some tokens present at genesis.
 

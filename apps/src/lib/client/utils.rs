@@ -1,11 +1,6 @@
-use std::collections::HashMap;
-use std::collections::btree_map::VacantEntry;
 use std::fs::{self, OpenOptions};
-use std::iter::FromIterator;
-use std::path::PathBuf;
 use std::str::FromStr;
 
-use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::{address, token};
 use rand::prelude::ThreadRng;
@@ -13,7 +8,7 @@ use rand::thread_rng;
 use serde_json::json;
 
 use crate::cli::{self, args};
-use crate::config::genesis::genesis_config::{self, EstablishedAccountConfig, ImplicitAccountConfig, TokenAccountConfig, ValidatorConfig};
+use crate::config::genesis::genesis_config;
 use crate::config::{genesis, Config};
 use crate::node::ledger::tendermint_node;
 use crate::wallet::Wallet;
@@ -28,8 +23,9 @@ pub fn init_network(
     }: args::InitNetwork,
 ) {
     let mut config = genesis_config::open_genesis_config(&genesis_path);
-
-    let temp_dir = global_args.base_dir.join("init-network");
+    let temp_chain_id = chain_id_prefix.temp_chain_id();
+    let temp_dir = global_args.base_dir.join(temp_chain_id.as_str());
+    // TODO replace temp_dir after we have chain ID
     let accounts_dir = temp_dir.join("setup");
 
     let mut rng: ThreadRng = thread_rng();
@@ -57,10 +53,10 @@ pub fn init_network(
                 "value": tm_node_key,
             }
         });
-        let tm_config_dir = validator_dir
-            .join(&temp_dir)
-            .join("tendermint")
-            .join("config");
+        let chain_dir = validator_dir.join(&temp_dir);
+        // TODO replace temp_dir after we have chain ID
+        let tm_home_dir = chain_dir.join("tendermint");
+        let tm_config_dir = tm_home_dir.join("config");
         fs::create_dir_all(&tm_config_dir)
             .expect("Couldn't create validator directory");
         let path = tm_config_dir.join("node_key.json");
@@ -72,6 +68,7 @@ pub fn init_network(
             .expect("Couldn't create validator node key file");
         serde_json::to_writer_pretty(file, &tm_node_keypair_json)
             .expect("Couldn't write validator node key file");
+        tendermint_node::write_validator_state(tm_home_dir);
 
         // Build the list of persistent peers from the validators' node IDs
         let peer = tendermint::net::Address::from_str(&format!(
@@ -86,7 +83,8 @@ pub fn init_network(
         config.net_address = None;
 
         // Generate the consensus, account and reward keys
-        let mut wallet = Wallet::load_or_new(&validator_dir);
+        // TODO replace temp_dir after we have chain ID
+        let mut wallet = Wallet::load_or_new(&chain_dir);
         let consensus_key_alias = format!("{}-consensus-key", name);
         let (_alias, consensus_keypair) = wallet.gen_key(Some(consensus_key_alias), unsafe_dont_encrypt);
         let account_key_alias = format!("{}-account-key", name);
@@ -112,8 +110,15 @@ pub fn init_network(
         wallet.add_address(format!("{}-reward", &name), reward_address);
 
         wallet.save().unwrap();
+    });
 
-        // write the anoma config here
+    // Generate the ledger and intent gossip config with the persistent peers
+    config.validator.iter().for_each(|(name, _config)| {
+        let validator_dir = accounts_dir.join(name).join(&global_args.base_dir);
+        // TODO replace temp_dir after we have chain ID
+        let mut config = Config::load(&validator_dir, &temp_chain_id);
+        config.ledger.p2p_persistent_peers = persistent_peers.clone();
+        config.write(&validator_dir, &temp_chain_id, true).unwrap();
     });
 
     // Create a wallet for all other account keys
@@ -161,9 +166,16 @@ pub fn init_network(
     // Save the wallet with other account keys
     wallet.save().unwrap();
 
-    // generate the chain id first
-    let genesis_parent = genesis_path.parent().unwrap();
-    genesis_config::write_genesis_config(config, genesis_parent.join(format!("{}.toml", chain_id_prefix.as_str())));
+    // TODO generate the chain id first
+    let chain_id = temp_chain_id;
+    genesis_config::write_genesis_config(config, global_args.base_dir.join(format!("{}.toml", chain_id.as_str())));
+    // TODO print the path to the file
+    // TODO write the genesis into validator sub-dirs too
+
+    // Update the ledger config persistent peers and save it
+    let mut config = Config::load(&global_args.base_dir, &chain_id);
+    config.ledger.p2p_persistent_peers = persistent_peers;
+    config.write(&global_args.base_dir, &chain_id, true).unwrap();
 }
 
 /// Initialize genesis validator's address, staking reward address,
