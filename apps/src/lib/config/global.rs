@@ -39,8 +39,8 @@ impl GlobalConfig {
     }
 
     /// Try to read the global config from a file.
-    pub fn read(base_dir: &Path) -> Result<Self> {
-        let file_path = Self::file_path(base_dir);
+    pub fn read(base_dir: impl AsRef<Path>) -> Result<Self> {
+        let file_path = Self::file_path(base_dir.as_ref());
         let file_name = file_path.to_str().expect("Expected UTF-8 file path");
         if !file_path.exists() {
             return Err(Error::FileNotFound(file_name.to_string()));
@@ -53,8 +53,8 @@ impl GlobalConfig {
     }
 
     /// Write configuration to a file.
-    pub fn write(&self, base_dir: &Path) -> Result<()> {
-        let file_path = Self::file_path(base_dir);
+    pub fn write(&self, base_dir: impl AsRef<Path>) -> Result<()> {
+        let file_path = Self::file_path(base_dir.as_ref());
         let file_dir = file_path.parent().unwrap();
         create_dir_all(file_dir).map_err(Error::WriteError)?;
         let mut file = File::create(file_path).map_err(Error::WriteError)?;

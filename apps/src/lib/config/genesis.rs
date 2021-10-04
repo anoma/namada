@@ -328,7 +328,7 @@ pub mod genesis_config {
         toml::from_str(&config_file).unwrap()
     }
 
-    pub fn write_genesis_config(config: GenesisConfig, path: impl AsRef<Path>) {
+    pub fn write_genesis_config(config: &GenesisConfig, path: impl AsRef<Path>) {
         let toml = toml::to_string(&config).unwrap();
         std::fs::write(path, toml).unwrap();
     }

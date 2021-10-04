@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 /// The length of chain ID string
@@ -35,6 +36,65 @@ impl ChainId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Derive the chain ID from the genesis hash and release version.
+    pub fn from_genesis(
+        ChainIdPrefix(prefix): ChainIdPrefix,
+        genesis_bytes: impl AsRef<[u8]>,
+    ) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(genesis_bytes.as_ref());
+        // hex of the first 40 chars of the hash
+        let hash = format!(
+            "{:.width$x}",
+            hasher.finalize(),
+            // less `1` for chain ID prefix separator char
+            width = CHAIN_ID_LENGTH - 1 - prefix.len()
+        );
+        let raw = format!("{}{}{}", prefix, CHAIN_ID_PREFIX_SEP, hash);
+        ChainId(raw)
+    }
+
+    /// Validate that chain ID is matching the expected value derived from the
+    /// genesis hash and release version.
+    pub fn validate(
+        &self,
+        genesis_bytes: impl AsRef<[u8]>,
+    ) -> Vec<ChainIdValidationError> {
+        let mut errors = vec![];
+        match self.0.rsplit_once(CHAIN_ID_PREFIX_SEP) {
+            Some((prefix, hash)) => {
+                let mut hasher = Sha256::new();
+                hasher.update(genesis_bytes.as_ref());
+                // less `1` for chain ID prefix separator char
+                let width = CHAIN_ID_LENGTH - 1 - prefix.len();
+                // lowercase hex of the first `width` chars of the hash
+                let expected_hash = format!(
+                    "{:.width$x}",
+                    hasher.finalize(),
+                    width = width,
+                );
+                if hash != expected_hash {
+                    errors.push(ChainIdValidationError::InvalidHash);
+                }
+            }
+            None => {
+                errors.push(ChainIdValidationError::MissingSeparator);
+            }
+        }
+        errors
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Error)]
+pub enum ChainIdValidationError {
+    #[error(
+        "The prefix separator character '{CHAIN_ID_PREFIX_SEP}' is missing"
+    )]
+    MissingSeparator,
+    #[error("The chain ID hash is not valid")]
+    InvalidHash,
 }
 
 impl Default for ChainId {
@@ -114,7 +174,7 @@ impl ChainIdPrefix {
 #[derive(Debug, Error)]
 pub enum ChainIdPrefixParseError {
     #[error(
-        "Chain ID prefix must be up to {CHAIN_ID_PREFIX_MAX_LEN} long, got {0}"
+        "Chain ID prefix must at least 1 and up to {CHAIN_ID_PREFIX_MAX_LEN} characters long, got {0}"
     )]
     UnexpectedLen(usize),
     #[error(
@@ -129,7 +189,7 @@ impl FromStr for ChainIdPrefix {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let len = s.len();
-        if len > CHAIN_ID_PREFIX_MAX_LEN {
+        if !(1..=CHAIN_ID_PREFIX_MAX_LEN).contains(&len) {
             return Err(ChainIdPrefixParseError::UnexpectedLen(len));
         }
         let mut forbidden_chars = s
@@ -144,5 +204,26 @@ impl FromStr for ChainIdPrefix {
             ));
         }
         Ok(Self(s.to_owned()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Test any chain ID that is generated via `from_genesis` function is valid.
+        #[test]
+        fn test_any_generated_chain_id_is_valid(
+            prefix in proptest::string::string_regex(r#"[A-Za-z0-9.!:,-_#]{1,19}"#).unwrap(),
+            genesis_bytes in any::<Vec<u8>>(),
+        ) {
+            let chain_id_prefix = ChainIdPrefix::from_str(&prefix).unwrap();
+            let chain_id = ChainId::from_genesis(chain_id_prefix, &genesis_bytes);
+            // There should be no validation errors
+            let errors = chain_id.validate(&genesis_bytes);
+            assert!(errors.is_empty(), "There should be no validation errors {:#?}", errors);
+        }
     }
 }

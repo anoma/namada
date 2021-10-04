@@ -1,6 +1,7 @@
 use std::fs::{self, OpenOptions};
 use std::str::FromStr;
 
+use anoma::types::chain::ChainId;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::{address, token};
 use rand::prelude::ThreadRng;
@@ -9,6 +10,7 @@ use serde_json::json;
 
 use crate::cli::{self, args};
 use crate::config::genesis::genesis_config;
+use crate::config::global::GlobalConfig;
 use crate::config::{genesis, Config};
 use crate::node::ledger::tendermint_node;
 use crate::wallet::Wallet;
@@ -25,7 +27,7 @@ pub fn init_network(
     let mut config = genesis_config::open_genesis_config(&genesis_path);
     let temp_chain_id = chain_id_prefix.temp_chain_id();
     let temp_dir = global_args.base_dir.join(temp_chain_id.as_str());
-    // TODO replace temp_dir after we have chain ID
+    // The `temp_chain_id` gets renamed after we have chain ID
     let accounts_dir = temp_dir.join("setup");
 
     let mut rng: ThreadRng = thread_rng();
@@ -54,7 +56,6 @@ pub fn init_network(
             }
         });
         let chain_dir = validator_dir.join(&temp_dir);
-        // TODO replace temp_dir after we have chain ID
         let tm_home_dir = chain_dir.join("tendermint");
         let tm_config_dir = tm_home_dir.join("config");
         fs::create_dir_all(&tm_config_dir)
@@ -83,7 +84,7 @@ pub fn init_network(
         config.net_address = None;
 
         // Generate the consensus, account and reward keys
-        // TODO replace temp_dir after we have chain ID
+        // The `temp_chain_id` gets renamed after we have chain ID
         let mut wallet = Wallet::load_or_new(&chain_dir);
         let consensus_key_alias = format!("{}-consensus-key", name);
         let (_alias, consensus_keypair) = wallet.gen_key(Some(consensus_key_alias), unsafe_dont_encrypt);
@@ -115,7 +116,7 @@ pub fn init_network(
     // Generate the ledger and intent gossip config with the persistent peers
     config.validator.iter().for_each(|(name, _config)| {
         let validator_dir = accounts_dir.join(name).join(&global_args.base_dir);
-        // TODO replace temp_dir after we have chain ID
+        // The `temp_chain_id` gets renamed after we have chain ID
         let mut config = Config::load(&validator_dir, &temp_chain_id);
         config.ledger.p2p_persistent_peers = persistent_peers.clone();
         config.write(&validator_dir, &temp_chain_id, true).unwrap();
@@ -166,16 +167,51 @@ pub fn init_network(
     // Save the wallet with other account keys
     wallet.save().unwrap();
 
-    // TODO generate the chain id first
-    let chain_id = temp_chain_id;
-    genesis_config::write_genesis_config(config, global_args.base_dir.join(format!("{}.toml", chain_id.as_str())));
-    // TODO print the path to the file
-    // TODO write the genesis into validator sub-dirs too
+    // Generate the chain ID first
+    let genesis_bytes = toml::to_vec(&config).unwrap();
+    let chain_id =
+        ChainId::from_genesis(chain_id_prefix, genesis_bytes);
+    let genesis_path = global_args
+        .base_dir
+        .join(format!("{}.toml", chain_id.as_str()));
+
+    // Write the genesis file
+    genesis_config::write_genesis_config(
+        &config,
+        &genesis_path,
+    );
+
+    // Write the global config setting the default chain ID
+    let global_config = GlobalConfig::new(chain_id.clone());
+    global_config.write(&global_args.base_dir).unwrap();
+
+    // Rename the generated directories for validators from `temp_chain_id` to `chain_id`
+    config.validator.iter().for_each(|(name, _config)| {
+        let validator_dir = accounts_dir.join(name);
+        let temp_chain_dir = validator_dir.join(&temp_dir);
+        let chain_dir = validator_dir.join(&chain_id.as_str());
+        std::fs::rename(&temp_chain_dir, &chain_dir).unwrap();
+        // Write the genesis and global config into validator sub-dirs
+        genesis_config::write_genesis_config(
+            &config,
+            validator_dir.join(&genesis_path),
+        );
+        global_config.write(validator_dir.join(&global_args.base_dir)).unwrap();
+    });
+
+    // Rename the generate chain config dir from `temp_chain_id` to `chain_id`
+    let chain_dir = global_args.base_dir.join(chain_id.as_str());
+    std::fs::rename(&temp_dir, &chain_dir).unwrap();
 
     // Update the ledger config persistent peers and save it
     let mut config = Config::load(&global_args.base_dir, &chain_id);
     config.ledger.p2p_persistent_peers = persistent_peers;
-    config.write(&global_args.base_dir, &chain_id, true).unwrap();
+    config
+        .write(&global_args.base_dir, &chain_id, true)
+        .unwrap();
+
+    println!("Derived chain ID: {}", chain_id);
+    println!("Genesis file generated at {}", genesis_path.to_string_lossy());
 }
 
 /// Initialize genesis validator's address, staking reward address,
