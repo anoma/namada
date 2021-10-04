@@ -31,6 +31,10 @@ use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::transaction::{process_tx, TxType, WrapperTx};
 use anoma::types::{address, key, token};
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "dev"))]
+use itertools::assert_equal;
+#[cfg(not(feature = "dev"))]
+use sha2::{Digest, Sha256};
 use tendermint::block::Header;
 use tendermint_proto::abci::{
     self, ConsensusParams, Evidence, ValidatorUpdate,
@@ -179,6 +183,7 @@ impl Shell {
         let mut vp_code_cache: HashMap<String, Vec<u8>> = HashMap::default();
 
         // Initialize genesis established accounts
+        #[cfg_attr(feature = "dev", allow(unused_variables))]
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
@@ -194,6 +199,15 @@ impl Shell {
                             panic!("cannot load genesis VP {}.", vp_code_path)
                         })
                 });
+
+            #[cfg(not(feature = "dev"))]
+            {
+                let mut hasher = Sha256::new();
+                hasher.update(&vp_code);
+                let vp_code_hash = hasher.finalize();
+                assert_equal(vp_code_hash.as_slice(), &vp_sha256);
+            }
+
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
@@ -221,6 +235,7 @@ impl Shell {
         }
 
         // Initialize genesis token accounts
+        #[cfg_attr(feature = "dev", allow(unused_variables))]
         for genesis::TokenAccount {
             address,
             vp_code_path,
@@ -235,6 +250,15 @@ impl Shell {
                             panic!("cannot load genesis VP {}.", vp_code_path)
                         })
                 });
+
+            #[cfg(not(feature = "dev"))]
+            {
+                let mut hasher = Sha256::new();
+                hasher.update(&vp_code);
+                let vp_code_hash = hasher.finalize();
+                assert_equal(vp_code_hash.as_slice(), &vp_sha256);
+            }
+
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
@@ -265,6 +289,15 @@ impl Shell {
                     })
                 },
             );
+
+            #[cfg(not(feature = "dev"))]
+            {
+                let mut hasher = Sha256::new();
+                hasher.update(&vp_code);
+                let vp_code_hash = hasher.finalize();
+                assert_equal(vp_code_hash.as_slice(), &validator.validator_vp_sha256);
+            }
+
             let addr = &validator.pos_data.address;
             self.storage
                 .write(&Key::validity_predicate(addr), vp_code)
