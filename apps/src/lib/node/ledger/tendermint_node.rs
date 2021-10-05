@@ -39,12 +39,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Run the tendermint node.
 pub fn run(
+    // TODO we should just use ledger config replace all the args
     home_dir: PathBuf,
     chain_id: ChainId,
     ledger_address: String,
     rpc_address: String,
     p2p_address: String,
     p2p_persistent_peers: Vec<net::Address>,
+    p2p_pex: bool,
     kill_switch: Sender<bool>,
     receiver: Receiver<bool>,
 ) -> Result<()> {
@@ -97,6 +99,7 @@ pub fn run(
         rpc_address,
         p2p_address,
         p2p_persistent_peers,
+        p2p_pex,
     )?;
 
     let tendermint_node = Command::new("tendermint")
@@ -240,6 +243,7 @@ fn update_tendermint_config(
     rpc_address: net::Address,
     p2p_address: net::Address,
     p2p_persistent_peers: Vec<net::Address>,
+    p2p_pex: bool,
 ) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
@@ -249,6 +253,7 @@ fn update_tendermint_config(
     config.rpc.laddr = rpc_address;
     config.p2p.laddr = p2p_address;
     config.p2p.persistent_peers = p2p_persistent_peers;
+    config.p2p.pex = p2p_pex;
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes

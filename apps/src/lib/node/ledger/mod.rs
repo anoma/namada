@@ -198,6 +198,7 @@ pub fn run(mut config: config::Ledger) {
     let p2p_address = config.p2p_address.to_string();
     let p2p_persistent_peers = mem::take(&mut config.p2p_persistent_peers);
     let chain_id = config.chain_id.clone();
+    let p2p_pex = config.p2p_pex;
 
     // used for shutting down Tendermint node in case the shell panics
     let (sender, receiver) = channel();
@@ -215,6 +216,7 @@ pub fn run(mut config: config::Ledger) {
             rpc_address,
             p2p_address,
             p2p_persistent_peers,
+            p2p_pex,
             sender,
             receiver,
         ) {

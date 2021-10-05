@@ -94,6 +94,9 @@ pub struct Ledger {
     pub p2p_address: SocketAddr,
     /// The persistent peers addresses must include node ID
     pub p2p_persistent_peers: Vec<tendermint::net::Address>,
+    /// Turns the peer exchange reactor on or off. Validator node will want the
+    /// pex turned off.
+    pub p2p_pex: bool,
     pub wasm_dir: PathBuf,
 }
 
@@ -142,6 +145,7 @@ impl Ledger {
                 26656,
             ),
             p2p_persistent_peers,
+            p2p_pex: true,
             wasm_dir: "wasm".into(),
         }
     }
