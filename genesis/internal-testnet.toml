@@ -1,5 +1,5 @@
 # Example genesis with internal testnet settings.
-genesis_time = "2021-09-30:10:00.00Z"
+genesis_time = "2021-09-30T10:00:00Z"
 
 # 4 genesis validators.
 [validator.validator-1]
@@ -13,6 +13,12 @@ validator_vp = "vp_user"
 staking_reward_vp = "vp_user"
 # Public IP:port address
 net_address = "52.210.23.30:26656"
+# This has to be an alias of one of the established accounts
+matchmaker_account = "matchmaker"
+# A matchmaker WASM program
+matchmaker_code = "wasm/mm_token_exch.wasm"
+# A transaction WASM code used by the matchmaker
+matchmaker_tx = "wasm/tx_from_intent.wasm"
 
 [validator.validator-2]
 # Validator's token balance at genesis.
@@ -96,6 +102,8 @@ vp = "vp_token"
 a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx = 9223372036854
 
 # Some established accounts present at genesis.
+[established.matchmaker]
+vp = "vp_user"
 
 [established.faucet]
 address = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx"

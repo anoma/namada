@@ -162,7 +162,7 @@ impl Default for RpcServer {
         Self {
             address: SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                39111,
+                26660,
             ),
         }
     }

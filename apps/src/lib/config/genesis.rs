@@ -128,6 +128,12 @@ pub mod genesis_config {
         pub staking_reward_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
         pub net_address: Option<String>,
+        /// Matchmaker account's alias, if any
+        pub matchmaker_account: Option<String>,
+        /// Path to a matchmaker WASM program, if any
+        pub matchmaker_code: Option<String>,
+        /// Path to a transaction WASM code used by the matchmaker, if any
+        pub matchmaker_tx: Option<String>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]

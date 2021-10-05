@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 
 use anoma::types::chain::ChainId;
@@ -37,10 +37,21 @@ pub fn init_network(
 
     let mut persistent_peers: Vec<tendermint::net::Address> =
         Vec::with_capacity(config.validator.len());
-    // Intent gossiper config bootstrap peers where we'll add the address for each validator's node
-    let mut bootstrap_peers: HashSet<PeerAddress> = HashSet::with_capacity(config.validator.len());
-    let mut gossiper_configs: HashMap<String, IntentGossiper> = HashMap::with_capacity(config.validator.len());
+    // Intent gossiper config bootstrap peers where we'll add the address for
+    // each validator's node
+    let mut bootstrap_peers: HashSet<PeerAddress> =
+        HashSet::with_capacity(config.validator.len());
+    let mut gossiper_configs: HashMap<String, IntentGossiper> =
+        HashMap::with_capacity(config.validator.len());
+    // Other accounts owned by one of the validators
+    let mut validator_owned_accounts: HashMap<
+        String,
+        genesis_config::EstablishedAccountConfig,
+    > = HashMap::default();
 
+    // We need a temporary copy to be able to use this inside the validator
+    // loop, which has mutable borrow on the config.
+    let established_accounts = config.established.clone();
     // Iterate over each validator, generating keys and addresses
     config.validator.iter_mut().for_each(|(name, config)| {
         let validator_dir = accounts_dir.join(name);
@@ -100,8 +111,6 @@ pub fn init_network(
             address: intent_address,
             peer_id,
         };
-        gossiper_configs.insert(name.clone(), gossiper_config);
-        bootstrap_peers.insert(intent_peer);
 
         // Generate the consensus, account and reward keys
         // The `temp_chain_id` gets renamed after we have chain ID
@@ -130,25 +139,84 @@ pub fn init_network(
         wallet.add_address(name.clone(), address);
         wallet.add_address(format!("{}-reward", &name), reward_address);
 
+        // Check if there's a matchmaker configured for this validator node
+        match (
+            &config.matchmaker_account,
+            &config.matchmaker_code,
+            &config.matchmaker_tx,
+        ) {
+            (Some(account), Some(mm_code), Some(tx_code)) => {
+                match established_accounts.as_ref().and_then(|e| e.get(account))
+                {
+                    Some(matchmaker) => {
+                        let mut matchmaker = matchmaker.clone();
+
+                        init_established_account(
+                            account,
+                            &mut wallet,
+                            &mut matchmaker,
+                            unsafe_dont_encrypt,
+                        );
+                        validator_owned_accounts
+                            .insert(account.clone(), matchmaker);
+
+                        let ledger_address =
+                            tendermint::net::Address::from_str(&format!(
+                                "0.0.0.0:{}",
+                                first_port + 1
+                            ))
+                            .unwrap();
+                        gossiper_config.matchmaker = Some(config::Matchmaker {
+                            matchmaker: mm_code.clone().into(),
+                            tx_code: tx_code.clone().into(),
+                            ledger_address,
+                            filter: None,
+                        });
+                    }
+                    None => {
+                        eprintln!(
+                            "Misconfigured validator's matchmaker. No \
+                             established account with alias {} found",
+                            account
+                        );
+                        cli::safe_exit(1)
+                    }
+                }
+            }
+            (None, None, None) => {}
+            _ => {
+                eprintln!(
+                    "Misconfigured validator's matchmaker. \
+                     `matchmaker_account`, `matchmaker_code` and \
+                     `matchmaker_tx` must be all or none present."
+                );
+                cli::safe_exit(1)
+            }
+        }
+
+        // Store the gossip config
+        gossiper_configs.insert(name.clone(), gossiper_config);
+        bootstrap_peers.insert(intent_peer);
+
         wallet.save().unwrap();
     });
 
-    // Create a wallet for all other account keys
+    // Create a wallet for all accounts other than validators
     let mut wallet = Wallet::load_or_new(&accounts_dir.join("other"));
     if let Some(established) = &mut config.established {
         established.iter_mut().for_each(|(name, config)| {
-            if config.address.is_none() {
-                let address = address::gen_established_address("established");
-                config.address = Some(address.to_string());
-                wallet.add_address(name.clone(), address);
-            }
-            if config.public_key.is_none() {
-                let (_alias, keypair) = wallet.gen_key(Some(name.clone()), unsafe_dont_encrypt);
-                let public_key = genesis_config::HexString(keypair.public.to_string());
-                config.public_key = Some(public_key);
-            }
-            if config.vp.is_none() {
-                config.vp = Some("vp_user".to_string());
+            match validator_owned_accounts.get(name) {
+                Some(validator_owned) => {
+                    *config = validator_owned.clone();
+                }
+                None => {
+                    init_established_account(
+                        name,
+                        &mut wallet,
+                        config,
+                        unsafe_dont_encrypt,
+                    );
+                }
             }
         })
     }
@@ -228,6 +296,8 @@ pub fn init_network(
             let validator_dir =
                 accounts_dir.join(name).join(&global_args.base_dir);
             let mut config = Config::load(&validator_dir, &chain_id);
+
+            // Configure the ledger
             config.ledger.genesis_time = genesis.genesis_time.into();
             // In `config::Ledger`'s `base_dir`, `chain_id` and `tendermint`,
             // the paths are prefixed with `validator_dir` given in the first
@@ -254,10 +324,19 @@ pub fn init_network(
             config.ledger.ledger_address.set_port(first_port + 2);
             // Validator node should turned off peer exchange reactor
             config.ledger.p2p_pex = false;
+
+            // Configure the intent gossiper
             config.intent_gossiper = gossiper_configs.remove(name).unwrap();
             if let Some(discover) = &mut config.intent_gossiper.discover_peer {
                 discover.bootstrap_peers = bootstrap_peers.clone();
             }
+            config.intent_gossiper.rpc = Some(config::RpcServer {
+                address: SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                    first_port + 4,
+                ),
+            });
+
             config.write(&validator_dir, &chain_id, true).unwrap();
         });
 
@@ -271,6 +350,30 @@ pub fn init_network(
 
     println!("Derived chain ID: {}", chain_id);
     println!("Genesis file generated at {}", genesis_path.to_string_lossy());
+}
+
+fn init_established_account(
+    name: impl AsRef<str>,
+    wallet: &mut Wallet,
+    config: &mut genesis_config::EstablishedAccountConfig,
+    unsafe_dont_encrypt: bool,
+) {
+    if config.address.is_none() {
+        let address = address::gen_established_address("established");
+        config.address = Some(address.to_string());
+        wallet.add_address(name.as_ref().to_string(), address);
+    }
+    if config.public_key.is_none() {
+        let (_alias, keypair) = wallet.gen_key(
+            Some(format!("{}-key", name.as_ref())),
+            unsafe_dont_encrypt,
+        );
+        let public_key = genesis_config::HexString(keypair.public.to_string());
+        config.public_key = Some(public_key);
+    }
+    if config.vp.is_none() {
+        config.vp = Some("vp_user".to_string());
+    }
 }
 
 /// Initialize genesis validator's address, staking reward address,
