@@ -396,6 +396,18 @@ impl PartialOrd for PublicKey {
     }
 }
 
+impl Ord for PublicKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.try_to_vec()
+            .expect("Encoding public key shouldn't fail")
+            .cmp(
+                &other
+                    .try_to_vec()
+                    .expect("Encoding public key shouldn't fail"),
+            )
+    }
+}
+
 impl Display for PublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let vec = self
