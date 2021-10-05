@@ -250,8 +250,8 @@ pub fn init_network(
             let net_address = validator_config.net_address.take().unwrap();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
             config.ledger.p2p_address.set_port(first_port);
-            config.ledger.ledger_address.set_port(first_port + 1);
-            config.ledger.rpc_address.set_port(first_port + 2);
+            config.ledger.rpc_address.set_port(first_port + 1);
+            config.ledger.ledger_address.set_port(first_port + 2);
             // Validator node should turned off peer exchange reactor
             config.ledger.p2p_pex = false;
             config.intent_gossiper = gossiper_configs.remove(name).unwrap();
