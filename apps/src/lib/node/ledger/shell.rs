@@ -153,6 +153,17 @@ impl Shell {
         }
         #[cfg(not(feature = "dev"))]
         let genesis = genesis::genesis(&self.base_dir, &self.storage.chain_id);
+        #[cfg(not(feature = "dev"))]
+        {
+            let genesis_bytes = genesis.try_to_vec().unwrap();
+            let errors = self.storage.chain_id.validate(genesis_bytes);
+            use itertools::Itertools;
+            assert!(
+                errors.is_empty(),
+                "Chain ID validation failed: {}",
+                errors.into_iter().format(". ")
+            );
+        }
         #[cfg(feature = "dev")]
         let genesis = genesis::genesis();
 
