@@ -228,6 +228,7 @@ pub fn init_network(
             let validator_dir =
                 accounts_dir.join(name).join(&global_args.base_dir);
             let mut config = Config::load(&validator_dir, &chain_id);
+            config.ledger.genesis_time = genesis.genesis_time.into();
             // In `config::Ledger`'s `base_dir`, `chain_id` and `tendermint`,
             // the paths are prefixed with `validator_dir` given in the first
             // parameter. We need to remove this prefix, because
