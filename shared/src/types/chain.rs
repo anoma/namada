@@ -14,15 +14,15 @@ pub const CHAIN_ID_LENGTH: usize = 30;
 /// The maximum length of chain ID prefix
 pub const CHAIN_ID_PREFIX_MAX_LEN: usize = 19;
 /// Separator between chain ID prefix and the generated hash
-pub const CHAIN_ID_PREFIX_SEP: char = ':';
+pub const CHAIN_ID_PREFIX_SEP: char = '.';
 
 /// Development default chain ID. Must be [`CHAIN_ID_LENGTH`] long.
 #[cfg(feature = "dev")]
-pub const DEFAULT_CHAIN_ID: &str = "anoma-devchain:000000000000000";
+pub const DEFAULT_CHAIN_ID: &str = "anoma-devchain.000000000000000";
 
 /// Release default chain ID. Must be [`CHAIN_ID_LENGTH`] long.
 #[cfg(not(feature = "dev"))]
-pub const DEFAULT_CHAIN_ID: &str = "anoma-internal:000000000000000";
+pub const DEFAULT_CHAIN_ID: &str = "anoma-internal.000000000000000";
 
 /// Chain ID
 #[derive(
@@ -43,14 +43,11 @@ impl ChainId {
         genesis_bytes: impl AsRef<[u8]>,
     ) -> Self {
         let mut hasher = Sha256::new();
-        hasher.update(genesis_bytes.as_ref());
-        // hex of the first 40 chars of the hash
-        let hash = format!(
-            "{:.width$x}",
-            hasher.finalize(),
-            // less `1` for chain ID prefix separator char
-            width = CHAIN_ID_LENGTH - 1 - prefix.len()
-        );
+        hasher.update(genesis_bytes);
+        // less `1` for chain ID prefix separator char
+        let width = CHAIN_ID_LENGTH - 1 - prefix.len();
+        // lowercase hex of the first `width` chars of the hash
+        let hash = format!("{:.width$x}", hasher.finalize(), width = width,);
         let raw = format!("{}{}{}", prefix, CHAIN_ID_PREFIX_SEP, hash);
         ChainId(raw)
     }
@@ -65,17 +62,17 @@ impl ChainId {
         match self.0.rsplit_once(CHAIN_ID_PREFIX_SEP) {
             Some((prefix, hash)) => {
                 let mut hasher = Sha256::new();
-                hasher.update(genesis_bytes.as_ref());
+                hasher.update(genesis_bytes);
                 // less `1` for chain ID prefix separator char
                 let width = CHAIN_ID_LENGTH - 1 - prefix.len();
                 // lowercase hex of the first `width` chars of the hash
-                let expected_hash = format!(
-                    "{:.width$x}",
-                    hasher.finalize(),
-                    width = width,
-                );
+                let expected_hash =
+                    format!("{:.width$x}", hasher.finalize(), width = width,);
                 if hash != expected_hash {
-                    errors.push(ChainIdValidationError::InvalidHash);
+                    errors.push(ChainIdValidationError::InvalidHash(
+                        expected_hash,
+                        hash.to_string(),
+                    ));
                 }
             }
             None => {
@@ -93,8 +90,8 @@ pub enum ChainIdValidationError {
         "The prefix separator character '{CHAIN_ID_PREFIX_SEP}' is missing"
     )]
     MissingSeparator,
-    #[error("The chain ID hash is not valid")]
-    InvalidHash,
+    #[error("The chain ID hash is not valid, expected {0}, got {1}")]
+    InvalidHash(String, String),
 }
 
 impl Default for ChainId {
@@ -116,7 +113,7 @@ pub enum ChainIdParseError {
     UnexpectedLen(usize),
     #[error(
         "The prefix contains forbidden characters: {0:?}. Only alphanumeric \
-         or punctuation ASCII characters are allowed"
+         characters and `-`, `_` and `.` are allowed."
     )]
     ForbiddenCharacters(Vec<char>),
 }
@@ -131,8 +128,9 @@ impl FromStr for ChainId {
         }
         let mut forbidden_chars = s
             .chars()
+            .into_iter()
             .filter(|char| {
-                char.is_ascii_alphanumeric() || char.is_ascii_punctuation()
+                matches!(*char as u8, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.')
             })
             .peekable();
         if forbidden_chars.next().is_some() {
@@ -174,7 +172,8 @@ impl ChainIdPrefix {
 #[derive(Debug, Error)]
 pub enum ChainIdPrefixParseError {
     #[error(
-        "Chain ID prefix must at least 1 and up to {CHAIN_ID_PREFIX_MAX_LEN} characters long, got {0}"
+        "Chain ID prefix must at least 1 and up to {CHAIN_ID_PREFIX_MAX_LEN} \
+         characters long, got {0}"
     )]
     UnexpectedLen(usize),
     #[error(
@@ -209,8 +208,9 @@ impl FromStr for ChainIdPrefix {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         /// Test any chain ID that is generated via `from_genesis` function is valid.
