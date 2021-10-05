@@ -13,6 +13,8 @@ use anoma::types::chain::ChainId;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::key::ed25519::PublicKey;
 use anoma::types::{storage, token};
+use borsh::{BorshDeserialize, BorshSerialize};
+use derivative::Derivative;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -269,7 +271,7 @@ pub mod genesis_config {
         }
     }
 
-    fn load_genesis_config(config: GenesisConfig) -> Genesis {
+    pub fn load_genesis_config(config: GenesisConfig) -> Genesis {
         let wasms = config.wasm;
         let validators = config
             .validator
@@ -313,14 +315,16 @@ pub mod genesis_config {
             light_client_attack_slash_rate: BasisPoints::new(config.pos_params.light_client_attack_slash_rate),
         };
 
-        Genesis {
+        let mut genesis = Genesis {
             validators: validators,
             token_accounts: tokens,
             established_accounts: established,
             implicit_accounts: implicit,
             parameters: parameters,
             pos_params: pos_params,
-        }
+        };
+        genesis.init();
+        genesis
     }
 
     pub fn open_genesis_config(path: impl AsRef<Path>) -> GenesisConfig {
@@ -338,7 +342,8 @@ pub mod genesis_config {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[borsh_init(init)]
 pub struct Genesis {
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
@@ -348,7 +353,26 @@ pub struct Genesis {
     pub pos_params: PosParams,
 }
 
-#[derive(Clone, Debug)]
+impl Genesis {
+    /// Sort all fields for deterministic encoding
+    pub fn init(&mut self) {
+        self.validators.sort();
+        self.token_accounts.sort();
+        self.established_accounts.sort();
+        self.implicit_accounts.sort();
+    }
+}
+
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 /// Genesis validator definition
 pub struct Validator {
     /// Data that is used for PoS system initialization
@@ -371,7 +395,10 @@ pub struct Validator {
     pub reward_vp_sha256: [u8; 32],
 }
 
-#[derive(Clone, Debug)]
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Derivative,
+)]
+#[derivative(PartialOrd, Ord)]
 pub struct EstablishedAccount {
     /// Address
     pub address: Address,
@@ -382,10 +409,14 @@ pub struct EstablishedAccount {
     /// A public key to be stored in the account's storage, if any
     pub public_key: Option<PublicKey>,
     /// Account's sub-space storage. The values must be borsh encoded bytes.
+    #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub storage: HashMap<storage::Key, Vec<u8>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Derivative,
+)]
+#[derivative(PartialOrd, Ord)]
 pub struct TokenAccount {
     /// Address
     pub address: Address,
@@ -394,10 +425,20 @@ pub struct TokenAccount {
     /// Expected SHA-256 hash of the validity predicate wasm
     pub vp_sha256: [u8; 32],
     /// Accounts' balances of this token
+    #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub struct ImplicitAccount {
     /// A public key from which the implicit account is derived. This will be
     /// stored on chain for the account.
