@@ -13,17 +13,18 @@ use anoma::types::{storage, token};
 /// Genesis configuration file format
 mod genesis_config {
     use std::str::FromStr;
+    use std::collections::HashMap;
 
     use anoma::ledger::parameters::{EpochDuration, Parameters};
     use anoma::ledger::pos::{GenesisValidator, PosParams};
     use anoma::ledger::pos::types::BasisPoints;
     use anoma::types::address::Address;
     use anoma::types::key::ed25519::{ParsePublicKeyError, PublicKey};
-    use anoma::types::token;
+    use anoma::types::{storage, token};
     use hex;
     use serde::Deserialize;
 
-    use super::{Genesis,Validator};
+    use super::{EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator};
 
     #[derive(Debug,Deserialize)]
     struct HexString(String);
@@ -62,6 +63,12 @@ mod genesis_config {
     struct GenesisConfig {
         // Initial validator set
         pub validator: Vec<ValidatorConfig>,
+        // Token accounts present at genesis
+        pub token: Option<Vec<TokenAccountConfig>>,
+        // Established accounts present at genesis
+        pub established: Option<Vec<EstablishedAccountConfig>>,
+        // Implicit accounts present at genesis
+        pub implicit: Option<Vec<ImplicitAccountConfig>>,
         // Protocol parameters
         pub parameters: ParametersConfig,
         // PoS parameters
@@ -88,6 +95,34 @@ mod genesis_config {
         validator_vp: Option<String>,
         // Filename of staking reward account VP. (default: user VP)
         staking_reward_vp: Option<String>,
+    }
+
+    #[derive(Debug,Deserialize)]
+    struct TokenAccountConfig {
+        // Address of token account.
+        address: String,
+        // Filename of token account VP. (default: token VP)
+        vp: Option<String>,
+        // Initial balances held by addresses.
+        balances: Option<HashMap<String, u64>>,
+    }
+
+    #[derive(Debug,Deserialize)]
+    struct EstablishedAccountConfig {
+        // Address of established account.
+        address: String,
+        // Filename of established account VP. (default: user VP)
+        vp: Option<String>,
+        // Public key of established account. (default: generate)
+        public_key: Option<HexString>,
+        // Initial storage key values.
+        storage: Option<HashMap<String, HexString>>,
+    }
+
+    #[derive(Debug,Deserialize)]
+    struct ImplicitAccountConfig {
+        // Public key of implicit account.
+        public_key: HexString,
     }
 
     #[derive(Debug,Deserialize)]
@@ -135,8 +170,48 @@ mod genesis_config {
         }
     }
 
+    fn load_token(config: &TokenAccountConfig) -> TokenAccount {
+        TokenAccount {
+            address: Address::decode(&config.address).unwrap(),
+            vp_code_path: config.vp.as_ref().unwrap().to_string(),
+            balances: config.balances.as_ref().unwrap_or(&HashMap::default())
+                .iter().map(|(address, amount)| {
+                    (Address::decode(&address).unwrap(),
+                     token::Amount::whole(*amount))
+                }).collect(),
+        }
+    }
+
+    fn load_established(config: &EstablishedAccountConfig) -> EstablishedAccount {
+        EstablishedAccount {
+            address: Address::decode(&config.address).unwrap(),
+            vp_code_path: config.vp.as_ref().unwrap().to_string(),
+            public_key: match &config.public_key {
+                Some(hex) => Some(hex.to_public_key().unwrap()),
+                None => None,
+            },
+            storage: config.storage.as_ref().unwrap_or(&HashMap::default())
+                .iter().map(|(address, hex)| {
+                    (storage::Key::parse(&address).unwrap(),
+                     hex.to_bytes().unwrap())
+                }).collect(),
+        }
+    }
+
+    fn load_implicit(config: &ImplicitAccountConfig) -> ImplicitAccount {
+        ImplicitAccount {
+            public_key: config.public_key.to_public_key().unwrap(),
+        }
+    }
+
     fn load_genesis_config(config: GenesisConfig) -> Genesis {
         let validators = config.validator.iter().map(load_validator).collect();
+        let tokens = config.token.unwrap_or(vec![])
+            .iter().map(load_token).collect();
+        let established = config.established.unwrap_or(vec![])
+            .iter().map(load_established).collect();
+        let implicit = config.implicit.unwrap_or(vec![])
+            .iter().map(load_implicit).collect();
 
         let parameters = Parameters {
             epoch_duration: EpochDuration {
@@ -158,9 +233,9 @@ mod genesis_config {
 
         Genesis {
             validators: validators,
-            token_accounts: vec![],
-            established_accounts: vec![],
-            implicit_accounts: vec![],
+            token_accounts: tokens,
+            established_accounts: established,
+            implicit_accounts: implicit,
             parameters: parameters,
             pos_params: pos_params,
         }
