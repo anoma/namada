@@ -45,7 +45,7 @@ use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
-use crate::{config, wasm};
+use crate::{config, wasm_loader};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -180,7 +180,7 @@ impl Shell {
         {
             let vp_code = vp_code_cache
                 .get_or_insert_with(vp_code_path.clone(), || {
-                    wasm::read_wasm(&self.wasm_dir, &vp_code_path)
+                    wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
                 });
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
@@ -217,7 +217,7 @@ impl Shell {
         {
             let vp_code = vp_code_cache
                 .get_or_insert_with(vp_code_path.clone(), || {
-                    wasm::read_wasm(&self.wasm_dir, &vp_code_path)
+                    wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
                 });
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
@@ -235,10 +235,15 @@ impl Shell {
 
         // Initialize genesis validator accounts
         for validator in &genesis.validators {
-            let vp_code = vp_code_cache
-                .get_or_insert_with(validator.vp_code_path.clone(), || {
-                    wasm::read_wasm(&self.wasm_dir, &validator.vp_code_path)
-                });
+            let vp_code = vp_code_cache.get_or_insert_with(
+                validator.vp_code_path.clone(),
+                || {
+                    wasm_loader::read_wasm(
+                        &self.wasm_dir,
+                        &validator.vp_code_path,
+                    )
+                },
+            );
             let addr = &validator.pos_data.address;
             self.storage
                 .write(&Key::validity_predicate(addr), vp_code)

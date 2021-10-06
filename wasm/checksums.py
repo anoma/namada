@@ -17,4 +17,4 @@ for wasm in sorted(glob.glob("wasm/*.wasm")):
     if not basename in updated_wasms:
         os.remove(wasm)
 
-json.dump(checksums, open("wasm/checksums.json", "w"))
+json.dump(checksums, open("wasm/checksums.json", "w"), indent=4)

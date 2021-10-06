@@ -16,7 +16,7 @@ use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
 use crate::client::tx::broadcast_tx;
 use crate::types::MatchmakerMessage;
-use crate::{config, wasm as wasm_loader};
+use crate::{config, wasm_loader};
 
 /// A matchmaker receive intents and tries to find a match with previously
 /// received intent.

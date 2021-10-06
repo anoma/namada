@@ -1,3 +1,5 @@
+//! A module for loading WASM files and downloading pre-built WASMs.
+
 use core::borrow::Borrow;
 use std::collections::HashMap;
 use std::fs;
@@ -35,7 +37,7 @@ impl Checksums {
             Ok(file) => match serde_json::from_reader(file) {
                 Ok(result) => result,
                 Err(_) => {
-                    eprint!(
+                    eprintln!(
                         "Can't read checksums.json in {}",
                         wasm_directory.as_ref().to_string_lossy()
                     );
@@ -43,7 +45,7 @@ impl Checksums {
                 }
             },
             Err(_) => {
-                eprint!(
+                eprintln!(
                     "Can't find checksums.json in {}",
                     wasm_directory.as_ref().to_string_lossy()
                 );
@@ -53,6 +55,9 @@ impl Checksums {
     }
 }
 
+/// Download all the pre-build WASMs, or if they're already downloaded, verify
+/// their checksums. Download all the pre-build WASMs, or if they're already
+/// downloaded, verify their checksums.
 pub fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
     // load json with wasm hashes
     let checksums = Checksums::read_checksums(&wasm_directory);
@@ -90,7 +95,7 @@ pub fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                         }
                     }
                     Err(e) => {
-                        eprint!("Error downloading wasm: {}", e);
+                        eprintln!("Error downloading wasm: {}", e);
                         safe_exit(1);
                     }
                 }
@@ -109,13 +114,13 @@ pub fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                             }
                         }
                         Err(e) => {
-                            eprint!("Error downloading wasm: {}", e);
+                            eprintln!("Error downloading wasm: {}", e);
                             safe_exit(1);
                         }
                     }
                 }
                 _ => {
-                    eprint!(
+                    eprintln!(
                         "Can't read {}.",
                         wasm_path.as_os_str().to_string_lossy()
                     );
@@ -143,7 +148,7 @@ pub fn read_wasm(
                             return bytes;
                         }
                         Err(_) => {
-                            eprint!(
+                            eprintln!(
                                 "File {} not found. ",
                                 wasm_path.to_string_lossy()
                             );
@@ -160,7 +165,7 @@ pub fn read_wasm(
                                 return bytes;
                             }
                             Err(_) => {
-                                eprint!(
+                                eprintln!(
                                     "Could not read file {}. ",
                                     file_path.as_ref().to_string_lossy()
                                 );
@@ -173,7 +178,7 @@ pub fn read_wasm(
                                 return bytes;
                             }
                             Err(_) => {
-                                eprint!(
+                                eprintln!(
                                     "Could not read file {}. ",
                                     file_path.as_ref().to_string_lossy()
                                 );
@@ -185,8 +190,8 @@ pub fn read_wasm(
             }
         }
     }
-    eprint!(
-        "Path  {} does not load to a file.",
+    eprintln!(
+        "File  {} does not exist.",
         file_path.as_ref().to_string_lossy()
     );
     safe_exit(1);
