@@ -860,7 +860,7 @@ kind: pipeline
 name: anoma-ci-release
 node: {project: anoma}
 steps:
-- commands: [echo "10e0c02fa255346179314b3ae731cdca160696cc07e390a6a0a979d5e718e1b8  Makefile"
+- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -941,6 +941,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 46f3af29b8718a082aa28d71a9d7b99e7c4ecf61e471d71e323f83919f9e95e2
+hmac: c7277b49814902c5c797750d8f383d43cd9f2a37ea8df5048c0570260e05b9bc
 
 ...

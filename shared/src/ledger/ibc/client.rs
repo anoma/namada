@@ -201,37 +201,43 @@ where
         }
 
         // check the posterior states
-        let client_state = ClientReader::client_state(self, client_id)
+        let client_state_post = ClientReader::client_state(self, client_id)
             .ok_or_else(|| {
                 Error::InvalidClient(format!(
                     "The client state doesn't exist: ID {}",
                     client_id
                 ))
             })?;
-        let height = client_state.latest_height();
-        let consensus_state =
+        let height = client_state_post.latest_height();
+        let consensus_state_post =
             self.consensus_state(client_id, height).ok_or_else(|| {
                 Error::InvalidClient(format!(
                     "The consensus state doesn't exist: ID {}, Height {}",
                     client_id, height
                 ))
             })?;
-        // check the prior client state
-        let pre_client_state = self.client_state_pre(client_id)?;
-        // get proofs
+
+        // verify the given states
+        let client_state = data.client_state.clone();
+        let consensus_state = data.consensus_state.clone();
         let client_proof = data.proof_client()?;
         let consensus_proof = data.proof_consensus_state()?;
-
-        let client = AnyClient::from_client_type(client_state.client_type());
+        let client_type = self.client_type(client_id).ok_or_else(|| {
+            Error::InvalidClient(format!(
+                "The client type doesn't exist: ID {}",
+                client_id
+            ))
+        })?;
+        let client = AnyClient::from_client_type(client_type);
         match client.verify_upgrade_and_update_state(
-            &pre_client_state,
+            &client_state,
             &consensus_state,
             client_proof,
             consensus_proof,
         ) {
             Ok((new_client_state, new_consensus_state)) => {
-                if new_client_state == client_state
-                    && new_consensus_state == consensus_state
+                if new_client_state == client_state_post
+                    && new_consensus_state == consensus_state_post
                 {
                     Ok(())
                 } else {

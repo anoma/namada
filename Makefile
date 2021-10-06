@@ -125,7 +125,10 @@ doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
 
-build-wasm-scripts-docker:
+build-wasm-image-docker:
+	docker build -t anoma-wasm wasm
+
+build-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make build-wasm-scripts
 
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm

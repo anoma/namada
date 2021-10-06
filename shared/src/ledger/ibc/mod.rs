@@ -6,7 +6,7 @@ mod connection;
 mod packet;
 mod port;
 mod sequence;
-mod storage;
+pub mod storage;
 
 use std::collections::HashSet;
 
