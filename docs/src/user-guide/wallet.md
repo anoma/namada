@@ -36,7 +36,7 @@ All accounts in Anoma ledger have a unique address, exactly one validity predica
 
 There are currently 3 types of account addresses:
 
-- Established: Used for accounts that allow to deploy custom validation logic. These must be created on-chain via a transaction (see [the Ledger guide](./ledger.md#initialize-an-account)). The address is generated on-chain and is not known until the transaction is applied.
+- Established: Used for accounts that allow to deploy custom validation logic. These must be created on-chain via a transaction (see [the Ledger guide](./ledger.md#-initialize-an-account)). The address is generated on-chain and is not known until the transaction is applied.
 - Implicit, *not yet fully supported in the ledger*: Derived from a key, which can be used to authorize certain transactions from the account. They can be used as recipients of transactions without even when the account has not been used on-chain before.
 - Internal: Special internal accounts, such protocol parameters account, PoS and IBC
 
