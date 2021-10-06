@@ -284,7 +284,11 @@ fn update_tendermint_config(
         .map_err(Error::WriteConfig)
 }
 
-fn write_tm_genesis(home_dir: impl AsRef<Path>, chain_id: ChainId, genesis_time: DateTimeUtc) {
+fn write_tm_genesis(
+    home_dir: impl AsRef<Path>,
+    chain_id: ChainId,
+    genesis_time: DateTimeUtc,
+) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
     let file = File::open(&path).unwrap_or_else(|err| {

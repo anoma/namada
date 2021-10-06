@@ -26,8 +26,8 @@ pub mod genesis_config {
     use std::str::FromStr;
 
     use anoma::ledger::parameters::{EpochDuration, Parameters};
-    use anoma::ledger::pos::{GenesisValidator, PosParams};
     use anoma::ledger::pos::types::BasisPoints;
+    use anoma::ledger::pos::{GenesisValidator, PosParams};
     use anoma::types::address::Address;
     use anoma::types::key::ed25519::{ParsePublicKeyError, PublicKey};
     use anoma::types::time::Rfc3339String;
@@ -35,7 +35,9 @@ pub mod genesis_config {
     use hex;
     use serde::{Deserialize, Serialize};
 
-    use super::{EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator};
+    use super::{
+        EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator,
+    };
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct HexString(pub String);
@@ -211,7 +213,10 @@ pub mod genesis_config {
         sha256: HexString,
     }
 
-    fn load_validator(config: &ValidatorConfig, wasm: &HashMap<String, WasmConfig>) -> Validator {
+    fn load_validator(
+        config: &ValidatorConfig,
+        wasm: &HashMap<String, WasmConfig>,
+    ) -> Validator {
         let validator_vp_name = config.validator_vp.as_ref().unwrap();
         let validator_vp_config = wasm.get(validator_vp_name).unwrap();
         let reward_vp_name = config.staking_reward_vp.as_ref().unwrap();
@@ -219,63 +224,112 @@ pub mod genesis_config {
 
         Validator {
             pos_data: GenesisValidator {
-                address: Address::decode(&config.address.as_ref().unwrap()).unwrap(),
+                address: Address::decode(&config.address.as_ref().unwrap())
+                    .unwrap(),
                 staking_reward_address: Address::decode(
                     &config.staking_reward_address.as_ref().unwrap(),
                 )
                 .unwrap(),
                 tokens: token::Amount::whole(config.tokens),
-                consensus_key: config.consensus_public_key.as_ref().unwrap().to_public_key().unwrap(),
-                staking_reward_key: config.staking_reward_public_key.as_ref().unwrap().to_public_key().unwrap(),
+                consensus_key: config
+                    .consensus_public_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
+                staking_reward_key: config
+                    .staking_reward_public_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
             },
-            account_key: config.account_public_key.as_ref().unwrap().to_public_key().unwrap(),
+            account_key: config
+                .account_public_key
+                .as_ref()
+                .unwrap()
+                .to_public_key()
+                .unwrap(),
             non_staked_balance: token::Amount::whole(config.non_staked_balance),
             validator_vp_code_path: validator_vp_config.filename.to_owned(),
-            validator_vp_sha256: validator_vp_config.sha256.to_sha256_bytes().unwrap(),
+            validator_vp_sha256: validator_vp_config
+                .sha256
+                .to_sha256_bytes()
+                .unwrap(),
             reward_vp_code_path: reward_vp_config.filename.to_owned(),
-            reward_vp_sha256: reward_vp_config.sha256.to_sha256_bytes().unwrap(),
+            reward_vp_sha256: reward_vp_config
+                .sha256
+                .to_sha256_bytes()
+                .unwrap(),
         }
     }
 
-    fn load_token(config: &TokenAccountConfig, wasm: &HashMap<String, WasmConfig>) -> TokenAccount {
+    fn load_token(
+        config: &TokenAccountConfig,
+        wasm: &HashMap<String, WasmConfig>,
+    ) -> TokenAccount {
         let token_vp_name = config.vp.as_ref().unwrap();
         let token_vp_config = wasm.get(token_vp_name).unwrap();
 
         TokenAccount {
-            address: Address::decode(&config.address.as_ref().unwrap()).unwrap(),
+            address: Address::decode(&config.address.as_ref().unwrap())
+                .unwrap(),
             vp_code_path: token_vp_config.filename.to_owned(),
             vp_sha256: token_vp_config.sha256.to_sha256_bytes().unwrap(),
-            balances: config.balances.as_ref().unwrap_or(&HashMap::default())
-                .iter().map(|(address, amount)| {
-                    (Address::decode(&address).unwrap(),
-                     token::Amount::whole(*amount))
-                }).collect(),
+            balances: config
+                .balances
+                .as_ref()
+                .unwrap_or(&HashMap::default())
+                .iter()
+                .map(|(address, amount)| {
+                    (
+                        Address::decode(&address).unwrap(),
+                        token::Amount::whole(*amount),
+                    )
+                })
+                .collect(),
         }
     }
 
-    fn load_established(config: &EstablishedAccountConfig, wasm: &HashMap<String, WasmConfig>) -> EstablishedAccount {
+    fn load_established(
+        config: &EstablishedAccountConfig,
+        wasm: &HashMap<String, WasmConfig>,
+    ) -> EstablishedAccount {
         let account_vp_name = config.vp.as_ref().unwrap();
         let account_vp_config = wasm.get(account_vp_name).unwrap();
 
         EstablishedAccount {
-            address: Address::decode(&config.address.as_ref().unwrap()).unwrap(),
+            address: Address::decode(&config.address.as_ref().unwrap())
+                .unwrap(),
             vp_code_path: account_vp_config.filename.to_owned(),
             vp_sha256: account_vp_config.sha256.to_sha256_bytes().unwrap(),
             public_key: match &config.public_key {
                 Some(hex) => Some(hex.to_public_key().unwrap()),
                 None => None,
             },
-            storage: config.storage.as_ref().unwrap_or(&HashMap::default())
-                .iter().map(|(address, hex)| {
-                    (storage::Key::parse(&address).unwrap(),
-                     hex.to_bytes().unwrap())
-                }).collect(),
+            storage: config
+                .storage
+                .as_ref()
+                .unwrap_or(&HashMap::default())
+                .iter()
+                .map(|(address, hex)| {
+                    (
+                        storage::Key::parse(&address).unwrap(),
+                        hex.to_bytes().unwrap(),
+                    )
+                })
+                .collect(),
         }
     }
 
     fn load_implicit(config: &ImplicitAccountConfig) -> ImplicitAccount {
         ImplicitAccount {
-            public_key: config.public_key.as_ref().unwrap().to_public_key().unwrap(),
+            public_key: config
+                .public_key
+                .as_ref()
+                .unwrap()
+                .to_public_key()
+                .unwrap(),
         }
     }
 
@@ -308,7 +362,10 @@ pub mod genesis_config {
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: config.parameters.min_num_of_blocks,
-                min_duration: anoma::types::time::Duration::seconds(config.parameters.min_duration).into(),
+                min_duration: anoma::types::time::Duration::seconds(
+                    config.parameters.min_duration,
+                )
+                .into(),
             },
         };
 
@@ -316,11 +373,17 @@ pub mod genesis_config {
             max_validator_slots: config.pos_params.max_validator_slots,
             pipeline_len: config.pos_params.pipeline_len,
             unbonding_len: config.pos_params.unbonding_len,
-            votes_per_token: BasisPoints::new(config.pos_params.votes_per_token),
+            votes_per_token: BasisPoints::new(
+                config.pos_params.votes_per_token,
+            ),
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
-            duplicate_vote_slash_rate: BasisPoints::new(config.pos_params.duplicate_vote_slash_rate),
-            light_client_attack_slash_rate: BasisPoints::new(config.pos_params.light_client_attack_slash_rate),
+            duplicate_vote_slash_rate: BasisPoints::new(
+                config.pos_params.duplicate_vote_slash_rate,
+            ),
+            light_client_attack_slash_rate: BasisPoints::new(
+                config.pos_params.light_client_attack_slash_rate,
+            ),
         };
 
         let mut genesis = Genesis {
@@ -341,7 +404,10 @@ pub mod genesis_config {
         toml::from_str(&config_file).unwrap()
     }
 
-    pub fn write_genesis_config(config: &GenesisConfig, path: impl AsRef<Path>) {
+    pub fn write_genesis_config(
+        config: &GenesisConfig,
+        path: impl AsRef<Path>,
+    ) {
         let toml = toml::to_string(&config).unwrap();
         std::fs::write(path, toml).unwrap();
     }
@@ -415,7 +481,7 @@ pub struct EstablishedAccount {
     /// Validity predicate code WASM
     pub vp_code_path: String,
     /// Expected SHA-256 hash of the validity predicate wasm
-    pub vp_sha256: [u8;32],
+    pub vp_sha256: [u8; 32],
     /// A public key to be stored in the account's storage, if any
     pub public_key: Option<PublicKey>,
     /// Account's sub-space storage. The values must be borsh encoded bytes.

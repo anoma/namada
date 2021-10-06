@@ -2219,9 +2219,11 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(GENESIS_PATH.def().about(
-                "Path to the preliminary genesis configuration file.",
-            ))
+            app.arg(
+                GENESIS_PATH.def().about(
+                    "Path to the preliminary genesis configuration file.",
+                ),
+            )
             .arg(CHAIN_ID_PREFIX.def().about(
                 "The chain ID prefix. Up to 19 alphanumeric or punctuation \
                  ASCII characters.",

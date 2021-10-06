@@ -75,7 +75,7 @@ impl From<std::time::Duration> for DurationNanos {
 }
 
 /// An RFC 3339 timestamp (e.g., "1970-01-01T00:00:00Z").
-#[derive(Clone,Debug,serde::Deserialize,serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Rfc3339String(pub String);
 
 /// A duration in seconds precision.
