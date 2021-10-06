@@ -2,7 +2,7 @@
 
 The Anoma wallet allows you to store and use addresses and keys by their alias.
 
-The wallet's state is stored under `.anoma/wallet.toml` (with the default `--base-dir`), which will be created for you if it doesn't already exist when you run any command that accesses the wallet. A newly created wallet will be pre-loaded with some default addresses.
+The wallet's state is stored under `.anoma/{chain_id}/wallet.toml` (with the default `--base-dir`), which will be created for you if it doesn't already exist when you run any command that accesses the wallet. A newly created wallet will be pre-loaded with some default addresses.
 
 For the ledger and intent gossip commands that use keys and addresses, you can enter their aliases as as defined in the wallet (case-sensitive).
 
