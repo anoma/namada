@@ -33,7 +33,7 @@ anoma client init-account \
 
 Once this transaction has been applied, the client will automatically see the new address created by the transaction and add it to your [wallet](./wallet.md) with the chosen alias `my-new-acc`.
 
-By default, this command will use the prebuilt user validity predicate (from the [vp_user](https://github.com/anoma/anoma/blob/fb445f67ffe3afe3bf50eb71658b01ff760e909d/wasm/wasm_source/src/vp_user.rs) source). You can supply a different validity predicate with `--code-path` argument. We'll come back to this topic and cover how to write and deploy custom validity predicates in the [custom validity predicates section](ledger/customize.md#validity-predicates).
+By default, this command will use the prebuilt user validity predicate (from the [vp_user](https://github.com/anoma/anoma/blob/fb445f67ffe3afe3bf50eb71658b01ff760e909d/wasm/wasm_source/src/vp_user.rs) source). You can supply a different validity predicate with `--code-path` argument. We'll come back to this topic and cover how to write and deploy custom validity predicates in the [custom validity predicates section](ledger/customize.md#-validity-predicates).
 
 ## 💸 Token transactions and queries
 

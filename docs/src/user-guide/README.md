@@ -1,16 +1,5 @@
 # User Guide
 
-This guide assumes that the Anoma binaries are installed and available on path. These are:
+Welcome to Anoma user guide!
 
-- `anoma`: The main binary that can be used to interact with all the components of Anoma
-- `anoman`: The ledger and intent gossiper node
-- `anomac`: The client
-- `anomaw`: The wallet
-
-The main binary `anoma` has sub-commands for all of the other binaries:
-
-- `anoma client = anomac`
-- `anoma node   = anoman`
-- `anoma wallet = anomaw`
-
-To explore the command-line interface, add `--help` argument at any sub-command level to find out any possible sub-commands and/or arguments.
+This guide is intended to help you find how to install, operate and interact with the Anoma ledger and intent gossip nodes, the matchmaker, the client and the wallet.
