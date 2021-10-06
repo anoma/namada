@@ -16,7 +16,7 @@ The ledger also needs access to the built WASM files that are used in the genesi
 
 ## 📝 Initialize an account
 
-First, let's generate a key in the wallet that we'll use for the account.
+If you already have a key in your wallet, you can skip this step and use it in the following commands. Otherwise, generate a new key now:
 
 ```shell
 anoma wallet key gen --alias my-key
