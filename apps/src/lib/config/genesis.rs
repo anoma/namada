@@ -1,10 +1,14 @@
 //! The parameters used for the chain's genesis
 
 use std::collections::HashMap;
+#[cfg(not(feature = "dev"))]
+use std::path::Path;
 
 use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::{GenesisValidator, PosParams};
 use anoma::types::address::Address;
+#[cfg(not(feature = "dev"))]
+use anoma::types::chain::ChainId;
 #[cfg(feature = "dev")]
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::key::ed25519::PublicKey;
@@ -16,6 +20,7 @@ mod genesis_config {
     use std::array::TryFromSliceError;
     use std::collections::HashMap;
     use std::convert::TryInto;
+    use std::path::Path;
 
     use anoma::ledger::parameters::{EpochDuration, Parameters};
     use anoma::ledger::pos::{GenesisValidator, PosParams};
@@ -283,7 +288,7 @@ mod genesis_config {
         }
     }
 
-    pub fn read_genesis_config(path: &str) -> Genesis {
+    pub fn read_genesis_config(path: impl AsRef<Path>) -> Genesis {
         let config_file = std::fs::read_to_string(path).unwrap();
         load_genesis_config(toml::from_str(&config_file).unwrap())
     }
@@ -355,6 +360,13 @@ pub struct ImplicitAccount {
     pub public_key: PublicKey,
 }
 
+#[cfg(not(feature = "dev"))]
+pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
+    let path = base_dir
+        .as_ref()
+        .join(format!("{}.toml", chain_id.as_str()));
+    genesis_config::read_genesis_config(path)
+}
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
     use std::iter::FromIterator;
@@ -392,7 +404,10 @@ pub fn genesis() -> Genesis {
         account_key: account_keypair.public,
         non_staked_balance: token::Amount::whole(100_000),
         // TODO replace with https://github.com/anoma/anoma/issues/25)
-        vp_code_path: vp_user_path.into(),
+        validator_vp_code_path: vp_user_path.into(),
+        validator_vp_sha256: Default::default(),
+        reward_vp_code_path: vp_user_path.into(),
+        reward_vp_sha256: Default::default(),
     };
     let parameters = Parameters {
         epoch_duration: EpochDuration {
@@ -403,24 +418,28 @@ pub fn genesis() -> Genesis {
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
         vp_code_path: vp_user_path.into(),
+        vp_sha256: Default::default(),
         public_key: Some(wallet::defaults::albert_keypair().public),
         storage: HashMap::default(),
     };
     let bertha = EstablishedAccount {
         address: wallet::defaults::bertha_address(),
         vp_code_path: vp_user_path.into(),
+        vp_sha256: Default::default(),
         public_key: Some(wallet::defaults::bertha_keypair().public),
         storage: HashMap::default(),
     };
     let christel = EstablishedAccount {
         address: wallet::defaults::christel_address(),
         vp_code_path: vp_user_path.into(),
+        vp_sha256: Default::default(),
         public_key: Some(wallet::defaults::christel_keypair().public),
         storage: HashMap::default(),
     };
     let matchmaker = EstablishedAccount {
         address: wallet::defaults::matchmaker_address(),
         vp_code_path: vp_user_path.into(),
+        vp_sha256: Default::default(),
         public_key: Some(wallet::defaults::matchmaker_keypair().public),
         storage: HashMap::default(),
     };
@@ -439,6 +458,7 @@ pub fn genesis() -> Genesis {
         .map(|(address, _)| TokenAccount {
             address,
             vp_code_path: vp_token_path.into(),
+            vp_sha256: Default::default(),
             balances: balances.clone(),
         })
         .collect();
@@ -450,10 +470,6 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
     }
-}
-#[cfg(not(feature = "dev"))]
-pub fn genesis() -> Genesis {
-    genesis_config::read_genesis_config("genesis/genesis.toml")
 }
 
 #[cfg(test)]

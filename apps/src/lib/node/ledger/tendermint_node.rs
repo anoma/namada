@@ -70,8 +70,6 @@ pub fn run(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    write_chain_id(&home_dir, chain_id);
-
     #[cfg(feature = "dev")]
     {
         let genesis = &crate::config::genesis::genesis();
@@ -91,6 +89,8 @@ pub fn run(
             );
         }
     }
+
+    write_chain_id(&home_dir, chain_id);
 
     update_tendermint_config(
         &home_dir,

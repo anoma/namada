@@ -143,7 +143,12 @@ async fn run_shell(
     abort_registration: AbortRegistration,
 ) {
     // Construct our ABCI application.
-    let service = AbcippShim::new(&config.db, config.chain_id, config.wasm_dir);
+    let service = AbcippShim::new(
+        config.base_dir,
+        &config.db,
+        config.chain_id,
+        config.wasm_dir,
+    );
 
     // Split it into components.
     let (consensus, mempool, snapshot, info) = split::service(service, 5);

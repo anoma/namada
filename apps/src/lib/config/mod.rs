@@ -85,6 +85,7 @@ And this is correct
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ledger {
+    pub base_dir: PathBuf,
     pub chain_id: ChainId,
     pub tendermint: PathBuf,
     pub db: PathBuf,
@@ -98,7 +99,8 @@ pub struct Ledger {
 
 impl Ledger {
     pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
-        let sub_dir = base_dir.as_ref().join(chain_id.as_str());
+        let base_dir = base_dir.as_ref().to_owned();
+        let sub_dir = base_dir.join(chain_id.as_str());
 
         #[cfg(feature = "dev")]
         let p2p_persistent_peers = vec![];
@@ -123,6 +125,7 @@ impl Ledger {
         ];
 
         Self {
+            base_dir,
             chain_id,
             tendermint: sub_dir.join(TENDERMINT_DIR),
             db: sub_dir.join(DB_DIR),

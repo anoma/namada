@@ -98,6 +98,8 @@ pub struct Shell {
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
+    /// Path to the base directory with DB data and configs
+    base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
     wasm_dir: PathBuf,
 }
@@ -106,6 +108,7 @@ impl Shell {
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
     pub fn new(
+        base_dir: PathBuf,
         db_path: impl AsRef<Path>,
         chain_id: ChainId,
         wasm_dir: PathBuf,
@@ -123,6 +126,7 @@ impl Shell {
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
             byzantine_validators: vec![],
+            base_dir,
             wasm_dir,
         }
     }
@@ -143,6 +147,9 @@ impl Shell {
                 current_chain_id, init.chain_id
             )));
         }
+        #[cfg(not(feature = "dev"))]
+        let genesis = genesis::genesis(&self.base_dir, &self.storage.chain_id);
+        #[cfg(feature = "dev")]
         let genesis = genesis::genesis();
 
         let ts: tendermint_proto::google::protobuf::Timestamp =
