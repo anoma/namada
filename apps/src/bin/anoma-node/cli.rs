@@ -7,6 +7,7 @@ use eyre::{Context, Result};
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::anoma_node_cli();
     let base_dir = &ctx.global_args.base_dir;
+    let wasm_dir = ctx.config.ledger.wasm_dir.clone();
     match cmd {
         cli::cmds::AnomaNode::Ledger(sub) => match sub {
             cli::cmds::Ledger::Run(_) => {
@@ -21,8 +22,8 @@ pub fn main() -> Result<()> {
             cli::cmds::Gossip::Run(cli::cmds::GossipRun(args)) => {
                 let tx_source_address = ctx.get_opt(&args.tx_source_address);
                 let tx_signing_key = ctx.get_opt_cached(&args.tx_signing_key);
-                let config = ctx.config;
-                let mut gossip_cfg = config.intent_gossiper;
+                let config = &ctx.config;
+                let mut gossip_cfg = config.intent_gossiper.clone();
                 gossip_cfg.update(
                     args.addr,
                     args.rpc,
@@ -31,11 +32,13 @@ pub fn main() -> Result<()> {
                     args.ledger_addr,
                     args.filter_path,
                 );
-                gossip::run(gossip_cfg, tx_source_address, tx_signing_key)
-                    .wrap_err(
-                        "Failed to run gossip
-            service",
-                    )?;
+                gossip::run(
+                    gossip_cfg.clone(),
+                    wasm_dir,
+                    tx_source_address,
+                    tx_signing_key,
+                )
+                .wrap_err("Failed to run gossip service")?;
             }
         },
         cli::cmds::AnomaNode::Config(sub) => match sub {

@@ -2,7 +2,7 @@
 
 use std::env;
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -13,6 +13,7 @@ use super::args;
 use crate::cli::safe_exit;
 use crate::config::Config;
 use crate::wallet::Wallet;
+use crate::wasm;
 
 /// A raw address (bech32m encoding) or an alias of an address that may be found
 /// in the wallet
@@ -101,20 +102,8 @@ impl Context {
     }
 
     /// Read the given WASM file from the WASM directory.
-    pub fn read_wasm(
-        &self,
-        file_name: impl AsRef<Path>,
-    ) -> std::io::Result<Vec<u8>> {
-        std::fs::read(self.wasm_path(file_name))
-    }
-
-    /// Find the path to the given WASM file name.
-    pub fn wasm_path(&self, file_name: impl AsRef<Path>) -> PathBuf {
-        let file_path = file_name.as_ref();
-        if file_path.is_absolute() {
-            return file_path.into();
-        }
-        self.config.ledger.wasm_dir.join(file_name)
+    pub fn read_wasm(&self, file_name: impl AsRef<Path>) -> Vec<u8> {
+        wasm::read_wasm(self.config.ledger.wasm_dir.to_path_buf(), file_name)
     }
 }
 

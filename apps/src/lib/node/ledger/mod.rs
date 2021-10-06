@@ -245,7 +245,7 @@ pub fn run(config: config::Ledger) {
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
 
     // Prefetch needed wasm artifacts
-    wasm::pre_fetch_wasm(&config.wasm_dir, "wasm/checksums.json");
+    wasm::pre_fetch_wasm(&config.wasm_dir);
     // Because we cannot attach any data to the `abort_handle`, we also need
     // another channel for signalling an error to the shell from Tendermint
     let (failure_sender, failure_receiver) = channel();

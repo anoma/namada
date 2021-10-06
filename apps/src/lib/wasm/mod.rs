@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::cli::safe_exit;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Not able to download {0}")]
@@ -27,18 +29,33 @@ struct Checksums(HashMap<String, String>);
 const S3_URL: &str = "https://heliax-anoma-wasm-v1.s3.eu-west-1.amazonaws.com";
 
 impl Checksums {
-    pub fn read_checksums(path: impl AsRef<Path>) -> Self {
-        let file = fs::File::open(path).expect("file should open read only");
-        serde_json::from_reader(file).expect("file should be proper JSON")
+    pub fn read_checksums(wasm_directory: impl AsRef<Path>) -> Self {
+        let checksums_path = wasm_directory.as_ref().join("checksums.json");
+        match fs::File::open(checksums_path) {
+            Ok(file) => match serde_json::from_reader(file) {
+                Ok(result) => result,
+                Err(_) => {
+                    eprint!(
+                        "Can't read checksums.json in {}",
+                        wasm_directory.as_ref().to_string_lossy()
+                    );
+                    safe_exit(1);
+                }
+            },
+            Err(_) => {
+                eprint!(
+                    "Can't find checksums.json in {}",
+                    wasm_directory.as_ref().to_string_lossy()
+                );
+                safe_exit(1);
+            }
+        }
     }
 }
 
-pub fn pre_fetch_wasm(
-    wasm_directory: impl AsRef<Path>,
-    checksums_path: impl AsRef<Path>,
-) {
+pub fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
     // load json with wasm hashes
-    let checksums = Checksums::read_checksums(checksums_path);
+    let checksums = Checksums::read_checksums(&wasm_directory);
 
     for (name, hash) in checksums.0 {
         let wasm_path = wasm_directory.as_ref().join(&hash);
@@ -52,7 +69,7 @@ pub fn pre_fetch_wasm(
                 let result = hex::encode(hasher.finalize());
                 let checksum = format!(
                     "{}.{}.wasm",
-                    &name.split(".").collect::<Vec<&str>>()[0],
+                    &name.split('.').collect::<Vec<&str>>()[0],
                     result
                 );
                 if hash == checksum {
@@ -73,81 +90,106 @@ pub fn pre_fetch_wasm(
                         }
                     }
                     Err(e) => {
-                        panic!("Error: {}", e);
+                        eprint!("Error downloading wasm: {}", e);
+                        safe_exit(1);
                     }
                 }
             }
             // if the doesn't file exist, download it.
-            Err(err) => {
-                match err.kind() {
-                    std::io::ErrorKind::NotFound => {
-                        // load it from external storage
-                        let url = format!("{}/{}", S3_URL, hash);
-                        let response = reqwest::blocking::get(&url);
-                        match response {
-                            Ok(body) => {
-                                let bytes = body.bytes().unwrap();
-                                let bytes: &[u8] = bytes.borrow();
-                                let bytes: Vec<u8> = bytes.to_owned();
-
-                                if let Err(e) = fs::write(wasm_path, &bytes) {
-                                    tracing::warn!(
-                                        "Error while creating file for {}: {}",
-                                        &name,
-                                        e
-                                    );
-                                } else {
-                                    tracing::info!(
-                                        "Created {} in {} folder",
-                                        &name,
-                                        &wasm_directory
-                                            .as_ref()
-                                            .to_string_lossy()
-                                    );
-                                }
-                            }
-                            Err(_) => {
-                                tracing::error!(
-                                    "Error while downloading file {} from {}",
-                                    &name,
-                                    url
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    let url = format!("{}/{}", S3_URL, hash);
+                    match download_wasm(url) {
+                        Ok(bytes) => {
+                            if let Err(e) = fs::write(wasm_path, &bytes) {
+                                panic!(
+                                    "Error while creating file for {}: {}",
+                                    &name, e
                                 );
                             }
                         }
+                        Err(e) => {
+                            eprint!("Error downloading wasm: {}", e);
+                            safe_exit(1);
+                        }
                     }
-                    _ => panic!(
-                        "Unrecoverable error while reading {}. Error: {}",
-                        wasm_path.to_string_lossy(),
-                        err
-                    ),
                 }
-            }
+                _ => {
+                    eprint!(
+                        "Can't read {}.",
+                        wasm_path.as_os_str().to_string_lossy()
+                    );
+                    safe_exit(1);
+                }
+            },
         }
     }
 }
 
 pub fn read_wasm(
     wasm_directory: impl AsRef<Path>,
-    checksums_path: impl AsRef<Path>,
-    name: impl AsRef<str>,
+    file_path: impl AsRef<Path>,
 ) -> Vec<u8> {
     // load json with wasm hashes
-    let checksums = Checksums::read_checksums(checksums_path);
+    let checksums = Checksums::read_checksums(&wasm_directory);
 
-    // construct the absolute path from hash
-    let wasm_hash = checksums.0.get(name.as_ref()).unwrap();
-    let wasm_path = wasm_directory.as_ref().join(wasm_hash);
-
-    // try to read wasm artifact. If not found, download it
-    match fs::read(&wasm_path) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            panic!(
-                "File {} not found. Restart the ledger.",
-                wasm_path.to_string_lossy()
-            );
+    if let Some(os_name) = file_path.as_ref().file_name() {
+        if let Some(name) = os_name.to_str() {
+            match checksums.0.get(name) {
+                Some(wasm_filename) => {
+                    let wasm_path = wasm_directory.as_ref().join(wasm_filename);
+                    match fs::read(&wasm_path) {
+                        Ok(bytes) => {
+                            return bytes;
+                        }
+                        Err(_) => {
+                            eprint!(
+                                "File {} not found. ",
+                                wasm_path.to_string_lossy()
+                            );
+                            safe_exit(1);
+                        }
+                    }
+                }
+                None => {
+                    if !file_path.as_ref().is_absolute() {
+                        match fs::read(
+                            wasm_directory.as_ref().join(file_path.as_ref()),
+                        ) {
+                            Ok(bytes) => {
+                                return bytes;
+                            }
+                            Err(_) => {
+                                eprint!(
+                                    "Could not read file {}. ",
+                                    file_path.as_ref().to_string_lossy()
+                                );
+                                safe_exit(1);
+                            }
+                        }
+                    } else {
+                        match fs::read(file_path.as_ref()) {
+                            Ok(bytes) => {
+                                return bytes;
+                            }
+                            Err(_) => {
+                                eprint!(
+                                    "Could not read file {}. ",
+                                    file_path.as_ref().to_string_lossy()
+                                );
+                                safe_exit(1);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
+    eprint!(
+        "Path  {} does not load to a file.",
+        file_path.as_ref().to_string_lossy()
+    );
+    safe_exit(1);
 }
 
 fn download_wasm(url: String) -> Result<Vec<u8>, Error> {

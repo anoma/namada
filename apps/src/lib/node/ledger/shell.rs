@@ -178,13 +178,9 @@ impl Shell {
             storage,
         } in genesis.established_accounts
         {
-            let vp_code =
-                vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
-                    wasm::read_wasm(
-                        &self.wasm_dir,
-                        "wasm/checksums.json",
-                        &vp_code_path,
-                    )
+            let vp_code = vp_code_cache
+                .get_or_insert_with(vp_code_path.clone(), || {
+                    wasm::read_wasm(&self.wasm_dir, &vp_code_path)
                 });
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
@@ -219,13 +215,9 @@ impl Shell {
             balances,
         } in genesis.token_accounts
         {
-            let vp_code =
-                vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
-                    wasm::read_wasm(
-                        &self.wasm_dir,
-                        "wasm/checksums.json",
-                        &vp_code_path,
-                    )
+            let vp_code = vp_code_cache
+                .get_or_insert_with(vp_code_path.clone(), || {
+                    wasm::read_wasm(&self.wasm_dir, &vp_code_path)
                 });
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
@@ -243,16 +235,10 @@ impl Shell {
 
         // Initialize genesis validator accounts
         for validator in &genesis.validators {
-            let vp_code = vp_code_cache.get_or_insert_with(
-                validator.vp_code_path.clone(),
-                || {
-                    wasm::read_wasm(
-                        &self.wasm_dir,
-                        "wasm/checksums.json",
-                        &validator.vp_code_path,
-                    )
-                },
-            );
+            let vp_code = vp_code_cache
+                .get_or_insert_with(validator.vp_code_path.clone(), || {
+                    wasm::read_wasm(&self.wasm_dir, &validator.vp_code_path)
+                });
             let addr = &validator.pos_data.address;
             self.storage
                 .write(&Key::validity_predicate(addr), vp_code)
