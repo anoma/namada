@@ -194,7 +194,6 @@ impl Shell {
         let mut vp_code_cache: HashMap<String, Vec<u8>> = HashMap::default();
 
         // Initialize genesis established accounts
-        #[cfg_attr(feature = "dev", allow(unused_variables))]
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
@@ -211,6 +210,9 @@ impl Shell {
                         })
                 });
 
+            // In dev, we don't check the hash
+            #[cfg(feature = "dev")]
+            let _ = vp_sha256;
             #[cfg(not(feature = "dev"))]
             {
                 let mut hasher = Sha256::new();
@@ -246,7 +248,6 @@ impl Shell {
         }
 
         // Initialize genesis token accounts
-        #[cfg_attr(feature = "dev", allow(unused_variables))]
         for genesis::TokenAccount {
             address,
             vp_code_path,
@@ -262,6 +263,9 @@ impl Shell {
                         })
                 });
 
+            // In dev, we don't check the hash
+            #[cfg(feature = "dev")]
+            let _ = vp_sha256;
             #[cfg(not(feature = "dev"))]
             {
                 let mut hasher = Sha256::new();
