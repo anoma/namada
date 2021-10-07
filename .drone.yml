@@ -874,12 +874,11 @@ steps:
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
       | sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
-      | sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
-      | sha256sum -c -, echo "36ea06c95559bfe2ff504549a663a76ef81308c904e9d1071b9979aaf3fe7a89  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "b36d4bc2fe64e2928fde493e504fa52c524ac8d9338f54dd068753616ffe7390  scripts/ci/release.sh"
+      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
       | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
       | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "7f5673f0fa47cbb82f83b112dd6a4dd08dd1d4422fcc02c8537b0ac589f16f15  wasm/checksums.py"
+      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -948,6 +947,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 03aa54111656ee0b9857a847cb796179a312aa1cb80576765f62d3b0b5f8e5bf
+hmac: 13f1ca6683d42bd5ffd7b063df5f5056069329b7e9a7af1a7db8737b9db2b545
 
 ...

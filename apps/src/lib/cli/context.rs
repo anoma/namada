@@ -13,7 +13,7 @@ use super::args;
 use crate::cli::safe_exit;
 use crate::config::Config;
 use crate::wallet::Wallet;
-use crate::wasm;
+use crate::wasm_loader;
 
 /// A raw address (bech32m encoding) or an alias of an address that may be found
 /// in the wallet
@@ -101,9 +101,12 @@ impl Context {
             .map(|from_context| from_context.from_mut_ctx(self))
     }
 
-    /// Read the given WASM file from the WASM directory.
+    /// Read the given WASM file from the WASM directory or an absolute path.
     pub fn read_wasm(&self, file_name: impl AsRef<Path>) -> Vec<u8> {
-        wasm::read_wasm(self.config.ledger.wasm_dir.to_path_buf(), file_name)
+        wasm_loader::read_wasm(
+            self.config.ledger.wasm_dir.to_path_buf(),
+            file_name,
+        )
     }
 }
 

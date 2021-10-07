@@ -1,3 +1,5 @@
+# script used only during CI execution.
+
 # setup git
 gh auth login --with-token $GITHUB_TOKEN
 

@@ -54,7 +54,9 @@ impl Checksums {
     }
 }
 
-/// Download all the pre-build WASMs, or if they're already downloaded, verify their checksums.
+/// Download all the pre-build WASMs, or if they're already downloaded, verify
+/// their checksums. Download all the pre-build WASMs, or if they're already
+/// downloaded, verify their checksums.
 pub fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
     // load json with wasm hashes
     let checksums = Checksums::read_checksums(&wasm_directory);
