@@ -7,7 +7,8 @@ use color_eyre::eyre::Result;
 
 pub async fn main() -> Result<()> {
     match cli::anoma_client_cli() {
-        cli::AnomaClient::WithContext(cmd, ctx) => {
+        cli::AnomaClient::WithContext(cmd_box) => {
+            let (cmd, ctx) = *cmd_box;
             use AnomaClientWithContext as Sub;
             match cmd {
                 // Ledger cmds

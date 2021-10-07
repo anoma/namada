@@ -2287,7 +2287,7 @@ pub fn anoma_node_cli() -> (cmds::AnomaNode, Context) {
 
 pub enum AnomaClient {
     WithoutContext(cmds::Utils, args::Global),
-    WithContext(cmds::AnomaClientWithContext, Context),
+    WithContext(Box<(cmds::AnomaClientWithContext, Context)>),
 }
 
 pub fn anoma_client_cli() -> AnomaClient {
@@ -2300,7 +2300,7 @@ pub fn anoma_client_cli() -> AnomaClient {
             match cmd {
                 cmds::AnomaClient::WithContext(sub_cmd) => {
                     let context = Context::new(global_args);
-                    AnomaClient::WithContext(sub_cmd, context)
+                    AnomaClient::WithContext(Box::new((sub_cmd, context)))
                 }
                 cmds::AnomaClient::WithoutContext(sub_cmd) => {
                     AnomaClient::WithoutContext(sub_cmd, global_args)

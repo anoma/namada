@@ -303,10 +303,10 @@ pub mod genesis_config {
                 .unwrap(),
             vp_code_path: account_vp_config.filename.to_owned(),
             vp_sha256: account_vp_config.sha256.to_sha256_bytes().unwrap(),
-            public_key: match &config.public_key {
-                Some(hex) => Some(hex.to_public_key().unwrap()),
-                None => None,
-            },
+            public_key: config
+                .public_key
+                .as_ref()
+                .map(|hex| hex.to_public_key().unwrap()),
             storage: config
                 .storage
                 .as_ref()
@@ -340,21 +340,21 @@ pub mod genesis_config {
             .iter()
             .map(|(_name, cfg)| load_validator(cfg, &wasms))
             .collect();
-        let tokens = config
+        let token_accounts = config
             .token
-            .unwrap_or(HashMap::default())
+            .unwrap_or_default()
             .iter()
             .map(|(_name, cfg)| load_token(cfg, &wasms))
             .collect();
-        let established = config
+        let established_accounts = config
             .established
-            .unwrap_or(HashMap::default())
+            .unwrap_or_default()
             .iter()
             .map(|(_name, cfg)| load_established(cfg, &wasms))
             .collect();
-        let implicit = config
+        let implicit_accounts = config
             .implicit
-            .unwrap_or(HashMap::default())
+            .unwrap_or_default()
             .iter()
             .map(|(_name, cfg)| load_implicit(cfg))
             .collect();
@@ -388,12 +388,12 @@ pub mod genesis_config {
 
         let mut genesis = Genesis {
             genesis_time: config.genesis_time.try_into().unwrap(),
-            validators: validators,
-            token_accounts: tokens,
-            established_accounts: established,
-            implicit_accounts: implicit,
-            parameters: parameters,
-            pos_params: pos_params,
+            validators,
+            token_accounts,
+            established_accounts,
+            implicit_accounts,
+            parameters,
+            pos_params,
         };
         genesis.init();
         genesis

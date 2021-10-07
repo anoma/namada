@@ -39,8 +39,9 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Run the tendermint node.
+// TODO we should just use ledger config replace all the args to fix this lint
+#[allow(clippy::too_many_arguments)]
 pub fn run(
-    // TODO we should just use ledger config replace all the args
     home_dir: PathBuf,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
