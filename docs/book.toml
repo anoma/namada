@@ -6,7 +6,7 @@ language = "en"
 multilingual = false
 site-url = "https://anoma.github.io/anoma/"
 src = "src"
-title = "Anoma - DOCS"
+title = "Anoma - Technical Specifications"
 
 [output.html]
 additional-css = ["assets/custom.css"]
@@ -15,8 +15,6 @@ mathjax-support = true
 
 [output.html.search]
 expand = true
-
-[output.linkcheck]
 
 [preprocessor]
 [preprocessor.mermaid]
