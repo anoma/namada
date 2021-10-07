@@ -32,8 +32,6 @@ use anoma::types::transaction::{process_tx, TxType, WrapperTx};
 use anoma::types::{address, key, token};
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(not(feature = "dev"))]
-use itertools::assert_equal;
-#[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
 use tendermint::block::Header;
 use tendermint_proto::abci::{
@@ -218,7 +216,12 @@ impl Shell {
                 let mut hasher = Sha256::new();
                 hasher.update(&vp_code);
                 let vp_code_hash = hasher.finalize();
-                assert_equal(vp_code_hash.as_slice(), &vp_sha256);
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &vp_sha256,
+                    "Invalid established account's VP sha256 hash for {}",
+                    vp_code_path
+                );
             }
 
             self.storage
@@ -271,7 +274,12 @@ impl Shell {
                 let mut hasher = Sha256::new();
                 hasher.update(&vp_code);
                 let vp_code_hash = hasher.finalize();
-                assert_equal(vp_code_hash.as_slice(), &vp_sha256);
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &vp_sha256,
+                    "Invalid token account's VP sha256 hash for {}",
+                    vp_code_path
+                );
             }
 
             self.storage
@@ -310,9 +318,11 @@ impl Shell {
                 let mut hasher = Sha256::new();
                 hasher.update(&vp_code);
                 let vp_code_hash = hasher.finalize();
-                assert_equal(
+                assert_eq!(
                     vp_code_hash.as_slice(),
                     &validator.validator_vp_sha256,
+                    "Invalid validator VP sha256 hash for {}",
+                    validator.validator_vp_code_path
                 );
             }
 
