@@ -338,8 +338,7 @@ pub fn init_network(
             // parameter. We need to remove this prefix, because
             // these sub-directories will be moved to validators' root
             // directories.
-            config.ledger.base_dir =
-                global_args.base_dir.join(chain_id.as_str());
+            config.ledger.base_dir = global_args.base_dir.clone();
             config.ledger.tendermint = global_args
                 .base_dir
                 .join(chain_id.as_str())
