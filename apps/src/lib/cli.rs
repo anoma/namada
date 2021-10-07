@@ -173,7 +173,7 @@ pub mod cmds {
             let bond = Self::parse_with_ctx(matches, Bond);
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
-            let query_epoch = Self::parse_with_ctx(matches, TxInitAccount);
+            let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_voting_power =
