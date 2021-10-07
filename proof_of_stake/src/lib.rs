@@ -532,6 +532,11 @@ pub trait PosBase {
         &self,
         key: &Self::Address,
     ) -> Option<ValidatorConsensusKeys<Self::PublicKey>>;
+    /// Read PoS validator's state.
+    fn read_validator_state(
+        &self,
+        key: &Self::Address,
+    ) -> Option<ValidatorStates>;
     /// Read PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
     fn read_validator_total_deltas(
@@ -695,40 +700,110 @@ pub trait PosBase {
         current_epoch: impl Into<Epoch>,
         f: impl FnMut(ValidatorSetUpdate<Self::PublicKey>),
     ) {
-        let current_epoch = current_epoch.into();
+        let current_epoch: Epoch = current_epoch.into();
+        let current_epoch_u64: u64 = current_epoch.into();
+        // INVARIANT: We can only access the previous epochs data, because
+        // this function is called on a beginning of a new block, before
+        // anything else could be updated (in epoched data updates, the old
+        // epochs data are merged with the current one).
+        let previous_epoch: Option<Epoch> = if current_epoch_u64 == 0 {
+            None
+        } else {
+            Some(Epoch::from(current_epoch_u64 - 1))
+        };
         let validators = self.read_validator_set();
-        let validators = validators.get(current_epoch).unwrap();
-        let active_validators = validators.active.iter().map(
-            |WeightedValidator {
-                 voting_power,
-                 address,
-             }: &WeightedValidator<Self::Address>| {
+        let cur_validators = validators.get(current_epoch).unwrap();
+        let prev_validators =
+            previous_epoch.and_then(|epoch| validators.get(epoch));
+
+        // If the validator never been active before and it doesn't have more
+        // than 0 voting power, we should not tell Tendermint to update it until
+        // it does. Tendermint uses 0 voting power as a way to signal
+        // that a validator has been removed from the validator set, but
+        // fails if we attempt to give it a new validator with 0 voting
+        // power.
+        // For active validators, this would only ever happen until all the
+        // validator slots are filled with non-0 voting power validators, but we
+        // still need to guard against it.
+        let active_validators = cur_validators.active.iter().filter_map(
+            |validator: &WeightedValidator<_>| {
+                // If the validators set from previous epoch contains the same
+                // validator, it means its voting power hasn't changed and hence
+                // doesn't need to updated.
+                if let (Some(prev_epoch), Some(prev_validators)) =
+                    (previous_epoch, prev_validators)
+                {
+                    if prev_validators.active.contains(validator) {
+                        println!(
+                            "skipping validator update, still the same {}",
+                            validator.address
+                        );
+                        return None;
+                    }
+                    if validator.voting_power == 0.into() {
+                        // If the validator was `Pending` in the previous epoch,
+                        // it means that it just was just added to validator
+                        // set. We have to skip it, because it's 0.
+                        if let Some(state) =
+                            self.read_validator_state(&validator.address)
+                        {
+                            if let Some(ValidatorState::Pending) =
+                                state.get(prev_epoch)
+                            {
+                                println!(
+                                    "skipping validator update, it's new {}",
+                                    validator.address
+                                );
+                                return None;
+                            }
+                        }
+                    }
+                }
                 let consensus_key = self
-                    .read_validator_consensus_key(address)
+                    .read_validator_consensus_key(&validator.address)
                     .unwrap()
                     .get(current_epoch)
                     .unwrap()
                     .clone();
-                ValidatorSetUpdate::Active(ActiveValidator {
+                Some(ValidatorSetUpdate::Active(ActiveValidator {
                     consensus_key,
-                    voting_power: *voting_power,
-                })
+                    voting_power: validator.voting_power,
+                }))
             },
         );
-        // TODO we only need inactive validators that were active in the last
-        // update
-        let inactive_validators = validators.inactive.iter().map(
-            |WeightedValidator {
-                 voting_power: _,
-                 address,
-             }: &WeightedValidator<Self::Address>| {
+        let inactive_validators = cur_validators.inactive.iter().filter_map(
+            |validator: &WeightedValidator<Self::Address>| {
+                // If the validators set from previous epoch contains the same
+                // validator, it means its voting power hasn't changed and hence
+                // doesn't need to updated.
+                if let (Some(prev_epoch), Some(prev_validators)) =
+                    (previous_epoch, prev_validators)
+                {
+                    if prev_validators.inactive.contains(validator) {
+                        return None;
+                    }
+                    if validator.voting_power == 0.into() {
+                        // If the validator was `Pending` in the previous epoch,
+                        // it means that it just was just added to validator
+                        // set. We have to skip it, because it's 0.
+                        if let Some(state) =
+                            self.read_validator_state(&validator.address)
+                        {
+                            if let Some(ValidatorState::Pending) =
+                                state.get(prev_epoch)
+                            {
+                                return None;
+                            }
+                        }
+                    }
+                }
                 let consensus_key = self
-                    .read_validator_consensus_key(address)
+                    .read_validator_consensus_key(&validator.address)
                     .unwrap()
                     .get(current_epoch)
                     .unwrap()
                     .clone();
-                ValidatorSetUpdate::Deactivated(consensus_key)
+                Some(ValidatorSetUpdate::Deactivated(consensus_key))
             },
         );
         active_validators.chain(inactive_validators).for_each(f)

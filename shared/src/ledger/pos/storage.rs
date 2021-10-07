@@ -372,6 +372,14 @@ where
         value.map(|value| decode(value).unwrap())
     }
 
+    fn read_validator_state(
+        &self,
+        key: &Self::Address,
+    ) -> Option<ValidatorStates> {
+        let (value, _gas) = self.read(&validator_state_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
     fn read_validator_total_deltas(
         &self,
         key: &Self::Address,
