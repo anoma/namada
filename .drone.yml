@@ -216,7 +216,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/wasm/.cargo, CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
@@ -947,6 +947,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 13f1ca6683d42bd5ffd7b063df5f5056069329b7e9a7af1a7db8737b9db2b545
+hmac: 7967a91995f4c0080476304e26a1c3a5ffadf0af67a66134ccd0c748e6dc0ccc
 
 ...
