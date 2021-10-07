@@ -124,12 +124,18 @@ pub fn init_network(
         // The `temp_chain_id` gets renamed after we have chain ID
         let mut wallet = Wallet::load_or_new(&chain_dir);
         let consensus_key_alias = format!("{}-consensus-key", name);
+        println!("Generating validator {} consensus key...", name);
         let (_alias, consensus_keypair) =
             wallet.gen_key(Some(consensus_key_alias), unsafe_dont_encrypt);
         let account_key_alias = format!("{}-account-key", name);
+        println!("Generating validator {} account key...", name);
         let (_alias, account_keypair) =
             wallet.gen_key(Some(account_key_alias), unsafe_dont_encrypt);
         let reward_key_alias = format!("{}-reward-key", name);
+        println!(
+            "Generating validator {} staking reward account key...",
+            name
+        );
         let (_alias, reward_keypair) =
             wallet.gen_key(Some(reward_key_alias), unsafe_dont_encrypt);
         // Add the validator public keys to genesis config
@@ -251,6 +257,10 @@ pub fn init_network(
     if let Some(implicit) = &mut config.implicit {
         implicit.iter_mut().for_each(|(name, config)| {
             if config.public_key.is_none() {
+                println!(
+                    "Generating implicit account {} key and address ...",
+                    name
+                );
                 let (_alias, keypair) =
                     wallet.gen_key(Some(name.clone()), unsafe_dont_encrypt);
                 let public_key =
@@ -383,6 +393,7 @@ fn init_established_account(
         wallet.add_address(name.as_ref().to_string(), address);
     }
     if config.public_key.is_none() {
+        println!("Generating established account {} key...", name.as_ref());
         let (_alias, keypair) = wallet.gen_key(
             Some(format!("{}-key", name.as_ref())),
             unsafe_dont_encrypt,
