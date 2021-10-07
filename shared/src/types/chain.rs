@@ -112,7 +112,7 @@ pub enum ChainIdParseError {
     #[error("Chain ID must be {CHAIN_ID_LENGTH} long, got {0}")]
     UnexpectedLen(usize),
     #[error(
-        "The prefix contains forbidden characters: {0:?}. Only alphanumeric \
+        "The chain ID contains forbidden characters: {0:?}. Only alphanumeric \
          characters and `-`, `_` and `.` are allowed."
     )]
     ForbiddenCharacters(Vec<char>),
@@ -128,12 +128,11 @@ impl FromStr for ChainId {
         }
         let mut forbidden_chars = s
             .chars()
-            .into_iter()
             .filter(|char| {
-                matches!(*char as u8, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.')
+                !matches!(*char as u8, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.')
             })
             .peekable();
-        if forbidden_chars.next().is_some() {
+        if forbidden_chars.peek().is_some() {
             return Err(ChainIdParseError::ForbiddenCharacters(
                 forbidden_chars.collect(),
             ));
@@ -178,7 +177,7 @@ pub enum ChainIdPrefixParseError {
     UnexpectedLen(usize),
     #[error(
         "The prefix contains forbidden characters: {0:?}. Only alphanumeric \
-         or punctuation ASCII characters are allowed"
+         characters and `-`, `_` and `.` are allowed."
     )]
     ForbiddenCharacters(Vec<char>),
 }
@@ -194,10 +193,10 @@ impl FromStr for ChainIdPrefix {
         let mut forbidden_chars = s
             .chars()
             .filter(|char| {
-                !char.is_ascii_alphanumeric() && !char.is_ascii_punctuation()
+                !matches!(*char as u8, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.')
             })
             .peekable();
-        if forbidden_chars.next().is_some() {
+        if forbidden_chars.peek().is_some() {
             return Err(ChainIdPrefixParseError::ForbiddenCharacters(
                 forbidden_chars.collect(),
             ));
@@ -216,7 +215,7 @@ mod tests {
         /// Test any chain ID that is generated via `from_genesis` function is valid.
         #[test]
         fn test_any_generated_chain_id_is_valid(
-            prefix in proptest::string::string_regex(r#"[A-Za-z0-9.!:,-_#]{1,19}"#).unwrap(),
+            prefix in proptest::string::string_regex(r#"[A-Za-z0-9\.\-_]{1,19}"#).unwrap(),
             genesis_bytes in any::<Vec<u8>>(),
         ) {
             let chain_id_prefix = ChainIdPrefix::from_str(&prefix).unwrap();

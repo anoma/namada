@@ -2225,8 +2225,8 @@ pub mod args {
                 ),
             )
             .arg(CHAIN_ID_PREFIX.def().about(
-                "The chain ID prefix. Up to 19 alphanumeric or punctuation \
-                 ASCII characters.",
+                "The chain ID prefix. Up to 19 alphanumeric, '.', '-' or '_' \
+                 characters.",
             ))
             .arg(UNSAFE_DONT_ENCRYPT.def().about(
                 "UNSAFE: Do not encrypt the generated keypairs. Do not use \
