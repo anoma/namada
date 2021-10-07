@@ -30,7 +30,9 @@ const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
-    let tx_code = ctx.read_wasm(args.code_path);
+    let tx_code = ctx
+        .read_wasm(args.code_path)
+        .expect("Expected a file at given code path");
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
@@ -43,8 +45,12 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let addr = ctx.get(&args.addr);
-    let vp_code = ctx.read_wasm(args.vp_code_path);
-    let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
+    let vp_code = ctx
+        .read_wasm(args.vp_code_path)
+        .expect("Expected a file at given code path");
+    let tx_code = ctx
+        .read_wasm(TX_UPDATE_VP_WASM)
+        .expect("Expected a file at given code path");
     let data = UpdateVp { addr, vp_code };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
@@ -57,9 +63,17 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let public_key = ctx.get_cached(&args.public_key);
     let vp_code = args
         .vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
-    let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
+        .map(|path| {
+            ctx.read_wasm(path)
+                .expect("Expected a file at given code path")
+        })
+        .unwrap_or_else(|| {
+            ctx.read_wasm(VP_USER_WASM)
+                .expect("Expected a file at given code path")
+        });
+    let tx_code = ctx
+        .read_wasm(TX_INIT_ACCOUNT_WASM)
+        .expect("Expected a file at given code path");
     let data = InitAccount {
         public_key,
         vp_code,
@@ -124,12 +138,26 @@ pub async fn submit_init_validator(
     ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
     let validator_vp_code = validator_vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+        .map(|path| {
+            ctx.read_wasm(path)
+                .expect("Expected a file at given code path")
+        })
+        .unwrap_or_else(|| {
+            ctx.read_wasm(VP_USER_WASM)
+                .expect("Expected a file at given code path")
+        });
     let rewards_vp_code = rewards_vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
-    let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
+        .map(|path| {
+            ctx.read_wasm(path)
+                .expect("Expected a file at given code path")
+        })
+        .unwrap_or_else(|| {
+            ctx.read_wasm(VP_USER_WASM)
+                .expect("Expected a file at given code path")
+        });
+    let tx_code = ctx
+        .read_wasm(TX_INIT_VALIDATOR_WASM)
+        .expect("Expected a file at given code path");
 
     let data = InitValidator {
         account_key,
@@ -249,7 +277,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let source = ctx.get(&args.source);
     let target = ctx.get(&args.target);
     let token = ctx.get(&args.token);
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM).unwrap();
     let transfer = token::Transfer {
         source,
         target,
@@ -269,7 +297,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let validator = ctx.get(&args.validator);
     let source = ctx.get_opt(&args.source);
-    let tx_code = ctx.read_wasm(TX_BOND_WASM);
+    let tx_code = ctx.read_wasm(TX_BOND_WASM).unwrap();
     let bond = pos::Bond {
         validator,
         amount: args.amount,
@@ -286,7 +314,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let validator = ctx.get(&args.validator);
     let source = ctx.get_opt(&args.source);
-    let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
+    let tx_code = ctx.read_wasm(TX_UNBOND_WASM).unwrap();
 
     let data = pos::Unbond {
         validator,
@@ -304,7 +332,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let validator = ctx.get(&args.validator);
     let source = ctx.get_opt(&args.source);
-    let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
+    let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM).unwrap();
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 

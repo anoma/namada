@@ -4,7 +4,6 @@ mod p2p;
 mod rpc;
 
 use std::borrow::Cow;
-use std::path::Path;
 use std::rc::Rc;
 
 use anoma::types::address::Address;
@@ -27,14 +26,12 @@ type Result<T> = std::result::Result<T, Error>;
 
 pub fn run(
     config: IntentGossiper,
-    wasm_dir: impl AsRef<Path>,
     tx_source_address: Option<Address>,
     tx_signing_key: Option<Rc<Keypair>>,
 ) -> Result<()> {
     // Start intent gossiper with matchmaker, if enabled.
     let intent_gossip_app = intent_gossiper::GossipIntent::new(
         &config,
-        wasm_dir,
         tx_source_address,
         tx_signing_key,
     )

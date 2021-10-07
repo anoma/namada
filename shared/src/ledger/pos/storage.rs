@@ -491,11 +491,11 @@ where
         address: &Self::Address,
         pk: &Self::PublicKey,
     ) {
-        // let user_vp =
-        //     std::fs::read("wasm/vp_user.wasm").expect("cannot load user VP");
-        // // The staking reward accounts are setup with a user VP
-        // self.write(&Key::validity_predicate(address), user_vp.to_vec())
-        //     .unwrap();
+        let user_vp =
+            std::fs::read("wasm/vp_user.wasm").expect("cannot load user VP");
+        // The staking reward accounts are setup with a user VP
+        self.write(&Key::validity_predicate(address), user_vp.to_vec())
+            .unwrap();
 
         // Write the public key
         let pk_key = key::ed25519::pk_key(address);

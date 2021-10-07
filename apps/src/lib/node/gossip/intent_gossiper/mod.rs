@@ -2,7 +2,6 @@ mod filter;
 mod matchmaker;
 mod mempool;
 
-use std::path::Path;
 use std::rc::Rc;
 
 use anoma::proto::Intent;
@@ -41,7 +40,6 @@ impl GossipIntent {
     /// Create a new gossip intent app with a matchmaker, if enabled.
     pub fn new(
         config: &crate::config::IntentGossiper,
-        wasm_dir: impl AsRef<Path>,
         tx_source_address: Option<Address>,
         tx_signing_key: Option<Rc<Keypair>>,
     ) -> Result<Self> {
@@ -51,13 +49,9 @@ impl GossipIntent {
             Some(tx_signing_key),
         ) = (&config.matchmaker, tx_source_address, tx_signing_key)
         {
-            let (mm, mm_sender, mm_receiver) = Matchmaker::new(
-                matchmaker,
-                wasm_dir,
-                tx_source_address,
-                tx_signing_key,
-            )
-            .map_err(Error::MatchmakerInit)?;
+            let (mm, mm_sender, mm_receiver) =
+                Matchmaker::new(matchmaker, tx_source_address, tx_signing_key)
+                    .map_err(Error::MatchmakerInit)?;
             Ok(Self {
                 matchmaker: Some(mm),
                 mm_sender: Some(mm_sender),

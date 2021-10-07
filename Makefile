@@ -135,11 +135,6 @@ build-wasm-scripts-docker: build-wasm-image-docker
 build-wasm-scripts:
 	make -C $(wasms)
 	make opt-wasm
-	make checksum-wasm
-
-# need python
-checksum-wasm:
-	python wasm/checksums.py
 
 # this command needs wasm-opt installed
 opt-wasm:

@@ -39,13 +39,13 @@ use thiserror::Error;
 use tower_abci::{request, response};
 
 use super::rpc;
+use crate::config;
 use crate::config::genesis;
 use crate::node::ledger::events::{Event, EventType};
 use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
-use crate::{config, wasm_loader};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -178,9 +178,12 @@ impl Shell {
             storage,
         } in genesis.established_accounts
         {
-            let vp_code = vp_code_cache
-                .get_or_insert_with(vp_code_path.clone(), || {
-                    wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
+            let vp_code =
+                vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
+                    std::fs::read(self.wasm_dir.join(&vp_code_path))
+                        .unwrap_or_else(|_| {
+                            panic!("cannot load genesis VP {}.", vp_code_path)
+                        })
                 });
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
@@ -215,9 +218,12 @@ impl Shell {
             balances,
         } in genesis.token_accounts
         {
-            let vp_code = vp_code_cache
-                .get_or_insert_with(vp_code_path.clone(), || {
-                    wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
+            let vp_code =
+                vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
+                    std::fs::read(self.wasm_dir.join(&vp_code_path))
+                        .unwrap_or_else(|_| {
+                            panic!("cannot load genesis VP {}.", vp_code_path)
+                        })
                 });
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
@@ -238,10 +244,13 @@ impl Shell {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.vp_code_path.clone(),
                 || {
-                    wasm_loader::read_wasm(
-                        &self.wasm_dir,
-                        &validator.vp_code_path,
-                    )
+                    std::fs::read(self.wasm_dir.join(&validator.vp_code_path))
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "cannot load genesis VP {}.",
+                                validator.vp_code_path
+                            )
+                        })
                 },
             );
             let addr = &validator.pos_data.address;
