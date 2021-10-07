@@ -404,21 +404,28 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [python3 scripts/ci/audit.py]
+- commands: ['curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
+      | python3 -', cd scripts/ci && poetry install]
   depends_on: [restore-cache]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: requirements
+  pull: never
+- commands: [cargo generate-lockfile, cd scripts/ci && poetry run python3 audit.py]
+  depends_on: [requirements]
   environment: {GITHUB_TOKEN: '{from_secret: github_token}'}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: audit
   pull: never
-- commands: [python3 scripts/ci/udeps.py]
-  depends_on: [audit]
+- commands: ['curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
+      | python3 -', cd scripts/ci && poetry install && poetry run python3 udeps.py]
+  depends_on: [requirements]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: udeps
   pull: never
 - commands: [cargo cache]
-  depends_on: [udeps]
+  depends_on: [udeps, audit]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
   pull: never
@@ -871,7 +878,7 @@ steps:
       | sha256sum -c -, echo "36ea06c95559bfe2ff504549a663a76ef81308c904e9d1071b9979aaf3fe7a89  scripts/ci/pre-run.sh"
       | sha256sum -c -, echo "b36d4bc2fe64e2928fde493e504fa52c524ac8d9338f54dd068753616ffe7390  scripts/ci/release.sh"
       | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
       | sha256sum -c -, echo "7f5673f0fa47cbb82f83b112dd6a4dd08dd1d4422fcc02c8537b0ac589f16f15  wasm/checksums.py"
       | sha256sum -c -, sh scripts/ci/pre-run.sh]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -941,6 +948,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: c7277b49814902c5c797750d8f383d43cd9f2a37ea8df5048c0570260e05b9bc
+hmac: 03aa54111656ee0b9857a847cb796179a312aa1cb80576765f62d3b0b5f8e5bf
 
 ...
