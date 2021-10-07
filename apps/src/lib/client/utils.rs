@@ -272,8 +272,19 @@ pub fn init_network(
     // Save the wallet with other account keys
     wallet.save().unwrap();
 
+    // Make a copy of genesis config without validator net addresses to
+    // `write_genesis_config`. Keep the original, because we still need the
+    // addresses to configure validators.
+    let mut config_clean = config.clone();
+    config_clean
+        .validator
+        .iter_mut()
+        .for_each(|(_name, config)| {
+            config.net_address = None;
+        });
+
     // Generate the chain ID first
-    let genesis = genesis_config::load_genesis_config(config.clone());
+    let genesis = genesis_config::load_genesis_config(config_clean.clone());
     let genesis_bytes = genesis.try_to_vec().unwrap();
     let chain_id = ChainId::from_genesis(chain_id_prefix, genesis_bytes);
     let chain_dir = global_args.base_dir.join(chain_id.as_str());
@@ -282,7 +293,7 @@ pub fn init_network(
         .join(format!("{}.toml", chain_id.as_str()));
 
     // Write the genesis file
-    genesis_config::write_genesis_config(&config, &genesis_path);
+    genesis_config::write_genesis_config(&config_clean, &genesis_path);
 
     // Write the global config setting the default chain ID
     let global_config = GlobalConfig::new(chain_id.clone());
