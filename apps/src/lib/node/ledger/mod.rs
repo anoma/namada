@@ -15,11 +15,11 @@ use tendermint_proto::abci::CheckTxType;
 use tower::ServiceBuilder;
 use tower_abci::{response, split, Server};
 
-use crate::config;
 use crate::config::genesis;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
+use crate::{config, wasm_loader};
 
 /// A panic-proof handle for aborting a future. Will abort during
 /// stack unwinding as its drop method calls abort.
@@ -244,6 +244,8 @@ pub fn run(config: config::Ledger) {
     // drop is called on the database
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
 
+    // Prefetch needed wasm artifacts
+    wasm_loader::pre_fetch_wasm(&config.wasm_dir);
     // Because we cannot attach any data to the `abort_handle`, we also need
     // another channel for signalling an error to the shell from Tendermint
     let (failure_sender, failure_receiver) = channel();

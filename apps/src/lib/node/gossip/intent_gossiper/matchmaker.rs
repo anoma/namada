@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::rc::Rc;
 
 use anoma::gossip::mm::MmHost;
@@ -14,8 +15,8 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
 use crate::client::tx::broadcast_tx;
-use crate::config;
 use crate::types::MatchmakerMessage;
+use crate::{config, wasm_loader};
 
 /// A matchmaker receive intents and tries to find a match with previously
 /// received intent.
@@ -88,6 +89,7 @@ impl Matchmaker {
     /// Create a new matchmaker based on the parameter config.
     pub fn new(
         config: &config::Matchmaker,
+        wasm_dir: impl AsRef<Path>,
         tx_source_address: Address,
         tx_signing_key: Rc<Keypair>,
     ) -> Result<(Self, Sender<MatchmakerMessage>, Receiver<MatchmakerMessage>)>
@@ -95,9 +97,8 @@ impl Matchmaker {
         // TODO: find a good number or maybe unlimited channel ?
         let (sender, receiver) = channel(100);
         let matchmaker_code =
-            std::fs::read(&config.matchmaker).map_err(Error::FileFailed)?;
-        let tx_code =
-            std::fs::read(&config.tx_code).map_err(Error::FileFailed)?;
+            wasm_loader::read_wasm(&wasm_dir, &config.matchmaker);
+        let tx_code = wasm_loader::read_wasm(&wasm_dir, &config.tx_code);
         let filter = config
             .filter
             .as_ref()

@@ -21,8 +21,7 @@ pub fn main() -> Result<()> {
             cli::cmds::Gossip::Run(cli::cmds::GossipRun(args)) => {
                 let tx_source_address = ctx.get_opt(&args.tx_source_address);
                 let tx_signing_key = ctx.get_opt_cached(&args.tx_signing_key);
-                let config = ctx.config;
-                let mut gossip_cfg = config.intent_gossiper;
+                let mut gossip_cfg = ctx.config.intent_gossiper;
                 gossip_cfg.update(
                     args.addr,
                     args.rpc,
@@ -31,11 +30,13 @@ pub fn main() -> Result<()> {
                     args.ledger_addr,
                     args.filter_path,
                 );
-                gossip::run(gossip_cfg, tx_source_address, tx_signing_key)
-                    .wrap_err(
-                        "Failed to run gossip
-            service",
-                    )?;
+                gossip::run(
+                    gossip_cfg,
+                    &ctx.config.ledger.wasm_dir,
+                    tx_source_address,
+                    tx_signing_key,
+                )
+                .wrap_err("Failed to run gossip service")?;
             }
         },
         cli::cmds::AnomaNode::Config(sub) => match sub {
