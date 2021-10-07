@@ -25,11 +25,14 @@ use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::address::Address;
+use anoma::types::chain::ChainId;
 use anoma::types::storage::{BlockHash, BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::transaction::{process_tx, TxType, WrapperTx};
 use anoma::types::{address, key, token};
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "dev"))]
+use sha2::{Digest, Sha256};
 use tendermint::block::Header;
 use tendermint_proto::abci::{
     self, ConsensusParams, Evidence, ValidatorUpdate,
@@ -97,6 +100,8 @@ pub struct Shell {
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
+    /// Path to the base directory with DB data and configs
+    base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
     wasm_dir: PathBuf,
 }
@@ -105,8 +110,9 @@ impl Shell {
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
     pub fn new(
+        base_dir: PathBuf,
         db_path: impl AsRef<Path>,
-        chain_id: String,
+        chain_id: ChainId,
         wasm_dir: PathBuf,
     ) -> Self {
         let mut storage = storage::open(db_path, chain_id);
@@ -122,6 +128,7 @@ impl Shell {
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
             byzantine_validators: vec![],
+            base_dir,
             wasm_dir,
         }
     }
@@ -142,6 +149,20 @@ impl Shell {
                 current_chain_id, init.chain_id
             )));
         }
+        #[cfg(not(feature = "dev"))]
+        let genesis = genesis::genesis(&self.base_dir, &self.storage.chain_id);
+        #[cfg(not(feature = "dev"))]
+        {
+            let genesis_bytes = genesis.try_to_vec().unwrap();
+            let errors = self.storage.chain_id.validate(genesis_bytes);
+            use itertools::Itertools;
+            assert!(
+                errors.is_empty(),
+                "Chain ID validation failed: {}",
+                errors.into_iter().format(". ")
+            );
+        }
+        #[cfg(feature = "dev")]
         let genesis = genesis::genesis();
 
         let ts: tendermint_proto::google::protobuf::Timestamp =
@@ -174,6 +195,7 @@ impl Shell {
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
+            vp_sha256,
             public_key,
             storage,
         } in genesis.established_accounts
@@ -182,6 +204,23 @@ impl Shell {
                 .get_or_insert_with(vp_code_path.clone(), || {
                     wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
                 });
+
+            // In dev, we don't check the hash
+            #[cfg(feature = "dev")]
+            let _ = vp_sha256;
+            #[cfg(not(feature = "dev"))]
+            {
+                let mut hasher = Sha256::new();
+                hasher.update(&vp_code);
+                let vp_code_hash = hasher.finalize();
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &vp_sha256,
+                    "Invalid established account's VP sha256 hash for {}",
+                    vp_code_path
+                );
+            }
+
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
@@ -212,6 +251,7 @@ impl Shell {
         for genesis::TokenAccount {
             address,
             vp_code_path,
+            vp_sha256,
             balances,
         } in genesis.token_accounts
         {
@@ -219,6 +259,23 @@ impl Shell {
                 .get_or_insert_with(vp_code_path.clone(), || {
                     wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
                 });
+
+            // In dev, we don't check the hash
+            #[cfg(feature = "dev")]
+            let _ = vp_sha256;
+            #[cfg(not(feature = "dev"))]
+            {
+                let mut hasher = Sha256::new();
+                hasher.update(&vp_code);
+                let vp_code_hash = hasher.finalize();
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &vp_sha256,
+                    "Invalid token account's VP sha256 hash for {}",
+                    vp_code_path
+                );
+            }
+
             self.storage
                 .write(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
@@ -236,14 +293,33 @@ impl Shell {
         // Initialize genesis validator accounts
         for validator in &genesis.validators {
             let vp_code = vp_code_cache.get_or_insert_with(
-                validator.vp_code_path.clone(),
+                validator.validator_vp_code_path.clone(),
                 || {
-                    wasm_loader::read_wasm(
-                        &self.wasm_dir,
-                        &validator.vp_code_path,
+                    std::fs::read(
+                        self.wasm_dir.join(&validator.validator_vp_code_path),
                     )
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "cannot load genesis VP {}.",
+                            validator.validator_vp_code_path
+                        )
+                    })
                 },
             );
+
+            #[cfg(not(feature = "dev"))]
+            {
+                let mut hasher = Sha256::new();
+                hasher.update(&vp_code);
+                let vp_code_hash = hasher.finalize();
+                assert_eq!(
+                    vp_code_hash.as_slice(),
+                    &validator.validator_vp_sha256,
+                    "Invalid validator VP sha256 hash for {}",
+                    validator.validator_vp_code_path
+                );
+            }
+
             let addr = &validator.pos_data.address;
             self.storage
                 .write(&Key::validity_predicate(addr), vp_code)
@@ -290,6 +366,27 @@ impl Shell {
             evidence: Some(evidence_params),
             ..response.consensus_params.unwrap_or_default()
         });
+
+        // Set the initial validator set
+        for validator in genesis.validators {
+            let mut abci_validator =
+                tendermint_proto::abci::ValidatorUpdate::default();
+            let consensus_key: ed25519_dalek::PublicKey =
+                validator.pos_data.consensus_key.clone().into();
+            let pub_key = tendermint_proto::crypto::PublicKey {
+                sum: Some(tendermint_proto::crypto::public_key::Sum::Ed25519(
+                    consensus_key.to_bytes().to_vec(),
+                )),
+            };
+            abci_validator.pub_key = Some(pub_key);
+            let power: u64 =
+                validator.pos_data.voting_power(&genesis.pos_params).into();
+            abci_validator.power = power
+                .try_into()
+                .expect("unexpected validator's voting power");
+            response.validators.push(abci_validator);
+        }
+
         Ok(response)
     }
 

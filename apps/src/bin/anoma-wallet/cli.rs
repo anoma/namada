@@ -184,7 +184,8 @@ fn address_list(ctx: Context) {
         let mut w = stdout.lock();
         writeln!(w, "Known addresses:").unwrap();
         for (alias, address) in sorted(known_addresses) {
-            writeln!(w, "  \"{}\": {}", alias, address).unwrap();
+            writeln!(w, "  \"{}\": {}", alias, address.to_pretty_string())
+                .unwrap();
         }
     }
 }
@@ -193,7 +194,7 @@ fn address_list(ctx: Context) {
 fn address_find(ctx: Context, args: args::AddressFind) {
     let wallet = ctx.wallet;
     if let Some(address) = wallet.find_address(&args.alias) {
-        println!("Found address {}", address.encode());
+        println!("Found address {}", address.to_pretty_string());
     } else {
         println!(
             "No address with alias {} found. Use the command `address list` \

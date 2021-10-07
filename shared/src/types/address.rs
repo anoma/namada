@@ -214,15 +214,20 @@ impl Address {
     }
 
     fn pretty_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_pretty_string())
+    }
+
+    /// Print the type of the address and its bech32m encoded value
+    pub fn to_pretty_string(&self) -> String {
         match self {
             Address::Established(_) => {
-                write!(f, "Established: {}", self.encode(),)
+                format!("Established: {}", self.encode(),)
             }
             Address::Implicit(_) => {
-                write!(f, "Implicit: {}", self.encode(),)
+                format!("Implicit: {}", self.encode(),)
             }
             Address::Internal(kind) => {
-                write!(f, "Internal {}: {}", kind, self.encode())
+                format!("Internal {}: {}", kind, self.encode())
             }
         }
     }
@@ -254,7 +259,7 @@ impl<'de> serde::Deserialize<'de> for Address {
 
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.pretty_fmt(f)
+        write!(f, "{}", self.encode())
     }
 }
 
