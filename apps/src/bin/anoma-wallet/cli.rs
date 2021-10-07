@@ -164,11 +164,20 @@ fn key_export(ctx: Context, args::KeyExport { alias }: args::KeyExport) {
 /// List all known addresses.
 fn address_list(ctx: Context) {
     let wallet = ctx.wallet;
-    let stdout = io::stdout();
-    let mut w = stdout.lock();
-    writeln!(w, "Known addresses:").unwrap();
-    for (alias, address) in sorted(wallet.get_addresses()) {
-        writeln!(w, "  \"{}\": {}", alias, address).unwrap();
+    let known_addresses = wallet.get_addresses();
+    if known_addresses.is_empty() {
+        println!(
+            "No known addresses. Try `address gen --alias my-addr` to \
+             generate a new implicit address."
+        );
+    } else {
+        let stdout = io::stdout();
+        let mut w = stdout.lock();
+        writeln!(w, "Known addresses:").unwrap();
+        for (alias, address) in sorted(known_addresses) {
+            writeln!(w, "  \"{}\": {}", alias, address.to_pretty_string())
+                .unwrap();
+        }
     }
 }
 
@@ -176,7 +185,7 @@ fn address_list(ctx: Context) {
 fn address_find(ctx: Context, args: args::AddressFind) {
     let wallet = ctx.wallet;
     if let Some(address) = wallet.find_address(&args.alias) {
-        println!("Found address {}", address.encode());
+        println!("Found address {}", address.to_pretty_string());
     } else {
         println!(
             "No address with alias {} found. Use the command `address list` \
