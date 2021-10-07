@@ -51,9 +51,9 @@ XAN is Anoma's native token. To obtain some tokens in a testnet, there's a speci
 anoma client transfer \
   --source faucet \
   --target my-new-acc \
-  --signer my-new-acc
+  --signer my-new-acc \
   --token XAN \
-  --amount 1000 \
+  --amount 1000
 ```
 
 Note that because you don't have the key to sign transfer from the faucet account, in the command above we set the `--signer` explicitly to your account's address.
@@ -65,7 +65,7 @@ anoma client transfer \
   --source my-new-acc \
   --target validator-1 \
   --token XAN \
-  --amount 1000 \
+  --amount 10
 ```
 
 This command will attempt to find and use the key of the source address to sign the transaction.

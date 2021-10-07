@@ -61,7 +61,7 @@ anoma client unbond \
 When you unbond tokens, you won't be able to withdraw them immediately. Instead, tokens unbonded in the epoch `n` will be withdrawable starting from the epoch `n + 6` (the literal `6` is set by PoS parameter `unbonding_len`). After you unbond some tokens, you will be able to see when you can withdraw them via `bonds` query:
 
 ```shell
-anoma client bonds --source my-new-acc
+anoma client bonds --owner my-new-acc
 ```
 
 When the chain reaches the epoch in which you can withdraw the tokens (or anytime after), you can submit a withdrawal of unbonded delegation of tokens back to your account:
