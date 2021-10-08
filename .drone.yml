@@ -1,6 +1,6 @@
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: 1}
+environment: {CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: 1}
 kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
@@ -121,8 +121,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
-  GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
@@ -216,7 +215,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/wasm/.cargo, CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
@@ -328,8 +327,7 @@ type: docker
 workspace: {path: /usr/local/rust/wasm}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
-  GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-misc-pr
 node: {project: anoma}
@@ -356,14 +354,59 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
+- depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+  image: meltwater/drone-cache:latest
+  name: restore-cache
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/docs/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    mount: [wasm/wasm_source/target]
+    region: eu-west-1
+    restore: true
+- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/]
+  depends_on: [restore-cache]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: docs
+  pull: never
+- commands: [cargo cache || true]
+  depends_on: [docs]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clean-cache
+  pull: never
+  when:
+    status: [success, failure]
+- depends_on: [clean-cache]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    BACKEND_OPERATION_TIMEOUT: 8m
+  image: meltwater/drone-cache:latest
+  name: rebuild-cache
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
+    override: false
+    rebuild: true
+    region: eu-west-1
+  when:
+    status: [success, failure]
 trigger:
   event: [pull_request]
 type: docker
-workspace: {path: /usr/local/rust/wasm}
+workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
-  GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-cron
 node: {project: anoma}
@@ -457,8 +500,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
-  GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-miri-master
 node: {project: anoma}
@@ -542,8 +584,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
-  GIT_LFS_SKIP_SMUDGE: '1', GIT_TERMINAL_PROMP: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1', GIT_TERMINAL_PROMP: '1'}
 kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
@@ -589,8 +630,16 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: docs
   pull: never
+- depends_on: [docs]
+  image: plugins/gh-pages
+  name: publish-docs
+  pull: never
+  settings:
+    pages_directory: ./docs/book
+    password: {from_secret: github_token}
+    username: DroneCI
 - commands: [cargo cache || true]
-  depends_on: [docs]
+  depends_on: [publish-docs]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
   pull: never
@@ -622,7 +671,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/wasm/.cargo, CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
@@ -868,8 +917,7 @@ trigger:
 type: docker
 workspace: {path: /usr/local/rust/wasm}
 ---
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
-  GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-release
 node: {project: anoma}
@@ -954,6 +1002,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 0c9e2f4d7daeb0de7856fe4e7e2ee9b5178af511e3fa7db4727e4235d0813c77
+hmac: 921f83a12d0433f736cae0664b34013d9fa0c420dba629967291be7d5f963b48
 
 ...
