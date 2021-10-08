@@ -965,14 +965,14 @@ steps:
   name: build-package
   pull: never
 - commands: [sh scripts/ci/create-release.sh]
-  depends_on: [build-release]
+  depends_on: [build-package]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: create-release
   pull: never
 - commands: [cargo cache || true]
-  depends_on: [build-release]
+  depends_on: [create-release]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
   pull: never
@@ -1003,6 +1003,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 8f226d16487fc43545764bf04fa63d7e3a2d45d78f911eafcbfbb1ed109be559
+hmac: 79576fd46ce01b892f701072a12c80d36b645872348b11cea8cf848c9dcaa8af
 
 ...
