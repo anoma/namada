@@ -1,8 +1,8 @@
 {
     "vp_token.wasm": "vp_token.521d89f957670ea542b824f78f79a1f301d65caae0668acebd694654eb253009.wasm", 
-    "tx_unbond.wasm": "tx_unbond.33d60fb5baa00f71fe6b1d1d956f6a978592e54c67c03288a4d8adc7a758ed2c.wasm", 
+    "tx_unbond.wasm": "tx_unbond.04089436b4975ddbdbf0bb70f38569d1bd4e393d1ad350fd50342b1d8508272d.wasm", 
     "tx_transfer.wasm": "tx_transfer.a2a6d0f4ec08d874b9b54b400cdd9b7bed303d9846d84cfc6c3560ebc14569ba.wasm", 
-    "tx_bond.wasm": "tx_bond.6933a462c36cd1c3373b672c8c5d00a31128246738cda4c8fe5a38a77b833790.wasm", 
+    "tx_bond.wasm": "tx_bond.ec57d84c17889397851a8ee1a6ac7d2224394cc3b6e92c08c0eae9d2f9ff5a4c.wasm", 
     "tx_init_account.wasm": "tx_init_account.05790a745bfdd25a11c0deb6fd1111a2cff65ce9966e2cad8412f6588f83d71c.wasm", 
     "tx_init_validator.wasm": "tx_init_validator.21c8a667b1569c52c62f870567108c5f0080fd707620a99fe1b1eda3c9e4a9c3.wasm", 
     "tx_from_intent.wasm": "tx_from_intent.d64aae398402ec513f56c15c33e31467e44ca1f16ea66a870358569388190054.wasm", 
