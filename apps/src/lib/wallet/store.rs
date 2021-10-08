@@ -10,9 +10,9 @@ use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::defaults;
 use super::keys::StoredKeypair;
 use crate::cli;
+use crate::config::genesis::genesis_config::GenesisConfig;
 
 pub type Alias = String;
 
@@ -38,11 +38,19 @@ pub enum LoadStoreError {
 }
 
 impl Store {
+    #[cfg(not(feature = "dev"))]
+    fn new(genesis: GenesisConfig) -> Self {
+        let mut store = Self::default();
+        store.add_genesis_addresses(genesis);
+        store
+    }
+
+    #[cfg(feature = "dev")]
     fn new() -> Self {
         let mut store = Self::default();
         // Pre-load the default keys without encryption
         let no_password = None;
-        for (alias, keypair) in defaults::keys() {
+        for (alias, keypair) in super::defaults::keys() {
             let pkh: PublicKeyHash = (&keypair.public).into();
             store.keys.insert(
                 alias.clone(),
@@ -50,8 +58,17 @@ impl Store {
             );
             store.pkhs.insert(pkh, alias);
         }
-        store.addresses.extend(defaults::addresses().into_iter());
         store
+            .addresses
+            .extend(super::defaults::addresses().into_iter());
+        store
+    }
+
+    /// Add addresses from a genesis configuration.
+    pub fn add_genesis_addresses(&mut self, genesis: GenesisConfig) {
+        self.addresses.extend(
+            super::defaults::addresses_from_genesis(genesis).into_iter(),
+        );
     }
 
     /// Save the wallet store to a file.
@@ -70,9 +87,44 @@ impl Store {
         file.write_all(&data)
     }
 
-    /// Load the store file or create a new one with the default keys and
-    /// addresses if not found.
+    /// Load the store file or create a new one without any keys or addresses.
     pub fn load_or_new(store_dir: &Path) -> Result<Self, LoadStoreError> {
+        Self::load_or_new_aux(store_dir, || {
+            let store = Self::default();
+            store.save(store_dir).map_err(|err| {
+                LoadStoreError::StoreNewWallet(err.to_string())
+            })?;
+            Ok(store)
+        })
+    }
+
+    /// Load the store file or create a new one with the default addresses from
+    /// the genesis file, if not found.
+    pub fn load_or_new_from_genesis(
+        store_dir: &Path,
+        load_genesis: impl FnOnce() -> GenesisConfig,
+    ) -> Result<Self, LoadStoreError> {
+        Self::load_or_new_aux(store_dir, || {
+            #[cfg(not(feature = "dev"))]
+            let store = Self::new(load_genesis());
+            #[cfg(feature = "dev")]
+            let store = {
+                // The function is unused in dev
+                let _ = load_genesis;
+                Self::new()
+            };
+            store.save(store_dir).map_err(|err| {
+                LoadStoreError::StoreNewWallet(err.to_string())
+            })?;
+            Ok(store)
+        })
+    }
+
+    /// Load the store file or create a new with the provided function.
+    fn load_or_new_aux(
+        store_dir: &Path,
+        new_store: impl FnOnce() -> Result<Self, LoadStoreError>,
+    ) -> Result<Self, LoadStoreError> {
         let wallet_file = wallet_file(store_dir);
         let store = fs::read(&wallet_file);
         match store {
@@ -85,11 +137,7 @@ impl Store {
                         "No wallet found at {:?}. Creating a new one.",
                         wallet_file
                     );
-                    let store = Self::new();
-                    store.save(store_dir).map_err(|err| {
-                        LoadStoreError::StoreNewWallet(err.to_string())
-                    })?;
-                    Ok(store)
+                    new_store()
                 }
                 _ => Err(LoadStoreError::ReadWallet(
                     wallet_file.to_string_lossy().into_owned(),

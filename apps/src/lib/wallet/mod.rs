@@ -13,6 +13,7 @@ use thiserror::Error;
 pub use self::keys::{DecryptionError, StoredKeypair};
 use self::store::{Alias, Store};
 use crate::cli;
+use crate::config::genesis::genesis_config::GenesisConfig;
 
 #[derive(Debug)]
 pub struct Wallet {
@@ -30,8 +31,8 @@ pub enum FindKeyError {
 }
 
 impl Wallet {
-    /// Load a wallet from the store file or create a new one with the default
-    /// keys and addresses if not found.
+    /// Load a wallet from the store file or create a new wallet without any
+    /// keys or addresses.
     pub fn load_or_new(store_dir: &Path) -> Self {
         let store = Store::load_or_new(store_dir).unwrap_or_else(|err| {
             eprintln!("Unable to load the wallet: {}", err);
@@ -42,6 +43,29 @@ impl Wallet {
             store,
             decrypted_key_cache: HashMap::default(),
         }
+    }
+
+    /// Load a wallet from the store file or create a new one with the default
+    /// addresses loaded from the genesis file, if not found.
+    pub fn load_or_new_from_genesis(
+        store_dir: &Path,
+        load_genesis: impl FnOnce() -> GenesisConfig,
+    ) -> Self {
+        let store = Store::load_or_new_from_genesis(store_dir, load_genesis)
+            .unwrap_or_else(|err| {
+                eprintln!("Unable to load the wallet: {}", err);
+                cli::safe_exit(1)
+            });
+        Self {
+            store_dir: store_dir.to_path_buf(),
+            store,
+            decrypted_key_cache: HashMap::default(),
+        }
+    }
+
+    /// Add addresses from a genesis configuration.
+    pub fn add_genesis_addresses(&mut self, genesis: GenesisConfig) {
+        self.store.add_genesis_addresses(genesis)
     }
 
     /// Save the wallet store to a file.
