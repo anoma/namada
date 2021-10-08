@@ -1,3 +1,6 @@
+//! Anoma macros for generating WASM binding code for transactions, validity
+//! predicates and matchmaker.
+
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
@@ -5,9 +8,11 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
+/// Generate WASM binding for a transaction main entrypoint function.
+///
 /// This macro expects a function with signature:
 ///
-/// ```compile_fail
+/// ```compiler_fail
 /// fn apply_tx(tx_data: Vec<u8>)
 /// ```
 #[proc_macro_attribute]
@@ -37,6 +42,8 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(gen)
 }
 
+/// Generate WASM binding for validity predicate main entrypoint function.
+///
 /// This macro expects a function with signature:
 ///
 /// ```compiler_fail
@@ -115,6 +122,8 @@ pub fn validity_predicate(
     TokenStream::from(gen)
 }
 
+/// Generate WASM binding for matchmaker main entrypoint function.
+///
 /// This macro expects a function with signature:
 ///
 /// ```compiler_fail
@@ -162,6 +171,8 @@ pub fn matchmaker(_attr: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(gen)
 }
 
+/// Generate WASM binding for matchmaker filter main entrypoint function.
+///
 /// This macro expects a function with signature:
 ///
 /// ```compiler_fail
