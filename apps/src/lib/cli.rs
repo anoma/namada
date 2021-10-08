@@ -9,18 +9,13 @@
 pub mod context;
 mod utils;
 
-use clap::{AppSettings, ArgMatches};
+use clap::{crate_authors, crate_version, AppSettings, ArgMatches};
 pub use utils::safe_exit;
 use utils::*;
 
 pub use self::context::Context;
 
-const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
 const APP_NAME: &str = "Anoma";
-const CLI_VERSION: &str = "0.1.0";
-const NODE_VERSION: &str = "0.1.0";
-const CLIENT_VERSION: &str = "0.1.0";
-const WALLET_VERSION: &str = "0.1.0";
 
 // Main Anoma sub-commands
 const NODE_CMD: &str = "node";
@@ -2321,8 +2316,8 @@ pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {
 
 fn anoma_app() -> App {
     let app = App::new(APP_NAME)
-        .version(CLI_VERSION)
-        .author(AUTHOR)
+        .version(crate_version!())
+        .author(crate_authors!("\n"))
         .about("Anoma command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::Anoma::add_sub(args::Global::def(app))
@@ -2330,8 +2325,8 @@ fn anoma_app() -> App {
 
 fn anoma_node_app() -> App {
     let app = App::new(APP_NAME)
-        .version(NODE_VERSION)
-        .author(AUTHOR)
+        .version(crate_version!())
+        .author(crate_authors!("\n"))
         .about("Anoma node command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaNode::add_sub(args::Global::def(app))
@@ -2339,8 +2334,8 @@ fn anoma_node_app() -> App {
 
 fn anoma_client_app() -> App {
     let app = App::new(APP_NAME)
-        .version(CLIENT_VERSION)
-        .author(AUTHOR)
+        .version(crate_version!())
+        .author(crate_authors!("\n"))
         .about("Anoma client command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaClient::add_sub(args::Global::def(app))
@@ -2348,8 +2343,8 @@ fn anoma_client_app() -> App {
 
 fn anoma_wallet_app() -> App {
     let app = App::new(APP_NAME)
-        .version(WALLET_VERSION)
-        .author(AUTHOR)
+        .version(crate_version!())
+        .author(crate_authors!("\n"))
         .about("Anoma wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaWallet::add_sub(args::Global::def(app))
