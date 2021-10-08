@@ -12,6 +12,7 @@ use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 
 use super::args;
 use crate::cli::safe_exit;
+use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
 use crate::wallet::Wallet;
@@ -59,7 +60,12 @@ impl Context {
         let chain_dir = global_args
             .base_dir
             .join(&global_config.default_chain_id.as_str());
-        let wallet = Wallet::load_or_new(&chain_dir);
+        let genesis_file_path = global_args
+            .base_dir
+            .join(format!("{}.toml", global_config.default_chain_id.as_str()));
+        let wallet = Wallet::load_or_new_from_genesis(&chain_dir, move || {
+            genesis_config::open_genesis_config(genesis_file_path)
+        });
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
