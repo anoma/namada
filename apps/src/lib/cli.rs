@@ -34,7 +34,6 @@ pub mod cmds {
     use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
 
     /// Commands for `anoma` binary.
-    #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     pub enum Anoma {
         Node(AnomaNode),
