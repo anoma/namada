@@ -129,10 +129,11 @@ pub mod cmds {
     /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
     #[derive(Clone, Debug)]
     pub enum AnomaClient {
-        /// The [`Context`] provides access to the wallet and the config.
-        /// It will generate a new wallet and config, if they don't exist.
+        /// The [`super::Context`] provides access to the wallet and the
+        /// config. It will generate a new wallet and config, if they
+        /// don't exist.
         WithContext(AnomaClientWithContext),
-        /// Utils don't have [`Context`], only the global arguments.
+        /// Utils don't have [`super::Context`], only the global arguments.
         WithoutContext(Utils),
     }
 
