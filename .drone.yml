@@ -10,19 +10,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -90,7 +89,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-e2e
   pull: never
-- commands: [cargo cache]
+- commands: [cargo cache || true]
   depends_on: [test-unit, test-e2e]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
@@ -133,19 +132,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -185,7 +183,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: format
   pull: never
-- commands: [cargo cache]
+- commands: [cargo cache || true]
   depends_on: [clippy, format]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
@@ -218,7 +216,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {CARGO_HOME: /usr/local/rust/wasm/.cargo, CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
@@ -228,19 +226,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -343,19 +340,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -377,19 +373,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -417,19 +412,19 @@ steps:
   pull: never
 - commands: [cargo generate-lockfile, cd scripts/ci && poetry run python3 audit.py]
   depends_on: [requirements]
-  environment: {GITHUB_TOKEN: '{from_secret: github_token}'}
+  environment:
+    GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: audit
   pull: never
-- commands: ['curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
-      | python3 -', cd scripts/ci && poetry install && poetry run python3 udeps.py]
+- commands: [cd scripts/ci && poetry install && poetry run python3 udeps.py]
   depends_on: [requirements]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: udeps
   pull: never
-- commands: [cargo cache]
+- commands: [cargo cache || true]
   depends_on: [udeps, audit]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
@@ -473,19 +468,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -515,7 +509,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-miri
   pull: never
-- commands: [cargo cache]
+- commands: [cargo cache || true]
   depends_on: [test-miri]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
@@ -559,19 +553,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -596,7 +589,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: docs
   pull: never
-- commands: [cargo cache]
+- commands: [cargo cache || true]
   depends_on: [docs]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
@@ -639,19 +632,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -691,8 +683,16 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-test
   pull: never
-- commands: [sccache --start-server, make test-unit]
+- commands: ['aws s3api head-object --bucket heliax-drone-wasm-v2 --key ${DRONE_COMMIT}.json',
+    'if [ $? -ne 0  ]; then exit 1; fi', 'aws s3 cp s3://heliax-drone-wasm-v2/${DRONE_COMMIT}.json
+      wasm', 'cp wasm/${DRONE_COMMIT}.json wasm/checksums.json', 'jq -r -c ''.[]''
+      wasm/checksums.json | parallel aws s3 cp s3://heliax-drone-wasm-v2/{} wasm']
   depends_on: [build-test]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: download-wasm
+  pull: never
+- commands: [sccache --start-server, make test-unit]
+  depends_on: [download-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -702,7 +702,7 @@ steps:
   name: test-unit
   pull: never
 - commands: [sccache --start-server, make test-e2e]
-  depends_on: [build-test]
+  depends_on: [download-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -711,7 +711,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-e2e
   pull: never
-- commands: [cargo cache]
+- commands: [cargo cache || true]
   depends_on: [test-unit, test-e2e]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
@@ -744,8 +744,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_HOME: /usr/local/rust/project/.cargo, CARGO_INCREMENTAL: '0',
-  GIT_LFS_SKIP_SMUDGE: '1'}
+environment: {GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-wasm-master
 node: {project: anoma}
@@ -755,19 +754,18 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "0104349ce6d5af79800bd460cbccc540f025080cb93d11179b38b040071596f3  Makefile"
-      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
-      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
-      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
-      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
-      | sha256sum -c -, echo "51e01e8f154fdaf62857817bd7ab701ed4b6b5b90bd1d34808ce261fa37cb2c2  scripts/ci/release.sh"
-      | sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
-      | sha256sum -c -, echo "41a66892c2ccecb7295862b724b8523f8673cd3f8b2d14d08dcc755ee5dbcd91  scripts/ci/udeps.py"
-      | sha256sum -c -, echo "ff36bf208a1b1c1ee10d7f2716493180273c001ebc3b1ab396167e9e8ec1c730  wasm/checksums.py"
-      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+- commands: [echo "4888011c2cc1c15f489a4d259d3e86cd0ac3dfe76af44e2b8d2b5ffd386a52ad  Makefile"
+      sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      sha256sum -c -, echo "4388598b8ace38607a492e2f4d3eae46ef97ac9edb98a20619de3298e5aea081  docs/Makefile"
+      sha256sum -c -, echo "4b0b566f5bc572569ebcf2eee17129e91f2009a66972fe294bc4d1e0b4d9ad8f  scripts/ci/update-wasm.sh"
+      sha256sum -c -, echo "c2bbcc7ab5f2b4cc478513dc1db117e3a1a9122271db0160afa3929132f54f82  scripts/ci/pre-run.sh"
+      sha256sum -c -, echo "19ab6263cc481222b4ecedd1037d2942e4b93d915693aad153bec2a80977ce3d  scripts/ci/audit.py"
+      sha256sum -c -, echo "d4790094234822503bc8fd230bbc9ae066c073f17aeb3d773b0bc4c879a49d65  scripts/ci/udeps.py"
+      sha256sum -c -, sh scripts/ci/pre-run.sh]
   depends_on: [clone]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
@@ -828,7 +826,7 @@ steps:
       "*" --exclude "*" --include "*.wasm" --exclude "*/*"', 'cp wasm/checksums.json
       wasm/${DRONE_COMMIT}.json', 'aws s3 cp wasm/${DRONE_COMMIT}.json s3://heliax-anoma-wasm-v1
       --acl public-read']
-  depends_on: [update-wasm]
+  depends_on: [test-wasm, check-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -924,7 +922,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: create-release
   pull: never
-- commands: [cargo cache]
+- commands: [cargo cache || true]
   depends_on: [build-release]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
@@ -956,6 +954,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 7967a91995f4c0080476304e26a1c3a5ffadf0af67a66134ccd0c748e6dc0ccc
+hmac: 0c9e2f4d7daeb0de7856fe4e7e2ee9b5178af511e3fa7db4727e4235d0813c77
 
 ...
