@@ -1084,6 +1084,7 @@ dependencies = [
  "atty",
  "bitflags",
  "indexmap",
+ "lazy_static 1.4.0",
  "os_str_bytes",
  "strsim 0.10.0",
  "termcolor",
