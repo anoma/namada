@@ -1,5 +1,5 @@
 FROM ubuntu:20.04
-WORKDIR /root
+WORKDIR /var/build
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update
 RUN apt-get install -y \

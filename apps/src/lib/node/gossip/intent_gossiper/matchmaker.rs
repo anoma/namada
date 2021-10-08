@@ -140,7 +140,7 @@ impl Matchmaker {
             self.mempool
                 .put(intent.clone())
                 .map_err(Error::MempoolFailed)?;
-            Ok(wasm::run::matchmaker(
+            wasm::run::matchmaker(
                 &self.matchmaker_code.clone(),
                 &self.state,
                 &intent.id().0,
@@ -148,7 +148,6 @@ impl Matchmaker {
                 self.wasm_host.clone(),
             )
             .map_err(Error::RunnerFailed)
-            .unwrap())
         } else {
             Ok(false)
         }
