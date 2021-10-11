@@ -362,16 +362,16 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/docs/{{ checksum "wasm/wasm_source/Cargo.lock" }}
-    mount: [wasm/wasm_source/target]
+    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
-    make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+- commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    git fetch --all, git checkout gh-pages, 'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH"
-      != "master" ]; then exit 78; fiif [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/*
-      .b; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
+    'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master" ]; then exit 78; fi',
+    cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
+    cd anoma-docs, 'if [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/* .b; else mkdir
+      $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -629,12 +629,12 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
-    make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+- commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    git fetch --all, git checkout gh-pages, 'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH"
-      != "master" ]; then exit 78; fiif [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/*
-      .b; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
+    'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master" ]; then exit 78; fi',
+    cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
+    cd anoma-docs, 'if [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/* .b; else mkdir
+      $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -1009,6 +1009,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 65671718a4e2854addaeb31ff4b88afcc7e61357904bd0768a7386afd0fd6e22
+hmac: 3413f586235bb5a2b2df5e930e3c222e0dc4d1eb5f74f8a01c0814e3ee79dfb5
 
 ...
