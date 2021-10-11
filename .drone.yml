@@ -362,17 +362,25 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/docs/{{ checksum "wasm/wasm_source/Cargo.lock" }}
-    mount: [wasm/wasm_source/target]
+    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
+    mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/]
+- commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+    mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
+    'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 0; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
+      --branch gh-pages --single-branch anoma-docs, cd anoma-docs, 'if [ -z "$DRONE_TAG"
+      ]; then mv -v ~/.tmp/book/* .; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/*
+      $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]: update docs $DRONE_COMMIT
+      && git push']
   depends_on: [restore-cache]
+  environment:
+    GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: docs
+  name: build-and-publish-docs
   pull: never
 - commands: [cargo cache || true]
-  depends_on: [docs]
+  depends_on: [build-and-publish-docs]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
   pull: never
@@ -622,19 +630,19 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/]
+- commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+    mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
+    'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 0; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
+      --branch gh-pages --single-branch anoma-docs, cd anoma-docs, 'if [ -z "$DRONE_TAG"
+      ]; then mv -v ~/.tmp/book/* .; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/*
+      $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]: update docs $DRONE_COMMIT
+      && git push']
   depends_on: [restore-cache]
+  environment:
+    GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: docs
+  name: build-and-publish-docs
   pull: never
-- depends_on: [docs]
-  image: plugins/gh-pages
-  name: publish-docs
-  pull: never
-  settings:
-    pages_directory: ./docs/book
-    password: {from_secret: github_token}
-    username: DroneCI
 - commands: [cargo cache || true]
   depends_on: [publish-docs]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -1003,6 +1011,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 79576fd46ce01b892f701072a12c80d36b645872348b11cea8cf848c9dcaa8af
+hmac: 0d3de3f56aebeb017a6cbbc31778606e2047f4dfb302fba8fe7111befb21ece6
 
 ...
