@@ -366,7 +366,8 @@ steps:
     mount: [wasm/wasm_source/target]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/]
+- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+    ls docs/book]
   depends_on: [restore-cache]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: docs
@@ -622,7 +623,8 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/]
+- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+    ls docs/book]
   depends_on: [restore-cache]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: docs
@@ -1003,6 +1005,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 577aca52b099a5f3f75a7957211b81bc080f7ad3003ed77fd3846742b31af87e
+hmac: f60e4cabd6f2cd86164d3980bf088e51ec45a51340165ef3b3e82f66aacbff97
 
 ...
