@@ -644,7 +644,7 @@ steps:
   name: build-and-publish-docs
   pull: never
 - commands: [cargo cache || true]
-  depends_on: [publish-docs]
+  depends_on: [build-and-publish-docs]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: clean-cache
   pull: never
@@ -1011,6 +1011,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 0d3de3f56aebeb017a6cbbc31778606e2047f4dfb302fba8fe7111befb21ece6
+hmac: 5c6d37f0e5b22545a17d833c4fff62ae0124e2aeb2a1cc9762abd85daea87893
 
 ...
