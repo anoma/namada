@@ -368,7 +368,7 @@ steps:
     restore: true
 - commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 78; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
+    'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 0; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
       --branch gh-pages --single-branch anoma-docs, cd anoma-docs, 'if [ -z "$DRONE_TAG"
       ]; then mv -v ~/.tmp/book/* .; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/*
       $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]: update docs $DRONE_COMMIT
@@ -632,7 +632,7 @@ steps:
     restore: true
 - commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 78; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
+    'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 0; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
       --branch gh-pages --single-branch anoma-docs, cd anoma-docs, 'if [ -z "$DRONE_TAG"
       ]; then mv -v ~/.tmp/book/* .; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/*
       $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]: update docs $DRONE_COMMIT
@@ -1011,6 +1011,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 7355e0f02a828c1ad261fc47fe71514dd99241ff36d75069e6718768935ce176
+hmac: 0d3de3f56aebeb017a6cbbc31778606e2047f4dfb302fba8fe7111befb21ece6
 
 ...
