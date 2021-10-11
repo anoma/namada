@@ -366,11 +366,17 @@ steps:
     mount: [wasm/wasm_source/target]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
-    mv docs/book/html/* docs/book/, rm -rf docs/book/html, ls docs/book]
+- commands: ['git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
+    make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+    mv docs/book/html/* docs/book/, mkdir ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
+    git checkout gh-pages, 'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master"
+      ]; then exit 78; fiif [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/* .b; else
+      mkdir $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
   depends_on: [restore-cache]
+  environment:
+    GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: docs
+  name: build-and-publish-docs
   pull: never
 - commands: [cargo cache || true]
   depends_on: [docs]
@@ -623,20 +629,18 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
-    mv docs/book/html/* docs/book/, rm -rf docs/book/html, ls docs/book]
+- commands: ['git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
+    make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+    mv docs/book/html/* docs/book/, mkdir ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
+    git checkout gh-pages, 'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master"
+      ]; then exit 78; fiif [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/* .b; else
+      mkdir $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
   depends_on: [restore-cache]
+  environment:
+    GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: docs
+  name: build-and-publish-docs
   pull: never
-- depends_on: [docs]
-  image: plugins/gh-pages
-  name: publish-docs
-  pull: never
-  settings:
-    pages_directory: ./docs/book/
-    password: {from_secret: github_token}
-    username: DroneCI
 - commands: [cargo cache || true]
   depends_on: [publish-docs]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -1005,6 +1009,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: aae09038b1f7fdce39144d75ec3837df60b571200025ca54d7b3d1e430a75dbf
+hmac: 1ab7ce14ad3b6f3689e56233d31ca40f69ad1a0e5c66835ade781f4aea6dd678
 
 ...
