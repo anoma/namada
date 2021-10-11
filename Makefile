@@ -1,5 +1,5 @@
 package = anoma
-version = $(shell git describe --always --dirty --broken)
+version = $(shell git describe --dirty --broken)
 platform = $(shell uname -s)-$(shell uname -m)
 package-name = anoma-$(version)-$(platform)
 
