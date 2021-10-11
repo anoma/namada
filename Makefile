@@ -41,7 +41,7 @@ package: build-release
 	mkdir -p $(package-name)/wasm && \
 	cd target/release && ln $(bin) ../../$(package-name) && \
 	cd ../.. && \
-	ln wasm/*.wasm $(package-name)/wasm && \
+	ln wasm/checksums.json $(package-name)/wasm && \
 	tar -c -z -f $(package-name).tar.gz $(package-name) && \
 	rm -rf $(package-name)
 
