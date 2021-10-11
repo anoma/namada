@@ -370,9 +370,10 @@ steps:
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
     'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 0; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
       --branch gh-pages --single-branch anoma-docs, cd anoma-docs, 'if [ -z "$DRONE_TAG"
-      ]; then mv -v ~/.tmp/book/* .; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/*
-      $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]: update docs $DRONE_COMMIT
-      && git push']
+      ]; then rm -rf rustdoc linkcheck html && mv -v ~/.tmp/book/* .; else mkdir -p
+      $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck $DRONE_TAG/html
+      && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]:
+      update docs $DRONE_COMMIT && git push']
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -634,9 +635,10 @@ steps:
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
     'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 0; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
       --branch gh-pages --single-branch anoma-docs, cd anoma-docs, 'if [ -z "$DRONE_TAG"
-      ]; then mv -v ~/.tmp/book/* .; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/*
-      $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]: update docs $DRONE_COMMIT
-      && git push']
+      ]; then rm -rf rustdoc linkcheck html && mv -v ~/.tmp/book/* .; else mkdir -p
+      $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck $DRONE_TAG/html
+      && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]:
+      update docs $DRONE_COMMIT && git push']
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -1011,6 +1013,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 5c6d37f0e5b22545a17d833c4fff62ae0124e2aeb2a1cc9762abd85daea87893
+hmac: 2beba8648b8ebe6aacb5eb70cd98c3976dc728cc321aa0770c7ebcb5c3762317
 
 ...
