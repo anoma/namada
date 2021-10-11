@@ -366,7 +366,7 @@ steps:
     mount: [wasm/wasm_source/target]
     region: eu-west-1
     restore: true
-- commands: ['git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
+- commands: [git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
     make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
     git checkout gh-pages, 'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master"
@@ -629,7 +629,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: ['git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
+- commands: [git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
     make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
     git checkout gh-pages, 'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master"
@@ -1009,6 +1009,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 717d1b51a5f43961f099e06eaaa08369c5ace3417f966710e658e5bca0ff5fd6
+hmac: 14a3a8ab8fa1beacb47f0cdbca1acdd3c1a717a4b548950c94a049c3904cceca
 
 ...
