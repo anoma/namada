@@ -367,8 +367,8 @@ steps:
     region: eu-west-1
     restore: true
 - commands: [git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
-    make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
-    mv docs/book/html/* docs/book/, mkdir ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
+    make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+    mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
     git checkout gh-pages, 'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master"
       ]; then exit 78; fiif [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/* .b; else
       mkdir $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
@@ -630,8 +630,8 @@ steps:
     region: eu-west-1
     restore: true
 - commands: [git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com:anoma/anoma.git',
-    make build-doc, mkdir docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
-    mv docs/book/html/* docs/book/, mkdir ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
+    make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
+    mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
     git checkout gh-pages, 'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master"
       ]; then exit 78; fiif [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/* .b; else
       mkdir $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
@@ -1009,6 +1009,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 14a3a8ab8fa1beacb47f0cdbca1acdd3c1a717a4b548950c94a049c3904cceca
+hmac: 0a529232aa76e7452f5f8116ed4c9f7328f2d3166a04e0e20cf95750f324ff0b
 
 ...
