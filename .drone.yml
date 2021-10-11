@@ -368,10 +368,11 @@ steps:
     restore: true
 - commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master" ]; then exit 78; fi',
-    cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
-    cd anoma-docs, 'if [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/* .b; else mkdir
-      $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
+    'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 78; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
+      --branch gh-pages --single-branch anoma-docs, cd anoma-docs, 'if [ -z "$DRONE_TAG"
+      ]; then mv -v ~/.tmp/book/* .; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/*
+      $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]: update docs $DRONE_COMMIT
+      && git push']
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -631,10 +632,11 @@ steps:
     restore: true
 - commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    'if [ -z "$DRONE_TAG" ] && [ "$DRONE_BRANCH" != "master" ]; then exit 78; fi',
-    cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
-    cd anoma-docs, 'if [ -z "$DRONE_TAG" ]; then mv -v ~/.tmp/book/* .b; else mkdir
-      $DRONE_TAG && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git push]
+    'if [ -n "$DRONE_PULL_REQUEST" ]; then exit 78; fi', cd ~, git clone $DRONE_GIT_HTTP_URL
+      --branch gh-pages --single-branch anoma-docs, cd anoma-docs, 'if [ -z "$DRONE_TAG"
+      ]; then mv -v ~/.tmp/book/* .; else mkdir $DRONE_TAG && mv -v ~/.tmp/book/*
+      $DRONE_TAG/; fi', 'git add -A && git commit -m "[docs]: update docs $DRONE_COMMIT
+      && git push']
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -1009,6 +1011,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 3413f586235bb5a2b2df5e930e3c222e0dc4d1eb5f74f8a01c0814e3ee79dfb5
+hmac: 7355e0f02a828c1ad261fc47fe71514dd99241ff36d75069e6718768935ce176
 
 ...
