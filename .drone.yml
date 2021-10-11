@@ -632,7 +632,7 @@ steps:
   name: publish-docs
   pull: never
   settings:
-    pages_directory: ./docs/book
+    pages_directory: ./docs/book/
     password: {from_secret: github_token}
     username: DroneCI
 - commands: [cargo cache || true]
@@ -1003,6 +1003,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 79576fd46ce01b892f701072a12c80d36b645872348b11cea8cf848c9dcaa8af
+hmac: 577aca52b099a5f3f75a7957211b81bc080f7ad3003ed77fd3846742b31af87e
 
 ...
