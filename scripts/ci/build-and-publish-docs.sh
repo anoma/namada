@@ -4,9 +4,9 @@ PUSH_URL="https://${GITHUB_TOKEN}@github.com/anoma/anoma.git"
 
 make build-doc
 
-if [ -n "$DRONE_PULL_REQUEST" ]; then 
-    exit 0; 
-fi
+# if [ -n "$DRONE_PULL_REQUEST" ]; then 
+#     exit 0; 
+# fi
 
 mkdir -p docs/book/rustdoc
 mv -v target/doc/* docs/book/rustdoc/
