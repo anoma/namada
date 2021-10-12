@@ -45,6 +45,15 @@ package: build-release
 	tar -c -z -f $(package-name).tar.gz $(package-name) && \
 	rm -rf $(package-name)
 
+build-release-image-docker:
+	docker build -t anoma-build .
+
+build-release-docker: build-release-image-docker
+	docker run --rm -v ${PWD}:/var/build anoma-build make build-release
+
+package-docker: build-release-image-docker
+	docker run --rm -v ${PWD}:/var/build anoma-build make package
+
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
 	$(cargo) check && \
