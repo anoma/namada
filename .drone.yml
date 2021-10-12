@@ -366,10 +366,11 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
-    mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
-    cd anoma-docs, git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com/anoma/anoma.git',
+- commands: [git config user.name "AnomaBot", make build-doc, mkdir -p docs/book/rustdoc,
+    mv -v target/doc/* docs/book/rustdoc/, mv docs/book/html/* docs/book/, mkdir -p
+      ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/, cd ~, git clone $DRONE_GIT_HTTP_URL
+      --branch gh-pages --single-branch anoma-docs, cd anoma-docs, git remote remove
+      origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com/anoma/anoma.git',
     'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc linkcheck html && mv -v ~/.tmp/book/*
       .; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
       $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git add -A, 'git commit
@@ -632,10 +633,11 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
-    mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
-    cd anoma-docs, git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com/anoma/anoma.git',
+- commands: [git config user.name "AnomaBot", make build-doc, mkdir -p docs/book/rustdoc,
+    mv -v target/doc/* docs/book/rustdoc/, mv docs/book/html/* docs/book/, mkdir -p
+      ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/, cd ~, git clone $DRONE_GIT_HTTP_URL
+      --branch gh-pages --single-branch anoma-docs, cd anoma-docs, git remote remove
+      origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com/anoma/anoma.git',
     'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc linkcheck html && mv -v ~/.tmp/book/*
       .; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
       $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git add -A, 'git commit
@@ -1015,6 +1017,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: f81a7f11cbe321203387963cbef353584b14b494c5e1fbf950f9d844de71941b
+hmac: 137fc54c1127cd6921c8eedecc91cd6b8bfe19082042b6947792cd9ff545c540
 
 ...
