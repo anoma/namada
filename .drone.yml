@@ -369,13 +369,14 @@ steps:
 - commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
     cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
-    cd anoma-docs, git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com/anoma/anoma.git',
+    cd anoma-docs, 'PUSH_URL="https://${GITHUB_TOKEN}@github.com/anoma/anoma.git"',
     git config user.name "AnomaBot", git config user.email "gianmarco@heliax.dev",
-    'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc linkcheck html && mv -v ~/.tmp/book/*
-      .; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
-      $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git add -A, 'git commit
-      -m "[docs]: update commit ${DRONE_COMMIT}"', git push --set-upstream origin
-      gh-pages]
+    git remote set-url origin $PUSH_URL, 'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc
+      linkcheck html && mv -v ~/.tmp/book/* .; else mkdir -p $DRONE_TAG && rm -rf
+      $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck $DRONE_TAG/html && mv -v ~/.tmp/book/*
+      $DRONE_TAG/; fi', 'if [ -z "$(git status --porcelain)" ]; then echo "No changes
+      to commit." && exit 0; fi', git add -A, 'git commit -m "[docs]: update commit
+      ${DRONE_COMMIT}"', git push --set-upstream origin gh-pages]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -636,13 +637,14 @@ steps:
 - commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
     mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
     cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
-    cd anoma-docs, git remote remove origin, 'git remote add origin https://${GITHUB_TOKEN}@github.com/anoma/anoma.git',
+    cd anoma-docs, 'PUSH_URL="https://${GITHUB_TOKEN}@github.com/anoma/anoma.git"',
     git config user.name "AnomaBot", git config user.email "gianmarco@heliax.dev",
-    'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc linkcheck html && mv -v ~/.tmp/book/*
-      .; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
-      $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git add -A, 'git commit
-      -m "[docs]: update commit ${DRONE_COMMIT}"', git push --set-upstream origin
-      gh-pages]
+    git remote set-url origin $PUSH_URL, 'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc
+      linkcheck html && mv -v ~/.tmp/book/* .; else mkdir -p $DRONE_TAG && rm -rf
+      $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck $DRONE_TAG/html && mv -v ~/.tmp/book/*
+      $DRONE_TAG/; fi', 'if [ -z "$(git status --porcelain)" ]; then echo "No changes
+      to commit." && exit 0; fi', git add -A, 'git commit -m "[docs]: update commit
+      ${DRONE_COMMIT}"', git push --set-upstream origin gh-pages]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -1017,6 +1019,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 478b0ad23addafe8cc6b80c3d5b7cba4e2871d0c34325fa125745c0eba53bce5
+hmac: 037e8e89068802e80b743415b126554f98d7de84130f080128e1dcb5b96eba43
 
 ...
