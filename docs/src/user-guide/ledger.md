@@ -45,7 +45,7 @@ You can see the tokens addresses known by the client when you query all tokens b
 anoma client balance
 ```
 
-XAN is Anoma's native token. To obtain some tokens in a testnet, there is a special "faucet" account that allows anyone to withdraw up to 1000 of any token that is posses in a single transaction. You can find the address of this account in your wallet. To get some tokens from the faucet account:
+XAN is Anoma's native token. To obtain some tokens in a testnet, there is a special "faucet" account that allows anyone to withdraw up to 1000 of any token for a single transaction. You can find the address of this account in your wallet. To get some tokens from the faucet account:
 
 ```shell
 anoma client transfer \
