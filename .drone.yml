@@ -373,7 +373,8 @@ steps:
     'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc linkcheck html && mv -v ~/.tmp/book/*
       .; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
       $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git add -A, 'git commit
-      -m "[docs]: update commit ${DRONE_COMMIT}"', git push]
+      -m "[docs]: update commit ${DRONE_COMMIT}"', git push --set-upstream origin
+      gh-pages]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -638,7 +639,8 @@ steps:
     'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc linkcheck html && mv -v ~/.tmp/book/*
       .; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
       $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', git add -A, 'git commit
-      -m "[docs]: update commit ${DRONE_COMMIT}"', git push]
+      -m "[docs]: update commit ${DRONE_COMMIT}"', git push --set-upstream origin
+      gh-pages]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -1013,6 +1015,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 76cbd8a35a44109113d64c4253762a9a7f4d90b8b76ccbe90e5104aaf48160e4
+hmac: f81a7f11cbe321203387963cbef353584b14b494c5e1fbf950f9d844de71941b
 
 ...
