@@ -366,18 +366,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
-    mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
-    cd anoma-docs, 'PUSH_URL="https://${GITHUB_TOKEN}@github.com/anoma/anoma.git"',
-    git config user.name "AnomaBot", git config user.email "gianmarco@heliax.dev",
-    git remote set-url origin $PUSH_URL, 'if [ -z "$DRONE_TAG" ]; then mkdir -p master
-      && rm -rf master/rustdoc master/linkcheck master/html && mv -v ~/.tmp/book/*
-      master/; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
-      $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', 'if [ -z "$(git status
-      --porcelain)" ]; then echo "No changes to commit." && exit 0; fi', git add -A,
-    'git commit -m "[docs]: update commit ${DRONE_COMMIT}"', git push --set-upstream
-      origin gh-pages]
+- commands: [sh scripts/ci/build-and-publish-docs.sh]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -635,18 +624,7 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [make build-doc, mkdir -p docs/book/rustdoc, mv -v target/doc/* docs/book/rustdoc/,
-    mv docs/book/html/* docs/book/, mkdir -p ~/.tmp/book, mv -v docs/book/* ~/.tmp/book/,
-    cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
-    cd anoma-docs, 'PUSH_URL="https://${GITHUB_TOKEN}@github.com/anoma/anoma.git"',
-    git config user.name "AnomaBot", git config user.email "gianmarco@heliax.dev",
-    git remote set-url origin $PUSH_URL, 'if [ -z "$DRONE_TAG" ]; then mkdir -p master
-      && rm -rf master/rustdoc master/linkcheck master/html && mv -v ~/.tmp/book/*
-      master/; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
-      $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', 'if [ -z "$(git status
-      --porcelain)" ]; then echo "No changes to commit." && exit 0; fi', git add -A,
-    'git commit -m "[docs]: update commit ${DRONE_COMMIT}"', git push --set-upstream
-      origin gh-pages]
+- commands: [sh scripts/ci/build-and-publish-docs.sh]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -1021,6 +999,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: d6d0643d9e62620a193c55804f8bd71b704198f7dd3afc30056a32caad0fa9a4
+hmac: 33ea9efba554440c320b5e869053259584e1d395c934bf73d26c7f6fbe8435f0
 
 ...
