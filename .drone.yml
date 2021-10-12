@@ -5,8 +5,8 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
-      --quiet]
+- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
+      .]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -126,8 +126,8 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
-      --quiet]
+- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
+      .]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -220,8 +220,8 @@ kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
-      --quiet]
+- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
+      .]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -371,12 +371,13 @@ steps:
     cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
     cd anoma-docs, 'PUSH_URL="https://${GITHUB_TOKEN}@github.com/anoma/anoma.git"',
     git config user.name "AnomaBot", git config user.email "gianmarco@heliax.dev",
-    git remote set-url origin $PUSH_URL, 'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc
-      linkcheck html && mv -v ~/.tmp/book/* .; else mkdir -p $DRONE_TAG && rm -rf
-      $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck $DRONE_TAG/html && mv -v ~/.tmp/book/*
-      $DRONE_TAG/; fi', 'if [ -z "$(git status --porcelain)" ]; then echo "No changes
-      to commit." && exit 0; fi', git add -A, 'git commit -m "[docs]: update commit
-      ${DRONE_COMMIT}"', git push --set-upstream origin gh-pages]
+    git remote set-url origin $PUSH_URL, 'if [ -z "$DRONE_TAG" ]; then mkdir -p master
+      && rm -rf master/rustdoc master/linkcheck master/html && mv -v ~/.tmp/book/*
+      master/; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
+      $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', 'if [ -z "$(git status
+      --porcelain)" ]; then echo "No changes to commit." && exit 0; fi', git add -A,
+    'git commit -m "[docs]: update commit ${DRONE_COMMIT}"', git push --set-upstream
+      origin gh-pages]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -420,8 +421,8 @@ kind: pipeline
 name: anoma-ci-cron
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
-      --quiet]
+- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
+      .]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -514,8 +515,8 @@ kind: pipeline
 name: anoma-ci-miri-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
-      --quiet]
+- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
+      .]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -598,8 +599,8 @@ kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
-      --quiet]
+- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
+      .]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -639,12 +640,13 @@ steps:
     cd ~, git clone $DRONE_GIT_HTTP_URL --branch gh-pages --single-branch anoma-docs,
     cd anoma-docs, 'PUSH_URL="https://${GITHUB_TOKEN}@github.com/anoma/anoma.git"',
     git config user.name "AnomaBot", git config user.email "gianmarco@heliax.dev",
-    git remote set-url origin $PUSH_URL, 'if [ -z "$DRONE_TAG" ]; then rm -rf rustdoc
-      linkcheck html && mv -v ~/.tmp/book/* .; else mkdir -p $DRONE_TAG && rm -rf
-      $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck $DRONE_TAG/html && mv -v ~/.tmp/book/*
-      $DRONE_TAG/; fi', 'if [ -z "$(git status --porcelain)" ]; then echo "No changes
-      to commit." && exit 0; fi', git add -A, 'git commit -m "[docs]: update commit
-      ${DRONE_COMMIT}"', git push --set-upstream origin gh-pages]
+    git remote set-url origin $PUSH_URL, 'if [ -z "$DRONE_TAG" ]; then mkdir -p master
+      && rm -rf master/rustdoc master/linkcheck master/html && mv -v ~/.tmp/book/*
+      master/; else mkdir -p $DRONE_TAG && rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck
+      $DRONE_TAG/html && mv -v ~/.tmp/book/* $DRONE_TAG/; fi', 'if [ -z "$(git status
+      --porcelain)" ]; then echo "No changes to commit." && exit 0; fi', git add -A,
+    'git commit -m "[docs]: update commit ${DRONE_COMMIT}"', git push --set-upstream
+      origin gh-pages]
   depends_on: [restore-cache]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
@@ -689,8 +691,8 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
-      --quiet]
+- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
+      .]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -811,8 +813,8 @@ kind: pipeline
 name: anoma-ci-wasm-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL ., git fetch --all, git checkout $DRONE_COMMIT
-      --quiet]
+- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
+      .]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -1019,6 +1021,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 037e8e89068802e80b743415b126554f98d7de84130f080128e1dcb5b96eba43
+hmac: d6d0643d9e62620a193c55804f8bd71b704198f7dd3afc30056a32caad0fa9a4
 
 ...
