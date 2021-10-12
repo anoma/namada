@@ -103,7 +103,7 @@ Then, it submits a transaction to the ledger that generates two new accounts wit
 - A validator account with the main validator address, which can be used to receive new delegations
 - A staking reward account, which will receive rewards for participation in the PoS system. In the future, the validity predicate of this account will be able to control how the rewards are to be distributed to the validator's delegators. *Staking rewards are not yet implemented*.
 
-These keys and addresses of the addresses will be saved in your wallet. Your local ledger node will also be setup to run this validator, you just have to shut it down with e.g. `Ctrl + C`, then start it again with the same command:
+These keys and aliases of the addresses will be saved in your wallet. Your local ledger node will also be setup to run this validator, you just have to shut it down with e.g. `Ctrl + C`, then start it again with the same command:
 
 ```shell
 anoma ledger
