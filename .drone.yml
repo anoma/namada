@@ -269,8 +269,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh, echo
-      $CARGO_HOME, ls $CARGO_HOME]
+- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
   depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -409,8 +408,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh, echo
-      $CARGO_HOME, ls $CARGO_HOME]
+- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
   depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -681,6 +679,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 75e9bd5b3149808c26faa69ae97e424b2e873b126b14f3d5a2afc58e310f1855
+hmac: e4f255b663c8bd1233cf4491b78acd3abbea3373bb959f6c764346ed96d0be61
 
 ...
