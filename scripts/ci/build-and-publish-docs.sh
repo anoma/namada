@@ -21,12 +21,12 @@ git config user.email "gianmarco@heliax.dev"
 
 if [ -z "$DRONE_TAG" ]; 
 then 
-    mkdir -p master 
-    rm -rf master/rustdoc master/linkcheck master/html 
+    rm -rf master
+    mkdir -p master
     mv -v ~/.tmp/book/* master/
 else 
-    mkdir -p $DRONE_TAG 
-    rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck $DRONE_TAG/html 
+    rm -rf $DRONE_TAG
+    mkdir -p $DRONE_TAG
     mv -v ~/.tmp/book/* $DRONE_TAG/
 fi
 
