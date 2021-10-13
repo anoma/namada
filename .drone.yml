@@ -407,7 +407,7 @@ steps:
 trigger:
   event: [pull_request]
 type: docker
-workspace: {path: /usr/local/rust/project}
+workspace: {path: /usr/local/rust/}
 ---
 clone: {disable: true}
 environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
@@ -1009,6 +1009,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: acf854d8f9345e11b7c75071339a7368a797000467c2637d0b81647f6130ef44
+hmac: b73f520cb01902ea0ce2a4dbd91abd8434ef2e1bb11840c1ed7822ffd33c9fba
 
 ...
