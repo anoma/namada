@@ -366,7 +366,8 @@ steps:
     mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
+- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.shecho $CARGO_HOME,
+    ls $CARGO_HOME]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -628,7 +629,8 @@ steps:
     mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
-- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
+- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.shecho $CARGO_HOME,
+    ls $CARGO_HOME]
   depends_on: [restore-cache]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -1007,6 +1009,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: d47db4f5d58fff86024b69d80938fbf8c5de9ffd2ab2cf2a32c5f3587731d063
+hmac: 8de9591fa0ab3f0d27a1a6e2bb91fdacb386438c8822aea3a8a3a717ccc11085
 
 ...
