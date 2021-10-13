@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
-use anoma::types::transaction::hash_tx;
+use anoma::types::transaction::{hash_tx, TxType};
+use borsh::BorshSerialize;
 use tendermint_proto::abci::EventAttribute;
 
 /// Custom events that can be queried from Tendermint
@@ -35,12 +36,26 @@ impl Display for EventType {
 impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
-    pub fn new_tx_event(ty: EventType, tx: &[u8], height: u64) -> Self {
-        let mut event = Event {
-            event_type: ty,
-            attributes: HashMap::new(),
+    pub fn new_tx_event(tx: &TxType, height: u64) -> Self {
+        let mut event = match tx {
+            TxType::Wrapper(wrapper) => {
+                let mut event = Event {
+                    event_type: EventType::Accepted,
+                    attributes: HashMap::new(),
+                };
+                event["hash"] = hash_tx(&wrapper.try_to_vec().expect("Serializing wrapper should not fail")).to_string();
+                event
+            }
+            TxType::Decrypted(decrypted) => {
+                let mut event = Event {
+                    event_type: EventType::Applied,
+                    attributes: HashMap::new(),
+                };
+                event["hash"] = decrypted.hash_commitment().to_string();
+                event
+            }
+            _ => unreachable!()
         };
-        event["hash"] = hash_tx(tx).to_string();
         event["height"] = height.to_string();
         event
     }
@@ -78,5 +93,43 @@ impl From<Event> for tendermint_proto::abci::Event {
                 })
                 .collect(),
         }
+    }
+}
+
+/// A thin wrapper around a HashMap for parsing event JSONs
+/// returned in tendermint subscription responses.
+#[derive(Debug)]
+pub struct Attributes(HashMap<String, String>);
+
+impl Attributes {
+
+    /// Get a reference to the value associated with input key
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.0.get(key)
+    }
+
+    /// Get ownership of the value associated to the input key
+    pub fn take(&mut self, key: &str) -> Option<String> {
+        self.0.remove(key)
+    }
+}
+
+
+impl From<&serde_json::Value> for Attributes {
+    fn from(json: &serde_json::Value) -> Self {
+        let mut attributes = HashMap::new();
+        let attrs: Vec<serde_json::Value> = serde_json::from_value(
+            json
+                .get("attributes")
+                .expect("Tendermint event missing attributes")
+                .clone()
+        ).unwrap();
+        for attr in attrs  {
+            attributes.insert(
+                serde_json::from_value(attr.get("key").expect("Attributes JSON missing key").clone()).unwrap(),
+                serde_json::from_value(attr.get("value").expect("Attributes JSON missing value").clone()).unwrap(),
+            );
+        }
+        Attributes(attributes)
     }
 }

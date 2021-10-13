@@ -5,17 +5,20 @@ pub mod shim {
 
     use tendermint_proto::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
-        RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
-        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
-        RequestQuery, ResponseApplySnapshotChunk, ResponseCheckTx,
-        ResponseCommit, ResponseEcho, ResponseFlush, ResponseInfo,
+        RequestExtendVote,RequestFlush, RequestInfo, RequestInitChain,
+        RequestListSnapshots,RequestLoadSnapshotChunk, RequestOfferSnapshot,
+        RequestPrepareProposal, RequestQuery, RequestVerifyVoteExtension,
+        ResponseApplySnapshotChunk, ResponseCheckTx,ResponseCommit,
+        ResponseEcho, ResponseExtendVote, ResponseFlush, ResponseInfo,
         ResponseInitChain, ResponseListSnapshots, ResponseLoadSnapshotChunk,
         ResponseOfferSnapshot, ResponsePrepareProposal, ResponseQuery,
+        ResponseVerifyVoteExtension,
     };
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
     use crate::node::ledger::shell;
+
     pub type TxBytes = Vec<u8>;
 
     #[derive(Error, Debug)]
@@ -53,10 +56,8 @@ pub mod shim {
         ProcessProposal(request::ProcessProposal),
         #[allow(dead_code)]
         RevertProposal(request::RevertProposal),
-        #[allow(dead_code)]
-        ExtendVote(request::ExtendVote),
-        #[allow(dead_code)]
-        VerifyVoteExtension(request::VerifyVoteExtension),
+        ExtendVote(RequestExtendVote),
+        VerifyVoteExtension(RequestVerifyVoteExtension),
         FinalizeBlock(request::FinalizeBlock),
         Commit(RequestCommit),
         Flush(RequestFlush),
@@ -80,6 +81,10 @@ pub mod shim {
                 Req::Commit(inner) => Ok(Request::Commit(inner)),
                 Req::Flush(inner) => Ok(Request::Flush(inner)),
                 Req::Echo(inner) => Ok(Request::Echo(inner)),
+                Req::ExtendVote(inner) => Ok(Request::ExtendVote(inner)),
+                Req::VerifyVoteExtension(inner) => {
+                    Ok(Request::VerifyVoteExtension(inner))
+                },
                 Req::CheckTx(inner) => Ok(Request::CheckTx(inner)),
                 Req::ListSnapshots(inner) => Ok(Request::ListSnapshots(inner)),
                 Req::OfferSnapshot(inner) => Ok(Request::OfferSnapshot(inner)),
@@ -109,8 +114,8 @@ pub mod shim {
         VerifyHeader(response::VerifyHeader),
         ProcessProposal(response::ProcessProposal),
         RevertProposal(response::RevertProposal),
-        ExtendVote(response::ExtendVote),
-        VerifyVoteExtension(response::VerifyVoteExtension),
+        ExtendVote(ResponseExtendVote),
+        VerifyVoteExtension(ResponseVerifyVoteExtension),
         FinalizeBlock(response::FinalizeBlock),
         Commit(ResponseCommit),
         Flush(ResponseFlush),
@@ -150,6 +155,12 @@ pub mod shim {
                 Response::PrepareProposal(inner) => {
                     Ok(Resp::PrepareProposal(inner))
                 }
+                Response::ExtendVote(inner) => {
+                    Ok(Resp::ExtendVote(inner))
+                }
+                Response::VerifyVoteExtension(inner) => {
+                    Ok(Resp::VerifyVoteExtension(inner))
+                }
                 _ => Err(Error::ConvertResp(resp)),
             }
         }
@@ -176,8 +187,6 @@ pub mod shim {
         }
 
         pub struct RevertProposal;
-        pub struct ExtendVote;
-        pub struct VerifyVoteExtension;
 
         /// A Tx and the result of calling Process Proposal on it
         pub struct ProcessedTx {
@@ -272,12 +281,6 @@ pub mod shim {
 
         #[derive(Debug, Default)]
         pub struct RevertProposal;
-
-        #[derive(Debug, Default)]
-        pub struct ExtendVote;
-
-        #[derive(Debug, Default)]
-        pub struct VerifyVoteExtension;
 
         #[derive(Debug, Default)]
         pub struct FinalizeBlock {

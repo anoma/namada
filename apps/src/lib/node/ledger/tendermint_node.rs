@@ -95,7 +95,9 @@ pub fn run(
     update_tendermint_config(&home_dir)?;
     let tendermint_node = Command::new(&tendermint_path)
         .args(&[
-            "node",
+            "start",
+            "--mode",
+            mode.to_str(),
             "--proxy-app",
             socket_address,
             "--home",
@@ -150,8 +152,9 @@ fn monitor_process(
 }
 
 pub fn reset(config: config::Ledger) -> Result<()> {
+    let tendermint_path = from_env_or_default()?;
     // reset all the Tendermint state, if any
-    Command::new("tendermint")
+    Command::new(tendermint_path)
         .args(&[
             "unsafe-reset-all",
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
@@ -177,7 +180,7 @@ fn update_tendermint_config(home_dir: impl AsRef<Path>) -> Result<()> {
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
-    config.consensus.create_empty_blocks = !cfg!(feature = "dev");
+    config.consensus.create_empty_blocks = true; // !cfg!(feature = "dev");
 
     // We set this to true as we don't want any invalid tx be re-applied. This
     // also implies that it's not possible for an invalid tx to become valid

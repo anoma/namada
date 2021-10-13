@@ -10,7 +10,7 @@ pub mod decrypted_tx {
     use borsh::{BorshDeserialize, BorshSerialize};
 
     use crate::proto::Tx;
-    use crate::types::transaction::WrapperTx;
+    use crate::types::transaction::{WrapperTx, Hash, hash_tx};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     #[allow(clippy::large_enum_variant)]
@@ -34,17 +34,26 @@ pub mod decrypted_tx {
                 }
             }
         }
+
+        /// Return the hash used as a commitment to the tx's contents in the
+        /// wrapper tx that includes this tx as an encrypted payload.
+        pub fn hash_commitment(&self) -> Hash {
+            match self {
+                DecryptedTx::Decrypted(tx) => hash_tx(&tx.to_bytes()),
+                DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone()
+            }
+        }
     }
 
     /// Verify that if the encrypted payload was marked
     /// "undecryptable", we should not be able to decrypt
     /// it
-    pub fn verify_not_decryptable(
+    pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
     ) -> bool {
         match decrypted {
-            DecryptedTx::Decrypted(_) => false,
+            DecryptedTx::Decrypted(_) => true,
             DecryptedTx::Undecryptable(tx) => tx.decrypt(privkey).is_err(),
         }
     }

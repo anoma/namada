@@ -25,14 +25,14 @@ use anoma::types::storage::{BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
 use anoma::types::token::Amount;
 use anoma::types::transaction::{
-    hash_tx, process_tx, verify_not_decryptable, AffineCurve, DecryptedTx,
+    hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
 use anoma::types::{address, key, token};
 use borsh::BorshSerialize;
 use itertools::Itertools;
 use tendermint_proto::abci::{
-    self, Evidence, RequestPrepareProposal, ResponsePrepareProposal,
+    self, Evidence, RequestPrepareProposal,
     ValidatorUpdate,
 };
 use tendermint_proto::types::ConsensusParams;
@@ -41,7 +41,7 @@ use tower_abci::{request, response};
 
 use super::rpc;
 use crate::config::genesis;
-use crate::node::ledger::events::{Event, EventType};
+use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -390,7 +390,7 @@ impl Shell {
     pub fn prepare_proposal(
         &mut self,
         req: RequestPrepareProposal,
-    ) -> ResponsePrepareProposal {
+    ) -> response::PrepareProposal {
         // We can safely reset meter, because if the block is rejected, we'll
         // reset again on the next proposal, until the proposal is accepted
         self.gas_meter.reset();
@@ -405,7 +405,7 @@ impl Shell {
             .take(number_of_new_txs)
             .filter(|tx| {
                 matches!(
-                    TxType::try_from(tx.as_slice()).unwrap(),
+                    process_tx(Tx::try_from(tx.as_slice()).unwrap()).unwrap(),
                     TxType::Wrapper(_)
                 )
             })
@@ -427,8 +427,7 @@ impl Shell {
             .collect();
 
         txs.append(&mut decrypted_txs);
-
-        ResponsePrepareProposal { block_data: txs }
+        response::PrepareProposal { block_data: txs }
     }
 
     /// Apply PoS slashes from the evidence
@@ -603,7 +602,7 @@ impl Shell {
                                        determined in the previous block"
                                     .into(),
                             }
-                        } else if verify_not_decryptable(&tx, privkey) {
+                        } else if verify_decrypted_correctly(&tx, privkey) {
                             TxResult {
                                 code: 0,
                                 info: "Process Proposal accepted this \
@@ -678,8 +677,16 @@ impl Shell {
     /// INVARIANT: This method must be stateless.
     pub fn extend_vote(
         &self,
-        _req: shim::request::ExtendVote,
-    ) -> shim::response::ExtendVote {
+        _req: request::ExtendVote,
+    ) -> response::ExtendVote {
+        Default::default()
+    }
+
+    /// INVARIANT: This method must be stateless.
+    pub fn verify_vote_extension(
+        &self,
+        _req: request::VerifyVoteExtension,
+    ) -> response::VerifyVoteExtension {
         Default::default()
     }
 
@@ -734,26 +741,26 @@ impl Shell {
 
         let mut response = shim::response::FinalizeBlock::default();
         for tx in &req.txs {
+            // This has already been verified as safe by [`process_proposal`]
+            let tx_length = tx.tx.len();
+            let processed_tx =
+                process_tx(Tx::try_from(&tx.tx as &[u8]).unwrap()).unwrap();
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
             // If we are rejecting all decrypted txs because they were submitted
             // in an incorrect order, we do that later.
             if tx.result.code != 0 && !req.reject_all_decrypted {
                 let mut tx_result =
-                    Event::new_tx_event(EventType::Accepted, &tx.tx, height.0);
+                    Event::new_tx_event(&processed_tx, height.0);
                 tx_result["code"] = tx.result.code.to_string();
                 tx_result["info"] = format!("Tx rejected: {}", &tx.result.info);
                 response.events.push(tx_result.into());
                 continue;
             }
-            // This has already been verified as safe by [`process_proposal`]
-            let tx_length = tx.tx.len();
-            let processed_tx =
-                process_tx(Tx::try_from(&tx.tx as &[u8]).unwrap()).unwrap();
             let mut tx_result = match &processed_tx {
                 TxType::Wrapper(wrapper) => {
                     self.storage.wrapper_txs.push(wrapper.clone());
-                    Event::new_tx_event(EventType::Accepted, &tx.tx, height.0)
+                    Event::new_tx_event(&processed_tx, height.0)
                 }
                 TxType::Decrypted(_) => {
                     // If [`process_proposal`] detected that decrypted txs were
@@ -762,8 +769,7 @@ impl Shell {
                     // be accepted.
                     if req.reject_all_decrypted {
                         let mut tx_result = Event::new_tx_event(
-                            EventType::Accepted,
-                            &tx.tx,
+                            &processed_tx,
                             height.0,
                         );
                         tx_result["code"] = "2".into();
@@ -774,7 +780,7 @@ impl Shell {
                         response.events.push(tx_result.into());
                         continue;
                     }
-                    Event::new_tx_event(EventType::Applied, &tx.tx, height.0)
+                    Event::new_tx_event(&processed_tx, height.0)
                 }
                 TxType::Raw(_) => unreachable!(),
             };
@@ -891,6 +897,7 @@ impl Shell {
             .gas_meter
             .finalize_transaction()
             .map_err(|_| Error::GasOverflow)?;
+        self.revert_wrapper_txs();
         Ok(response)
     }
 

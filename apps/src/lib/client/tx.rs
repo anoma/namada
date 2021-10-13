@@ -19,7 +19,8 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
-use crate::node::ledger::events::EventType as TmEventType;
+use crate::node::ledger::events::{Attributes, EventType as TmEventType};
+
 
 const TX_INIT_ACCOUNT_WASM: &str = "wasm/tx_init_account.wasm";
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
@@ -72,7 +73,7 @@ pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
     let data = update_vp.try_to_vec().expect(
         "Encoding transfer data to update a validity predicate shouldn't fail",
     );
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx, &keypair).await
 }
@@ -132,7 +133,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx, &keypair).await
 }
@@ -225,14 +226,9 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx, keypair: &Keypair) {
         ),
         args.gas_limit,
         tx,
-    )
-    .sign(keypair)
-    .expect("Signing of the wrapper transaction should not fail");
-
-    let tx_bytes = tx.to_bytes();
+    );
 
     // NOTE: use this to print the request JSON body:
-
     // let request =
     // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
     //     tx_bytes.clone().into(),
@@ -242,9 +238,9 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx, keypair: &Keypair) {
     // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
-        rpc::dry_run_tx(&args.ledger_address, tx_bytes).await
+        rpc::dry_run_tx(&args.ledger_address, tx.sign(&keypair).unwrap().to_bytes()).await
     } else {
-        match broadcast_tx(args.ledger_address.clone(), tx_bytes).await {
+        match broadcast_tx(args.ledger_address.clone(), tx, keypair).await {
             Ok(result) => {
                 save_initialized_accounts(
                     ctx,
@@ -330,32 +326,54 @@ async fn save_initialized_accounts(
     }
 }
 
+/// Broadcast a transaction to be included in the blockchain.
+///
+/// Checks that
+/// 1. The tx has been successfully included into the mempool of a validator
+/// 2. The tx with encrypted payload has been included on the blockchain
+/// 3. The decrypted payload of the tx has been included on the blockchain.
+///
+/// In the case of errors in any of those stages, an error message is returned
 pub async fn broadcast_tx(
     address: tendermint::net::Address,
-    tx_bytes: Vec<u8>,
+    tx: WrapperTx,
+    keypair: &Keypair,
 ) -> Result<TxResponse, Error> {
-    let mut client =
+    // We use this to determine when the wrapper tx makes it on-chain
+    let wrapper_tx_hash = hash_tx(&tx.try_to_vec().unwrap()).to_string();
+    // We use this to determine when the decrypted inner tx makes it on-chain
+    let decrypted_tx_hash = tx.tx_hash.to_string();
+    // we sign all txs
+    let tx = tx.sign(keypair).expect("Signing of the wrapper transaction should not fail");
+    let tx_bytes = tx.to_bytes();
+
+    let mut wrapper_tx_subscription =
+        TendermintWebsocketClient::open(WebSocketAddress::try_from(address.clone())?)?;
+    let mut decrypted_tx_subscription =
         TendermintWebsocketClient::open(WebSocketAddress::try_from(address)?)?;
     // It is better to subscribe to the transaction before it is broadcast
     //
     // Note that the `applied.hash` key comes from a custom event
     // created by the shell
-    let tx_hash = hash_tx(&tx_bytes);
     let query = Query::from(EventType::NewBlock)
-        .and_eq("accepted.hash", tx_hash.to_string());
-    client.subscribe(query)?;
+        .and_eq("accepted.hash", wrapper_tx_hash.as_str());
+    wrapper_tx_subscription.subscribe(query)?;
+    let query = Query::from(EventType::NewBlock)
+        .and_eq("applied.hash", decrypted_tx_hash.as_str());
+    decrypted_tx_subscription.subscribe(query)?;
 
-    let response = client
+    let response = wrapper_tx_subscription
         .broadcast_tx_sync(tx_bytes.into())
         .await
         .map_err(|err| Error::Response(format!("{:?}", err)))?;
 
     let parsed = if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
-        let parsed = TxResponse::from((
-            client.receive_response()?,
+        let parsed = parse(
+            wrapper_tx_subscription.receive_response()?,
             TmEventType::Accepted,
-        ));
+            &wrapper_tx_hash.to_string(),
+        );
         println!(
             "Transaction accepted with result: {}",
             serde_json::to_string_pretty(&parsed).unwrap()
@@ -364,14 +382,11 @@ pub async fn broadcast_tx(
         // The transaction is now on chain. We wait for it to be decrypted and
         // applied
         if parsed.code == 0.to_string() {
-            client.unsubscribe()?;
-            let query = Query::from(EventType::NewBlock)
-                .and_eq("applied.hash", tx_hash.to_string());
-            client.subscribe(query)?;
-            let parsed = TxResponse::from((
-                client.receive_response()?,
+            let parsed = parse(
+                decrypted_tx_subscription.receive_response()?,
                 TmEventType::Applied,
-            ));
+                &decrypted_tx_hash,
+            );
             println!(
                 "Transaction applied with result: {}",
                 serde_json::to_string_pretty(&parsed).unwrap()
@@ -383,8 +398,10 @@ pub async fn broadcast_tx(
     } else {
         Err(Error::Response(response.log.to_string()))
     };
-    client.unsubscribe()?;
-    client.close();
+    wrapper_tx_subscription.unsubscribe()?;
+    wrapper_tx_subscription.close();
+    decrypted_tx_subscription.unsubscribe()?;
+    decrypted_tx_subscription.close();
     parsed
 }
 
@@ -398,61 +415,49 @@ pub struct TxResponse {
     initialized_accounts: Vec<Address>,
 }
 
-impl From<(serde_json::Value, TmEventType)> for TxResponse {
-    fn from((json, event_type): (serde_json::Value, TmEventType)) -> Self {
-        let mut selector = jsonpath::selector(&json);
-        let info = selector(&format!(
-            "$.events.['{}.info'][0]",
-            event_type.to_string()
-        ))
-        .unwrap();
-        let height = selector(&format!(
-            "$.events.['{}.height'][0]",
-            event_type.to_string()
-        ))
-        .unwrap();
-        let hash = selector(&format!(
-            "$.events.['{}.hash'][0]",
-            event_type.to_string()
-        ))
-        .unwrap();
-        let code = selector(&format!(
-            "$.events.['{}.code'][0]",
-            event_type.to_string()
-        ))
-        .unwrap();
-        let gas_used: String =
-            match selector("$.events.['applied.gas_used'][0]") {
-                Ok(gas) => serde_json::from_value(gas[0].clone()).unwrap(),
-                _ => "0".into(),
-            };
-        let initialized_accounts =
-            selector("$.events.['applied.initialized_accounts'][0]");
-        let initialized_accounts = match initialized_accounts {
-            Ok(values) if !values.is_empty() => {
-                // In a response, the initialized accounts are encoded as e.g.:
-                // ```
-                // "applied.initialized_accounts": Array([
-                //   String(
-                //     "[\"a1qq5qqqqq8qerqv3sxyuyz3zzxgcyxvecgerry333xce5z3fkg4pnj3zxgfqnzd69gsu5gwzr9wpjpe\"]",
-                //   ),
-                // ]),
-                // ...
-                // So we need to decode the inner string first ...
-                let raw: String =
-                    serde_json::from_value(values[0].clone()).unwrap();
-                // ... and then decode the vec from the array inside the string
-                serde_json::from_str(&raw).unwrap()
+/// Parse the JSON payload recieved from a subscription
+///
+/// Searches for custom events emitted from the ledger and converts
+/// them back to thin wrapper around a hashmap for further parsing.
+fn parse(json: serde_json::Value, event_type: TmEventType, tx_hash: &String) -> TxResponse {
+    let mut selector = jsonpath::selector(&json);
+    let mut event = selector(&format!(
+        "$.events.[?(@.type=='{}')]",
+        event_type.to_string()
+    ))
+    .unwrap()
+    .iter()
+    .filter_map(|event| {
+        let attrs = Attributes::from(*event);
+        match attrs.get("hash") {
+            Some(hash) if hash == tx_hash => {
+                Some(attrs)
             }
-            _ => vec![],
-        };
-        TxResponse {
-            info: serde_json::from_value(info[0].clone()).unwrap(),
-            height: serde_json::from_value(height[0].clone()).unwrap(),
-            hash: serde_json::from_value(hash[0].clone()).unwrap(),
-            code: serde_json::from_value(code[0].clone()).unwrap(),
-            gas_used,
-            initialized_accounts,
+            _ => None
         }
+    })
+    .collect::<Vec::<Attributes>>()
+    .remove(0);
+
+    let info = event.take("info").unwrap();
+    let height = event.take("height").unwrap();
+    let hash = event.take("hash").unwrap();
+    let code = event.take("code").unwrap();
+    let gas_used= event.take("gas_used").unwrap();
+    let initialized_accounts = event.take("initialized_accounts");
+    let initialized_accounts = match initialized_accounts {
+        Some(values) => {
+            serde_json::from_str(&values).unwrap()
+        }
+        _ => vec![],
+    };
+    TxResponse {
+        info,
+        height,
+        hash,
+        code,
+        gas_used,
+        initialized_accounts,
     }
 }
+
