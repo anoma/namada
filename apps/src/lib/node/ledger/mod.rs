@@ -102,9 +102,9 @@ impl Shell {
             Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
-            Request::VerifyVoteExtension(_req) => {
-                Ok(Response::VerifyVoteExtension(self.verify_vote_extension(_req)))
-            }
+            Request::VerifyVoteExtension(_req) => Ok(
+                Response::VerifyVoteExtension(self.verify_vote_extension(_req)),
+            ),
             Request::FinalizeBlock(finalize) => {
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }

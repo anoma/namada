@@ -5,10 +5,10 @@ pub mod shim {
 
     use tendermint_proto::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
-        RequestExtendVote,RequestFlush, RequestInfo, RequestInitChain,
-        RequestListSnapshots,RequestLoadSnapshotChunk, RequestOfferSnapshot,
+        RequestExtendVote, RequestFlush, RequestInfo, RequestInitChain,
+        RequestListSnapshots, RequestLoadSnapshotChunk, RequestOfferSnapshot,
         RequestPrepareProposal, RequestQuery, RequestVerifyVoteExtension,
-        ResponseApplySnapshotChunk, ResponseCheckTx,ResponseCommit,
+        ResponseApplySnapshotChunk, ResponseCheckTx, ResponseCommit,
         ResponseEcho, ResponseExtendVote, ResponseFlush, ResponseInfo,
         ResponseInitChain, ResponseListSnapshots, ResponseLoadSnapshotChunk,
         ResponseOfferSnapshot, ResponsePrepareProposal, ResponseQuery,
@@ -84,7 +84,7 @@ pub mod shim {
                 Req::ExtendVote(inner) => Ok(Request::ExtendVote(inner)),
                 Req::VerifyVoteExtension(inner) => {
                     Ok(Request::VerifyVoteExtension(inner))
-                },
+                }
                 Req::CheckTx(inner) => Ok(Request::CheckTx(inner)),
                 Req::ListSnapshots(inner) => Ok(Request::ListSnapshots(inner)),
                 Req::OfferSnapshot(inner) => Ok(Request::OfferSnapshot(inner)),
@@ -155,9 +155,7 @@ pub mod shim {
                 Response::PrepareProposal(inner) => {
                     Ok(Resp::PrepareProposal(inner))
                 }
-                Response::ExtendVote(inner) => {
-                    Ok(Resp::ExtendVote(inner))
-                }
+                Response::ExtendVote(inner) => Ok(Resp::ExtendVote(inner)),
                 Response::VerifyVoteExtension(inner) => {
                     Ok(Resp::VerifyVoteExtension(inner))
                 }

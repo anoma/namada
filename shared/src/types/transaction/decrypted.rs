@@ -10,7 +10,7 @@ pub mod decrypted_tx {
     use borsh::{BorshDeserialize, BorshSerialize};
 
     use crate::proto::Tx;
-    use crate::types::transaction::{WrapperTx, Hash, hash_tx};
+    use crate::types::transaction::{hash_tx, Hash, WrapperTx};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     #[allow(clippy::large_enum_variant)]
@@ -40,7 +40,7 @@ pub mod decrypted_tx {
         pub fn hash_commitment(&self) -> Hash {
             match self {
                 DecryptedTx::Decrypted(tx) => hash_tx(&tx.to_bytes()),
-                DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone()
+                DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone(),
             }
         }
     }

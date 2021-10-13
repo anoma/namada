@@ -138,12 +138,13 @@ where
         })?;
     match apply_tx
         .call(tx_data_ptr, tx_data_len)
-        .map_err(Error::RuntimeError) {
+        .map_err(Error::RuntimeError)
+    {
         Err(Error::RuntimeError(err)) => {
             tracing::info!("{:?}", err.trace());
             Err(Error::RuntimeError(err))
         }
-        _ => Ok(())
+        _ => Ok(()),
     }?;
 
     Ok(verifiers)

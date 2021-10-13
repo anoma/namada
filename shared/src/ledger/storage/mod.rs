@@ -59,7 +59,8 @@ where
     pub next_epoch_min_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
-    /// The encrypted transactions not yet decrypted and applied
+    /// The encrypted transactions not yet decrypted and applied, in reverse
+    /// order
     pub wrapper_txs: Vec<WrapperTx>,
 }
 

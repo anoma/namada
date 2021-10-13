@@ -21,7 +21,6 @@ use crate::client::tendermint_websocket_client::{
 };
 use crate::node::ledger::events::{Attributes, EventType as TmEventType};
 
-
 const TX_INIT_ACCOUNT_WASM: &str = "wasm/tx_init_account.wasm";
 const TX_UPDATE_VP_WASM: &str = "wasm/tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
@@ -48,7 +47,7 @@ pub async fn submit_custom(mut ctx: Context, args: args::TxCustom) {
             .await
         }
     };
-    let tx = Tx::new(tx_code, data);
+    let tx = Tx::new(tx_code, data).sign(&keypair);
     submit_tx(ctx, args.tx, tx, &keypair).await
 }
 
@@ -106,7 +105,7 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let data = data.try_to_vec().expect(
         "Encoding transfer data to initialize a new account shouldn't fail",
     );
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx, &keypair).await
 }
@@ -157,7 +156,7 @@ pub async fn submit_bond(mut ctx: Context, args: args::Bond) {
     };
     tracing::debug!("Bond data {:?}", bond);
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx, &keypair).await
 }
@@ -183,7 +182,7 @@ pub async fn submit_unbond(mut ctx: Context, args: args::Unbond) {
     let data = unbond
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx, &keypair).await
 }
@@ -205,7 +204,7 @@ pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
     let data = withdraw
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = Tx::new(tx_code, Some(data)).sign(&keypair);
 
     submit_tx(ctx, args.tx, tx, &keypair).await
 }
@@ -238,7 +237,11 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx, keypair: &Keypair) {
     // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
-        rpc::dry_run_tx(&args.ledger_address, tx.sign(&keypair).unwrap().to_bytes()).await
+        rpc::dry_run_tx(
+            &args.ledger_address,
+            tx.sign(keypair).unwrap().to_bytes(),
+        )
+        .await
     } else {
         match broadcast_tx(args.ledger_address.clone(), tx, keypair).await {
             Ok(result) => {
@@ -344,11 +347,14 @@ pub async fn broadcast_tx(
     // We use this to determine when the decrypted inner tx makes it on-chain
     let decrypted_tx_hash = tx.tx_hash.to_string();
     // we sign all txs
-    let tx = tx.sign(keypair).expect("Signing of the wrapper transaction should not fail");
+    let tx = tx
+        .sign(keypair)
+        .expect("Signing of the wrapper transaction should not fail");
     let tx_bytes = tx.to_bytes();
 
-    let mut wrapper_tx_subscription =
-        TendermintWebsocketClient::open(WebSocketAddress::try_from(address.clone())?)?;
+    let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
+        WebSocketAddress::try_from(address.clone())?,
+    )?;
     let mut decrypted_tx_subscription =
         TendermintWebsocketClient::open(WebSocketAddress::try_from(address)?)?;
     // It is better to subscribe to the transaction before it is broadcast
@@ -415,11 +421,15 @@ pub struct TxResponse {
     initialized_accounts: Vec<Address>,
 }
 
-/// Parse the JSON payload recieved from a subscription
+/// Parse the JSON payload received from a subscription
 ///
 /// Searches for custom events emitted from the ledger and converts
 /// them back to thin wrapper around a hashmap for further parsing.
-fn parse(json: serde_json::Value, event_type: TmEventType, tx_hash: &String) -> TxResponse {
+fn parse(
+    json: serde_json::Value,
+    event_type: TmEventType,
+    tx_hash: &str,
+) -> TxResponse {
     let mut selector = jsonpath::selector(&json);
     let mut event = selector(&format!(
         "$.events.[?(@.type=='{}')]",
@@ -430,25 +440,21 @@ fn parse(json: serde_json::Value, event_type: TmEventType, tx_hash: &String) -> 
     .filter_map(|event| {
         let attrs = Attributes::from(*event);
         match attrs.get("hash") {
-            Some(hash) if hash == tx_hash => {
-                Some(attrs)
-            }
-            _ => None
+            Some(hash) if hash == tx_hash => Some(attrs),
+            _ => None,
         }
     })
-    .collect::<Vec::<Attributes>>()
+    .collect::<Vec<Attributes>>()
     .remove(0);
 
     let info = event.take("info").unwrap();
     let height = event.take("height").unwrap();
     let hash = event.take("hash").unwrap();
     let code = event.take("code").unwrap();
-    let gas_used= event.take("gas_used").unwrap();
+    let gas_used = event.take("gas_used").unwrap();
     let initialized_accounts = event.take("initialized_accounts");
     let initialized_accounts = match initialized_accounts {
-        Some(values) => {
-            serde_json::from_str(&values).unwrap()
-        }
+        Some(values) => serde_json::from_str(&values).unwrap(),
         _ => vec![],
     };
     TxResponse {
@@ -460,4 +466,3 @@ fn parse(json: serde_json::Value, event_type: TmEventType, tx_hash: &String) -> 
         initialized_accounts,
     }
 }
-

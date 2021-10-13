@@ -1,3 +1,4 @@
+//! Shell methods for querying state
 use std::cmp::max;
 
 use anoma::ledger::parameters::Parameters;
@@ -8,8 +9,43 @@ use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
 use tendermint_proto::types::EvidenceParams;
 
+use super::*;
 use crate::node::ledger::rpc::PrefixValue;
 use crate::node::ledger::{response, storage};
+
+impl Shell {
+    /// Uses `path` in the query to forward the request to the
+    /// right query method and returns the result (which may be
+    /// the default if `path` is not a supported string.
+    /// INVARIANT: This method must be stateless.
+    pub fn query(&self, query: request::Query) -> response::Query {
+        use rpc::Path;
+        match Path::from_str(&query.path) {
+            Ok(path) => match path {
+                Path::DryRunTx => self.dry_run_tx(&query.data),
+                Path::Epoch => {
+                    let (epoch, _gas) = self.storage.get_last_epoch();
+                    let value = anoma::ledger::storage::types::encode(&epoch);
+                    response::Query {
+                        value,
+                        ..Default::default()
+                    }
+                }
+                Path::Value(storage_key) => {
+                    queries::read_storage_value(&self.storage, &storage_key)
+                }
+                Path::Prefix(storage_key) => {
+                    queries::read_storage_prefix(&self.storage, &storage_key)
+                }
+            },
+            Err(err) => response::Query {
+                code: 1,
+                info: format!("RPC error: {}", err),
+                ..Default::default()
+            },
+        }
+    }
+}
 
 /// Simple helper function for the ledger to get balances
 /// of the specified token at the specified address

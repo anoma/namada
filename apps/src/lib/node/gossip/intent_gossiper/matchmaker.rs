@@ -2,6 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use anoma::gossip::mm::MmHost;
 use anoma::proto::{Intent, IntentId, Tx};
+use anoma::types::address::xan;
+use anoma::types::transaction::{Fee, WrapperTx};
 use anoma::vm::wasm;
 use tendermint::net;
 use thiserror::Error;
@@ -9,13 +11,11 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
+use crate::cli::args;
+use crate::client::rpc;
 use crate::client::tx::broadcast_tx;
 use crate::types::MatchmakerMessage;
 use crate::{config, wallet};
-use anoma::types::address::xan;
-use crate::client::rpc;
-use crate::cli::args;
-use anoma::types::transaction::{WrapperTx, Fee};
 
 /// A matchmaker receive intents and tries to find a match with previously
 /// received intent.
@@ -157,16 +157,18 @@ impl Matchmaker {
                     rpc::query_epoch(args::Query {
                         ledger_address: self.ledger_address.clone(),
                     })
-                        .await
-                        .expect(
-                            "Getting the epoch of the last committed block should not fail",
-                        ),
+                    .await
+                    .expect(
+                        "Getting the epoch of the last committed block should \
+                         not fail",
+                    ),
                     0.into(),
                     Tx::new(tx_code, Some(tx_data)),
                 );
 
                 let response =
-                    broadcast_tx(self.ledger_address.clone(), tx, &keypair).await;
+                    broadcast_tx(self.ledger_address.clone(), tx, &keypair)
+                        .await;
                 println!("{:#?}", response);
             }
             MatchmakerMessage::RemoveIntents(intents_id) => {

@@ -43,7 +43,12 @@ impl Event {
                     event_type: EventType::Accepted,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = hash_tx(&wrapper.try_to_vec().expect("Serializing wrapper should not fail")).to_string();
+                event["hash"] = hash_tx(
+                    &wrapper
+                        .try_to_vec()
+                        .expect("Serializing wrapper should not fail"),
+                )
+                .to_string();
                 event
             }
             TxType::Decrypted(decrypted) => {
@@ -54,7 +59,7 @@ impl Event {
                 event["hash"] = decrypted.hash_commitment().to_string();
                 event
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         event["height"] = height.to_string();
         event
@@ -102,7 +107,6 @@ impl From<Event> for tendermint_proto::abci::Event {
 pub struct Attributes(HashMap<String, String>);
 
 impl Attributes {
-
     /// Get a reference to the value associated with input key
     pub fn get(&self, key: &str) -> Option<&String> {
         self.0.get(key)
@@ -114,20 +118,29 @@ impl Attributes {
     }
 }
 
-
 impl From<&serde_json::Value> for Attributes {
     fn from(json: &serde_json::Value) -> Self {
         let mut attributes = HashMap::new();
         let attrs: Vec<serde_json::Value> = serde_json::from_value(
-            json
-                .get("attributes")
+            json.get("attributes")
                 .expect("Tendermint event missing attributes")
-                .clone()
-        ).unwrap();
-        for attr in attrs  {
+                .clone(),
+        )
+        .unwrap();
+        for attr in attrs {
             attributes.insert(
-                serde_json::from_value(attr.get("key").expect("Attributes JSON missing key").clone()).unwrap(),
-                serde_json::from_value(attr.get("value").expect("Attributes JSON missing value").clone()).unwrap(),
+                serde_json::from_value(
+                    attr.get("key")
+                        .expect("Attributes JSON missing key")
+                        .clone(),
+                )
+                .unwrap(),
+                serde_json::from_value(
+                    attr.get("value")
+                        .expect("Attributes JSON missing value")
+                        .clone(),
+                )
+                .unwrap(),
             );
         }
         Attributes(attributes)

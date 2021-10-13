@@ -82,6 +82,12 @@ impl Default for VpsResult {
 }
 
 /// Apply a given transaction
+///
+/// The only Tx Types that should be input here are `Decrypted` and `Wrapper`
+///
+/// If the given tx is a successfully decrypted payload apply the necessary
+/// vps. Otherwise, we include the tx on chain with the gas charge added
+/// but no further validations.
 pub fn apply_tx(
     tx: TxType,
     tx_length: usize,
@@ -94,6 +100,7 @@ pub fn apply_tx(
         .add_base_transaction_fee(tx_length)
         .map_err(Error::GasError)?;
     match tx {
+        TxType::Raw(_) => unreachable!(),
         TxType::Decrypted(DecryptedTx::Decrypted(tx)) => {
             let verifiers =
                 execute_tx(&tx, storage, block_gas_meter, write_log)?;

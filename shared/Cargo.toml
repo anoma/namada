@@ -16,7 +16,9 @@ ferveo-tpke = [
   "ark-ec",
   "ark-serialize",
   "rand_core",
-  "rand_new"]
+  "rand_new",
+  "rand",
+]
 
 # for integration tests and test utilies
 ibc-vp = [
