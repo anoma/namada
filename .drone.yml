@@ -366,10 +366,14 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sh scripts/ci/build-and-publish-docs.sh]
+- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
   depends_on: [restore-cache]
   environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     GITHUB_TOKEN: {from_secret: github_token}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-docs
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-and-publish-docs
   pull: never
@@ -624,10 +628,14 @@ steps:
     mount: [.cargo]
     region: eu-west-1
     restore: true
-- commands: [sh scripts/ci/build-and-publish-docs.sh]
+- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
   depends_on: [restore-cache]
   environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     GITHUB_TOKEN: {from_secret: github_token}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-docs
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-and-publish-docs
   pull: never
@@ -999,6 +1007,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 33ea9efba554440c320b5e869053259584e1d395c934bf73d26c7f6fbe8435f0
+hmac: de3c6137906910b06c5f8d4a9ecbead62fae7aad5bf3fd50b3fdb71b1f95f834
 
 ...
