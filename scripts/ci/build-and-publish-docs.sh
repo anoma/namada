@@ -25,9 +25,8 @@ then
     rm -rf master/rustdoc master/linkcheck master/html 
     mv -v ~/.tmp/book/* master/
 else 
-    mkdir -p $DRONE_TAG 
-    rm -rf $DRONE_TAG/rustdoc $DRONE_TAG/linkcheck $DRONE_TAG/html 
-    mv -v ~/.tmp/book/* $DRONE_TAG/
+    rm -rf rustdoc linkcheck html 
+    mv -v ~/.tmp/book/* .
 fi
 
 if [ -z "$(git status --porcelain)" ]; 
