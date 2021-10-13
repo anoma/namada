@@ -26,23 +26,8 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/build/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    region: eu-west-1
-    restore: true
 - commands: [sccache --start-server, make build]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -89,32 +74,6 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-e2e
   pull: never
-- commands: [cargo cache || true]
-  depends_on: [test-unit, test-e2e]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/build/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   event: [pull_request]
 type: docker
@@ -147,23 +106,8 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/checks/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    region: eu-west-1
-    restore: true
 - commands: [sccache --start-server, make clippy]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -173,7 +117,7 @@ steps:
   name: clippy
   pull: never
 - commands: [sccache --start-server, make fmt-check]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -182,32 +126,6 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: format
   pull: never
-- commands: [cargo cache || true]
-  depends_on: [clippy, format]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/checks/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   branch: [develop, master]
   event: [push, pull_request]
@@ -351,24 +269,9 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/docs/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    region: eu-west-1
-    restore: true
 - commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh, echo
       $CARGO_HOME, ls $CARGO_HOME]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -378,36 +281,10 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-and-publish-docs
   pull: never
-- commands: [cargo cache || true]
-  depends_on: [build-and-publish-docs]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/docs/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   event: [pull_request]
 type: docker
-workspace: {path: /usr/local/rust/}
+workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
 environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
@@ -436,24 +313,9 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/cron/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    region: eu-west-1
-    restore: true
 - commands: ['curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
       | python3 -', cd scripts/ci && poetry install]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: requirements
   pull: never
@@ -471,32 +333,6 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: udeps
   pull: never
-- commands: [cargo cache || true]
-  depends_on: [udeps, audit]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/cron/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   cron: [audit]
   event: [cron]
@@ -530,23 +366,8 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/miri/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    region: eu-west-1
-    restore: true
 - commands: [sccache --start-server, make test-miri || true]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -555,32 +376,6 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-miri
   pull: never
-- commands: [cargo cache || true]
-  depends_on: [test-miri]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/miri/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   branch: [master]
   event: [push]
@@ -614,24 +409,9 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/docs/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    region: eu-west-1
-    restore: true
 - commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh, echo
       $CARGO_HOME, ls $CARGO_HOME]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -641,32 +421,6 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build-and-publish-docs
   pull: never
-- commands: [cargo cache || true]
-  depends_on: [build-and-publish-docs]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/docs/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   branch: [master]
   event: [push]
@@ -700,23 +454,8 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/build/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    region: eu-west-1
-    restore: true
 - commands: [sccache --start-server, make build]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -763,32 +502,6 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-e2e
   pull: never
-- commands: [cargo cache || true]
-  depends_on: [test-unit, test-e2e]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/build/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   branch: [master]
   event: [push]
@@ -945,23 +658,8 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- depends_on: [check-scripts-integrity]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-  image: meltwater/drone-cache:latest
-  name: restore-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/build-release/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    region: eu-west-1
-    restore: true
 - commands: [sccache --start-server, make package]
-  depends_on: [restore-cache]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -977,38 +675,12 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: create-release
   pull: never
-- commands: [cargo cache || true]
-  depends_on: [create-release]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: clean-cache
-  pull: never
-  when:
-    status: [success, failure]
-- depends_on: [clean-cache]
-  environment:
-    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
-    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    BACKEND_OPERATION_TIMEOUT: 8m
-  image: meltwater/drone-cache:latest
-  name: rebuild-cache
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/v1/build-release/{{ checksum "Cargo.lock" }}
-    mount: [/usr/local/rust/cargo]
-    override: false
-    rebuild: true
-    region: eu-west-1
-  when:
-    status: [success, failure]
 trigger:
   event: [tag]
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: b73f520cb01902ea0ce2a4dbd91abd8434ef2e1bb11840c1ed7822ffd33c9fba
+hmac: 75e9bd5b3149808c26faa69ae97e424b2e873b126b14f3d5a2afc58e310f1855
 
 ...
