@@ -37,8 +37,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/build/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/build/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, make build]
@@ -108,8 +108,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/build/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/build/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -158,8 +158,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/checks/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/checks/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, make clippy]
@@ -201,8 +201,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/checks/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/checks/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -362,8 +362,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/docs/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
@@ -396,8 +396,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/docs/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -446,8 +446,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/cron/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/cron/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
 - commands: ['curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
@@ -489,8 +489,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/cron/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/cron/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -540,8 +540,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/miri/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/miri/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, make test-miri || true]
@@ -573,8 +573,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/miri/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/miri/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -587,7 +587,7 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
-environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1', GIT_TERMINAL_PROMP: '1'}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
@@ -624,8 +624,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/docs/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
@@ -658,8 +658,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/docs/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/docs/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -709,8 +709,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/build/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/build/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, make build]
@@ -780,8 +780,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/build/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/build/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -954,8 +954,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/build-release/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/build-release/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     region: eu-west-1
     restore: true
 - commands: [sccache --start-server, make package]
@@ -994,8 +994,8 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/build-release/{{ checksum "Cargo.lock" }}
-    mount: [.cargo]
+    cache_key: 1-54-0/v1/build-release/{{ checksum "Cargo.lock" }}
+    mount: [/usr/local/rust/cargo]
     override: false
     rebuild: true
     region: eu-west-1
@@ -1007,6 +1007,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: de3c6137906910b06c5f8d4a9ecbead62fae7aad5bf3fd50b3fdb71b1f95f834
+hmac: d47db4f5d58fff86024b69d80938fbf8c5de9ffd2ab2cf2a32c5f3587731d063
 
 ...
