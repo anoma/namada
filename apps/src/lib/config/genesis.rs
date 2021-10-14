@@ -210,7 +210,7 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct WasmConfig {
         filename: String,
-        sha256: HexString,
+        pub sha256: HexString,
     }
 
     fn load_validator(
