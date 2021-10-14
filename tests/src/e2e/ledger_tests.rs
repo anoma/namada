@@ -1,9 +1,18 @@
+//! By default, these tests will run in release mode. This can be disabled
+//! by setting environment variable `ANOMA_E2E_DEBUG=true`. For debugging,
+//! you'll typically also want to set `RUST_BACKTRACE=1`, e.g.:
+//!
+//! ```ignore,shell
+//! ANOMA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::ledger_tests -- --test-threads=1 --nocapture
+//! ```
+//!
+//! To keep the temporary files created by a test, use env var
+//! `ANOMA_E2E_KEEP_TEMP=true`.
+
 use std::fs;
-use std::path::PathBuf;
 use std::process::Command;
 
 use anoma::proto::Tx;
-use anoma::types::address::{xan, Address};
 use anoma::types::storage::Epoch;
 use anoma::types::token;
 use anoma::types::transaction::{Fee, WrapperTx};
@@ -12,20 +21,31 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use setup::constants::*;
 
-use crate::e2e::setup::{self, sleep, Bin, Test};
-use crate::run;
+use crate::e2e::setup::{self, find_address, find_keypair, sleep, Bin, Who};
+use crate::{run, run_as};
 
 /// Test that when we "run-ledger" with all the possible command
-/// combinations from fresh state, the node starts-up successfully.
+/// combinations from fresh state, the node starts-up successfully for both a
+/// validator and non-validator user.
 #[test]
 fn run_ledger() -> Result<()> {
-    let test = Test::new();
+    let test = setup::single_node_net()?;
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
-    // Start the ledger
-    for args in cmd_combinations {
-        let mut ledger = run!(test, Bin::Node, args, Some(20))?;
+    // Start the ledger as a validator
+    for args in &cmd_combinations {
+        let mut ledger =
+            run_as!(test, Who::Validator(0), Bin::Node, args, Some(20))?;
         ledger.exp_string("Anoma ledger node started")?;
+        ledger.exp_string("This node is a validator")?;
+    }
+
+    // Start the ledger as a non-validator
+    for args in &cmd_combinations {
+        let mut ledger =
+            run_as!(test, Who::NonValidator, Bin::Node, args, Some(20))?;
+        ledger.exp_string("Anoma ledger node started")?;
+        ledger.exp_string("This node is not a validator")?;
     }
 
     Ok(())
@@ -38,10 +58,11 @@ fn run_ledger() -> Result<()> {
 /// 4. Check that the node shuts down
 #[test]
 fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
-    let test = Test::new();
+    let test = setup::single_node_net()?;
 
     // 1. Run the ledger node
-    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
 
@@ -72,24 +93,25 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 /// 6. Run the ledger again, it should start from fresh state
 #[test]
 fn run_ledger_load_state_and_reset() -> Result<()> {
-    let test = Test::new();
+    let test = setup::single_node_net()?;
 
     // 1. Run the ledger node
-    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
-
     // There should be no previous state
     ledger.exp_string("No state could be found")?;
-
     // Wait to commit a block
-    ledger.exp_regex(r"Committed block hash.*, height: 2")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+
     // 2. Shut it down
     ledger.send_control('c')?;
     drop(ledger);
 
     // 3. Run the ledger again, it should load its previous state
-    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
 
@@ -101,10 +123,17 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     drop(ledger);
 
     // 5. Reset the ledger's state
-    let _session = run!(test, Bin::Node, &["ledger", "reset"], Some(10))?;
+    let _session = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "reset"],
+        Some(10),
+    )?;
 
     // 6. Run the ledger again, it should start from fresh state
-    let mut session = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    let mut session =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     session.exp_string("Anoma ledger node started")?;
 
@@ -123,10 +152,11 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 6. Query token balance
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
-    let test = Test::new();
+    let test = setup::network(|genesis| genesis)?;
 
     // 1. Run the ledger node
-    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
     ledger.exp_string("Started node")?;
@@ -212,26 +242,29 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// 5. Submit and invalid transactions (malformed)
 #[test]
 fn invalid_transactions() -> Result<()> {
-    let test = Test::new();
+    let test = setup::single_node_net()?;
 
     // 1. Run the ledger node
-    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
     ledger.exp_string("Anoma ledger node started")?;
     ledger.exp_string("Started node")?;
+    // Wait to commit a block
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     // 2. Submit a an invalid transaction (trying to mint tokens should fail
     // in the token's VP)
     let tx_data_path = test.base_dir.path().join("tx.data");
     let transfer = token::Transfer {
-        source: Address::decode(BERTHA).unwrap(),
-        target: Address::decode(ALBERT).unwrap(),
-        token: Address::decode(XAN).unwrap(),
+        source: find_address(&test, BERTHA)?,
+        target: find_address(&test, ALBERT)?,
+        token: find_address(&test, XAN)?,
         amount: token::Amount::whole(1),
     };
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let source_key = wallet::defaults::bertha_keypair();
+    let source_key = find_keypair(&test, BERTHA_KEY)?;
     let tx_wasm_path = wasm_abs_path(TX_MINT_TOKENS_WASM);
     let tx_code = fs::read(&tx_wasm_path).unwrap();
     let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
@@ -251,9 +284,7 @@ fn invalid_transactions() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
 
     client.exp_string("Process proposal accepted this transaction")?;
-
     client.exp_string("Transaction is invalid")?;
-
     client.exp_string(r#""code": "1"#)?;
 
     client.assert_success();
@@ -261,14 +292,15 @@ fn invalid_transactions() -> Result<()> {
     ledger.exp_string("some VPs rejected apply_tx storage modification")?;
 
     // Wait to commit a block
-    ledger.exp_regex(r"Committed block hash.*, height: 2")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     // 3. Shut it down
     ledger.send_control('c')?;
     drop(ledger);
 
     // 4. Restart the ledger
-    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
 
@@ -308,16 +340,16 @@ fn invalid_transactions() -> Result<()> {
 /// 5. Submit a wrapper tx where the fee > user's balance
 #[test]
 fn test_wrapper_txs() -> Result<()> {
-    use wallet::defaults;
-
-    let test = Test::new();
-    let keypair = defaults::daewon_keypair();
+    let test = setup::single_node_net()?;
+    // We cannot read this key with `find_keypair`, because its pre-generated
+    // and its public key is hard-coded in the E2E genesis source.
+    let keypair = wallet::defaults::daewon_keypair();
 
     use anoma::types::token::Amount;
     let tx = WrapperTx::new(
         Fee {
             amount: Amount::whole(1_000_000),
-            token: xan(),
+            token: find_address(&test, XAN)?,
         },
         &keypair,
         Epoch(1),
@@ -326,30 +358,32 @@ fn test_wrapper_txs() -> Result<()> {
     );
 
     // write out the tx code and data to files
-    let mut wasm = PathBuf::from(test.base_dir.path());
-    wasm.push("tx_wasm");
+    let wasm = test.base_dir.path().join("tx_wasm");
     std::fs::write(&wasm, vec![]).expect("Test failed");
-    let wasm_path = wasm.to_str().unwrap();
-    let mut data = PathBuf::from(test.base_dir.path());
-    data.push("tx_data");
+    let wasm_path = wasm.to_string_lossy();
+    let data = test.base_dir.path().join("tx_data");
     std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
         .expect("Test failed");
-    let data_path = data.to_str().unwrap();
+    let data_path = data.to_string_lossy();
 
     // 1. Run the ledger node
-    let mut ledger = run!(test, Bin::Node, &["ledger"], Some(20))?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
     ledger.exp_string("Anoma ledger node started")?;
     ledger.exp_string("Started node")?;
+    // Wait to commit a block
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     // 2. Submit a valid wrapper tx and check it is accepted.
+    let keypair_str = keypair.to_string();
     let tx_args = vec![
         "tx",
         "--code-path",
-        wasm_path,
+        &wasm_path,
         "--data-path",
-        data_path,
+        &data_path,
         "--signing-key",
-        "Daewon",
+        &keypair_str,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     // check that it is accepted by the process proposal method
@@ -360,7 +394,7 @@ fn test_wrapper_txs() -> Result<()> {
 
     // 3. Submit a wrapper tx without signing
     let tx_args =
-        vec!["tx", "--code-path", wasm_path, "--data-path", data_path];
+        vec!["tx", "--code-path", &wasm_path, "--data-path", &data_path];
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     // check that it is rejected by the process proposal method
     client.exp_string("Expected signed WrapperTx data")?;
@@ -370,11 +404,11 @@ fn test_wrapper_txs() -> Result<()> {
     let tx_args = vec![
         "tx",
         "--code-path",
-        wasm_path,
+        &wasm_path,
         "--data-path",
-        data_path,
+        &data_path,
         "--signing-key",
-        "Albert",
+        ALBERT_KEY,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     // check that it is rejected by the process proposal method
@@ -385,7 +419,7 @@ fn test_wrapper_txs() -> Result<()> {
     let tx = WrapperTx::new(
         Fee {
             amount: Amount::whole(1_000_001),
-            token: xan(),
+            token: find_address(&test, XAN)?,
         },
         &keypair,
         Epoch(1),
@@ -394,18 +428,17 @@ fn test_wrapper_txs() -> Result<()> {
     );
 
     // write out the tx data to file
-    let mut data = PathBuf::from(test.base_dir.path());
-    data.push("tx_data");
+    let data = test.base_dir.path().join("tx_data");
     std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
         .expect("Test failed");
     let tx_args = vec![
         "tx",
         "--code-path",
-        wasm_path,
+        &wasm_path,
         "--data-path",
-        data_path,
+        &data_path,
         "--signing-key",
-        "Daewon",
+        &keypair_str,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     // check that it is rejected by the process proposal method
