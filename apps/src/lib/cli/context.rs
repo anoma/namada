@@ -27,8 +27,8 @@ const ENV_VAR_WASM_DIR: &str = "ANOMA_WASM_DIR";
 /// in the wallet
 pub type WalletAddress = FromContext<Address>;
 
-/// An alias, a public key or a public key hash of a keypair that may be found
-/// in the wallet
+/// A raw keypair (hex encoding), an alias, a public key or a public key hash of
+/// a keypair that may be found in the wallet
 pub type WalletKeypair = FromContext<Rc<Keypair>>;
 
 /// A raw public key (hex encoding), a public key hash (also hex encoding) or an
@@ -51,6 +51,7 @@ pub struct Context {
 impl Context {
     pub fn new(global_args: args::Global) -> Self {
         let global_config = read_or_try_new_global_config(&global_args);
+        tracing::info!("Chain ID: {}", global_config.default_chain_id);
 
         let mut config = Config::load(
             &global_args.base_dir,
@@ -232,10 +233,16 @@ impl ArgFromContext for Address {
 impl ArgFromMutContext for Rc<Keypair> {
     fn from_mut_ctx(ctx: &mut Context, raw: impl AsRef<str>) -> Self {
         let raw = raw.as_ref();
-        ctx.wallet.find_key(raw).unwrap_or_else(|_find_err| {
-            eprintln!("Unknown key {}", raw);
-            safe_exit(1)
-        })
+        // A keypair can be either a raw keypair in hex string
+        FromStr::from_str(raw)
+            .map(Rc::new)
+            .unwrap_or_else(|_parse_err| {
+                // Or it can be an alias
+                ctx.wallet.find_key(raw).unwrap_or_else(|_find_err| {
+                    eprintln!("Unknown key {}", raw);
+                    safe_exit(1)
+                })
+            })
     }
 }
 
