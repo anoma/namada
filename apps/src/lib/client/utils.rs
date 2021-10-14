@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use anoma::types::chain::ChainId;
@@ -18,6 +19,9 @@ use crate::config::{self, genesis, Config, IntentGossiper, PeerAddress};
 use crate::node::ledger::tendermint_node;
 use crate::wallet::Wallet;
 
+pub const NET_ACCOUNTS_DIR: &str = "setup";
+pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
+
 /// Initialize a new test network with the given validators and faucet accounts.
 pub fn init_network(
     global_args: args::Global,
@@ -26,13 +30,17 @@ pub fn init_network(
         chain_id_prefix,
         unsafe_dont_encrypt,
         consensus_timeout_commit,
+        localhost,
     }: args::InitNetwork,
 ) {
     let mut config = genesis_config::open_genesis_config(&genesis_path);
     let temp_chain_id = chain_id_prefix.temp_chain_id();
     let temp_dir = global_args.base_dir.join(temp_chain_id.as_str());
     // The `temp_chain_id` gets renamed after we have chain ID
-    let accounts_dir = temp_dir.join("setup");
+    let accounts_dir = temp_dir.join(NET_ACCOUNTS_DIR);
+    // Base dir used in account sub-directories
+    let accounts_temp_dir =
+        PathBuf::from(config::DEFAULT_BASE_DIR).join(temp_chain_id.as_str());
 
     let mut rng: ThreadRng = thread_rng();
 
@@ -74,7 +82,7 @@ pub fn init_network(
                 "value": tm_node_key,
             }
         });
-        let chain_dir = validator_dir.join(&temp_dir);
+        let chain_dir = validator_dir.join(&accounts_temp_dir);
         let tm_home_dir = chain_dir.join("tendermint");
         let tm_config_dir = tm_home_dir.join("config");
         fs::create_dir_all(&tm_config_dir)
@@ -108,14 +116,19 @@ pub fn init_network(
             SocketAddr::from_str(config.net_address.as_ref().unwrap()).unwrap();
         let ip = ledger_addr.ip().to_string();
         let first_port = ledger_addr.port();
-        gossiper_config.address = libp2p::Multiaddr::from_str(
-            format!("/ip4/0.0.0.0/tcp/{}", first_port + 3).as_str(),
-        )
-        .unwrap();
         let intent_peer_address = libp2p::Multiaddr::from_str(
             format!("/ip4/{}/tcp/{}", ip, first_port + 3).as_str(),
         )
         .unwrap();
+
+        gossiper_config.address = if localhost {
+            intent_peer_address.clone()
+        } else {
+            libp2p::Multiaddr::from_str(
+                format!("/ip4/0.0.0.0/tcp/{}", first_port + 3).as_str(),
+            )
+            .unwrap()
+        };
         let intent_peer = PeerAddress {
             address: intent_peer_address,
             peer_id,
@@ -190,7 +203,7 @@ pub fn init_network(
 
                         let ledger_address =
                             tendermint::net::Address::from_str(&format!(
-                                "0.0.0.0:{}",
+                                "127.0.0.1:{}",
                                 first_port + 1
                             ))
                             .unwrap();
@@ -230,7 +243,8 @@ pub fn init_network(
     });
 
     // Create a wallet for all accounts other than validators
-    let mut wallet = Wallet::load_or_new(&accounts_dir.join("other"));
+    let mut wallet =
+        Wallet::load_or_new(&accounts_dir.join(NET_OTHER_ACCOUNTS_DIR));
     if let Some(established) = &mut config.established {
         established.iter_mut().for_each(|(name, config)| {
             match validator_owned_accounts.get(name) {
@@ -309,40 +323,45 @@ pub fn init_network(
     let global_config = GlobalConfig::new(chain_id.clone());
     global_config.write(&global_args.base_dir).unwrap();
 
-    // Rename the generated directories for validators from `temp_chain_id` to
-    // `chain_id`
+    // Rename the generate chain config dir from `temp_chain_id` to `chain_id`
+    std::fs::rename(&temp_dir, &chain_dir).unwrap();
+
     config.validator.iter().for_each(|(name, _config)| {
-        let validator_dir = accounts_dir.join(name);
-        let temp_chain_dir = validator_dir.join(&temp_dir);
-        let chain_dir = validator_dir
-            .join(&global_args.base_dir)
-            .join(&chain_id.as_str());
-        std::fs::rename(&temp_chain_dir, &chain_dir).unwrap();
+        let validator_dir = global_args
+            .base_dir
+            .join(chain_id.as_str())
+            .join(NET_ACCOUNTS_DIR)
+            .join(name)
+            .join(config::DEFAULT_BASE_DIR);
+        let temp_validator_chain_dir =
+            validator_dir.join(temp_chain_id.as_str());
+        let validator_chain_dir = validator_dir.join(&chain_id.as_str());
+        fs::create_dir_all(&validator_chain_dir)
+            .expect("Couldn't create validator directory");
+        // Rename the generated directories for validators from `temp_chain_id`
+        // to `chain_id`
+        std::fs::rename(&temp_validator_chain_dir, &validator_chain_dir)
+            .unwrap();
         // Write the genesis and global config into validator sub-dirs
         genesis_config::write_genesis_config(
             &config,
-            validator_dir.join(&genesis_path),
+            validator_dir.join(format!("{}.toml", chain_id.as_str())),
         );
-        global_config
-            .write(validator_dir.join(&global_args.base_dir))
-            .unwrap();
+        global_config.write(validator_dir).unwrap();
         // Add genesis addresses to the validator's wallet
-        let mut wallet = Wallet::load_or_new(&chain_dir);
+        let mut wallet = Wallet::load_or_new(&validator_chain_dir);
         wallet.add_genesis_addresses(config_clean.clone());
         wallet.save().unwrap();
     });
-
-    // Rename the generate chain config dir from `temp_chain_id` to `chain_id`
-    std::fs::rename(&temp_dir, &chain_dir).unwrap();
 
     // Generate the validators' ledger and intent gossip config
     config
         .validator
         .iter_mut()
         .for_each(|(name, validator_config)| {
-            let accounts_dir = chain_dir.join("setup");
+            let accounts_dir = chain_dir.join(NET_ACCOUNTS_DIR);
             let validator_dir =
-                accounts_dir.join(name).join(&global_args.base_dir);
+                accounts_dir.join(name).join(config::DEFAULT_BASE_DIR);
             let mut config = Config::load(&validator_dir, &chain_id);
 
             // Configure the ledger
@@ -352,7 +371,7 @@ pub fn init_network(
             // parameter. We need to remove this prefix, because
             // these sub-directories will be moved to validators' root
             // directories.
-            config.ledger.shell.base_dir = global_args.base_dir.clone();
+            config.ledger.shell.base_dir = config::DEFAULT_BASE_DIR.into();
             // Add a ledger P2P persistent peers
             config.ledger.tendermint.p2p_persistent_peers =
                 persistent_peers.clone();
@@ -361,7 +380,21 @@ pub fn init_network(
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
+            if !localhost {
+                config
+                    .ledger
+                    .tendermint
+                    .p2p_address
+                    .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+            }
             config.ledger.tendermint.p2p_address.set_port(first_port);
+            if !localhost {
+                config
+                    .ledger
+                    .tendermint
+                    .rpc_address
+                    .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+            }
             config
                 .ledger
                 .tendermint
@@ -378,7 +411,11 @@ pub fn init_network(
             }
             config.intent_gossiper.rpc = Some(config::RpcServer {
                 address: SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                    IpAddr::V4(if localhost {
+                        Ipv4Addr::new(127, 0, 0, 1)
+                    } else {
+                        Ipv4Addr::new(0, 0, 0, 0)
+                    }),
                     first_port + 4,
                 ),
             });

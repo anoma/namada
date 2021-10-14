@@ -1104,6 +1104,7 @@ pub mod args {
     const LEDGER_ADDRESS_OPT: ArgOpt<tendermint::net::Address> =
         LEDGER_ADDRESS.opt();
     const LEDGER_ADDRESS: Arg<tendermint::net::Address> = arg("ledger-address");
+    const LOCALHOST: ArgFlag = flag("localhost");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE_OPT: ArgOpt<String> = arg_opt("node");
@@ -2206,6 +2207,7 @@ pub mod args {
         pub chain_id_prefix: ChainIdPrefix,
         pub unsafe_dont_encrypt: bool,
         pub consensus_timeout_commit: tendermint::Timeout,
+        pub localhost: bool,
     }
 
     impl Args for InitNetwork {
@@ -2215,11 +2217,13 @@ pub mod args {
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let consensus_timeout_commit =
                 CONSENSUS_TIMEOUT_COMMIT.parse(matches);
+            let localhost = LOCALHOST.parse(matches);
             Self {
                 genesis_path,
                 chain_id_prefix,
                 unsafe_dont_encrypt,
                 consensus_timeout_commit,
+                localhost,
             }
         }
 
@@ -2240,6 +2244,10 @@ pub mod args {
             .arg(CONSENSUS_TIMEOUT_COMMIT.def().about(
                 "The Tendermint consensus timeout_commit configuration as \
                  e.g. `1s` or `1000ms`. Defaults to 10 seconds.",
+            ))
+            .arg(LOCALHOST.def().about(
+                "Use localhost address for P2P and RPC connections for the \
+                 validators ledger and intent gossip nodes",
             ))
         }
     }
