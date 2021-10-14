@@ -73,6 +73,7 @@ pub fn start_rpc_server(
     let addr = config.address;
     let (rpc_sender, rpc_receiver) = mpsc::channel(100);
     thread::spawn(move || rpc_server(addr, rpc_sender).unwrap());
+    tracing::info!("RPC started at {}", config.address);
     rpc_receiver
 }
 

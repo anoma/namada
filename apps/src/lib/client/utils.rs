@@ -353,14 +353,6 @@ pub fn init_network(
             // these sub-directories will be moved to validators' root
             // directories.
             config.ledger.shell.base_dir = global_args.base_dir.clone();
-            config.ledger.tendermint.tendermint_dir = global_args
-                .base_dir
-                .join(chain_id.as_str())
-                .join(config::TENDERMINT_DIR);
-            config.ledger.shell.db_dir = global_args
-                .base_dir
-                .join(chain_id.as_str())
-                .join(config::DB_DIR);
             // Add a ledger P2P persistent peers
             config.ledger.tendermint.p2p_persistent_peers =
                 persistent_peers.clone();
@@ -505,7 +497,7 @@ fn init_genesis_validator_aux(
 
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
-    let tendermint_home = &config.ledger.tendermint.tendermint_dir;
+    let tendermint_home = &config.ledger.tendermint_dir();
     tendermint_node::write_validator_key(
         tendermint_home,
         &validator_address,

@@ -1,6 +1,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::mpsc::Receiver;
@@ -41,6 +41,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Run the tendermint node.
 pub fn run(
+    home_dir: PathBuf,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
     ledger_address: String,
@@ -48,7 +49,6 @@ pub fn run(
     abort_sender: Sender<bool>,
     abort_receiver: Receiver<bool>,
 ) -> Result<()> {
-    let home_dir = config.tendermint_dir.clone();
     let home_dir_string = home_dir.to_string_lossy().to_string();
 
     #[cfg(feature = "dev")]
@@ -153,7 +153,8 @@ fn monitor_process(
     });
 }
 
-pub fn reset(config: config::Tendermint) -> Result<()> {
+pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
+    let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
     // reset all the Tendermint state, if any
     Command::new("tendermint")
         .args(&[
@@ -161,15 +162,12 @@ pub fn reset(config: config::Tendermint) -> Result<()> {
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
             // "--log-level=\"*debug\"",
             "--home",
-            &config.tendermint_dir.to_string_lossy(),
+            &tendermint_dir,
         ])
         .output()
         .expect("Failed to reset tendermint node's data");
-    fs::remove_dir_all(format!(
-        "{}/config",
-        &config.tendermint_dir.to_string_lossy()
-    ))
-    .expect("Failed to reset tendermint node's config");
+    fs::remove_dir_all(format!("{}/config", tendermint_dir,))
+        .expect("Failed to reset tendermint node's config");
     Ok(())
 }
 

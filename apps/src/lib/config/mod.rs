@@ -25,6 +25,11 @@ use thiserror::Error;
 
 use crate::cli;
 
+pub const DEFAULT_BASE_DIR: &str = ".anoma";
+pub const FILENAME: &str = "config.toml";
+pub const TENDERMINT_DIR: &str = "tendermint";
+pub const DB_DIR: &str = "db";
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub wasm_dir: PathBuf,
@@ -43,13 +48,15 @@ pub struct Ledger {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Shell {
     pub base_dir: PathBuf,
-    pub db_dir: PathBuf,
     pub ledger_address: SocketAddr,
+    /// Use the [`Ledger::db_dir()`] method to read the value.
+    db_dir: PathBuf,
+    /// Use the [`Ledger::tendermint_dir()`] method to read the value.
+    tendermint_dir: PathBuf,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tendermint {
-    pub tendermint_dir: PathBuf,
     pub rpc_address: SocketAddr,
     pub p2p_address: SocketAddr,
     /// The persistent peers addresses must include node ID
@@ -69,6 +76,62 @@ pub struct IntentGossiper {
     pub gossiper: Gossiper,
     pub discover_peer: Option<DiscoverPeer>,
     pub matchmaker: Option<Matchmaker>,
+}
+
+impl Ledger {
+    pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
+        Self {
+            genesis_time: Rfc3339String("1970-01-01T00:00:00Z".to_owned()),
+            chain_id,
+            shell: Shell {
+                base_dir: base_dir.as_ref().to_owned(),
+                ledger_address: SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    26658,
+                ),
+                db_dir: DB_DIR.into(),
+                tendermint_dir: TENDERMINT_DIR.into(),
+            },
+            tendermint: Tendermint {
+                rpc_address: SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    26657,
+                ),
+                p2p_address: SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    26656,
+                ),
+                p2p_persistent_peers: vec![],
+                p2p_pex: true,
+                consensus_timeout_commit: tendermint::Timeout::from_str("1s")
+                    .unwrap(),
+            },
+        }
+    }
+
+    /// Get the directory path to the DB
+    pub fn db_dir(&self) -> PathBuf {
+        self.shell.db_dir(&self.chain_id)
+    }
+
+    /// Get the directory path to Tendermint
+    pub fn tendermint_dir(&self) -> PathBuf {
+        self.shell.tendermint_dir(&self.chain_id)
+    }
+}
+
+impl Shell {
+    /// Get the directory path to the DB
+    pub fn db_dir(&self, chain_id: &ChainId) -> PathBuf {
+        self.base_dir.join(chain_id.as_str()).join(&self.db_dir)
+    }
+
+    /// Get the directory path to Tendermint
+    pub fn tendermint_dir(&self, chain_id: &ChainId) -> PathBuf {
+        self.base_dir
+            .join(chain_id.as_str())
+            .join(&self.tendermint_dir)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -134,6 +197,8 @@ pub enum Error {
     BadBootstrapPeerFormat(String),
 }
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Error, Debug)]
 pub enum SerdeError {
     // This is needed for serde https://serde.rs/error-handling.html
@@ -145,12 +210,6 @@ pub enum SerdeError {
     #[error("{0}")]
     Message(String),
 }
-
-pub const FILENAME: &str = "config.toml";
-pub const TENDERMINT_DIR: &str = "tendermint";
-pub const DB_DIR: &str = "db";
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 impl Config {
     pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
@@ -164,9 +223,13 @@ impl Config {
     /// Load config from expected path in the `base_dir` or generate a new one
     /// if it doesn't exist. Terminates with an error if the config loading
     /// fails.
-    pub fn load(base_dir: &Path, chain_id: &ChainId) -> Self {
+    pub fn load(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Self {
+        let base_dir = base_dir.as_ref();
         match Self::read(base_dir, chain_id) {
-            Ok(config) => config,
+            Ok(mut config) => {
+                config.ledger.shell.base_dir = base_dir.to_path_buf();
+                config
+            }
             Err(err) => {
                 eprintln!(
                     "Tried to read config in {} but failed with: {}",
@@ -232,69 +295,6 @@ impl Config {
     fn file_path(base_dir: &Path, chain_id: &ChainId) -> PathBuf {
         // Join base dir to the chain ID
         base_dir.join(chain_id.to_string()).join(FILENAME)
-    }
-}
-
-impl Ledger {
-    pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
-        let base_dir = base_dir.as_ref().to_owned();
-        let sub_dir = base_dir.join(chain_id.as_str());
-
-        Self {
-            chain_id,
-            genesis_time: Rfc3339String("1970-01-01T00:00:00Z".to_owned()),
-            shell: Shell {
-                base_dir,
-                db_dir: sub_dir.join(DB_DIR),
-                ledger_address: SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    26658,
-                ),
-            },
-            tendermint: Tendermint::new(&sub_dir),
-        }
-    }
-}
-
-impl Tendermint {
-    fn new(dir: impl AsRef<Path>) -> Self {
-        #[cfg(feature = "dev")]
-        let p2p_persistent_peers = vec![];
-        #[cfg(not(feature = "dev"))]
-        let p2p_persistent_peers = vec![
-            tendermint::net::Address::from_str(
-                "72eb02444a4736d569734675c6ba893aadb3fb99@52.210.23.30:26656",
-            )
-            .unwrap(),
-            tendermint::net::Address::from_str(
-                "39f31bcf0a0b73a08d9e18f4e9cada33d4997779@63.34.55.152:26656",
-            )
-            .unwrap(),
-            tendermint::net::Address::from_str(
-                "d7d2e6e942b157df4137ca3b47258ca20db00416@54.195.72.213:26656",
-            )
-            .unwrap(),
-            tendermint::net::Address::from_str(
-                "31752d323de34e4dcd36ecf30b4ed179de7dc48a@79.125.112.218:26656",
-            )
-            .unwrap(),
-        ];
-
-        Self {
-            tendermint_dir: dir.as_ref().join(TENDERMINT_DIR),
-            rpc_address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                26657,
-            ),
-            p2p_address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                26656,
-            ),
-            p2p_persistent_peers,
-            p2p_pex: true,
-            consensus_timeout_commit: tendermint::Timeout::from_str("1s")
-                .unwrap(),
-        }
     }
 }
 

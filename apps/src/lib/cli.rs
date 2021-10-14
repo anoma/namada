@@ -1063,6 +1063,7 @@ pub mod args {
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
     use super::ArgMatches;
+    use crate::config;
 
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -1072,7 +1073,7 @@ pub mod args {
         "base-dir",
         DefaultFn(|| match env::var("ANOMA_BASE_DIR") {
             Ok(dir) => dir.into(),
-            Err(_) => ".anoma".into(),
+            Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
     );
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
