@@ -1,5 +1,18 @@
 //! Implementation of chain initialization for the Shell
+use std::path::PathBuf;
+
 use super::*;
+
+fn top_level_directory() -> PathBuf {
+    let mut current_path = std::env::current_dir()
+        .expect("Current directory should exist")
+        .canonicalize()
+        .expect("Current directory should exist");
+    while current_path.file_name().unwrap() != "anoma" {
+        current_path.pop();
+    }
+    current_path
+}
 
 impl Shell {
     /// Create a new genesis for the chain with specified id. This includes
@@ -22,9 +35,11 @@ impl Shell {
 
         // Initialize because there is no block
         let token_vp =
-            std::fs::read("wasm/vp_token.wasm").expect("cannot load token VP");
+            std::fs::read(&*top_level_directory().join("wasm/vp_token.wasm"))
+                .expect("cannot load token VP");
         let user_vp =
-            std::fs::read("wasm/vp_user.wasm").expect("cannot load user VP");
+            std::fs::read(&*top_level_directory().join("wasm/vp_user.wasm"))
+                .expect("cannot load user VP");
 
         // TODO load initial accounts from genesis
 

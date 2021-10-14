@@ -3,7 +3,7 @@ use std::process::Command;
 use std::{fs, thread, time};
 
 use anoma_apps::config::{Config, IntentGossiper, Ledger};
-use assert_cmd::assert::OutputAssertExt;
+// use assert_cmd::assert::OutputAssertExt;
 use libp2p::identity::Keypair;
 use libp2p::PeerId;
 
@@ -17,7 +17,11 @@ pub fn working_dir() -> PathBuf {
         .output()
         .unwrap();
     // Check that tendermint is on $PATH
-    Command::new("which").arg("tendermint").assert().success();
+    // Command::new("which").arg("tendermint").assert().success();
+    std::env::var("TENDERMINT").expect(
+        "The env variable TENDERMINT must be set and point to a local build \
+         of the tendermint abci++ branch",
+    );
     working_dir
 }
 

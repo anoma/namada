@@ -1,13 +1,9 @@
 use std::fs;
-use std::path::PathBuf;
 use std::process::Command;
 
 use anoma::proto::Tx;
-use anoma::types::address::{xan, Address};
-use anoma::types::storage::Epoch;
+use anoma::types::address::Address;
 use anoma::types::token;
-use anoma::types::transaction::{Fee, WrapperTx};
-use anoma_apps::wallet;
 use assert_cmd::assert::OutputAssertExt;
 use assert_cmd::cargo::CommandCargoExt;
 use borsh::BorshSerialize;
@@ -221,32 +217,65 @@ fn ledger_txs_and_queries() -> Result<()> {
         .env("ANOMA_LOG", "anoma=debug")
         .args(&["--base-dir", base_dir_arg, "ledger"]);
     println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
+    let mut session = spawn_command(cmd, Some(30_000))
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     session
         .exp_string("Anoma ledger node started")
         .map_err(|e| eyre!(format!("{}", e)))?;
     session
-        .exp_string("Started node")
+        .exp_string("started node")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     let txs_args = vec![
             // 2. Submit a token transfer tx
             vec![
-                "transfer", "--source", BERTHA, "--target", ALBERT, "--token",
-                XAN, "--amount", "10.1",
+                "transfer",
+                "--source",
+                BERTHA,
+                "--target",
+                ALBERT,
+                "--token",
+                XAN,
+                "--amount",
+                "10.1",
+                "--fee-amount",
+                "0",
+                "--gas-limit",
+                "0",
+                "--fee-token",
+                XAN,
             ],
             // 3. Submit a transaction to update an account's validity
             // predicate
-            vec!["update", "--address", BERTHA, "--code-path", VP_USER_WASM],
+            vec![
+                "update",
+                 "--address",
+                 BERTHA,
+                 "--code-path",
+                 VP_USER_WASM,
+                 "--fee-amount",
+                 "0",
+                 "--gas-limit",
+                 "0",
+                 "--fee-token",
+                 XAN,
+            ],
             // 4. Submit a custom tx
             vec![
                 "tx",
+                "--signer",
+                BERTHA,
                 "--code-path",
                 TX_NO_OP_WASM,
                 "--data-path",
                 "README.md",
+                "--fee-amount",
+                "0",
+                "--gas-limit",
+                "0",
+                "--fee-token",
+                XAN,
             ],
             // 5. Submit a tx to initialize a new account
             vec![
@@ -259,7 +288,13 @@ fn ledger_txs_and_queries() -> Result<()> {
                 "--code-path",
                 VP_USER_WASM,
                 "--alias",
-                "test-account"
+                "test-account",
+                "--fee-amount",
+                "0",
+                "--gas-limit",
+                "0",
+                "--fee-token",
+                XAN,
             ],
         ];
     for tx_args in &txs_args {
@@ -279,14 +314,12 @@ fn ledger_txs_and_queries() -> Result<()> {
                     eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
                 })?;
             if !dry_run {
-                request
-                    .exp_string("Process proposal accepted this transaction")
-                    .map_err(|e| {
-                        eyre!(format!(
-                            "in command: {}\n\nReason: {}",
-                            cmd_str, e
-                        ))
-                    })?;
+                request.exp_string("Transaction accepted").map_err(|e| {
+                    eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+                })?;
+                request.exp_string("Transaction applied").map_err(|e| {
+                    eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+                })?;
             }
             request.exp_string("Transaction is valid.").map_err(|e| {
                 eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
@@ -356,7 +389,7 @@ fn invalid_transactions() -> Result<()> {
         .exp_string("Anoma ledger node started")
         .map_err(|e| eyre!(format!("{}", e)))?;
     session
-        .exp_string("Started node")
+        .exp_string("started node")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // 2. Submit a an invalid transaction (trying to mint tokens should fail
@@ -371,12 +404,11 @@ fn invalid_transactions() -> Result<()> {
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let source_key = wallet::defaults::key_of(BERTHA);
     let tx_wasm_path = TX_MINT_TOKENS_WASM;
     let tx_wasm_path_abs = working_dir.join(&tx_wasm_path);
     println!("Reading tx wasm for test from {:?}", tx_wasm_path_abs);
     let tx_code = fs::read(tx_wasm_path_abs).unwrap();
-    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
+    let tx = Tx::new(tx_code, Some(data));
 
     let tx_data = tx.data.unwrap();
     std::fs::write(&tx_data_path, tx_data).unwrap();
@@ -387,6 +419,14 @@ fn invalid_transactions() -> Result<()> {
         tx_wasm_path,
         "--data-path",
         &tx_data_path,
+        "--signer",
+        BERTHA,
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
     ];
 
     let mut cmd = Command::cargo_bin("anomac")?;
@@ -401,11 +441,12 @@ fn invalid_transactions() -> Result<()> {
         eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
     })?;
 
-    request
-        .exp_string("Process proposal accepted this transaction")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+    request.exp_string("Transaction accepted").map_err(|e| {
+        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+    })?;
+    request.exp_string("Transaction applied").map_err(|e| {
+        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+    })?;
 
     request.exp_string("Transaction is invalid").map_err(|e| {
         eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
@@ -426,7 +467,7 @@ fn invalid_transactions() -> Result<()> {
 
     // Wait to commit a block
     session
-        .exp_regex(r"Committed block hash.*, height: 2")
+        .exp_regex(r"Committed block hash.*, height: 3")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
     // 3. Shut it down
@@ -453,7 +494,7 @@ fn invalid_transactions() -> Result<()> {
         .exp_string("Last state root hash:")
         .map_err(|e| eyre!(format!("{}", e)))?;
 
-    // 5. Submit and invalid transactions (invalid token address)
+    // 5. Submit an invalid transactions (invalid token address)
     let tx_args = vec![
         "transfer",
         "--source",
@@ -464,6 +505,12 @@ fn invalid_transactions() -> Result<()> {
         BERTHA,
         "--amount",
         "1_000_000.1",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
     ];
     let mut cmd = Command::cargo_bin("anomac")?;
     cmd.current_dir(&working_dir)
@@ -477,11 +524,12 @@ fn invalid_transactions() -> Result<()> {
         eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
     })?;
 
-    request
-        .exp_string("Process proposal accepted this transaction")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
+    request.exp_string("Transaction accepted").map_err(|e| {
+        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+    })?;
+    request.exp_string("Transaction applied").map_err(|e| {
+        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
+    })?;
 
     request
         .exp_string("Error trying to apply a transaction")
@@ -489,204 +537,10 @@ fn invalid_transactions() -> Result<()> {
             eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
         })?;
 
-    request.exp_string(r#""code": "2"#).map_err(|e| {
+    request.exp_string(r#""code": "4"#).map_err(|e| {
         eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
     })?;
     let status = request.process.wait().unwrap();
     assert_eq!(WaitStatus::Exited(request.process.child_pid, 0), status);
-    Ok(())
-}
-
-/// 1. Start the ledger
-/// 2. Submit a valid wrapper tx and check it is accepted6.
-/// Rejected cases:
-/// 3. Submit a wrapper tx without signing
-/// 4. Submit a wrapper tx signed with wrong key
-/// 5. Submit a wrapper tx where the fee >  user's balance
-/// 6. Submit a wrapper tx whose implicit address is unknown to the ledger
-#[test]
-fn test_wrapper_txs() -> Result<()> {
-    use wallet::defaults;
-    let working_dir = setup::working_dir();
-
-    let base_dir = tempdir().unwrap();
-    let base_dir_arg = &base_dir.path().to_string_lossy();
-
-    let bertha = "a1qq5qqqqqxv6yydz9xc6ry33589q5x33eggcnjs2xx9znydj9xuens3phxppnwvzpg4rrqdpswve4n9";
-    let keypair = defaults::key_of(&bertha);
-
-    use anoma::types::token::Amount;
-    let tx = WrapperTx::new(
-        Fee {
-            amount: Amount::whole(1_000_000),
-            token: xan(),
-        },
-        &keypair,
-        Epoch(1),
-        1.into(),
-        Tx::new(vec![], Some("transaction data".as_bytes().to_owned())),
-    );
-
-    // write out the tx code and data to files
-    let mut wasm = PathBuf::from(base_dir.path());
-    wasm.push("tx_wasm");
-    std::fs::write(&wasm, vec![]).expect("Test failed");
-    let wasm_path = wasm.to_str().unwrap();
-    let mut data = PathBuf::from(base_dir.path());
-    data.push("tx_data");
-    std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
-        .expect("Test failed");
-    let data_path = data.to_str().unwrap();
-
-    // 1. Run the ledger node
-    let mut cmd = Command::cargo_bin("anoman")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg, "ledger"]);
-
-    println!("Running {:?}", cmd);
-    let mut session = spawn_command(cmd, Some(20_000))
-        .map_err(|e| eyre!(format!("{}", e)))?;
-
-    session
-        .exp_string("Anoma ledger node started")
-        .map_err(|e| eyre!(format!("{}", e)))?;
-    session
-        .exp_string("Started node")
-        .map_err(|e| eyre!(format!("{}", e)))?;
-
-    // Submit a valid transaction
-    let public = keypair.public.to_string();
-    let tx_args = vec![
-        "tx",
-        "--code-path",
-        wasm_path,
-        "--data-path",
-        data_path,
-        "--signing-key",
-        &public,
-    ];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    // check that it is accepted by the process proposal method
-    request
-        .exp_string("Process proposal accepted this transaction")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-    // check that it is placed on - chain
-    request.exp_string("Transaction is valid.").map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    drop(request);
-
-    // Submit the transaction without signing
-    let tx_args =
-        vec!["tx", "--code-path", wasm_path, "--data-path", data_path];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    // check that it is rejected by the process proposal method
-    request
-        .exp_string("Expected signed WrapperTx data")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-    drop(request);
-
-    // Submit the transaction signed with wrong key
-    let albert = "a1qq5qqqqqg4znssfsgcurjsfhgfpy2vjyxy6yg3z98pp5zvp5xgersvfjxvcnx3f4xycrzdfkak0xhx";
-    let signing_key = defaults::key_of(&albert).public.to_string();
-    let tx_args = vec![
-        "tx",
-        "--code-path",
-        wasm_path,
-        "--data-path",
-        data_path,
-        "--signing-key",
-        &signing_key,
-    ];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    // check that it is rejected by the process proposal method
-    request
-        .exp_string("Signature verification failed")
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-    drop(request);
-
-    // submit a wrapper tx bertha cannot afford
-    let tx = WrapperTx::new(
-        Fee {
-            amount: Amount::whole(1_000_001),
-            token: xan(),
-        },
-        &keypair,
-        Epoch(1),
-        1.into(),
-        Tx::new(vec![], Some("transaction data".as_bytes().to_owned())),
-    );
-
-    // write out the tx data to file
-    let mut data = PathBuf::from(base_dir.path());
-    data.push("tx_data");
-    std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
-        .expect("Test failed");
-    let tx_args = vec![
-        "tx",
-        "--code-path",
-        wasm_path,
-        "--data-path",
-        data_path,
-        "--signing-key",
-        &public,
-    ];
-    let mut cmd = Command::cargo_bin("anomac")?;
-    cmd.current_dir(&working_dir)
-        .env("ANOMA_LOG", "debug")
-        .args(&["--base-dir", base_dir_arg])
-        .args(tx_args);
-
-    let cmd_str = format!("{:?}", cmd);
-
-    let mut request = spawn_command(cmd, Some(20_000)).map_err(|e| {
-        eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-    })?;
-    // check that it is rejected by the process proposal method
-    request
-        .exp_string(
-            "The address given does not have sufficient balance to pay fee",
-        )
-        .map_err(|e| {
-            eyre!(format!("in command: {}\n\nReason: {}", cmd_str, e))
-        })?;
-
     Ok(())
 }

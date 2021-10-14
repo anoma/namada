@@ -82,7 +82,8 @@ test-e2e:
 	$(cargo) test e2e -- --test-threads=1
 
 test-unit:
-	$(cargo) test -- --skip e2e
+	$(cargo) test -- --skip e2e --skip node::ledger::shell::process && \
+	$(cargo) test node::ledger::shell::process -- --test-threads=1
 
 test-wasm:
 	make -C $(wasms) test

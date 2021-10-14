@@ -344,7 +344,6 @@ pub mod wrapper_tx {
         #[test]
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
-            println!("{}", keypair.public.to_string());
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
@@ -366,7 +365,7 @@ pub mod wrapper_tx {
             assert_eq!(tx, decrypted);
         }
 
-        /// We test that when we try to decrpyt a tx and it
+        /// We test that when we try to decrypt a tx and it
         /// does not match the commitment, an error is returned
         #[test]
         fn test_decryption_invalid_hash() {
@@ -400,7 +399,7 @@ pub mod wrapper_tx {
         fn test_malleability_attack_detection() {
             let pubkey = <EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator();
             let keypair = gen_keypair();
-            // The intendend tx
+            // The intended tx
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),

@@ -352,7 +352,7 @@ impl Shell {
         let mut write_log = WriteLog::default();
         match Tx::try_from(tx_bytes) {
             Ok(tx) => {
-                let tx = TxType::from(tx);
+                let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
                 match protocol::apply_tx(
                     tx,
                     tx_bytes.len(),

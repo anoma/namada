@@ -1,5 +1,7 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
+use std::path::PathBuf;
+
 use anoma_proof_of_stake::parameters::PosParams;
 use anoma_proof_of_stake::types::{
     TotalVotingPowers, ValidatorStates, ValidatorVotingPowers,
@@ -30,6 +32,18 @@ const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_VOTING_POWER_STORAGE_KEY: &str = "total_voting_power";
+
+/// Gets the absolute path to root directory
+fn top_level_directory() -> PathBuf {
+    let mut current_path = std::env::current_dir()
+        .expect("Current directory should exist")
+        .canonicalize()
+        .expect("Current directory should exist");
+    while current_path.file_name().unwrap() != "anoma" {
+        current_path.pop();
+    }
+    current_path
+}
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -480,7 +494,8 @@ where
         pk: &Self::PublicKey,
     ) {
         let user_vp =
-            std::fs::read("wasm/vp_user.wasm").expect("cannot load user VP");
+            std::fs::read(&*top_level_directory().join("wasm/vp_user.wasm"))
+                .expect("cannot load user VP");
         // The staking reward accounts are setup with a user VP
         self.write(&Key::validity_predicate(address), user_vp.to_vec())
             .unwrap();

@@ -959,7 +959,7 @@ pub mod args {
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const FEE_AMOUNT: Arg<token::Amount> = arg("fee-amount");
-    const FEE_TOKEN: Arg<token::Amount> = arg("fee-token");
+    const FEE_TOKEN: Arg<WalletAddress> = arg("fee-token");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
     const GAS_LIMIT: Arg<token::Amount> = arg("gas-limit");
     const LEDGER_ADDRESS_ABOUT: &str =
@@ -1765,8 +1765,8 @@ pub mod args {
             let dry_run = DRY_RUN_TX.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
-            let fee_amount = AMOUNT.parse(matches);
-            let fee_token = TOKEN.parse(matches);
+            let fee_amount = FEE_AMOUNT.parse(matches);
+            let fee_token = FEE_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
 
             Self {

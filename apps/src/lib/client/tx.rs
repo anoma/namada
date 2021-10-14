@@ -210,23 +210,6 @@ pub async fn submit_withdraw(mut ctx: Context, args: args::Withdraw) {
 }
 
 async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx, keypair: &Keypair) {
-    let tx = WrapperTx::new(
-        Fee {
-            amount: args.fee_amount,
-            token: ctx.get(args.fee_token),
-        },
-        keypair,
-        rpc::query_epoch(args::Query {
-            ledger_address: args.ledger_address.clone(),
-        })
-        .await
-        .expect(
-            "Getting the epoch of the last committed block should not fail",
-        ),
-        args.gas_limit,
-        tx,
-    );
-
     // NOTE: use this to print the request JSON body:
     // let request =
     // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
@@ -237,12 +220,24 @@ async fn submit_tx(ctx: Context, args: args::Tx, tx: Tx, keypair: &Keypair) {
     // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
-        rpc::dry_run_tx(
-            &args.ledger_address,
-            tx.sign(keypair).unwrap().to_bytes(),
-        )
-        .await
+        rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await
     } else {
+        let tx = WrapperTx::new(
+            Fee {
+                amount: args.fee_amount,
+                token: ctx.get(args.fee_token),
+            },
+            keypair,
+            rpc::query_epoch(args::Query {
+                ledger_address: args.ledger_address.clone(),
+            })
+            .await
+            .expect(
+                "Getting the epoch of the last committed block should not fail",
+            ),
+            args.gas_limit,
+            tx,
+        );
         match broadcast_tx(args.ledger_address.clone(), tx, keypair).await {
             Ok(result) => {
                 save_initialized_accounts(
