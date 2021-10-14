@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use anoma::types::address::Address;
 use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
+pub use store::wallet_file;
 use thiserror::Error;
 
 pub use self::keys::{DecryptionError, StoredKeypair};
