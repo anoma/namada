@@ -111,7 +111,7 @@ def main():
 
     for config in drone_config:
         if 'steps' in config:
-            config_steps = config['steps'][0]
+            config_steps = config['steps'][1]
             if config_steps and config_steps['name'] == STEP_NAME:
                 commands = []
                 for file in files_to_check:
