@@ -133,8 +133,10 @@ pub fn network(
     )?;
 
     // Get the generated chain_id` from result of the last command
-    let (unread, matched) = init_network.exp_regex(r"Derived chain ID: .*")?;
-    let chain_id_raw = matched.split_once("Derived chain ID: ").unwrap().1;
+    let (unread, matched) =
+        init_network.exp_regex(r"Derived chain ID: .*\n")?;
+    let chain_id_raw =
+        matched.trim().split_once("Derived chain ID: ").unwrap().1;
     let chain_id = ChainId::from_str(chain_id_raw.trim())?;
     println!("'init-network' output: {}", unread);
     let net = Network { chain_id };
@@ -512,7 +514,7 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
         &["address", "find", "--alias", alias.as_ref()],
         Some(1)
     )?;
-    let (unread, matched) = find.exp_regex("Found address .*")?;
+    let (unread, matched) = find.exp_regex("Found address .*\n")?;
     let address = matched.trim().rsplit_once(" ").unwrap().1;
     Address::from_str(address).map_err(|e| {
         eyre!(format!(
@@ -536,9 +538,9 @@ pub fn find_keypair(test: &Test, alias: impl AsRef<str>) -> Result<Keypair> {
         ],
         Some(1)
     )?;
-    let (_unread, matched) = find.exp_regex("Public key: .*")?;
+    let (_unread, matched) = find.exp_regex("Public key: .*\n")?;
     let pk = matched.trim().rsplit_once(" ").unwrap().1;
-    let (unread, matched) = find.exp_regex("Secret key: .*")?;
+    let (unread, matched) = find.exp_regex("Secret key: .*\n")?;
     let sk = matched.trim().rsplit_once(" ").unwrap().1;
     let key = format!("{}{}", sk, pk);
     Keypair::from_str(&key).map_err(|e| {
