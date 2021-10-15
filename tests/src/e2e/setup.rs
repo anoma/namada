@@ -514,10 +514,13 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
         &["address", "find", "--alias", alias.as_ref()],
         Some(1)
     )?;
-    let (_unread, matched) = find.exp_regex("Found address .*")?;
+    let (unread, matched) = find.exp_regex("Found address .*")?;
     let address = matched.trim().rsplit_once(" ").unwrap().1;
     Address::from_str(address).map_err(|e| {
-        eyre!(format!("\n\nIn command: {}\n\nReason: {}", find.cmd_str, e))
+        eyre!(format!(
+            "Address: {} parsed from {}, Error: {}\n\nOutput: {}",
+            address, matched, e, unread
+        ))
     })
 }
 
@@ -537,11 +540,14 @@ pub fn find_keypair(test: &Test, alias: impl AsRef<str>) -> Result<Keypair> {
     )?;
     let (_unread, matched) = find.exp_regex("Public key: .*")?;
     let pk = matched.trim().rsplit_once(" ").unwrap().1;
-    let (_unread, matched) = find.exp_regex("Secret key: .*")?;
+    let (unread, matched) = find.exp_regex("Secret key: .*")?;
     let sk = matched.trim().rsplit_once(" ").unwrap().1;
     let key = format!("{}{}", sk, pk);
     Keypair::from_str(&key).map_err(|e| {
-        eyre!(format!("\n\nIn command: {}\n\nReason: {}", find.cmd_str, e))
+        eyre!(format!(
+            "Key: {} parsed from {}, Error: {}\n\nOutput: {}",
+            key, matched, e, unread
+        ))
     })
 }
 
