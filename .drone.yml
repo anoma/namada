@@ -121,7 +121,7 @@ steps:
   name: clippy
   pull: never
 - commands: [sccache --start-server, make fmt-check]
-  depends_on: [check-scripts-integrity]
+  depends_on: [check-scripts-integrity, clippy]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -699,6 +699,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 89a111e4c49642042d1b7ce5179cfbfa5852a9d82662c33195133aac3d299273
+hmac: 3fb0a7c5c481af3efe04784a634d358b14e51d70207c21989f6291b924e5b554
 
 ...
