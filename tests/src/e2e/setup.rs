@@ -331,8 +331,6 @@ pub fn working_dir() -> PathBuf {
 /// A command under test
 pub struct AnomaCmd {
     pub session: PtySession,
-    /// The command that ran this session, used in error reporting
-    cmd_str: String,
 }
 
 impl AnomaCmd {
@@ -498,7 +496,7 @@ where
             }
         }
     }
-    Ok(AnomaCmd { session, cmd_str })
+    Ok(AnomaCmd { session })
 }
 
 /// Sleep for given `seconds`.
