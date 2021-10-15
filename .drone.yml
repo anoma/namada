@@ -227,6 +227,7 @@ steps:
       - make fmt-check
     depends_on:
       - check-scripts-integrity
+      - clippy
     environment:
       AWS_ACCESS_KEY_ID:
         from_secret: aws_access_key_id
