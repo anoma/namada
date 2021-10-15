@@ -34,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "anoma"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "anoma_proof_of_stake",
  "bech32",
@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_proof_of_stake"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "borsh",
  "thiserror",
@@ -79,7 +79,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_tests"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "anoma",
  "anoma_vm_env",
@@ -97,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_vm_env"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "anoma",
  "anoma_vm_macro",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_vm_macro"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "quote",
  "syn",
@@ -2315,7 +2315,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tx_template"
-version = "0.1.0"
+version = "0.1.6"
 dependencies = [
  "anoma_tests",
  "anoma_vm_env",

@@ -25,7 +25,7 @@ checksum = "739f4a8db6605981345c5654f3a85b056ce52f37a39d34da03f25bf2151ea16e"
 
 [[package]]
 name = "anoma"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "anoma_proof_of_stake",
  "bech32",
@@ -49,7 +49,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_proof_of_stake"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "borsh",
  "thiserror",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_vm_env"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "anoma",
  "anoma_vm_macro",
@@ -66,7 +66,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_vm_macro"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "quote",
  "syn",
@@ -299,7 +299,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "filter"
-version = "0.1.0"
+version = "0.1.6"
 dependencies = [
  "anoma_vm_env",
  "borsh",
