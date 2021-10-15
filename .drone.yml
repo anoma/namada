@@ -199,13 +199,11 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: update-wasm
   pull: never
-- commands: [sccache --start-server, make test-wasm]
+- commands: [make test-wasm]
   depends_on: [update-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
-    SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-test-wasm
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: test-wasm
   pull: never
