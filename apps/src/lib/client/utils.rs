@@ -25,6 +25,7 @@ pub fn init_network(
         genesis_path,
         chain_id_prefix,
         unsafe_dont_encrypt,
+        consensus_timeout_commit,
     }: args::InitNetwork,
 ) {
     let mut config = genesis_config::open_genesis_config(&genesis_path);
@@ -351,25 +352,32 @@ pub fn init_network(
             // parameter. We need to remove this prefix, because
             // these sub-directories will be moved to validators' root
             // directories.
-            config.ledger.base_dir = global_args.base_dir.clone();
-            config.ledger.tendermint = global_args
+            config.ledger.shell.base_dir = global_args.base_dir.clone();
+            config.ledger.tendermint.tendermint_dir = global_args
                 .base_dir
                 .join(chain_id.as_str())
                 .join(config::TENDERMINT_DIR);
-            config.ledger.db = global_args
+            config.ledger.shell.db_dir = global_args
                 .base_dir
                 .join(chain_id.as_str())
                 .join(config::DB_DIR);
             // Add a ledger P2P persistent peers
-            config.ledger.p2p_persistent_peers = persistent_peers.clone();
+            config.ledger.tendermint.p2p_persistent_peers =
+                persistent_peers.clone();
+            config.ledger.tendermint.consensus_timeout_commit =
+                consensus_timeout_commit;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
-            config.ledger.p2p_address.set_port(first_port);
-            config.ledger.rpc_address.set_port(first_port + 1);
-            config.ledger.ledger_address.set_port(first_port + 2);
+            config.ledger.tendermint.p2p_address.set_port(first_port);
+            config
+                .ledger
+                .tendermint
+                .rpc_address
+                .set_port(first_port + 1);
+            config.ledger.shell.ledger_address.set_port(first_port + 2);
             // Validator node should turned off peer exchange reactor
-            config.ledger.p2p_pex = false;
+            config.ledger.tendermint.p2p_pex = false;
 
             // Configure the intent gossiper
             config.intent_gossiper = gossiper_configs.remove(name).unwrap();
@@ -388,7 +396,9 @@ pub fn init_network(
 
     // Update the ledger config persistent peers and save it
     let mut config = Config::load(&global_args.base_dir, &chain_id);
-    config.ledger.p2p_persistent_peers = persistent_peers;
+    config.ledger.tendermint.p2p_persistent_peers = persistent_peers;
+    config.ledger.tendermint.consensus_timeout_commit =
+        consensus_timeout_commit;
     config.ledger.genesis_time = genesis.genesis_time.into();
     if let Some(discover) = &mut config.intent_gossiper.discover_peer {
         discover.bootstrap_peers = bootstrap_peers;
@@ -495,7 +505,7 @@ fn init_genesis_validator_aux(
 
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
-    let tendermint_home = &config.ledger.tendermint;
+    let tendermint_home = &config.ledger.tendermint.tendermint_dir;
     tendermint_node::write_validator_key(
         tendermint_home,
         &validator_address,

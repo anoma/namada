@@ -25,6 +25,96 @@ use thiserror::Error;
 
 use crate::cli;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Config {
+    pub wasm_dir: PathBuf,
+    pub ledger: Ledger,
+    pub intent_gossiper: IntentGossiper,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Ledger {
+    pub genesis_time: Rfc3339String,
+    pub chain_id: ChainId,
+    pub shell: Shell,
+    pub tendermint: Tendermint,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Shell {
+    pub base_dir: PathBuf,
+    pub db_dir: PathBuf,
+    pub ledger_address: SocketAddr,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Tendermint {
+    pub tendermint_dir: PathBuf,
+    pub rpc_address: SocketAddr,
+    pub p2p_address: SocketAddr,
+    /// The persistent peers addresses must include node ID
+    pub p2p_persistent_peers: Vec<tendermint::net::Address>,
+    /// Turns the peer exchange reactor on or off. Validator node will want the
+    /// pex turned off.
+    pub p2p_pex: bool,
+    pub consensus_timeout_commit: tendermint::Timeout,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct IntentGossiper {
+    pub address: Multiaddr,
+    pub topics: HashSet<String>,
+    pub subscription_filter: SubscriptionFilter,
+    pub rpc: Option<RpcServer>,
+    pub gossiper: Gossiper,
+    pub discover_peer: Option<DiscoverPeer>,
+    pub matchmaker: Option<Matchmaker>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RpcServer {
+    pub address: SocketAddr,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Matchmaker {
+    pub matchmaker: PathBuf,
+    pub tx_code: PathBuf,
+    pub ledger_address: net::Address,
+    pub filter: Option<PathBuf>,
+}
+
+// TODO maybe add also maxCount for a maximum number of subscription for a
+// filter.
+
+// TODO toml failed to serialize without "untagged" because does not support
+// enum with nested data, unless with the untagged flag. This might be a source
+// of confusion in the future... Another approach would be to have multiple
+// field for each filter possibility but it's less nice.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum SubscriptionFilter {
+    RegexFilter(#[serde(with = "serde_regex")] Regex),
+    WhitelistFilter(Vec<String>),
+}
+
+// TODO peer_id can be part of Multiaddr, mayby this splitting is not useful ?
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+pub struct PeerAddress {
+    pub address: Multiaddr,
+    pub peer_id: PeerId,
+}
+
+// TODO add reserved_peers: explicit peers for gossipsub network, to not be
+// added to kademlia
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DiscoverPeer {
+    pub max_discovery_peers: u64,
+    pub kademlia: bool,
+    pub mdns: bool,
+    pub bootstrap_peers: HashSet<PeerAddress>,
+}
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error while reading config: {0}")]
@@ -61,244 +151,11 @@ pub const TENDERMINT_DIR: &str = "tendermint";
 pub const DB_DIR: &str = "db";
 
 pub type Result<T> = std::result::Result<T, Error>;
-pub const VALUE_AFTER_TABLE_ERROR_MSG: &str = r#"
-Error while serializing to toml. It means that some nested structure is followed
- by simple fields.
-This fails:
-    struct Nested{
-       i:int
-    }
-
-    struct Broken{
-       nested:Nested,
-       simple:int
-    }
-And this is correct
-    struct Nested{
-       i:int
-    }
-
-    struct Correct{
-       simple:int
-       nested:Nested,
-    }
-"#;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Ledger {
-    pub base_dir: PathBuf,
-    pub chain_id: ChainId,
-    pub genesis_time: Rfc3339String,
-    pub tendermint: PathBuf,
-    pub db: PathBuf,
-    pub ledger_address: SocketAddr,
-    pub rpc_address: SocketAddr,
-    pub p2p_address: SocketAddr,
-    /// The persistent peers addresses must include node ID
-    pub p2p_persistent_peers: Vec<tendermint::net::Address>,
-    /// Turns the peer exchange reactor on or off. Validator node will want the
-    /// pex turned off.
-    pub p2p_pex: bool,
-    pub wasm_dir: PathBuf,
-}
-
-impl Ledger {
-    pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
-        let base_dir = base_dir.as_ref().to_owned();
-        let sub_dir = base_dir.join(chain_id.as_str());
-
-        #[cfg(feature = "dev")]
-        let p2p_persistent_peers = vec![];
-        #[cfg(not(feature = "dev"))]
-        let p2p_persistent_peers = vec![
-            tendermint::net::Address::from_str(
-                "72eb02444a4736d569734675c6ba893aadb3fb99@52.210.23.30:26656",
-            )
-            .unwrap(),
-            tendermint::net::Address::from_str(
-                "39f31bcf0a0b73a08d9e18f4e9cada33d4997779@63.34.55.152:26656",
-            )
-            .unwrap(),
-            tendermint::net::Address::from_str(
-                "d7d2e6e942b157df4137ca3b47258ca20db00416@54.195.72.213:26656",
-            )
-            .unwrap(),
-            tendermint::net::Address::from_str(
-                "31752d323de34e4dcd36ecf30b4ed179de7dc48a@79.125.112.218:26656",
-            )
-            .unwrap(),
-        ];
-
-        Self {
-            base_dir,
-            chain_id,
-            genesis_time: Rfc3339String("1970-01-01T00:00:00Z".to_owned()),
-            tendermint: sub_dir.join(TENDERMINT_DIR),
-            db: sub_dir.join(DB_DIR),
-            ledger_address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                26658,
-            ),
-            rpc_address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                26657,
-            ),
-            p2p_address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                26656,
-            ),
-            p2p_persistent_peers,
-            p2p_pex: true,
-            wasm_dir: "wasm".into(),
-        }
-    }
-}
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct RpcServer {
-    pub address: SocketAddr,
-}
-impl Default for RpcServer {
-    fn default() -> Self {
-        Self {
-            address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                26660,
-            ),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Matchmaker {
-    pub matchmaker: PathBuf,
-    pub tx_code: PathBuf,
-    pub ledger_address: net::Address,
-    pub filter: Option<PathBuf>,
-}
-
-// TODO maybe add also maxCount for a maximum number of subscription for a
-// filter.
-
-// TODO toml failed to serialize without "untagged" because does not support
-// enum with nested data, unless with the untagged flag. This might be a source
-// of confusion in the future... Another approach would be to have multiple
-// field for each filter possibility but it's less nice.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(untagged)]
-pub enum SubscriptionFilter {
-    RegexFilter(#[serde(with = "serde_regex")] Regex),
-    WhitelistFilter(Vec<String>),
-}
-
-// TODO peer_id can be part of Multiaddr, mayby this splitting is not useful ?
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct PeerAddress {
-    pub address: Multiaddr,
-    pub peer_id: PeerId,
-}
-
-impl Serialize for PeerAddress {
-    fn serialize<S>(
-        &self,
-        serializer: S,
-    ) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut address = self.address.clone();
-        address.push(Protocol::P2p(Multihash::from(self.peer_id)));
-        address.serialize(serializer)
-    }
-}
-
-impl de::Error for SerdeError {
-    fn custom<T: Display>(msg: T) -> Self {
-        SerdeError::Message(msg.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for PeerAddress {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::Error;
-
-        let mut address = Multiaddr::deserialize(deserializer)
-            .map_err(|err| SerdeError::BadBootstrapPeerFormat(err.to_string()))
-            .map_err(D::Error::custom)?;
-        if let Some(Protocol::P2p(mh)) = address.pop() {
-            let peer_id = PeerId::from_multihash(mh).unwrap();
-            Ok(Self { address, peer_id })
-        } else {
-            Err(SerdeError::BadBootstrapPeerFormat(address.to_string()))
-                .map_err(D::Error::custom)
-        }
-    }
-}
-
-// TODO add reserved_peers: explicit peers for gossipsub network, to not be
-// added to kademlia
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DiscoverPeer {
-    pub max_discovery_peers: u64,
-    pub kademlia: bool,
-    pub mdns: bool,
-    pub bootstrap_peers: HashSet<PeerAddress>,
-}
-
-impl Default for DiscoverPeer {
-    /// default configuration for discovering peer.
-    /// max_discovery_peers: 16,
-    /// kademlia: true,
-    /// mdns: true,
-    fn default() -> Self {
-        Self {
-            max_discovery_peers: 16,
-            kademlia: true,
-            mdns: true,
-            bootstrap_peers: HashSet::new(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct IntentGossiper {
-    pub address: Multiaddr,
-    pub topics: HashSet<String>,
-    pub subscription_filter: SubscriptionFilter,
-    pub rpc: Option<RpcServer>,
-    pub gossiper: Gossiper,
-    pub discover_peer: Option<DiscoverPeer>,
-    pub matchmaker: Option<Matchmaker>,
-}
-
-impl Default for IntentGossiper {
-    fn default() -> Self {
-        Self {
-            address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/26659").unwrap(),
-            rpc: None,
-            subscription_filter: SubscriptionFilter::RegexFilter(
-                Regex::new("asset_v\\d{1,2}").unwrap(),
-            ),
-
-            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
-            gossiper: Gossiper::new(),
-            matchmaker: None,
-            discover_peer: Some(DiscoverPeer::default()),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    pub ledger: Ledger,
-    pub intent_gossiper: IntentGossiper,
-}
 
 impl Config {
     pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
         Self {
+            wasm_dir: "wasm".into(),
             ledger: Ledger::new(base_dir, chain_id),
             intent_gossiper: IntentGossiper::default(),
         }
@@ -320,9 +177,7 @@ impl Config {
             }
         }
     }
-}
 
-impl Config {
     /// Read the config from a file, or generate a default one and write it to
     /// a file if it doesn't already exist.
     pub fn read(base_dir: &Path, chain_id: &ChainId) -> Result<Self> {
@@ -377,6 +232,86 @@ impl Config {
     fn file_path(base_dir: &Path, chain_id: &ChainId) -> PathBuf {
         // Join base dir to the chain ID
         base_dir.join(chain_id.to_string()).join(FILENAME)
+    }
+}
+
+impl Ledger {
+    pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
+        let base_dir = base_dir.as_ref().to_owned();
+        let sub_dir = base_dir.join(chain_id.as_str());
+
+        Self {
+            chain_id,
+            genesis_time: Rfc3339String("1970-01-01T00:00:00Z".to_owned()),
+            shell: Shell {
+                base_dir,
+                db_dir: sub_dir.join(DB_DIR),
+                ledger_address: SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    26658,
+                ),
+            },
+            tendermint: Tendermint::new(&sub_dir),
+        }
+    }
+}
+
+impl Tendermint {
+    fn new(dir: impl AsRef<Path>) -> Self {
+        #[cfg(feature = "dev")]
+        let p2p_persistent_peers = vec![];
+        #[cfg(not(feature = "dev"))]
+        let p2p_persistent_peers = vec![
+            tendermint::net::Address::from_str(
+                "72eb02444a4736d569734675c6ba893aadb3fb99@52.210.23.30:26656",
+            )
+            .unwrap(),
+            tendermint::net::Address::from_str(
+                "39f31bcf0a0b73a08d9e18f4e9cada33d4997779@63.34.55.152:26656",
+            )
+            .unwrap(),
+            tendermint::net::Address::from_str(
+                "d7d2e6e942b157df4137ca3b47258ca20db00416@54.195.72.213:26656",
+            )
+            .unwrap(),
+            tendermint::net::Address::from_str(
+                "31752d323de34e4dcd36ecf30b4ed179de7dc48a@79.125.112.218:26656",
+            )
+            .unwrap(),
+        ];
+
+        Self {
+            tendermint_dir: dir.as_ref().join(TENDERMINT_DIR),
+            rpc_address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                26657,
+            ),
+            p2p_address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                26656,
+            ),
+            p2p_persistent_peers,
+            p2p_pex: true,
+            consensus_timeout_commit: tendermint::Timeout::from_str("1s")
+                .unwrap(),
+        }
+    }
+}
+
+impl Default for IntentGossiper {
+    fn default() -> Self {
+        Self {
+            address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/26659").unwrap(),
+            rpc: None,
+            subscription_filter: SubscriptionFilter::RegexFilter(
+                Regex::new("asset_v\\d{1,2}").unwrap(),
+            ),
+
+            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
+            gossiper: Gossiper::new(),
+            matchmaker: None,
+            discover_peer: Some(DiscoverPeer::default()),
+        }
     }
 }
 
@@ -488,3 +423,92 @@ impl IntentGossiper {
         gossiper_config
     }
 }
+
+impl Default for RpcServer {
+    fn default() -> Self {
+        Self {
+            address: SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                26660,
+            ),
+        }
+    }
+}
+
+impl Serialize for PeerAddress {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut address = self.address.clone();
+        address.push(Protocol::P2p(Multihash::from(self.peer_id)));
+        address.serialize(serializer)
+    }
+}
+
+impl de::Error for SerdeError {
+    fn custom<T: Display>(msg: T) -> Self {
+        SerdeError::Message(msg.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for PeerAddress {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let mut address = Multiaddr::deserialize(deserializer)
+            .map_err(|err| SerdeError::BadBootstrapPeerFormat(err.to_string()))
+            .map_err(D::Error::custom)?;
+        if let Some(Protocol::P2p(mh)) = address.pop() {
+            let peer_id = PeerId::from_multihash(mh).unwrap();
+            Ok(Self { address, peer_id })
+        } else {
+            Err(SerdeError::BadBootstrapPeerFormat(address.to_string()))
+                .map_err(D::Error::custom)
+        }
+    }
+}
+
+impl Default for DiscoverPeer {
+    /// default configuration for discovering peer.
+    /// max_discovery_peers: 16,
+    /// kademlia: true,
+    /// mdns: true,
+    fn default() -> Self {
+        Self {
+            max_discovery_peers: 16,
+            kademlia: true,
+            mdns: true,
+            bootstrap_peers: HashSet::new(),
+        }
+    }
+}
+
+pub const VALUE_AFTER_TABLE_ERROR_MSG: &str = r#"
+Error while serializing to toml. It means that some nested structure is followed
+ by simple fields.
+This fails:
+    struct Nested{
+       i:int
+    }
+
+    struct Broken{
+       nested:Nested,
+       simple:int
+    }
+And this is correct
+    struct Nested{
+       i:int
+    }
+
+    struct Correct{
+       simple:int
+       nested:Nested,
+    }
+"#;
