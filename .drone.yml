@@ -121,7 +121,7 @@ steps:
   name: clippy
   pull: never
 - commands: [sccache --start-server, make fmt-check]
-  depends_on: [check-scripts-integrity, clippy]
+  depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -204,6 +204,8 @@ steps:
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-test-wasm
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   name: test-wasm
   pull: never
@@ -583,7 +585,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: update-wasm
   pull: never
-- commands: [sccache --start-server, make test-wasm]
+- commands: [make test-wasm]
   depends_on: [update-wasm]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -697,6 +699,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: b8673469088c0e16b3242842d9cddae6f59efda7a483bb8640967de9c4150323
+hmac: 89a111e4c49642042d1b7ce5179cfbfa5852a9d82662c33195133aac3d299273
 
 ...
