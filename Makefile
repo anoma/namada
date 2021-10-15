@@ -92,9 +92,8 @@ audit:
 
 test: test-unit test-e2e test-wasm
 
-# TODO remove `ANOMA_E2E_DEBUG` once we have genesis config for tests
 test-e2e:
-	ANOMA_E2E_DEBUG=true $(cargo) test e2e -- --test-threads=1
+	RUST_BACKTRACE=1 $(cargo) test e2e -- --test-threads=1
 
 test-unit:
 	$(cargo) test -- --skip e2e
