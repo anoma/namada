@@ -1,4 +1,5 @@
 FROM ubuntu:16.04
+ARG RUST_VERSION=1.54.0
 WORKDIR /var/build
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && apt-get install -y \
@@ -11,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup toolchain install 1.54.0 --component \
+RUN rustup toolchain install $RUST_VERSION --component \
     cargo \ 
     rls \
     rustc \
