@@ -1,9 +1,9 @@
-FROM ubuntu:20.04
+FROM ubuntu:16.04
 WORKDIR /var/build
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && apt-get install -y \
     build-essential \
-    clang-tools-11 \
+    clang-tools-8 \
     curl \
     git \
     libssl-dev \
