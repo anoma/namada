@@ -147,8 +147,8 @@ async fn run_shell(
     failure_receiver: Receiver<()>,
 ) {
     // Construct our ABCI application.
-    let service =
-        AbcippShim::new(config.base_dir, &config.db_dir, chain_id, wasm_dir);
+    let db_dir = config.db_dir(&chain_id);
+    let service = AbcippShim::new(config.base_dir, db_dir, chain_id, wasm_dir);
 
     // Split it into components.
     let (consensus, mempool, snapshot, info) = split::service(service, 5);
@@ -202,6 +202,7 @@ async fn run_shell(
 /// When the shell process finishes, we check if it finished with a panic. If it
 /// did we stop the tendermint node with a channel that acts as a kill switch.
 pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
+    let tendermint_dir = config.tendermint_dir();
     let ledger_address = config.shell.ledger_address.to_string();
     let chain_id = config.chain_id.clone();
     let genesis_time = config
@@ -230,6 +231,7 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
     // start Tendermint node
     let tendermint_handle = std::thread::spawn(move || {
         if let Err(err) = tendermint_node::run(
+            tendermint_dir,
             chain_id,
             genesis_time,
             ledger_address,

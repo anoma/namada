@@ -93,7 +93,7 @@ audit:
 test: test-unit test-e2e test-wasm
 
 test-e2e:
-	$(cargo) test e2e -- --test-threads=1
+	RUST_BACKTRACE=1 $(cargo) test e2e -- --test-threads=1
 
 test-unit:
 	$(cargo) test -- --skip e2e

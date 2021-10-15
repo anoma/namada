@@ -23,9 +23,10 @@ pub enum Error {
     ServerError(String, String),
 }
 
+/// A hash map where keys are file names and values their expected sha256 hash
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
-struct Checksums(HashMap<String, String>);
+pub struct Checksums(pub HashMap<String, String>);
 
 const S3_URL: &str = "https://heliax-anoma-wasm-v1.s3.eu-west-1.amazonaws.com";
 

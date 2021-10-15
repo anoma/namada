@@ -332,6 +332,6 @@ fn show_overwrite_confirmation(
 const FILE_NAME: &str = "wallet.toml";
 
 /// Get the path to the wallet store.
-fn wallet_file(store_dir: &Path) -> PathBuf {
-    store_dir.join(FILE_NAME)
+pub fn wallet_file(store_dir: impl AsRef<Path>) -> PathBuf {
+    store_dir.as_ref().join(FILE_NAME)
 }
