@@ -660,8 +660,19 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- commands: [sccache --start-server, make package]
+- commands: [sccache --start-server, sh scripts/ci/build-and-publish-docs.sh]
   depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    GITHUB_TOKEN: {from_secret: github_token}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-docs
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: build-and-publish-docs
+  pull: never
+- commands: [sccache --start-server, make package]
+  depends_on: [build-and-publish-docs]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
@@ -683,6 +694,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 0901b0c7fadc5e9eca173b1ed5425df0fc1aa253fa8082364c2909a2783f7810
+hmac: 5468490844fb38bcab87e764970f71f35f885ec56e0f0147354a7f4f9c0fcb50
 
 ...
