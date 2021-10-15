@@ -18,7 +18,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -163,7 +163,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -266,7 +266,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -453,7 +453,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -540,7 +540,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -644,7 +644,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -731,7 +731,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -820,7 +820,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -966,7 +966,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -1177,7 +1177,7 @@ steps:
     pull: never
   - commands:
       - >-
-        echo "936bef03d939acac7b749cb915eb45dd7d44e7ca2103fd186935335248fe1d95 
+        echo "dafc718a7807efb2757edcc810d630ae0f9ea9e31553eeab2ccb9e07cbfbe249 
         Makefile" | sha256sum -c -
       - >-
         echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6 
@@ -1254,6 +1254,6 @@ workspace:
   path: /usr/local/rust/project
 ---
 kind: signature
-hmac: 5fc4a52f2c02c4a9be89320d9da65268a9fbeeeb5ca25f93df8d09eff01835dc
+hmac: 6968ef0dab0cc266848569be4a38492a05b84edaab849829c050a34bd50a3e39
 
 ...
