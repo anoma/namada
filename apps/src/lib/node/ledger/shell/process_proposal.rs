@@ -51,7 +51,7 @@ impl Shell {
                            are not supported"
                         .into(),
                 },
-                TxType::Decrypted(tx) => match self.get_next_wrapper() {
+                TxType::Decrypted(tx) => match self.next_wrapper() {
                     Some(wrapper) => {
                         if wrapper.tx_hash != tx.hash_commitment() {
                             TxResult {
@@ -190,7 +190,7 @@ mod test_process_proposal {
         /// Add a wrapper tx to the queue of txs to be decrypted
         /// in the current block proposal
         fn add_wrapper_tx(&mut self, wrapper: WrapperTx) {
-            self.shell.storage.wrapper_txs.push(wrapper);
+            self.shell.storage.wrapper_txs.push_back(wrapper);
             self.shell.revert_wrapper_txs();
         }
     }
@@ -402,7 +402,6 @@ mod test_process_proposal {
             shell.add_wrapper_tx(wrapper);
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
-        txs.reverse();
         let req_1 = ProcessProposal {
             tx: txs[0].to_bytes(),
         };

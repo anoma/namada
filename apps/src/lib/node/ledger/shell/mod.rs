@@ -117,30 +117,30 @@ impl Shell {
             })
             .expect("PersistentStorage cannot be initialized");
 
-        let next_wrapper = storage.wrapper_txs.len();
         Self {
             storage,
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
             byzantine_validators: vec![],
-            next_wrapper,
+            next_wrapper: 0,
         }
     }
 
     /// Iterate lazily over the wrapper txs in order
-    fn get_next_wrapper(&mut self) -> Option<&WrapperTx> {
-        if self.next_wrapper == 0 {
+    fn next_wrapper(&mut self) -> Option<&WrapperTx> {
+        if self.next_wrapper == self.storage.wrapper_txs.len() {
             None
         } else {
-            self.next_wrapper -= 1;
-            Some(&self.storage.wrapper_txs[self.next_wrapper])
+            let next_wrapper = Some(&self.storage.wrapper_txs[self.next_wrapper]);
+            self.next_wrapper += 1;
+            next_wrapper
         }
     }
 
     /// If we reject the decrypted txs because they were out of
     /// order, reset the iterator.
     pub fn revert_wrapper_txs(&mut self) {
-        self.next_wrapper = self.storage.wrapper_txs.len();
+        self.next_wrapper = 0;
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if

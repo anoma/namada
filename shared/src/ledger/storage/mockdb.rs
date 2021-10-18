@@ -1,6 +1,6 @@
 //! DB mock for testing
 
-use std::collections::{btree_map, BTreeMap, HashMap};
+use std::collections::{btree_map, BTreeMap, HashMap, VecDeque};
 use std::ops::Bound::{Excluded, Included};
 
 use super::{BlockState, DBIter, Error, Result, DB};
@@ -167,7 +167,7 @@ impl DB for MockDB {
         let mut pred_epochs = None;
         let mut address_gen = None;
         let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
-        let mut wrapper_txs = Vec::new();
+        let mut wrapper_txs = VecDeque::new();
         for (path, bytes) in
             self.0.range((Included(prefix), Excluded(upper_prefix)))
         {

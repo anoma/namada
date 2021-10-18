@@ -15,7 +15,7 @@
 //!   - `address_gen`: established address generator
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 
 use anoma::ledger::storage::types::PrefixIterator;
@@ -282,7 +282,7 @@ impl DB for RocksDB {
         let mut pred_epochs = None;
         let mut address_gen = None;
         let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
-        let mut wrapper_txs = Vec::new();
+        let mut wrapper_txs = VecDeque::new();
         for (key, bytes) in self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,

@@ -6,7 +6,7 @@ pub mod types;
 pub mod write_log;
 
 use core::fmt::Debug;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Display;
 
 use sparse_merkle_tree::default_store::DefaultStore;
@@ -61,7 +61,7 @@ where
     pub address_gen: EstablishedAddressGen,
     /// The encrypted transactions not yet decrypted and applied, in reverse
     /// order
-    pub wrapper_txs: Vec<WrapperTx>,
+    pub wrapper_txs: VecDeque<WrapperTx>,
 }
 
 /// The block storage data
@@ -121,7 +121,7 @@ pub struct BlockState {
     /// Established address generator
     pub address_gen: EstablishedAddressGen,
     /// The encrypted transactions not yet decrypted and applied
-    pub wrapper_txs: Vec<WrapperTx>,
+    pub wrapper_txs: VecDeque<WrapperTx>,
 }
 
 /// A database backend.
@@ -583,7 +583,7 @@ pub mod testing {
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),
-                wrapper_txs: Vec::default(),
+                wrapper_txs: VecDeque::default(),
             }
         }
     }

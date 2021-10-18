@@ -3,7 +3,7 @@
 
 mod rocksdb;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::path::Path;
 
@@ -44,7 +44,7 @@ pub fn open(db_path: impl AsRef<Path>, chain_id: String) -> PersistentStorage {
         address_gen: EstablishedAddressGen::new(
             "Privacy is a function of liberty.",
         ),
-        wrapper_txs: Vec::new(),
+        wrapper_txs: VecDeque::new(),
     }
 }
 

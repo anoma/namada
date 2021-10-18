@@ -73,7 +73,7 @@ impl Shell {
 
             let mut tx_result = match &processed_tx {
                 TxType::Wrapper(wrapper) => {
-                    self.storage.wrapper_txs.push(wrapper.clone());
+                    self.storage.wrapper_txs.push_back(wrapper.clone());
                     Event::new_tx_event(&processed_tx, height.0)
                 }
                 TxType::Decrypted(_) => {
@@ -92,6 +92,8 @@ impl Shell {
                         response.events.push(tx_result.into());
                         continue;
                     }
+                    // We remove the corresponding wrapper tx from the queue
+                    self.storage.wrapper_txs.pop_front();
                     Event::new_tx_event(&processed_tx, height.0)
                 }
                 TxType::Raw(_) => unreachable!(),

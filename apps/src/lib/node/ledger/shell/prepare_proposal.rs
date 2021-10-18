@@ -41,7 +41,6 @@ impl Shell {
             .storage
             .wrapper_txs
             .iter()
-            .rev()
             .map(|tx| {
                 Tx::from(match tx.decrypt(privkey) {
                     Ok(tx) => DecryptedTx::Decrypted(tx),
