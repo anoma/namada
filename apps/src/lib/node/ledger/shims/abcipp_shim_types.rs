@@ -187,6 +187,7 @@ pub mod shim {
         pub struct RevertProposal;
 
         /// A Tx and the result of calling Process Proposal on it
+        #[derive(Debug, Clone)]
         pub struct ProcessedTx {
             pub tx: super::TxBytes,
             pub result: super::response::TxResult,
@@ -237,6 +238,7 @@ pub mod shim {
             pub txs: Vec<ProcessedTx>,
             pub reject_all_decrypted: bool,
         }
+
     }
 
     /// Custom types for response payloads
@@ -248,7 +250,7 @@ pub mod shim {
         #[derive(Debug, Default)]
         pub struct VerifyHeader;
 
-        #[derive(Debug, Default)]
+        #[derive(Debug, Default, Clone)]
         pub struct TxResult {
             pub code: u32,
             pub info: String,

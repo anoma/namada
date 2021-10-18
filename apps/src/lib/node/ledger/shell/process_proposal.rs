@@ -134,12 +134,12 @@ impl Shell {
     }
 }
 
+/// We test the failure cases of [`process_proposal`]. The happy flows
+/// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use std::path::PathBuf;
-
     use anoma::types::address::xan;
-    use anoma::types::key::ed25519::{Keypair, SignedTxData};
+    use anoma::types::key::ed25519::SignedTxData;
     use anoma::types::storage::Epoch;
     use anoma::types::transaction::{Fee, Hash};
     use borsh::BorshDeserialize;
@@ -147,60 +147,8 @@ mod test_process_proposal {
     use tendermint_proto::google::protobuf::Timestamp;
 
     use super::*;
+    use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessProposal;
-
-    fn gen_keypair() -> Keypair {
-        use rand::prelude::ThreadRng;
-        use rand::thread_rng;
-
-        let mut rng: ThreadRng = thread_rng();
-        Keypair::generate(&mut rng)
-    }
-
-    struct TestShell {
-        shell: Shell,
-    }
-
-    impl TestShell {
-        /// Create a new shell
-        fn new() -> Self {
-            Self {
-                shell: Shell::new(
-                    PathBuf::from(".anoma")
-                        .join("db")
-                        .join("anoma-devchain-00000"),
-                    "".into(),
-                ),
-            }
-        }
-
-        /// Forward a InitChain request and expect a success
-        fn init_chain(&mut self, req: RequestInitChain) {
-            self.shell
-                .init_chain(req)
-                .expect("Test shell failed to initialize");
-        }
-
-        /// Forward a ProcessProposal request and extract the relevant
-        /// response data to return
-        fn process_proposal(&mut self, req: ProcessProposal) -> TxResult {
-            self.shell.process_proposal(req).result
-        }
-
-        /// Add a wrapper tx to the queue of txs to be decrypted
-        /// in the current block proposal
-        fn add_wrapper_tx(&mut self, wrapper: WrapperTx) {
-            self.shell.storage.wrapper_txs.push_back(wrapper);
-            self.shell.revert_wrapper_txs();
-        }
-    }
-
-    impl Drop for TestShell {
-        fn drop(&mut self) {
-            std::fs::remove_dir_all(".anoma")
-                .expect("Unable to clean up test shell");
-        }
-    }
 
     /// Test that if a wrapper tx is not signed, it is rejected
     /// by [`process_proposal`].

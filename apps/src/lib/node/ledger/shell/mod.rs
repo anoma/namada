@@ -378,3 +378,103 @@ impl Shell {
         }
     }
 }
+
+/// Helper functions and types for writing unit tests
+/// for the shell
+#[cfg(test)]
+mod test_utils {
+    use std::path::PathBuf;
+
+    use anoma::types::key::ed25519::Keypair;
+    use tendermint_proto::abci::RequestInitChain;
+
+    use super::*;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessProposal};
+
+    /// Gets the absolute path to root directory
+    pub fn top_level_directory() -> PathBuf {
+        let mut current_path = std::env::current_dir()
+            .expect("Current directory should exist")
+            .canonicalize()
+            .expect("Current directory should exist");
+        while current_path.file_name().unwrap() != "anoma" {
+            current_path.pop();
+        }
+        current_path
+    }
+
+    /// Generate a random public/private keypair
+    pub(super) fn gen_keypair() -> Keypair {
+        use rand::prelude::ThreadRng;
+        use rand::thread_rng;
+
+        let mut rng: ThreadRng = thread_rng();
+        Keypair::generate(&mut rng)
+    }
+
+    /// A wrapper around the shell that implements
+    /// Drop so as to clean up the files that it
+    /// generates. Also allows illegal state
+    /// modifications for testing purposes
+    pub(super) struct TestShell {
+        shell: Shell,
+    }
+
+    impl TestShell {
+        /// Create a new shell
+        pub fn new() -> Self {
+            Self {
+                shell: Shell::new(
+                    PathBuf::from(".anoma")
+                        .join("db")
+                        .join("anoma-devchain-00000"),
+                    "".into(),
+                ),
+            }
+        }
+
+        /// Forward a InitChain request and expect a success
+        pub fn init_chain(&mut self, req: RequestInitChain) {
+            self.shell
+                .init_chain(req)
+                .expect("Test shell failed to initialize");
+        }
+
+        /// Forward a ProcessProposal request and extract the relevant
+        /// response data to return
+        pub fn process_proposal(&mut self, req: ProcessProposal) -> TxResult {
+            self.shell.process_proposal(req).result
+        }
+
+        /// Forward a FinalizeBlock request return a vector of
+        /// the events created for each transaction
+        pub fn finalize_block(
+            &mut self,
+            req: FinalizeBlock
+        ) -> Result<Vec<tendermint_proto::abci::Event>> {
+            match self.shell.finalize_block(req) {
+                Ok(resp) => Ok(resp.events),
+                Err(err) => Err(err)
+            }
+        }
+
+        /// Add a wrapper tx to the queue of txs to be decrypted
+        /// in the current block proposal
+        pub fn add_wrapper_tx(&mut self, wrapper: WrapperTx) {
+            self.shell.storage.wrapper_txs.push_back(wrapper);
+            self.shell.revert_wrapper_txs();
+        }
+
+        /// Get the next wrapper tx to be decoded
+        pub fn next_wrapper(&mut self) -> Option<&WrapperTx> {
+            self.shell.next_wrapper()
+        }
+    }
+
+    impl Drop for TestShell {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(".anoma")
+                .expect("Unable to clean up test shell");
+        }
+    }
+}
