@@ -3,6 +3,7 @@ mod keys;
 mod store;
 
 use std::collections::HashMap;
+use std::env;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -235,8 +236,11 @@ impl Wallet {
 /// Read the password for encryption/decryption from the stdin. Panics if the
 /// input is an empty string.
 fn read_password(prompt_msg: &str) -> String {
-    let pwd =
-        rpassword::read_password_from_tty(Some(prompt_msg)).unwrap_or_default();
+    let pwd = match env::var("ANOMA_WALLET_PASSWORD") {
+        Ok(password) => password,
+        Err(_) => rpassword::read_password_from_tty(Some(prompt_msg))
+            .unwrap_or_default(),
+    };
     if pwd.is_empty() {
         eprintln!("Password cannot be empty");
         cli::safe_exit(1)
