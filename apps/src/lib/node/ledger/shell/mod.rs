@@ -131,7 +131,8 @@ impl Shell {
         if self.next_wrapper == self.storage.wrapper_txs.len() {
             None
         } else {
-            let next_wrapper = Some(&self.storage.wrapper_txs[self.next_wrapper]);
+            let next_wrapper =
+                Some(&self.storage.wrapper_txs[self.next_wrapper]);
             self.next_wrapper += 1;
             next_wrapper
         }
@@ -386,10 +387,12 @@ mod test_utils {
     use std::path::PathBuf;
 
     use anoma::types::key::ed25519::Keypair;
-    use tendermint_proto::abci::RequestInitChain;
+    use tendermint_proto::abci::{RequestInitChain, ResponsePrepareProposal};
 
     use super::*;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessProposal};
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
+        FinalizeBlock, ProcessProposal,
+    };
 
     /// Gets the absolute path to root directory
     pub fn top_level_directory() -> PathBuf {
@@ -417,7 +420,7 @@ mod test_utils {
     /// generates. Also allows illegal state
     /// modifications for testing purposes
     pub(super) struct TestShell {
-        shell: Shell,
+        pub shell: Shell,
     }
 
     impl TestShell {
@@ -440,6 +443,14 @@ mod test_utils {
                 .expect("Test shell failed to initialize");
         }
 
+        /// Forward the prepare proposal request and return the response
+        pub fn prepare_proposal(
+            &mut self,
+            req: RequestPrepareProposal,
+        ) -> ResponsePrepareProposal {
+            self.shell.prepare_proposal(req)
+        }
+
         /// Forward a ProcessProposal request and extract the relevant
         /// response data to return
         pub fn process_proposal(&mut self, req: ProcessProposal) -> TxResult {
@@ -450,11 +461,11 @@ mod test_utils {
         /// the events created for each transaction
         pub fn finalize_block(
             &mut self,
-            req: FinalizeBlock
+            req: FinalizeBlock,
         ) -> Result<Vec<tendermint_proto::abci::Event>> {
             match self.shell.finalize_block(req) {
                 Ok(resp) => Ok(resp.events),
-                Err(err) => Err(err)
+                Err(err) => Err(err),
             }
         }
 

@@ -82,7 +82,11 @@ test-e2e:
 	$(cargo) test e2e -- --test-threads=1
 
 test-unit:
-	$(cargo) test -- --skip e2e --skip node::ledger::shell::process --skip node::ledger::shell::finalize && \
+	$(cargo) test -- --skip e2e \
+	   				 --skip node::ledger::shell::process \
+					 --skip node::ledger::shell::finalize \
+ 					 --skip node::ledger::shell::prepare && \
+	$(cargo) test node::ledger::shell::prepare -- --test-threads=1 && \
 	$(cargo) test node::ledger::shell::process -- --test-threads=1 && \
 	$(cargo) test node::ledger::shell::finalize -- --test-threads=1
 

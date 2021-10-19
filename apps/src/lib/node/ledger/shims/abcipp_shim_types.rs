@@ -238,7 +238,6 @@ pub mod shim {
             pub txs: Vec<ProcessedTx>,
             pub reject_all_decrypted: bool,
         }
-
     }
 
     /// Custom types for response payloads

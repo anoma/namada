@@ -30,8 +30,8 @@ impl Shell {
             .take(number_of_new_txs)
             .filter(|tx| {
                 matches!(
-                    process_tx(Tx::try_from(tx.as_slice()).unwrap()).unwrap(),
-                    TxType::Wrapper(_)
+                    process_tx(Tx::try_from(tx.as_slice()).unwrap()),
+                    Ok(TxType::Wrapper(_))
                 )
             })
             .collect();
@@ -52,5 +52,131 @@ impl Shell {
 
         txs.append(&mut decrypted_txs);
         response::PrepareProposal { block_data: txs }
+    }
+}
+
+#[cfg(test)]
+mod test_prepare_proposal {
+    use anoma::types::address::xan;
+    use anoma::types::storage::Epoch;
+    use anoma::types::transaction::Fee;
+
+    use super::*;
+    use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
+
+    /// Test that if a tx from the mempool is not a
+    /// WrapperTx type, it is not included in the
+    /// proposed block.
+    #[test]
+    fn test_prepare_proposal_rejects_non_wrapper_tx() {
+        let mut shell = TestShell::new();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+        );
+        let req = RequestPrepareProposal {
+            block_data: vec![tx.to_bytes()],
+            block_data_size: 0,
+        };
+        assert_eq!(shell.prepare_proposal(req).block_data.len(), 0);
+    }
+
+    /// Test that if an error is encountered while
+    /// trying to process a tx from the mempool,
+    /// we simply exclude it from the proposal
+    #[test]
+    fn test_error_in_processing_tx() {
+        let mut shell = TestShell::new();
+        let keypair = gen_keypair();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+        );
+        // an unsigned wrapper will cause an error in processing
+        let wrapper = Tx::new(
+            "".as_bytes().to_owned(),
+            Some(
+                WrapperTx::new(
+                    Fee {
+                        amount: 0.into(),
+                        token: xan(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    tx,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
+            ),
+        )
+        .to_bytes();
+        let req = RequestPrepareProposal {
+            block_data: vec![wrapper],
+            block_data_size: 0,
+        };
+        assert_eq!(shell.prepare_proposal(req).block_data.len(), 0);
+    }
+
+    /// Test that the decrypted txs are included
+    /// in the proposal in the same order as their
+    /// corresponding wrappers
+    #[test]
+    fn test_decrypted_txs_in_correct_order() {
+        let mut shell = TestShell::new();
+        let keypair = gen_keypair();
+        let mut expected_wrapper = vec![];
+        let mut expected_decrypted = vec![];
+
+        let mut req = RequestPrepareProposal {
+            block_data: vec![],
+            block_data_size: 0,
+        };
+        // create a request with two new wrappers from mempool and
+        // two wrappers from the previous block to be decrypted
+        for i in 0..2 {
+            let tx = Tx::new(
+                "wasm_code".as_bytes().to_owned(),
+                Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+            );
+            expected_decrypted
+                .push(Tx::from(DecryptedTx::Decrypted(tx.clone())));
+            let wrapper_tx = WrapperTx::new(
+                Fee {
+                    amount: 0.into(),
+                    token: xan(),
+                },
+                &keypair,
+                Epoch(0),
+                0.into(),
+                tx,
+            );
+            let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
+            shell.add_wrapper_tx(wrapper_tx);
+            expected_wrapper.push(wrapper.clone());
+            req.block_data.push(wrapper.to_bytes());
+        }
+        // we extract the inner data from the txs for testing
+        // equality since otherwise changes in timestamps would
+        // fail the test
+        expected_wrapper.append(&mut expected_decrypted);
+        let expected_txs: Vec<Vec<u8>> = expected_wrapper
+            .iter()
+            .map(|tx| tx.data.clone().expect("Test failed"))
+            .collect();
+
+        let received: Vec<Vec<u8>> = shell
+            .prepare_proposal(req)
+            .block_data
+            .iter()
+            .map(|tx_bytes| {
+                Tx::try_from(tx_bytes.as_slice())
+                    .expect("Test failed")
+                    .data
+                    .expect("Test failed")
+            })
+            .collect();
+        // check that the order of the txs is correct
+        assert_eq!(received, expected_txs);
     }
 }

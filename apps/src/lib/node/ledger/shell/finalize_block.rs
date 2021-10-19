@@ -1,9 +1,10 @@
 //! Implementation of the [`FinalizeBlock`] ABCI++ method for the Shell
 
-use super::*;
 use anoma::types::storage::BlockHash;
 use tendermint::block::Header;
 use tendermint_proto::abci::Evidence;
+
+use super::*;
 
 impl Shell {
     /// Updates the chain with new header, height, etc. Also keeps track
@@ -36,7 +37,6 @@ impl Shell {
         } else {
             self.update_state(req.header, req.hash, req.byzantine_validators)
         };
-
 
         for tx in &req.txs {
             // This has already been verified as safe by [`process_proposal`]
@@ -167,7 +167,7 @@ impl Shell {
         &mut self,
         header: Header,
         hash: BlockHash,
-        byzantine_validators: Vec<Evidence>
+        byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
         let height = BlockHeight(header.height.into());
         self.storage
@@ -259,8 +259,12 @@ mod testg_finalize_block {
     use tendermint::{Hash, Time};
 
     use super::*;
-    use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell, top_level_directory};
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::{ProcessedTx, FinalizeBlock};
+    use crate::node::ledger::shell::test_utils::{
+        gen_keypair, top_level_directory, TestShell,
+    };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
+        FinalizeBlock, ProcessedTx,
+    };
 
     /// This is just to be used in testing. It is not
     /// a meaningful default.
@@ -269,11 +273,10 @@ mod testg_finalize_block {
             FinalizeBlock {
                 hash: BlockHash([0u8; 32]),
                 header: Header {
-                    version: Version {
-                        block: 0,
-                        app: 0,
-                    },
-                    chain_id: String::from("test").try_into().expect("Should not fail"),
+                    version: Version { block: 0, app: 0 },
+                    chain_id: String::from("test")
+                        .try_into()
+                        .expect("Should not fail"),
                     height: 0u64.try_into().expect("Should not fail"),
                     time: Time::now(),
                     last_block_id: None,
@@ -282,18 +285,21 @@ mod testg_finalize_block {
                     validators_hash: Hash::None,
                     next_validators_hash: Hash::None,
                     consensus_hash: Hash::None,
-                    app_hash: Vec::<u8>::new().try_into().expect("Should not fail"),
+                    app_hash: Vec::<u8>::new()
+                        .try_into()
+                        .expect("Should not fail"),
                     last_results_hash: None,
                     evidence_hash: None,
-                    proposer_address: vec![0u8; 20].try_into().expect("Should not fail"),
+                    proposer_address: vec![0u8; 20]
+                        .try_into()
+                        .expect("Should not fail"),
                 },
                 byzantine_validators: vec![],
                 txs: vec![],
-                reject_all_decrypted: false
+                reject_all_decrypted: false,
             }
         }
     }
-
 
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
@@ -322,15 +328,14 @@ mod testg_finalize_block {
             );
             let tx = wrapper.sign(&keypair).expect("Test failed");
             if i > 1 {
-                processed_txs.push(
-                    ProcessedTx {
-                        tx: tx.to_bytes(),
-                        result: TxResult {
-                            code: u32::try_from(i.rem_euclid(2)).expect("Test failed"),
-                            info: "".into(),
-                        }
-                    }
-                );
+                processed_txs.push(ProcessedTx {
+                    tx: tx.to_bytes(),
+                    result: TxResult {
+                        code: u32::try_from(i.rem_euclid(2))
+                            .expect("Test failed"),
+                        info: "".into(),
+                    },
+                });
             } else {
                 shell.add_wrapper_tx(wrapper.clone());
             }
@@ -341,14 +346,16 @@ mod testg_finalize_block {
         }
 
         // check that the correct events were created
-        for (index, event) in shell.finalize_block(FinalizeBlock {
-            txs: processed_txs.clone(),
-            reject_all_decrypted: false,
-            ..Default::default()
-        })
-        .expect("Test failed")
-        .iter()
-        .enumerate() {
+        for (index, event) in shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs.clone(),
+                reject_all_decrypted: false,
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .iter()
+            .enumerate()
+        {
             assert_eq!(event.r#type, "accepted");
             let code = event
                 .attributes
@@ -365,11 +372,13 @@ mod testg_finalize_block {
         while let Some(wrapper) = shell.next_wrapper() {
             // we cannot easily implement the PartialEq trait for WrapperTx
             // so we check the hashes of the inner txs for equality
-            assert_eq!(wrapper.tx_hash, valid_tx.next().expect("Test failed").tx_hash);
+            assert_eq!(
+                wrapper.tx_hash,
+                valid_tx.next().expect("Test failed").tx_hash
+            );
             counter += 1;
         }
         assert_eq!(counter, 3);
-
     }
 
     /// Check that if a decrypted tx was rejected by [`process_proposal`],
@@ -382,7 +391,7 @@ mod testg_finalize_block {
         let keypair = gen_keypair();
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some(format!("transaction data").as_bytes().to_owned()),
+            Some(String::from("transaction data").as_bytes().to_owned()),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -396,20 +405,24 @@ mod testg_finalize_block {
         );
 
         let processed_tx = ProcessedTx {
-            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx))).to_bytes(),
+            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
+                .to_bytes(),
             result: TxResult {
                 code: 1,
                 info: "".into(),
-            }
+            },
         };
         shell.add_wrapper_tx(wrapper);
 
         // check that the decrypted tx was not applied
-        for event in shell.finalize_block(FinalizeBlock{
-            txs: vec![processed_tx],
-            reject_all_decrypted: false,
-            ..Default::default()
-        }).expect("Test failed") {
+        for event in shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                reject_all_decrypted: false,
+                ..Default::default()
+            })
+            .expect("Test failed")
+        {
             assert_eq!(event.r#type, "applied");
             let code = event
                 .attributes
@@ -442,7 +455,11 @@ mod testg_finalize_block {
         for i in 0..2 {
             let raw_tx = Tx::new(
                 tx_code.clone(),
-                Some(format!("Decrypted transaction data: {}", i).as_bytes().to_owned()),
+                Some(
+                    format!("Decrypted transaction data: {}", i)
+                        .as_bytes()
+                        .to_owned(),
+                ),
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -456,7 +473,8 @@ mod testg_finalize_block {
             );
             shell.add_wrapper_tx(wrapper_tx);
             processed_txs.push(ProcessedTx {
-                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx))).to_bytes(),
+                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
+                    .to_bytes(),
                 result: TxResult {
                     code: 0,
                     info: "".into(),
@@ -467,7 +485,11 @@ mod testg_finalize_block {
         for i in 0..2 {
             let raw_tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
-                Some(format!("Encrypted transaction data: {}", i).as_bytes().to_owned()),
+                Some(
+                    format!("Encrypted transaction data: {}", i)
+                        .as_bytes()
+                        .to_owned(),
+                ),
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -492,14 +514,16 @@ mod testg_finalize_block {
         // Put the wrapper txs in front of the decrypted txs
         processed_txs.rotate_left(2);
         // check that the correct events were created
-        for (index, event) in shell.finalize_block(FinalizeBlock{
-            txs: processed_txs,
-            reject_all_decrypted: false,
-            ..Default::default()
-        })
-        .expect("Test failed")
-        .iter()
-        .enumerate() {
+        for (index, event) in shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                reject_all_decrypted: false,
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .iter()
+            .enumerate()
+        {
             if index < 2 {
                 // these should be accepted wrapper txs
                 assert_eq!(event.r#type, "accepted");
@@ -529,7 +553,10 @@ mod testg_finalize_block {
         let mut txs = valid_txs.iter();
         let mut counter = 0;
         while let Some(wrapper) = shell.next_wrapper() {
-            assert_eq!(wrapper.tx_hash, txs.next().expect("Test failed").tx_hash);
+            assert_eq!(
+                wrapper.tx_hash,
+                txs.next().expect("Test failed").tx_hash
+            );
             counter += 1;
         }
         assert_eq!(counter, 2);
@@ -548,7 +575,7 @@ mod testg_finalize_block {
         // create a wrapper tx to be included in block proposal
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some(format!("transaction data").as_bytes().to_owned()),
+            Some(String::from("transaction data").as_bytes().to_owned()),
         );
         let wrapper_tx = WrapperTx::new(
             Fee {
@@ -558,9 +585,9 @@ mod testg_finalize_block {
             &keypair,
             Epoch(0),
             0.into(),
-            raw_tx.clone(),
+            raw_tx,
         );
-        let wrapper= wrapper_tx.sign(&keypair).expect("Test failed");
+        let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
         valid_txs.push(wrapper_tx);
         processed_txs.push(ProcessedTx {
             tx: wrapper.to_bytes(),
@@ -593,7 +620,8 @@ mod testg_finalize_block {
             shell.add_wrapper_tx(wrapper.clone());
             valid_txs.push(wrapper);
             processed_txs.push(ProcessedTx {
-                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx))).to_bytes(),
+                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
+                    .to_bytes(),
                 result: TxResult {
                     code: 2,
                     info: "".into(),
@@ -604,14 +632,16 @@ mod testg_finalize_block {
         // order although in fact they are not. This should not affect
         // the expected behavior
         // We check that the correct events are created.
-        for (index, event) in shell.finalize_block(FinalizeBlock {
-            txs: processed_txs.clone(),
-            reject_all_decrypted: true,
-            ..Default::default()
-        })
-        .expect("Test failed")
-        .iter()
-        .enumerate() {
+        for (index, event) in shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs.clone(),
+                reject_all_decrypted: true,
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .iter()
+            .enumerate()
+        {
             if index == 0 {
                 // the wrapper tx should be accepted
                 assert_eq!(event.r#type, "accepted");
@@ -642,7 +672,10 @@ mod testg_finalize_block {
         let mut counter = 0;
         let mut txs = valid_txs.iter();
         while let Some(wrapper) = shell.next_wrapper() {
-            assert_eq!(wrapper.tx_hash, txs.next().expect("Test failed").tx_hash);
+            assert_eq!(
+                wrapper.tx_hash,
+                txs.next().expect("Test failed").tx_hash
+            );
             counter += 1;
         }
         assert_eq!(counter, 3);
