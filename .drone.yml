@@ -5,8 +5,8 @@ kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
-      .]
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -87,8 +87,8 @@ kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
-      .]
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -142,8 +142,8 @@ kind: pipeline
 name: anoma-ci-wasm-pr
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
-      .]
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -291,8 +291,8 @@ kind: pipeline
 name: anoma-ci-cron
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
-      .]
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -346,8 +346,8 @@ kind: pipeline
 name: anoma-ci-miri-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
-      .]
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -391,8 +391,8 @@ kind: pipeline
 name: anoma-ci-docs-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
-      .]
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -437,8 +437,8 @@ kind: pipeline
 name: anoma-ci-build-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
-      .]
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -520,8 +520,8 @@ kind: pipeline
 name: anoma-ci-wasm-master
 node: {project: anoma}
 steps:
-- commands: [git clone $DRONE_GIT_HTTP_URL --quiet --branch $DRONE_SOURCE_BRANCH --single-branch
-      .]
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
@@ -678,7 +678,7 @@ steps:
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     SCCACHE_BUCKET: heliax-drone-cache-v2
     SCCACHE_S3_KEY_PREFIX: sccache-build-release
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma-release:release
   name: build-package
   pull: never
 - commands: [sh scripts/ci/release.sh]
@@ -694,6 +694,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 5468490844fb38bcab87e764970f71f35f885ec56e0f0147354a7f4f9c0fcb50
+hmac: fd75ae5b038d1e1aaca70b939181dd707369934dea4595378a5c043bab3b7bbb
 
 ...
