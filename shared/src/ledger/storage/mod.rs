@@ -9,9 +9,11 @@ use core::fmt::Debug;
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use prost::Message;
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 use tendermint::block::Header;
+use tendermint::merkle::proof::ProofOp;
 use thiserror::Error;
 use types::MerkleTree;
 
@@ -373,6 +375,33 @@ where
     /// Get the current (yet to be committed) block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
+    }
+
+    /// Get the membership or non-membership proof
+    pub fn get_proof(&self, key: &Key) -> Result<ProofOp> {
+        let hash_key = H::hash_key(key);
+        let proof = if self.has_key(key)?.0 {
+            self.block
+                .tree
+                .0
+                .membership_proof(&hash_key)
+                .map_err(Error::MerkleTreeError)?
+        } else {
+            self.block
+                .tree
+                .0
+                .non_membership_proof(&hash_key)
+                .map_err(Error::MerkleTreeError)?
+        };
+        let mut data = vec![];
+        proof
+            .encode(&mut data)
+            .expect("Encoding proof shouldn't fail");
+        Ok(ProofOp {
+            field_type: "ics23_CommitmentProof".to_string(),
+            key: hash_key.as_slice().to_vec(),
+            data,
+        })
     }
 
     /// Get the current (yet to be committed) block epoch
