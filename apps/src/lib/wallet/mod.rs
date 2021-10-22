@@ -16,6 +16,7 @@ pub use self::keys::{DecryptionError, StoredKeypair};
 use self::store::{Alias, Store};
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
+use crate::std::fs;
 
 #[derive(Debug)]
 pub struct Wallet {
@@ -236,10 +237,17 @@ impl Wallet {
 /// Read the password for encryption/decryption from the stdin. Panics if the
 /// input is an empty string.
 fn read_password(prompt_msg: &str) -> String {
-    let pwd = match env::var("ANOMA_WALLET_PASSWORD") {
-        Ok(password) => password,
-        Err(_) => rpassword::read_password_from_tty(Some(prompt_msg))
-            .unwrap_or_default(),
+    let pwd = match env::var("ANOMA_WALLET_PASSWORD_FILE") {
+        Ok(path) => {
+            fs::read_to_string(path).expect("Something went wrong reading the file")
+        }
+        Err(_) => {
+            match env::var("ANOMA_WALLET_PASSWORD") {
+                Ok(password) => password,
+                Err(_) => rpassword::read_password_from_tty(Some(prompt_msg))
+                    .unwrap_or_default(),
+            }
+        }
     };
     if pwd.is_empty() {
         eprintln!("Password cannot be empty");
