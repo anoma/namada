@@ -15,4 +15,8 @@ The main binary `anoma` has sub-commands for all of the other binaries:
 
 To explore the command-line interface, add `--help` argument at any sub-command level to find out any possible sub-commands and/or arguments.
 
+To configure your node for a given chain ID, set the `$CHAIN_ID` and run:
 
+```bash
+anoma client utils join-network --chain-id=$CHAIN_ID
+```
