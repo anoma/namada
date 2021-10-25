@@ -22,6 +22,38 @@ use crate::wallet::Wallet;
 pub const NET_ACCOUNTS_DIR: &str = "setup";
 pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
 
+/// Configure Anoma to join an existing network. The chain must be known in the
+/// <https://github.com/heliaxdev/anoma-network-config> repository.
+pub async fn join_network(
+    global_args: args::Global,
+    args::JoinNetwork { chain_id }: args::JoinNetwork,
+) {
+    let chain_dir = global_args.base_dir.join(chain_id.as_str());
+    fs::create_dir_all(&chain_dir).expect("Couldn't create chain directory");
+
+    let genesis_file = format!("{}.toml", chain_id);
+    let global_config_file = "global-config.toml";
+    let config_file = format!("{}/config.toml", chain_id);
+
+    let file_url_prefix = format!("https://raw.githubusercontent.com/heliaxdev/anoma-network-config/master/final/{}/.anoma", chain_id);
+    let genesis_url = format!("{}/{}", file_url_prefix, genesis_file);
+    let global_config_url =
+        format!("{}/{}", file_url_prefix, global_config_file);
+    let config_url = format!("{}/{}", file_url_prefix, config_file);
+
+    let genesis = download_file(genesis_url).await;
+    let global_config = download_file(global_config_url).await;
+    let config = download_file(config_url).await;
+
+    std::fs::write(global_args.base_dir.join(genesis_file), genesis).unwrap();
+    std::fs::write(
+        global_args.base_dir.join(global_config_file),
+        global_config,
+    )
+    .unwrap();
+    std::fs::write(global_args.base_dir.join(config_file), config).unwrap();
+}
+
 /// Initialize a new test network with the given validators and faucet accounts.
 pub fn init_network(
     global_args: args::Global,
@@ -578,4 +610,23 @@ fn init_genesis_validator_aux(
     // TODO print in toml format after we have https://github.com/anoma/anoma/issues/425
     println!("Genesis validator config: {:#?}", genesis_validator);
     genesis_validator
+}
+
+async fn download_file(url: impl AsRef<str>) -> String {
+    let url = url.as_ref();
+    reqwest::get(url)
+        .await
+        .unwrap_or_else(|err| {
+            eprintln!("File not found at {}. Error: {}", url, err);
+            cli::safe_exit(1)
+        })
+        .text()
+        .await
+        .unwrap_or_else(|err| {
+            eprintln!(
+                "Failed to download file from {} with error: {}",
+                url, err
+            );
+            cli::safe_exit(1)
+        })
 }
