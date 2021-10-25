@@ -16,39 +16,47 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
 
 ## ✋ Example intents
 
-1) We'll be using these addresses in the intents:
+1) We first need some addresses with a balance:
 
-   ```shell
-   export ALBERT=atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4
-   export BERTHA=atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw
-   export CHRISTEL=atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p
-   export XAN=atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5
-   export BTC=atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp
-   export ETH=atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p
+   ```
+   anoma client transfer --source faucet --target ALBERTO --signer ALBERTO --token ETH --amount 1000
+   anoma client transfer --source faucet --target BERTHA --signer BERTHA --token BTC --amount 1000
+   anoma client transfer --source faucet --target CHRISTEL --signer CHRISTEL --token XAN --amount 1000
    ```
 
-2) Create files with the intents in JSON format:
+2) We then export some addresses:
 
    ```shell
-   echo '[{"addr":"'$ALBERT'","key":"'$ALBERT'","max_sell":"300","min_buy":"50","rate_min":"0.7","token_buy":"'$BTC'","token_sell":"'$ETH'"}]' > intent.A.data
+   export ALBERT=$(anoma wallet address find --alias ALBERTO | cut -c 28-)
+   export BERTHA=$(anoma wallet address find --alias BERTHA | cut -c 28-)
+   export CHRISTEL=$(anoma wallet address find --alias CHRISTEL | cut -c 28-)
+   export XAN=$(anoma wallet address find --alias XAN | cut -c 28-)
+   export BTC=$(anoma wallet address find --alias BTC | cut -c 28-)
+   export ETH=$(anoma wallet address find --alias ETH | cut -c 28-)
+   ```
 
-   echo '[{"addr":"'$BERTHA'","key":"'$BERTHA'","max_sell":"70","min_buy":"100","rate_min":"2","token_buy":"'$XAN'","token_sell":"'$BTC'","vp_path": "wasm_for_tests/vp_always_true.wasm"}]' > intent.B.data
+3) Create files with the intents in JSON format:
+
+   ```shell
+   echo '[{"addr":"'$BERTHA'","key":"'$BERTHA'","max_sell":"70","min_buy":"100","rate_min":"2","token_buy":"'$XAN'","token_sell":"'$BTC'","vp_path": "wasm_for_tests/vp_always_true.wasm"}]' > intent.A.data
+   
+   echo '[{"addr":"'$ALBERT'","key":"'$ALBERT'","max_sell":"300","min_buy":"50","rate_min":"0.7","token_buy":"'$BTC'","token_sell":"'$ETH'"}]' > intent.B.data
 
    echo '[{"addr":"'$CHRISTEL'","key":"'$CHRISTEL'","max_sell":"200","min_buy":"20","rate_min":"0.5","token_buy":"'$ETH'","token_sell":"'$XAN'"}]' > intent.C.data
    ```
 
-3) Instruct the matchmaker to subscribe to a topic "asset_v1":
+4) Instruct the matchmaker to subscribe to a topic "asset_v1":
 
    ```shell
    cargo run --bin anomac subscribe-topic --node "http://127.0.0.1:39111" --topic "asset_v1"
    ```
 
-4) Submit the intents (the target gossip node must be running an RPC server):
+5) Submit the intents (the target gossip node must be running an RPC server):
 
    ```shell
-   cargo run --bin anomac intent --node "http://127.0.0.1:39111" --data-path intent.A.data --topic "asset_v1" --signing-key Albert
-   cargo run --bin anomac intent --node "http://127.0.0.1:39111" --data-path intent.B.data --topic "asset_v1" --signing-key Bertha
-   cargo run --bin anomac intent --node "http://127.0.0.1:39111" --data-path intent.C.data --topic "asset_v1" --signing-key Christel
+   cargo run --bin anomac intent --node "http://127.0.0.1:39111" --data-path intent.A.data --topic "asset_v1" --signing-key ALBERT
+   cargo run --bin anomac intent --node "http://127.0.0.1:39111" --data-path intent.B.data --topic "asset_v1" --signing-key BERTHA
+   cargo run --bin anomac intent --node "http://127.0.0.1:39111" --data-path intent.C.data --topic "asset_v1" --signing-key CHRISTEL
    ```
 
    The matchmaker should find a match from these intents and submit a transaction to the ledger that performs the n-party transfers of tokens.
