@@ -19,7 +19,7 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
 1) We first need some addresses with a balance:
 
    ```
-   anoma client transfer --source faucet --target ALBERTO --signer ALBERTO --token ETH --amount 1000
+   anoma client transfer --source faucet --target ALBERT --signer ALBERT --token ETH --amount 1000
    anoma client transfer --source faucet --target BERTHA --signer BERTHA --token BTC --amount 1000
    anoma client transfer --source faucet --target CHRISTEL --signer CHRISTEL --token XAN --amount 1000
    ```
@@ -27,7 +27,7 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
 2) We then export some addresses:
 
    ```shell
-   export ALBERT=$(anoma wallet address find --alias ALBERTO | cut -c 28-)
+   export ALBERT=$(anoma wallet address find --alias ALBERT | cut -c 28-)
    export BERTHA=$(anoma wallet address find --alias BERTHA | cut -c 28-)
    export CHRISTEL=$(anoma wallet address find --alias CHRISTEL | cut -c 28-)
    export XAN=$(anoma wallet address find --alias XAN | cut -c 28-)
