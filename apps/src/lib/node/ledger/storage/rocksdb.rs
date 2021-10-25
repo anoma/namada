@@ -40,6 +40,8 @@ pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
     // compactions + flushes
     cf_opts.set_max_background_jobs(6);
     cf_opts.set_bytes_per_sync(1048576);
+    cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     // TODO the recommended default `options.compaction_pri =
     // kMinOverlappingRatio` doesn't seem to be available in Rust
     let mut table_opts = BlockBasedOptions::default();
