@@ -14,14 +14,16 @@
 //!   - `subspace`: any byte data associated with accounts
 //!   - `address_gen`: established address generator
 
-use std::cmp::Ordering;
+use std::cmp::{min, Ordering};
 use std::collections::HashMap;
+use std::io;
 use std::path::Path;
 
 use anoma::ledger::storage::types::PrefixIterator;
 use anoma::ledger::storage::{types, BlockState, DBIter, Error, Result, DB};
 use anoma::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use anoma::types::time::DateTimeUtc;
+use rlimit::{Resource, Rlim};
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -34,6 +36,10 @@ pub struct RocksDB(rocksdb::DB);
 
 /// Open RocksDB for the DB
 pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
+    match increase_nofile_limit() {
+        Ok(soft) => tracing::info!("NOFILE limit:      soft   = {}", soft),
+        Err(err) => tracing::info!("Failed to increase NOFILE limit: {}", err),
+    }
     let mut cf_opts = Options::default();
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
     cf_opts.set_level_compaction_dynamic_level_bytes(true);
@@ -428,4 +434,20 @@ fn unknown_key_error(key: &str) -> Result<()> {
     Err(Error::UnknownKey {
         key: key.to_owned(),
     })
+}
+
+const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
+
+/// Try to increase NOFILE limit and return the current soft limit.
+pub fn increase_nofile_limit() -> io::Result<Rlim> {
+    let (soft, hard) = Resource::NOFILE.get()?;
+    tracing::info!("Before increasing: soft   = {}, hard = {}", soft, hard);
+
+    let target = min(DEFAULT_NOFILE_LIMIT, hard);
+    tracing::info!("Try to increase:   target = {}", target);
+    Resource::NOFILE.set(target, target)?;
+
+    let (soft, hard) = Resource::NOFILE.get()?;
+    tracing::info!("After increasing:  soft   = {}, hard = {}", soft, hard);
+    Ok(soft)
 }
