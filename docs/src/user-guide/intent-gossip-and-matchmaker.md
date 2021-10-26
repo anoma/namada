@@ -12,20 +12,25 @@ To run an intent gossip node with the intent gossip system, a token exchange mat
 cargo run --bin anoman gossip --rpc "127.0.0.1:39111" --matchmaker-path wasm/mm_token_exch.wasm --tx-code-path wasm/tx_from_intent.wasm --ledger-address "127.0.0.1:26657" --source matchmaker --signing-key matchmaker
 ```
 
+Mind that `matchmaker` should be valid key in your wallet.
+
 This pre-built matchmaker implementation is [the fungible token exchange `mm_token_exch`](https://github.com/anoma/anoma/blob/master/wasm/wasm_source/src/mm_token_exch.rs), that is being used together with [the pre-built `tx_from_intent` transaction WASM](https://github.com/anoma/anoma/blob/master/wasm/wasm_source/src/lib.rs) to submit transaction from matched intents to the ledger.
 
 ## ✋ Example intents
 
 1) Lets create some accounts:
    ```
-   cargo run --no-default-features --features std --bin anomaw -- key gen --alias alberto
+   cargo run --no-default-features --features std --bin anomaw -- key gen --alias alberto --unsafe-dont-encrypt
    cargo run --no-default-features --features std --bin anomac -- init-account --alias alberto-account --public-key alberto --source alberto
 
-   cargo run --no-default-features --features std --bin anomaw -- key gen --alias chisel
+   cargo run --no-default-features --features std --bin anomaw -- key gen --alias chisel --unsafe-dont-encrypt
    cargo run --no-default-features --features std --bin anomac -- init-account --alias christel-account --public-key christel --source christel
 
-   cargo run --no-default-features --features std --bin anomaw -- key gen --alias bertha
+   cargo run --no-default-features --features std --bin anomaw -- key gen --alias bertha --unsafe-dont-encrypt
    cargo run --no-default-features --features std --bin anomac -- init-account --alias bertha-account --public-key bertha --source bertha
+   
+   cargo run --no-default-features --features std --bin anomaw -- key gen --alias my-matchmaker --unsafe-dont-encrypt
+   cargo run --no-default-features --features std --bin anomac -- init-account --alias my-matchmaker-account --public-key my-matchmaker --source my-matchmaker
    ```
 
 1) We then need some tokens:
@@ -57,9 +62,13 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
    echo '[{"addr":"'$CHRISTEL'","key":"'$CHRISTEL'","max_sell":"200","min_buy":"20","rate_min":"0.5","token_buy":"'$ETH'","token_sell":"'$XAN'"}]' > intent.C.data
    ```
 
-4) Instruct the matchmaker to subscribe to a topic "asset_v1":
+3) Start the ledger and the matchmaker. Instruct the matchmaker to subscribe to a topic "asset_v1":
 
    ```shell
+   cargo run --no-default-features --features std --bin anoman ledger run
+   
+   cargo run --no-default-features --features std --bin anoman gossip --rpc "127.0.0.1:39111" --matchmaker-path wasm/mm_token_exch.wasm --tx-code-path wasm/tx_from_intent.wasm --ledger-address "127.0.0.1:26657" --source mm-1 --signing-key mm-1
+   
    cargo run --bin anomac subscribe-topic --node "http://127.0.0.1:39111" --topic "asset_v1"
    ```
 
@@ -72,6 +81,14 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
    ```
 
    The matchmaker should find a match from these intents and submit a transaction to the ledger that performs the n-party transfers of tokens.
+   
+6) You can check the balances with:
+
+   ```
+   cargo run --no-default-features --features std --bin anomac -- balance --owner alberto-account
+   cargo run --no-default-features --features std --bin anomac -- balance --owner bertha-account
+   cargo run --no-default-features --features std --bin anomac -- balance --owner christel-account
+   ```
 
 ## 🤝 Custom matchmaker
 
