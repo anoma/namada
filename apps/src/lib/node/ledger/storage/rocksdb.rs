@@ -444,10 +444,15 @@ pub fn increase_nofile_limit() -> io::Result<Rlim> {
     tracing::info!("Before increasing: soft   = {}, hard = {}", soft, hard);
 
     let target = min(DEFAULT_NOFILE_LIMIT, hard);
-    tracing::info!("Try to increase:   target = {}", target);
-    Resource::NOFILE.set(target, target)?;
+    if soft >= target {
+        tracing::info!("NOFILE limit already large enough, not attempting to increase");
+        Ok(soft)
+    } else {
+        tracing::info!("Try to increase:   target = {}", target);
+        Resource::NOFILE.set(target, target)?;
 
-    let (soft, hard) = Resource::NOFILE.get()?;
-    tracing::info!("After increasing:  soft   = {}, hard = {}", soft, hard);
-    Ok(soft)
+        let (soft, hard) = Resource::NOFILE.get()?;
+        tracing::info!("After increasing:  soft   = {}, hard = {}", soft, hard);
+        Ok(soft)
+    }
 }
