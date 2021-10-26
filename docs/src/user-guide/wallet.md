@@ -6,7 +6,7 @@ The wallet's state is stored under `.anoma/{chain_id}/wallet.toml` (with the def
 
 For the ledger and intent gossip commands that use keys and addresses, you can enter their aliases as as defined in the wallet (case-sensitive).
 
-By default, keys are stored encrypted (unless the `--unsafe-dont-encrpt`). Currently, the anoma client can load the password via:
+By default, keys are stored encrypted (unless the `--unsafe-dont-encrypt`). Currently, the anoma client can load the password via:
 - file, by exporting a ENV variable called ANOMA_WALLET_PASSWORD_FILE with value the path to a file containg the password.
 - env variable, by exporting a ENV variable called ANOMA_WALLET_PASSWORD with value the actual password.
 - stdin, the client will prompt for a password.
