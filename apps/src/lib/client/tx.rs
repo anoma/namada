@@ -103,6 +103,14 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         .vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        eprintln!("Validity predicate code validation failed with {}", err);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
     let data = InitAccount {
         public_key,
