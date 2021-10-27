@@ -11,7 +11,7 @@ use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
 use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::Client;
+use tendermint_rpc::{Client, HttpClient};
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
@@ -320,8 +320,62 @@ pub async fn submit_init_validator(
 
 pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let source = ctx.get(&args.source);
+    // Check that the source address exists on chain
+    let source_exists =
+        rpc::known_address(&source, args.tx.ledger_address.clone()).await;
+    if !source_exists {
+        eprintln!("The source address {} doesn't exist on chain.", source);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let target = ctx.get(&args.target);
+    // Check that the target address exists on chain
+    let target_exists =
+        rpc::known_address(&target, args.tx.ledger_address.clone()).await;
+    if !target_exists {
+        eprintln!("The target address {} doesn't exist on chain.", target);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let token = ctx.get(&args.token);
+    // Check that the token address exists on chain
+    let token_exists =
+        rpc::known_address(&token, args.tx.ledger_address.clone()).await;
+    if !token_exists {
+        eprintln!("The token address {} doesn't exist on chain.", token);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+    // Check source balance
+    let balance_key = token::balance_key(&token, &source);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
+        Some(balance) => {
+            if balance < args.amount {
+                eprintln!(
+                    "The balance of the source {} of token {} is lower than \
+                     the amount to be transferred. Amount to transfer is {} \
+                     and the balance is {}.",
+                    source, token, args.amount, balance
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!(
+                "No balance found for the source {} of token {}",
+                source, token
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let transfer = token::Transfer {
         source,
