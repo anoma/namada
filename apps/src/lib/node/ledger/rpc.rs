@@ -19,6 +19,8 @@ pub enum Path {
     Value(storage::Key),
     /// Read a range of storage values with a matching key prefix
     Prefix(storage::Key),
+    /// Check if the given storage key exists
+    HasKey(storage::Key),
 }
 
 /// RPC query path
@@ -38,6 +40,7 @@ const DRY_RUN_TX_PATH: &str = "dry_run_tx";
 const EPOCH_PATH: &str = "epoch";
 const VALUE_PREFIX: &str = "value";
 const PREFIX_PREFIX: &str = "prefix";
+const HAS_KEY_PREFIX: &str = "has_key";
 
 impl Display for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -49,6 +52,9 @@ impl Display for Path {
             }
             Path::Prefix(storage_key) => {
                 write!(f, "{}/{}", PREFIX_PREFIX, storage_key)
+            }
+            Path::HasKey(storage_key) => {
+                write!(f, "{}/{}", HAS_KEY_PREFIX, storage_key)
             }
         }
     }
@@ -72,6 +78,11 @@ impl FromStr for Path {
                     let key = storage::Key::parse(storage_key)
                         .map_err(PathParseError::InvalidStorageKey)?;
                     Ok(Self::Prefix(key))
+                }
+                Some((HAS_KEY_PREFIX, storage_key)) => {
+                    let key = storage::Key::parse(storage_key)
+                        .map_err(PathParseError::InvalidStorageKey)?;
+                    Ok(Self::HasKey(key))
                 }
                 _ => Err(PathParseError::InvalidPath(s.to_string())),
             },

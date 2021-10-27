@@ -440,6 +440,7 @@ impl Shell {
                 Path::Prefix(storage_key) => {
                     self.read_storage_prefix(&storage_key)
                 }
+                Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
             },
             Err(err) => response::Query {
                 code: 1,
@@ -992,6 +993,21 @@ impl Shell {
                     ..Default::default()
                 },
             }
+        }
+    }
+
+    /// Query to check if a storage key exists.
+    fn has_storage_key(&self, key: &Key) -> response::Query {
+        match self.storage.has_key(key) {
+            Ok((has_key, _gas)) => response::Query {
+                value: has_key.try_to_vec().unwrap(),
+                ..Default::default()
+            },
+            Err(err) => response::Query {
+                code: 2,
+                info: format!("Storage error: {}", err),
+                ..Default::default()
+            },
         }
     }
 

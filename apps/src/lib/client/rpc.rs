@@ -964,3 +964,28 @@ where
     }
     cli::safe_exit(1)
 }
+
+/// Query to check if the given storage key exists.
+async fn query_has_storage_key(client: HttpClient, key: storage::Key) -> bool {
+    let path = Path::HasKey(key);
+    let data = vec![];
+    let response = client
+        .abci_query(Some(path.into()), data, None, false)
+        .await
+        .unwrap();
+    match response.code {
+        tendermint::abci::Code::Ok => {
+            match bool::try_from_slice(&response.value[..]) {
+                Ok(value) => return value,
+                Err(err) => eprintln!("Error decoding the value: {}", err),
+            }
+        }
+        tendermint::abci::Code::Err(err) => {
+            eprintln!(
+                "Error in the query {} (error code {})",
+                response.info, err
+            )
+        }
+    }
+    cli::safe_exit(1)
+}
