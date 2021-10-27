@@ -530,9 +530,68 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
+    let (ctx, epoch) = rpc::query_epoch(
+        ctx,
+        args::Query {
+            ledger_address: args.tx.ledger_address.clone(),
+        },
+    )
+    .await;
+
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
+
+    // Check the source's current unbond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    let bond_id = BondId {
+        source: bond_source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_key = ledger::pos::unbond_key(&bond_id);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let unbonds =
+        rpc::query_storage_value::<Unbonds>(client.clone(), bond_key).await;
+    match unbonds {
+        Some(unbonds) => {
+            let mut unbonded_amount: token::Amount = 0.into();
+            if let Some(unbond) = unbonds.get(epoch) {
+                for delta in unbond.deltas.values() {
+                    unbonded_amount += *delta;
+                }
+            }
+            if unbonded_amount == 0.into() {
+                eprintln!(
+                    "There are no unbonded bonds ready to withdraw in the \
+                     current epoch {}.",
+                    epoch
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No unbonded bonds found");
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
