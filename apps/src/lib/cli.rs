@@ -1092,6 +1092,7 @@ pub mod args {
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
+    const FORCE: ArgFlag = flag("force");
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
@@ -1942,6 +1943,8 @@ pub mod args {
     pub struct Tx {
         /// Simulate applying the transaction
         pub dry_run: bool,
+        /// Submit the transaction even if it doesn't pass client checks
+        pub force: bool,
         /// The address of the ledger node as host:port
         pub ledger_address: tendermint::net::Address,
         /// If any new account is initialized by the tx, use the given alias to
@@ -1960,6 +1963,9 @@ pub mod args {
                     .def()
                     .about("Simulate the transaction application."),
             )
+            .arg(FORCE.def().about(
+                "Submit the transaction even if it doesn't pass client checks.",
+            ))
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
             .arg(ALIAS_OPT.def().about(
                 "If any new account is initialized by the tx, use the given \
@@ -1990,12 +1996,14 @@ pub mod args {
 
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
+            let force = FORCE.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
             Self {
                 dry_run,
+                force,
                 ledger_address,
                 initialized_account_alias,
                 signing_key,
