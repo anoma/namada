@@ -37,6 +37,8 @@ pub enum TxRuntimeError {
     UnknownAddressStorageModification(Address),
     #[error("Trying to update a validity predicate with an invalid WASM {0}")]
     UpdateVpInvalid(WasmValidationError),
+    #[error("A validity predicate of an account cannot be deleted")]
+    CannotDeleteVp,
     #[error(
         "Trying to initialize an account with an invalid validity predicate \
          WASM {0}"
@@ -811,6 +813,9 @@ where
     tracing::debug!("tx_delete {}", key);
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
+    if key.is_validity_predicate().is_some() {
+        return Err(TxRuntimeError::CannotDeleteVp);
+    }
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
