@@ -318,6 +318,9 @@ fn invalid_transactions() -> Result<()> {
         BERTHA,
         "--amount",
         "1_000_000.1",
+        // Force to ignore client check that fails on the balance check of the
+        // source address
+        "--force",
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
