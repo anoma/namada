@@ -5,6 +5,7 @@ use anoma::proto::Tx;
 use anoma::types::address::Address;
 use anoma::types::token;
 use anoma::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
+use anoma::vm;
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
@@ -43,8 +44,51 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let addr = ctx.get(&args.addr);
+
+    // Check that the address is established and exists on chain
+    match &addr {
+        Address::Established(_) => {
+            let exists =
+                rpc::known_address(&addr, args.tx.ledger_address.clone()).await;
+            if !exists {
+                eprintln!("The address {} doesn't exist on chain.", addr);
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        Address::Implicit(_) => {
+            eprintln!(
+                "A validity predicate of an implicit address cannot be \
+                 directly updated. You can use an established address for \
+                 this purpose."
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+        Address::Internal(_) => {
+            eprintln!(
+                "A validity predicate of an internal address cannot be \
+                 directly updated."
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+
     let vp_code = ctx.read_wasm(args.vp_code_path);
+    // Validate the VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        eprintln!("Validity predicate code validation failed with {}", err);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
+
     let data = UpdateVp { addr, vp_code };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
