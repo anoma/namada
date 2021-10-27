@@ -1,11 +1,12 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
 
+use anoma::ledger::pos::{BondId, Bonds, Unbonds};
 use anoma::proto::Tx;
-use anoma::types::address::Address;
+use anoma::types::address::{self, Address};
 use anoma::types::token;
 use anoma::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use anoma::vm;
+use anoma::{ledger, vm};
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
@@ -395,7 +396,56 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let source = ctx.get_opt(&args.source);
+    // Check that the source address exists on chain
+    if let Some(source) = &source {
+        let source_exists =
+            rpc::known_address(source, args.tx.ledger_address.clone()).await;
+        if !source_exists {
+            eprintln!("The source address {} doesn't exist on chain.", source);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+    // Check bond's source (source for delegation or validator for self-bonds)
+    // balance
+    let bond_source = source.as_ref().unwrap_or(&validator);
+    let balance_key = token::balance_key(&address::xan(), bond_source);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
+        Some(balance) => {
+            if balance < args.amount {
+                eprintln!(
+                    "The balance of the source {} is lower than the amount to \
+                     be transferred. Amount to transfer is {} and the balance \
+                     is {}.",
+                    bond_source, args.amount, balance
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No balance found for the source {}", bond_source);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
     let tx_code = ctx.read_wasm(TX_BOND_WASM);
     let bond = pos::Bond {
         validator,
