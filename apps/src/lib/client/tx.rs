@@ -462,8 +462,59 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
+
+    // Check the source's current bond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    let bond_id = BondId {
+        source: bond_source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_key = ledger::pos::bond_key(&bond_id);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let bonds =
+        rpc::query_storage_value::<Bonds>(client.clone(), bond_key).await;
+    match bonds {
+        Some(bonds) => {
+            let mut bond_amount: token::Amount = 0.into();
+            for bond in bonds.iter() {
+                for delta in bond.deltas.values() {
+                    bond_amount += *delta;
+                }
+            }
+            if args.amount > bond_amount {
+                eprintln!(
+                    "The total bonds of the source {} is lower than the \
+                     amount to be unbonded. Amount to unbond is {} and the \
+                     total bonds is {}.",
+                    bond_source, args.amount, bond_amount
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No bonds found");
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
 
     let data = pos::Unbond {
         validator,
