@@ -445,7 +445,9 @@ pub fn increase_nofile_limit() -> io::Result<Rlim> {
 
     let target = min(DEFAULT_NOFILE_LIMIT, hard);
     if soft >= target {
-        tracing::info!("NOFILE limit already large enough, not attempting to increase");
+        tracing::info!(
+            "NOFILE limit already large enough, not attempting to increase"
+        );
         Ok(soft)
     } else {
         tracing::info!("Try to increase:   target = {}", target);
