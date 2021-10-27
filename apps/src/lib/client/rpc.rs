@@ -897,7 +897,7 @@ fn process_unbonds_query(
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-async fn query_storage_value<T>(
+pub async fn query_storage_value<T>(
     client: HttpClient,
     key: storage::Key,
 ) -> Option<T>
@@ -934,7 +934,7 @@ where
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-async fn query_storage_prefix<T>(
+pub async fn query_storage_prefix<T>(
     client: HttpClient,
     key: storage::Key,
 ) -> Option<impl Iterator<Item = (storage::Key, T)>>
@@ -984,7 +984,10 @@ where
 }
 
 /// Query to check if the given storage key exists.
-async fn query_has_storage_key(client: HttpClient, key: storage::Key) -> bool {
+pub async fn query_has_storage_key(
+    client: HttpClient,
+    key: storage::Key,
+) -> bool {
     let path = Path::HasKey(key);
     let data = vec![];
     let response = client
