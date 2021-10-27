@@ -747,6 +747,24 @@ pub async fn is_validator(
     state.is_some()
 }
 
+/// Check if the address exists on chain. Established address exists if it has a
+/// stored validity predicate. Implicit and internal addresses always return
+/// true.
+pub async fn known_address(
+    address: &Address,
+    ledger_address: tendermint::net::Address,
+) -> bool {
+    let client = HttpClient::new(ledger_address).unwrap();
+    match address {
+        Address::Established(_) => {
+            // Established account exists if it has a VP
+            let key = storage::Key::validity_predicate(address);
+            query_has_storage_key(client, key).await
+        }
+        Address::Implicit(_) | Address::Internal(_) => true,
+    }
+}
+
 /// Accumulate slashes starting from `epoch_start` until (optionally)
 /// `withdraw_epoch` and apply them to the token amount `delta`.
 fn apply_slashes(
