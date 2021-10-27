@@ -299,14 +299,32 @@ impl TendermintWebsocketClient {
         F: FnOnce(String) -> Error,
     {
         let resp = match received {
-            Some(resp) => Ok(OwnedMessage::Text(resp)),
-            None => self
-                .websocket
-                .lock()
-                .unwrap()
-                .recv_message()
-                .map_err(Error::Websocket),
-        }?;
+            Some(resp) => OwnedMessage::Text(resp),
+            None => {
+                let mut websocket = self.websocket.lock().unwrap();
+                loop {
+                    match websocket.recv_message().map_err(Error::Websocket)? {
+                        text @ OwnedMessage::Text(_) => break text,
+                        OwnedMessage::Ping(data) => {
+                            tracing::debug!(
+                                "Received websocket Ping, sending Pong"
+                            );
+                            websocket
+                                .send_message(&OwnedMessage::Pong(data))
+                                .unwrap();
+                            continue;
+                        }
+                        OwnedMessage::Pong(_) => {
+                            tracing::debug!(
+                                "Received websocket Pong, ignoring"
+                            );
+                            continue;
+                        }
+                        other => return Err(Error::UnexpectedResponse(other)),
+                    }
+                }
+            }
+        };
         match resp {
             OwnedMessage::Text(raw) => RpcResponse::from_string(raw)
                 .map(|v| v.0)
@@ -344,18 +362,25 @@ impl Client for TendermintWebsocketClient {
         }
 
         // Return the response if text is returned, else return empty response
+        let mut websocket = self.websocket.lock().unwrap();
         loop {
-            let response = match self
-                .websocket
-                .lock()
-                .unwrap()
+            let response = match websocket
                 .recv_message()
                 .expect("Failed to receive message from websocket")
             {
                 OwnedMessage::Text(resp) => resp,
+                OwnedMessage::Ping(data) => {
+                    tracing::debug!("Received websocket Ping, sending Pong");
+                    websocket.send_message(&OwnedMessage::Pong(data)).unwrap();
+                    continue;
+                }
+                OwnedMessage::Pong(_) => {
+                    tracing::debug!("Received websocket Pong, ignoring");
+                    continue;
+                }
                 other => {
                     tracing::info! {
-                        "Received unexpect response to query: {}\nReceived {:?}",
+                        "Received unexpected response to query: {}\nReceived {:?}",
                         &req_json,
                         other
                     };
