@@ -178,9 +178,30 @@ pub async fn submit_init_validator(
     let validator_vp_code = validator_vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the validator VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {
+        eprintln!(
+            "Validator validity predicate code validation failed with {}",
+            err
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
     let rewards_vp_code = rewards_vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the rewards VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&rewards_vp_code) {
+        eprintln!(
+            "Staking reward account validity predicate code validation failed \
+             with {}",
+            err
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
     let data = InitValidator {
