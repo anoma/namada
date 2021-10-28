@@ -32,10 +32,10 @@ build-test:
 	$(cargo) build --tests
 
 build-release:
-	$(cargo) build --release --package anoma_apps --no-default-features --features std
+	ANOMA_DEV=false $(cargo) build --release --package anoma_apps
 
 check-release:
-	$(cargo) check --release --package anoma_apps --no-default-features --features std
+	ANOMA_DEV=false $(cargo) check --release --package anoma_apps
 
 package: build-release
 	mkdir -p $(package-name)/wasm && \
@@ -70,7 +70,7 @@ clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
 install: tendermint
-	$(cargo) install --path ./apps --no-default-features --features std
+	ANOMA_DEV=false $(cargo) install --path ./apps
 
 tendermint:
 	./scripts/install/get_tendermint.sh
