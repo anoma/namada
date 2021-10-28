@@ -1586,7 +1586,7 @@ pub mod args {
         pub token_buy: String,
         /// The amount of token to be bought
         pub min_buy: String,
-        // The path to the wasm vp code
+        /// The path to the wasm vp code
         pub vp_path: Option<String>,
     }
 
