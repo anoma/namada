@@ -245,6 +245,7 @@ fn update_tendermint_config(
             .unwrap();
     config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
     config.p2p.pex = tendermint_config.p2p_pex;
+    config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
