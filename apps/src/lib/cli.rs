@@ -1068,6 +1068,7 @@ pub mod args {
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     const ALIAS: Arg<String> = arg("alias");
+    const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     const AMOUNT: Arg<token::Amount> = arg("amount");
     const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
@@ -2208,6 +2209,7 @@ pub mod args {
         pub unsafe_dont_encrypt: bool,
         pub consensus_timeout_commit: tendermint::Timeout,
         pub localhost: bool,
+        pub allow_duplicate_ip: bool,
     }
 
     impl Args for InitNetwork {
@@ -2218,12 +2220,14 @@ pub mod args {
             let consensus_timeout_commit =
                 CONSENSUS_TIMEOUT_COMMIT.parse(matches);
             let localhost = LOCALHOST.parse(matches);
+            let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             Self {
                 genesis_path,
                 chain_id_prefix,
                 unsafe_dont_encrypt,
                 consensus_timeout_commit,
                 localhost,
+                allow_duplicate_ip,
             }
         }
 
@@ -2248,6 +2252,10 @@ pub mod args {
             .arg(LOCALHOST.def().about(
                 "Use localhost address for P2P and RPC connections for the \
                  validators ledger and intent gossip nodes",
+            ))
+            .arg(ALLOW_DUPLICATE_IP.def().about(
+                "Toggle to disable guard against peers connecting from the \
+                 same IP. This option shouldn't be used in mainnet.",
             ))
         }
     }

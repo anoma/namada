@@ -31,6 +31,7 @@ pub fn init_network(
         unsafe_dont_encrypt,
         consensus_timeout_commit,
         localhost,
+        allow_duplicate_ip,
     }: args::InitNetwork,
 ) {
     let mut config = genesis_config::open_genesis_config(&genesis_path);
@@ -377,6 +378,8 @@ pub fn init_network(
                 persistent_peers.clone();
             config.ledger.tendermint.consensus_timeout_commit =
                 consensus_timeout_commit;
+            config.ledger.tendermint.p2p_allow_duplicate_ip =
+                allow_duplicate_ip;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
@@ -428,6 +431,7 @@ pub fn init_network(
     config.ledger.tendermint.p2p_persistent_peers = persistent_peers;
     config.ledger.tendermint.consensus_timeout_commit =
         consensus_timeout_commit;
+    config.ledger.tendermint.p2p_allow_duplicate_ip = allow_duplicate_ip;
     config.ledger.genesis_time = genesis.genesis_time.into();
     if let Some(discover) = &mut config.intent_gossiper.discover_peer {
         discover.bootstrap_peers = bootstrap_peers;
