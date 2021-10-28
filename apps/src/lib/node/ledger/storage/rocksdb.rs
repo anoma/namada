@@ -36,15 +36,22 @@ pub struct RocksDB(rocksdb::DB);
 
 /// Open RocksDB for the DB
 pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
-    if let Err(err) = increase_nofile_limit() {
-        tracing::error!("Failed to increase NOFILE limit: {}", err);
-    }
+    let max_open_files = match increase_nofile_limit() {
+        Ok(max_open_files) => Some(max_open_files),
+        Err(err) => {
+            tracing::error!("Failed to increase NOFILE limit: {}", err);
+            None
+        }
+    };
     let mut cf_opts = Options::default();
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
     cf_opts.set_level_compaction_dynamic_level_bytes(true);
     // compactions + flushes
     cf_opts.set_max_background_jobs(6);
     cf_opts.set_bytes_per_sync(1048576);
+    if let Some(max_open_files) = (max_open_files) {
+        cf_opts.set_max_open_files(max_open_files);
+    }
     // TODO the recommended default `options.compaction_pri =
     // kMinOverlappingRatio` doesn't seem to be available in Rust
     let mut table_opts = BlockBasedOptions::default();
@@ -440,7 +447,7 @@ const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
 /// Try to increase NOFILE limit and return the current soft limit.
 pub fn increase_nofile_limit() -> io::Result<Rlim> {
     let (soft, hard) = Resource::NOFILE.get()?;
-        tracing::debug!("Current NOFILE limit, soft={}, hard={}", soft, hard);
+    tracing::debug!("Current NOFILE limit, soft={}, hard={}", soft, hard);
 
     let target = min(DEFAULT_NOFILE_LIMIT, hard);
     if soft >= target {
