@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use sha2::{Digest, Sha256};
@@ -11,6 +12,7 @@ use tendermint::net::Address;
 use tendermint_rpc::query::Query;
 use tendermint_rpc::{Client, Request, Response, SimpleRequest};
 use thiserror::Error;
+use tokio::time::Instant;
 use websocket::result::WebSocketError;
 use websocket::{ClientBuilder, Message, OwnedMessage};
 
@@ -34,6 +36,8 @@ pub enum Error {
     Response(String),
     #[error("Encountered JSONRPC request/response without an id")]
     MissingId,
+    #[error("Connection timed out")]
+    ConnectionTimeout,
 }
 
 type Json = serde_json::Value;
@@ -184,11 +188,16 @@ pub struct TendermintWebsocketClient {
     websocket: Websocket,
     subscribed: Option<Subscription>,
     received_responses: ResponseQueue,
+    connection_timeout: Duration,
 }
 
 impl TendermintWebsocketClient {
-    /// Open up a new websocket given a specified URL
-    pub fn open(url: WebSocketAddress) -> Result<Self, Error> {
+    /// Open up a new websocket given a specified URL.
+    /// If no `connection_timeout` is given, defaults to 5 minutes.
+    pub fn open(
+        url: WebSocketAddress,
+        connection_timeout: Option<Duration>,
+    ) -> Result<Self, Error> {
         match ClientBuilder::new(&url.to_string())
             .unwrap()
             .connect_insecure()
@@ -197,6 +206,8 @@ impl TendermintWebsocketClient {
                 websocket: Arc::new(Mutex::new(websocket)),
                 subscribed: None,
                 received_responses: Arc::new(Mutex::new(HashMap::new())),
+                connection_timeout: connection_timeout
+                    .unwrap_or_else(|| Duration::new(300, 0)),
             }),
             Err(inner) => Err(Error::Websocket(inner)),
         }
@@ -299,14 +310,42 @@ impl TendermintWebsocketClient {
         F: FnOnce(String) -> Error,
     {
         let resp = match received {
-            Some(resp) => Ok(OwnedMessage::Text(resp)),
-            None => self
-                .websocket
-                .lock()
-                .unwrap()
-                .recv_message()
-                .map_err(Error::Websocket),
-        }?;
+            Some(resp) => OwnedMessage::Text(resp),
+            None => {
+                let mut websocket = self.websocket.lock().unwrap();
+                let start = Instant::now();
+                loop {
+                    if Instant::now().duration_since(start)
+                        > self.connection_timeout
+                    {
+                        tracing::error!(
+                            "Websocket connection timed out while waiting for \
+                             response"
+                        );
+                        return Err(Error::ConnectionTimeout);
+                    }
+                    match websocket.recv_message().map_err(Error::Websocket)? {
+                        text @ OwnedMessage::Text(_) => break text,
+                        OwnedMessage::Ping(data) => {
+                            tracing::debug!(
+                                "Received websocket Ping, sending Pong"
+                            );
+                            websocket
+                                .send_message(&OwnedMessage::Pong(data))
+                                .unwrap();
+                            continue;
+                        }
+                        OwnedMessage::Pong(_) => {
+                            tracing::debug!(
+                                "Received websocket Pong, ignoring"
+                            );
+                            continue;
+                        }
+                        other => return Err(Error::UnexpectedResponse(other)),
+                    }
+                }
+            }
+        };
         match resp {
             OwnedMessage::Text(raw) => RpcResponse::from_string(raw)
                 .map(|v| v.0)
@@ -344,18 +383,34 @@ impl Client for TendermintWebsocketClient {
         }
 
         // Return the response if text is returned, else return empty response
+        let mut websocket = self.websocket.lock().unwrap();
+        let start = Instant::now();
         loop {
-            let response = match self
-                .websocket
-                .lock()
-                .unwrap()
+            if Instant::now().duration_since(start) > self.connection_timeout {
+                tracing::error!(
+                    "Websocket connection timed out while waiting for response"
+                );
+                return Err(tendermint_rpc::error::Error::websocket_error(
+                    Error::ConnectionTimeout.to_string(),
+                ));
+            }
+            let response = match websocket
                 .recv_message()
                 .expect("Failed to receive message from websocket")
             {
                 OwnedMessage::Text(resp) => resp,
+                OwnedMessage::Ping(data) => {
+                    tracing::debug!("Received websocket Ping, sending Pong");
+                    websocket.send_message(&OwnedMessage::Pong(data)).unwrap();
+                    continue;
+                }
+                OwnedMessage::Pong(_) => {
+                    tracing::debug!("Received websocket Pong, ignoring");
+                    continue;
+                }
                 other => {
                     tracing::info! {
-                        "Received unexpect response to query: {}\nReceived {:?}",
+                        "Received unexpected response to query: {}\nReceived {:?}",
                         &req_json,
                         other
                     };
@@ -407,6 +462,8 @@ fn get_id(req_json: &str) -> Result<String, Error> {
 /// responses are give for each of the corresponding requests
 #[cfg(test)]
 mod test_tendermint_websocket_client {
+    use std::time::Duration;
+
     use serde::{Deserialize, Serialize};
     use tendermint_rpc::endpoint::abci_info::AbciInfo;
     use tendermint_rpc::query::{EventType, Query};
@@ -541,8 +598,11 @@ mod test_tendermint_websocket_client {
         std::thread::spawn(start);
         // need to make sure that the mock tendermint node has time to boot up
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut rpc_client = TendermintWebsocketClient::open(address())
-            .expect("Client could not start");
+        let mut rpc_client = TendermintWebsocketClient::open(
+            address(),
+            Some(Duration::new(10, 0)),
+        )
+        .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
         assert_eq!(
@@ -561,8 +621,11 @@ mod test_tendermint_websocket_client {
         std::thread::spawn(start);
         // need to make sure that the mock tendermint node has time to boot up
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut rpc_client = TendermintWebsocketClient::open(address())
-            .expect("Client could not start");
+        let mut rpc_client = TendermintWebsocketClient::open(
+            address(),
+            Some(Duration::new(10, 0)),
+        )
+        .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
         assert_eq!(
@@ -582,8 +645,11 @@ mod test_tendermint_websocket_client {
         std::thread::spawn(start);
         // need to make sure that the mock tendermint node has time to boot up
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut rpc_client = TendermintWebsocketClient::open(address())
-            .expect("Client could not start");
+        let mut rpc_client = TendermintWebsocketClient::open(
+            address(),
+            Some(Duration::new(10, 0)),
+        )
+        .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
         assert_eq!(
@@ -614,8 +680,11 @@ mod test_tendermint_websocket_client {
         std::thread::spawn(start);
         // need to make sure that the mock tendermint node has time to boot up
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let mut rpc_client = TendermintWebsocketClient::open(address())
-            .expect("Client could not start");
+        let mut rpc_client = TendermintWebsocketClient::open(
+            address(),
+            Some(Duration::new(10, 0)),
+        )
+        .expect("Client could not start");
         // Check that subscription was successful
         rpc_client.subscribe(Query::from(EventType::Tx)).unwrap();
         assert_eq!(
