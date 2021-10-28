@@ -973,6 +973,7 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub enum Utils {
+        JoinNetwork(JoinNetwork),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
     }
@@ -982,20 +983,42 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let join_network =
+                    SubCmd::parse(matches).map(Self::JoinNetwork);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
-                init_network.or(init_genesis)
+                join_network.or(init_network).or(init_genesis)
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Utilities.")
+                .subcommand(JoinNetwork::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct JoinNetwork(pub args::JoinNetwork);
+
+    impl SubCmd for JoinNetwork {
+        const CMD: &'static str = "join-network";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::JoinNetwork::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Configure Anoma to join an existing network.")
+                .add_args::<args::JoinNetwork>()
         }
     }
 
@@ -2198,6 +2221,22 @@ pub mod args {
                     .def()
                     .about("The bech32m encoded address string."),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct JoinNetwork {
+        pub chain_id: ChainId,
+    }
+
+    impl Args for JoinNetwork {
+        fn parse(matches: &ArgMatches) -> Self {
+            let chain_id = CHAIN_ID.parse(matches);
+            Self { chain_id }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
         }
     }
 
