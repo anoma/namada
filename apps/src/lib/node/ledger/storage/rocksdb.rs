@@ -36,9 +36,8 @@ pub struct RocksDB(rocksdb::DB);
 
 /// Open RocksDB for the DB
 pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
-    match increase_nofile_limit() {
-        Ok(soft) => tracing::info!("NOFILE limit:      soft   = {}", soft),
-        Err(err) => tracing::info!("Failed to increase NOFILE limit: {}", err),
+    if let Err(err) = increase_nofile_limit() {
+        tracing::error!("Failed to increase NOFILE limit: {}", err);
     }
     let mut cf_opts = Options::default();
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
@@ -441,20 +440,20 @@ const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
 /// Try to increase NOFILE limit and return the current soft limit.
 pub fn increase_nofile_limit() -> io::Result<Rlim> {
     let (soft, hard) = Resource::NOFILE.get()?;
-    tracing::info!("Before increasing: soft   = {}, hard = {}", soft, hard);
+        tracing::debug!("Current NOFILE limit, soft={}, hard={}", soft, hard);
 
     let target = min(DEFAULT_NOFILE_LIMIT, hard);
     if soft >= target {
-        tracing::info!(
+        tracing::debug!(
             "NOFILE limit already large enough, not attempting to increase"
         );
         Ok(soft)
     } else {
-        tracing::info!("Try to increase:   target = {}", target);
+        tracing::debug!("Try to increase to {}", target);
         Resource::NOFILE.set(target, target)?;
 
         let (soft, hard) = Resource::NOFILE.get()?;
-        tracing::info!("After increasing:  soft   = {}, hard = {}", soft, hard);
+        tracing::debug!("Increased NOFILE limit, soft={}, hard={}", soft, hard);
         Ok(soft)
     }
 }
