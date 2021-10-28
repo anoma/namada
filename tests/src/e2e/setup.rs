@@ -454,6 +454,8 @@ where
     };
     let mut cmd = cmd.run().unwrap().command();
     cmd.env("ANOMA_LOG", "anoma=debug")
+        // Explicitly disable dev, in case it's enabled when a test is invoked
+        .env("ANOMA_DEV", "false")
         .current_dir(working_dir)
         .args(&["--base-dir", &base_dir.as_ref().to_string_lossy()])
         .args(args);
