@@ -14,14 +14,17 @@
 //!   - `subspace`: any byte data associated with accounts
 //!   - `address_gen`: established address generator
 
-use std::cmp::Ordering;
+use std::cmp::{min, Ordering};
 use std::collections::HashMap;
+use std::convert::TryInto;
+use std::io;
 use std::path::Path;
 
 use anoma::ledger::storage::types::PrefixIterator;
 use anoma::ledger::storage::{types, BlockState, DBIter, Error, Result, DB};
 use anoma::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use anoma::types::time::DateTimeUtc;
+use rlimit::{Resource, Rlim};
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -34,12 +37,24 @@ pub struct RocksDB(rocksdb::DB);
 
 /// Open RocksDB for the DB
 pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
+    let max_open_files = match increase_nofile_limit() {
+        Ok(max_open_files) => Some(max_open_files),
+        Err(err) => {
+            tracing::error!("Failed to increase NOFILE limit: {}", err);
+            None
+        }
+    };
     let mut cf_opts = Options::default();
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
     cf_opts.set_level_compaction_dynamic_level_bytes(true);
     // compactions + flushes
     cf_opts.set_max_background_jobs(6);
     cf_opts.set_bytes_per_sync(1048576);
+    if let Some(max_open_files) =
+        max_open_files.and_then(|max| max.as_raw().try_into().ok())
+    {
+        cf_opts.set_max_open_files(max_open_files);
+    }
     // TODO the recommended default `options.compaction_pri =
     // kMinOverlappingRatio` doesn't seem to be available in Rust
     let mut table_opts = BlockBasedOptions::default();
@@ -428,4 +443,27 @@ fn unknown_key_error(key: &str) -> Result<()> {
     Err(Error::UnknownKey {
         key: key.to_owned(),
     })
+}
+
+const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
+
+/// Try to increase NOFILE limit and return the current soft limit.
+pub fn increase_nofile_limit() -> io::Result<Rlim> {
+    let (soft, hard) = Resource::NOFILE.get()?;
+    tracing::debug!("Current NOFILE limit, soft={}, hard={}", soft, hard);
+
+    let target = min(DEFAULT_NOFILE_LIMIT, hard);
+    if soft >= target {
+        tracing::debug!(
+            "NOFILE limit already large enough, not attempting to increase"
+        );
+        Ok(soft)
+    } else {
+        tracing::debug!("Try to increase to {}", target);
+        Resource::NOFILE.set(target, target)?;
+
+        let (soft, hard) = Resource::NOFILE.get()?;
+        tracing::debug!("Increased NOFILE limit, soft={}, hard={}", soft, hard);
+        Ok(soft)
+    }
 }
