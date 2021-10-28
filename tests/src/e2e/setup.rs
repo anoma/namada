@@ -443,8 +443,6 @@ where
     let cmd = CargoBuild::new()
         .package(APPS_PACKAGE)
         .manifest_path(manifest_path)
-        .no_default_features()
-        .features("std")
         .bin(bin_name);
     let cmd = if run_debug {
         cmd
