@@ -13,7 +13,7 @@ mod queries;
 
 use std::convert::{TryFrom, TryInto};
 use std::mem;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anoma::ledger::gas::BlockGasMeter;
@@ -24,17 +24,15 @@ use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
-use anoma::types::address::Address;
+use anoma::types::chain::ChainId;
 use anoma::types::storage::{BlockHeight, Key};
 use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
-use anoma::types::token::Amount;
 use anoma::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
 use anoma::types::{address, key, token};
 use borsh::BorshSerialize;
-use itertools::Itertools;
 use tendermint_proto::abci::{
     self, Evidence, RequestPrepareProposal, ValidatorUpdate,
 };
@@ -43,13 +41,13 @@ use thiserror::Error;
 use tower_abci::{request, response};
 
 use super::rpc;
+use crate::config;
 use crate::config::genesis;
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 use crate::node::ledger::{protocol, storage, tendermint_node};
-use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -71,13 +69,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn reset(config: config::Ledger) -> Result<()> {
     // simply nuke the DB files
-    let db_path = &config.db;
+    let db_path = &config.db_dir();
     match std::fs::remove_dir_all(&db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,
     };
     // reset Tendermint state
-    tendermint_node::reset(config).map_err(Error::Tendermint)?;
+    tendermint_node::reset(config.tendermint_dir())
+        .map_err(Error::Tendermint)?;
     Ok(())
 }
 
@@ -101,6 +100,10 @@ pub struct Shell {
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
+    /// Path to the base directory with DB data and configs
+    base_dir: PathBuf,
+    /// Path to the WASM directory for files used in the genesis block.
+    wasm_dir: PathBuf,
     /// Index of next wrapper_tx to fetch from storage
     next_wrapper: usize,
 }
@@ -108,7 +111,12 @@ pub struct Shell {
 impl Shell {
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
-    pub fn new(db_path: impl AsRef<Path>, chain_id: String) -> Self {
+    pub fn new(
+        base_dir: PathBuf,
+        db_path: impl AsRef<Path>,
+        chain_id: ChainId,
+        wasm_dir: PathBuf,
+    ) -> Self {
         let mut storage = storage::open(db_path, chain_id);
         storage
             .load_last_state()
@@ -122,6 +130,8 @@ impl Shell {
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
             byzantine_validators: vec![],
+            base_dir,
+            wasm_dir,
             next_wrapper: 0,
         }
     }
@@ -428,10 +438,12 @@ mod test_utils {
         pub fn new() -> Self {
             Self {
                 shell: Shell::new(
+                    PathBuf::from(".anoma"),
                     PathBuf::from(".anoma")
                         .join("db")
                         .join("anoma-devchain-00000"),
-                    "".into(),
+                    Default::default(),
+                    top_level_directory().join("wasm"),
                 ),
             }
         }

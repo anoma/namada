@@ -1,5 +1,5 @@
 package = anoma
-version = $(shell git describe --always --dirty --broken)
+version = $(shell git describe --dirty --broken)
 platform = $(shell uname -s)-$(shell uname -m)
 package-name = anoma-$(version)-$(platform)
 
@@ -32,15 +32,27 @@ build-test:
 	$(cargo) build --tests
 
 build-release:
-	$(cargo) build --release
+	$(cargo) build --release --package anoma_apps --no-default-features --features std
+
+check-release:
+	$(cargo) check --release --package anoma_apps --no-default-features --features std
 
 package: build-release
 	mkdir -p $(package-name)/wasm && \
 	cd target/release && ln $(bin) ../../$(package-name) && \
 	cd ../.. && \
-	ln wasm/*.wasm $(package-name)/wasm && \
+	ln wasm/checksums.json $(package-name)/wasm && \
 	tar -c -z -f $(package-name).tar.gz $(package-name) && \
 	rm -rf $(package-name)
+
+build-release-image-docker:
+	docker build -t anoma-build .
+
+build-release-docker: build-release-image-docker
+	docker run --rm -v ${PWD}:/var/build anoma-build make build-release
+
+package-docker: build-release-image-docker
+	docker run --rm -v ${PWD}:/var/build anoma-build make package
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
@@ -57,9 +69,11 @@ clippy:
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
-install:
-	# Warning: built in debug mode for now
-	$(cargo) install --path ./apps --debug
+install: tendermint
+	$(cargo) install --path ./apps --no-default-features --features std
+
+tendermint:
+	./scripts/install/get_tendermint.sh
 
 run-ledger:
 	# runs the node
@@ -79,7 +93,7 @@ audit:
 test: test-unit test-e2e test-wasm
 
 test-e2e:
-	$(cargo) test e2e -- --test-threads=1
+	RUST_BACKTRACE=1 $(cargo) test e2e -- --test-threads=1
 
 test-unit:
 	$(cargo) test -- --skip e2e \
@@ -126,13 +140,21 @@ doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
 
-build-wasm-scripts-docker:
+build-wasm-image-docker:
+	docker build -t anoma-wasm wasm
+
+build-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make build-wasm-scripts
 
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm-scripts:
 	make -C $(wasms)
 	make opt-wasm
+	make checksum-wasm
+
+# need python
+checksum-wasm:
+	python wasm/checksums.py
 
 # this command needs wasm-opt installed
 opt-wasm:

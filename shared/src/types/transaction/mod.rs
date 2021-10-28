@@ -86,6 +86,34 @@ pub struct InitAccount {
     pub vp_code: Vec<u8>,
 }
 
+/// A tx data type to initialize a new validator account and its staking reward
+/// account.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct InitValidator {
+    /// Public key to be written into the account's storage. This can be used
+    /// for signature verification of transactions for the newly created
+    /// account.
+    pub account_key: PublicKey,
+    /// A key to be used for signing blocks and votes on blocks.
+    pub consensus_key: PublicKey,
+    /// Public key to be written into the staking reward account's storage.
+    /// This can be used for signature verification of transactions for the
+    /// newly created account.
+    pub rewards_account_key: PublicKey,
+    /// The VP code for validator account
+    pub validator_vp_code: Vec<u8>,
+    /// The VP code for validator's staking reward account
+    pub rewards_vp_code: Vec<u8>,
+}
+
 /// Module that includes helper functions for classifying
 /// different types of transactions that the ledger
 /// must support as well as conversion functions

@@ -173,10 +173,11 @@ fn check_vps(
     // collect the VPs for the verifiers
     let verifiers: Vec<(Address, HashSet<Key>, Vp)> = verifiers
         .iter()
+        .filter(|(addr, _)| !matches!(addr, Address::Implicit(_)))
         .map(|(addr, keys)| {
             let vp = match addr {
                 Address::Internal(addr) => Vp::Native(addr),
-                Address::Established(_) | Address::Implicit(_) => {
+                Address::Established(_) => {
                     let (vp, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
@@ -189,6 +190,7 @@ fn check_vps(
                         .map_err(Error::GasError)?;
                     Vp::Wasm(vp)
                 }
+                Address::Implicit(_) => unreachable!(),
             };
 
             Ok((addr.clone(), keys.clone(), vp))

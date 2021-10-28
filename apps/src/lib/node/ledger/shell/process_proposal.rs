@@ -96,11 +96,7 @@ impl Shell {
                         }
                     } else {
                         // check that the fee payer has sufficient balance
-                        match queries::get_balance(
-                            &self.storage,
-                            &tx.fee.token,
-                            &tx.fee_payer(),
-                        ) {
+                        match self.get_balance(&tx.fee.token, &tx.fee_payer()) {
                             Ok(balance) if tx.fee.amount <= balance => {
                                 shim::response::TxResult {
                                     code: 0,
@@ -141,6 +137,7 @@ mod test_process_proposal {
     use anoma::types::address::xan;
     use anoma::types::key::ed25519::SignedTxData;
     use anoma::types::storage::Epoch;
+    use anoma::types::token::Amount;
     use anoma::types::transaction::{Fee, Hash};
     use borsh::BorshDeserialize;
     use tendermint_proto::abci::RequestInitChain;
@@ -290,9 +287,10 @@ mod test_process_proposal {
                 seconds: 0,
                 nanos: 0,
             }),
+            chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
-        let keypair = crate::wallet::defaults::keys().remove(0).1;
+        let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),

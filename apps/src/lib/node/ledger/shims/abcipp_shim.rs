@@ -1,9 +1,10 @@
 use std::convert::{TryFrom, TryInto};
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use anoma::types::chain::ChainId;
 use anoma::types::storage::BlockHeight;
 use futures::future::FutureExt;
 use tower::Service;
@@ -26,9 +27,14 @@ pub struct AbcippShim {
 }
 
 impl AbcippShim {
-    pub fn new(db_path: impl AsRef<Path>, chain_id: String) -> Self {
+    pub fn new(
+        base_dir: PathBuf,
+        db_path: impl AsRef<Path>,
+        chain_id: ChainId,
+        wasm_dir: PathBuf,
+    ) -> Self {
         Self {
-            service: Shell::new(db_path, chain_id),
+            service: Shell::new(base_dir, db_path, chain_id, wasm_dir),
             begin_block_request: None,
             block_txs: vec![],
         }

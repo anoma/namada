@@ -1,7 +1,5 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
-use std::path::PathBuf;
-
 use anoma_proof_of_stake::parameters::PosParams;
 use anoma_proof_of_stake::types::{
     TotalVotingPowers, ValidatorStates, ValidatorVotingPowers,
@@ -32,18 +30,6 @@ const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_VOTING_POWER_STORAGE_KEY: &str = "total_voting_power";
-
-/// Gets the absolute path to root directory
-fn top_level_directory() -> PathBuf {
-    let mut current_path = std::env::current_dir()
-        .expect("Current directory should exist")
-        .canonicalize()
-        .expect("Current directory should exist");
-    while current_path.file_name().unwrap() != "anoma" {
-        current_path.pop();
-    }
-    current_path
-}
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -90,6 +76,18 @@ pub fn validator_address_raw_hash_key(raw_hash: impl AsRef<str>) -> Key {
         .expect("Cannot obtain a storage key")
         .push(&raw_hash)
         .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's address raw hash?
+pub fn is_validator_address_raw_hash_key(key: &Key) -> Option<&str> {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(raw_hash)]
+            if addr == &ADDRESS && prefix == VALIDATOR_ADDRESS_RAW_HASH =>
+        {
+            Some(raw_hash)
+        }
+        _ => None,
+    }
 }
 
 /// Storage key for validator's staking reward address.
@@ -374,6 +372,14 @@ where
         value.map(|value| decode(value).unwrap())
     }
 
+    fn read_validator_state(
+        &self,
+        key: &Self::Address,
+    ) -> Option<ValidatorStates> {
+        let (value, _gas) = self.read(&validator_state_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
     fn read_validator_total_deltas(
         &self,
         key: &Self::Address,
@@ -493,12 +499,11 @@ where
         address: &Self::Address,
         pk: &Self::PublicKey,
     ) {
-        let user_vp =
-            std::fs::read(&*top_level_directory().join("wasm/vp_user.wasm"))
-                .expect("cannot load user VP");
-        // The staking reward accounts are setup with a user VP
-        self.write(&Key::validity_predicate(address), user_vp.to_vec())
-            .unwrap();
+        // let user_vp =
+        //     std::fs::read("wasm/vp_user.wasm").expect("cannot load user VP");
+        // // The staking reward accounts are setup with a user VP
+        // self.write(&Key::validity_predicate(address), user_vp.to_vec())
+        //     .unwrap();
 
         // Write the public key
         let pk_key = key::ed25519::pk_key(address);

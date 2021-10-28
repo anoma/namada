@@ -135,6 +135,8 @@ impl Shell {
                     tx_result["info"] = result.to_string();
                 }
                 Err(msg) => {
+                    tracing::info!("Transaction failed with: {}", msg);
+                    self.write_log.drop_tx();
                     tx_result["gas_used"] = self
                         .gas_meter
                         .get_current_transaction_gas()
@@ -170,6 +172,9 @@ impl Shell {
         byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
         let height = BlockHeight(header.height.into());
+
+        self.gas_meter.reset();
+
         self.storage
             .begin_block(hash, height)
             .expect("Beginning a block shouldn't fail");
@@ -240,7 +245,7 @@ impl Shell {
             .expect("Couldn't read protocol parameters");
         let pos_params = self.storage.read_pos_params();
         let evidence_params =
-            queries::get_evidence_params(&parameters, &pos_params);
+            self.get_evidence_params(&parameters, &pos_params);
         response.consensus_param_updates = Some(ConsensusParams {
             evidence: Some(evidence_params),
             ..response.consensus_param_updates.take().unwrap_or_default()
