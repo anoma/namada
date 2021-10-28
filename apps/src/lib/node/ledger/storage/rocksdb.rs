@@ -16,6 +16,7 @@
 
 use std::cmp::{min, Ordering};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::io;
 use std::path::Path;
 
@@ -49,7 +50,9 @@ pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
     // compactions + flushes
     cf_opts.set_max_background_jobs(6);
     cf_opts.set_bytes_per_sync(1048576);
-    if let Some(max_open_files) = (max_open_files) {
+    if let Some(max_open_files) =
+        max_open_files.and_then(|max| max.as_raw().try_into().ok())
+    {
         cf_opts.set_max_open_files(max_open_files);
     }
     // TODO the recommended default `options.compaction_pri =
