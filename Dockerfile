@@ -1,10 +1,10 @@
-FROM ubuntu:16.04
+FROM ubuntu:20.04
 ARG RUST_VERSION=1.54.0
 WORKDIR /var/build
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && apt-get install -y \
     build-essential \
-    clang-tools-8 \
+    clang-tools-11 \
     curl \
     git \
     libssl-dev \
