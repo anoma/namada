@@ -63,6 +63,9 @@ pub async fn main() -> Result<()> {
         }
         cli::AnomaClient::WithoutContext(cmd, global_args) => match cmd {
             // Utils cmds
+            Utils::JoinNetwork(JoinNetwork(args)) => {
+                utils::join_network(global_args, args).await
+            }
             Utils::InitNetwork(InitNetwork(args)) => {
                 utils::init_network(global_args, args)
             }

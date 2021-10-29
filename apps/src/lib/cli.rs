@@ -974,6 +974,7 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub enum Utils {
+        JoinNetwork(JoinNetwork),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
     }
@@ -983,20 +984,42 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let join_network =
+                    SubCmd::parse(matches).map(Self::JoinNetwork);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
-                init_network.or(init_genesis)
+                join_network.or(init_network).or(init_genesis)
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Utilities.")
+                .subcommand(JoinNetwork::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct JoinNetwork(pub args::JoinNetwork);
+
+    impl SubCmd for JoinNetwork {
+        const CMD: &'static str = "join-network";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::JoinNetwork::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Configure Anoma to join an existing network.")
+                .add_args::<args::JoinNetwork>()
         }
     }
 
@@ -1071,6 +1094,7 @@ pub mod args {
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     const ALIAS: Arg<String> = arg("alias");
+    const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     const AMOUNT: Arg<token::Amount> = arg("amount");
     const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
@@ -1600,7 +1624,7 @@ pub mod args {
         pub token_buy: String,
         /// The amount of token to be bought
         pub min_buy: String,
-        // The path to the wasm vp code
+        /// The path to the wasm vp code
         pub vp_path: Option<String>,
     }
 
@@ -2238,12 +2262,29 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
+    pub struct JoinNetwork {
+        pub chain_id: ChainId,
+    }
+
+    impl Args for JoinNetwork {
+        fn parse(matches: &ArgMatches) -> Self {
+            let chain_id = CHAIN_ID.parse(matches);
+            Self { chain_id }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct InitNetwork {
         pub genesis_path: PathBuf,
         pub chain_id_prefix: ChainIdPrefix,
         pub unsafe_dont_encrypt: bool,
         pub consensus_timeout_commit: tendermint::Timeout,
         pub localhost: bool,
+        pub allow_duplicate_ip: bool,
     }
 
     impl Args for InitNetwork {
@@ -2254,12 +2295,14 @@ pub mod args {
             let consensus_timeout_commit =
                 CONSENSUS_TIMEOUT_COMMIT.parse(matches);
             let localhost = LOCALHOST.parse(matches);
+            let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             Self {
                 genesis_path,
                 chain_id_prefix,
                 unsafe_dont_encrypt,
                 consensus_timeout_commit,
                 localhost,
+                allow_duplicate_ip,
             }
         }
 
@@ -2284,6 +2327,10 @@ pub mod args {
             .arg(LOCALHOST.def().about(
                 "Use localhost address for P2P and RPC connections for the \
                  validators ledger and intent gossip nodes",
+            ))
+            .arg(ALLOW_DUPLICATE_IP.def().about(
+                "Toggle to disable guard against peers connecting from the \
+                 same IP. This option shouldn't be used in mainnet.",
             ))
         }
     }

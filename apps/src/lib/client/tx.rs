@@ -365,6 +365,7 @@ async fn submit_tx(
     keypair: &Keypair,
 ) -> (Context, Vec<Address>) {
     // NOTE: use this to print the request JSON body:
+
     // let request =
     // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
     //     tx_bytes.clone().into(),
@@ -501,9 +502,13 @@ pub async fn broadcast_tx(
 
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,
+        None,
     )?;
     let mut decrypted_tx_subscription =
-        TendermintWebsocketClient::open(WebSocketAddress::try_from(address)?)?;
+        TendermintWebsocketClient::open(
+            WebSocketAddress::try_from(address)?,
+            None,
+        )?;
     // It is better to subscribe to the transaction before it is broadcast
     //
     // Note that the `applied.hash` key comes from a custom event

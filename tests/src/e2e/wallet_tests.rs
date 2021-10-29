@@ -9,6 +9,8 @@
 //! To keep the temporary files created by a test, use env var
 //! `ANOMA_E2E_KEEP_TEMP=true`.
 
+use std::env;
+
 use color_eyre::eyre::Result;
 
 use super::setup;
@@ -50,6 +52,49 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
 
     cmd.exp_string("Enter decryption password:")?;
     cmd.send_line(password)?;
+    cmd.exp_string("Public key hash:")?;
+    cmd.exp_string("Public key:")?;
+
+    // 3. key list
+    let mut cmd = run!(test, Bin::Wallet, &["key", "list"], Some(20))?;
+    cmd.exp_string(&format!("Alias \"{}\" (encrypted):", key_alias))?;
+
+    Ok(())
+}
+
+/// Test wallet key commands with an encrypted key supplied via ENV:
+/// 1. key gen
+/// 2. key find
+/// 3. key list
+#[test]
+fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
+    let test = setup::single_node_net()?;
+    let key_alias = "test_key_1";
+    let password = "VeRySeCuR3";
+
+    env::set_var("ANOMA_WALLET_PASSWORD", password);
+
+    // 1. key gen
+    let mut cmd = run!(
+        test,
+        Bin::Wallet,
+        &["key", "gen", "--alias", key_alias],
+        Some(20),
+    )?;
+
+    cmd.exp_string(&format!(
+        "Successfully added a key and an address with alias: \"{}\"",
+        key_alias
+    ))?;
+
+    // 2. key find
+    let mut cmd = run!(
+        test,
+        Bin::Wallet,
+        &["key", "find", "--alias", key_alias],
+        Some(20),
+    )?;
+
     cmd.exp_string("Public key hash:")?;
     cmd.exp_string("Public key:")?;
 
