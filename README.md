@@ -36,8 +36,9 @@ To find how to use it, check out the [User Guide section of the docs](https://an
 # Build the provided validity predicate, transaction and matchmaker wasm modules
 make build-wasm-scripts-docker
 
-# Development build Anoma
-make
+# Development (debug) build Anoma, which includes a validator and some default 
+# accounts, whose keys and addresses are available in the wallet
+ANOMA_DEV=true make
 ```
 
 ### Using Nix
