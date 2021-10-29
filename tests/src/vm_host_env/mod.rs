@@ -17,10 +17,12 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
+    use std::panic;
+
     use anoma::ledger::ibc::{init_genesis_storage, Error as IbcError};
     use anoma::proto::Tx;
     use anoma::types::key::ed25519::SignedTxData;
-    use anoma::types::storage::{Key, KeySeg};
+    use anoma::types::storage::{self, Key, KeySeg};
     use anoma::types::time::DateTimeUtc;
     use anoma::types::{address, key};
     use anoma_vm_env::tx_prelude::{
@@ -99,6 +101,8 @@ mod tests {
     fn test_tx_delete() {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
+        let test_account = address::testing::established_address_1();
+        env.spawn_accounts([&test_account]);
         init_tx_env(&mut env);
 
         // Trying to delete a key that doesn't exists should be a no-op
@@ -118,6 +122,16 @@ mod tests {
         assert!(
             !tx_host_env::has_key(key),
             "After a key has been deleted, its key shouldn't be found"
+        );
+
+        // Trying to delete a validity predicate should fail
+        let key = storage::Key::validity_predicate(&test_account).to_string();
+        assert!(
+            panic::catch_unwind(|| { tx_host_env::delete(key) })
+                .err()
+                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+                .unwrap()
+                .contains("CannotDeleteVp")
         );
     }
 

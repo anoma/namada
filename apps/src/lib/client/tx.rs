@@ -1,16 +1,18 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
 
+use anoma::ledger::pos::{BondId, Bonds, Unbonds};
 use anoma::proto::Tx;
-use anoma::types::address::Address;
+use anoma::types::address::{self, Address};
 use anoma::types::token;
 use anoma::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
+use anoma::{ledger, vm};
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
 use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::Client;
+use tendermint_rpc::{Client, HttpClient};
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
@@ -43,8 +45,51 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let addr = ctx.get(&args.addr);
+
+    // Check that the address is established and exists on chain
+    match &addr {
+        Address::Established(_) => {
+            let exists =
+                rpc::known_address(&addr, args.tx.ledger_address.clone()).await;
+            if !exists {
+                eprintln!("The address {} doesn't exist on chain.", addr);
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        Address::Implicit(_) => {
+            eprintln!(
+                "A validity predicate of an implicit address cannot be \
+                 directly updated. You can use an established address for \
+                 this purpose."
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+        Address::Internal(_) => {
+            eprintln!(
+                "A validity predicate of an internal address cannot be \
+                 directly updated."
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+
     let vp_code = ctx.read_wasm(args.vp_code_path);
+    // Validate the VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        eprintln!("Validity predicate code validation failed with {}", err);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
+
     let data = UpdateVp { addr, vp_code };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
@@ -59,6 +104,14 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         .vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        eprintln!("Validity predicate code validation failed with {}", err);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
     let data = InitAccount {
         public_key,
@@ -126,9 +179,30 @@ pub async fn submit_init_validator(
     let validator_vp_code = validator_vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the validator VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {
+        eprintln!(
+            "Validator validity predicate code validation failed with {}",
+            err
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
     let rewards_vp_code = rewards_vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the rewards VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&rewards_vp_code) {
+        eprintln!(
+            "Staking reward account validity predicate code validation failed \
+             with {}",
+            err
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
     let data = InitValidator {
@@ -247,8 +321,62 @@ pub async fn submit_init_validator(
 
 pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let source = ctx.get(&args.source);
+    // Check that the source address exists on chain
+    let source_exists =
+        rpc::known_address(&source, args.tx.ledger_address.clone()).await;
+    if !source_exists {
+        eprintln!("The source address {} doesn't exist on chain.", source);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let target = ctx.get(&args.target);
+    // Check that the target address exists on chain
+    let target_exists =
+        rpc::known_address(&target, args.tx.ledger_address.clone()).await;
+    if !target_exists {
+        eprintln!("The target address {} doesn't exist on chain.", target);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let token = ctx.get(&args.token);
+    // Check that the token address exists on chain
+    let token_exists =
+        rpc::known_address(&token, args.tx.ledger_address.clone()).await;
+    if !token_exists {
+        eprintln!("The token address {} doesn't exist on chain.", token);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+    // Check source balance
+    let balance_key = token::balance_key(&token, &source);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
+        Some(balance) => {
+            if balance < args.amount {
+                eprintln!(
+                    "The balance of the source {} of token {} is lower than \
+                     the amount to be transferred. Amount to transfer is {} \
+                     and the balance is {}.",
+                    source, token, args.amount, balance
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!(
+                "No balance found for the source {} of token {}",
+                source, token
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let transfer = token::Transfer {
         source,
@@ -268,7 +396,56 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let source = ctx.get_opt(&args.source);
+    // Check that the source address exists on chain
+    if let Some(source) = &source {
+        let source_exists =
+            rpc::known_address(source, args.tx.ledger_address.clone()).await;
+        if !source_exists {
+            eprintln!("The source address {} doesn't exist on chain.", source);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+    // Check bond's source (source for delegation or validator for self-bonds)
+    // balance
+    let bond_source = source.as_ref().unwrap_or(&validator);
+    let balance_key = token::balance_key(&address::xan(), bond_source);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
+        Some(balance) => {
+            if balance < args.amount {
+                eprintln!(
+                    "The balance of the source {} is lower than the amount to \
+                     be transferred. Amount to transfer is {} and the balance \
+                     is {}.",
+                    bond_source, args.amount, balance
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No balance found for the source {}", bond_source);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
     let tx_code = ctx.read_wasm(TX_BOND_WASM);
     let bond = pos::Bond {
         validator,
@@ -285,8 +462,59 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
+
+    // Check the source's current bond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    let bond_id = BondId {
+        source: bond_source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_key = ledger::pos::bond_key(&bond_id);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let bonds =
+        rpc::query_storage_value::<Bonds>(client.clone(), bond_key).await;
+    match bonds {
+        Some(bonds) => {
+            let mut bond_amount: token::Amount = 0.into();
+            for bond in bonds.iter() {
+                for delta in bond.deltas.values() {
+                    bond_amount += *delta;
+                }
+            }
+            if args.amount > bond_amount {
+                eprintln!(
+                    "The total bonds of the source {} is lower than the \
+                     amount to be unbonded. Amount to unbond is {} and the \
+                     total bonds is {}.",
+                    bond_source, args.amount, bond_amount
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No bonds found");
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
 
     let data = pos::Unbond {
         validator,
@@ -302,9 +530,68 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
+    let (ctx, epoch) = rpc::query_epoch(
+        ctx,
+        args::Query {
+            ledger_address: args.tx.ledger_address.clone(),
+        },
+    )
+    .await;
+
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
+
+    // Check the source's current unbond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    let bond_id = BondId {
+        source: bond_source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_key = ledger::pos::unbond_key(&bond_id);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let unbonds =
+        rpc::query_storage_value::<Unbonds>(client.clone(), bond_key).await;
+    match unbonds {
+        Some(unbonds) => {
+            let mut unbonded_amount: token::Amount = 0.into();
+            if let Some(unbond) = unbonds.get(epoch) {
+                for delta in unbond.deltas.values() {
+                    unbonded_amount += *delta;
+                }
+            }
+            if unbonded_amount == 0.into() {
+                eprintln!(
+                    "There are no unbonded bonds ready to withdraw in the \
+                     current epoch {}.",
+                    epoch
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No unbonded bonds found");
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
