@@ -51,15 +51,10 @@ fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
     }
 }
 
-fn handle_subcommand(
-    program: &str,
-    #[cfg(not(feature = "dev"))] sub_args: Vec<String>,
-    #[cfg(feature = "dev")] mut sub_args: Vec<String>,
-) -> Result<()> {
+fn handle_subcommand(program: &str, mut sub_args: Vec<String>) -> Result<()> {
     let env_vars = env::vars_os();
 
-    #[cfg(feature = "dev")]
-    let cmd_str = if env::var("CARGO").is_ok() {
+    let cmd_name = if cfg!(feature = "dev") && env::var("CARGO").is_ok() {
         // When the command is ran from inside `cargo run`, we also want to
         // call the sub-command via `cargo run` to rebuild if necessary.
         // We do this by prepending the arguments with `cargo run` arguments.
@@ -67,14 +62,15 @@ fn handle_subcommand(
             vec!["run".to_string(), format!("--bin={}", program), "--".into()];
         cargo_args.append(&mut sub_args);
         sub_args = cargo_args;
-        "cargo"
+        "cargo".into()
     } else {
-        program
+        // Get the full path to the program to be inside the parent directory of
+        // the current process
+        let anoma_path = env::current_exe()?;
+        anoma_path.parent().unwrap().join(program)
     };
-    #[cfg(not(feature = "dev"))]
-    let cmd_str = program;
 
-    let mut cmd = Command::new(cmd_str);
+    let mut cmd = Command::new(cmd_name);
     cmd.args(sub_args).envs(env_vars);
     exec_subcommand(program, cmd)
 }
