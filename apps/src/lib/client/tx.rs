@@ -15,7 +15,9 @@ use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
 #[cfg(not(feature = "ABCI"))]
-use tendermint::net::Address as TendermintAddress;
+use tendermint_config::net::Address as TendermintAddress;
+#[cfg(feature = "ABCI")]
+use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::{EventType, Query};
 #[cfg(not(feature = "ABCI"))]
@@ -24,8 +26,6 @@ use tendermint_rpc::{Client, HttpClient};
 use tendermint_rpc_abci::query::{EventType, Query};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::{Client, HttpClient};
-#[cfg(feature = "ABCI")]
-use tendermint_stable::net::Address as TendermintAddress;
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;

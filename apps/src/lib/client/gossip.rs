@@ -5,9 +5,9 @@ use anoma::types::intent::{Exchange, FungibleTokenIntent};
 use anoma::types::key::ed25519::Signed;
 use borsh::BorshSerialize;
 #[cfg(not(feature = "ABCI"))]
-use tendermint::net::Address as TendermintAddress;
+use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
-use tendermint_stable::net::Address as TendermintAddress;
+use tendermint_config_abci::net::Address as TendermintAddress;
 
 use super::signing;
 use crate::cli::{self, args, Context};

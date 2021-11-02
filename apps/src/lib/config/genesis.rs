@@ -530,8 +530,6 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
 }
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
-    use std::iter::FromIterator;
-
     use anoma::ledger::parameters::EpochDuration;
     use anoma::types::address;
 

@@ -295,6 +295,7 @@ mod test_finalize_block {
     use anoma::types::address::xan;
     use anoma::types::storage::Epoch;
     use anoma::types::transaction::Fee;
+    use anoma::types::time::DateTimeUtc;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::block::header::Version;
     #[cfg(not(feature = "ABCI"))]
@@ -322,7 +323,7 @@ mod test_finalize_block {
                         .try_into()
                         .expect("Should not fail"),
                     height: 0u64.try_into().expect("Should not fail"),
-                    time: Time::now(),
+                    time: Time::from(DateTimeUtc::now()),
                     last_block_id: None,
                     last_commit_hash: None,
                     data_hash: None,

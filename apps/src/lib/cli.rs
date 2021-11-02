@@ -1085,11 +1085,11 @@ pub mod args {
     use libp2p::Multiaddr;
     use serde::Deserialize;
     #[cfg(not(feature = "ABCI"))]
-    use tendermint::net::Address as TendermintAddress;
-    #[cfg(not(feature = "ABCI"))]
     use tendermint::Timeout;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint_config::net::Address as TendermintAddress;
     #[cfg(feature = "ABCI")]
-    use tendermint_stable::net::Address as TendermintAddress;
+    use tendermint_config_abci::net::Address as TendermintAddress;
     #[cfg(feature = "ABCI")]
     use tendermint_stable::Timeout;
 
