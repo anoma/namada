@@ -44,6 +44,7 @@ dev = ["anoma/dev"]
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 ABCI = [
+  "ibc-abci",
   "tendermint-stable",
   "tendermint-config-abci",
   "tendermint-proto-abci",
@@ -53,6 +54,7 @@ ABCI = [
   "anoma/ibc-vp-abci",
 ]
 ABCI-plus-plus = [
+  "ibc",
   "tendermint",
   "tendermint-config",
   "tendermint-proto",
@@ -84,6 +86,10 @@ eyre = "0.6.5"
 flate2 = "1.0.22"
 futures = "0.3"
 hex = "0.4.3"
+# TODO temp fork for borsh coding
+# Also, using the same version of tendermint-rs as we do here.
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/abci++-v0.23.0", features = ["mocks", "borsh"], optional = true}
+ibc-abci = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/rebase_v0.23.0", features = ["mocks", "borsh"], optional = true}
 itertools = "0.10.1"
 jsonpath_lib = "0.3.0"
 libc = "0.2.97"

@@ -98,6 +98,7 @@ where
             "anoma_tx_get_block_height" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_height),
             "anoma_tx_get_block_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_hash),
             "anoma_tx_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_epoch),
+            "anoma_tx_emit_ibc_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_emit_ibc_event),
             "anoma_tx_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_log_string),
         },
     }

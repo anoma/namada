@@ -6,8 +6,9 @@ use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::types::address::{Address, EstablishedAddressGen};
-use crate::types::storage::Key;
+use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
+use crate::types::ibc::IbcEvent;
+use crate::types::storage::{Key, KeySeg};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -21,6 +22,10 @@ pub enum Error {
     UpdateVpOfNewAccount,
     #[error("Trying to delete a validity predicate")]
     DeleteVp,
+    #[error("Trying to update an IBC event which has been already set")]
+    UpdateIbcEvent,
+    #[error("Trying to delete an IBC event")]
+    DeleteIbcEvent,
 }
 
 /// Result for functions that may fail
@@ -42,6 +47,11 @@ pub enum StorageModification {
     InitAccount {
         /// Validity predicate bytes
         vp: Vec<u8>,
+    },
+    /// IBC event
+    Ibc {
+        /// IBC event
+        event: IbcEvent,
     },
 }
 
@@ -85,6 +95,9 @@ impl WriteLog {
                     StorageModification::InitAccount { ref vp } => {
                         key.len() + vp.len()
                     }
+                    &StorageModification::Ibc { ref event } => {
+                        event.0.to_json().len()
+                    }
                 };
                 (Some(v), gas as _)
             }
@@ -109,6 +122,9 @@ impl WriteLog {
                 StorageModification::Delete => len as i64,
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::UpdateVpOfNewAccount);
+                }
+                StorageModification::Ibc { .. } => {
+                    return Err(Error::UpdateIbcEvent);
                 }
             },
             // set just the length of the value because we don't know if
@@ -136,6 +152,9 @@ impl WriteLog {
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::DeleteVp);
                 }
+                StorageModification::Ibc { .. } => {
+                    return Err(Error::DeleteIbcEvent);
+                }
             },
             // set 0 because we don't know if the previous value exists on the
             // storage
@@ -162,6 +181,16 @@ impl WriteLog {
         self.tx_write_log
             .insert(key, StorageModification::InitAccount { vp });
         (addr, gas)
+    }
+
+    /// Set an IBC event and return the gas cost.
+    pub fn set_ibc_event(&mut self, event: IbcEvent) -> u64 {
+        let len = event.0.to_json().len() as _;
+        self.tx_write_log.insert(
+            crate::ledger::ibc::storage::event_key(),
+            StorageModification::Ibc { event },
+        );
+        len
     }
 
     /// Get the storage keys changed and accounts keys initialized in the
@@ -202,6 +231,17 @@ impl WriteLog {
                 }
             })
             .collect()
+    }
+
+    /// Get the IBC event of the current transaction
+    pub fn get_ibc_event(&self) -> Option<IbcEvent> {
+        match self
+            .tx_write_log
+            .get(&Address::Internal(InternalAddress::Ibc).to_db_key().into())
+        {
+            Some(StorageModification::Ibc { event }) => Some(event.clone()),
+            _ => None,
+        }
     }
 
     /// Commit the current transaction's write log to the block when it's
@@ -253,6 +293,7 @@ impl WriteLog {
                         .batch_write_subspace_val(&mut batch, key, vp.clone())
                         .map_err(Error::StorageError)?;
                 }
+                StorageModification::Ibc { .. } => {}
             }
         }
         storage.exec_batch(batch).map_err(Error::StorageError)?;

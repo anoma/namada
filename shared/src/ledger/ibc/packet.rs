@@ -59,8 +59,8 @@ use super::storage::{port_channel_sequence_id, Error as IbcStorageError};
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::ibc::{
-    Error as IbcDataError, PacketAckData, PacketReceiptData, PacketSendData,
-    TimeoutData,
+    make_timeout_on_close_event, Error as IbcDataError, PacketAckData,
+    PacketReceiptData, PacketSendData, TimeoutData,
 };
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -88,6 +88,8 @@ pub enum Error {
     InvalidIbcData(IbcDataError),
     #[error("IBC storage error: {0}")]
     IbcStorage(IbcStorageError),
+    #[error("IBC event error: {0}")]
+    IbcEvent(String),
 }
 
 /// IBC packet functions result
@@ -609,6 +611,12 @@ where
                 &data.proofs()?,
             )
             .map_err(Error::ProofVerificationFailure)?;
+
+            // Check if the event of TimeoutOnClose has been emitted
+            // An event of Timeout will be checked in the channel validation
+            let event = make_timeout_on_close_event(data.packet);
+            self.check_emitted_event(event)
+                .map_err(|e| Error::IbcEvent(e.to_string()))?;
         }
 
         if channel.order_matches(&Order::Ordered) {

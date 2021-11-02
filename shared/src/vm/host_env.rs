@@ -19,6 +19,7 @@ use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_env;
 use crate::proto::Tx;
 use crate::types::address::{self, Address};
+use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::key::ed25519::{verify_tx_sig, PublicKey, Signature};
 use crate::types::storage::Key;
@@ -583,6 +584,9 @@ where
         Some(&write_log::StorageModification::InitAccount { .. }) => {
             HostEnvResult::Success.to_i64()
         }
+        Some(&write_log::StorageModification::Ibc { .. }) => {
+            HostEnvResult::Success.to_i64()
+        }
         None => {
             // when not found in write log, try to check the storage
             let storage = unsafe { env.ctx.storage.get() };
@@ -650,6 +654,10 @@ where
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(vp.clone());
             len
+        }
+        Some(&write_log::StorageModification::Ibc { .. }) => {
+            // fail, IBC event doesn't need to be read
+            HostEnvResult::Fail.to_i64()
         }
         None => {
             // when not found in write log, try to read from the storage
@@ -783,6 +791,10 @@ where
                 // a VP of a new account doesn't need to be iterated
                 continue;
             }
+            Some(&write_log::StorageModification::Ibc { .. }) => {
+                // The IBC event doesn't need to be iterated
+                continue;
+            }
             None => {
                 let key_val = KeyVal { key, val }
                     .try_to_vec()
@@ -900,6 +912,31 @@ where
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
     // TODO: charge the size diff
+}
+
+/// Emitting an IBC event function exposed to the wasm VM Tx environment.
+/// The given IBC event will be set to the write log.
+pub fn tx_emit_ibc_event<MEM, DB, H, CA>(
+    env: &TxEnv<MEM, DB, H, CA>,
+    event_ptr: u64,
+    event_len: u64,
+) -> TxResult<()>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let (event, gas) = env
+        .memory
+        .read_bytes(event_ptr, event_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_add_gas(env, gas)?;
+    let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
+        .map_err(TxRuntimeError::EncodingError)?;
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let gas = write_log.set_ibc_event(event);
+    tx_add_gas(env, gas)
 }
 
 /// Storage read prior state (before tx execution) function exposed to the wasm

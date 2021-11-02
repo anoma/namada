@@ -157,6 +157,8 @@ dependencies = [
  "flate2",
  "futures 0.3.18",
  "hex",
+ "ibc 0.8.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/abci++-v0.23.0)",
+ "ibc 0.8.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/rebase_v0.23.0)",
  "itertools 0.10.1",
  "jsonpath_lib",
  "libc",

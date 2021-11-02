@@ -177,6 +177,9 @@ where
                         );
                         self.write_log.commit_tx();
                         tx_result["code"] = ErrorCodes::Ok.into();
+                        if let Some(ibc_event) = result.ibc_event {
+                            tx_result.merge_ibc_event(&ibc_event);
+                        }
                         match serde_json::to_string(
                             &result.initialized_accounts,
                         ) {

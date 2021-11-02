@@ -65,6 +65,7 @@ pub enum IbcPrefix {
     Commitment,
     Receipt,
     Ack,
+    Event,
     Unknown,
 }
 
@@ -86,6 +87,7 @@ pub fn ibc_prefix(key: &Key) -> IbcPrefix {
                 "commitments" => IbcPrefix::Commitment,
                 "receipts" => IbcPrefix::Receipt,
                 "acks" => IbcPrefix::Ack,
+                "event" => IbcPrefix::Event,
                 _ => IbcPrefix::Unknown,
             }
         }
