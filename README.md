@@ -11,8 +11,8 @@ This is an implementation of the Anoma protocol in Rust.
 
 ## 📓 Docs
 
-- [docs](https://anoma.github.io/anoma/): built from [docs mdBook](./docs/)
-- [rustdoc](https://anoma.github.io/anoma/rustdoc/anoma/): built from the source
+- [docs](https://docs.anoma.network/master/): built from [docs mdBook](./docs/)
+- [rustdoc](https://docs.anoma.network/master/rustdoc/anoma/): built from the source
 
 ## Warning
 
@@ -28,7 +28,7 @@ make install
 
 After installation, the main `anoma` executable will be available on path.
 
-To find how to use it, check out the [User Guide section of the docs](https://anoma.github.io/anoma/user-guide/).
+To find how to use it, check out the [User Guide section of the docs](https://docs.anoma.network/master/user-guide/).
 
 ## ⚙️ Development
 

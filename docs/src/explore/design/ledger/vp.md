@@ -25,7 +25,7 @@ fn validate_tx(
 ) -> bool;
 ```
 
-The host functions available to call from inside the VP code can be found in [docs generated from code](https://anoma.github.io/anoma/rustdoc/anoma_vm_env/imports/vp/index.html#functions).
+The host functions available to call from inside the VP code can be found in [docs generated from code](https://docs.anoma.network/master/rustdoc/anoma_vm_env/imports/vp/index.html#functions).
 
 ## Native VPs
 

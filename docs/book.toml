@@ -4,7 +4,7 @@ edit-url-template = "https://github.com/anoma/anoma/edit/master/docs/{path}"
 git-repository-url = "https://github.com/anoma/anoma"
 language = "en"
 multilingual = false
-site-url = "https://anoma.github.io/anoma/"
+site-url = "https://docs.anoma.network/master/"
 src = "src"
 title = "Anoma - DOCS"
 
