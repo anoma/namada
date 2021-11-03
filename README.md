@@ -30,6 +30,15 @@ After installation, the main `anoma` executable will be available on path.
 
 To find how to use it, check out the [User Guide section of the docs](https://docs.anoma.network/master/user-guide/).
 
+If you are running NixOS or at least the Nix package manager, you may opt to
+install Anoma as a Nix derivation like so:
+
+```shell
+nix-shell --run "crate2nix generate --no-default-features --features 'std ABCI'"
+nix-build -A anoma
+nix-env -i ./result
+```
+
 ## ⚙️ Development
 
 ```shell
@@ -43,10 +52,12 @@ ANOMA_DEV=true make
 
 ### Using Nix
 
+If you are running NixOS or at least the Nix package manager, you may opt in to
+all the dependencies via Nix by simply entering the Nix shell environment:
+
 ```shell
-nix-shell -p crate2nix --command "crate2nix generate"
-nix-build -A apps
-nix-env -i ./result
+nix-shell
+make
 ```
 
 ### Before submitting a PR, pls make sure to run the following:
