@@ -488,6 +488,14 @@ pub fn init_network(
     config.ledger.tendermint.consensus_timeout_commit =
         consensus_timeout_commit;
     config.ledger.tendermint.p2p_allow_duplicate_ip = allow_duplicate_ip;
+    // Open P2P address
+    if !localhost {
+        config
+            .ledger
+            .tendermint
+            .p2p_address
+            .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+    }
     config.ledger.genesis_time = genesis.genesis_time.into();
     if let Some(discover) = &mut config.intent_gossiper.discover_peer {
         discover.bootstrap_peers = bootstrap_peers;
