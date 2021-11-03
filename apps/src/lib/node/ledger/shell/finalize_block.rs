@@ -294,8 +294,8 @@ where
 mod test_finalize_block {
     use anoma::types::address::xan;
     use anoma::types::storage::Epoch;
-    use anoma::types::transaction::Fee;
     use anoma::types::time::DateTimeUtc;
+    use anoma::types::transaction::Fee;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::block::header::Version;
     #[cfg(not(feature = "ABCI"))]

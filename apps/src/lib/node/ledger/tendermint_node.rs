@@ -15,17 +15,17 @@ use signal_hook::iterator::Signals;
 #[cfg(not(feature = "ABCI"))]
 use tendermint::Genesis;
 #[cfg(not(feature = "ABCI"))]
+use tendermint_config::net::Address as TendermintAddress;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_config::Error as TendermintError;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::TendermintConfig;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::net::Address as TendermintAddress;
+#[cfg(feature = "ABCI")]
+use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::Error as TendermintError;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::TendermintConfig;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_stable::Genesis;
 use thiserror::Error;
@@ -298,10 +298,9 @@ fn update_tendermint_config(
     let mut config =
         TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
 
-    config.p2p.laddr = TendermintAddress::from_str(
-        &tendermint_config.p2p_address.to_string(),
-    )
-    .unwrap();
+    config.p2p.laddr =
+        TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
+            .unwrap();
     config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
     config.p2p.pex = tendermint_config.p2p_pex;
     config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
@@ -317,10 +316,9 @@ fn update_tendermint_config(
     // again in the future.
     config.mempool.keep_invalid_txs_in_cache = false;
 
-    config.rpc.laddr = TendermintAddress::from_str(
-        &tendermint_config.rpc_address.to_string(),
-    )
-    .unwrap();
+    config.rpc.laddr =
+        TendermintAddress::from_str(&tendermint_config.rpc_address.to_string())
+            .unwrap();
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
     config.rpc.max_body_bytes = 2_000_000;

@@ -922,21 +922,19 @@ fn parse(
     tx_hash: &str,
 ) -> TxResponse {
     let mut selector = jsonpath::selector(&json);
-    let mut event = selector(&format!(
-        "$.events.[?(@.type=='{}')]",
-        event_type.to_string()
-    ))
-    .unwrap()
-    .iter()
-    .filter_map(|event| {
-        let attrs = Attributes::from(*event);
-        match attrs.get("hash") {
-            Some(hash) if hash == tx_hash => Some(attrs),
-            _ => None,
-        }
-    })
-    .collect::<Vec<Attributes>>()
-    .remove(0);
+    let mut event =
+        selector(&format!("$.events.[?(@.type=='{}')]", event_type))
+            .unwrap()
+            .iter()
+            .filter_map(|event| {
+                let attrs = Attributes::from(*event);
+                match attrs.get("hash") {
+                    Some(hash) if hash == tx_hash => Some(attrs),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<Attributes>>()
+            .remove(0);
 
     let info = event.take("info").unwrap();
     let height = event.take("height").unwrap();

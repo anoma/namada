@@ -17,11 +17,6 @@ wasms := wasm/wasm_source
 # Paths for all the wasm templates
 wasm_templates := wasm/tx_template wasm/vp_template wasm/mm_template wasm/mm_filter_template
 
-# Transitive dependency warning from tendermint-rpc
-audit-ignores += RUSTSEC-2020-0016
-# Transitive dependency warning from tendermint-rs and ibc-rs
-# TODO https://github.com/anoma/anoma/issues/340
-audit-ignores += RUSTSEC-2021-0073
 # TODO upgrade libp2p
 audit-ignores += RUSTSEC-2021-0076
 

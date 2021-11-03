@@ -987,14 +987,12 @@ pub fn update_client(
         }
         AnyClientState::Mock(_) => match headers.last().unwrap() {
             AnyHeader::Mock(h) => Ok((
-                MockClientState(h.clone()).wrap_any(),
-                MockConsensusState::new(h.clone()).wrap_any(),
+                MockClientState(*h).wrap_any(),
+                MockConsensusState::new(*h).wrap_any(),
             )),
-            _ => {
-                return Err(Error::ClientUpdate(
-                    "The header type is mismatched".to_owned(),
-                ));
-            }
+            _ => Err(Error::ClientUpdate(
+                "The header type is mismatched".to_owned(),
+            )),
         },
     }
 }

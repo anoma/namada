@@ -10,14 +10,8 @@ use crate::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use crate::types::time::DateTimeUtc;
 
 /// An in-memory DB for testing.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MockDB(BTreeMap<String, Vec<u8>>);
-
-impl Default for MockDB {
-    fn default() -> MockDB {
-        MockDB(BTreeMap::new())
-    }
-}
 
 impl DB for MockDB {
     fn open(_db_path: impl AsRef<Path>) -> Self {
@@ -258,7 +252,7 @@ impl<'iter> DBIter<'iter> for MockDB {
         prefix: &Key,
     ) -> MockPrefixIterator<'iter> {
         let db_prefix = format!("{}/subspace/", height.raw());
-        let prefix = format!("{}{}", db_prefix, prefix.to_string());
+        let prefix = format!("{}{}", db_prefix, prefix);
         let iter = self.0.iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
     }

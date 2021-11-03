@@ -344,7 +344,7 @@ pub mod wrapper_tx {
         #[test]
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
-            println!("{}", keypair.public.to_string());
+            println!("{}", keypair.public);
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
@@ -463,7 +463,9 @@ pub mod wrapper_tx {
             assert_eq!(
                 err,
                 WrapperTxErr::SigError(
-                    "Signature verification failed: signature error: Verification equation was not satisfied".into()
+                    "Signature verification failed: signature error: \
+                     Verification equation was not satisfied"
+                        .into()
                 )
             );
         }
