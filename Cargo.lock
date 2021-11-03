@@ -149,6 +149,7 @@ dependencies = [
  "derivative",
  "ed25519-dalek",
  "eyre",
+ "flate2",
  "futures 0.3.17",
  "hex",
  "itertools 0.10.1",
@@ -176,6 +177,7 @@ dependencies = [
  "sha2 0.9.8",
  "signal-hook",
  "sparse-merkle-tree",
+ "tar",
  "tempfile",
  "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-integration)",
  "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
@@ -5537,6 +5539,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
+name = "tar"
+version = "0.4.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6f5515d3add52e0bbdcad7b83c388bb36ba7b754dda3b5f5bc2d38640cdba5c"
+dependencies = [
+ "filetime",
+ "libc",
+ "xattr",
+]
+
+[[package]]
 name = "target-lexicon"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7164,6 +7177,15 @@ dependencies = [
  "curve25519-dalek",
  "rand_core 0.5.1",
  "zeroize",
+]
+
+[[package]]
+name = "xattr"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "244c3741f4240ef46274860397c7c74e50eb23624996930e484c16679633a54c"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
