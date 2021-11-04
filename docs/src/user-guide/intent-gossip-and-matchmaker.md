@@ -23,7 +23,7 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
    anoma wallet key gen --alias alberto --unsafe-dont-encrypt
    anoma client init-account --alias alberto-account --public-key alberto --source alberto
 
-   anoma wallet  key gen --alias chisel --unsafe-dont-encrypt
+   anoma wallet  key gen --alias christel --unsafe-dont-encrypt
    anoma client init-account --alias christel-account --public-key christel --source christel
 
    anoma wallet key gen --alias bertha --unsafe-dont-encrypt
