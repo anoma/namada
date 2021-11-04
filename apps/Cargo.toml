@@ -45,9 +45,25 @@ dev = ["anoma/dev"]
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 testing = ["dev"]
+ABCI = [
+    "tendermint-stable",
+    "tendermint-proto-abci",
+    "tendermint-rpc-abci",
+    "tower-abci-old",
+    "anoma/ABCI",
+    "anoma/ibc-vp-abci",
+]
+ABCI-plus-plus = [
+    "tendermint",
+    "tendermint-proto",
+    "tendermint-rpc",
+    "tower-abci",
+    "anoma/ABCI-plus-plus",
+    "anoma/ibc-vp",
+]
 
 [dependencies]
-anoma = {path = "../shared", features = ["ibc-vp", "wasm-runtime", "ferveo-tpke", "rand"]}
+anoma = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand"]}
 async-std = {version = "1.9.0", features = ["unstable"]}
 async-trait = "0.1.51"
 base64 = "0.13.0"
@@ -90,16 +106,20 @@ signal-hook = "0.3.9"
 sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "tomas/encoding-0.9.0b", features = ["borsh"]}
 # temporarily using fork work-around for https://github.com/informalsystems/tendermint-rs/issues/916
 # and https://github.com/anoma/anoma/issues/445
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", features = ["http-client", "websocket-client"]}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", optional = true}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", optional = true}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", features = ["http-client", "websocket-client"], optional = true}
+tendermint-stable = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/lowercase-node-id", optional = true}
+tendermint-proto-abci = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/lowercase-node-id", optional = true}
+tendermint-rpc-abci = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/lowercase-node-id", optional = true, features = ["http-client", "websocket-client"]}
 thiserror = "1.0.24"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.5.0"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci", branch = "bat/abci++-integration"}
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci", branch = "bat/abci++-integration", optional = true}
+tower-abci-old = {package = "tower-abci", git = "https://github.com/heliaxdev/tower-abci", branch = "tomas/tm-lowercase-node-id", optional = true}
 tracing = "0.1.26"
 tracing-log = "0.1.2"
 tracing-subscriber = "0.2.18"

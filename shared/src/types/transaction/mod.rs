@@ -14,6 +14,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use decrypted::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(not(feature = "ABCI"))]
+use tendermint::abci::transaction;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::transaction;
 pub use wrapper::*;
 
 use crate::types::address::Address;
@@ -39,6 +43,12 @@ impl Display for Hash {
             write!(f, "{:02X}", byte)?;
         }
         Ok(())
+    }
+}
+
+impl From<Hash> for transaction::Hash {
+    fn from(hash: Hash) -> Self {
+        Self::new(hash.0)
     }
 }
 

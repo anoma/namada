@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
 
+use anoma::{ledger, vm};
+use anoma::ledger::pos::{BondId, Unbonds, Bonds};
 use anoma::proto::Tx;
 use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
-use anoma::types::token;
+use anoma::types::{token, address};
 use anoma::types::transaction::{
     pos, Fee, InitAccount, InitValidator, UpdateVp, WrapperTx,
 };
@@ -12,8 +14,18 @@ use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::net::Address as TendermintAddress;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address as TendermintAddress;
+#[cfg(not(feature= "ABCI"))]
 use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::Client;
+#[cfg(feature="ABCI")]
+use tendermint_rpc_abci::query::{EventType, Query};
+#[cfg(not(feature= "ABCI"))]
+use tendermint_rpc::{Client, HttpClient};
+#[cfg(feature="ABCI")]
+use tendermint_rpc_abci::{Client, HttpClient};
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
@@ -47,8 +59,51 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let addr = ctx.get(&args.addr);
+
+    // Check that the address is established and exists on chain
+    match &addr {
+        Address::Established(_) => {
+            let exists =
+                rpc::known_address(&addr, args.tx.ledger_address.clone()).await;
+            if !exists {
+                eprintln!("The address {} doesn't exist on chain.", addr);
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        Address::Implicit(_) => {
+            eprintln!(
+                "A validity predicate of an implicit address cannot be \
+                 directly updated. You can use an established address for \
+                 this purpose."
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+        Address::Internal(_) => {
+            eprintln!(
+                "A validity predicate of an internal address cannot be \
+                 directly updated."
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+
     let vp_code = ctx.read_wasm(args.vp_code_path);
+    // Validate the VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        eprintln!("Validity predicate code validation failed with {}", err);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
+
     let data = UpdateVp { addr, vp_code };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
@@ -63,6 +118,14 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         .vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        eprintln!("Validity predicate code validation failed with {}", err);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
     let data = InitAccount {
         public_key,
@@ -132,9 +195,30 @@ pub async fn submit_init_validator(
     let validator_vp_code = validator_vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the validator VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {
+        eprintln!(
+            "Validator validity predicate code validation failed with {}",
+            err
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
     let rewards_vp_code = rewards_vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // Validate the rewards VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&rewards_vp_code) {
+        eprintln!(
+            "Staking reward account validity predicate code validation failed \
+             with {}",
+            err
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
     let data = InitValidator {
@@ -254,8 +338,62 @@ pub async fn submit_init_validator(
 
 pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let source = ctx.get(&args.source);
+    // Check that the source address exists on chain
+    let source_exists =
+        rpc::known_address(&source, args.tx.ledger_address.clone()).await;
+    if !source_exists {
+        eprintln!("The source address {} doesn't exist on chain.", source);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let target = ctx.get(&args.target);
+    // Check that the target address exists on chain
+    let target_exists =
+        rpc::known_address(&target, args.tx.ledger_address.clone()).await;
+    if !target_exists {
+        eprintln!("The target address {} doesn't exist on chain.", target);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let token = ctx.get(&args.token);
+    // Check that the token address exists on chain
+    let token_exists =
+        rpc::known_address(&token, args.tx.ledger_address.clone()).await;
+    if !token_exists {
+        eprintln!("The token address {} doesn't exist on chain.", token);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+    // Check source balance
+    let balance_key = token::balance_key(&token, &source);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
+        Some(balance) => {
+            if balance < args.amount {
+                eprintln!(
+                    "The balance of the source {} of token {} is lower than \
+                     the amount to be transferred. Amount to transfer is {} \
+                     and the balance is {}.",
+                    source, token, args.amount, balance
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!(
+                "No balance found for the source {} of token {}",
+                source, token
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let transfer = token::Transfer {
         source,
@@ -276,7 +414,56 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
     let source = ctx.get_opt(&args.source);
+    // Check that the source address exists on chain
+    if let Some(source) = &source {
+        let source_exists =
+            rpc::known_address(source, args.tx.ledger_address.clone()).await;
+        if !source_exists {
+            eprintln!("The source address {} doesn't exist on chain.", source);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+    // Check bond's source (source for delegation or validator for self-bonds)
+    // balance
+    let bond_source = source.as_ref().unwrap_or(&validator);
+    let balance_key = token::balance_key(&address::xan(), bond_source);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
+        Some(balance) => {
+            if balance < args.amount {
+                eprintln!(
+                    "The balance of the source {} is lower than the amount to \
+                     be transferred. Amount to transfer is {} and the balance \
+                     is {}.",
+                    bond_source, args.amount, balance
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No balance found for the source {}", bond_source);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
     let tx_code = ctx.read_wasm(TX_BOND_WASM);
     let bond = pos::Bond {
         validator,
@@ -294,8 +481,59 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
+
+    // Check the source's current bond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    let bond_id = BondId {
+        source: bond_source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_key = ledger::pos::bond_key(&bond_id);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let bonds =
+        rpc::query_storage_value::<Bonds>(client.clone(), bond_key).await;
+    match bonds {
+        Some(bonds) => {
+            let mut bond_amount: token::Amount = 0.into();
+            for bond in bonds.iter() {
+                for delta in bond.deltas.values() {
+                    bond_amount += *delta;
+                }
+            }
+            if args.amount > bond_amount {
+                eprintln!(
+                    "The total bonds of the source {} is lower than the \
+                     amount to be unbonded. Amount to unbond is {} and the \
+                     total bonds is {}.",
+                    bond_source, args.amount, bond_amount
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No bonds found");
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
 
     let data = pos::Unbond {
         validator,
@@ -312,9 +550,68 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
+    let epoch = rpc::query_epoch(
+        args::Query {
+            ledger_address: args.tx.ledger_address.clone(),
+        },
+    )
+    .await
+    .unwrap();
+
     let validator = ctx.get(&args.validator);
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    if !is_validator {
+        eprintln!(
+            "The address {} doesn't belong to any known validator account.",
+            validator
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
     let source = ctx.get_opt(&args.source);
     let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
+
+    // Check the source's current unbond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    let bond_id = BondId {
+        source: bond_source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_key = ledger::pos::unbond_key(&bond_id);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let unbonds =
+        rpc::query_storage_value::<Unbonds>(client.clone(), bond_key).await;
+    match unbonds {
+        Some(unbonds) => {
+            let mut unbonded_amount: token::Amount = 0.into();
+            if let Some(unbond) = unbonds.get(epoch) {
+                for delta in unbond.deltas.values() {
+                    unbonded_amount += *delta;
+                }
+            }
+            if unbonded_amount == 0.into() {
+                eprintln!(
+                    "There are no unbonded bonds ready to withdraw in the \
+                     current epoch {}.",
+                    epoch
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!("No unbonded bonds found");
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
@@ -486,14 +783,23 @@ async fn save_initialized_accounts(
 ///
 /// In the case of errors in any of those stages, an error message is returned
 pub async fn broadcast_tx(
-    address: tendermint::net::Address,
+    address: TendermintAddress,
     tx: WrapperTx,
     keypair: &Keypair,
 ) -> Result<TxResponse, Error> {
     // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_tx_hash = hash_tx(&tx.try_to_vec().unwrap()).to_string();
+    let wrapper_tx_hash = if !cfg!(feature = "ABCI") {
+        hash_tx(&tx.try_to_vec().unwrap()).to_string()
+    } else {
+        tx.tx_hash.to_string()
+    };
     // We use this to determine when the decrypted inner tx makes it on-chain
-    let decrypted_tx_hash = tx.tx_hash.to_string();
+    let decrypted_tx_hash = if !cfg!(feature = "ABCI") {
+        Some(tx.tx_hash.to_string())
+    } else {
+        None
+    };
+
     // we sign all txs
     let tx = tx
         .sign(keypair)
@@ -504,21 +810,36 @@ pub async fn broadcast_tx(
         WebSocketAddress::try_from(address.clone())?,
         None,
     )?;
-    let mut decrypted_tx_subscription =
-        TendermintWebsocketClient::open(
-            WebSocketAddress::try_from(address)?,
-            None,
-        )?;
+
     // It is better to subscribe to the transaction before it is broadcast
     //
     // Note that the `applied.hash` key comes from a custom event
     // created by the shell
-    let query = Query::from(EventType::NewBlock)
-        .and_eq("accepted.hash", wrapper_tx_hash.as_str());
+    let query = if !cfg!(feature = "ABCI") {
+        Query::from(EventType::NewBlock)
+            .and_eq("accepted.hash", wrapper_tx_hash.as_str())
+    } else {
+        Query::from(EventType::NewBlock)
+            .and_eq("applied.hash", wrapper_tx_hash.as_str())
+    };
     wrapper_tx_subscription.subscribe(query)?;
-    let query = Query::from(EventType::NewBlock)
-        .and_eq("applied.hash", decrypted_tx_hash.as_str());
-    decrypted_tx_subscription.subscribe(query)?;
+
+    // If we are using ABCI++, we also subscribe to the event emitted
+    // when the encrypted payload makes its way onto the blockchain
+    let mut decrypted_tx_subscription = if !cfg!(feature = "ABCI")
+    {
+        let mut decrypted_tx_subscription =
+            TendermintWebsocketClient::open(
+                WebSocketAddress::try_from(address)?,
+                None,
+            )?;
+        let query = Query::from(EventType::NewBlock)
+            .and_eq("applied.hash", decrypted_tx_hash.as_ref().unwrap().as_str());
+        decrypted_tx_subscription.subscribe(query)?;
+        Some(decrypted_tx_subscription)
+    } else {
+        None
+    };
 
     let response = wrapper_tx_subscription
         .broadcast_tx_sync(tx_bytes.into())
@@ -527,39 +848,57 @@ pub async fn broadcast_tx(
 
     let parsed = if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
-        let parsed = parse(
-            wrapper_tx_subscription.receive_response()?,
-            TmEventType::Accepted,
-            &wrapper_tx_hash.to_string(),
-        );
-        println!(
-            "Transaction accepted with result: {}",
-            serde_json::to_string_pretty(&parsed).unwrap()
-        );
-
-        // The transaction is now on chain. We wait for it to be decrypted and
-        // applied
-        if parsed.code == 0.to_string() {
-            let parsed = parse(
-                decrypted_tx_subscription.receive_response()?,
-                TmEventType::Applied,
-                &decrypted_tx_hash,
-            );
+        let parsed = if !cfg!(feature = "ABCI") {
+            parse(
+                wrapper_tx_subscription.receive_response()?,
+                TmEventType::Accepted,
+                &wrapper_tx_hash.to_string(),
+            )
+        } else {
+            TxResponse::find_tx(wrapper_tx_subscription.receive_response()?, wrapper_tx_hash)
+        };
+        #[cfg(feature = "ABCI")]
+        {
             println!(
                 "Transaction applied with result: {}",
                 serde_json::to_string_pretty(&parsed).unwrap()
             );
             Ok(parsed)
-        } else {
-            Ok(parsed)
+        }
+        #[cfg(not(feature= "ABCI"))]
+        {
+            println!(
+                "Transaction accepted with result: {}",
+                serde_json::to_string_pretty(&parsed).unwrap()
+            );
+            // The transaction is now on chain. We wait for it to be decrypted and
+            // applied
+            if parsed.code == 0.to_string() {
+                let parsed = parse(
+                    decrypted_tx_subscription.as_ref().unwrap().receive_response()?,
+                    TmEventType::Applied,
+                    &decrypted_tx_hash.as_ref().unwrap(),
+                );
+                println!(
+                    "Transaction applied with result: {}",
+                    serde_json::to_string_pretty(&parsed).unwrap()
+                );
+                Ok(parsed)
+            } else {
+                Ok(parsed)
+            }
         }
     } else {
         Err(Error::Response(response.log.to_string()))
     };
     wrapper_tx_subscription.unsubscribe()?;
     wrapper_tx_subscription.close();
-    decrypted_tx_subscription.unsubscribe()?;
-    decrypted_tx_subscription.close();
+    if !cfg!(feature = "ABCI")
+    {
+        decrypted_tx_subscription.as_mut().unwrap().unsubscribe()?;
+        decrypted_tx_subscription.as_mut().unwrap().close();
+    }
+
     parsed
 }
 
@@ -616,5 +955,75 @@ fn parse(
         code,
         gas_used,
         initialized_accounts,
+    }
+}
+
+impl TxResponse {
+    pub fn find_tx(
+        json: serde_json::Value,
+        tx_hash: String,
+    ) -> Self {
+        let tx_hash_json = serde_json::Value::String(tx_hash.clone());
+        let mut selector = jsonpath::selector(&json);
+        let mut index = 0;
+        // Find the tx with a matching hash
+        let hash = loop {
+            if let Ok(hash) =
+            selector(&format!("$.events.['applied.hash'][{}]", index))
+            {
+                let hash = hash[0].clone();
+                if hash == tx_hash_json {
+                    break hash;
+                } else {
+                    index = index + 1;
+                }
+            } else {
+                eprintln!(
+                    "Couldn't find tx with hash {} in the event string {}",
+                    tx_hash, json
+                );
+                safe_exit(1)
+            }
+        };
+        let info =
+            selector(&format!("$.events.['applied.info'][{}]", index)).unwrap();
+        let height =
+            selector(&format!("$.events.['applied.height'][{}]", index))
+                .unwrap();
+        let code =
+            selector(&format!("$.events.['applied.code'][{}]", index)).unwrap();
+        let gas_used =
+            selector(&format!("$.events.['applied.gas_used'][{}]", index))
+                .unwrap();
+        let initialized_accounts = selector(&format!(
+            "$.events.['applied.initialized_accounts'][{}]",
+            index
+        ));
+        let initialized_accounts = match initialized_accounts {
+            Ok(values) if !values.is_empty() => {
+                // In a response, the initialized accounts are encoded as e.g.:
+                // ```
+                // "applied.initialized_accounts": Array([
+                //   String(
+                //     "[\"atest1...\"]",
+                //   ),
+                // ]),
+                // ...
+                // So we need to decode the inner string first ...
+                let raw: String =
+                    serde_json::from_value(values[0].clone()).unwrap();
+                // ... and then decode the vec from the array inside the string
+                serde_json::from_str(&raw).unwrap()
+            }
+            _ => vec![],
+        };
+        TxResponse {
+            info: serde_json::from_value(info[0].clone()).unwrap(),
+            height: serde_json::from_value(height[0].clone()).unwrap(),
+            hash: serde_json::from_value(hash).unwrap(),
+            code: serde_json::from_value(code[0].clone()).unwrap(),
+            gas_used: serde_json::from_value(gas_used[0].clone()).unwrap(),
+            initialized_accounts,
+        }
     }
 }

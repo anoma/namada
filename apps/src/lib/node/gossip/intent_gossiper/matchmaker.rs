@@ -9,7 +9,10 @@ use anoma::types::key::ed25519::Keypair;
 use anoma::types::transaction::{Fee, WrapperTx};
 use anoma::vm::wasm;
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "ABCI"))]
 use tendermint::net;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net;
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 

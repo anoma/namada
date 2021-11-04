@@ -347,10 +347,6 @@ impl KeySeg for DbKeySeg {
                     .map_err(Error::ParseAddress)
                     .map(DbKeySeg::AddressSeg)
             }
-            // reserved for a validity predicate
-            Some(c) if c == VP_KEY_PREFIX && string == RESERVED_VP_KEY => {
-                Err(Error::InvalidKeySeg(string))
-            }
             _ => Ok(DbKeySeg::StringSeg(string)),
         }
     }
@@ -592,15 +588,10 @@ mod tests {
         let target = "?test/test@".to_owned();
         let key = Key::parse(target.clone()).expect("cannot parse the string");
         assert_eq!(key.to_string(), target);
-    }
 
-    #[test]
-    fn test_key_parse_invalid() {
         let target = "?/test".to_owned();
-        match Key::parse(target).expect_err("unexpectedly succeeded") {
-            Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
-            _ => panic!("unexpected error happens"),
-        }
+        let key = Key::parse(target.clone()).expect("cannot parse the string");
+        assert_eq!(key.to_string(), target);
     }
 
     #[test]
@@ -618,6 +609,12 @@ mod tests {
             .push(&target)
             .expect("cannnot push the segment");
         assert_eq!(key.segments[1].raw(), target);
+
+        let target = "?".to_owned();
+        let key = Key::from(addr.to_db_key())
+            .push(&target)
+            .expect("cannnot push the segment");
+        assert_eq!(key.segments[1].raw(), target);
     }
 
     #[test]
@@ -629,15 +626,6 @@ mod tests {
             .expect_err("unexpectedly succeeded")
         {
             Error::InvalidKeySeg(s) => assert_eq!(s, "/"),
-            _ => panic!("unexpected error happens"),
-        }
-
-        let target = "?".to_owned();
-        match Key::from(addr.to_db_key())
-            .push(&target)
-            .expect_err("unexpectedly succeeded")
-        {
-            Error::InvalidKeySeg(s) => assert_eq!(s, "?"),
             _ => panic!("unexpected error happens"),
         }
     }

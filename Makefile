@@ -26,16 +26,16 @@ audit-ignores += RUSTSEC-2021-0073
 audit-ignores += RUSTSEC-2021-0076
 
 build:
-	$(cargo) build
+	$(cargo) build --features ABCI
 
 build-test:
-	$(cargo) build --tests
+	$(cargo) build --features ABCI --tests
 
 build-release:
-	$(cargo) build --release --package anoma_apps --no-default-features --features std
+	$(cargo) build --release --package anoma_apps --no-default-features --features "std ABCI"
 
 check-release:
-	$(cargo) check --release --package anoma_apps --no-default-features --features std
+	$(cargo) check --release --package anoma_apps --no-default-features --features "std ABCI"
 
 package: build-release
 	mkdir -p $(package-name)/wasm && \
@@ -77,7 +77,11 @@ tendermint:
 
 run-ledger:
 	# runs the node
-	$(cargo) run --bin anoman -- ledger run
+	$(cargo) run --bin anoman --features ABCI -- ledger run
+
+run-ledger-abci-plus-plus:
+	# runs the node
+	$(cargo) run --bin anoman --features ABCI-plus-plus -- ledger run
 
 run-gossip:
 	# runs the node gossip node
@@ -85,7 +89,12 @@ run-gossip:
 
 reset-ledger:
 	# runs the node
-	$(cargo) run --bin anoman -- ledger reset
+	$(cargo) run --bin anoman --features ABCI -- ledger reset
+
+reset-ledger-abci-plus-plus:
+	# runs the node
+	$(cargo) run --bin anoman --features ABCI-plus-plus -- ledger reset
+
 
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
@@ -93,16 +102,29 @@ audit:
 test: test-unit test-e2e test-wasm
 
 test-e2e:
-	RUST_BACKTRACE=1 $(cargo) test e2e -- --test-threads=1
+	RUST_BACKTRACE=1 $(cargo) test e2e --features ABCI -- --test-threads=1
 
-test-unit:
-	$(cargo) test -- --skip e2e \
+test-e2e-abci-plus-plus:
+	RUST_BACKTRACE=1 $(cargo) test e2e --features ABCI-plus-plus -- --test-threads=1
+
+test-unit-abci-plus-plus:
+	$(cargo) test --features ABCI-plus-plus -- --skip e2e \
 	   				 --skip node::ledger::shell::process \
 					 --skip node::ledger::shell::finalize \
  					 --skip node::ledger::shell::prepare && \
-	$(cargo) test node::ledger::shell::prepare -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::process -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::finalize -- --test-threads=1
+	$(cargo) test node::ledger::shell::prepare --features ABCI-plus-plus -- --test-threads=1 && \
+	$(cargo) test node::ledger::shell::process --features ABCI-plus-plus -- --test-threads=1 && \
+	$(cargo) test node::ledger::shell::finalize --features ABCI-plus-plus -- --test-threads=1
+
+
+test-unit:
+	$(cargo) test --features ABCI -- --skip e2e \
+	   				 --skip node::ledger::shell::process \
+					 --skip node::ledger::shell::finalize \
+ 					 --skip node::ledger::shell::prepare && \
+	$(cargo) test node::ledger::shell::prepare --features ABCI -- --test-threads=1 && \
+	$(cargo) test node::ledger::shell::process --features ABCI -- --test-threads=1 && \
+	$(cargo) test node::ledger::shell::finalize --features ABCI -- --test-threads=1
 
 test-wasm:
 	make -C $(wasms) test

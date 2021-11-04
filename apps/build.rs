@@ -9,6 +9,8 @@ const PROTO_SRC: &str = "./proto";
 const RUSTFMT_TOOLCHAIN_SRC: &str = "../rust-nightly-version";
 
 fn main() {
+    #[cfg(all(feature = "ABCI", feature = "ABCI-plus-plus"))]
+    compile_error!("`ABCI` and `ABCI-plus-plus` may not be used at the same time");
     // Tell Cargo that if the given file changes, to rerun this build script.
     println!("cargo:rerun-if-changed={}", PROTO_SRC);
 

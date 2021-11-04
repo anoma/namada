@@ -10,18 +10,36 @@ version = "0.1.6"
 [features]
 default = ["wasm-runtime"]
 wasm-runtime = ["anoma/wasm-runtime"]
+ABCI = [
+    "ibc-abci",
+    "ibc-proto-abci",
+    "anoma/ibc-vp-abci",
+    "tendermint-stable",
+    "anoma/ABCI"
+]
+
+ABCI-plus-plus = [
+    "ibc",
+    "ibc-proto",
+    "anoma/ibc-vp",
+    "tendermint",
+    "anoma/ABCI-plus-plus"
+]
 
 [dependencies]
-anoma = {path = "../shared", features = ["testing", "ibc-vp"]}
+anoma = {path = "../shared", features = ["testing"]}
 anoma_vm_env = {path = "../vm_env"}
 chrono = "0.4.19"
 concat-idents = "1.1.2"
 # TODO temp fork for https://github.com/informalsystems/ibc-rs/issues/1161
-ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "bat/abci++-integration", features = ["mocks", "borsh"]}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", branch = "bat/abci++-integration"}
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "bat/abci++-integration", features = ["mocks", "borsh"], optional = true}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", branch = "bat/abci++-integration", optional = true}
+ibc-abci = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", branch = "tomas/tm-lowercase-node-id", features = ["mocks", "borsh"], optional = true}
+ibc-proto-abci = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", branch = "tomas/tm-lowercase-node-id", optional = true}
 test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 # temporarily using fork work-around for https://github.com/informalsystems/tendermint-rs/issues/916
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration"}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", optional = true}
+tendermint-stable = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/lowercase-node-id", optional = true}
 tracing = "0.1.26"
 tracing-subscriber = {version = "0.2.18", default-features = false, features = ["env-filter", "fmt"]}
 serde_json = { version = "1.0.65" }

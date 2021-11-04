@@ -4,28 +4,78 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_consensus::AnyConsensusState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_def::{AnyClient, ClientDef};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_state::AnyClientState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::header::AnyHeader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::height::Height;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::connection::{
     ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
 };
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::version::Version;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::packet::{Packet, Sequence};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics23_commitment::commitment::{
     CommitmentPrefix, CommitmentProofBytes,
 };
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
+#[cfg(not(feature = "ABCI"))]
 use ibc::proofs::{ConsensusProof, Proofs};
+#[cfg(not(feature = "ABCI"))]
 use ibc::timestamp::Timestamp;
+#[cfg(not(feature = "ABCI"))]
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_consensus::AnyConsensusState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_def::{AnyClient, ClientDef};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_state::AnyClientState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::header::AnyHeader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::height::Height;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::connection::{
+    ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::version::Version;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::channel::{
+    ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::packet::{Packet, Sequence};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics23_commitment::commitment::{
+    CommitmentPrefix, CommitmentProofBytes,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::proofs::{ConsensusProof, Proofs};
+#[cfg(feature = "ABCI")]
+use ibc_abci::timestamp::Timestamp;
+#[cfg(feature = "ABCI")]
+use ibc_proto_abci::ibc::core::commitment::v1::MerkleProof;
 use prost::Message;
 use sha2::Digest;
 use thiserror::Error;

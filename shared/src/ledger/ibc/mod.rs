@@ -11,7 +11,10 @@ pub mod storage;
 use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::context::ClientReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::context::ClientReader;
 use storage::{
     capability_index_key, channel_counter_key, client_counter_key, client_id,
     connection_counter_key, ibc_prefix, is_client_counter_key, IbcPrefix,
@@ -270,28 +273,78 @@ mod tests {
 
     use borsh::ser::BorshSerialize;
     use chrono::Utc;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics02_client::client_consensus::ConsensusState;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics02_client::client_state::ClientState;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics02_client::client_type::ClientType;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics02_client::header::AnyHeader;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics03_connection::connection::{
         ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
     };
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics03_connection::version::Version;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics04_channel::channel::{
         ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
     };
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics04_channel::packet::{Packet, Sequence};
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics23_commitment::commitment::{
         CommitmentPrefix, CommitmentProofBytes,
     };
+    #[cfg(not(feature = "ABCI"))]
     use ibc::ics24_host::identifier::{
         ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
     };
+    #[cfg(not(feature = "ABCI"))]
     use ibc::mock::client_state::{MockClientState, MockConsensusState};
+    #[cfg(not(feature = "ABCI"))]
     use ibc::mock::header::MockHeader;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::timestamp::Timestamp;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::Height;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics02_client::client_consensus::ConsensusState;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics02_client::client_state::ClientState;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics02_client::client_type::ClientType;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics02_client::header::AnyHeader;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics03_connection::connection::{
+        ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
+    };
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics03_connection::version::Version;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics04_channel::channel::{
+        ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
+    };
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics04_channel::packet::{Packet, Sequence};
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics23_commitment::commitment::{
+        CommitmentPrefix, CommitmentProofBytes,
+    };
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::ics24_host::identifier::{
+        ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+    };
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::mock::client_state::{MockClientState, MockConsensusState};
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::mock::header::MockHeader;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::timestamp::Timestamp;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::Height;
     use sha2::Digest;
     use storage::{
         ack_key, capability_key, channel_key, client_state_key,
@@ -299,12 +352,30 @@ mod tests {
         next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
         port_key, receipt_key,
     };
+    #[cfg(not(feature = "ABCI"))]
     use tendermint::account::Id as TmAccountId;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint::block::header::{Header as TmHeader, Version as TmVersion};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint::block::Height as TmHeight;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint::chain::Id as TmChainId;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint::hash::{AppHash, Hash as TmHash};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint::time::Time as TmTime;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::account::Id as TmAccountId;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::block::header::{Header as TmHeader, Version as TmVersion};
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::block::Height as TmHeight;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::chain::Id as TmChainId;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::hash::{AppHash, Hash as TmHash};
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::time::Time as TmTime;
 
     use super::*;
     use crate::ledger::gas::VpGasMeter;

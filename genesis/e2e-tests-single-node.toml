@@ -115,7 +115,7 @@ vp = "vp_user"
 public_key = "20000000ddfaeb3984ddbfc7851e66e3658e538a18d58ce5fed99302753cebad4993b37a"
 
 
-[implicit.BerthaKey]
+[implicit.BerthaImplicit]
 # Address derived from this key is atest1d9khqw36ggengdekxv6rsvpjxaprzd69x3rrs3pcgccrswp3gvmyxdpex9zyzsfnxppnvv29t20ag6
 public_key = "20000000ddfaeb3984ddbfc7851e66e3658e538a18d58ce5fed99302753cebad4993b37a"
 

@@ -1,9 +1,18 @@
 //! Implementation of the [`FinalizeBlock`] ABCI++ method for the Shell
 
 use anoma::types::storage::BlockHash;
+#[cfg(not(feature= "ABCI"))]
 use tendermint::block::Header;
+#[cfg(feature= "ABCI")]
+use tendermint_stable::block::Header;
+#[cfg(not(feature= "ABCI"))]
 use tendermint_proto::abci::Evidence;
-
+#[cfg(feature= "ABCI")]
+use tendermint_proto_abci::abci::Evidence;
+#[cfg(not(feature= "ABCI"))]
+use tendermint_proto::crypto::{public_key, PublicKey as TendermintPublicKey};
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::crypto::{public_key, PublicKey as TendermintPublicKey};
 use super::*;
 
 impl Shell {
@@ -52,6 +61,7 @@ impl Shell {
                     Event::new_tx_event(&processed_tx, height.0);
                 tx_result["code"] = tx.result.code.to_string();
                 tx_result["info"] = format!("Tx rejected: {}", &tx.result.info);
+                tx_result["gas_used"] = "0".into();
                 response.events.push(tx_result.into());
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
@@ -62,8 +72,10 @@ impl Shell {
             }
 
             let mut tx_result = match &processed_tx {
-                TxType::Wrapper(wrapper) => {
-                    self.storage.wrapper_txs.push_back(wrapper.clone());
+                TxType::Wrapper(_wrapper) => {
+                    if !cfg!(feature="ABCI"){
+                        self.storage.wrapper_txs.push_back(_wrapper.clone());
+                    }
                     Event::new_tx_event(&processed_tx, height.0)
                 }
                 TxType::Decrypted(_) => {
@@ -79,11 +91,14 @@ impl Shell {
                                              they were not submitted in \
                                              correct order"
                             .into();
+                        tx_result["gas_used"] = "0".into();
                         response.events.push(tx_result.into());
                         continue;
                     }
                     // We remove the corresponding wrapper tx from the queue
-                    self.storage.wrapper_txs.pop_front();
+                    if !cfg!(feature="ABCI") {
+                        self.storage.wrapper_txs.pop_front();
+                    }
                     Event::new_tx_event(&processed_tx, height.0)
                 }
                 TxType::Raw(_) => unreachable!(),
@@ -230,8 +245,8 @@ impl Shell {
                 }
             };
             let consensus_key: ed25519_dalek::PublicKey = consensus_key.into();
-            let pub_key = tendermint_proto::crypto::PublicKey {
-                sum: Some(tendermint_proto::crypto::public_key::Sum::Ed25519(
+            let pub_key = TendermintPublicKey {
+                sum: Some(public_key::Sum::Ed25519(
                     consensus_key.to_bytes().to_vec(),
                 )),
             };
@@ -256,12 +271,18 @@ impl Shell {
 /// We test the failure cases of [`finalize_block`]. The happy flows
 /// are covered by the e2e tests.
 #[cfg(test)]
-mod testg_finalize_block {
+mod test_finalize_block {
     use anoma::types::address::xan;
     use anoma::types::storage::Epoch;
     use anoma::types::transaction::Fee;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint::block::header::Version;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::block::header::Version;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint::{Hash, Time};
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::{Hash, Time};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -306,6 +327,7 @@ mod testg_finalize_block {
         }
     }
 
+    #[cfg(not(feature = "ABCI"))]
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
     /// not appear in the queue of txs to be decrypted
@@ -370,6 +392,7 @@ mod testg_finalize_block {
                 .value
                 .as_str();
             assert_eq!(code, &index.rem_euclid(2).to_string());
+
         }
         // verify that the queue of wrapper txs to be processed is correct
         let mut valid_tx = valid_wrappers.iter();
@@ -386,6 +409,71 @@ mod testg_finalize_block {
         assert_eq!(counter, 3);
     }
 
+    #[cfg(feature = "ABCI")]
+    /// Check that if a wrapper tx was rejected by [`process_proposal`],
+    /// check that the correct event is returned.
+    #[test]
+    fn test_process_proposal_rejected_wrapper_tx() {
+        let mut shell = TestShell::new();
+        let keypair = gen_keypair();
+        let mut processed_txs = vec![];
+        // create some wrapper txs
+        for i in 1..5 {
+            let raw_tx = Tx::new(
+                "wasm_code".as_bytes().to_owned(),
+                Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+            );
+            let wrapper = WrapperTx::new(
+                Fee {
+                    amount: i.into(),
+                    token: xan(),
+                },
+                &keypair,
+                Epoch(0),
+                0.into(),
+                raw_tx.clone(),
+            );
+            let tx = wrapper.sign(&keypair).expect("Test failed");
+            if i > 1 {
+                processed_txs.push(ProcessedTx {
+                    tx: tx.to_bytes(),
+                    result: TxResult {
+                        code: u32::try_from(i.rem_euclid(2))
+                            .expect("Test failed"),
+                        info: "".into(),
+                    },
+                });
+            }
+        }
+
+        // check that the correct events were created
+        for (index, event) in shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs.clone(),
+                reject_all_decrypted: false,
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(event.r#type, "applied");
+            let code = event
+                .attributes
+                .iter()
+                .find(|attr| attr.key == "code".as_bytes())
+                .expect("Test failed")
+                .value
+                .clone();
+            assert_eq!(
+                String::from_utf8(code).expect("Test failed"),
+                index.rem_euclid(2).to_string()
+            );
+
+        }
+    }
+
+    #[cfg(not(feature = "ABCI"))]
     /// Check that if a decrypted tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it is still
     /// removed from the queue of txs to be included in the next block
@@ -438,7 +526,52 @@ mod testg_finalize_block {
                 .as_str();
             assert_eq!(code, "1");
         }
-        // chech that the corresponding wrapper tx was removed from the queue
+        // check that the corresponding wrapper tx was removed from the queue
+        assert!(shell.next_wrapper().is_none());
+    }
+
+    #[cfg(feature = "ABCI")]
+    /// Check that if a decrypted tx was rejected by [`process_proposal`],
+    /// check that the correct event is returned.
+    #[test]
+    fn test_process_proposal_rejected_decrypted_tx() {
+        let mut shell = TestShell::new();
+        let raw_tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some(String::from("transaction data").as_bytes().to_owned()),
+        );
+        let processed_tx = ProcessedTx {
+            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
+                .to_bytes(),
+            result: TxResult {
+                code: 1,
+                info: "".into(),
+            },
+        };
+
+        // check that the decrypted tx was not applied
+        for event in shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                reject_all_decrypted: false,
+                ..Default::default()
+            })
+            .expect("Test failed")
+        {
+            assert_eq!(event.r#type, "applied");
+            let code = event
+                .attributes
+                .iter()
+                .find(|attr| attr.key == "code".as_bytes())
+                .expect("Test failed")
+                .value
+                .clone();
+            assert_eq!(
+                String::from_utf8(code).expect("Test failed"),
+                String::from("1")
+            );
+        }
+        // check that the corresponding wrapper tx was removed from the queue
         assert!(shell.next_wrapper().is_none());
     }
 
@@ -531,42 +664,78 @@ mod testg_finalize_block {
         {
             if index < 2 {
                 // these should be accepted wrapper txs
-                assert_eq!(event.r#type, "accepted");
-                let code = event
-                    .attributes
-                    .iter()
-                    .find(|attr| attr.key.as_str() == "code")
-                    .expect("Test failed")
-                    .value
-                    .as_str();
-                assert_eq!(code, "0");
+
+                #[cfg(not(feature = "ABCI"))]
+                {
+                    assert_eq!(event.r#type, "accepted");
+                    let code = event
+                        .attributes
+                        .iter()
+                        .find(|attr| attr.key.as_str() == "code")
+                        .expect("Test failed")
+                        .value
+                        .as_str();
+                    assert_eq!(code, "0");
+                }
+                #[cfg(feature = "ABCI")]
+                {
+                    assert_eq!(event.r#type, "applied");
+                    let code = event
+                        .attributes
+                        .iter()
+                        .find(|attr| attr.key == "code".as_bytes())
+                        .expect("Test failed")
+                        .value
+                        .clone();
+                    assert_eq!(String::from_utf8(code).expect("Test failed"), String::from("0"));
+                }
             } else {
                 // these should be accepted decrypted txs
                 assert_eq!(event.r#type, "applied");
-                let code = event
-                    .attributes
-                    .iter()
-                    .find(|attr| attr.key.as_str() == "code")
-                    .expect("Test failed")
-                    .value
-                    .as_str();
-                assert_eq!(code, "0");
+                #[cfg(not(feature = "ABCI"))]
+                {
+                    let code = event
+                        .attributes
+                        .iter()
+                        .find(|attr| attr.key.as_str() == "code")
+                        .expect("Test failed")
+                        .value
+                        .as_str();
+                    assert_eq!(code, "0");
+                }
+                #[cfg(feature= "ABCI")]
+                {
+                    let code = event
+                        .attributes
+                        .iter()
+                        .find(|attr| attr.key == "code".as_bytes())
+                        .expect("Test failed")
+                        .value
+                        .clone();
+                    assert_eq!(String::from_utf8(code).expect("Test failed"), String::from("0"));
+                }
             }
         }
-        // check that the applied decrypted txs were dequeued and the
-        // accepted wrappers were enqueued in correct order
-        let mut txs = valid_txs.iter();
-        let mut counter = 0;
-        while let Some(wrapper) = shell.next_wrapper() {
-            assert_eq!(
-                wrapper.tx_hash,
-                txs.next().expect("Test failed").tx_hash
-            );
-            counter += 1;
+
+        #[cfg(not(feature = "ABCI"))]
+        {
+            // check that the applied decrypted txs were dequeued and the
+            // accepted wrappers were enqueued in correct order
+            let mut txs = valid_txs.iter();
+
+            let mut counter = 0;
+            while let Some(wrapper) = shell.next_wrapper() {
+                assert_eq!(
+                    wrapper.tx_hash,
+                    txs.next().expect("Test failed").tx_hash
+                );
+                counter += 1;
+            }
+            assert_eq!(counter, 2);
         }
-        assert_eq!(counter, 2);
     }
 
+    #[cfg(not(feature = "ABCI"))]
     /// Tests that if the decrypted txs are submitted out of
     /// order then
     ///  1. They are still enqueued in order
@@ -650,25 +819,53 @@ mod testg_finalize_block {
             if index == 0 {
                 // the wrapper tx should be accepted
                 assert_eq!(event.r#type, "accepted");
-                let code = event
-                    .attributes
-                    .iter()
-                    .find(|attr| attr.key.as_str() == "code")
-                    .expect("Test failed")
-                    .value
-                    .as_str();
-                assert_eq!(code, "0");
+                #[cfg(not(feature = "ABCI"))]
+                {
+                    let code = event
+                        .attributes
+                        .iter()
+                        .find(|attr| attr.key.as_str() == "code")
+                        .expect("Test failed")
+                        .value
+                        .as_str();
+                    assert_eq!(code, "0");
+                }
+                #[cfg(feature = "ABCI")]
+                {
+                    let code = event
+                        .attributes
+                        .iter()
+                        .find(|attr| attr.key == "code".as_bytes())
+                        .expect("Test failed")
+                        .value
+                        .clone();
+                    assert_eq!(String::from_utf8(code).expect("Test failed"), String::from("0"));
+                }
             } else {
                 // both decrypted txs should be rejected
                 assert_eq!(event.r#type, "applied");
-                let code = event
-                    .attributes
-                    .iter()
-                    .find(|attr| attr.key.as_str() == "code")
-                    .expect("Test failed")
-                    .value
-                    .as_str();
-                assert_eq!(code, "2");
+                #[cfg(not(feature = "ABCI"))]
+                {
+                    let code = event
+                        .attributes
+                        .iter()
+                        .find(|attr| attr.key.as_str() == "code")
+                        .expect("Test failed")
+                        .value
+                        .as_str();
+                    assert_eq!(code, "2");
+                }
+                #[cfg(feature = "ABCI")]
+                {
+                    let code = event
+                        .attributes
+                        .iter()
+                        .find(|attr| attr.key == "code".as_bytes())
+                        .expect("Test failed")
+                        .value
+                        .clone();
+                    assert_eq!(String::from_utf8(code).expect("Test failed"), String::from("2"));
+                }
             }
         }
         // the wrapper tx should appear at the end of the queue

@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::str::FromStr;
 use std::sync::Once;
 use std::{env, fs, mem, thread, time};
@@ -11,6 +12,7 @@ use anoma::types::key::ed25519::{Keypair, PublicKey, SecretKey};
 use anoma_apps::client::utils;
 use anoma_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use anoma_apps::{config, wallet, wasm_loader};
+use assert_cmd::assert::OutputAssertExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use escargot::CargoBuild;
@@ -332,12 +334,19 @@ impl Test {
 /// A helper that should be ran on start of every e2e test case.
 pub fn working_dir() -> PathBuf {
     let working_dir = fs::canonicalize("..").unwrap();
-    // Check that tendermint is on $PATH
-    // Command::new("which").arg("tendermint").assert().success();
-    std::env::var("TENDERMINT").expect(
-        "The env variable TENDERMINT must be set and point to a local build \
+
+    if cfg!(feature = "ABCI") {
+        // Check that tendermint is on $PATH
+        Command::new("which").arg("tendermint").assert().success();
+        std::env::var("TENDERMINT").expect_err(
+            "The env variable TENDERMINT must **not** be set",
+        );
+    } else {
+        std::env::var("TENDERMINT").expect(
+            "The env variable TENDERMINT must be set and point to a local build \
          of the tendermint abci++ branch",
-    );
+        );
+    }
     working_dir
 }
 
@@ -451,12 +460,21 @@ where
         Ok(val) => val.to_ascii_lowercase() != "false",
         _ => false,
     };
-    let cmd = CargoBuild::new()
-        .package(APPS_PACKAGE)
-        .manifest_path(manifest_path)
-        .no_default_features()
-        .features("std")
-        .bin(bin_name);
+    let cmd = if !cfg!(feature = "ABCI") {
+        CargoBuild::new()
+            .package(APPS_PACKAGE)
+            .manifest_path(manifest_path)
+            .no_default_features()
+            .features("std ABCI-plus-plus")
+            .bin(bin_name)
+    } else {
+        CargoBuild::new()
+            .package(APPS_PACKAGE)
+            .manifest_path(manifest_path)
+            .no_default_features()
+            .features("std ABCI")
+            .bin(bin_name)
+    };
     let cmd = if run_debug {
         cmd
     } else {

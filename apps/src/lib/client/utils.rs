@@ -11,6 +11,14 @@ use borsh::BorshSerialize;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::net::Address as TendermintAddress;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address as TendermintAddress;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::node::Id as TendermintNodeId;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::node::Id as TendermintNodeId;
 
 use crate::cli::{self, args};
 use crate::config::genesis::genesis_config;
@@ -79,7 +87,7 @@ pub fn init_network(
 
     let mut rng: ThreadRng = thread_rng();
 
-    let mut persistent_peers: Vec<tendermint::net::Address> =
+    let mut persistent_peers: Vec<TendermintAddress> =
         Vec::with_capacity(config.validator.len());
     // Intent gossiper config bootstrap peers where we'll add the address for
     // each validator's node
@@ -106,7 +114,7 @@ pub fn init_network(
             node_keypair.public.clone().into();
 
         // Derive the node ID from the node key
-        let node_id: tendermint::node::Id = node_pk.into();
+        let node_id: TendermintNodeId = node_pk.into();
 
         // Convert and write the keypair into Tendermint node_key.json file
         let node_key: ed25519_dalek::Keypair = node_keypair.into();
@@ -134,7 +142,7 @@ pub fn init_network(
         tendermint_node::write_validator_state(&tm_home_dir);
 
         // Build the list of persistent peers from the validators' node IDs
-        let peer = tendermint::net::Address::from_str(&format!(
+        let peer = TendermintAddress::from_str(&format!(
             "{}@{}",
             node_id,
             config.net_address.as_ref().unwrap(),
@@ -237,7 +245,7 @@ pub fn init_network(
                             .insert(account.clone(), matchmaker);
 
                         let ledger_address =
-                            tendermint::net::Address::from_str(&format!(
+                            TendermintAddress::from_str(&format!(
                                 "127.0.0.1:{}",
                                 first_port + 1
                             ))

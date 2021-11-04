@@ -20,7 +20,14 @@ use libp2p::multihash::Multihash;
 use libp2p::PeerId;
 use regex::Regex;
 use serde::{de, Deserialize, Serialize};
-use tendermint::net;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::Timeout;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::Timeout;
+#[cfg(not(feature= "ABCI"))]
+use tendermint::net::{self, Address as TendermintAddress};
+#[cfg(feature= "ABCI")]
+use tendermint_stable::net::{self, Address as TendermintAddress};
 use thiserror::Error;
 
 use crate::cli;
@@ -92,7 +99,7 @@ pub struct Tendermint {
     pub rpc_address: SocketAddr,
     pub p2p_address: SocketAddr,
     /// The persistent peers addresses must include node ID
-    pub p2p_persistent_peers: Vec<tendermint::net::Address>,
+    pub p2p_persistent_peers: Vec<TendermintAddress>,
     /// Turns the peer exchange reactor on or off. Validator node will want the
     /// pex turned off.
     pub p2p_pex: bool,
@@ -100,7 +107,7 @@ pub struct Tendermint {
     pub p2p_allow_duplicate_ip: bool,
     /// How long we wait after committing a block, before starting on the new
     /// height
-    pub consensus_timeout_commit: tendermint::Timeout,
+    pub consensus_timeout_commit: Timeout,
     pub tendermint_mode: TendermintMode,
 }
 
@@ -145,7 +152,7 @@ impl Ledger {
                 p2p_persistent_peers: vec![],
                 p2p_pex: true,
                 p2p_allow_duplicate_ip: false,
-                consensus_timeout_commit: tendermint::Timeout::from_str("1s")
+                consensus_timeout_commit: Timeout::from_str("1s")
                     .unwrap(),
                 tendermint_mode: mode,
             },
@@ -378,7 +385,7 @@ impl IntentGossiper {
         rpc: Option<SocketAddr>,
         matchmaker_path: Option<PathBuf>,
         tx_code_path: Option<PathBuf>,
-        ledger_addr: Option<tendermint::net::Address>,
+        ledger_addr: Option<TendermintAddress>,
         filter_path: Option<PathBuf>,
     ) {
         if let Some(addr) = addr {

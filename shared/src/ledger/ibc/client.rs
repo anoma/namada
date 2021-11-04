@@ -1,13 +1,34 @@
 //! IBC validity predicate for client module
 
 use borsh::BorshDeserialize;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_consensus::AnyConsensusState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_def::{AnyClient, ClientDef};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_state::AnyClientState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_type::ClientType;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::context::ClientReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::height::Height;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::ClientId;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_consensus::AnyConsensusState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_def::{AnyClient, ClientDef};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_state::AnyClientState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_type::ClientType;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::context::ClientReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::height::Height;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::ClientId;
 use thiserror::Error;
 
 use super::storage::{

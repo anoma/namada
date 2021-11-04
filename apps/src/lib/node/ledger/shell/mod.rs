@@ -7,6 +7,7 @@
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
 mod init_chain;
+#[cfg(not(feature="ABCI"))]
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
@@ -33,12 +34,23 @@ use anoma::types::transaction::{
 };
 use anoma::types::{address, key, token};
 use borsh::BorshSerialize;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::{
     self, Evidence, RequestPrepareProposal, ValidatorUpdate,
 };
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::abci::{
+    self, Evidence, ValidatorUpdate,
+};
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::ConsensusParams;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::abci::ConsensusParams;
 use thiserror::Error;
+#[cfg(not(feature = "ABCI"))]
 use tower_abci::{request, response};
+#[cfg(feature = "ABCI")]
+use tower_abci_old::{request, response};
 
 use super::rpc;
 use crate::config;
@@ -46,7 +58,6 @@ use crate::config::genesis;
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 use crate::node::ledger::{protocol, storage, tendermint_node};
 
 #[derive(Error, Debug)]
@@ -137,6 +148,7 @@ impl Shell {
     }
 
     /// Iterate lazily over the wrapper txs in order
+    #[cfg(not(feature="ABCI"))]
     fn next_wrapper(&mut self) -> Option<&WrapperTx> {
         if self.next_wrapper == self.storage.wrapper_txs.len() {
             None
@@ -146,6 +158,12 @@ impl Shell {
             self.next_wrapper += 1;
             next_wrapper
         }
+    }
+
+    /// Iterate lazily over the wrapper txs in order
+    #[cfg(feature="ABCI")]
+    fn next_wrapper(&mut self) -> Option<WrapperTx> {
+        self.storage.wrapper_txs.pop_front()
     }
 
     /// If we reject the decrypted txs because they were out of
@@ -295,6 +313,7 @@ impl Shell {
         }
     }
 
+    #[cfg(not(feature = "ABCI"))]
     /// INVARIANT: This method must be stateless.
     pub fn extend_vote(
         &self,
@@ -303,6 +322,7 @@ impl Shell {
         Default::default()
     }
 
+    #[cfg(not(feature = "ABCI"))]
     /// INVARIANT: This method must be stateless.
     pub fn verify_vote_extension(
         &self,
@@ -397,7 +417,10 @@ mod test_utils {
     use std::path::PathBuf;
 
     use anoma::types::key::ed25519::Keypair;
-    use tendermint_proto::abci::{RequestInitChain, ResponsePrepareProposal};
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint_proto::abci::{Event as TmEvent, RequestInitChain, ResponsePrepareProposal};
+    #[cfg(feature = "ABCI")]
+    use tendermint_proto_abci::abci::{Event as TmEvent, RequestInitChain};
 
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
@@ -456,6 +479,7 @@ mod test_utils {
         }
 
         /// Forward the prepare proposal request and return the response
+        #[cfg(not(feature="ABCI"))]
         pub fn prepare_proposal(
             &mut self,
             req: RequestPrepareProposal,
@@ -465,8 +489,11 @@ mod test_utils {
 
         /// Forward a ProcessProposal request and extract the relevant
         /// response data to return
-        pub fn process_proposal(&mut self, req: ProcessProposal) -> TxResult {
-            self.shell.process_proposal(req).result
+        pub fn process_proposal(&mut self, req: ProcessProposal) -> shim::response::ProcessProposal {
+            #[cfg(not(feature="ABCI"))]
+            {self.shell.process_proposal(req)}
+            #[cfg(feature="ABCI")]
+            {self.shell.process_and_decode_proposal(req)}
         }
 
         /// Forward a FinalizeBlock request return a vector of
@@ -474,7 +501,7 @@ mod test_utils {
         pub fn finalize_block(
             &mut self,
             req: FinalizeBlock,
-        ) -> Result<Vec<tendermint_proto::abci::Event>> {
+        ) -> Result<Vec<TmEvent>> {
             match self.shell.finalize_block(req) {
                 Ok(resp) => Ok(resp.events),
                 Err(err) => Err(err),
@@ -488,8 +515,15 @@ mod test_utils {
             self.shell.revert_wrapper_txs();
         }
 
+        #[cfg(not(feature = "ABCI"))]
         /// Get the next wrapper tx to be decoded
         pub fn next_wrapper(&mut self) -> Option<&WrapperTx> {
+            self.shell.next_wrapper()
+        }
+
+        #[cfg(feature = "ABCI")]
+        /// Get the next wrapper tx to be decoded
+        pub fn next_wrapper(&mut self) -> Option<WrapperTx> {
             self.shell.next_wrapper()
         }
     }

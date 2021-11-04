@@ -1082,6 +1082,14 @@ pub mod args {
     use anoma::types::storage::Epoch;
     use anoma::types::token;
     use anoma::types::transaction::GasLimit;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint::Timeout;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::Timeout;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint::net::Address as TendermintAddress;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::net::Address as TendermintAddress;
     use libp2p::Multiaddr;
     use serde::Deserialize;
 
@@ -1108,10 +1116,10 @@ pub mod args {
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<tendermint::Timeout> =
+    const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> =
         arg_default(
             "consensus-timeout-commit",
-            DefaultFn(|| tendermint::Timeout::from_str("1s").unwrap()),
+            DefaultFn(|| Timeout::from_str("1s").unwrap()),
         );
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
@@ -1121,19 +1129,20 @@ pub mod args {
     const FEE_AMOUNT: Arg<token::Amount> = arg("fee-amount");
     const FEE_TOKEN: Arg<WalletAddress> = arg("fee-token");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
+    const FORCE: ArgFlag = flag("force");
     const GAS_LIMIT: Arg<token::Amount> = arg("gas-limit");
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
-    const LEDGER_ADDRESS_DEFAULT: ArgDefault<tendermint::net::Address> =
+    const LEDGER_ADDRESS_DEFAULT: ArgDefault<TendermintAddress> =
         LEDGER_ADDRESS.default(DefaultFn(|| {
             let raw = "127.0.0.1:26657";
-            tendermint::net::Address::from_str(raw).unwrap()
+            TendermintAddress::from_str(raw).unwrap()
         }));
-    const LEDGER_ADDRESS_OPT: ArgOpt<tendermint::net::Address> =
+    const LEDGER_ADDRESS_OPT: ArgOpt<TendermintAddress> =
         LEDGER_ADDRESS.opt();
-    const LEDGER_ADDRESS: Arg<tendermint::net::Address> = arg("ledger-address");
+    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MODE: ArgOpt<String> = arg_opt("mode");
@@ -1782,7 +1791,7 @@ pub mod args {
         /// Exchanges description
         pub exchanges: Vec<Exchange>,
         /// The address of the ledger node as host:port
-        pub ledger_address: tendermint::net::Address,
+        pub ledger_address: TendermintAddress,
         /// Print output to stdout
         pub to_stdout: bool,
     }
@@ -1905,7 +1914,7 @@ pub mod args {
         pub rpc: Option<SocketAddr>,
         pub matchmaker_path: Option<PathBuf>,
         pub tx_code_path: Option<PathBuf>,
-        pub ledger_addr: Option<tendermint::net::Address>,
+        pub ledger_addr: Option<TendermintAddress>,
         pub filter_path: Option<PathBuf>,
         pub tx_signing_key: Option<WalletKeypair>,
         pub tx_source_address: Option<WalletAddress>,
@@ -1980,8 +1989,10 @@ pub mod args {
     pub struct Tx {
         /// Simulate applying the transaction
         pub dry_run: bool,
+        /// Submit the transaction even if it doesn't pass client checks
+        pub force: bool,
         /// The address of the ledger node as host:port
-        pub ledger_address: tendermint::net::Address,
+        pub ledger_address: TendermintAddress,
         /// If any new account is initialized by the tx, use the given alias to
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
@@ -2004,6 +2015,9 @@ pub mod args {
                     .def()
                     .about("Simulate the transaction application."),
             )
+            .arg(FORCE.def().about(
+                "Submit the transaction even if it doesn't pass client checks.",
+            ))
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
             .arg(ALIAS_OPT.def().about(
                 "If any new account is initialized by the tx, use the given \
@@ -2043,6 +2057,7 @@ pub mod args {
 
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
+            let force = FORCE.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let fee_amount = FEE_AMOUNT.parse(matches);
@@ -2053,6 +2068,7 @@ pub mod args {
             let signer = SIGNER.parse(matches);
             Self {
                 dry_run,
+                force,
                 ledger_address,
                 initialized_account_alias,
                 fee_amount,
@@ -2068,7 +2084,7 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct Query {
         /// The address of the ledger node as host:port
-        pub ledger_address: tendermint::net::Address,
+        pub ledger_address: TendermintAddress,
     }
 
     impl Args for Query {
@@ -2282,7 +2298,7 @@ pub mod args {
         pub genesis_path: PathBuf,
         pub chain_id_prefix: ChainIdPrefix,
         pub unsafe_dont_encrypt: bool,
-        pub consensus_timeout_commit: tendermint::Timeout,
+        pub consensus_timeout_commit: Timeout,
         pub localhost: bool,
         pub allow_duplicate_ip: bool,
     }

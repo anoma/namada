@@ -44,10 +44,13 @@ fn run_ledger() -> Result<()> {
         ledger.exp_string("Anoma ledger node started")?;
         // TODO: I'm (batconjurer) not sure the intention of this test but this
         // may need to be changed
-        ledger.exp_string(
-            "This node is a validator (NOT in the active validator set)",
-        )?;
-        // ledger.exp_string("This node is not a validator")?;
+        if !cfg!(feature = "ABCI") {
+            ledger.exp_string(
+                "This node is a validator (NOT in the active validator set)",
+            )?;
+        } else {
+            ledger.exp_string("This node is not a validator")?;
+        }
     }
 
     Ok(())
@@ -161,7 +164,11 @@ fn ledger_txs_and_queries() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("started node")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
     let vp_user = vp_user.to_string_lossy();
@@ -248,7 +255,9 @@ fn ledger_txs_and_queries() -> Result<()> {
             let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
 
             if !dry_run {
-                client.exp_string("Transaction accepted")?;
+                if !cfg!(feature = "ABCI") {
+                    client.exp_string("Transaction accepted")?;
+                }
                 client.exp_string("Transaction applied")?;
             }
             client.exp_string("Transaction is valid.")?;
@@ -290,7 +299,11 @@ fn invalid_transactions() -> Result<()> {
     let keypair = wallet::defaults::daewon_keypair();
     let daewon = keypair.to_string();
     ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("started node")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
     // Wait to commit a block
     // ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
@@ -328,8 +341,9 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-
-    client.exp_string("Transaction accepted")?;
+    if !cfg!(feature = "ABCI"){
+        client.exp_string("Transaction accepted")?;
+    }
     client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is invalid")?;
     client.exp_string(r#""code": "1"#)?;
@@ -375,8 +389,9 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-
-    client.exp_string("Transaction accepted")?;
+    if !cfg!(feature = "ABCI"){
+        client.exp_string("Transaction accepted")?;
+    }
     client.exp_string("Transaction applied")?;
 
     client.exp_string("Error trying to apply a transaction")?;

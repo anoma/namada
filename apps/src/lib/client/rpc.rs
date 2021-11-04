@@ -16,7 +16,18 @@ use anoma::types::storage::Epoch;
 use anoma::types::{address, storage, token};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::abci::Code;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::Code;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::net::Address as TendermintAddress;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address as TendermintAddress;
+#[cfg(not(feature="ABCI"))]
 use tendermint_rpc::{Client, HttpClient};
+#[cfg(feature="ABCI")]
+use tendermint_rpc_abci::{Client, HttpClient};
 
 use crate::cli::{self, args, Context};
 use crate::node::ledger::rpc::{Path, PrefixValue};
@@ -31,7 +42,7 @@ pub async fn query_epoch(args: args::Query) -> Option<Epoch> {
         .await
         .unwrap();
     match response.code {
-        tendermint::abci::Code::Ok => {
+        Code::Ok => {
             match Epoch::try_from_slice(&response.value[..]) {
                 Ok(epoch) => {
                     println!("Last committed epoch: {}", epoch);
@@ -43,7 +54,7 @@ pub async fn query_epoch(args: args::Query) -> Option<Epoch> {
                 }
             }
         }
-        tendermint::abci::Code::Err(err) => eprintln!(
+        Code::Err(err) => eprintln!(
             "Error in the query {} (error code {})",
             response.info, err
         ),
@@ -707,7 +718,7 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
 
 /// Dry run a transaction
 pub async fn dry_run_tx(
-    ledger_address: &tendermint::net::Address,
+    ledger_address: &TendermintAddress,
     tx_bytes: Vec<u8>,
 ) {
     let client = HttpClient::new(ledger_address.clone()).unwrap();
@@ -722,7 +733,7 @@ pub async fn dry_run_tx(
 /// Get account's public key stored in its storage sub-space
 pub async fn get_public_key(
     address: &Address,
-    ledger_address: tendermint::net::Address,
+    ledger_address: TendermintAddress,
 ) -> Option<ed25519::PublicKey> {
     let client = HttpClient::new(ledger_address).unwrap();
     let key = ed25519::pk_key(address);
@@ -732,7 +743,7 @@ pub async fn get_public_key(
 /// Check if the given address is a known validator.
 pub async fn is_validator(
     address: &Address,
-    ledger_address: tendermint::net::Address,
+    ledger_address: TendermintAddress,
 ) -> bool {
     let client = HttpClient::new(ledger_address).unwrap();
     // Check if there's any validator state
@@ -742,6 +753,24 @@ pub async fn is_validator(
         query_storage_value(client, key).await;
     // If there is, then the address is a validator
     state.is_some()
+}
+
+/// Check if the address exists on chain. Established address exists if it has a
+/// stored validity predicate. Implicit and internal addresses always return
+/// true.
+pub async fn known_address(
+    address: &Address,
+    ledger_address: TendermintAddress,
+) -> bool {
+    let client = HttpClient::new(ledger_address).unwrap();
+    match address {
+        Address::Established(_) => {
+            // Established account exists if it has a VP
+            let key = storage::Key::validity_predicate(address);
+            query_has_storage_key(client, key).await
+        }
+        Address::Implicit(_) | Address::Internal(_) => true,
+    }
 }
 
 /// Accumulate slashes starting from `epoch_start` until (optionally)
@@ -876,7 +905,7 @@ fn process_unbonds_query(
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-async fn query_storage_value<T>(
+pub async fn query_storage_value<T>(
     client: HttpClient,
     key: storage::Key,
 ) -> Option<T>
@@ -890,13 +919,13 @@ where
         .await
         .unwrap();
     match response.code {
-        tendermint::abci::Code::Ok => {
+        Code::Ok => {
             match T::try_from_slice(&response.value[..]) {
                 Ok(value) => return Some(value),
                 Err(err) => eprintln!("Error decoding the value: {}", err),
             }
         }
-        tendermint::abci::Code::Err(err) => {
+        Code::Err(err) => {
             if err == 1 {
                 return None;
             } else {
@@ -913,7 +942,7 @@ where
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-async fn query_storage_prefix<T>(
+pub async fn query_storage_prefix<T>(
     client: HttpClient,
     key: storage::Key,
 ) -> Option<impl Iterator<Item = (storage::Key, T)>>
@@ -927,7 +956,7 @@ where
         .await
         .unwrap();
     match response.code {
-        tendermint::abci::Code::Ok => {
+        Code::Ok => {
             match Vec::<PrefixValue>::try_from_slice(&response.value[..]) {
                 Ok(values) => {
                     let decode = |PrefixValue { key, value }: PrefixValue| {
@@ -948,7 +977,7 @@ where
                 Err(err) => eprintln!("Error decoding the values: {}", err),
             }
         }
-        tendermint::abci::Code::Err(err) => {
+        Code::Err(err) => {
             if err == 1 {
                 return None;
             } else {
@@ -957,6 +986,34 @@ where
                     response.info, err
                 )
             }
+        }
+    }
+    cli::safe_exit(1)
+}
+
+/// Query to check if the given storage key exists.
+pub async fn query_has_storage_key(
+    client: HttpClient,
+    key: storage::Key,
+) -> bool {
+    let path = Path::HasKey(key);
+    let data = vec![];
+    let response = client
+        .abci_query(Some(path.into()), data, None, false)
+        .await
+        .unwrap();
+    match response.code {
+        Code::Ok => {
+            match bool::try_from_slice(&response.value[..]) {
+                Ok(value) => return value,
+                Err(err) => eprintln!("Error decoding the value: {}", err),
+            }
+        }
+        Code::Err(err) => {
+            eprintln!(
+                "Error in the query {} (error code {})",
+                response.info, err
+            )
         }
     }
     cli::safe_exit(1)

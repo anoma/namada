@@ -8,8 +8,10 @@ use anoma::types::chain::ChainId;
 use anoma::types::storage::BlockHeight;
 use futures::future::FutureExt;
 use tower::Service;
+#[cfg(not(feature="ABCI"))]
 use tower_abci::{BoxError, Request as Req, Response as Resp};
-
+#[cfg(feature="ABCI")]
+use tower_abci_old::{BoxError, Request as Req, Response as Resp};
 use super::super::Shell;
 use super::abcipp_shim_types::shim::{request, Error, Request, Response};
 use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
@@ -79,7 +81,10 @@ impl Service<Req> for AbcippShim {
                         Response::ProcessProposal(resp) => {
                             tracing::info!("{:?}", resp);
                             self.block_txs.push(ProcessedTx {
+                                #[cfg(not(feature = "ABCI"))]
                                 tx: deliver_tx.tx,
+                                #[cfg(feature = "ABCI")]
+                                tx: resp.tx,
                                 result: resp.result,
                             });
                             Ok(Resp::DeliverTx(Default::default()))

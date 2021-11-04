@@ -7,10 +7,23 @@ use std::time::Duration;
 
 use anoma::types::transaction::{hash_tx as hash_tx_bytes, Hash};
 use async_trait::async_trait;
+#[cfg(not(feature= "ABCI"))]
 use tendermint::abci::transaction;
+#[cfg(feature= "ABCI")]
+use tendermint_stable::abci::transaction;
+#[cfg(not(feature= "ABCI"))]
 use tendermint::net::Address;
+#[cfg(feature= "ABCI")]
+use tendermint_stable::net::Address;
+#[cfg(not(feature= "ABCI"))]
 use tendermint_rpc::query::Query;
-use tendermint_rpc::{Client, Request, Response, SimpleRequest};
+#[cfg(feature= "ABCI")]
+use tendermint_rpc_abci::query::Query;
+#[cfg(not(feature= "ABCI"))]
+use tendermint_rpc::{Client, Error as RpcError, Request, Response, SimpleRequest};
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::{Client, Error as RpcError, Request, Response, SimpleRequest};
+
 use thiserror::Error;
 use tokio::time::Instant;
 use websocket::result::WebSocketError;
@@ -19,7 +32,7 @@ use websocket::{ClientBuilder, Message, OwnedMessage};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Could not convert into websocket address: {0:?}")]
-    Address(tendermint::net::Address),
+    Address(Address),
     #[error("Websocket Error: {0:?}")]
     Websocket(WebSocketError),
     #[error("Failed to subscribe to the event: {0}")]
@@ -50,9 +63,18 @@ mod rpc_types {
     use std::str::FromStr;
 
     use serde::{de, Deserialize, Serialize, Serializer};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::method::Method;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::method::Method;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::query::{EventType, Query};
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::query::{EventType, Query};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::{request, response};
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::{request, response};
 
     use super::Json;
 
@@ -153,7 +175,7 @@ pub struct WebSocketAddress {
     port: u16,
 }
 
-impl TryFrom<tendermint::net::Address> for WebSocketAddress {
+impl TryFrom<Address> for WebSocketAddress {
     type Error = Error;
 
     fn try_from(value: Address) -> Result<Self, Self::Error> {
@@ -207,7 +229,7 @@ impl TendermintWebsocketClient {
                 subscribed: None,
                 received_responses: Arc::new(Mutex::new(HashMap::new())),
                 connection_timeout: connection_timeout
-                    .unwrap_or_else(|| Duration::new(300, 0)),
+                    .unwrap_or_else(|| Duration::new(30, 0)),
             }),
             Err(inner) => Err(Error::Websocket(inner)),
         }
@@ -360,7 +382,7 @@ impl Client for TendermintWebsocketClient {
     async fn perform<R>(
         &self,
         request: R,
-    ) -> Result<R::Response, tendermint_rpc::error::Error>
+    ) -> Result<R::Response, RpcError>
     where
         R: SimpleRequest,
     {
@@ -390,7 +412,7 @@ impl Client for TendermintWebsocketClient {
                 tracing::error!(
                     "Websocket connection timed out while waiting for response"
                 );
-                return Err(tendermint_rpc::error::Error::websocket_error(
+                return Err(RpcError::websocket_error(
                     Error::ConnectionTimeout.to_string(),
                 ));
             }
@@ -463,9 +485,18 @@ mod test_tendermint_websocket_client {
     use std::time::Duration;
 
     use serde::{Deserialize, Serialize};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::endpoint::abci_info::AbciInfo;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::endpoint::abci_info::AbciInfo;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::query::{EventType, Query};
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::query::{EventType, Query};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::Client;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::Client;
     use websocket::sync::Server;
     use websocket::{Message, OwnedMessage};
 

@@ -12,9 +12,15 @@ use std::sync::mpsc::{channel, Receiver};
 
 use anoma::types::chain::ChainId;
 use futures::future::{AbortHandle, AbortRegistration, Abortable};
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::CheckTxType;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::abci::CheckTxType;
 use tower::ServiceBuilder;
+#[cfg(not(feature = "ABCI"))]
 use tower_abci::{response, split, Server};
+#[cfg(feature = "ABCI")]
+use tower_abci_old::{response, split, Server};
 
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
@@ -58,6 +64,7 @@ impl Shell {
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
+            #[cfg(not(feature="ABCI"))]
             Request::PrepareProposal(block) => {
                 Ok(Response::PrepareProposal(self.prepare_proposal(block)))
             }
@@ -65,14 +72,20 @@ impl Shell {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))
             }
             Request::ProcessProposal(block) => {
-                Ok(Response::ProcessProposal(self.process_proposal(block)))
+                #[cfg(not(feature="ABCI"))]
+                {Ok(Response::ProcessProposal(self.process_proposal(block)))}
+                #[cfg(feature="ABCI")]
+                {Ok(Response::ProcessProposal(self.process_and_decode_proposal(block)))}
             }
+            #[cfg(not(feature="ABCI"))]
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
+            #[cfg(not(feature="ABCI"))]
             Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
+            #[cfg(not(feature="ABCI"))]
             Request::VerifyVoteExtension(_req) => Ok(
                 Response::VerifyVoteExtension(self.verify_vote_extension(_req)),
             ),

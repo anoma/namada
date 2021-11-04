@@ -1,14 +1,30 @@
 //! Functions for IBC validity predicate to access the storage
 
 use std::str::FromStr;
-
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::height::Height;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::packet::Sequence;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics05_port::capabilities::Capability;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::Path;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::height::Height;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::packet::Sequence;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics05_port::capabilities::Capability;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::Path;
 use thiserror::Error;
 
 use crate::types::address::{Address, InternalAddress};

@@ -11,7 +11,10 @@ use std::fmt::Display;
 
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+#[cfg(not(feature = "ABCI"))]
 use tendermint::block::Header;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::block::Header;
 use thiserror::Error;
 use types::MerkleTree;
 

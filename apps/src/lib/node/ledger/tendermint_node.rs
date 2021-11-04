@@ -12,8 +12,14 @@ use anoma::types::time::DateTimeUtc;
 use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
-use tendermint::config::TendermintConfig;
-use tendermint::net;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::{Genesis, config::TendermintConfig, net};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::{Genesis, config::TendermintConfig, net};
+#[cfg(not(feature = "ABCI"))]
+use tendermint::error::Error as TendermintError;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::error::Error as TendermintError;
 use thiserror::Error;
 
 use crate::config;
@@ -24,7 +30,7 @@ pub enum Error {
     #[error("Failed to initialize Tendermint: {0}")]
     Init(std::io::Error),
     #[error("Failed to load Tendermint config file: {0}")]
-    LoadConfig(tendermint::error::Error),
+    LoadConfig(TendermintError),
     #[error("Failed to open Tendermint config for writing: {0}")]
     OpenWriteConfig(std::io::Error),
     #[error("Failed to serialize Tendermint config TOML to string: {0}")]
@@ -117,18 +123,31 @@ pub fn run(
 
     update_tendermint_config(&home_dir, config)?;
 
-    let tendermint_node = Command::new(&tendermint_path)
-        .args(&[
-            "start",
-            "--mode",
-            &mode,
-            "--proxy-app",
-            &ledger_address,
-            "--home",
-            &home_dir_string,
-        ])
-        .spawn()
-        .map_err(Error::StartUp)?;
+    let tendermint_node = if !cfg!(feature = "ABCI"){
+        Command::new(&tendermint_path)
+            .args(&[
+                "start",
+                "--mode",
+                &mode,
+                "--proxy-app",
+                &ledger_address,
+                "--home",
+                &home_dir_string,
+            ])
+            .spawn()
+            .map_err(Error::StartUp)?
+    } else {
+        Command::new(&tendermint_path)
+            .args(&[
+                "start",
+                "--proxy_app",
+                &ledger_address,
+                "--home",
+                &home_dir_string,
+            ])
+            .spawn()
+            .map_err(Error::StartUp)?
+    };
     let pid = tendermint_node.id();
     tracing::info!("Tendermint node started");
     // make sure to shut down when receiving a termination signal
@@ -319,7 +338,7 @@ fn write_tm_genesis(
         )
     });
     let reader = BufReader::new(file);
-    let mut genesis: tendermint::Genesis = serde_json::from_reader(reader)
+    let mut genesis: Genesis = serde_json::from_reader(reader)
         .expect("Couldn't deserialize the genesis file");
     genesis.chain_id =
         FromStr::from_str(chain_id.as_str()).expect("Invalid chain ID");

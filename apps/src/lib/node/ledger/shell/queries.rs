@@ -7,7 +7,14 @@ use anoma::types::address::Address;
 use anoma::types::storage::Key;
 use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "ABCI"))]
+use tendermint_proto::google::protobuf as protobuf;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::google::protobuf as protobuf;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::EvidenceParams;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::types::EvidenceParams;
 
 use super::*;
 use crate::node::ledger::response;
@@ -37,6 +44,7 @@ impl Shell {
                 Path::Prefix(storage_key) => {
                     self.read_storage_prefix(&storage_key)
                 }
+                Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
             },
             Err(err) => response::Query {
                 code: 1,
@@ -129,6 +137,21 @@ impl Shell {
         }
     }
 
+    /// Query to check if a storage key exists.
+    fn has_storage_key(&self, key: &Key) -> response::Query {
+        match self.storage.has_key(key) {
+            Ok((has_key, _gas)) => response::Query {
+                value: has_key.try_to_vec().unwrap(),
+                ..Default::default()
+            },
+            Err(err) => response::Query {
+                code: 2,
+                info: format!("Storage error: {}", err),
+                ..Default::default()
+            },
+        }
+    }
+
     pub fn get_evidence_params(
         &self,
         protocol_params: &Parameters,
@@ -143,7 +166,7 @@ impl Shell {
         let min_duration_secs =
             protocol_params.epoch_duration.min_duration.0 as i64;
         let max_age_duration =
-            Some(tendermint_proto::google::protobuf::Duration {
+            Some(protobuf::Duration {
                 seconds: min_duration_secs * len_before_unbonded,
                 nanos: 0,
             });

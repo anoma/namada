@@ -4,7 +4,10 @@ use std::ops::{Index, IndexMut};
 
 use anoma::types::transaction::{hash_tx, TxType};
 use borsh::BorshSerialize;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::EventAttribute;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::abci::EventAttribute;
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
@@ -23,10 +26,22 @@ pub enum EventType {
     Applied,
 }
 
+#[cfg(not(feature = "ABCI"))]
 impl Display for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EventType::Accepted => write!(f, "accepted"),
+            EventType::Applied => write!(f, "applied"),
+        }?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "ABCI")]
+impl Display for EventType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EventType::Accepted => write!(f, "applied"),
             EventType::Applied => write!(f, "applied"),
         }?;
         Ok(())
@@ -43,12 +58,16 @@ impl Event {
                     event_type: EventType::Accepted,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = hash_tx(
-                    &wrapper
-                        .try_to_vec()
-                        .expect("Serializing wrapper should not fail"),
-                )
-                .to_string();
+                event["hash"] = if !cfg!(feature = "ABCI"){
+                    hash_tx(
+                        &wrapper
+                            .try_to_vec()
+                            .expect("Serializing wrapper should not fail"),
+                    )
+                   .to_string()
+                } else {
+                    wrapper.tx_hash.to_string()
+                };
                 event
             }
             TxType::Decrypted(decrypted) => {
@@ -83,6 +102,7 @@ impl IndexMut<&str> for Event {
     }
 }
 
+#[cfg(not(feature = "ABCI"))]
 /// Convert our custom event into the necessary tendermint proto type
 impl From<Event> for tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
@@ -94,6 +114,25 @@ impl From<Event> for tendermint_proto::abci::Event {
                 .map(|(key, value)| EventAttribute {
                     key,
                     value,
+                    index: true,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[cfg(feature = "ABCI")]
+/// Convert our custom event into the necessary tendermint proto type
+impl From<Event> for tendermint_proto_abci::abci::Event {
+    fn from(event: Event) -> Self {
+        Self {
+            r#type: event.event_type.to_string(),
+            attributes: event
+                .attributes
+                .into_iter()
+                .map(|(key, value)| EventAttribute {
+                    key: key.into_bytes(),
+                    value: value.into_bytes(),
                     index: true,
                 })
                 .collect(),

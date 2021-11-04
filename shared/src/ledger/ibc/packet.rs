@@ -1,19 +1,50 @@
 //! IBC validity predicate for packets
 
 use borsh::BorshDeserialize;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::height::Height;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::channel::{ChannelEnd, Counterparty, Order, State};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::context::ChannelReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::error::Error as Ics04Error;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::handler::verify::{
     verify_channel_proofs, verify_next_sequence_recv,
     verify_packet_acknowledgement_proofs, verify_packet_receipt_absence,
     verify_packet_recv_proofs,
 };
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::packet::{Packet, Sequence};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::{ChannelId, ClientId, PortChannelId, PortId};
+#[cfg(not(feature = "ABCI"))]
 use ibc::proofs::Proofs;
+#[cfg(not(feature = "ABCI"))]
 use ibc::timestamp::Expiry;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::height::Height;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::channel::{ChannelEnd, Counterparty, Order, State};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::context::ChannelReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::error::Error as Ics04Error;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::handler::verify::{
+    verify_channel_proofs, verify_next_sequence_recv,
+    verify_packet_acknowledgement_proofs, verify_packet_receipt_absence,
+    verify_packet_recv_proofs,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::packet::{Packet, Sequence};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::{ChannelId, ClientId, PortChannelId, PortId};
+#[cfg(feature = "ABCI")]
+use ibc_abci::proofs::Proofs;
+#[cfg(feature = "ABCI")]
+use ibc_abci::timestamp::Expiry;
 use thiserror::Error;
 
 use super::storage::{port_channel_sequence_id, Error as IbcStorageError};
