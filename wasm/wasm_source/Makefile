@@ -51,11 +51,11 @@ $(wasms): %:
 
 # `cargo check` one of the wasms, e.g. `make check_tx_transfer`
 $(patsubst %,check_%,$(wasms)): check_%:
-	$(cargo) check --target wasm32-unknown-unknown --features $*
+	$(cargo) check --target wasm32-unknown-unknown --features "ABCI $*"
 
 # `cargo test` one of the wasms, e.g. `make test_tx_transfer`
 $(patsubst %,test_%,$(wasms)): test_%:
-	$(cargo) test --features $*
+	$(cargo) test --features "ABCI $*"
 
 # `cargo watch` one of the wasms, e.g. `make watch_tx_transfer`
 $(patsubst %,watch_%,$(wasms)): watch_%:

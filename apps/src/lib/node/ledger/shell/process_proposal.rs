@@ -239,7 +239,7 @@ mod test_process_proposal {
             Tx::new(vec![], Some(wrapper.try_to_vec().expect("Test failed")))
                 .to_bytes();
         #[allow(clippy::redundant_clone)]
-        let request= ProcessProposal { tx: tx.clone() };
+        let request = ProcessProposal { tx: tx.clone() };
 
         let response = shell.process_proposal(request);
         assert_eq!(response.result.code, 1);

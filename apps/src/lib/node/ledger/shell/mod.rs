@@ -433,9 +433,10 @@ mod test_utils {
             .expect("Current directory should exist")
             .canonicalize()
             .expect("Current directory should exist");
-        while current_path.file_name().unwrap() != "anoma" {
+        while current_path.file_name().unwrap() != "apps" {
             current_path.pop();
         }
+        current_path.pop();
         current_path
     }
 
