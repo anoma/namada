@@ -11,7 +11,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -93,7 +93,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -148,7 +148,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -252,7 +252,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -297,7 +297,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -352,7 +352,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -397,7 +397,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -443,7 +443,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -526,7 +526,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -643,7 +643,7 @@ steps:
   name: clone
   pull: never
 - commands: [echo "06b15756fae968243674bb91c525a81cbc0400ae155098dedf44ed5e860bc0ef  Makefile"
-      | sha256sum -c -, echo "55258dc2f3793612edc02c25c3171aa1be79d8baef46eef4e403587062dc39ea  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "ab424b98089151f4f548d84279ee016ca4f20625abce8441fb7bbced02babd05  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
@@ -694,6 +694,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: cefef9148b58aee009846facba01c4cc231d7ccef950b42bda9315ab818d9d8c
+hmac: ad9265cbf82a44f9c2c62b1d787b9e3555b0a29eb18b1fe5196f2539a1dd90a9
 
 ...
