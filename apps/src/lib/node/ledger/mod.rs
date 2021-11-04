@@ -160,7 +160,7 @@ async fn run_shell(
         .mempool(
             ServiceBuilder::new()
                 .load_shed()
-                .buffer(10)
+                .buffer(1024)
                 .service(mempool),
         )
         .info(
