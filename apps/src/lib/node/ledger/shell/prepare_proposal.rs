@@ -1,6 +1,6 @@
 //! Implementation of the [`PrepareProposal`] ABCI++ method for the Shell
 
-#[cfg(not(feature="ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 mod prepare_proposal {
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -12,20 +12,22 @@ mod prepare_proposal {
         /// by tendermint. The rest of the block is filled with decryptions
         /// of the wrapper txs from the previously committed block.
         ///
-        /// INVARIANT: Any changes applied in this method must be reverted if the
-        /// proposal is rejected (unless we can simply overwrite them in the
-        /// next block).
+        /// INVARIANT: Any changes applied in this method must be reverted if
+        /// the proposal is rejected (unless we can simply overwrite
+        /// them in the next block).
         pub fn prepare_proposal(
             &mut self,
             req: RequestPrepareProposal,
         ) -> response::PrepareProposal {
-            // We can safely reset meter, because if the block is rejected, we'll
-            // reset again on the next proposal, until the proposal is accepted
+            // We can safely reset meter, because if the block is rejected,
+            // we'll reset again on the next proposal, until the
+            // proposal is accepted
             self.gas_meter.reset();
             // TODO: This should not be hardcoded
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-            // filter in half of the new txs from Tendermint, only keeping wrappers
+            // filter in half of the new txs from Tendermint, only keeping
+            // wrappers
             let number_of_new_txs = 1 + req.block_data.len() / 2;
             let mut txs: Vec<TxBytes> = req
                 .block_data
@@ -33,9 +35,9 @@ mod prepare_proposal {
                 .take(number_of_new_txs)
                 .filter(|tx| {
                     matches!(
-                    process_tx(Tx::try_from(tx.as_slice()).unwrap()),
-                    Ok(TxType::Wrapper(_))
-                )
+                        process_tx(Tx::try_from(tx.as_slice()).unwrap()),
+                        Ok(TxType::Wrapper(_))
+                    )
                 })
                 .collect();
 
@@ -49,7 +51,7 @@ mod prepare_proposal {
                         Ok(tx) => DecryptedTx::Decrypted(tx),
                         _ => DecryptedTx::Undecryptable(tx.clone()),
                     })
-                        .to_bytes()
+                    .to_bytes()
                 })
                 .collect();
 
@@ -109,11 +111,11 @@ mod prepare_proposal {
                         0.into(),
                         tx,
                     )
-                        .try_to_vec()
-                        .expect("Test failed"),
+                    .try_to_vec()
+                    .expect("Test failed"),
                 ),
             )
-                .to_bytes();
+            .to_bytes();
             let req = RequestPrepareProposal {
                 block_data: vec![wrapper],
                 block_data_size: 0,
@@ -140,7 +142,11 @@ mod prepare_proposal {
             for i in 0..2 {
                 let tx = Tx::new(
                     "wasm_code".as_bytes().to_owned(),
-                    Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                    Some(
+                        format!("transaction data: {}", i)
+                            .as_bytes()
+                            .to_owned(),
+                    ),
                 );
                 expected_decrypted
                     .push(Tx::from(DecryptedTx::Decrypted(tx.clone())));
@@ -185,5 +191,5 @@ mod prepare_proposal {
     }
 }
 
-#[cfg(not(feature="ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 pub use prepare_proposal::*;

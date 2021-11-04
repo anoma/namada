@@ -64,7 +64,7 @@ impl Shell {
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
-            #[cfg(not(feature="ABCI"))]
+            #[cfg(not(feature = "ABCI"))]
             Request::PrepareProposal(block) => {
                 Ok(Response::PrepareProposal(self.prepare_proposal(block)))
             }
@@ -72,20 +72,26 @@ impl Shell {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))
             }
             Request::ProcessProposal(block) => {
-                #[cfg(not(feature="ABCI"))]
-                {Ok(Response::ProcessProposal(self.process_proposal(block)))}
-                #[cfg(feature="ABCI")]
-                {Ok(Response::ProcessProposal(self.process_and_decode_proposal(block)))}
+                #[cfg(not(feature = "ABCI"))]
+                {
+                    Ok(Response::ProcessProposal(self.process_proposal(block)))
+                }
+                #[cfg(feature = "ABCI")]
+                {
+                    Ok(Response::ProcessProposal(
+                        self.process_and_decode_proposal(block),
+                    ))
+                }
             }
-            #[cfg(not(feature="ABCI"))]
+            #[cfg(not(feature = "ABCI"))]
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
-            #[cfg(not(feature="ABCI"))]
+            #[cfg(not(feature = "ABCI"))]
             Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
-            #[cfg(not(feature="ABCI"))]
+            #[cfg(not(feature = "ABCI"))]
             Request::VerifyVoteExtension(_req) => Ok(
                 Response::VerifyVoteExtension(self.verify_vote_extension(_req)),
             ),

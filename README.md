@@ -11,8 +11,8 @@ This is an implementation of the Anoma protocol in Rust.
 
 ## 📓 Docs
 
-- [docs](https://anoma.github.io/anoma/): built from [docs mdBook](./docs/)
-- [rustdoc](https://anoma.github.io/anoma/rustdoc/anoma/): built from the source
+- [docs](https://docs.anoma.network/master/): built from [docs mdBook](./docs/)
+- [rustdoc](https://docs.anoma.network/master/rustdoc/anoma/): built from the source
 
 ## Warning
 
@@ -28,7 +28,7 @@ make install
 
 After installation, the main `anoma` executable will be available on path.
 
-To find how to use it, check out the [User Guide section of the docs](https://anoma.github.io/anoma/user-guide/).
+To find how to use it, check out the [User Guide section of the docs](https://docs.anoma.network/master/user-guide/).
 
 ## ⚙️ Development
 
@@ -36,8 +36,9 @@ To find how to use it, check out the [User Guide section of the docs](https://an
 # Build the provided validity predicate, transaction and matchmaker wasm modules
 make build-wasm-scripts-docker
 
-# Development build Anoma
-make
+# Development (debug) build Anoma, which includes a validator and some default 
+# accounts, whose keys and addresses are available in the wallet
+ANOMA_DEV=true make
 ```
 
 ### Using Nix

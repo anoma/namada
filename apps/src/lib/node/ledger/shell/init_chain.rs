@@ -6,16 +6,18 @@ use std::hash::Hash;
 use sha2::{Digest, Sha256};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci;
+#[cfg(not(feature = "ABCI"))]
+use tendermint_proto::crypto::{public_key, PublicKey as TendermintPublicKey};
+#[cfg(not(feature = "ABCI"))]
+use tendermint_proto::google::protobuf;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci;
-#[cfg(not(feature= "ABCI"))]
-use tendermint_proto::crypto::{public_key, PublicKey as TendermintPublicKey};
 #[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::{public_key, PublicKey as TendermintPublicKey};
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::google::protobuf as protobuf;
+use tendermint_proto_abci::crypto::{
+    public_key, PublicKey as TendermintPublicKey,
+};
 #[cfg(feature = "ABCI")]
-use tendermint_proto_abci::google::protobuf as protobuf;
+use tendermint_proto_abci::google::protobuf;
 
 use super::*;
 use crate::wasm_loader;
@@ -53,8 +55,7 @@ impl Shell {
         #[cfg(feature = "dev")]
         let genesis = genesis::genesis();
 
-        let ts: protobuf::Timestamp =
-            init.time.expect("Missing genesis time");
+        let ts: protobuf::Timestamp = init.time.expect("Missing genesis time");
         let initial_height = init
             .initial_height
             .try_into()
@@ -257,8 +258,7 @@ impl Shell {
 
         // Set the initial validator set
         for validator in genesis.validators {
-            let mut abci_validator =
-                abci::ValidatorUpdate::default();
+            let mut abci_validator = abci::ValidatorUpdate::default();
             let consensus_key: ed25519_dalek::PublicKey =
                 validator.pos_data.consensus_key.clone().into();
             let pub_key = TendermintPublicKey {

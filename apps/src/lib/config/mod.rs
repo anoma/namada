@@ -21,13 +21,13 @@ use libp2p::PeerId;
 use regex::Regex;
 use serde::{de, Deserialize, Serialize};
 #[cfg(not(feature = "ABCI"))]
+use tendermint::net::{self, Address as TendermintAddress};
+#[cfg(not(feature = "ABCI"))]
 use tendermint::Timeout;
 #[cfg(feature = "ABCI")]
-use tendermint_stable::Timeout;
-#[cfg(not(feature= "ABCI"))]
-use tendermint::net::{self, Address as TendermintAddress};
-#[cfg(feature= "ABCI")]
 use tendermint_stable::net::{self, Address as TendermintAddress};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::Timeout;
 use thiserror::Error;
 
 use crate::cli;
@@ -152,8 +152,7 @@ impl Ledger {
                 p2p_persistent_peers: vec![],
                 p2p_pex: true,
                 p2p_allow_duplicate_ip: false,
-                consensus_timeout_commit: Timeout::from_str("1s")
-                    .unwrap(),
+                consensus_timeout_commit: Timeout::from_str("1s").unwrap(),
                 tendermint_mode: mode,
             },
         }

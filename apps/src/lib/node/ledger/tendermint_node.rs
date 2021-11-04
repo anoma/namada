@@ -13,13 +13,13 @@ use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
 #[cfg(not(feature = "ABCI"))]
-use tendermint::{Genesis, config::TendermintConfig, net};
-#[cfg(feature = "ABCI")]
-use tendermint_stable::{Genesis, config::TendermintConfig, net};
-#[cfg(not(feature = "ABCI"))]
 use tendermint::error::Error as TendermintError;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::{config::TendermintConfig, net, Genesis};
 #[cfg(feature = "ABCI")]
 use tendermint_stable::error::Error as TendermintError;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::{config::TendermintConfig, net, Genesis};
 use thiserror::Error;
 
 use crate::config;
@@ -123,7 +123,7 @@ pub fn run(
 
     update_tendermint_config(&home_dir, config)?;
 
-    let tendermint_node = if !cfg!(feature = "ABCI"){
+    let tendermint_node = if !cfg!(feature = "ABCI") {
         Command::new(&tendermint_path)
             .args(&[
                 "start",

@@ -7,23 +7,26 @@ use std::time::Duration;
 
 use anoma::types::transaction::{hash_tx as hash_tx_bytes, Hash};
 use async_trait::async_trait;
-#[cfg(not(feature= "ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 use tendermint::abci::transaction;
-#[cfg(feature= "ABCI")]
-use tendermint_stable::abci::transaction;
-#[cfg(not(feature= "ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 use tendermint::net::Address;
-#[cfg(feature= "ABCI")]
-use tendermint_stable::net::Address;
-#[cfg(not(feature= "ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::Query;
-#[cfg(feature= "ABCI")]
-use tendermint_rpc_abci::query::Query;
-#[cfg(not(feature= "ABCI"))]
-use tendermint_rpc::{Client, Error as RpcError, Request, Response, SimpleRequest};
+#[cfg(not(feature = "ABCI"))]
+use tendermint_rpc::{
+    Client, Error as RpcError, Request, Response, SimpleRequest,
+};
 #[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{Client, Error as RpcError, Request, Response, SimpleRequest};
-
+use tendermint_rpc_abci::query::Query;
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::{
+    Client, Error as RpcError, Request, Response, SimpleRequest,
+};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::transaction;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address;
 use thiserror::Error;
 use tokio::time::Instant;
 use websocket::result::WebSocketError;
@@ -65,14 +68,14 @@ mod rpc_types {
     use serde::{de, Deserialize, Serialize, Serializer};
     #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::method::Method;
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::method::Method;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::query::{EventType, Query};
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::query::{EventType, Query};
     #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::{request, response};
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::method::Method;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::query::{EventType, Query};
     #[cfg(feature = "ABCI")]
     use tendermint_rpc_abci::{request, response};
 
@@ -379,10 +382,7 @@ impl TendermintWebsocketClient {
 
 #[async_trait]
 impl Client for TendermintWebsocketClient {
-    async fn perform<R>(
-        &self,
-        request: R,
-    ) -> Result<R::Response, RpcError>
+    async fn perform<R>(&self, request: R) -> Result<R::Response, RpcError>
     where
         R: SimpleRequest,
     {
@@ -487,14 +487,14 @@ mod test_tendermint_websocket_client {
     use serde::{Deserialize, Serialize};
     #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::endpoint::abci_info::AbciInfo;
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::endpoint::abci_info::AbciInfo;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::query::{EventType, Query};
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::query::{EventType, Query};
     #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::Client;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::endpoint::abci_info::AbciInfo;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::query::{EventType, Query};
     #[cfg(feature = "ABCI")]
     use tendermint_rpc_abci::Client;
     use websocket::sync::Server;

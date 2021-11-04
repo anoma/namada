@@ -13,10 +13,10 @@ use rand::thread_rng;
 use serde_json::json;
 #[cfg(not(feature = "ABCI"))]
 use tendermint::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::net::Address as TendermintAddress;
 #[cfg(not(feature = "ABCI"))]
 use tendermint::node::Id as TendermintNodeId;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_stable::node::Id as TendermintNodeId;
 
@@ -244,12 +244,10 @@ pub fn init_network(
                         validator_owned_accounts
                             .insert(account.clone(), matchmaker);
 
-                        let ledger_address =
-                            TendermintAddress::from_str(&format!(
-                                "127.0.0.1:{}",
-                                first_port + 1
-                            ))
-                            .unwrap();
+                        let ledger_address = TendermintAddress::from_str(
+                            &format!("127.0.0.1:{}", first_port + 1),
+                        )
+                        .unwrap();
                         gossiper_config.matchmaker = Some(config::Matchmaker {
                             matchmaker: mm_code.clone().into(),
                             tx_code: tx_code.clone().into(),

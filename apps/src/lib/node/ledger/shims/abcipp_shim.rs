@@ -8,10 +8,11 @@ use anoma::types::chain::ChainId;
 use anoma::types::storage::BlockHeight;
 use futures::future::FutureExt;
 use tower::Service;
-#[cfg(not(feature="ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 use tower_abci::{BoxError, Request as Req, Response as Resp};
-#[cfg(feature="ABCI")]
+#[cfg(feature = "ABCI")]
 use tower_abci_old::{BoxError, Request as Req, Response as Resp};
+
 use super::super::Shell;
 use super::abcipp_shim_types::shim::{request, Error, Request, Response};
 use crate::node::ledger::shims::abcipp_shim_types::shim::request::{

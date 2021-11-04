@@ -7,7 +7,7 @@
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
 mod init_chain;
-#[cfg(not(feature="ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
@@ -38,14 +38,12 @@ use borsh::BorshSerialize;
 use tendermint_proto::abci::{
     self, Evidence, RequestPrepareProposal, ValidatorUpdate,
 };
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::{
-    self, Evidence, ValidatorUpdate,
-};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::ConsensusParams;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::ConsensusParams;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::abci::{self, Evidence, ValidatorUpdate};
 use thiserror::Error;
 #[cfg(not(feature = "ABCI"))]
 use tower_abci::{request, response};
@@ -148,7 +146,7 @@ impl Shell {
     }
 
     /// Iterate lazily over the wrapper txs in order
-    #[cfg(not(feature="ABCI"))]
+    #[cfg(not(feature = "ABCI"))]
     fn next_wrapper(&mut self) -> Option<&WrapperTx> {
         if self.next_wrapper == self.storage.wrapper_txs.len() {
             None
@@ -161,7 +159,7 @@ impl Shell {
     }
 
     /// Iterate lazily over the wrapper txs in order
-    #[cfg(feature="ABCI")]
+    #[cfg(feature = "ABCI")]
     fn next_wrapper(&mut self) -> Option<WrapperTx> {
         self.storage.wrapper_txs.pop_front()
     }
@@ -418,7 +416,9 @@ mod test_utils {
 
     use anoma::types::key::ed25519::Keypair;
     #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::abci::{Event as TmEvent, RequestInitChain, ResponsePrepareProposal};
+    use tendermint_proto::abci::{
+        Event as TmEvent, RequestInitChain, ResponsePrepareProposal,
+    };
     #[cfg(feature = "ABCI")]
     use tendermint_proto_abci::abci::{Event as TmEvent, RequestInitChain};
 
@@ -479,7 +479,7 @@ mod test_utils {
         }
 
         /// Forward the prepare proposal request and return the response
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         pub fn prepare_proposal(
             &mut self,
             req: RequestPrepareProposal,
@@ -489,11 +489,18 @@ mod test_utils {
 
         /// Forward a ProcessProposal request and extract the relevant
         /// response data to return
-        pub fn process_proposal(&mut self, req: ProcessProposal) -> shim::response::ProcessProposal {
-            #[cfg(not(feature="ABCI"))]
-            {self.shell.process_proposal(req)}
-            #[cfg(feature="ABCI")]
-            {self.shell.process_and_decode_proposal(req)}
+        pub fn process_proposal(
+            &mut self,
+            req: ProcessProposal,
+        ) -> shim::response::ProcessProposal {
+            #[cfg(not(feature = "ABCI"))]
+            {
+                self.shell.process_proposal(req)
+            }
+            #[cfg(feature = "ABCI")]
+            {
+                self.shell.process_and_decode_proposal(req)
+            }
         }
 
         /// Forward a FinalizeBlock request return a vector of

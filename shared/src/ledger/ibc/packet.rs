@@ -26,7 +26,9 @@ use ibc::timestamp::Expiry;
 #[cfg(feature = "ABCI")]
 use ibc_abci::ics02_client::height::Height;
 #[cfg(feature = "ABCI")]
-use ibc_abci::ics04_channel::channel::{ChannelEnd, Counterparty, Order, State};
+use ibc_abci::ics04_channel::channel::{
+    ChannelEnd, Counterparty, Order, State,
+};
 #[cfg(feature = "ABCI")]
 use ibc_abci::ics04_channel::context::ChannelReader;
 #[cfg(feature = "ABCI")]
@@ -40,7 +42,9 @@ use ibc_abci::ics04_channel::handler::verify::{
 #[cfg(feature = "ABCI")]
 use ibc_abci::ics04_channel::packet::{Packet, Sequence};
 #[cfg(feature = "ABCI")]
-use ibc_abci::ics24_host::identifier::{ChannelId, ClientId, PortChannelId, PortId};
+use ibc_abci::ics24_host::identifier::{
+    ChannelId, ClientId, PortChannelId, PortId,
+};
 #[cfg(feature = "ABCI")]
 use ibc_abci::proofs::Proofs;
 #[cfg(feature = "ABCI")]

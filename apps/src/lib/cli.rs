@@ -1082,16 +1082,16 @@ pub mod args {
     use anoma::types::storage::Epoch;
     use anoma::types::token;
     use anoma::types::transaction::GasLimit;
+    use libp2p::Multiaddr;
+    use serde::Deserialize;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint::net::Address as TendermintAddress;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::Timeout;
     #[cfg(feature = "ABCI")]
-    use tendermint_stable::Timeout;
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint::net::Address as TendermintAddress;
-    #[cfg(feature = "ABCI")]
     use tendermint_stable::net::Address as TendermintAddress;
-    use libp2p::Multiaddr;
-    use serde::Deserialize;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::Timeout;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
@@ -1116,11 +1116,10 @@ pub mod args {
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> =
-        arg_default(
-            "consensus-timeout-commit",
-            DefaultFn(|| Timeout::from_str("1s").unwrap()),
-        );
+    const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
+        "consensus-timeout-commit",
+        DefaultFn(|| Timeout::from_str("1s").unwrap()),
+    );
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DECRYPT: ArgFlag = flag("decrypt");
@@ -1140,8 +1139,7 @@ pub mod args {
             let raw = "127.0.0.1:26657";
             TendermintAddress::from_str(raw).unwrap()
         }));
-    const LEDGER_ADDRESS_OPT: ArgOpt<TendermintAddress> =
-        LEDGER_ADDRESS.opt();
+    const LEDGER_ADDRESS_OPT: ArgOpt<TendermintAddress> = LEDGER_ADDRESS.opt();
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");

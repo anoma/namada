@@ -55,6 +55,8 @@ pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
     {
         cf_opts.set_max_open_files(max_open_files);
     }
+    cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     // TODO the recommended default `options.compaction_pri =
     // kMinOverlappingRatio` doesn't seem to be available in Rust
     let mut table_opts = BlockBasedOptions::default();

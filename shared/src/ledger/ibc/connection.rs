@@ -24,7 +24,9 @@ use ibc::ics23_commitment::commitment::CommitmentPrefix;
 #[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::{ClientId, ConnectionId};
 #[cfg(feature = "ABCI")]
-use ibc_abci::ics02_client::client_consensus::{AnyConsensusState, ConsensusState};
+use ibc_abci::ics02_client::client_consensus::{
+    AnyConsensusState, ConsensusState,
+};
 #[cfg(feature = "ABCI")]
 use ibc_abci::ics02_client::client_state::AnyClientState;
 #[cfg(feature = "ABCI")]
@@ -32,7 +34,9 @@ use ibc_abci::ics02_client::context::ClientReader;
 #[cfg(feature = "ABCI")]
 use ibc_abci::ics02_client::height::Height;
 #[cfg(feature = "ABCI")]
-use ibc_abci::ics03_connection::connection::{ConnectionEnd, Counterparty, State};
+use ibc_abci::ics03_connection::connection::{
+    ConnectionEnd, Counterparty, State,
+};
 #[cfg(feature = "ABCI")]
 use ibc_abci::ics03_connection::context::ConnectionReader;
 #[cfg(feature = "ABCI")]

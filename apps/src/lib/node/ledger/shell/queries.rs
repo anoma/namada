@@ -8,11 +8,11 @@ use anoma::types::storage::Key;
 use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(not(feature = "ABCI"))]
-use tendermint_proto::google::protobuf as protobuf;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::google::protobuf as protobuf;
+use tendermint_proto::google::protobuf;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::EvidenceParams;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::google::protobuf;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::types::EvidenceParams;
 
@@ -165,11 +165,10 @@ impl Shell {
                 * len_before_unbonded;
         let min_duration_secs =
             protocol_params.epoch_duration.min_duration.0 as i64;
-        let max_age_duration =
-            Some(protobuf::Duration {
-                seconds: min_duration_secs * len_before_unbonded,
-                nanos: 0,
-            });
+        let max_age_duration = Some(protobuf::Duration {
+            seconds: min_duration_secs * len_before_unbonded,
+            nanos: 0,
+        });
         EvidenceParams {
             max_age_num_blocks,
             max_age_duration,

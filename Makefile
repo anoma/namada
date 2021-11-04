@@ -29,13 +29,13 @@ build:
 	$(cargo) build --features ABCI
 
 build-test:
-	$(cargo) build --features ABCI --tests
+	$(cargo) build --features "dev ABCI" --tests
 
 build-release:
-	$(cargo) build --release --package anoma_apps --no-default-features --features "std ABCI"
+	$(cargo) build --release --package anoma_apps --features ABCI
 
 check-release:
-	$(cargo) check --release --package anoma_apps --no-default-features --features "std ABCI"
+	$(cargo) check --release --package anoma_apps --features ABCI
 
 package: build-release
 	mkdir -p $(package-name)/wasm && \
@@ -70,7 +70,7 @@ clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
 install: tendermint
-	$(cargo) install --path ./apps --no-default-features --features std
+	ANOMA_DEV=false $(cargo) install --path ./apps
 
 tendermint:
 	./scripts/install/get_tendermint.sh
@@ -108,23 +108,23 @@ test-e2e-abci-plus-plus:
 	RUST_BACKTRACE=1 $(cargo) test e2e --features ABCI-plus-plus -- --test-threads=1
 
 test-unit-abci-plus-plus:
-	$(cargo) test --features ABCI-plus-plus -- --skip e2e \
+	$(cargo) test --features "dev ABCI-plus-plus" -- --skip e2e \
 	   				 --skip node::ledger::shell::process \
 					 --skip node::ledger::shell::finalize \
  					 --skip node::ledger::shell::prepare && \
-	$(cargo) test node::ledger::shell::prepare --features ABCI-plus-plus -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::process --features ABCI-plus-plus -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::finalize --features ABCI-plus-plus -- --test-threads=1
+	$(cargo) test node::ledger::shell::prepare --features "dev ABCI-plus-plus" -- --test-threads=1 && \
+	$(cargo) test node::ledger::shell::process --features "dev ABCI-plus-plus" -- --test-threads=1 && \
+	$(cargo) test node::ledger::shell::finalize --features "dev ABCI-plus-plus" -- --test-threads=1
 
 
 test-unit:
-	$(cargo) test --features ABCI -- --skip e2e \
+	$(cargo) test --features "dev ABCI" -- --skip e2e \
 	   				 --skip node::ledger::shell::process \
 					 --skip node::ledger::shell::finalize \
  					 --skip node::ledger::shell::prepare && \
-	$(cargo) test node::ledger::shell::prepare --features ABCI -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::process --features ABCI -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::finalize --features ABCI -- --test-threads=1
+	$(cargo) test node::ledger::shell::prepare --features "dev ABCI" -- --test-threads=1 && \
+	$(cargo) test node::ledger::shell::process --features "dev ABCI" -- --test-threads=1 && \
+	$(cargo) test node::ledger::shell::finalize --features "dev ABCI" -- --test-threads=1
 
 test-wasm:
 	make -C $(wasms) test

@@ -179,11 +179,7 @@ impl Matchmaker {
                     rpc::query_epoch(args::Query {
                         ledger_address: self.ledger_address.clone(),
                     })
-                    .await
-                    .expect(
-                        "Getting the epoch of the last committed block should \
-                         not fail",
-                    ),
+                    .await,
                     0.into(),
                     Tx::new(tx_code, Some(tx_data)).sign(&self.tx_signing_key),
                 );

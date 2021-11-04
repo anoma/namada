@@ -38,8 +38,6 @@ use ibc::ics24_host::identifier::{
 use ibc::proofs::{ConsensusProof, Proofs};
 #[cfg(not(feature = "ABCI"))]
 use ibc::timestamp::Timestamp;
-#[cfg(not(feature = "ABCI"))]
-use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 #[cfg(feature = "ABCI")]
 use ibc_abci::ics02_client::client_consensus::AnyConsensusState;
 #[cfg(feature = "ABCI")]
@@ -74,6 +72,8 @@ use ibc_abci::ics24_host::identifier::{
 use ibc_abci::proofs::{ConsensusProof, Proofs};
 #[cfg(feature = "ABCI")]
 use ibc_abci::timestamp::Timestamp;
+#[cfg(not(feature = "ABCI"))]
+use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 #[cfg(feature = "ABCI")]
 use ibc_proto_abci::ibc::core::commitment::v1::MerkleProof;
 use prost::Message;

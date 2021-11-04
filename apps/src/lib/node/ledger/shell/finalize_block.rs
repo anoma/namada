@@ -1,18 +1,21 @@
 //! Implementation of the [`FinalizeBlock`] ABCI++ method for the Shell
 
 use anoma::types::storage::BlockHash;
-#[cfg(not(feature= "ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 use tendermint::block::Header;
-#[cfg(feature= "ABCI")]
-use tendermint_stable::block::Header;
-#[cfg(not(feature= "ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::Evidence;
-#[cfg(feature= "ABCI")]
-use tendermint_proto_abci::abci::Evidence;
-#[cfg(not(feature= "ABCI"))]
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::{public_key, PublicKey as TendermintPublicKey};
 #[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::{public_key, PublicKey as TendermintPublicKey};
+use tendermint_proto_abci::abci::Evidence;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::crypto::{
+    public_key, PublicKey as TendermintPublicKey,
+};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::block::Header;
+
 use super::*;
 
 impl Shell {
@@ -73,7 +76,7 @@ impl Shell {
 
             let mut tx_result = match &processed_tx {
                 TxType::Wrapper(_wrapper) => {
-                    if !cfg!(feature="ABCI"){
+                    if !cfg!(feature = "ABCI") {
                         self.storage.wrapper_txs.push_back(_wrapper.clone());
                     }
                     Event::new_tx_event(&processed_tx, height.0)
@@ -96,7 +99,7 @@ impl Shell {
                         continue;
                     }
                     // We remove the corresponding wrapper tx from the queue
-                    if !cfg!(feature="ABCI") {
+                    if !cfg!(feature = "ABCI") {
                         self.storage.wrapper_txs.pop_front();
                     }
                     Event::new_tx_event(&processed_tx, height.0)
@@ -277,10 +280,10 @@ mod test_finalize_block {
     use anoma::types::transaction::Fee;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::block::header::Version;
-    #[cfg(feature = "ABCI")]
-    use tendermint_stable::block::header::Version;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::{Hash, Time};
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::block::header::Version;
     #[cfg(feature = "ABCI")]
     use tendermint_stable::{Hash, Time};
 
@@ -392,7 +395,6 @@ mod test_finalize_block {
                 .value
                 .as_str();
             assert_eq!(code, &index.rem_euclid(2).to_string());
-
         }
         // verify that the queue of wrapper txs to be processed is correct
         let mut valid_tx = valid_wrappers.iter();
@@ -469,7 +471,6 @@ mod test_finalize_block {
                 String::from_utf8(code).expect("Test failed"),
                 index.rem_euclid(2).to_string()
             );
-
         }
     }
 
@@ -687,7 +688,10 @@ mod test_finalize_block {
                         .expect("Test failed")
                         .value
                         .clone();
-                    assert_eq!(String::from_utf8(code).expect("Test failed"), String::from("0"));
+                    assert_eq!(
+                        String::from_utf8(code).expect("Test failed"),
+                        String::from("0")
+                    );
                 }
             } else {
                 // these should be accepted decrypted txs
@@ -703,7 +707,7 @@ mod test_finalize_block {
                         .as_str();
                     assert_eq!(code, "0");
                 }
-                #[cfg(feature= "ABCI")]
+                #[cfg(feature = "ABCI")]
                 {
                     let code = event
                         .attributes
@@ -712,7 +716,10 @@ mod test_finalize_block {
                         .expect("Test failed")
                         .value
                         .clone();
-                    assert_eq!(String::from_utf8(code).expect("Test failed"), String::from("0"));
+                    assert_eq!(
+                        String::from_utf8(code).expect("Test failed"),
+                        String::from("0")
+                    );
                 }
             }
         }
@@ -839,7 +846,10 @@ mod test_finalize_block {
                         .expect("Test failed")
                         .value
                         .clone();
-                    assert_eq!(String::from_utf8(code).expect("Test failed"), String::from("0"));
+                    assert_eq!(
+                        String::from_utf8(code).expect("Test failed"),
+                        String::from("0")
+                    );
                 }
             } else {
                 // both decrypted txs should be rejected
@@ -864,7 +874,10 @@ mod test_finalize_block {
                         .expect("Test failed")
                         .value
                         .clone();
-                    assert_eq!(String::from_utf8(code).expect("Test failed"), String::from("2"));
+                    assert_eq!(
+                        String::from_utf8(code).expect("Test failed"),
+                        String::from("2")
+                    );
                 }
             }
         }

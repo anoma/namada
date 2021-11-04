@@ -367,7 +367,9 @@ mod tests {
     #[cfg(feature = "ABCI")]
     use tendermint_stable::account::Id as TmAccountId;
     #[cfg(feature = "ABCI")]
-    use tendermint_stable::block::header::{Header as TmHeader, Version as TmVersion};
+    use tendermint_stable::block::header::{
+        Header as TmHeader, Version as TmVersion,
+    };
     #[cfg(feature = "ABCI")]
     use tendermint_stable::block::Height as TmHeight;
     #[cfg(feature = "ABCI")]

@@ -5,6 +5,7 @@ use tower_abci_old::{Request, Response};
 
 pub mod shim {
     use std::convert::TryFrom;
+
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
@@ -17,18 +18,16 @@ pub mod shim {
         ResponseOfferSnapshot, ResponsePrepareProposal, ResponseQuery,
         ResponseVerifyVoteExtension,
     };
-
     #[cfg(feature = "ABCI")]
     use tendermint_proto_abci::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
         RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
-        RequestLoadSnapshotChunk, RequestOfferSnapshot,RequestQuery,
+        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestQuery,
         ResponseApplySnapshotChunk, ResponseCheckTx, ResponseCommit,
         ResponseEcho, ResponseFlush, ResponseInfo, ResponseInitChain,
-        ResponseListSnapshots, ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
-        ResponseQuery,
+        ResponseListSnapshots, ResponseLoadSnapshotChunk,
+        ResponseOfferSnapshot, ResponseQuery,
     };
-
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
@@ -64,18 +63,18 @@ pub mod shim {
         InitChain(RequestInitChain),
         Info(RequestInfo),
         Query(RequestQuery),
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         PrepareProposal(RequestPrepareProposal),
         #[allow(dead_code)]
         VerifyHeader(request::VerifyHeader),
         #[allow(dead_code)]
         ProcessProposal(request::ProcessProposal),
         #[allow(dead_code)]
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         RevertProposal(request::RevertProposal),
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         ExtendVote(RequestExtendVote),
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         VerifyVoteExtension(RequestVerifyVoteExtension),
         FinalizeBlock(request::FinalizeBlock),
         Commit(RequestCommit),
@@ -100,9 +99,9 @@ pub mod shim {
                 Req::Commit(inner) => Ok(Request::Commit(inner)),
                 Req::Flush(inner) => Ok(Request::Flush(inner)),
                 Req::Echo(inner) => Ok(Request::Echo(inner)),
-                #[cfg(not(feature="ABCI"))]
+                #[cfg(not(feature = "ABCI"))]
                 Req::ExtendVote(inner) => Ok(Request::ExtendVote(inner)),
-                #[cfg(not(feature="ABCI"))]
+                #[cfg(not(feature = "ABCI"))]
                 Req::VerifyVoteExtension(inner) => {
                     Ok(Request::VerifyVoteExtension(inner))
                 }
@@ -115,7 +114,7 @@ pub mod shim {
                 Req::ApplySnapshotChunk(inner) => {
                     Ok(Request::ApplySnapshotChunk(inner))
                 }
-                #[cfg(not(feature="ABCI"))]
+                #[cfg(not(feature = "ABCI"))]
                 Req::PrepareProposal(inner) => {
                     Ok(Request::PrepareProposal(inner))
                 }
@@ -132,15 +131,15 @@ pub mod shim {
         InitChain(ResponseInitChain),
         Info(ResponseInfo),
         Query(ResponseQuery),
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         PrepareProposal(ResponsePrepareProposal),
         VerifyHeader(response::VerifyHeader),
         ProcessProposal(response::ProcessProposal),
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         RevertProposal(response::RevertProposal),
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         ExtendVote(ResponseExtendVote),
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         VerifyVoteExtension(ResponseVerifyVoteExtension),
         FinalizeBlock(response::FinalizeBlock),
         Commit(ResponseCommit),
@@ -178,13 +177,13 @@ pub mod shim {
                 Response::ApplySnapshotChunk(inner) => {
                     Ok(Resp::ApplySnapshotChunk(inner))
                 }
-                #[cfg(not(feature="ABCI"))]
+                #[cfg(not(feature = "ABCI"))]
                 Response::PrepareProposal(inner) => {
                     Ok(Resp::PrepareProposal(inner))
                 }
-                #[cfg(not(feature="ABCI"))]
+                #[cfg(not(feature = "ABCI"))]
                 Response::ExtendVote(inner) => Ok(Resp::ExtendVote(inner)),
-                #[cfg(not(feature="ABCI"))]
+                #[cfg(not(feature = "ABCI"))]
                 Response::VerifyVoteExtension(inner) => {
                     Ok(Resp::VerifyVoteExtension(inner))
                 }
@@ -200,12 +199,12 @@ pub mod shim {
         use anoma::types::storage::BlockHash;
         #[cfg(not(feature = "ABCI"))]
         use tendermint::block::Header;
-        #[cfg(feature = "ABCI")]
-        use tendermint_stable::block::Header;
         #[cfg(not(feature = "ABCI"))]
         use tendermint_proto::abci::{Evidence, RequestBeginBlock};
         #[cfg(feature = "ABCI")]
         use tendermint_proto_abci::abci::{Evidence, RequestBeginBlock};
+        #[cfg(feature = "ABCI")]
+        use tendermint_stable::block::Header;
 
         pub struct VerifyHeader;
 
@@ -281,17 +280,18 @@ pub mod shim {
     pub mod response {
         #[cfg(not(feature = "ABCI"))]
         use tendermint_proto::abci::{Event, ValidatorUpdate};
-        #[cfg(feature = "ABCI")]
-        use tendermint_proto_abci::abci::{Event, ValidatorUpdate};
         #[cfg(not(feature = "ABCI"))]
         use tendermint_proto::types::ConsensusParams;
         #[cfg(feature = "ABCI")]
         use tendermint_proto_abci::abci::ConsensusParams;
+        #[cfg(feature = "ABCI")]
+        use tendermint_proto_abci::abci::{Event, ValidatorUpdate};
         #[cfg(not(feature = "ABCI"))]
         use tower_abci::response;
         #[cfg(feature = "ABCI")]
         use tower_abci_old::response;
-        #[cfg(feature="ABCI")]
+
+        #[cfg(feature = "ABCI")]
         use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
         #[derive(Debug, Default)]
@@ -318,21 +318,24 @@ pub mod shim {
         #[derive(Debug, Default)]
         pub struct ProcessProposal {
             pub result: TxResult,
-            #[cfg(feature="ABCI")]
+            #[cfg(feature = "ABCI")]
             pub tx: TxBytes,
         }
 
-        #[cfg(not(feature="ABCI"))]
+        #[cfg(not(feature = "ABCI"))]
         impl From<TxResult> for ProcessProposal {
             fn from(result: TxResult) -> Self {
                 ProcessProposal { result }
             }
         }
 
-        #[cfg(feature="ABCI")]
+        #[cfg(feature = "ABCI")]
         impl From<TxResult> for ProcessProposal {
             fn from(result: TxResult) -> Self {
-                ProcessProposal { result, ..Default::default() }
+                ProcessProposal {
+                    result,
+                    ..Default::default()
+                }
             }
         }
 

@@ -1,6 +1,7 @@
 //! Functions for IBC validity predicate to access the storage
 
 use std::str::FromStr;
+
 #[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::height::Height;
 #[cfg(not(feature = "ABCI"))]

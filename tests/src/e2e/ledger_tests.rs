@@ -17,7 +17,7 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use setup::constants::*;
 
-use crate::e2e::setup::{self, find_address, single_node_net, sleep, Bin, Who};
+use crate::e2e::setup::{self, find_address, sleep, Bin, Who};
 use crate::{run, run_as};
 
 /// Test that when we "run-ledger" with all the possible command
@@ -26,7 +26,6 @@ use crate::{run, run_as};
 #[test]
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
-
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
     // Start the ledger as a validator
@@ -42,8 +41,6 @@ fn run_ledger() -> Result<()> {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(20))?;
         ledger.exp_string("Anoma ledger node started")?;
-        // TODO: I'm (batconjurer) not sure the intention of this test but this
-        // may need to be changed
         if !cfg!(feature = "ABCI") {
             ledger.exp_string(
                 "This node is a validator (NOT in the active validator set)",
@@ -98,7 +95,7 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 /// 6. Run the ledger again, it should start from fresh state
 #[test]
 fn run_ledger_load_state_and_reset() -> Result<()> {
-    let test = single_node_net()?;
+    let test = setup::single_node_net()?;
 
     // 1. Run the ledger node
     let mut ledger =
@@ -157,7 +154,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 6. Query token balance
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
-    let test = setup::single_node_net()?;
+    let test = setup::network(|genesis| genesis)?;
 
     // 1. Run the ledger node
     let mut ledger =
@@ -341,7 +338,7 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-    if !cfg!(feature = "ABCI"){
+    if !cfg!(feature = "ABCI") {
         client.exp_string("Transaction accepted")?;
     }
     client.exp_string("Transaction applied")?;
@@ -386,10 +383,13 @@ fn invalid_transactions() -> Result<()> {
         "0",
         "--fee-token",
         XAN,
+        // Force to ignore client check that fails on the balance check of the
+        // source address
+        "--force",
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-    if !cfg!(feature = "ABCI"){
+    if !cfg!(feature = "ABCI") {
         client.exp_string("Transaction accepted")?;
     }
     client.exp_string("Transaction applied")?;

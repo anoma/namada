@@ -58,13 +58,13 @@ impl Event {
                     event_type: EventType::Accepted,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = if !cfg!(feature = "ABCI"){
+                event["hash"] = if !cfg!(feature = "ABCI") {
                     hash_tx(
                         &wrapper
                             .try_to_vec()
                             .expect("Serializing wrapper should not fail"),
                     )
-                   .to_string()
+                    .to_string()
                 } else {
                     wrapper.tx_hash.to_string()
                 };

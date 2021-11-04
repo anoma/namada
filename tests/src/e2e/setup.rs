@@ -338,13 +338,12 @@ pub fn working_dir() -> PathBuf {
     if cfg!(feature = "ABCI") {
         // Check that tendermint is on $PATH
         Command::new("which").arg("tendermint").assert().success();
-        std::env::var("TENDERMINT").expect_err(
-            "The env variable TENDERMINT must **not** be set",
-        );
+        std::env::var("TENDERMINT")
+            .expect_err("The env variable TENDERMINT must **not** be set");
     } else {
         std::env::var("TENDERMINT").expect(
-            "The env variable TENDERMINT must be set and point to a local build \
-         of the tendermint abci++ branch",
+            "The env variable TENDERMINT must be set and point to a local \
+             build of the tendermint abci++ branch",
         );
     }
     working_dir
@@ -483,6 +482,8 @@ where
     };
     let mut cmd = cmd.run().unwrap().command();
     cmd.env("ANOMA_LOG", "anoma=debug")
+        // Explicitly disable dev, in case it's enabled when a test is invoked
+        .env("ANOMA_DEV", "false")
         .current_dir(working_dir)
         .args(&["--base-dir", &base_dir.as_ref().to_string_lossy()])
         .args(args);

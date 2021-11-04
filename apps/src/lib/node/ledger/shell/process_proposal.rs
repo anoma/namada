@@ -124,24 +124,26 @@ impl Shell {
 
     /// If we are not using ABCI++, we check the wrapper,
     /// decode it, and check the decoded payload all at once
-    #[cfg(feature="ABCI")]
+    #[cfg(feature = "ABCI")]
     pub fn process_and_decode_proposal(
         &mut self,
         req: shim::request::ProcessProposal,
     ) -> shim::response::ProcessProposal {
         // check the wrapper tx
-        match process_tx(Tx::try_from(req.tx.as_ref())
-                .expect("Deserializing tx should not fail")) {
-            Ok(TxType::Wrapper(_)) => {},
+        match process_tx(
+            Tx::try_from(req.tx.as_ref())
+                .expect("Deserializing tx should not fail"),
+        ) {
+            Ok(TxType::Wrapper(_)) => {}
             Ok(_) => {
                 return shim::response::TxResult {
                     code: 1,
-                    info: "The submitted transaction was not encrypted"
-                        .into(),
-                }.into()
+                    info: "The submitted transaction was not encrypted".into(),
+                }
+                .into();
             }
             Err(_) => {
-                //This will be caught later
+                // This will be caught later
             }
         }
 
@@ -150,16 +152,21 @@ impl Shell {
 
         if wrapper_resp.result.code == 0 {
             // if the wrapper passed, decode it
-            if let Ok(TxType::Wrapper(wrapper)) =  process_tx(Tx::try_from(req.tx.as_slice()).unwrap()) {
+            if let Ok(TxType::Wrapper(wrapper)) =
+                process_tx(Tx::try_from(req.tx.as_slice()).unwrap())
+            {
                 let decoded = Tx::from(match wrapper.decrypt(privkey) {
                     Ok(tx) => DecryptedTx::Decrypted(tx),
                     _ => DecryptedTx::Undecryptable(wrapper.clone()),
                 })
-                    .to_bytes();
+                .to_bytes();
                 // we are not checking that txs are out of order
                 self.storage.wrapper_txs.push_back(wrapper);
                 // check the decoded tx
-                let mut decoded_resp = self.process_proposal(shim::request::ProcessProposal{tx: decoded.clone()});
+                let mut decoded_resp =
+                    self.process_proposal(shim::request::ProcessProposal {
+                        tx: decoded.clone(),
+                    });
                 // this ensures that emitted events are of the correct type
                 if decoded_resp.result.code == 0 {
                     decoded_resp.tx = decoded;
@@ -197,10 +204,10 @@ mod test_process_proposal {
     use borsh::BorshDeserialize;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::RequestInitChain;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::abci::RequestInitChain;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::google::protobuf::Timestamp;
+    #[cfg(feature = "ABCI")]
+    use tendermint_proto_abci::abci::RequestInitChain;
     #[cfg(feature = "ABCI")]
     use tendermint_proto_abci::google::protobuf::Timestamp;
 
@@ -228,16 +235,16 @@ mod test_process_proposal {
             0.into(),
             tx,
         );
-        let tx = Tx::new(
-            vec![],
-            Some(wrapper.try_to_vec().expect("Test failed")),
-        ).to_bytes();
-        let request = ProcessProposal {
-            tx: tx.clone()
-        };
+        let tx =
+            Tx::new(vec![], Some(wrapper.try_to_vec().expect("Test failed")))
+                .to_bytes();
+        let request = ProcessProposal { tx: tx.clone() };
         let response = shell.process_proposal(request);
         assert_eq!(response.result.code, 1);
-        assert_eq!(response.result.info, String::from("Expected signed WrapperTx data"));
+        assert_eq!(
+            response.result.info,
+            String::from("Expected signed WrapperTx data")
+        );
         #[cfg(feature = "ABCI")]
         {
             assert_eq!(response.tx, tx);
@@ -523,7 +530,9 @@ mod test_process_proposal {
 
         let tx = if !cfg!(feature = "ABCI") {
             shell.add_wrapper_tx(wrapper.clone());
-            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper.clone())))
+            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+                wrapper.clone(),
+            )))
         } else {
             wrapper.sign(&keypair).expect("Test failed")
         };
@@ -535,9 +544,10 @@ mod test_process_proposal {
         #[cfg(feature = "ABCI")]
         {
             match process_tx(
-                Tx::try_from(response.tx.as_ref()).expect("Test failed")
+                Tx::try_from(response.tx.as_ref()).expect("Test failed"),
             )
-            .expect("Test failed") {
+            .expect("Test failed")
+            {
                 TxType::Decrypted(DecryptedTx::Undecryptable(inner)) => {
                     assert_eq!(
                         hash_tx(inner.try_to_vec().unwrap().as_ref()),
@@ -545,7 +555,7 @@ mod test_process_proposal {
                     );
                     assert!(shell.shell.storage.wrapper_txs.is_empty())
                 }
-                _ => panic!("Test failed")
+                _ => panic!("Test failed"),
             }
         }
     }
