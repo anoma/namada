@@ -28,6 +28,9 @@ audit-ignores += RUSTSEC-2021-0076
 build:
 	$(cargo) build --features ABCI
 
+build-abci-plus-plus:
+	$(cargo) build --features "ABCI-plus-plus"
+
 build-test:
 	$(cargo) build --features "dev ABCI" --tests
 
@@ -60,11 +63,19 @@ check:
 	make -C $(wasms) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
-clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
+clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --features ABCI -- -D warnings
+
+clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --features ABCI-plus-plus -- -D warnings
+
 clippy:
-	$(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	$(cargo) +$(nightly) clippy --all-targets --features ABCI -- -D warnings && \
 	make -C $(wasms) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+
+clippy-abci-plus-plus:
+	$(cargo) +$(nightly) clippy --all-targets --features ABCI-plus-plus -- -D warnings && \
+	make -C $(wasms) clippy-abci-plus-plus && \
+	$(foreach wasm,$(wasm_templates),$(clippy-wasm-abci-plus-plus) && ) true
 
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged

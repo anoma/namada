@@ -34,6 +34,9 @@ test:
 clippy:
 	$(foreach wasm,$(wasms),make clippy_$(wasm) && ) true
 
+clippy-abci-plus-plus:
+	$(foreach wasm,$(wasms),make abcipp_clippy_$(wasm) && ) true
+
 fmt:
 	$(cargo) +$(nightly) fmt --all
 
@@ -43,7 +46,7 @@ fmt-check:
 # Build a selected wasm
 # Linker flag "-s" for stripping (https://github.com/rust-lang/cargo/issues/3483#issuecomment-431209957)
 $(wasms): %:
-	RUSTFLAGS='-C link-arg=-s' $(cargo) build --release --target wasm32-unknown-unknown --features $@ && \
+	RUSTFLAGS='-C link-arg=-s' $(cargo) build --release --target wasm32-unknown-unknown --features "ABCI $@" && \
 	cp "./target/wasm32-unknown-unknown/release/anoma_wasm.wasm" ../$@.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_transfer`
@@ -60,7 +63,10 @@ $(patsubst %,watch_%,$(wasms)): watch_%:
 
 # `cargo clippy` one of the wasms, e.g. `make clippy_tx_transfer`
 $(patsubst %,clippy_%,$(wasms)): clippy_%:
-	$(cargo) +$(nightly) clippy --all-targets --features $* -- -D warnings
+	$(cargo) +$(nightly) clippy --all-targets --features "ABCI $*" -- -D warnings
+
+$(patsubst %,abcipp_clippy_%,$(wasms)): abcipp_clippy_%:
+	$(cargo) +$(nightly) clippy --all-targets --features "ABCI-plus-plus $*" -- -D warnings
 
 clean-wasm = rm ../$(wasm).wasm
 clean:

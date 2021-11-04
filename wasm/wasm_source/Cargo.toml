@@ -25,6 +25,16 @@ tx_withdraw = []
 vp_testnet_faucet = ["once_cell"]
 vp_token = []
 vp_user = ["once_cell", "rust_decimal"]
+ABCI = [
+    "anoma_vm_env/ABCI",
+    "anoma_tests/ABCI",
+]
+
+ABCI-plus-plus = [
+    "anoma_vm_env/ABCI-plus-plus",
+    "anoma_tests/ABCI-plus-plus",
+]
+
 
 [dependencies]
 anoma_vm_env = {path = "../../vm_env"}

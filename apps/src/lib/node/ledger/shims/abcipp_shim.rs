@@ -75,7 +75,10 @@ impl Service<Req> for AbcippShim {
                 // of the tx to tendermint
                 self.service
                     .call(Request::ProcessProposal(
+                        #[cfg(not(feature = "ABCI"))]
                         deliver_tx.tx.clone().into(),
+                        #[cfg(feature = "ABCI")]
+                        deliver_tx.tx.into(),
                     ))
                     .map_err(Error::from)
                     .and_then(|res| match res {

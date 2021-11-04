@@ -6,6 +6,15 @@ name = "anoma_vm_env"
 resolver = "2"
 version = "0.2.0"
 
+[features]
+ABCI = [
+    "anoma/ABCI",
+]
+
+ABCI-plus-plus = [
+    "anoma/ABCI-plus-plus",
+]
+
 [dependencies]
 anoma = {path = "../shared"}
 anoma_vm_macro = {path = "../vm_macro"}

@@ -878,7 +878,7 @@ pub async fn broadcast_tx(
                         .unwrap()
                         .receive_response()?,
                     TmEventType::Applied,
-                    &decrypted_tx_hash.as_ref().unwrap(),
+                    decrypted_tx_hash.as_ref().unwrap(),
                 );
                 println!(
                     "Transaction applied with result: {}",
@@ -972,7 +972,7 @@ impl TxResponse {
                 if hash == tx_hash_json {
                     break hash;
                 } else {
-                    index = index + 1;
+                    index += index;
                 }
             } else {
                 eprintln!(

@@ -1,7 +1,7 @@
 //! Implementation of the [`PrepareProposal`] ABCI++ method for the Shell
 
 #[cfg(not(feature = "ABCI"))]
-mod prepare_proposal {
+mod prepare_block {
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -192,4 +192,4 @@ mod prepare_proposal {
 }
 
 #[cfg(not(feature = "ABCI"))]
-pub use prepare_proposal::*;
+pub use prepare_block::*;

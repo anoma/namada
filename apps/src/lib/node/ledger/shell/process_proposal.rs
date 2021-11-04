@@ -238,7 +238,9 @@ mod test_process_proposal {
         let tx =
             Tx::new(vec![], Some(wrapper.try_to_vec().expect("Test failed")))
                 .to_bytes();
-        let request = ProcessProposal { tx: tx.clone() };
+        #[allow(clippy::redundant_clone)]
+        let request= ProcessProposal { tx: tx.clone() };
+
         let response = shell.process_proposal(request);
         assert_eq!(response.result.code, 1);
         assert_eq!(
@@ -531,6 +533,7 @@ mod test_process_proposal {
         let tx = if !cfg!(feature = "ABCI") {
             shell.add_wrapper_tx(wrapper.clone());
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+                #[allow(clippy::redundant_clone)]
                 wrapper.clone(),
             )))
         } else {

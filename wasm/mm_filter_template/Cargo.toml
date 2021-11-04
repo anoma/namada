@@ -9,6 +9,15 @@ version = "0.2.0"
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+ABCI = [
+    "anoma_vm_env/ABCI",
+]
+
+ABCI-plus-plus = [
+    "anoma_vm_env/ABCI-plus-plus",
+]
+
 [dependencies]
 anoma_vm_env = {path = "../../vm_env"}
 borsh = "0.9.0"
