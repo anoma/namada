@@ -232,7 +232,7 @@ impl TendermintWebsocketClient {
                 subscribed: None,
                 received_responses: Arc::new(Mutex::new(HashMap::new())),
                 connection_timeout: connection_timeout
-                    .unwrap_or_else(|| Duration::new(30, 0)),
+                    .unwrap_or_else(|| Duration::new(300, 0)),
             }),
             Err(inner) => Err(Error::Websocket(inner)),
         }

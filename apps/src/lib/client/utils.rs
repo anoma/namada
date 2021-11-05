@@ -416,12 +416,11 @@ pub fn init_network(
             // directories.
             config.ledger.shell.base_dir = config::DEFAULT_BASE_DIR.into();
             // Add a ledger P2P persistent peers
-            // TODO: Reviewers! Is there a reason I shouldn't do this?
             config.ledger.tendermint.p2p_persistent_peers = persistent_peers
                     .iter()
                     .enumerate()
                     .filter_map(|(index, peer)|
-                        // we do not the validator in its own persistent peer list
+                        // we do not add the validator in its own persistent peer list
                         if index != ix  {
                             Some(peer.to_owned())
                         } else {
