@@ -3,7 +3,7 @@
 use std::collections::{btree_map, BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
 
-use super::{BlockState, DBIter, Error, Result, DB};
+use super::{BlockStateRead, BlockStateWrite, DBIter, Error, Result, DB};
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 use crate::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use crate::types::time::DateTimeUtc;
@@ -23,8 +23,8 @@ impl DB for MockDB {
         Ok(())
     }
 
-    fn write_block(&mut self, state: BlockState) -> Result<()> {
-        let BlockState {
+    fn write_block(&mut self, state: BlockStateWrite) -> Result<()> {
+        let BlockStateWrite {
             root,
             store,
             hash,
@@ -35,7 +35,7 @@ impl DB for MockDB {
             next_epoch_min_start_time,
             subspaces,
             address_gen,
-        }: BlockState = state;
+        }: BlockStateWrite = state;
 
         // Epoch start height and time
         self.0.insert(
@@ -122,7 +122,7 @@ impl DB for MockDB {
         }
     }
 
-    fn read_last_block(&mut self) -> Result<Option<BlockState>> {
+    fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
         // Block height
         let height: BlockHeight;
         match self.0.get("height") {
@@ -224,7 +224,7 @@ impl DB for MockDB {
                 Some(epoch),
                 Some(pred_epochs),
                 Some(address_gen),
-            ) => Ok(Some(BlockState {
+            ) => Ok(Some(BlockStateRead {
                 root,
                 store,
                 hash,
