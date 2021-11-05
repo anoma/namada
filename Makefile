@@ -52,7 +52,7 @@ package: build-release
 	rm -rf $(package-name)
 
 build-release-image-docker:
-	docker build -t anoma-build .
+	docker build -t anoma-build - < docker/anoma-build/Dockerfile
 
 build-release-docker: build-release-image-docker
 	docker run --rm -v ${PWD}:/var/build anoma-build make build-release
@@ -202,7 +202,7 @@ doc:
 	$(cargo) doc --open
 
 build-wasm-image-docker:
-	docker build -t anoma-wasm wasm
+	docker build -t anoma-wasm - < docker/anoma-wasm/Dockerfile
 
 build-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make build-wasm-scripts
