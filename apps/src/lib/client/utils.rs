@@ -32,6 +32,7 @@ use crate::config::{
 };
 use crate::node::ledger::tendermint_node;
 use crate::wallet::Wallet;
+use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
 pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
@@ -71,6 +72,7 @@ pub fn init_network(
     global_args: args::Global,
     args::InitNetwork {
         genesis_path,
+        wasm_checksums_path,
         chain_id_prefix,
         unsafe_dont_encrypt,
         consensus_timeout_commit,
@@ -80,6 +82,25 @@ pub fn init_network(
     }: args::InitNetwork,
 ) {
     let mut config = genesis_config::open_genesis_config(&genesis_path);
+
+    // Update the WASM checksums
+    let checksums =
+        wasm_loader::Checksums::read_checksums_file(&wasm_checksums_path);
+    config.wasm.iter_mut().for_each(|(name, config)| {
+        // Find the sha256 from checksums.json
+        let name = format!("{}.wasm", name);
+        // Full name in format `{name}.{sha256}.wasm`
+        let full_name = checksums.0.get(&name).unwrap();
+        let hash = full_name
+            .split_once(".")
+            .unwrap()
+            .1
+            .split_once(".")
+            .unwrap()
+            .0;
+        config.sha256 = genesis_config::HexString(hash.to_owned());
+    });
+
     let temp_chain_id = chain_id_prefix.temp_chain_id();
     let temp_dir = global_args.base_dir.join(temp_chain_id.as_str());
     // The `temp_chain_id` gets renamed after we have chain ID
@@ -536,6 +557,13 @@ pub fn init_network(
             Config::file_path(config::DEFAULT_BASE_DIR, &chain_id);
         release
             .append_path_with_name(chain_config_path, release_chain_config_path)
+            .unwrap();
+        let release_wasm_checksums_path = "wasm/checksums.json";
+        release
+            .append_path_with_name(
+                &wasm_checksums_path,
+                release_wasm_checksums_path,
+            )
             .unwrap();
 
         // Gzip tar release and write to file
