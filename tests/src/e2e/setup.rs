@@ -463,8 +463,7 @@ where
         CargoBuild::new()
             .package(APPS_PACKAGE)
             .manifest_path(manifest_path)
-            .no_default_features()
-            .features("std ABCI-plus-plus")
+            .features("ABCI-plus-plus")
             .bin(bin_name)
     } else {
         CargoBuild::new()
