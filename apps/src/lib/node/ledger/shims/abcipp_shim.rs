@@ -85,7 +85,6 @@ impl Service<Req> for AbcippShim {
                     .map_err(Error::from)
                     .and_then(|res| match res {
                         Response::ProcessProposal(resp) => {
-                            tracing::info!("{:?}", resp);
                             self.block_txs.push(ProcessedTx {
                                 #[cfg(not(feature = "ABCI"))]
                                 tx: deliver_tx.tx,
