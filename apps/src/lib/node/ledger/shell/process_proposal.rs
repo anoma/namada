@@ -208,7 +208,7 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use anoma::types::address::xan;
+    use anoma::types::address::{xan, Address};
     use anoma::types::key::ed25519::SignedTxData;
     use anoma::types::storage::Epoch;
     use anoma::types::token::Amount;
@@ -362,9 +362,14 @@ mod test_process_proposal {
         };
         let response = shell.process_proposal(request);
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
+        let source: Address = (&keypair.public).into();
         assert_eq!(
             response.result.info,
-            String::from("Unable to read balance of the given address")
+            format!(
+                "Unable to read token {} balance of the given address {}",
+                xan(),
+                source
+            )
         );
         #[cfg(feature = "ABCI")]
         {
