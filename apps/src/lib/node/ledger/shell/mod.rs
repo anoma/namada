@@ -22,8 +22,8 @@ use anoma::ledger::pos::anoma_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
 use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
-use anoma::ledger::storage::{DB, DBIter, StorageHasher, Storage};
 use anoma::ledger::storage::write_log::WriteLog;
+use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::chain::ChainId;
@@ -35,6 +35,8 @@ use anoma::types::transaction::{
 };
 use anoma::types::{address, key, token};
 use borsh::BorshSerialize;
+use num_derive::{FromPrimitive, ToPrimitive};
+use num_traits::{FromPrimitive, ToPrimitive};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::{
     self, Evidence, RequestPrepareProposal, ValidatorUpdate,
@@ -75,6 +77,31 @@ pub enum Error {
     Tendermint(tendermint_node::Error),
 }
 
+/// The different error codes that the ledger may
+/// send back to a client indicating the status
+/// of their submitted tx
+#[derive(Debug, Clone, FromPrimitive, ToPrimitive, PartialEq)]
+pub enum ErrorCodes {
+    Ok = 0,
+    InvalidTx = 1,
+    InvalidSig = 2,
+    WasmRuntimeError = 3,
+    InvalidOrder = 4,
+    ExtraTxs = 5,
+}
+
+impl From<ErrorCodes> for u32 {
+    fn from(code: ErrorCodes) -> u32 {
+        code.to_u32().unwrap()
+    }
+}
+
+impl From<ErrorCodes> for String {
+    fn from(code: ErrorCodes) -> String {
+        u32::from(code).to_string()
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn reset(config: config::Ledger) -> Result<()> {
@@ -100,8 +127,10 @@ pub enum MempoolTxType {
 }
 
 #[derive(Debug)]
-pub struct Shell<D = storage::PersistentDB , H = storage::PersistentStorageHasher>
-where
+pub struct Shell<
+    D = storage::PersistentDB,
+    H = storage::PersistentStorageHasher,
+> where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
@@ -437,7 +466,6 @@ mod test_utils {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessProposal,
     };
-
 
     /// Gets the absolute path to root directory
     pub fn top_level_directory() -> PathBuf {

@@ -22,7 +22,7 @@ use crate::node::ledger::rpc::PrefixValue;
 
 impl<D, H> Shell<D, H>
 where
-    D: DB + for<'iter> DBIter<'iter> +  Sync + 'static,
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
     /// Uses `path` in the query to forward the request to the

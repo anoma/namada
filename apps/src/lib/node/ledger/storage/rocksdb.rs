@@ -21,7 +21,7 @@ use std::io;
 use std::path::Path;
 
 use anoma::ledger::storage::types::PrefixIterator;
-use anoma::ledger::storage::{types, BlockState,  DB, DBIter, Error, Result};
+use anoma::ledger::storage::{types, BlockState, DBIter, Error, Result, DB};
 use anoma::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use anoma::types::time::DateTimeUtc;
 use rlimit::{Resource, Rlim};
@@ -113,7 +113,6 @@ impl Drop for RocksDB {
 }
 
 impl DB for RocksDB {
-
     fn open(db_path: impl AsRef<Path>) -> Self {
         open(db_path).expect("cannot open the DB")
     }

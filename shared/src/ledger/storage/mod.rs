@@ -177,7 +177,10 @@ where
     H: StorageHasher,
 {
     /// open up a new instance of the storage given path to db and chain id
-    pub fn open(db_path: impl AsRef<std::path::Path>, chain_id: ChainId) -> Self {
+    pub fn open(
+        db_path: impl AsRef<std::path::Path>,
+        chain_id: ChainId,
+    ) -> Self {
         let block = BlockStorage {
             tree: MerkleTree::default(),
             hash: BlockHash::default(),

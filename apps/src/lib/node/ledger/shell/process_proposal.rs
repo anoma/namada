@@ -29,8 +29,10 @@ where
     /// Error codes:
     ///   0: Ok
     ///   1: Invalid tx
-    ///   2: Invalid order of decrypted txs
-    ///   3. More decrypted txs than expected
+    ///   2: Tx is invalidly signed
+    ///   3: Wasm runtime error
+    ///   4: Invalid order of decrypted txs
+    ///   5. More decrypted txs than expected
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
@@ -46,11 +48,14 @@ where
 
         match process_tx(tx) {
             // This occurs if the wrapper tx signature is invalid
-            Err(err) => TxResult::from(err),
+            Err(err) => TxResult {
+                code: ErrorCodes::InvalidSig.into(),
+                info: err.to_string(),
+            },
             Ok(result) => match result {
                 // If it is a raw transaction, we do no further validation
                 TxType::Raw(_) => TxResult {
-                    code: 1,
+                    code: ErrorCodes::InvalidTx.into(),
                     info: "Transaction rejected: Non-encrypted transactions \
                            are not supported"
                         .into(),
@@ -59,7 +64,7 @@ where
                     Some(wrapper) => {
                         if wrapper.tx_hash != tx.hash_commitment() {
                             TxResult {
-                                code: 2,
+                                code: ErrorCodes::InvalidOrder.into(),
                                 info: "Process proposal rejected a decrypted \
                                        transaction that violated the tx order \
                                        determined in the previous block"
@@ -67,14 +72,14 @@ where
                             }
                         } else if verify_decrypted_correctly(&tx, privkey) {
                             TxResult {
-                                code: 0,
+                                code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
                                        transaction"
                                     .into(),
                             }
                         } else {
                             TxResult {
-                                code: 1,
+                                code: ErrorCodes::InvalidTx.into(),
                                 info: "The encrypted payload of tx was \
                                        incorrectly marked as un-decryptable"
                                     .into(),
@@ -82,7 +87,7 @@ where
                         }
                     }
                     None => TxResult {
-                        code: 3,
+                        code: ErrorCodes::ExtraTxs.into(),
                         info: "Received more decrypted txs than expected"
                             .into(),
                     },
@@ -91,7 +96,7 @@ where
                     // validate the ciphertext via Ferveo
                     if !tx.validate_ciphertext() {
                         TxResult {
-                            code: 1,
+                            code: ErrorCodes::InvalidTx.into(),
                             info: format!(
                                 "The ciphertext of the wrapped tx {} is \
                                  invalid",
@@ -103,21 +108,22 @@ where
                         match self.get_balance(&tx.fee.token, &tx.fee_payer()) {
                             Ok(balance) if tx.fee.amount <= balance => {
                                 shim::response::TxResult {
-                                    code: 0,
+                                    code: ErrorCodes::Ok.into(),
                                     info: "Process proposal accepted this \
                                            transaction"
                                         .into(),
                                 }
                             }
                             Ok(_) => shim::response::TxResult {
-                                code: 1,
+                                code: ErrorCodes::InvalidTx.into(),
                                 info: "The address given does not have \
                                        sufficient balance to pay fee"
                                     .into(),
                             },
-                            Err(err) => {
-                                shim::response::TxResult { code: 1, info: err }
-                            }
+                            Err(err) => shim::response::TxResult {
+                                code: ErrorCodes::InvalidTx.into(),
+                                info: err,
+                            },
                         }
                     }
                 }
@@ -141,7 +147,7 @@ where
             Ok(TxType::Wrapper(_)) => {}
             Ok(_) => {
                 return shim::response::TxResult {
-                    code: 1,
+                    code: ErrorCodes::InvalidSig.into(),
                     info: "The submitted transaction was not encrypted".into(),
                 }
                 .into();
@@ -172,7 +178,9 @@ where
                         tx: decoded.clone(),
                     });
                 // this ensures that emitted events are of the correct type
-                if decoded_resp.result.code == 0 {
+                if ErrorCodes::from_u32(decoded_resp.result.code).unwrap()
+                    == ErrorCodes::Ok
+                {
                     decoded_resp.tx = decoded;
                 }
                 decoded_resp
@@ -246,7 +254,7 @@ mod test_process_proposal {
         let request = ProcessProposal { tx: tx.clone() };
 
         let response = shell.process_proposal(request);
-        assert_eq!(response.result.code, 1);
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
             String::from("Expected signed WrapperTx data")
@@ -315,7 +323,7 @@ mod test_process_proposal {
             tx: new_tx.to_bytes(),
         };
         let response = shell.process_proposal(request);
-        assert_eq!(response.result.code, 1);
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
             String::from("Signature verification failed: signature error")
@@ -353,7 +361,7 @@ mod test_process_proposal {
             tx: wrapper.to_bytes(),
         };
         let response = shell.process_proposal(request);
-        assert_eq!(response.result.code, 1);
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
             response.result.info,
             String::from("Unable to read balance of the given address")
@@ -403,7 +411,7 @@ mod test_process_proposal {
         };
 
         let response = shell.process_proposal(request);
-        assert_eq!(response.result.code, 1);
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
             response.result.info,
             String::from(
@@ -447,14 +455,14 @@ mod test_process_proposal {
             tx: txs[0].to_bytes(),
         };
         let response_1 = shell.process_proposal(req_1);
-        assert_eq!(response_1.result.code, 0);
+        assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
 
         let req_2 = ProcessProposal {
             tx: txs[2].to_bytes(),
         };
 
         let response_2 = shell.process_proposal(req_2);
-        assert_eq!(response_2.result.code, 2);
+        assert_eq!(response_2.result.code, u32::from(ErrorCodes::InvalidOrder));
         assert_eq!(
             response_2.result.info,
             String::from(
@@ -494,7 +502,7 @@ mod test_process_proposal {
         let request = ProcessProposal { tx: tx.to_bytes() };
 
         let response = shell.process_proposal(request);
-        assert_eq!(response.result.code, 1);
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
             response.result.info,
             String::from(
@@ -547,7 +555,7 @@ mod test_process_proposal {
         let request = ProcessProposal { tx: tx.to_bytes() };
         let response = shell.process_proposal(request);
         println!("{}", response.result.info);
-        assert_eq!(response.result.code, 0);
+        assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
         #[cfg(feature = "ABCI")]
         {
             match process_tx(
@@ -583,7 +591,7 @@ mod test_process_proposal {
 
         let request = ProcessProposal { tx: tx.to_bytes() };
         let response = shell.process_proposal(request);
-        assert_eq!(response.result.code, 3);
+        assert_eq!(response.result.code, u32::from(ErrorCodes::ExtraTxs));
         assert_eq!(
             response.result.info,
             String::from("Received more decrypted txs than expected"),

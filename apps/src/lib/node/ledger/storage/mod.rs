@@ -65,17 +65,18 @@ fn new_blake2b() -> Blake2b {
 #[cfg(test)]
 mod tests {
     use anoma::ledger::storage::types;
+    use anoma::types::chain::ChainId;
+    use anoma::types::storage::{BlockHash, BlockHeight};
     use tempfile::TempDir;
 
     use super::*;
-    use anoma::types::storage::{BlockHash, BlockHeight};
-    use anoma::types::chain::ChainId;
 
     #[test]
     fn test_crud_value() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
+        let mut storage =
+            PersistentStorage::open(db_path.path(), ChainId::default());
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
@@ -118,7 +119,8 @@ mod tests {
     fn test_commit_block() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
+        let mut storage =
+            PersistentStorage::open(db_path.path(), ChainId::default());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -140,7 +142,8 @@ mod tests {
         drop(storage);
 
         // load the last state
-        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
+        let mut storage =
+            PersistentStorage::open(db_path.path(), ChainId::default());
         storage
             .load_last_state()
             .expect("loading the last state failed");
@@ -158,7 +161,8 @@ mod tests {
     fn test_iter() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
+        let mut storage =
+            PersistentStorage::open(db_path.path(), ChainId::default());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -198,7 +202,8 @@ mod tests {
     fn test_validity_predicate() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
+        let mut storage =
+            PersistentStorage::open(db_path.path(), ChainId::default());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");

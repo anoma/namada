@@ -13,8 +13,8 @@ use tendermint_proto_abci::abci::EventAttribute;
 /// using a websocket client
 #[derive(Clone)]
 pub struct Event {
-    event_type: EventType,
-    attributes: HashMap<String, String>,
+    pub event_type: EventType,
+    pub attributes: HashMap<String, String>,
 }
 
 /// The two types of custom events we currently use

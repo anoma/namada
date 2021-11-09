@@ -39,19 +39,34 @@ where
     /// Error codes:
     ///   0: Ok
     ///   1: Invalid tx
-    ///   2: Invalid order of decrypted txs
-    ///   3. More decrypted txs than expected
-    ///   4. Runtime error in WASM
+    ///   2: Tx is invalidly signed
+    ///   3: Wasm runtime error
+    ///   4: Invalid order of decrypted txs
+    ///   5. More decrypted txs than expected
     pub fn finalize_block(
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
         let mut response = shim::response::FinalizeBlock::default();
         // begin the next block and check if a new epoch began
-        let (height, new_epoch) = self.update_state(req.header, req.hash, req.byzantine_validators);
+        let (height, new_epoch) =
+            self.update_state(req.header, req.hash, req.byzantine_validators);
 
         for tx in &req.txs {
-            // This has already been verified as safe by [`process_proposal`]
+            if ErrorCodes::from_u32(tx.result.code).unwrap()
+                == ErrorCodes::InvalidSig
+            {
+                let wrapper =
+                    WrapperTx::try_from(&Tx::try_from(tx.tx.as_ref()).unwrap())
+                        .unwrap();
+                let mut tx_result =
+                    Event::new_tx_event(&TxType::Wrapper(wrapper), height.0);
+                tx_result["code"] = "2".into();
+                tx_result["info"] = format!("Tx rejected: {}", &tx.result.info);
+                tx_result["gas_used"] = "0".into();
+                response.events.push(tx_result.into());
+                continue;
+            }
             let tx_length = tx.tx.len();
             let processed_tx =
                 process_tx(Tx::try_from(&tx.tx as &[u8]).unwrap()).unwrap();
@@ -59,7 +74,9 @@ where
             // move on to next tx
             // If we are rejecting all decrypted txs because they were submitted
             // in an incorrect order, we do that later.
-            if tx.result.code != 0 && !req.reject_all_decrypted {
+            if ErrorCodes::from_u32(tx.result.code).unwrap() != ErrorCodes::Ok
+                && !req.reject_all_decrypted
+            {
                 let mut tx_result =
                     Event::new_tx_event(&processed_tx, height.0);
                 tx_result["code"] = tx.result.code.to_string();
@@ -89,7 +106,7 @@ where
                     if req.reject_all_decrypted {
                         let mut tx_result =
                             Event::new_tx_event(&processed_tx, height.0);
-                        tx_result["code"] = "2".into();
+                        tx_result["code"] = ErrorCodes::InvalidOrder.into();
                         tx_result["info"] = "All decrypted txs rejected as \
                                              they were not submitted in \
                                              correct order"
@@ -124,7 +141,7 @@ where
                             result
                         );
                         self.write_log.commit_tx();
-                        tx_result["code"] = "0".into();
+                        tx_result["code"] = ErrorCodes::Ok.into();
                         match serde_json::to_string(
                             &result.initialized_accounts,
                         ) {
@@ -147,7 +164,7 @@ where
                             result.vps_result.rejected_vps
                         );
                         self.write_log.drop_tx();
-                        tx_result["code"] = "1".into();
+                        tx_result["code"] = ErrorCodes::InvalidTx.into();
                     }
                     tx_result["gas_used"] = result.gas_used.to_string();
                     tx_result["info"] = result.to_string();
@@ -160,7 +177,7 @@ where
                         .get_current_transaction_gas()
                         .to_string();
                     tx_result["info"] = msg.to_string();
-                    tx_result["code"] = "4".into();
+                    tx_result["code"] = ErrorCodes::WasmRuntimeError.into();
                 }
             }
             response.events.push(tx_result.into());
@@ -282,19 +299,18 @@ mod test_finalize_block {
     use tendermint::block::header::Version;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::{Hash, Time};
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint_proto::abci::RequestInitChain;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint_proto::google::protobuf::Timestamp;
+    #[cfg(feature = "ABCI")]
+    use tendermint_proto_abci::abci::RequestInitChain;
+    #[cfg(feature = "ABCI")]
+    use tendermint_proto_abci::google::protobuf::Timestamp;
     #[cfg(feature = "ABCI")]
     use tendermint_stable::block::header::Version;
     #[cfg(feature = "ABCI")]
     use tendermint_stable::{Hash, Time};
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::abci::RequestInitChain;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::abci::RequestInitChain;
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::google::protobuf::Timestamp;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::google::protobuf::Timestamp;
-
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -303,7 +319,6 @@ mod test_finalize_block {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
-
 
     /// This is just to be used in testing. It is not
     /// a meaningful default.
@@ -526,7 +541,7 @@ mod test_finalize_block {
             tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
                 .to_bytes(),
             result: TxResult {
-                code: 1,
+                code: ErrorCodes::InvalidTx.into(),
                 info: "".into(),
             },
         };
@@ -549,7 +564,7 @@ mod test_finalize_block {
                 .expect("Test failed")
                 .value
                 .as_str();
-            assert_eq!(code, "1");
+            assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
         }
         // check that the corresponding wrapper tx was removed from the queue
         assert!(shell.next_wrapper().is_none());
@@ -569,7 +584,7 @@ mod test_finalize_block {
             tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
                 .to_bytes(),
             result: TxResult {
-                code: 1,
+                code: ErrorCodes::InvalidTx.into(),
                 info: "".into(),
             },
         };
@@ -593,7 +608,7 @@ mod test_finalize_block {
                 .clone();
             assert_eq!(
                 String::from_utf8(code).expect("Test failed"),
-                String::from("1")
+                String::from(ErrorCodes::InvalidTx)
             );
         }
         // check that the corresponding wrapper tx was removed from the queue
@@ -639,7 +654,7 @@ mod test_finalize_block {
                 tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
                     .to_bytes(),
                 result: TxResult {
-                    code: 0,
+                    code: ErrorCodes::Ok.into(),
                     info: "".into(),
                 },
             });
@@ -669,7 +684,7 @@ mod test_finalize_block {
             processed_txs.push(ProcessedTx {
                 tx: wrapper.to_bytes(),
                 result: TxResult {
-                    code: 0,
+                    code: ErrorCodes::Ok.into(),
                     info: "".into(),
                 },
             });
@@ -700,7 +715,7 @@ mod test_finalize_block {
                         .expect("Test failed")
                         .value
                         .as_str();
-                    assert_eq!(code, "0");
+                    assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
                 }
                 #[cfg(feature = "ABCI")]
                 {
@@ -714,7 +729,7 @@ mod test_finalize_block {
                         .clone();
                     assert_eq!(
                         String::from_utf8(code).expect("Test failed"),
-                        String::from("0")
+                        String::from(ErrorCodes::Ok)
                     );
                 }
             } else {
@@ -729,7 +744,7 @@ mod test_finalize_block {
                         .expect("Test failed")
                         .value
                         .as_str();
-                    assert_eq!(code, "0");
+                    assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
                 }
                 #[cfg(feature = "ABCI")]
                 {
@@ -742,7 +757,7 @@ mod test_finalize_block {
                         .clone();
                     assert_eq!(
                         String::from_utf8(code).expect("Test failed"),
-                        String::from("0")
+                        String::from(ErrorCodes::Ok)
                     );
                 }
             }
@@ -797,7 +812,7 @@ mod test_finalize_block {
         processed_txs.push(ProcessedTx {
             tx: wrapper.to_bytes(),
             result: TxResult {
-                code: 0,
+                code: ErrorCodes::Ok.into(),
                 info: "".into(),
             },
         });
@@ -828,7 +843,7 @@ mod test_finalize_block {
                 tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
                     .to_bytes(),
                 result: TxResult {
-                    code: 2,
+                    code: ErrorCodes::InvalidOrder.into(),
                     info: "".into(),
                 },
             })
@@ -859,7 +874,7 @@ mod test_finalize_block {
                         .expect("Test failed")
                         .value
                         .as_str();
-                    assert_eq!(code, "0");
+                    assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
                 }
                 #[cfg(feature = "ABCI")]
                 {
@@ -872,7 +887,7 @@ mod test_finalize_block {
                         .clone();
                     assert_eq!(
                         String::from_utf8(code).expect("Test failed"),
-                        String::from("0")
+                        String::from(ErrorCodes::Ok)
                     );
                 }
             } else {
@@ -887,7 +902,10 @@ mod test_finalize_block {
                         .expect("Test failed")
                         .value
                         .as_str();
-                    assert_eq!(code, "2");
+                    assert_eq!(
+                        code,
+                        String::from(ErrorCodes::InvalidOrder).as_str()
+                    );
                 }
                 #[cfg(feature = "ABCI")]
                 {
@@ -900,7 +918,7 @@ mod test_finalize_block {
                         .clone();
                     assert_eq!(
                         String::from_utf8(code).expect("Test failed"),
-                        String::from("2")
+                        String::from(ErrorCodes::InvalidOrder)
                     );
                 }
             }
