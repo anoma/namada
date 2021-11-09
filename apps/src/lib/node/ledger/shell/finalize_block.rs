@@ -18,7 +18,11 @@ use tendermint_stable::block::Header;
 
 use super::*;
 
-impl Shell {
+impl<D, H> Shell<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     /// Updates the chain with new header, height, etc. Also keeps track
     /// of epoch changes and applies associated updates to validator sets,
     /// etc. as necessary.

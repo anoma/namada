@@ -20,7 +20,11 @@ use super::*;
 use crate::node::ledger::response;
 use crate::node::ledger::rpc::PrefixValue;
 
-impl Shell {
+impl<D, H> Shell<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter> +  Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     /// Uses `path` in the query to forward the request to the
     /// right query method and returns the result (which may be
     /// the default if `path` is not a supported string.

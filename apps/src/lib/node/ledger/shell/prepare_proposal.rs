@@ -5,7 +5,11 @@ mod prepare_block {
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
-    impl Shell {
+    impl<D, H> Shell<D, H>
+    where
+        D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+        H: StorageHasher + Sync + 'static,
+    {
         /// Begin a new block.
         ///
         /// We include half of the new wrapper txs given to us from the mempool

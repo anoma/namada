@@ -7,6 +7,7 @@ use super::{BlockState, DBIter, Error, Result, DB};
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 use crate::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use crate::types::time::DateTimeUtc;
+use std::path::Path;
 
 /// An in-memory DB for testing.
 #[derive(Debug)]
@@ -19,6 +20,11 @@ impl Default for MockDB {
 }
 
 impl DB for MockDB {
+
+    fn open(_db_path: impl AsRef<Path>) -> Self {
+        Self::default()
+    }
+
     fn flush(&self) -> Result<()> {
         Ok(())
     }

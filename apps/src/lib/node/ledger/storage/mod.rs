@@ -3,16 +3,10 @@
 
 mod rocksdb;
 
-use std::collections::{HashMap, VecDeque};
 use std::fmt;
-use std::path::Path;
 
-use anoma::ledger::storage::types::MerkleTree;
-use anoma::ledger::storage::{types, BlockStorage, Storage, StorageHasher};
-use anoma::types::address::EstablishedAddressGen;
-use anoma::types::chain::ChainId;
-use anoma::types::storage::{BlockHash, BlockHeight, Epoch, Epochs, Key};
-use anoma::types::time::DateTimeUtc;
+use anoma::ledger::storage::{types, Storage, StorageHasher};
+use anoma::types::storage::Key;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::traits::Hasher;
@@ -23,31 +17,6 @@ pub struct PersistentStorageHasher(Blake2bHasher);
 pub type PersistentDB = rocksdb::RocksDB;
 
 pub type PersistentStorage = Storage<PersistentDB, PersistentStorageHasher>;
-
-pub fn open(db_path: impl AsRef<Path>, chain_id: ChainId) -> PersistentStorage {
-    let block = BlockStorage {
-        tree: MerkleTree::default(),
-        hash: BlockHash::default(),
-        height: BlockHeight::default(),
-        epoch: Epoch::default(),
-        pred_epochs: Epochs::default(),
-        subspaces: HashMap::default(),
-    };
-    PersistentStorage {
-        db: rocksdb::open(db_path).expect("cannot open the DB"),
-        chain_id,
-        block,
-        header: None,
-        last_height: BlockHeight(0),
-        last_epoch: Epoch::default(),
-        next_epoch_min_start_height: BlockHeight::default(),
-        next_epoch_min_start_time: DateTimeUtc::now(),
-        address_gen: EstablishedAddressGen::new(
-            "Privacy is a function of liberty.",
-        ),
-        wrapper_txs: VecDeque::new(),
-    }
-}
 
 impl Default for PersistentStorageHasher {
     fn default() -> Self {
@@ -99,12 +68,14 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use anoma::types::storage::{BlockHash, BlockHeight};
+    use anoma::types::chain::ChainId;
 
     #[test]
     fn test_crud_value() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path(), ChainId::default());
+        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
         let key =
             Key::parse("key".to_owned()).expect("cannot parse the key string");
         let value: u64 = 1;
@@ -147,7 +118,7 @@ mod tests {
     fn test_commit_block() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path(), ChainId::default());
+        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -169,7 +140,7 @@ mod tests {
         drop(storage);
 
         // load the last state
-        let mut storage = open(db_path.path(), ChainId::default());
+        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
         storage
             .load_last_state()
             .expect("loading the last state failed");
@@ -187,7 +158,7 @@ mod tests {
     fn test_iter() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path(), ChainId::default());
+        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -227,7 +198,7 @@ mod tests {
     fn test_validity_predicate() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = open(db_path.path(), ChainId::default());
+        let mut storage = PersistentStorage::open(db_path.path(), ChainId::default());
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");

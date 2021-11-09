@@ -2,7 +2,11 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 use super::*;
 
-impl Shell {
+impl<D, H> Shell<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     /// INVARIANT: This method must be stateless.
     pub fn verify_header(
         &self,

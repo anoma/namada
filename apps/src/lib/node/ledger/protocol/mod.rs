@@ -7,6 +7,7 @@ use anoma::ledger::ibc::{self, Ibc};
 use anoma::ledger::native_vp::{self, NativeVp};
 use anoma::ledger::parameters::{self, ParametersVp};
 use anoma::ledger::pos::{self, PosVP};
+use anoma::ledger::storage::{DB, StorageHasher, DBIter, Storage};
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::proto::{self, Tx};
 use anoma::types::address::{Address, InternalAddress};
@@ -16,8 +17,6 @@ use anoma::vm::{self, wasm};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::node::ledger::storage::PersistentStorage;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
@@ -26,6 +25,8 @@ pub enum Error {
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
+    #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
+    TxTypeError,
     #[error("Gas error: {0}")]
     GasError(gas::Error),
     #[error("Error executing VP for addresses: {0:?}")]
@@ -88,19 +89,23 @@ impl Default for VpsResult {
 /// If the given tx is a successfully decrypted payload apply the necessary
 /// vps. Otherwise, we include the tx on chain with the gas charge added
 /// but no further validations.
-pub fn apply_tx(
+pub fn apply_tx<D, H>(
     tx: TxType,
     tx_length: usize,
     block_gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
-    storage: &PersistentStorage,
-) -> Result<TxResult> {
+    storage: &Storage<D, H>,
+) -> Result<TxResult>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     // Base gas cost for applying the tx
     block_gas_meter
         .add_base_transaction_fee(tx_length)
         .map_err(Error::GasError)?;
     match tx {
-        TxType::Raw(_) => unreachable!(),
+        TxType::Raw(_) => Err(Error::TxTypeError),
         TxType::Decrypted(DecryptedTx::Decrypted(tx)) => {
             let verifiers =
                 execute_tx(&tx, storage, block_gas_meter, write_log)?;
@@ -139,12 +144,16 @@ pub fn apply_tx(
 }
 
 /// Execute a transaction code. Returns verifiers requested by the transaction.
-fn execute_tx(
+fn execute_tx<D, H>(
     tx: &Tx,
-    storage: &PersistentStorage,
+    storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
-) -> Result<HashSet<Address>> {
+) -> Result<HashSet<Address>>
+where
+    D: DB + for<'iter> DBIter<'iter> + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     gas_meter
         .add_compiling_fee(tx.code.len())
         .map_err(Error::GasError)?;
@@ -161,13 +170,17 @@ enum Vp<'a> {
 }
 
 /// Check the acceptance of a transaction by validity predicates
-fn check_vps(
+fn check_vps<D, H>(
     tx: &Tx,
-    storage: &PersistentStorage,
+    storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
     write_log: &WriteLog,
     verifiers_from_tx: &HashSet<Address>,
-) -> Result<VpsResult> {
+) -> Result<VpsResult>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
     // collect the VPs for the verifiers
@@ -211,13 +224,17 @@ fn check_vps(
 }
 
 /// Execute verifiers' validity predicates
-fn execute_vps(
+fn execute_vps<D, H>(
     verifiers: Vec<(Address, HashSet<Key>, Vp)>,
     tx: &Tx,
-    storage: &PersistentStorage,
+    storage: &Storage<D, H>,
     write_log: &WriteLog,
     initial_gas: u64,
-) -> Result<VpsResult> {
+) -> Result<VpsResult>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     let verifiers_addr = verifiers
         .iter()
         .map(|(addr, _, _)| addr)

@@ -22,7 +22,11 @@ use tendermint_proto_abci::google::protobuf;
 use super::*;
 use crate::wasm_loader;
 
-impl Shell {
+impl<D, H> Shell<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     /// Create a new genesis for the chain with specified id. This includes
     /// 1. A set of initial users and tokens
     /// 2. Setting up the validity predicates for both users and tokens

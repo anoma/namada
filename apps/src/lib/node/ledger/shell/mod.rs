@@ -22,6 +22,7 @@ use anoma::ledger::pos::anoma_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
 use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
+use anoma::ledger::storage::{DB, DBIter, StorageHasher, Storage};
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
@@ -99,9 +100,13 @@ pub enum MempoolTxType {
 }
 
 #[derive(Debug)]
-pub struct Shell {
+pub struct Shell<D = storage::PersistentDB , H = storage::PersistentStorageHasher>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     /// The persistent storage
-    pub(super) storage: storage::PersistentStorage,
+    pub(super) storage: Storage<D, H>,
     /// Gas meter for the current block
     gas_meter: BlockGasMeter,
     /// Write log for the current block
@@ -117,7 +122,11 @@ pub struct Shell {
     next_wrapper: usize,
 }
 
-impl Shell {
+impl<D, H> Shell<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
     pub fn new(
@@ -126,7 +135,7 @@ impl Shell {
         chain_id: ChainId,
         wasm_dir: PathBuf,
     ) -> Self {
-        let mut storage = storage::open(db_path, chain_id);
+        let mut storage = Storage::open(db_path, chain_id);
         storage
             .load_last_state()
             .map_err(|e| {
@@ -414,6 +423,8 @@ impl Shell {
 mod test_utils {
     use std::path::PathBuf;
 
+    use anoma::ledger::storage::mockdb::MockDB;
+    use anoma::ledger::storage::testing::Sha256Hasher;
     use anoma::types::key::ed25519::Keypair;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::{
@@ -426,6 +437,7 @@ mod test_utils {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessProposal,
     };
+
 
     /// Gets the absolute path to root directory
     pub fn top_level_directory() -> PathBuf {
@@ -454,14 +466,14 @@ mod test_utils {
     /// generates. Also allows illegal state
     /// modifications for testing purposes
     pub(super) struct TestShell {
-        pub shell: Shell,
+        pub shell: Shell<MockDB, Sha256Hasher>,
     }
 
     impl TestShell {
         /// Create a new shell
         pub fn new() -> Self {
             Self {
-                shell: Shell::new(
+                shell: Shell::<MockDB, Sha256Hasher>::new(
                     PathBuf::from(".anoma"),
                     PathBuf::from(".anoma")
                         .join("db")
@@ -533,13 +545,6 @@ mod test_utils {
         /// Get the next wrapper tx to be decoded
         pub fn next_wrapper(&mut self) -> Option<WrapperTx> {
             self.shell.next_wrapper()
-        }
-    }
-
-    impl Drop for TestShell {
-        fn drop(&mut self) {
-            std::fs::remove_dir_all(".anoma")
-                .expect("Unable to clean up test shell");
         }
     }
 }
