@@ -172,10 +172,10 @@ pub fn network(
     validator_wallet.insert_keypair(
         constants::MATCHMAKER_KEY.into(),
         wallet::StoredKeypair::Raw(std::rc::Rc::new(Keypair {
-            public: PublicKey::from_str("2000000034afc284494621022874fcf365c3bcb45749eabe43a9c3acf9bc0332759ac889").unwrap(),
-            secret: SecretKey::from_str("2000000032dbf8a7cab9deebc9a394d574d5a1407305a1c3f6bb953f50cd036586b01b0c").unwrap(),
+            public: PublicKey::from_str("2000000032dbf8a7cab9deebc9a394d574d5a1407305a1c3f6bb953f50cd036586b01b0c").unwrap(),
+            secret: SecretKey::from_str("2000000034afc284494621022874fcf365c3bcb45749eabe43a9c3acf9bc0332759ac889").unwrap(),
         })),
-        PublicKey::from_str("2000000034afc284494621022874fcf365c3bcb45749eabe43a9c3acf9bc0332759ac889").unwrap().into(),
+        PublicKey::from_str("2000000032dbf8a7cab9deebc9a394d574d5a1407305a1c3f6bb953f50cd036586b01b0c").unwrap().into(),
     );
     validator_wallet
         .save()
