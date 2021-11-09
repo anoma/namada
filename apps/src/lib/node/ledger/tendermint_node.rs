@@ -50,22 +50,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Check if the TENDERMINT env var has been set and use that as the
 /// location of the tendermint binary. Otherwise, assume it is on path
 ///
-/// Can return an error if the env var is defined but cannot be interpreted
-/// as String
+/// Returns an error if the env var is defined but not a valid Unicode.
 fn from_env_or_default() -> Result<String> {
-    if let Some(str) = std::env::var_os("TENDERMINT") {
-        match str.into_string() {
-            Ok(path) => {
-                tracing::info!(
-                    "Using tendermint path from env variable: {}",
-                    &path
-                );
-                Ok(path)
-            }
-            Err(msg) => Err(Error::TendermintPath(msg)),
+    match std::env::var("TENDERMINT") {
+        Ok(path) => {
+            tracing::info!("Using tendermint path from env variable: {}", path);
+            Ok(path)
         }
-    } else {
-        Ok(String::from("tendermint"))
+        Err(std::env::VarError::NotPresent) => Ok(String::from("tendermint")),
+        Err(std::env::VarError::NotUnicode(msg)) => {
+            Err(Error::TendermintPath(msg))
+        }
     }
 }
 

@@ -140,7 +140,7 @@ where
         .map_err(Error::RuntimeError)
     {
         Err(Error::RuntimeError(err)) => {
-            tracing::info!("{:?}", err.trace());
+            tracing::debug!("Tx WASM failed with {}", err);
             Err(Error::RuntimeError(err))
         }
         _ => Ok(()),

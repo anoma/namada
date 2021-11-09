@@ -72,7 +72,9 @@ impl Service<Req> for AbcippShim {
             }
             Req::DeliverTx(deliver_tx) => {
                 // We call [`process_proposal`] to report back the validity
-                // of the tx to tendermint
+                // of the tx to tendermint.
+                // Invariant: The service call with `Request::ProcessProposal`
+                // must always return `Response::ProcessProposal`
                 self.service
                     .call(Request::ProcessProposal(
                         #[cfg(not(feature = "ABCI"))]
@@ -83,7 +85,6 @@ impl Service<Req> for AbcippShim {
                     .map_err(Error::from)
                     .and_then(|res| match res {
                         Response::ProcessProposal(resp) => {
-                            tracing::info!("{:?}", resp);
                             self.block_txs.push(ProcessedTx {
                                 #[cfg(not(feature = "ABCI"))]
                                 tx: deliver_tx.tx,
