@@ -477,17 +477,26 @@ where
         Ok(val) => val.to_ascii_lowercase() != "false",
         _ => false,
     };
-    let cmd = CargoBuild::new()
-        .package(APPS_PACKAGE)
-        .manifest_path(manifest_path)
-        .features(if !cfg!(feature = "ABCI") {
-            "ABCI-plus-plus"
-        } else {
-            "ABCI"
-        })
-        // Explicitly disable dev, in case it's enabled when a test is invoked
-        .env("ANOMA_DEV", "false")
-        .bin(bin_name);
+    let cmd = if !cfg!(feature = "ABCI") {
+        CargoBuild::new()
+            .package(APPS_PACKAGE)
+            .manifest_path(manifest_path)
+            .no_default_features()
+            .features("ABCI-plus-plus")
+            // Explicitly disable dev, in case it's enabled when a test is
+            // invoked
+            .env("ANOMA_DEV", "false")
+            .bin(bin_name)
+    } else {
+        CargoBuild::new()
+            .package(APPS_PACKAGE)
+            .manifest_path(manifest_path)
+            .features("ABCI")
+            // Explicitly disable dev, in case it's enabled when a test is
+            // invoked
+            .env("ANOMA_DEV", "false")
+            .bin(bin_name)
+    };
     let cmd = if run_debug {
         cmd
     } else {
