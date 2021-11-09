@@ -154,7 +154,7 @@ fn match_intents() -> Result<()> {
             "--topic",
             "asset_v1",
             "--signing-key",
-            ALBERT_KEY,
+            BERTHA_KEY,
         ],
         Some(40),
     )?;

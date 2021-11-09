@@ -68,7 +68,10 @@ where
         let query_resp =
             self.read_storage_value(&token::balance_key(token, owner));
         if query_resp.code != 0 {
-            Err("Unable to read balance of the given address".into())
+            Err(format!(
+                "Unable to read token {} balance of the given address {}",
+                token, owner
+            ))
         } else {
             BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
                 |_| {

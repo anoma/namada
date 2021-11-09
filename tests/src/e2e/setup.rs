@@ -154,7 +154,7 @@ pub fn network(
     .unwrap();
     let mut wallet = wallet::Wallet::load_or_new(&chain_dir);
     wallet.insert_keypair(
-        "Bertha_Implicit".into(),
+        constants::BERTHA_KEY.into(),
         wallet::StoredKeypair::Raw(std::rc::Rc::new(Keypair {
             public: PublicKey::from_str("20000000ddfaeb3984ddbfc7851e66e3658e538a18d58ce5fed99302753cebad4993b37a").unwrap(),
             secret: SecretKey::from_str("20000000a8f9bfd600736b3ff17a026c232592bec873fd593e9a8b68a17538911be7c3e7").unwrap(),
@@ -162,6 +162,24 @@ pub fn network(
         PublicKey::from_str("20000000ddfaeb3984ddbfc7851e66e3658e538a18d58ce5fed99302753cebad4993b37a").unwrap().into(),
     );
     wallet.save().expect("Saving wallet should succeed");
+    let mut validator_wallet = wallet::Wallet::load_or_new(
+        &chain_dir
+            .join("setup")
+            .join("validator-0")
+            .join(config::DEFAULT_BASE_DIR)
+            .join(net.chain_id.as_str()),
+    );
+    validator_wallet.insert_keypair(
+        constants::MATCHMAKER_KEY.into(),
+        wallet::StoredKeypair::Raw(std::rc::Rc::new(Keypair {
+            public: PublicKey::from_str("2000000034afc284494621022874fcf365c3bcb45749eabe43a9c3acf9bc0332759ac889").unwrap(),
+            secret: SecretKey::from_str("2000000032dbf8a7cab9deebc9a394d574d5a1407305a1c3f6bb953f50cd036586b01b0c").unwrap(),
+        })),
+        PublicKey::from_str("2000000034afc284494621022874fcf365c3bcb45749eabe43a9c3acf9bc0332759ac889").unwrap().into(),
+    );
+    validator_wallet
+        .save()
+        .expect("Saving wallet should succeed");
 
     Ok(Test {
         working_dir,
@@ -459,19 +477,17 @@ where
         Ok(val) => val.to_ascii_lowercase() != "false",
         _ => false,
     };
-    let cmd = if !cfg!(feature = "ABCI") {
-        CargoBuild::new()
-            .package(APPS_PACKAGE)
-            .manifest_path(manifest_path)
-            .features("ABCI-plus-plus")
-            .bin(bin_name)
-    } else {
-        CargoBuild::new()
-            .package(APPS_PACKAGE)
-            .manifest_path(manifest_path)
-            .features("ABCI")
-            .bin(bin_name)
-    };
+    let cmd = CargoBuild::new()
+        .package(APPS_PACKAGE)
+        .manifest_path(manifest_path)
+        .features(if !cfg!(feature = "ABCI") {
+            "ABCI-plus-plus"
+        } else {
+            "ABCI"
+        })
+        // Explicitly disable dev, in case it's enabled when a test is invoked
+        .env("ANOMA_DEV", "false")
+        .bin(bin_name);
     let cmd = if run_debug {
         cmd
     } else {
@@ -480,8 +496,6 @@ where
     };
     let mut cmd = cmd.run().unwrap().command();
     cmd.env("ANOMA_LOG", "anoma=debug")
-        // Explicitly disable dev, in case it's enabled when a test is invoked
-        .env("ANOMA_DEV", "false")
         .current_dir(working_dir)
         .args(&["--base-dir", &base_dir.as_ref().to_string_lossy()])
         .args(args);
@@ -593,6 +607,7 @@ pub mod constants {
     pub const CHRISTEL: &str = "Christel";
     pub const CHRISTEL_KEY: &str = "Christel-key";
     pub const DAEWON: &str = "Daewon";
+    pub const MATCHMAKER_KEY: &str = "matchmaker-key";
 
     // Fungible token addresses
     pub const XAN: &str = "XAN";
