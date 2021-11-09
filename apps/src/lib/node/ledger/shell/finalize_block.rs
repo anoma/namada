@@ -48,11 +48,7 @@ where
     ) -> Result<shim::response::FinalizeBlock> {
         let mut response = shim::response::FinalizeBlock::default();
         // begin the next block and check if a new epoch began
-        let (height, new_epoch) = if cfg!(test) {
-            (BlockHeight(0), false)
-        } else {
-            self.update_state(req.header, req.hash, req.byzantine_validators)
-        };
+        let (height, new_epoch) = self.update_state(req.header, req.hash, req.byzantine_validators);
 
         for tx in &req.txs {
             // This has already been verified as safe by [`process_proposal`]
@@ -290,6 +286,15 @@ mod test_finalize_block {
     use tendermint_stable::block::header::Version;
     #[cfg(feature = "ABCI")]
     use tendermint_stable::{Hash, Time};
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint_proto::abci::RequestInitChain;
+    #[cfg(feature = "ABCI")]
+    use tendermint_proto_abci::abci::RequestInitChain;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint_proto::google::protobuf::Timestamp;
+    #[cfg(feature = "ABCI")]
+    use tendermint_proto_abci::google::protobuf::Timestamp;
+
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -298,6 +303,7 @@ mod test_finalize_block {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
+
 
     /// This is just to be used in testing. It is not
     /// a meaningful default.
@@ -334,13 +340,27 @@ mod test_finalize_block {
         }
     }
 
+    /// Start a new test shell and initialize it
+    fn setup() -> TestShell {
+        let mut test = TestShell::new();
+        test.init_chain(RequestInitChain {
+            time: Some(Timestamp {
+                seconds: 0,
+                nanos: 0,
+            }),
+            chain_id: ChainId::default().to_string(),
+            ..Default::default()
+        });
+        test
+    }
+
     #[cfg(not(feature = "ABCI"))]
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
     /// not appear in the queue of txs to be decrypted
     #[test]
     fn test_process_proposal_rejected_wrapper_tx() {
-        let mut shell = TestShell::new();
+        let mut shell = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_wrappers = vec![];
@@ -420,7 +440,7 @@ mod test_finalize_block {
     /// check that the correct event is returned.
     #[test]
     fn test_process_proposal_rejected_wrapper_tx() {
-        let mut shell = TestShell::new();
+        let mut shell = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         // create some wrapper txs
@@ -485,7 +505,7 @@ mod test_finalize_block {
     /// proposal
     #[test]
     fn test_process_proposal_rejected_decrypted_tx() {
-        let mut shell = TestShell::new();
+        let mut shell = setup();
         let keypair = gen_keypair();
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -540,7 +560,7 @@ mod test_finalize_block {
     /// check that the correct event is returned.
     #[test]
     fn test_process_proposal_rejected_decrypted_tx() {
-        let mut shell = TestShell::new();
+        let mut shell = setup();
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some(String::from("transaction data").as_bytes().to_owned()),
@@ -585,7 +605,7 @@ mod test_finalize_block {
     /// decrypted txs are de-queued.
     #[test]
     fn test_mixed_txs_queued_in_correct_order() {
-        let mut shell = TestShell::new();
+        let mut shell = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
@@ -753,7 +773,7 @@ mod test_finalize_block {
     ///  2. New wrapper txs are enqueued in correct order
     #[test]
     fn test_decrypted_txs_out_of_order() {
-        let mut shell = TestShell::new();
+        let mut shell = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];

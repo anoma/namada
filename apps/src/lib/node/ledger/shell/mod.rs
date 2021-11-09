@@ -157,7 +157,7 @@ where
     /// Iterate lazily over the wrapper txs in order
     #[cfg(not(feature = "ABCI"))]
     fn next_wrapper(&mut self) -> Option<&WrapperTx> {
-        if self.next_wrapper == self.storage.wrapper_txs.len() {
+        if self.next_wrapper >= self.storage.wrapper_txs.len() {
             None
         } else {
             let next_wrapper =

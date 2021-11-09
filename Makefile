@@ -119,23 +119,10 @@ test-e2e-abci-plus-plus:
 	RUST_BACKTRACE=1 $(cargo) test e2e --features ABCI-plus-plus -- --test-threads=1
 
 test-unit-abci-plus-plus:
-	$(cargo) test --features "dev ABCI-plus-plus" -- --skip e2e \
-	   				 --skip node::ledger::shell::process \
-					 --skip node::ledger::shell::finalize \
- 					 --skip node::ledger::shell::prepare && \
-	$(cargo) test node::ledger::shell::prepare --features "dev ABCI-plus-plus" -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::process --features "dev ABCI-plus-plus" -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::finalize --features "dev ABCI-plus-plus" -- --test-threads=1
-
+	$(cargo) test --features "dev ABCI-plus-plus" -- --skip e2e
 
 test-unit:
-	$(cargo) test --features "dev ABCI" -- --skip e2e \
-	   				 --skip node::ledger::shell::process \
-					 --skip node::ledger::shell::finalize \
- 					 --skip node::ledger::shell::prepare && \
-	$(cargo) test node::ledger::shell::prepare --features "dev ABCI" -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::process --features "dev ABCI" -- --test-threads=1 && \
-	$(cargo) test node::ledger::shell::finalize --features "dev ABCI" -- --test-threads=1
+	$(cargo) test --features "dev ABCI" -- --skip e2e
 
 test-wasm:
 	make -C $(wasms) test
