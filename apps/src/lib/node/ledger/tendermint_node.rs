@@ -91,10 +91,17 @@ pub fn run(
     };
 
     // init and run a tendermint node child process
-    let output = Command::new(&tendermint_path)
-        .args(&["init", &mode, "--home", &home_dir_string])
-        .output()
-        .map_err(Error::Init)?;
+    let output = if !cfg!(featuer = "ABCI") {
+        Command::new(&tendermint_path)
+            .args(&["init", &mode, "--home", &home_dir_string])
+            .output()
+            .map_err(Error::Init)?
+    } else {
+        Command::new(&tendermint_path)
+            .args(&["init", "--home", &home_dir_string])
+            .output()
+            .map_err(Error::Init)?
+    };
     if !output.status.success() {
         panic!("Tendermint failed to initialize with {:#?}", output);
     }

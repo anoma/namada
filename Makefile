@@ -57,9 +57,9 @@ build-release-docker: build-release-image-docker
 package-docker: build-release-image-docker
 	docker run --rm -v ${PWD}:/var/build anoma-build make package
 
-check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
+check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml --features ABCI
 check:
-	$(cargo) check && \
+	$(cargo) check --features ABCI && \
 	make -C $(wasms) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
