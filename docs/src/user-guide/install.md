@@ -10,7 +10,7 @@ There are different ways to install anoma.
 
 ## Source
 
-Download the source code from [github anoma repo](www.github.com/anoma/anoma).
+Download the source code from [github anoma repo](https://github.com/anoma/anoma).
 ```shell
 git clone https://github.com/anoma/anoma.git
 ```
