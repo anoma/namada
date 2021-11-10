@@ -172,40 +172,40 @@ pub mod genesis_config {
     pub struct ParametersConfig {
         // Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
-        min_num_of_blocks: u64,
+        pub min_num_of_blocks: u64,
         // Minimum duration of an epoch (in seconds).
         // TODO: this is i64 because datetime wants it
-        min_duration: i64,
+        pub min_duration: i64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PosParamsConfig {
         // Maximum number of active validators.
         // XXX: u64 doesn't work with toml-rs!
-        max_validator_slots: u64,
+        pub max_validator_slots: u64,
         // Pipeline length (in epochs).
         // XXX: u64 doesn't work with toml-rs!
-        pipeline_len: u64,
+        pub pipeline_len: u64,
         // Unbonding length (in epochs).
         // XXX: u64 doesn't work with toml-rs!
-        unbonding_len: u64,
+        pub unbonding_len: u64,
         // Votes per token (in basis points).
         // XXX: u64 doesn't work with toml-rs!
-        votes_per_token: u64,
+        pub votes_per_token: u64,
         // Reward for proposing a block.
         // XXX: u64 doesn't work with toml-rs!
-        block_proposer_reward: u64,
+        pub block_proposer_reward: u64,
         // Reward for voting on a block.
         // XXX: u64 doesn't work with toml-rs!
-        block_vote_reward: u64,
+        pub block_vote_reward: u64,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote (in basis points).
         // XXX: u64 doesn't work with toml-rs!
-        duplicate_vote_slash_rate: u64,
+        pub duplicate_vote_slash_rate: u64,
         // Portion of a validator's stake that should be slashed on a
         // light client attack (in basis points).
         // XXX: u64 doesn't work with toml-rs!
-        light_client_attack_slash_rate: u64,
+        pub light_client_attack_slash_rate: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
