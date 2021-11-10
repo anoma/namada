@@ -20,7 +20,10 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use setup::constants::*;
 
-use crate::e2e::setup::{self, find_address, get_epoch, sleep, Bin, Who};
+use crate::e2e::setup::{
+    self, find_address, find_keypair, find_voting_power, get_epoch, sleep, Bin,
+    Who,
+};
 use crate::{run, run_as};
 
 /// Test that when we "run-ledger" with all the possible command
@@ -574,6 +577,172 @@ fn pos_bonds() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    Ok(())
+}
+
+/// PoS validator creation test. In this test we:
+///
+/// 1. Run the ledger node with shorter epochs for faster progression
+/// 2. Initialize a new validator account
+/// 3. Submit a delegation to the new validator
+/// 4. Transfer some XAN to the new validator
+/// 5. Submit a self-bond for the new validator
+/// 6. Wait for the pipeline epoch
+/// 7. Check the new validator's voting power
+#[test]
+fn pos_init_validator() -> Result<()> {
+    let pipeline_len = 1;
+    let test = setup::network(|genesis| {
+        let parameters = ParametersConfig {
+            min_num_of_blocks: 2,
+            min_duration: 1,
+        };
+        let pos_params = PosParamsConfig {
+            pipeline_len,
+            unbonding_len: 2,
+            ..genesis.pos_params
+        };
+        GenesisConfig {
+            parameters,
+            pos_params,
+            ..genesis
+        }
+    })?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+
+    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Started node")?;
+
+    // 2. Initialize a new validator account
+    let new_validator = "new-validator";
+    let new_validator_key = format!("{}-key", new_validator);
+    let tx_args = vec![
+        "init-validator",
+        "--alias",
+        new_validator,
+        "--source",
+        BERTHA,
+        "--unsafe-dont-encrypt",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 3. Submit a delegation to the new validator
+    //    First, transfer some tokens to the validator's key for fees:
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        &new_validator_key,
+        "--token",
+        XAN,
+        "--amount",
+        "0.5",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+    //     Then self-bond the tokens:
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        new_validator,
+        "--source",
+        BERTHA,
+        "--amount",
+        "1000.5",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 4. Transfer some XAN to the new validator
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        new_validator,
+        "--token",
+        XAN,
+        "--amount",
+        "10999.5",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 5. Submit a self-bond for the new validator
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        new_validator,
+        "--amount",
+        "10000",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 6. Wait for the pipeline epoch when the validator's voting power should
+    // be non-zero
+    let epoch = get_epoch(&test)?;
+    let earliest_update_epoch = epoch + pipeline_len;
+    println!(
+        "Current epoch: {}, earliest epoch with updated voting power: {}",
+        epoch, earliest_update_epoch
+    );
+    let start = Instant::now();
+    let loop_timeout = Duration::new(20, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
+        }
+        let epoch = get_epoch(&test)?;
+        if epoch >= earliest_update_epoch {
+            break;
+        }
+    }
+
+    // 7. Check the new validator's voting power
+    let voting_power = find_voting_power(&test, new_validator)?;
+    assert_eq!(voting_power, 11);
 
     Ok(())
 }

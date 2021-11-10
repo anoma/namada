@@ -578,6 +578,24 @@ pub fn find_keypair(test: &Test, alias: impl AsRef<str>) -> Result<Keypair> {
     })
 }
 
+/// Find the address of an account by its alias from the wallet
+pub fn find_voting_power(test: &Test, alias: impl AsRef<str>) -> Result<u64> {
+    let mut find = run!(
+        test,
+        Bin::Client,
+        &["voting-power", "--validator", alias.as_ref()],
+        Some(1)
+    )?;
+    let (unread, matched) = find.exp_regex("voting power: .*\n")?;
+    let voting_power_str = matched.trim().rsplit_once(" ").unwrap().1;
+    u64::from_str(voting_power_str).map_err(|e| {
+        eyre!(format!(
+            "Voting power: {} parsed from {}, Error: {}\n\nOutput: {}",
+            voting_power_str, matched, e, unread
+        ))
+    })
+}
+
 /// Get the last committed epoch.
 pub fn get_epoch(test: &Test) -> Result<Epoch> {
     let mut find = run!(test, Bin::Client, &["epoch"], Some(5))?;
