@@ -3,7 +3,7 @@
 ## Requirements
 
 - Building from source requires at least 16GB of ram available and 4 core cpu
-- Free disk space of at least 30GB
+- Free disk space of at least 60GB
 - At the moment we are not supporting windows
 
 There are different ways to install anoma.
