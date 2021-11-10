@@ -9,6 +9,7 @@ use std::{env, fs, mem, thread, time};
 use anoma::types::address::Address;
 use anoma::types::chain::ChainId;
 use anoma::types::key::ed25519::Keypair;
+use anoma::types::storage::Epoch;
 use anoma_apps::client::utils;
 use anoma_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use anoma_apps::{config, wallet, wasm_loader};
@@ -575,6 +576,20 @@ pub fn find_keypair(test: &Test, alias: impl AsRef<str>) -> Result<Keypair> {
             key, matched, e, unread
         ))
     })
+}
+
+/// Get the last committed epoch.
+pub fn get_epoch(test: &Test) -> Result<Epoch> {
+    let mut find = run!(test, Bin::Client, &["epoch"], Some(5))?;
+    let (unread, matched) = find.exp_regex("Last committed epoch: .*\n")?;
+    let epoch_str = matched.trim().rsplit_once(" ").unwrap().1;
+    let epoch = u64::from_str(epoch_str).map_err(|e| {
+        eyre!(format!(
+            "Epoch: {} parsed from {}, Error: {}\n\nOutput: {}",
+            epoch_str, matched, e, unread
+        ))
+    })?;
+    Ok(Epoch(epoch))
 }
 
 #[allow(dead_code)]

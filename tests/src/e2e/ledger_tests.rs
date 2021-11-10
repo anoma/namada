@@ -10,13 +10,17 @@
 //! `ANOMA_E2E_KEEP_TEMP=true`.
 
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 use anoma::types::token;
+use anoma_apps::config::genesis::genesis_config::{
+    GenesisConfig, ParametersConfig, PosParamsConfig,
+};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use setup::constants::*;
 
-use crate::e2e::setup::{self, find_address, sleep, Bin, Who};
+use crate::e2e::setup::{self, find_address, get_epoch, sleep, Bin, Who};
 use crate::{run, run_as};
 
 /// Test that when we "run-ledger" with all the possible command
@@ -396,5 +400,180 @@ fn invalid_transactions() -> Result<()> {
     client.exp_string(r#""code": "3"#)?;
 
     client.assert_success();
+    Ok(())
+}
+
+/// PoS bonding, unbonding and withdrawal tests. In this test we:
+///
+/// 1. Run the ledger node with shorter epochs for faster progression
+/// 2. Submit a self-bond for the genesis validator
+/// 3. Submit a delegation to the genesis validator
+/// 4. Submit an unbond of the self-bond
+/// 5. Submit an unbond of the delegation
+/// 6. Wait for the unbonding epoch
+/// 7. Submit a withdrawal of the self-bond
+/// 8. Submit a withdrawal of the delegation
+#[test]
+fn pos_bonds() -> Result<()> {
+    let unbonding_len = 2;
+    let test = setup::network(|genesis| {
+        let parameters = ParametersConfig {
+            min_num_of_blocks: 2,
+            min_duration: 1,
+        };
+        let pos_params = PosParamsConfig {
+            pipeline_len: 1,
+            unbonding_len,
+            ..genesis.pos_params
+        };
+        GenesisConfig {
+            parameters,
+            pos_params,
+            ..genesis
+        }
+    })?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+
+    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Started node")?;
+
+    // 2. Submit a self-bond for the genesis validator
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--amount",
+        "10.1",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 3. Submit a delegation to the genesis validator
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "10.1",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 4. Submit an unbond of the self-bond
+    let tx_args = vec![
+        "unbond",
+        "--validator",
+        "validator-0",
+        "--amount",
+        "5.1",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 5. Submit an unbond of the delegation
+    let tx_args = vec![
+        "unbond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "3.2",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 6. Wait for the unbonding epoch
+    let epoch = get_epoch(&test)?;
+    let earliest_withdrawal_epoch = epoch + unbonding_len;
+    println!(
+        "Current epoch: {}, earliest epoch for withdrawal: {}",
+        epoch, earliest_withdrawal_epoch
+    );
+    let start = Instant::now();
+    let loop_timeout = Duration::new(20, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!(
+                "Timed out waiting for epoch: {}",
+                earliest_withdrawal_epoch
+            );
+        }
+        let epoch = get_epoch(&test)?;
+        if epoch >= earliest_withdrawal_epoch {
+            break;
+        }
+    }
+
+    // 7. Submit a withdrawal of the self-bond
+    let tx_args = vec![
+        "withdraw",
+        "--validator",
+        "validator-0",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 8. Submit a withdrawal of the delegation
+    let tx_args = vec![
+        "withdraw",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
     Ok(())
 }
