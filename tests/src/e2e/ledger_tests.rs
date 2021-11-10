@@ -20,10 +20,8 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use setup::constants::*;
 
-use crate::e2e::setup::{
-    self, find_address, find_keypair, find_voting_power, get_epoch, sleep, Bin,
-    Who,
-};
+use crate::e2e::helpers::{find_address, find_voting_power, get_epoch};
+use crate::e2e::setup::{self, sleep, Bin, Who};
 use crate::{run, run_as};
 
 /// Test that when we "run-ledger" with all the possible command
