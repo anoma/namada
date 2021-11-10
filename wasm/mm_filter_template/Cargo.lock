@@ -40,10 +40,8 @@ dependencies = [
  "serde",
  "sha2",
  "sparse-merkle-tree",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint",
+ "tendermint-proto",
  "thiserror",
  "tonic-build",
  "tracing",
@@ -1074,37 +1072,6 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
-dependencies = [
- "anomaly",
- "async-trait",
- "bytes",
- "chrono",
- "ed25519",
- "ed25519-dalek",
- "futures",
- "num-traits",
- "once_cell",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "sha2",
- "signature",
- "subtle",
- "subtle-encoding",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "thiserror",
- "toml",
- "url",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint"
-version = "0.20.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id#ca0bffdde9a3f1597aea3e0faf518de453b72518"
 dependencies = [
  "anomaly",
@@ -1126,29 +1093,11 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint-proto",
  "thiserror",
  "toml",
  "url",
  "zeroize",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
-dependencies = [
- "anomaly",
- "bytes",
- "chrono",
- "num-derive",
- "num-traits",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "subtle-encoding",
- "thiserror",
 ]
 
 [[package]]
