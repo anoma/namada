@@ -42,10 +42,8 @@ dependencies = [
  "chrono",
  "ed25519-dalek",
  "hex",
- "ibc 0.6.0 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration)",
- "ibc 0.6.0 (git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id)",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration)",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id)",
+ "ibc",
+ "ibc-proto",
  "itertools",
  "loupe",
  "parity-wasm",
@@ -59,10 +57,8 @@ dependencies = [
  "serde",
  "sha2",
  "sparse-merkle-tree",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint",
+ "tendermint-proto",
  "thiserror",
  "tonic-build",
  "tracing",
@@ -90,14 +86,11 @@ dependencies = [
  "anoma_vm_env",
  "chrono",
  "concat-idents",
- "ibc 0.6.0 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration)",
- "ibc 0.6.0 (git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id)",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration)",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id)",
+ "ibc",
+ "ibc-proto",
  "serde_json",
  "sha2",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint",
  "test-env-log",
  "tracing",
  "tracing-subscriber",
@@ -971,33 +964,6 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.6.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration#740058b9b6f0c3f075768e23478e137abdd92a3a"
-dependencies = [
- "anomaly",
- "borsh",
- "bytes",
- "chrono",
- "dyn-clonable",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration)",
- "ics23",
- "prost",
- "prost-types",
- "regex",
- "serde",
- "serde_derive",
- "serde_json",
- "sha2",
- "subtle-encoding",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "tendermint-testgen 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "ibc"
-version = "0.6.0"
 source = "git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id#f6d9b39cd3b2e5b95543a12884f5e99709527f34"
 dependencies = [
  "anomaly",
@@ -1005,7 +971,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dyn-clonable",
- "ibc-proto 0.8.2 (git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id)",
+ "ibc-proto",
  "ics23",
  "prost",
  "prost-types",
@@ -1015,25 +981,11 @@ dependencies = [
  "serde_json",
  "sha2",
  "subtle-encoding",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
- "tendermint-testgen 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint",
+ "tendermint-proto",
+ "tendermint-testgen",
  "thiserror",
  "tracing",
-]
-
-[[package]]
-name = "ibc-proto"
-version = "0.8.2"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration#740058b9b6f0c3f075768e23478e137abdd92a3a"
-dependencies = [
- "anomaly",
- "bytes",
- "prost",
- "prost-types",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "thiserror",
- "tonic",
 ]
 
 [[package]]
@@ -1045,7 +997,7 @@ dependencies = [
  "bytes",
  "prost",
  "prost-types",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint-proto",
  "thiserror",
  "tonic",
 ]
@@ -2133,37 +2085,6 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
-dependencies = [
- "anomaly",
- "async-trait",
- "bytes",
- "chrono",
- "ed25519",
- "ed25519-dalek",
- "futures",
- "num-traits 0.2.14",
- "once_cell",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "sha2",
- "signature",
- "subtle",
- "subtle-encoding",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
- "thiserror",
- "toml",
- "url",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint"
-version = "0.20.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id#ca0bffdde9a3f1597aea3e0faf518de453b72518"
 dependencies = [
  "anomaly",
@@ -2185,29 +2106,11 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint-proto",
  "thiserror",
  "toml",
  "url",
  "zeroize",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
-dependencies = [
- "anomaly",
- "bytes",
- "chrono",
- "num-derive",
- "num-traits 0.2.14",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "subtle-encoding",
- "thiserror",
 ]
 
 [[package]]
@@ -2231,20 +2134,6 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
-dependencies = [
- "ed25519-dalek",
- "gumdrop",
- "serde",
- "serde_json",
- "simple-error",
- "tempfile",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration)",
-]
-
-[[package]]
-name = "tendermint-testgen"
-version = "0.20.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id#ca0bffdde9a3f1597aea3e0faf518de453b72518"
 dependencies = [
  "ed25519-dalek",
@@ -2253,7 +2142,7 @@ dependencies = [
  "serde_json",
  "simple-error",
  "tempfile",
- "tendermint 0.20.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id)",
+ "tendermint",
 ]
 
 [[package]]

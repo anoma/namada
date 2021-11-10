@@ -26,19 +26,19 @@ audit-ignores += RUSTSEC-2021-0073
 audit-ignores += RUSTSEC-2021-0076
 
 build:
-	$(cargo) build --features ABCI
+	$(cargo) build
 
 build-abci-plus-plus:
-	$(cargo) build --features "ABCI-plus-plus"
+	$(cargo) build --no-default-features --features "ABCI-plus-plus"
 
 build-test:
-	$(cargo) build --features "dev ABCI" --tests
+	$(cargo) build --tests
 
 build-release:
-	$(cargo) build --release --package anoma_apps --features ABCI
+	$(cargo) build --release --package anoma_apps
 
 check-release:
-	$(cargo) check --release --package anoma_apps --features ABCI
+	$(cargo) check --release --package anoma_apps
 
 package: build-release
 	mkdir -p $(package-name)/wasm && \
@@ -57,25 +57,42 @@ build-release-docker: build-release-image-docker
 package-docker: build-release-image-docker
 	docker run --rm -v ${PWD}:/var/build anoma-build make package
 
-check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml --features ABCI
+check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
-	$(cargo) check --features ABCI && \
+	$(cargo) check && \
 	make -C $(wasms) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
-clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --features ABCI -- -D warnings
+clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
-clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --features ABCI-plus-plus -- -D warnings
+clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --no-default-features --features "ABCI-plus-plus" -- -D warnings
 
 clippy:
-	$(cargo) +$(nightly) clippy --all-targets --features ABCI -- -D warnings && \
+	$(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
 clippy-abci-plus-plus:
-	$(cargo) +$(nightly) clippy --all-targets --features ABCI-plus-plus -- -D warnings && \
-	make -C $(wasms) clippy-abci-plus-plus && \
-	$(foreach wasm,$(wasm_templates),$(clippy-wasm-abci-plus-plus) && ) true
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "std testing ABCI-plus-plus" && \
+	$(cargo) +$(nightly) clippy --all-targets --manifest-path ./proof_of_stake/Cargo.toml && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing ABCI-plus-plus" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./tests/Cargo.toml \
+		--no-default-features \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" && \
+	$(cargo) +$(nightly) clippy \
+		--all-targets \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "ABCI-plus-plus" && \
+	make -C $(wasms) clippy && \
+	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
@@ -88,11 +105,11 @@ tendermint:
 
 run-ledger:
 	# runs the node
-	$(cargo) run --bin anoman --features ABCI -- ledger run
+	$(cargo) run --bin anoman -- ledger run
 
 run-ledger-abci-plus-plus:
 	# runs the node
-	$(cargo) run --bin anoman --features ABCI-plus-plus -- ledger run
+	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger run
 
 run-gossip:
 	# runs the node gossip node
@@ -100,11 +117,11 @@ run-gossip:
 
 reset-ledger:
 	# runs the node
-	$(cargo) run --bin anoman --features ABCI -- ledger reset
+	$(cargo) run --bin anoman -- ledger reset
 
 reset-ledger-abci-plus-plus:
 	# runs the node
-	$(cargo) run --bin anoman --features ABCI-plus-plus -- ledger reset
+	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger reset
 
 
 audit:
@@ -113,16 +130,37 @@ audit:
 test: test-unit test-e2e test-wasm
 
 test-e2e:
-	RUST_BACKTRACE=1 $(cargo) test e2e --features ABCI -- --test-threads=1
+	RUST_BACKTRACE=1 $(cargo) test e2e -- --test-threads=1
 
 test-e2e-abci-plus-plus:
-	RUST_BACKTRACE=1 $(cargo) test e2e --features ABCI-plus-plus -- --test-threads=1
+	RUST_BACKTRACE=1 $(cargo) test e2e \
+		--manifest-path ./tests/Cargo.toml \
+		--no-default-features \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+		-- --test-threads=1
 
 test-unit-abci-plus-plus:
-	$(cargo) test --features "dev ABCI-plus-plus" -- --skip e2e
+	$(cargo) test \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "testing std ABCI-plus-plus" && \
+	$(cargo) test --manifest-path ./proof_of_stake/Cargo.toml && \
+	$(cargo) test \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing ABCI-plus-plus" && \
+	$(cargo) test \
+		--manifest-path ./tests/Cargo.toml \
+		--no-default-features \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+		-- --skip e2e && \
+	$(cargo) test \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "ABCI-plus-plus"
 
 test-unit:
-	$(cargo) test --features "dev ABCI" -- --skip e2e
+	$(cargo) test -- --skip e2e
 
 test-wasm:
 	make -C $(wasms) test

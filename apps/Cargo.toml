@@ -39,30 +39,30 @@ name = "anomaw"
 path = "src/bin/anoma-wallet/main.rs"
 
 [features]
-default = ["std"]
+default = ["std", "ABCI"]
 dev = ["anoma/dev"]
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
-testing = ["dev"]
 ABCI = [
-    "tendermint-stable",
-    "tendermint-proto-abci",
-    "tendermint-rpc-abci",
-    "tower-abci-old",
-    "anoma/ABCI",
-    "anoma/ibc-vp-abci",
+  "tendermint-stable",
+  "tendermint-proto-abci",
+  "tendermint-rpc-abci",
+  "tower-abci-old",
+  "anoma/ABCI",
+  "anoma/ibc-vp-abci",
 ]
 ABCI-plus-plus = [
-    "tendermint",
-    "tendermint-proto",
-    "tendermint-rpc",
-    "tower-abci",
-    "anoma/ABCI-plus-plus",
-    "anoma/ibc-vp",
+  "tendermint",
+  "tendermint-proto",
+  "tendermint-rpc",
+  "tower-abci",
+  "anoma/ABCI-plus-plus",
+  "anoma/ibc-vp",
 ]
+testing = ["dev"]
 
 [dependencies]
-anoma = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand"]}
+anoma = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "rand"]}
 async-std = {version = "1.9.0", features = ["unstable"]}
 async-trait = "0.1.51"
 base64 = "0.13.0"
@@ -84,8 +84,8 @@ itertools = "0.10.1"
 jsonpath_lib = "0.3.0"
 libc = "0.2.97"
 libp2p = "0.38.0"
-num-traits = "0.2.14"
 num-derive = "0.3.3"
+num-traits = "0.2.14"
 orion = "0.16.0"
 prost = "0.8.0"
 prost-types = "0.8.0"
@@ -109,10 +109,10 @@ sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", b
 # and https://github.com/anoma/anoma/issues/445
 tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", optional = true}
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", optional = true}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", features = ["http-client", "websocket-client"], optional = true}
-tendermint-stable = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/lowercase-node-id", optional = true}
 tendermint-proto-abci = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/lowercase-node-id", optional = true}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abci++-integration", features = ["http-client", "websocket-client"], optional = true}
 tendermint-rpc-abci = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/lowercase-node-id", optional = true, features = ["http-client", "websocket-client"]}
+tendermint-stable = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", branch = "tomas/lowercase-node-id", optional = true}
 thiserror = "1.0.24"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
@@ -127,7 +127,7 @@ tracing-subscriber = "0.2.18"
 websocket = "0.26.2"
 
 [dev-dependencies]
-anoma = {path = "../shared", features = ["testing", "wasm-runtime"]}
+anoma = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 cargo-watch = "7.5.0"
 proptest = "1.0.0"
 tempfile = "3.2.0"
