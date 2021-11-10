@@ -105,11 +105,11 @@ impl Service<Req> for AbcippShim {
                 std::mem::swap(&mut txs, &mut self.block_txs);
                 // If the wrapper txs were not properly submitted, reject all
                 // txs
-                let out_of_order = txs.iter().any(|tx| tx.result.code > 1u32);
+                let out_of_order = txs.iter().any(|tx| tx.result.code > 3u32);
                 if out_of_order {
                     // The wrapper txs will need to be decrypted again
                     // and included in the proposed block after the current
-                    self.service.revert_wrapper_txs();
+                    self.service.reset_queue();
                 }
                 let begin_block_request =
                     self.begin_block_request.take().unwrap();

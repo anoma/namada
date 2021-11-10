@@ -61,7 +61,7 @@ where
                         .unwrap();
                 let mut tx_result =
                     Event::new_tx_event(&TxType::Wrapper(wrapper), height.0);
-                tx_result["code"] = "2".into();
+                tx_result["code"] = tx.result.code.to_string();
                 tx_result["info"] = format!("Tx rejected: {}", &tx.result.info);
                 tx_result["gas_used"] = "0".into();
                 response.events.push(tx_result.into());
@@ -86,7 +86,7 @@ where
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
                 if let TxType::Decrypted(_) = &processed_tx {
-                    self.storage.wrapper_txs.pop_front();
+                    self.tx_queue.pop();
                 }
                 continue;
             }
@@ -94,7 +94,7 @@ where
             let mut tx_result = match &processed_tx {
                 TxType::Wrapper(_wrapper) => {
                     if !cfg!(feature = "ABCI") {
-                        self.storage.wrapper_txs.push_back(_wrapper.clone());
+                        self.tx_queue.push(_wrapper.clone());
                     }
                     Event::new_tx_event(&processed_tx, height.0)
                 }
@@ -117,7 +117,7 @@ where
                     }
                     // We remove the corresponding wrapper tx from the queue
                     if !cfg!(feature = "ABCI") {
-                        self.storage.wrapper_txs.pop_front();
+                        self.tx_queue.pop();
                     }
                     Event::new_tx_event(&processed_tx, height.0)
                 }
@@ -191,7 +191,7 @@ where
             .gas_meter
             .finalize_transaction()
             .map_err(|_| Error::GasOverflow)?;
-        self.revert_wrapper_txs();
+        self.reset_queue();
         Ok(response)
     }
 
@@ -299,23 +299,13 @@ mod test_finalize_block {
     use tendermint::block::header::Version;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::{Hash, Time};
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::abci::RequestInitChain;
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::google::protobuf::Timestamp;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::abci::RequestInitChain;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::google::protobuf::Timestamp;
     #[cfg(feature = "ABCI")]
     use tendermint_stable::block::header::Version;
     #[cfg(feature = "ABCI")]
     use tendermint_stable::{Hash, Time};
 
     use super::*;
-    use crate::node::ledger::shell::test_utils::{
-        gen_keypair, top_level_directory, TestShell,
-    };
+    use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -355,20 +345,6 @@ mod test_finalize_block {
         }
     }
 
-    /// Start a new test shell and initialize it
-    fn setup() -> TestShell {
-        let mut test = TestShell::new();
-        test.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
-        test
-    }
-
     #[cfg(not(feature = "ABCI"))]
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
@@ -406,7 +382,7 @@ mod test_finalize_block {
                     },
                 });
             } else {
-                shell.add_wrapper_tx(wrapper.clone());
+                shell.enqueue_tx(wrapper.clone());
             }
 
             if i != 3 {
@@ -545,7 +521,7 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        shell.add_wrapper_tx(wrapper);
+        shell.enqueue_tx(wrapper);
 
         // check that the decrypted tx was not applied
         for event in shell
@@ -649,7 +625,7 @@ mod test_finalize_block {
                 0.into(),
                 raw_tx.clone(),
             );
-            shell.add_wrapper_tx(wrapper_tx);
+            shell.enqueue_tx(wrapper_tx);
             processed_txs.push(ProcessedTx {
                 tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
                     .to_bytes(),
@@ -837,7 +813,7 @@ mod test_finalize_block {
                 raw_tx.clone(),
             );
             // add the corresponding wrapper tx to the queue
-            shell.add_wrapper_tx(wrapper.clone());
+            shell.enqueue_tx(wrapper.clone());
             valid_txs.push(wrapper);
             processed_txs.push(ProcessedTx {
                 tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))

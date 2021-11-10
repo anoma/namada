@@ -15,7 +15,7 @@
 //!   - `address_gen`: established address generator
 
 use std::cmp::{min, Ordering};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io;
 use std::path::Path;
@@ -138,7 +138,6 @@ impl DB for RocksDB {
             next_epoch_min_start_time,
             subspaces,
             address_gen,
-            wrapper_txs,
         }: BlockState = state;
 
         // Epoch start height and time
@@ -209,13 +208,6 @@ impl DB for RocksDB {
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
             batch.put(key.to_string(), types::encode(&address_gen));
-        }
-        // wrapper txs
-        {
-            let key = prefix_key
-                .push(&"wrapper_txs".to_owned())
-                .map_err(Error::KeyError)?;
-            batch.put(key.to_string(), types::encode(&wrapper_txs));
         }
         let mut write_opts = WriteOptions::default();
         write_opts.disable_wal(true);
@@ -303,7 +295,6 @@ impl DB for RocksDB {
         let mut pred_epochs = None;
         let mut address_gen = None;
         let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
-        let mut wrapper_txs = VecDeque::new();
         for (key, bytes) in self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
@@ -366,10 +357,6 @@ impl DB for RocksDB {
                             types::decode(bytes).map_err(Error::CodingError)?,
                         );
                     }
-                    "wrapper_txs" => {
-                        wrapper_txs =
-                            types::decode(bytes).map_err(Error::CodingError)?;
-                    }
                     _ => unknown_key_error(path)?,
                 },
                 None => unknown_key_error(path)?,
@@ -394,7 +381,6 @@ impl DB for RocksDB {
                 next_epoch_min_start_time,
                 subspaces,
                 address_gen,
-                wrapper_txs,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"

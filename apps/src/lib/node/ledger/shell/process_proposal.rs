@@ -171,7 +171,7 @@ where
                 })
                 .to_bytes();
                 // we are not checking that txs are out of order
-                self.storage.wrapper_txs.push_back(wrapper);
+                self.tx_queue.push(wrapper);
                 // check the decoded tx
                 let mut decoded_resp =
                     self.process_proposal(shim::request::ProcessProposal {
@@ -262,7 +262,7 @@ mod test_process_proposal {
         #[cfg(feature = "ABCI")]
         {
             assert_eq!(response.tx, tx);
-            assert!(shell.shell.storage.wrapper_txs.is_empty())
+            assert!(shell.shell.tx_queue.is_empty())
         }
     }
 
@@ -331,7 +331,7 @@ mod test_process_proposal {
         #[cfg(feature = "ABCI")]
         {
             assert_eq!(response.tx, new_tx.to_bytes());
-            assert!(shell.shell.storage.wrapper_txs.is_empty())
+            assert!(shell.shell.tx_queue.is_empty())
         }
     }
 
@@ -374,7 +374,7 @@ mod test_process_proposal {
         #[cfg(feature = "ABCI")]
         {
             assert_eq!(response.tx, wrapper.to_bytes());
-            assert!(shell.shell.storage.wrapper_txs.is_empty())
+            assert!(shell.shell.tx_queue.is_empty())
         }
     }
 
@@ -426,7 +426,7 @@ mod test_process_proposal {
         #[cfg(feature = "ABCI")]
         {
             assert_eq!(response.tx, wrapper.to_bytes());
-            assert!(shell.shell.storage.wrapper_txs.is_empty())
+            assert!(shell.shell.tx_queue.is_empty())
         }
     }
 
@@ -453,7 +453,7 @@ mod test_process_proposal {
                 0.into(),
                 tx.clone(),
             );
-            shell.add_wrapper_tx(wrapper);
+            shell.enqueue_tx(wrapper);
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
         let req_1 = ProcessProposal {
@@ -499,7 +499,7 @@ mod test_process_proposal {
             0.into(),
             tx,
         );
-        shell.add_wrapper_tx(wrapper.clone());
+        shell.enqueue_tx(wrapper.clone());
 
         let tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
@@ -548,7 +548,7 @@ mod test_process_proposal {
         wrapper.tx_hash = Hash([0; 32]);
 
         let tx = if !cfg!(feature = "ABCI") {
-            shell.add_wrapper_tx(wrapper.clone());
+            shell.enqueue_tx(wrapper.clone());
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
                 #[allow(clippy::redundant_clone)]
                 wrapper.clone(),
@@ -573,7 +573,7 @@ mod test_process_proposal {
                         hash_tx(inner.try_to_vec().unwrap().as_ref()),
                         hash_tx(wrapper.try_to_vec().unwrap().as_ref())
                     );
-                    assert!(shell.shell.storage.wrapper_txs.is_empty())
+                    assert!(shell.shell.tx_queue.is_empty())
                 }
                 _ => panic!("Test failed"),
             }

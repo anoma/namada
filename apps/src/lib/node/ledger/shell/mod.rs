@@ -12,6 +12,7 @@ mod prepare_proposal;
 mod process_proposal;
 mod queries;
 
+use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -34,7 +35,7 @@ use anoma::types::transaction::{
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
 use anoma::types::{address, key, token};
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 #[cfg(not(feature = "ABCI"))]
@@ -147,8 +148,74 @@ pub struct Shell<
     base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
     wasm_dir: PathBuf,
+    /// Wrapper txs to be decrypted in the next block proposal
+    tx_queue: TxQueue,
+}
+
+#[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]
+/// Wrapper txs to be decrypted in the next block proposal
+pub struct TxQueue {
     /// Index of next wrapper_tx to fetch from storage
     next_wrapper: usize,
+    /// The actual wrappers
+    queue: VecDeque<WrapperTx>,
+}
+
+impl TxQueue {
+    /// Add a new wrapper at the back of the queue
+    pub fn push(&mut self, wrapper: WrapperTx) {
+        self.queue.push_back(wrapper);
+    }
+
+    /// Remove the wrapper at the head of the queue
+    pub fn pop(&mut self) -> Option<WrapperTx> {
+        self.queue.pop_front()
+    }
+
+    /// Iterate lazily over the queue
+    #[allow(dead_code)]
+    fn next(&mut self) -> Option<&WrapperTx> {
+        let next = self.queue.get(self.next_wrapper);
+        if self.next_wrapper < self.queue.len() {
+            self.next_wrapper += 1;
+        }
+        next
+    }
+
+    /// Reset the iterator to the head of the queue
+    pub fn rewind(&mut self) {
+        self.next_wrapper = 0;
+    }
+
+    /// Get an iterator over the queue
+    #[allow(dead_code)]
+    pub fn iter(&self) -> impl std::iter::Iterator<Item=&WrapperTx> {
+        self.queue.iter()
+    }
+
+    /// Check if there are any txs in the queue
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+}
+
+impl<D, H> Drop for Shell<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    fn drop(&mut self) {
+        let cache_path = self.base_dir.clone().join(".tx_queue");
+        let _ = std::fs::File::create(&cache_path)
+            .expect("Creating the file for the tx_queue dump should not fail");
+        std::fs::write(
+            cache_path,
+            self.tx_queue
+                .try_to_vec()
+                .expect("Serializing tx queue to bytes should not fail"),
+        ).expect("Failed to write tx queue to file. Good luck booting back up now");
+    }
 }
 
 impl<D, H> Shell<D, H>
@@ -164,6 +231,10 @@ where
         chain_id: ChainId,
         wasm_dir: PathBuf,
     ) -> Self {
+        if !Path::new(&base_dir).is_dir() {
+            std::fs::create_dir(&base_dir)
+                .expect("Creating directory for Anoma should not fail");
+        }
         let mut storage = Storage::open(db_path, chain_id);
         storage
             .load_last_state()
@@ -171,6 +242,24 @@ where
                 tracing::error!("Cannot load the last state from the DB {}", e);
             })
             .expect("PersistentStorage cannot be initialized");
+        // If we are not starting the chain for the first time, the file
+        // containing the tx queue should exist
+        let tx_queue = if storage.last_height.0 > 0u64 {
+            BorshDeserialize::deserialize(
+                &mut std::fs::read(base_dir.clone().join(".tx_queue"))
+                    .expect(
+                        "Anoma ledger failed to start: Failed to open file \
+                     containing the transaction queue",
+                    )
+                    .as_ref(),
+            )
+                .expect(
+                    "Anoma ledger failed to start: Failed to read file containing the \
+             transaction queue",
+                )
+        } else {
+            Default::default()
+        };
 
         Self {
             storage,
@@ -179,33 +268,26 @@ where
             byzantine_validators: vec![],
             base_dir,
             wasm_dir,
-            next_wrapper: 0,
+            tx_queue,
         }
     }
 
     /// Iterate lazily over the wrapper txs in order
     #[cfg(not(feature = "ABCI"))]
     fn next_wrapper(&mut self) -> Option<&WrapperTx> {
-        if self.next_wrapper >= self.storage.wrapper_txs.len() {
-            None
-        } else {
-            let next_wrapper =
-                Some(&self.storage.wrapper_txs[self.next_wrapper]);
-            self.next_wrapper += 1;
-            next_wrapper
-        }
+        self.tx_queue.next()
     }
 
     /// Iterate lazily over the wrapper txs in order
     #[cfg(feature = "ABCI")]
     fn next_wrapper(&mut self) -> Option<WrapperTx> {
-        self.storage.wrapper_txs.pop_front()
+        self.tx_queue.pop()
     }
 
     /// If we reject the decrypted txs because they were out of
     /// order, reset the iterator.
-    pub fn revert_wrapper_txs(&mut self) {
-        self.next_wrapper = 0;
+    pub fn reset_queue(&mut self) {
+        self.tx_queue.rewind()
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
@@ -452,20 +534,29 @@ where
 mod test_utils {
     use std::path::PathBuf;
 
+    use anoma::ledger::storage::BlockState;
     use anoma::ledger::storage::mockdb::MockDB;
     use anoma::ledger::storage::testing::Sha256Hasher;
     use anoma::types::key::ed25519::Keypair;
+    use anoma::types::storage::{Epoch, BlockHash};use anoma::types::transaction::Fee;
+    use anoma::types::address::{xan, EstablishedAddressGen};
+    use tempfile::tempdir;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::{
         Event as TmEvent, RequestInitChain, ResponsePrepareProposal,
     };
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint_proto::google::protobuf::Timestamp;
     #[cfg(feature = "ABCI")]
     use tendermint_proto_abci::abci::{Event as TmEvent, RequestInitChain};
+    #[cfg(feature = "ABCI")]
+    use tendermint_proto_abci::google::protobuf::Timestamp;
 
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessProposal,
     };
+    use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
 
     /// Gets the absolute path to root directory
     pub fn top_level_directory() -> PathBuf {
@@ -500,10 +591,15 @@ mod test_utils {
     impl TestShell {
         /// Create a new shell
         pub fn new() -> Self {
-            Self {
+            let base_dir=  tempdir()
+                    .unwrap()
+                    .as_ref()
+                    .canonicalize()
+                    .unwrap();
+                Self {
                 shell: Shell::<MockDB, Sha256Hasher>::new(
-                    PathBuf::from(".anoma"),
-                    PathBuf::from(".anoma")
+                    base_dir.clone(),
+                    base_dir
                         .join("db")
                         .join("anoma-devchain-00000"),
                     Default::default(),
@@ -558,9 +654,9 @@ mod test_utils {
 
         /// Add a wrapper tx to the queue of txs to be decrypted
         /// in the current block proposal
-        pub fn add_wrapper_tx(&mut self, wrapper: WrapperTx) {
-            self.shell.storage.wrapper_txs.push_back(wrapper);
-            self.shell.revert_wrapper_txs();
+        pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
+            self.shell.tx_queue.push(wrapper);
+            self.shell.reset_queue();
         }
 
         #[cfg(not(feature = "ABCI"))]
@@ -574,5 +670,157 @@ mod test_utils {
         pub fn next_wrapper(&mut self) -> Option<WrapperTx> {
             self.shell.next_wrapper()
         }
+    }
+
+    /// Start a new test shell and initialize it
+    pub(super) fn setup() -> TestShell {
+        let mut test = TestShell::new();
+        test.init_chain(RequestInitChain {
+            time: Some(Timestamp {
+                seconds: 0,
+                nanos: 0,
+            }),
+            chain_id: ChainId::default().to_string(),
+            ..Default::default()
+        });
+        test
+    }
+
+    /// We test that on shell shutdown, the tx queue gets
+    /// persisted in a file, and on startup it is read
+    /// successfully
+    #[test]
+    fn test_tx_queue_persistence() {
+        let base_dir=  tempdir()
+            .unwrap()
+            .as_ref()
+            .canonicalize()
+            .unwrap();
+        // we have to use RocksDB for this test
+        let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
+                base_dir.clone(),
+                base_dir
+                    .join("db")
+                    .join("anoma-devchain-00000"),
+                Default::default(),
+                top_level_directory().join("wasm"),
+            );
+        let keypair = gen_keypair();
+        // enqueue a wrapper tx
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: xan(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+        );
+        shell.tx_queue.push(wrapper);
+        // Artificially increase the block height so that chain
+        // will read the ".tx_queue" file when restarted
+        shell.storage.db.write_block(
+            BlockState {
+                root: [0; 32].into(),
+                store: Default::default(),
+                hash: BlockHash([0; 32]),
+                height: BlockHeight(1),
+                epoch: Epoch(0),
+                pred_epochs: Default::default(),
+                next_epoch_min_start_height: BlockHeight(3),
+                next_epoch_min_start_time: DateTimeUtc::now(),
+                subspaces: Default::default(),
+                address_gen: EstablishedAddressGen::new("test"),
+            }
+        ).expect("Test failed");
+
+        // Drop the shell and check that the ".tx_queue" file was created
+        std::mem::drop(shell);
+        assert!(base_dir.join(".tx_queue").exists());
+
+        // Reboot the shell and check that the queue was restored from disk
+        let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
+            base_dir.clone(),
+            base_dir
+                .join("db")
+                .join("anoma-devchain-00000"),
+            Default::default(),
+            top_level_directory().join("wasm"),
+        );
+        assert!(!shell.tx_queue.is_empty());
+    }
+
+    /// We test that on shell bootup, if the last height > 0
+    /// and  the tx queue file is missing, bootup fails
+    #[test]
+    #[should_panic]
+    fn test_tx_queue_must_exist() {
+        let base_dir=  tempdir()
+            .unwrap()
+            .as_ref()
+            .canonicalize()
+            .unwrap();
+        // we have to use RocksDB for this test
+        let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
+                base_dir.clone(),
+                base_dir
+                    .join("db")
+                    .join("anoma-devchain-00000"),
+                Default::default(),
+                top_level_directory().join("wasm"),
+            );
+        let keypair = gen_keypair();
+        // enqueue a wrapper tx
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: xan(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+        );
+        shell.tx_queue.push(wrapper);
+        // Artificially increase the block height so that chain
+        // will read the ".tx_queue" file when restarted
+        shell.storage.db.write_block(
+            BlockState {
+                root: [0; 32].into(),
+                store: Default::default(),
+                hash: BlockHash([0; 32]),
+                height: BlockHeight(1),
+                epoch: Epoch(0),
+                pred_epochs: Default::default(),
+                next_epoch_min_start_height: BlockHeight(3),
+                next_epoch_min_start_time: DateTimeUtc::now(),
+                subspaces: Default::default(),
+                address_gen: EstablishedAddressGen::new("test"),
+            }
+        ).expect("Test failed");
+
+        // Drop the shell and check that the ".tx_queue" file was created
+        std::mem::drop(shell);
+        std::fs::remove_file(base_dir.join(".tx_queue")).expect("Test failed");
+        assert!(!base_dir.join(".tx_queue").exists());
+
+        // Reboot the shell and check that the queue was restored from disk
+        let _ = Shell::<PersistentDB, PersistentStorageHasher>::new(
+            base_dir.clone(),
+            base_dir
+                .join("db")
+                .join("anoma-devchain-00000"),
+            Default::default(),
+            top_level_directory().join("wasm"),
+        );
     }
 }

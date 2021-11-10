@@ -47,8 +47,7 @@ mod prepare_block {
 
             // decrypt the wrapper txs included in the previous block
             let mut decrypted_txs = self
-                .storage
-                .wrapper_txs
+                .tx_queue
                 .iter()
                 .map(|tx| {
                     Tx::from(match tx.decrypt(privkey) {
@@ -165,7 +164,7 @@ mod prepare_block {
                     tx,
                 );
                 let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
-                shell.add_wrapper_tx(wrapper_tx);
+                shell.enqueue_tx(wrapper_tx);
                 expected_wrapper.push(wrapper.clone());
                 req.block_data.push(wrapper.to_bytes());
             }

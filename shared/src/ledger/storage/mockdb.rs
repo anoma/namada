@@ -1,6 +1,6 @@
 //! DB mock for testing
 
-use std::collections::{btree_map, BTreeMap, HashMap, VecDeque};
+use std::collections::{btree_map, BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
 use std::path::Path;
 
@@ -40,7 +40,6 @@ impl DB for MockDB {
             next_epoch_min_start_time,
             subspaces,
             address_gen,
-            wrapper_txs,
         }: BlockState = state;
 
         // Epoch start height and time
@@ -113,14 +112,6 @@ impl DB for MockDB {
             let value = &address_gen;
             self.0.insert(key.to_string(), types::encode(value));
         }
-        // Wrapper txs
-        {
-            let key = prefix_key
-                .push(&"wrapper_txs".to_owned())
-                .map_err(Error::KeyError)?;
-            let value = &wrapper_txs;
-            self.0.insert(key.to_string(), types::encode(value));
-        }
         self.0.insert("height".to_owned(), types::encode(&height));
         Ok(())
     }
@@ -172,7 +163,6 @@ impl DB for MockDB {
         let mut pred_epochs = None;
         let mut address_gen = None;
         let mut subspaces: HashMap<Key, Vec<u8>> = HashMap::new();
-        let mut wrapper_txs = VecDeque::new();
         for (path, bytes) in
             self.0.range((Included(prefix), Excluded(upper_prefix)))
         {
@@ -226,10 +216,6 @@ impl DB for MockDB {
                             types::decode(bytes).map_err(Error::CodingError)?,
                         );
                     }
-                    "wrapper_txs" => {
-                        wrapper_txs =
-                            types::decode(bytes).map_err(Error::CodingError)?;
-                    }
                     _ => unknown_key_error(path)?,
                 },
                 None => unknown_key_error(path)?,
@@ -254,7 +240,6 @@ impl DB for MockDB {
                 next_epoch_min_start_time,
                 subspaces,
                 address_gen,
-                wrapper_txs,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
