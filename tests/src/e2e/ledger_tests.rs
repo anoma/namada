@@ -302,7 +302,7 @@ fn invalid_transactions() -> Result<()> {
         ledger.exp_string("Started node")?;
     }
     // Wait to commit a block
-    // ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     // 2. Submit a an invalid transaction (trying to mint tokens should fail
     // in the token's VP)
@@ -396,7 +396,7 @@ fn invalid_transactions() -> Result<()> {
 
     client.exp_string("Error trying to apply a transaction")?;
 
-    client.exp_string(r#""code": "4"#)?;
+    client.exp_string(r#""code": "3"#)?;
 
     client.assert_success();
     Ok(())
