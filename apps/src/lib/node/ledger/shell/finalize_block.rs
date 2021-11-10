@@ -61,7 +61,7 @@ where
                         .unwrap();
                 let mut tx_result =
                     Event::new_tx_event(&TxType::Wrapper(wrapper), height.0);
-                tx_result["code"] = "2".into();
+                tx_result["code"] = tx.result.code.to_string();
                 tx_result["info"] = format!("Tx rejected: {}", &tx.result.info);
                 tx_result["gas_used"] = "0".into();
                 response.events.push(tx_result.into());
