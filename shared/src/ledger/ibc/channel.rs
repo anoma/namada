@@ -81,9 +81,9 @@ use crate::types::ibc::{
     make_close_confirm_channel_event, make_close_init_channel_event,
     make_open_ack_channel_event, make_open_confirm_channel_event,
     make_open_init_channel_event, make_open_try_channel_event,
-    make_timeout_event, ChannelCloseConfirmData, ChannelCloseInitData,
-    ChannelOpenAckData, ChannelOpenConfirmData, ChannelOpenInitData,
-    ChannelOpenTryData, Error as IbcDataError, TimeoutData,
+    ChannelCloseConfirmData, ChannelCloseInitData, ChannelOpenAckData,
+    ChannelOpenConfirmData, ChannelOpenInitData, ChannelOpenTryData,
+    Error as IbcDataError, TimeoutData,
 };
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -194,7 +194,7 @@ where
                 State::TryOpen => {
                     let data = ChannelOpenTryData::try_from_slice(tx_data)?;
                     self.verify_channel_try_proof(
-                        port_channel_id,
+                        &port_channel_id,
                         &channel,
                         &data,
                     )?;
@@ -301,12 +301,9 @@ where
                     )));
                 }
                 match TimeoutData::try_from_slice(tx_data) {
-                    Ok(data) => {
-                        self.validate_commitment_absence(data)?;
-                        let event = make_timeout_event(data.packet);
-                        self.check_emitted_event(event)
-                            .map_err(|e| Error::IbcEvent(e.to_string()))
-                    }
+                    // The timeout event will be checked in the commitment
+                    // validation
+                    Ok(data) => self.validate_commitment_absence(&data),
                     Err(_) => {
                         match ChannelCloseInitData::try_from_slice(tx_data) {
                             Ok(data) => {
@@ -342,13 +339,12 @@ where
         }
     }
 
-    fn validate_commitment_absence(&self, data: TimeoutData) -> Result<()> {
+    fn validate_commitment_absence(&self, data: &TimeoutData) -> Result<()> {
         // check if the commitment has been deleted
-        let packet = data.packet;
         let key = commitment_key(
-            &packet.source_port,
-            &packet.source_channel,
-            packet.sequence,
+            &data.packet.source_port,
+            &data.packet.source_channel,
+            data.packet.sequence,
         );
         let state_change = self
             .get_state_change(&key)
@@ -359,18 +355,21 @@ where
             _ => Err(Error::InvalidStateChange(format!(
                 "The commitment hasn't been deleted yet: Port {}, Channel {}, \
                  Sequence {}",
-                packet.source_port, packet.source_channel, packet.sequence
+                data.packet.source_port,
+                data.packet.source_channel,
+                data.packet.sequence
             ))),
         }
     }
 
     fn verify_channel_try_proof(
         &self,
-        port_channel_id: PortChannelId,
+        port_channel_id: &PortChannelId,
         channel: &ChannelEnd,
         data: &ChannelOpenTryData,
     ) -> Result<()> {
-        let expected_my_side = Counterparty::new(port_channel_id.port_id, None);
+        let expected_my_side =
+            Counterparty::new(port_channel_id.port_id.clone(), None);
         self.verify_proofs(
             channel,
             expected_my_side,

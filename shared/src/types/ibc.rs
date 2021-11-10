@@ -10,7 +10,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(not(feature = "ABCI"))]
 use ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 #[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::client_consensus::{AnyConsensusState, ConsensusState};
+use ibc::core::ics02_client::client_consensus::{
+    AnyConsensusState, ConsensusState,
+};
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics02_client::client_state::{AnyClientState, ClientState};
 #[cfg(not(feature = "ABCI"))]
@@ -58,7 +60,7 @@ use ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 #[cfg(not(feature = "ABCI"))]
-use ibc::events::{IbcEvent as RawIbcEvent, Error as IbcEventError};
+use ibc::events::{Error as IbcEventError, IbcEvent as RawIbcEvent};
 #[cfg(not(feature = "ABCI"))]
 use ibc::mock::client_state::{MockClientState, MockConsensusState};
 #[cfg(not(feature = "ABCI"))]
@@ -68,7 +70,9 @@ use ibc::timestamp::Timestamp;
 #[cfg(feature = "ABCI")]
 use ibc_abci::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 #[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::client_consensus::{AnyConsensusState, ConsensusState};
+use ibc_abci::core::ics02_client::client_consensus::{
+    AnyConsensusState, ConsensusState,
+};
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics02_client::client_state::{AnyClientState, ClientState};
 #[cfg(feature = "ABCI")]
@@ -116,7 +120,7 @@ use ibc_abci::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 #[cfg(feature = "ABCI")]
-use ibc_abci::events::{IbcEvent as RawIbcEvent, Error as IbcEventError};
+use ibc_abci::events::{Error as IbcEventError, IbcEvent as RawIbcEvent};
 #[cfg(feature = "ABCI")]
 use ibc_abci::mock::client_state::{MockClientState, MockConsensusState};
 #[cfg(feature = "ABCI")]
@@ -1128,7 +1132,7 @@ fn commitment_prefix() -> CommitmentPrefix {
 }
 
 /// Wapped IbcEvent
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, PartialEq)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
 pub struct IbcEvent(pub RawIbcEvent);
 
 impl From<RawIbcEvent> for IbcEvent {
@@ -1349,7 +1353,7 @@ pub fn make_close_confirm_channel_event(
 /// Makes SendPacket event
 pub fn make_send_packet_event(packet: Packet) -> IbcEvent {
     RawIbcEvent::SendPacket(SendPacket {
-        height: packet.timeout_height.clone(),
+        height: packet.timeout_height,
         packet,
     })
     .into()

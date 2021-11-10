@@ -422,11 +422,16 @@ mod tests {
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::ibc::{
-        ChannelOpenAckData, ChannelOpenConfirmData, ChannelOpenInitData,
-        ChannelOpenTryData, ClientUpdateData, ConnectionOpenAckData,
-        ConnectionOpenConfirmData, ConnectionOpenInitData,
-        ConnectionOpenTryData, PacketAckData, PacketReceiptData,
-        PacketSendData,
+        make_create_client_event, make_open_ack_channel_event,
+        make_open_ack_connection_event, make_open_confirm_channel_event,
+        make_open_confirm_connection_event, make_open_init_channel_event,
+        make_open_init_connection_event, make_open_try_channel_event,
+        make_open_try_connection_event, make_send_packet_event,
+        make_update_client_event, ChannelOpenAckData, ChannelOpenConfirmData,
+        ChannelOpenInitData, ChannelOpenTryData, ClientCreationData,
+        ClientUpdateData, ConnectionOpenAckData, ConnectionOpenConfirmData,
+        ConnectionOpenInitData, ConnectionOpenTryData, PacketAckData,
+        PacketReceiptData, PacketSendData,
     };
     use crate::types::storage::KeySeg;
     use crate::vm::wasm;
@@ -616,10 +621,21 @@ mod tests {
 
     #[test]
     fn test_create_client() {
-        let (storage, write_log) = insert_init_states();
+        let (storage, mut write_log) = insert_init_states();
+
+        let height = Height::new(1, 10);
+        let header = MockHeader {
+            height,
+            timestamp: Timestamp::now(),
+        };
+        let client_state = MockClientState(header).wrap_any();
+        let consensus_state = MockConsensusState::new(header).wrap_any();
+        let data = ClientCreationData::new(client_state, consensus_state);
+        let event = make_create_client_event(&get_client_id(), &data);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
-        let tx_data = vec![];
+        let tx_data = data.try_to_vec().expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -680,6 +696,11 @@ mod tests {
             height,
             timestamp: Timestamp::now(),
         };
+        let data = ClientUpdateData::new(
+            client_id.clone(),
+            vec![AnyHeader::from(header)],
+        );
+
         let client_state = MockClientState(header).wrap_any();
         let bytes = client_state.try_to_vec().expect("encoding failed");
         write_log
@@ -691,13 +712,11 @@ mod tests {
         write_log
             .write(&consensus_key, bytes)
             .expect("write failed");
-        write_log.commit_tx();
+        let event = make_update_client_event(&client_id, &data);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
-        let tx_data =
-            ClientUpdateData::new(client_id, vec![AnyHeader::from(header)])
-                .try_to_vec()
-                .expect("encoding failed");
+        let tx_data = data.try_to_vec().expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -730,11 +749,13 @@ mod tests {
         );
 
         // insert an INIT connection
-        let conn_key = connection_key(&get_connection_id());
+        let conn_id = get_connection_id();
+        let conn_key = connection_key(&conn_id);
         let conn = data.connection();
         let bytes = conn.try_to_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
-        write_log.commit_tx();
+        let event = make_open_init_connection_event(&conn_id, &data);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
         let tx_data = data.try_to_vec().expect("encoding failed");
@@ -774,7 +795,6 @@ mod tests {
         let conn = data.connection();
         let bytes = conn.try_to_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
-        write_log.commit_tx();
 
         let tx_code = vec![];
         let tx_data = data.try_to_vec().expect("encoding failed");
@@ -827,11 +847,13 @@ mod tests {
         );
 
         // insert a TryOpen connection
-        let conn_key = connection_key(&get_connection_id());
+        let conn_id = get_connection_id();
+        let conn_key = connection_key(&conn_id);
         let conn = data.connection();
         let bytes = conn.try_to_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
-        write_log.commit_tx();
+        let event = make_open_try_connection_event(&conn_id, &data);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
         let tx_data = data.try_to_vec().expect("encoding failed");
@@ -867,7 +889,6 @@ mod tests {
         let conn = get_connection(ConnState::Open);
         let bytes = conn.try_to_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
-        write_log.commit_tx();
 
         // prepare data
         let height = Height::new(1, 10);
@@ -891,6 +912,8 @@ mod tests {
             proof_consensus,
             Version::default(),
         );
+        let event = make_open_ack_connection_event(&data);
+        write_log.set_ibc_event(event);
 
         let tx_data = data.try_to_vec().expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
@@ -924,7 +947,6 @@ mod tests {
         let conn = get_connection(ConnState::Open);
         let bytes = conn.try_to_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
-        write_log.commit_tx();
 
         // prepare data
         let height = Height::new(1, 10);
@@ -939,6 +961,8 @@ mod tests {
             proof_client,
             proof_consensus,
         );
+        let event = make_open_confirm_connection_event(&data);
+        write_log.set_ibc_event(event);
 
         let tx_data = data.try_to_vec().expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
@@ -983,7 +1007,8 @@ mod tests {
         let channel = data.channel();
         let bytes = channel.try_to_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        write_log.commit_tx();
+        let event = make_open_init_channel_event(&get_channel_id(), &data);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
         let tx_data = data.try_to_vec().expect("encoding failed");
@@ -1037,7 +1062,8 @@ mod tests {
         let channel = data.channel();
         let bytes = channel.try_to_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        write_log.commit_tx();
+        let event = make_open_try_channel_event(&get_channel_id(), &data);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
         let tx_data = data.try_to_vec().expect("encoding failed");
@@ -1094,7 +1120,8 @@ mod tests {
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.try_to_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        write_log.commit_tx();
+        let event = make_open_ack_channel_event(&data);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
         let tx_data = data.try_to_vec().expect("encoding failed");
@@ -1149,7 +1176,8 @@ mod tests {
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.try_to_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        write_log.commit_tx();
+        let event = make_open_confirm_channel_event(&data);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
         let tx_data = data.try_to_vec().expect("encoding failed");
@@ -1480,7 +1508,8 @@ mod tests {
                 commitment.try_to_vec().expect("encoding failed"),
             )
             .expect("write failed");
-        write_log.commit_tx();
+        let event = make_send_packet_event(packet);
+        write_log.set_ibc_event(event);
 
         let tx_code = vec![];
         let tx_data = data.try_to_vec().expect("encoding failed");

@@ -6,9 +6,9 @@ use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
+use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::ibc::IbcEvent;
-use crate::types::storage::{Key, KeySeg};
+use crate::types::storage::Key;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -237,7 +237,7 @@ impl WriteLog {
     pub fn get_ibc_event(&self) -> Option<IbcEvent> {
         match self
             .tx_write_log
-            .get(&Address::Internal(InternalAddress::Ibc).to_db_key().into())
+            .get(&crate::ledger::ibc::storage::event_key())
         {
             Some(StorageModification::Ibc { event }) => Some(event.clone()),
             _ => None,

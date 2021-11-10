@@ -51,7 +51,6 @@ ABCI = [
   "tendermint-rpc-abci",
   "tower-abci-old",
   "anoma/ABCI",
-  "anoma/ibc-vp-abci",
 ]
 ABCI-plus-plus = [
   "ibc",
@@ -61,7 +60,6 @@ ABCI-plus-plus = [
   "tendermint-rpc",
   "tower-abci",
   "anoma/ABCI-plus-plus",
-  "anoma/ibc-vp",
 ]
 testing = ["dev"]
 

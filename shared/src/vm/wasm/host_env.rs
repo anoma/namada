@@ -94,11 +94,11 @@ where
             "anoma_tx_insert_verifier" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_insert_verifier),
             "anoma_tx_update_validity_predicate" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_validity_predicate),
             "anoma_tx_init_account" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_init_account),
+            "anoma_tx_emit_ibc_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_emit_ibc_event),
             "anoma_tx_get_chain_id" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_chain_id),
             "anoma_tx_get_block_height" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_height),
             "anoma_tx_get_block_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_hash),
             "anoma_tx_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_epoch),
-            "anoma_tx_emit_ibc_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_emit_ibc_event),
             "anoma_tx_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_log_string),
         },
     }

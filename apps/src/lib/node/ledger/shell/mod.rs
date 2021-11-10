@@ -80,6 +80,8 @@ pub enum Error {
     Tendermint(tendermint_node::Error),
     #[error("Server error: {0}")]
     TowerServer(String),
+    #[error("Error converting an IBC event")]
+    IbcEvent(crate::node::ledger::events::Error),
 }
 
 /// The different error codes that the ledger may
