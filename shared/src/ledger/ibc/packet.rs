@@ -59,8 +59,9 @@ use super::storage::{port_channel_sequence_id, Error as IbcStorageError};
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::ibc::{
-    make_timeout_on_close_event, Error as IbcDataError, PacketAckData,
-    PacketReceiptData, PacketSendData, TimeoutData,
+    make_send_packet_event, make_timeout_event, make_timeout_on_close_event,
+    Error as IbcDataError, PacketAckData, PacketReceiptData, PacketSendData,
+    TimeoutData,
 };
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -135,7 +136,11 @@ where
                 self.validate_packet_commitment(&packet, commitment)
                     .map_err(|e| Error::InvalidPacket(e.to_string()))?;
 
-                self.validate_send_packet(&commitment_key, &packet)
+                self.validate_send_packet(&commitment_key, &packet)?;
+
+                let event = make_send_packet_event(packet);
+                self.check_emitted_event(event)
+                    .map_err(|e| Error::IbcEvent(e.to_string()))
             }
             StateChange::Deleted => {
                 // check the channel state
@@ -578,45 +583,50 @@ where
         let client_id = connection.client_id().clone();
 
         // check if the packet actually timed out
-        if self
-            .check_timeout(&client_id, data.proof_height, &packet)
-            .is_ok()
-        {
-            // "TimedoutOnClose" because the packet didn't time out
-            // check that the counterpart channel has been closed
-            let expected_my_side = Counterparty::new(
-                packet.source_port.clone(),
-                Some(packet.source_channel.clone()),
-            );
-            let counterparty = connection.counterparty();
-            let conn_id = counterparty.connection_id().ok_or_else(|| {
-                Error::InvalidConnection(
-                    "The counterparty doesn't have a connection ID".to_owned(),
+        match self.check_timeout(&client_id, data.proof_height, &packet) {
+            Ok(()) => {
+                // "TimedoutOnClose" because the packet didn't time out
+                // check that the counterpart channel has been closed
+                let expected_my_side = Counterparty::new(
+                    packet.source_port.clone(),
+                    Some(packet.source_channel.clone()),
+                );
+                let counterparty = connection.counterparty();
+                let conn_id =
+                    counterparty.connection_id().ok_or_else(|| {
+                        Error::InvalidConnection(
+                            "The counterparty doesn't have a connection ID"
+                                .to_owned(),
+                        )
+                    })?;
+                let expected_conn_hops = vec![conn_id.clone()];
+                let expected_channel = ChannelEnd::new(
+                    State::Closed,
+                    *channel.ordering(),
+                    expected_my_side,
+                    expected_conn_hops,
+                    channel.version(),
+                );
+
+                verify_channel_proofs(
+                    self,
+                    &channel,
+                    &connection,
+                    &expected_channel,
+                    &data.proofs()?,
                 )
-            })?;
-            let expected_conn_hops = vec![conn_id.clone()];
-            let expected_channel = ChannelEnd::new(
-                State::Closed,
-                *channel.ordering(),
-                expected_my_side,
-                expected_conn_hops,
-                channel.version(),
-            );
+                .map_err(Error::ProofVerificationFailure)?;
 
-            verify_channel_proofs(
-                self,
-                &channel,
-                &connection,
-                &expected_channel,
-                &data.proofs()?,
-            )
-            .map_err(Error::ProofVerificationFailure)?;
-
-            // Check if the event of TimeoutOnClose has been emitted
-            // An event of Timeout will be checked in the channel validation
-            let event = make_timeout_on_close_event(data.packet);
-            self.check_emitted_event(event)
-                .map_err(|e| Error::IbcEvent(e.to_string()))?;
+                let event = make_timeout_on_close_event(packet.clone());
+                self.check_emitted_event(event)
+                    .map_err(|e| Error::IbcEvent(e.to_string()))?;
+            }
+            Err(_) => {
+                // the packet timed out
+                let event = make_timeout_event(packet.clone());
+                self.check_emitted_event(event)
+                    .map_err(|e| Error::IbcEvent(e.to_string()))?;
+            }
         }
 
         if channel.order_matches(&Order::Ordered) {
