@@ -1,10 +1,22 @@
 //! IBC validity predicate for port module
 
 use borsh::BorshDeserialize;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::context::ChannelReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics05_port::capabilities::Capability;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics05_port::context::PortReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::PortId;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::context::ChannelReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics05_port::capabilities::Capability;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics05_port::context::PortReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::PortId;
 use thiserror::Error;
 
 use super::storage::{

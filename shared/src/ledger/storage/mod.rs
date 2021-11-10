@@ -12,8 +12,14 @@ use std::fmt::Display;
 use prost::Message;
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+#[cfg(not(feature = "ABCI"))]
 use tendermint::block::Header;
+#[cfg(not(feature = "ABCI"))]
 use tendermint::merkle::proof::ProofOp;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::block::Header;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::merkle::proof::ProofOp;
 use thiserror::Error;
 use types::MerkleTree;
 
@@ -118,6 +124,9 @@ pub struct BlockState {
 
 /// A database backend.
 pub trait DB: std::fmt::Debug {
+    /// open the database from provided path
+    fn open(db_path: impl AsRef<std::path::Path>) -> Self;
+
     /// Flush data on the memory to persistent them
     fn flush(&self) -> Result<()>;
 
@@ -158,6 +167,34 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
+    /// open up a new instance of the storage given path to db and chain id
+    pub fn open(
+        db_path: impl AsRef<std::path::Path>,
+        chain_id: ChainId,
+    ) -> Self {
+        let block = BlockStorage {
+            tree: MerkleTree::default(),
+            hash: BlockHash::default(),
+            height: BlockHeight::default(),
+            epoch: Epoch::default(),
+            pred_epochs: Epochs::default(),
+            subspaces: HashMap::default(),
+        };
+        Storage::<D, H> {
+            db: D::open(db_path),
+            chain_id,
+            block,
+            header: None,
+            last_height: BlockHeight(0),
+            last_epoch: Epoch::default(),
+            next_epoch_min_start_height: BlockHeight::default(),
+            next_epoch_min_start_time: DateTimeUtc::now(),
+            address_gen: EstablishedAddressGen::new(
+                "Privacy is a function of liberty.",
+            ),
+        }
+    }
+
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
     pub fn load_last_state(&mut self) -> Result<()> {

@@ -1,17 +1,54 @@
 //! IBC validity predicate for connection module
 
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_consensus::{AnyConsensusState, ConsensusState};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_state::AnyClientState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::context::ClientReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::height::Height;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::connection::{ConnectionEnd, Counterparty, State};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::context::ConnectionReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::error::Error as Ics03Error;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::handler::verify::verify_proofs;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics07_tendermint::consensus_state::ConsensusState as TendermintConsensusState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics23_commitment::commitment::CommitmentPrefix;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::{ClientId, ConnectionId};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_consensus::{
+    AnyConsensusState, ConsensusState,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_state::AnyClientState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::context::ClientReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::height::Height;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::connection::{
+    ConnectionEnd, Counterparty, State,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::context::ConnectionReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::error::Error as Ics03Error;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::handler::verify::verify_proofs;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics07_tendermint::consensus_state::ConsensusState as TendermintConsensusState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics23_commitment::commitment::CommitmentPrefix;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::{ClientId, ConnectionId};
 use thiserror::Error;
 
 use super::storage::{

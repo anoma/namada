@@ -1,4 +1,4 @@
-mod events;
+pub mod events;
 pub mod protocol;
 pub mod rpc;
 mod shell;
@@ -6,16 +6,21 @@ mod shims;
 pub mod storage;
 pub mod tendermint_node;
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
 
 use anoma::types::chain::ChainId;
-use anoma::types::storage::BlockHash;
 use futures::future::{AbortHandle, AbortRegistration, Abortable};
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::CheckTxType;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::abci::CheckTxType;
 use tower::ServiceBuilder;
+#[cfg(not(feature = "ABCI"))]
 use tower_abci::{response, split, Server};
+#[cfg(feature = "ABCI")]
+use tower_abci_old::{response, split, Server};
 
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
@@ -59,48 +64,42 @@ impl Shell {
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
+            #[cfg(not(feature = "ABCI"))]
             Request::PrepareProposal(block) => {
-                match (
-                    BlockHash::try_from(&*block.hash),
-                    block.header.expect("missing block's header").try_into(),
-                ) {
-                    (Ok(hash), Ok(header)) => {
-                        let _ = self.prepare_proposal(
-                            hash,
-                            header,
-                            block.byzantine_validators,
-                        );
-                    }
-                    (Ok(_), Err(msg)) => {
-                        tracing::error!("Unexpected block header {}", msg);
-                    }
-                    (err @ Err(_), _) => tracing::error!("{:#?}", err),
-                };
-                Ok(Response::PrepareProposal(Default::default()))
+                Ok(Response::PrepareProposal(self.prepare_proposal(block)))
             }
             Request::VerifyHeader(_req) => {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))
             }
             Request::ProcessProposal(block) => {
-                Ok(Response::ProcessProposal(self.process_proposal(block)))
+                #[cfg(not(feature = "ABCI"))]
+                {
+                    Ok(Response::ProcessProposal(self.process_proposal(block)))
+                }
+                #[cfg(feature = "ABCI")]
+                {
+                    Ok(Response::ProcessProposal(
+                        self.process_and_decode_proposal(block),
+                    ))
+                }
             }
+            #[cfg(not(feature = "ABCI"))]
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
+            #[cfg(not(feature = "ABCI"))]
             Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
-            Request::VerifyVoteExtension(_req) => {
-                Ok(Response::VerifyVoteExtension(Default::default()))
-            }
+            #[cfg(not(feature = "ABCI"))]
+            Request::VerifyVoteExtension(_req) => Ok(
+                Response::VerifyVoteExtension(self.verify_vote_extension(_req)),
+            ),
             Request::FinalizeBlock(finalize) => {
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
             Request::Commit(_) => Ok(Response::Commit(self.commit())),
             Request::Flush(_) => Ok(Response::Flush(Default::default())),
-            Request::SetOption(_) => {
-                Ok(Response::SetOption(Default::default()))
-            }
             Request::Echo(msg) => Ok(Response::Echo(response::Echo {
                 message: msg.message,
             })),

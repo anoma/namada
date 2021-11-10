@@ -11,11 +11,21 @@ use borsh::BorshSerialize;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::net::Address as TendermintAddress;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::node::Id as TendermintNodeId;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address as TendermintAddress;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::node::Id as TendermintNodeId;
 
 use crate::cli::{self, args};
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
-use crate::config::{self, genesis, Config, IntentGossiper, PeerAddress};
+use crate::config::{
+    self, genesis, Config, IntentGossiper, PeerAddress, TendermintMode,
+};
 use crate::node::ledger::tendermint_node;
 use crate::wallet::Wallet;
 
@@ -77,7 +87,7 @@ pub fn init_network(
 
     let mut rng: ThreadRng = thread_rng();
 
-    let mut persistent_peers: Vec<tendermint::net::Address> =
+    let mut persistent_peers: Vec<TendermintAddress> =
         Vec::with_capacity(config.validator.len());
     // Intent gossiper config bootstrap peers where we'll add the address for
     // each validator's node
@@ -104,7 +114,7 @@ pub fn init_network(
             node_keypair.public.clone().into();
 
         // Derive the node ID from the node key
-        let node_id: tendermint::node::Id = node_pk.into();
+        let node_id: TendermintNodeId = node_pk.into();
 
         // Convert and write the keypair into Tendermint node_key.json file
         let node_key: ed25519_dalek::Keypair = node_keypair.into();
@@ -132,7 +142,7 @@ pub fn init_network(
         tendermint_node::write_validator_state(&tm_home_dir);
 
         // Build the list of persistent peers from the validators' node IDs
-        let peer = tendermint::net::Address::from_str(&format!(
+        let peer = TendermintAddress::from_str(&format!(
             "{}@{}",
             node_id,
             config.net_address.as_ref().unwrap(),
@@ -234,12 +244,10 @@ pub fn init_network(
                         validator_owned_accounts
                             .insert(account.clone(), matchmaker);
 
-                        let ledger_address =
-                            tendermint::net::Address::from_str(&format!(
-                                "127.0.0.1:{}",
-                                first_port + 1
-                            ))
-                            .unwrap();
+                        let ledger_address = TendermintAddress::from_str(
+                            &format!("127.0.0.1:{}", first_port + 1),
+                        )
+                        .unwrap();
                         gossiper_config.matchmaker = Some(config::Matchmaker {
                             matchmaker: mm_code.clone().into(),
                             tx_code: tx_code.clone().into(),
@@ -388,14 +396,16 @@ pub fn init_network(
     });
 
     // Generate the validators' ledger and intent gossip config
-    config
-        .validator
-        .iter_mut()
-        .for_each(|(name, validator_config)| {
+    config.validator.iter_mut().enumerate().for_each(
+        |(ix, (name, validator_config))| {
             let accounts_dir = chain_dir.join(NET_ACCOUNTS_DIR);
             let validator_dir =
                 accounts_dir.join(name).join(config::DEFAULT_BASE_DIR);
-            let mut config = Config::load(&validator_dir, &chain_id);
+            let mut config = Config::load(
+                &validator_dir,
+                &chain_id,
+                TendermintMode::Validator,
+            );
 
             // Configure the ledger
             config.ledger.genesis_time = genesis.genesis_time.into();
@@ -406,8 +416,17 @@ pub fn init_network(
             // directories.
             config.ledger.shell.base_dir = config::DEFAULT_BASE_DIR.into();
             // Add a ledger P2P persistent peers
-            config.ledger.tendermint.p2p_persistent_peers =
-                persistent_peers.clone();
+            config.ledger.tendermint.p2p_persistent_peers = persistent_peers
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, peer)|
+                        // we do not add the validator in its own persistent peer list
+                        if index != ix  {
+                            Some(peer.to_owned())
+                        } else {
+                            None
+                        })
+                    .collect();
             config.ledger.tendermint.consensus_timeout_commit =
                 consensus_timeout_commit;
             config.ledger.tendermint.p2p_allow_duplicate_ip =
@@ -456,10 +475,15 @@ pub fn init_network(
             });
 
             config.write(&validator_dir, &chain_id, true).unwrap();
-        });
+        },
+    );
 
     // Update the ledger config persistent peers and save it
-    let mut config = Config::load(&global_args.base_dir, &chain_id);
+    let mut config = Config::load(
+        &global_args.base_dir,
+        &chain_id,
+        TendermintMode::Validator,
+    );
     config.ledger.tendermint.p2p_persistent_peers = persistent_peers;
     config.ledger.tendermint.consensus_timeout_commit =
         consensus_timeout_commit;
@@ -517,7 +541,11 @@ pub fn init_genesis_validator(
 ) {
     let chain_dir = global_args.base_dir.join(chain_id.as_str());
     let mut wallet = Wallet::load_or_new(&chain_dir);
-    let config = Config::load(&global_args.base_dir, &chain_id);
+    let config = Config::load(
+        &global_args.base_dir,
+        &chain_id,
+        TendermintMode::Validator,
+    );
     init_genesis_validator_aux(
         &mut wallet,
         &config,

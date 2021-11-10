@@ -3,16 +3,29 @@ use std::convert::TryFrom;
 
 use anoma::ledger::pos::{BondId, Bonds, Unbonds};
 use anoma::proto::Tx;
-use anoma::types::address::{self, Address};
-use anoma::types::token;
-use anoma::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
+use anoma::types::address::Address;
+use anoma::types::key::ed25519::Keypair;
+use anoma::types::transaction::{
+    pos, Fee, InitAccount, InitValidator, UpdateVp, WrapperTx,
+};
+use anoma::types::{address, token};
 use anoma::{ledger, vm};
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::net::Address as TendermintAddress;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::{EventType, Query};
+#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::{Client, HttpClient};
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::query::{EventType, Query};
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::{Client, HttpClient};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address as TendermintAddress;
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
@@ -20,6 +33,7 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
+use crate::node::ledger::events::{Attributes, EventType as TmEventType};
 use crate::node::ledger::tendermint_node;
 
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -37,9 +51,9 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
     let tx = Tx::new(tx_code, data);
-
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, None).await;
-    let (ctx, initialized_accounts) = submit_tx(ctx, &args.tx, tx).await;
+    let (ctx, tx, keypair) = sign_tx(ctx, tx, &args.tx, None).await;
+    let (ctx, initialized_accounts) =
+        submit_tx(ctx, &args.tx, tx, &keypair).await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
@@ -94,8 +108,8 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.addr)).await;
-    submit_tx(ctx, &args.tx, tx).await;
+    let (ctx, tx, keypair) = sign_tx(ctx, tx, &args.tx, Some(&args.addr)).await;
+    submit_tx(ctx, &args.tx, tx, &keypair).await;
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
@@ -120,8 +134,10 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.source)).await;
-    let (ctx, initialized_accounts) = submit_tx(ctx, &args.tx, tx).await;
+    let (ctx, tx, keypair) =
+        sign_tx(ctx, tx, &args.tx, Some(&args.source)).await;
+    let (ctx, initialized_accounts) =
+        submit_tx(ctx, &args.tx, tx, &keypair).await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
@@ -214,9 +230,10 @@ pub async fn submit_init_validator(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &tx_args, Some(&source)).await;
+    let (ctx, tx, keypair) = sign_tx(ctx, tx, &tx_args, Some(&source)).await;
 
-    let (mut ctx, initialized_accounts) = submit_tx(ctx, &tx_args, tx).await;
+    let (mut ctx, initialized_accounts) =
+        submit_tx(ctx, &tx_args, tx, &keypair).await;
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address, rewards_address_alias) =
             match &initialized_accounts[..] {
@@ -390,8 +407,9 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.source)).await;
-    submit_tx(ctx, &args.tx, tx).await;
+    let (ctx, tx, keypair) =
+        sign_tx(ctx, tx, &args.tx, Some(&args.source)).await;
+    submit_tx(ctx, &args.tx, tx, &keypair).await;
 }
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
@@ -456,8 +474,9 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
-    submit_tx(ctx, &args.tx, tx).await;
+    let (ctx, tx, keypair) =
+        sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
+    submit_tx(ctx, &args.tx, tx, &keypair).await;
 }
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
@@ -525,17 +544,15 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
-    submit_tx(ctx, &args.tx, tx).await;
+    let (ctx, tx, keypair) =
+        sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
+    submit_tx(ctx, &args.tx, tx, &keypair).await;
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
-    let (ctx, epoch) = rpc::query_epoch(
-        ctx,
-        args::Query {
-            ledger_address: args.tx.ledger_address.clone(),
-        },
-    )
+    let epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.tx.ledger_address.clone(),
+    })
     .await;
 
     let validator = ctx.get(&args.validator);
@@ -597,8 +614,9 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
-    submit_tx(ctx, &args.tx, tx).await;
+    let (ctx, tx, keypair) =
+        sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
+    submit_tx(ctx, &args.tx, tx, &keypair).await;
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -609,10 +627,10 @@ async fn sign_tx(
     tx: Tx,
     args: &args::Tx,
     default: Option<&WalletAddress>,
-) -> (Context, Tx) {
-    let tx = if let Some(signing_key) = &args.signing_key {
+) -> (Context, Tx, std::rc::Rc<Keypair>) {
+    let (tx, keypair) = if let Some(signing_key) = &args.signing_key {
         let signing_key = ctx.get_cached(signing_key);
-        tx.sign(&signing_key)
+        (tx.sign(&signing_key), signing_key)
     } else if let Some(signer) = args.signer.as_ref().or(default) {
         let signer = ctx.get(signer);
         let signing_key = signing::find_keypair(
@@ -621,12 +639,15 @@ async fn sign_tx(
             args.ledger_address.clone(),
         )
         .await;
-        tx.sign(&signing_key)
+        (tx.sign(&signing_key), signing_key)
     } else {
-        // Unsigned tx
-        tx
+        panic!(
+            "All transactions must be signed; please either specify the key \
+             or the address from which to look up the signing key."
+        );
     };
-    (ctx, tx)
+
+    (ctx, tx, keypair)
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -635,9 +656,8 @@ async fn submit_tx(
     ctx: Context,
     args: &args::Tx,
     tx: Tx,
+    keypair: &Keypair,
 ) -> (Context, Vec<Address>) {
-    let tx_bytes = tx.to_bytes();
-
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -649,10 +669,24 @@ async fn submit_tx(
     // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
-        rpc::dry_run_tx(&args.ledger_address, tx_bytes).await;
+        rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
         (ctx, vec![])
     } else {
-        match broadcast_tx(args.ledger_address.clone(), tx_bytes).await {
+        let epoch = rpc::query_epoch(args::Query {
+            ledger_address: args.ledger_address.clone(),
+        })
+        .await;
+        let tx = WrapperTx::new(
+            Fee {
+                amount: args.fee_amount,
+                token: ctx.get(&args.fee_token),
+            },
+            keypair,
+            epoch,
+            args.gas_limit.clone(),
+            tx,
+        );
+        match broadcast_tx(args.ledger_address.clone(), tx, keypair).await {
             Ok(result) => (ctx, result.initialized_accounts),
             Err(err) => {
                 eprintln!(
@@ -735,39 +769,136 @@ async fn save_initialized_accounts(
     }
 }
 
+/// Broadcast a transaction to be included in the blockchain.
+///
+/// Checks that
+/// 1. The tx has been successfully included into the mempool of a validator
+/// 2. The tx with encrypted payload has been included on the blockchain
+/// 3. The decrypted payload of the tx has been included on the blockchain.
+///
+/// In the case of errors in any of those stages, an error message is returned
 pub async fn broadcast_tx(
-    address: tendermint::net::Address,
-    tx_bytes: Vec<u8>,
+    address: TendermintAddress,
+    tx: WrapperTx,
+    keypair: &Keypair,
 ) -> Result<TxResponse, Error> {
-    let mut client = TendermintWebsocketClient::open(
-        WebSocketAddress::try_from(address)?,
+    // We use this to determine when the wrapper tx makes it on-chain
+    let wrapper_tx_hash = if !cfg!(feature = "ABCI") {
+        hash_tx(&tx.try_to_vec().unwrap()).to_string()
+    } else {
+        tx.tx_hash.to_string()
+    };
+    // We use this to determine when the decrypted inner tx makes it on-chain
+    let decrypted_tx_hash = if !cfg!(feature = "ABCI") {
+        Some(tx.tx_hash.to_string())
+    } else {
+        None
+    };
+
+    // we sign all txs
+    let tx = tx
+        .sign(keypair)
+        .expect("Signing of the wrapper transaction should not fail");
+    let tx_bytes = tx.to_bytes();
+
+    let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
+        WebSocketAddress::try_from(address.clone())?,
         None,
     )?;
+
     // It is better to subscribe to the transaction before it is broadcast
     //
     // Note that the `applied.hash` key comes from a custom event
     // created by the shell
-    let query = Query::from(EventType::NewBlock)
-        .and_eq("applied.hash", hash_tx(&tx_bytes).to_string());
-    client.subscribe(query)?;
-    let response = client
+    let query = if !cfg!(feature = "ABCI") {
+        Query::from(EventType::NewBlock)
+            .and_eq("accepted.hash", wrapper_tx_hash.as_str())
+    } else {
+        Query::from(EventType::NewBlock)
+            .and_eq("applied.hash", wrapper_tx_hash.as_str())
+    };
+    wrapper_tx_subscription.subscribe(query)?;
+
+    // If we are using ABCI++, we also subscribe to the event emitted
+    // when the encrypted payload makes its way onto the blockchain
+    let mut decrypted_tx_subscription = if !cfg!(feature = "ABCI") {
+        let mut decrypted_tx_subscription = TendermintWebsocketClient::open(
+            WebSocketAddress::try_from(address)?,
+            None,
+        )?;
+        let query = Query::from(EventType::NewBlock).and_eq(
+            "applied.hash",
+            decrypted_tx_hash.as_ref().unwrap().as_str(),
+        );
+        decrypted_tx_subscription.subscribe(query)?;
+        Some(decrypted_tx_subscription)
+    } else {
+        None
+    };
+
+    let response = wrapper_tx_subscription
         .broadcast_tx_sync(tx_bytes.into())
         .await
         .map_err(|err| Error::Response(format!("{:?}", err)))?;
 
     let parsed = if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
-        let parsed = TxResponse::from(client.receive_response()?);
-        println!(
-            "Transaction applied with result: {}",
-            serde_json::to_string_pretty(&parsed).unwrap()
-        );
-        Ok(parsed)
+        let parsed = if !cfg!(feature = "ABCI") {
+            parse(
+                wrapper_tx_subscription.receive_response()?,
+                TmEventType::Accepted,
+                &wrapper_tx_hash.to_string(),
+            )
+        } else {
+            TxResponse::find_tx(
+                wrapper_tx_subscription.receive_response()?,
+                wrapper_tx_hash,
+            )
+        };
+        #[cfg(feature = "ABCI")]
+        {
+            println!(
+                "Transaction applied with result: {}",
+                serde_json::to_string_pretty(&parsed).unwrap()
+            );
+            Ok(parsed)
+        }
+        #[cfg(not(feature = "ABCI"))]
+        {
+            println!(
+                "Transaction accepted with result: {}",
+                serde_json::to_string_pretty(&parsed).unwrap()
+            );
+            // The transaction is now on chain. We wait for it to be decrypted
+            // and applied
+            if parsed.code == 0.to_string() {
+                let parsed = parse(
+                    decrypted_tx_subscription
+                        .as_ref()
+                        .unwrap()
+                        .receive_response()?,
+                    TmEventType::Applied,
+                    decrypted_tx_hash.as_ref().unwrap(),
+                );
+                println!(
+                    "Transaction applied with result: {}",
+                    serde_json::to_string_pretty(&parsed).unwrap()
+                );
+                Ok(parsed)
+            } else {
+                Ok(parsed)
+            }
+        }
     } else {
         Err(Error::Response(response.log.to_string()))
     };
-    client.unsubscribe()?;
-    client.close();
+    wrapper_tx_subscription.unsubscribe()?;
+    wrapper_tx_subscription.close();
+    if !cfg!(feature = "ABCI") {
+        decrypted_tx_subscription.as_mut().unwrap().unsubscribe()?;
+        decrypted_tx_subscription.as_mut().unwrap().close();
+    }
+
     parsed
 }
 
@@ -781,16 +912,90 @@ pub struct TxResponse {
     initialized_accounts: Vec<Address>,
 }
 
-impl From<serde_json::Value> for TxResponse {
-    fn from(json: serde_json::Value) -> Self {
+/// Parse the JSON payload received from a subscription
+///
+/// Searches for custom events emitted from the ledger and converts
+/// them back to thin wrapper around a hashmap for further parsing.
+fn parse(
+    json: serde_json::Value,
+    event_type: TmEventType,
+    tx_hash: &str,
+) -> TxResponse {
+    let mut selector = jsonpath::selector(&json);
+    let mut event = selector(&format!(
+        "$.events.[?(@.type=='{}')]",
+        event_type.to_string()
+    ))
+    .unwrap()
+    .iter()
+    .filter_map(|event| {
+        let attrs = Attributes::from(*event);
+        match attrs.get("hash") {
+            Some(hash) if hash == tx_hash => Some(attrs),
+            _ => None,
+        }
+    })
+    .collect::<Vec<Attributes>>()
+    .remove(0);
+
+    let info = event.take("info").unwrap();
+    let height = event.take("height").unwrap();
+    let hash = event.take("hash").unwrap();
+    let code = event.take("code").unwrap();
+    let gas_used = event.take("gas_used").unwrap_or_else(|| String::from("0"));
+    let initialized_accounts = event.take("initialized_accounts");
+    let initialized_accounts = match initialized_accounts {
+        Some(values) => serde_json::from_str(&values).unwrap(),
+        _ => vec![],
+    };
+    TxResponse {
+        info,
+        height,
+        hash,
+        code,
+        gas_used,
+        initialized_accounts,
+    }
+}
+
+impl TxResponse {
+    pub fn find_tx(json: serde_json::Value, tx_hash: String) -> Self {
+        let tx_hash_json = serde_json::Value::String(tx_hash.clone());
         let mut selector = jsonpath::selector(&json);
-        let info = selector("$.events.['applied.info'][0]").unwrap();
-        let height = selector("$.events.['applied.height'][0]").unwrap();
-        let hash = selector("$.events.['applied.hash'][0]").unwrap();
-        let code = selector("$.events.['applied.code'][0]").unwrap();
-        let gas_used = selector("$.events.['applied.gas_used'][0]").unwrap();
-        let initialized_accounts =
-            selector("$.events.['applied.initialized_accounts'][0]");
+        let mut index = 0;
+        // Find the tx with a matching hash
+        let hash = loop {
+            if let Ok(hash) =
+                selector(&format!("$.events.['applied.hash'][{}]", index))
+            {
+                let hash = hash[0].clone();
+                if hash == tx_hash_json {
+                    break hash;
+                } else {
+                    index += index;
+                }
+            } else {
+                eprintln!(
+                    "Couldn't find tx with hash {} in the event string {}",
+                    tx_hash, json
+                );
+                safe_exit(1)
+            }
+        };
+        let info =
+            selector(&format!("$.events.['applied.info'][{}]", index)).unwrap();
+        let height =
+            selector(&format!("$.events.['applied.height'][{}]", index))
+                .unwrap();
+        let code =
+            selector(&format!("$.events.['applied.code'][{}]", index)).unwrap();
+        let gas_used =
+            selector(&format!("$.events.['applied.gas_used'][{}]", index))
+                .unwrap();
+        let initialized_accounts = selector(&format!(
+            "$.events.['applied.initialized_accounts'][{}]",
+            index
+        ));
         let initialized_accounts = match initialized_accounts {
             Ok(values) if !values.is_empty() => {
                 // In a response, the initialized accounts are encoded as e.g.:
@@ -812,7 +1017,7 @@ impl From<serde_json::Value> for TxResponse {
         TxResponse {
             info: serde_json::from_value(info[0].clone()).unwrap(),
             height: serde_json::from_value(height[0].clone()).unwrap(),
-            hash: serde_json::from_value(hash[0].clone()).unwrap(),
+            hash: serde_json::from_value(hash).unwrap(),
             code: serde_json::from_value(code[0].clone()).unwrap(),
             gas_used: serde_json::from_value(gas_used[0].clone()).unwrap(),
             initialized_accounts,

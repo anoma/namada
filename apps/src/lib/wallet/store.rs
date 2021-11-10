@@ -253,7 +253,7 @@ impl Store {
 
     /// Insert a new key with the given alias. If the alias is already used,
     /// will prompt for overwrite confirmation.
-    fn insert_keypair(
+    pub(super) fn insert_keypair(
         &mut self,
         alias: Alias,
         keypair: StoredKeypair,

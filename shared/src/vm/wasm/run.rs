@@ -125,7 +125,6 @@ where
         tx_data_ptr,
         tx_data_len,
     } = memory::write_tx_inputs(memory, tx_data).map_err(Error::MemoryError)?;
-
     // Get the module's entrypoint to be called
     let apply_tx = instance
         .exports
@@ -136,9 +135,16 @@ where
             entrypoint: TX_ENTRYPOINT,
             error,
         })?;
-    apply_tx
+    match apply_tx
         .call(tx_data_ptr, tx_data_len)
-        .map_err(Error::RuntimeError)?;
+        .map_err(Error::RuntimeError)
+    {
+        Err(Error::RuntimeError(err)) => {
+            tracing::debug!("Tx WASM failed with {}", err);
+            Err(Error::RuntimeError(err))
+        }
+        _ => Ok(()),
+    }?;
 
     Ok(verifiers)
 }

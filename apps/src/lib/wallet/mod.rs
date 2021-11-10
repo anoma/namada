@@ -232,6 +232,17 @@ impl Wallet {
     pub fn add_address(&mut self, alias: String, address: Address) -> bool {
         self.store.insert_address(alias, address)
     }
+
+    /// Insert a new key with the given alias. If the alias is already used,
+    /// will prompt for overwrite confirmation.
+    pub fn insert_keypair(
+        &mut self,
+        alias: Alias,
+        keypair: StoredKeypair,
+        pkh: PublicKeyHash,
+    ) -> bool {
+        self.store.insert_keypair(alias, keypair, pkh)
+    }
 }
 
 /// Read the password for encryption/decryption from the file/env/stdin. Panics

@@ -9,19 +9,15 @@
 //! To keep the temporary files created by a test, use env var
 //! `ANOMA_E2E_KEEP_TEMP=true`.
 
-use std::fs;
 use std::process::Command;
 
-use anoma::proto::Tx;
-use anoma::types::storage::Epoch;
 use anoma::types::token;
-use anoma::types::transaction::{Fee, WrapperTx};
 use anoma_apps::wallet;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use setup::constants::*;
 
-use crate::e2e::setup::{self, find_address, find_keypair, sleep, Bin, Who};
+use crate::e2e::setup::{self, find_address, sleep, Bin, Who};
 use crate::{run, run_as};
 
 /// Test that when we "run-ledger" with all the possible command
@@ -45,7 +41,13 @@ fn run_ledger() -> Result<()> {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(20))?;
         ledger.exp_string("Anoma ledger node started")?;
-        ledger.exp_string("This node is not a validator")?;
+        if !cfg!(feature = "ABCI") {
+            ledger.exp_string(
+                "This node is a validator (NOT in the active validator set)",
+            )?;
+        } else {
+            ledger.exp_string("This node is not a validator")?;
+        }
     }
 
     Ok(())
@@ -159,7 +161,11 @@ fn ledger_txs_and_queries() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("Started node")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
     let vp_user = vp_user.to_string_lossy();
@@ -169,19 +175,52 @@ fn ledger_txs_and_queries() -> Result<()> {
     let txs_args = vec![
             // 2. Submit a token transfer tx
             vec![
-                "transfer", "--source", BERTHA, "--target", ALBERT, "--token",
-                XAN, "--amount", "10.1",
+                "transfer",
+                "--source",
+                BERTHA,
+                "--target",
+                ALBERT,
+                "--token",
+                XAN,
+                "--amount",
+                "10.1",
+                "--fee-amount",
+                "0",
+                "--gas-limit",
+                "0",
+                "--fee-token",
+                XAN,
             ],
             // 3. Submit a transaction to update an account's validity
             // predicate
-            vec!["update", "--address", BERTHA, "--code-path", &vp_user],
+            vec![
+                "update",
+                 "--address",
+                 BERTHA,
+                 "--code-path",
+                 &vp_user,
+                 "--fee-amount",
+                 "0",
+                 "--gas-limit",
+                 "0",
+                 "--fee-token",
+                 XAN,
+            ],
             // 4. Submit a custom tx
             vec![
                 "tx",
+                "--signer",
+                BERTHA,
                 "--code-path",
                 &tx_no_op,
                 "--data-path",
                 "README.md",
+                "--fee-amount",
+                "0",
+                "--gas-limit",
+                "0",
+                "--fee-token",
+                XAN,
             ],
             // 5. Submit a tx to initialize a new account
             vec![
@@ -194,7 +233,13 @@ fn ledger_txs_and_queries() -> Result<()> {
                 "--code-path",
                 &vp_user,
                 "--alias",
-                "test-account"
+                "test-account",
+                "--fee-amount",
+                "0",
+                "--gas-limit",
+                "0",
+                "--fee-token",
+                XAN,
             ],
         ];
     for tx_args in &txs_args {
@@ -207,11 +252,12 @@ fn ledger_txs_and_queries() -> Result<()> {
             let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
 
             if !dry_run {
-                client
-                    .exp_string("Process proposal accepted this transaction")?;
+                if !cfg!(feature = "ABCI") {
+                    client.exp_string("Transaction accepted")?;
+                }
+                client.exp_string("Transaction applied")?;
             }
             client.exp_string("Transaction is valid.")?;
-
             client.assert_success();
         }
     }
@@ -221,7 +267,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         (
             vec!["balance", "--owner", BERTHA, "--token", XAN],
             // expect a decimal
-            r"XAN: (\d*\.)\d+",
+            r"XAN: \d+(\.\d+)?",
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
@@ -247,8 +293,14 @@ fn invalid_transactions() -> Result<()> {
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
+    let keypair = wallet::defaults::daewon_keypair();
+    let daewon = keypair.to_string();
     ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("Started node")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
@@ -256,7 +308,7 @@ fn invalid_transactions() -> Result<()> {
     // in the token's VP)
     let tx_data_path = test.base_dir.path().join("tx.data");
     let transfer = token::Transfer {
-        source: find_address(&test, BERTHA)?,
+        source: find_address(&test, DAEWON)?,
         target: find_address(&test, ALBERT)?,
         token: find_address(&test, XAN)?,
         amount: token::Amount::whole(1),
@@ -264,31 +316,36 @@ fn invalid_transactions() -> Result<()> {
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let source_key = find_keypair(&test, BERTHA_KEY)?;
     let tx_wasm_path = wasm_abs_path(TX_MINT_TOKENS_WASM);
-    let tx_code = fs::read(&tx_wasm_path).unwrap();
-    let tx = Tx::new(tx_code, Some(data)).sign(&source_key);
-
-    let tx_data = tx.data.unwrap();
-    std::fs::write(&tx_data_path, tx_data).unwrap();
+    std::fs::write(&tx_data_path, data).unwrap();
     let tx_wasm_path = tx_wasm_path.to_string_lossy();
     let tx_data_path = tx_data_path.to_string_lossy();
+
     let tx_args = vec![
         "tx",
         "--code-path",
         &tx_wasm_path,
         "--data-path",
         &tx_data_path,
+        "--signing-key",
+        &daewon,
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-
-    client.exp_string("Process proposal accepted this transaction")?;
+    if !cfg!(feature = "ABCI") {
+        client.exp_string("Transaction accepted")?;
+    }
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is invalid")?;
     client.exp_string(r#""code": "1"#)?;
 
     client.assert_success();
-
     ledger.exp_string("some VPs rejected apply_tx storage modification")?;
 
     // Wait to commit a block
@@ -307,147 +364,40 @@ fn invalid_transactions() -> Result<()> {
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
 
-    // 5. Submit and invalid transactions (invalid token address)
+    // 5. Submit an invalid transactions (invalid token address)
     let tx_args = vec![
         "transfer",
         "--source",
-        BERTHA,
+        DAEWON,
+        "--signing-key",
+        &daewon,
         "--target",
         ALBERT,
         "--token",
         BERTHA,
         "--amount",
         "1_000_000.1",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
         // Force to ignore client check that fails on the balance check of the
         // source address
         "--force",
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-
-    client.exp_string("Process proposal accepted this transaction")?;
+    if !cfg!(feature = "ABCI") {
+        client.exp_string("Transaction accepted")?;
+    }
+    client.exp_string("Transaction applied")?;
 
     client.exp_string("Error trying to apply a transaction")?;
 
-    client.exp_string(r#""code": "2"#)?;
+    client.exp_string(r#""code": "3"#)?;
 
     client.assert_success();
-    Ok(())
-}
-
-/// 1. Start the ledger
-/// 2. Submit a valid wrapper tx and check it is accepted.
-/// Rejected cases:
-/// 3. Submit a wrapper tx without signing
-/// 4. Submit a wrapper tx signed with wrong key
-/// 5. Submit a wrapper tx where the fee > user's balance
-#[test]
-fn test_wrapper_txs() -> Result<()> {
-    let test = setup::single_node_net()?;
-    // We cannot read this key with `find_keypair`, because its pre-generated
-    // and its public key is hard-coded in the E2E genesis source.
-    let keypair = wallet::defaults::daewon_keypair();
-
-    use anoma::types::token::Amount;
-    let tx = WrapperTx::new(
-        Fee {
-            amount: Amount::whole(1_000_000),
-            token: find_address(&test, XAN)?,
-        },
-        &keypair,
-        Epoch(1),
-        1.into(),
-        Tx::new(vec![], Some("transaction data".as_bytes().to_owned())),
-    );
-
-    // write out the tx code and data to files
-    let wasm = test.base_dir.path().join("tx_wasm");
-    std::fs::write(&wasm, vec![]).expect("Test failed");
-    let wasm_path = wasm.to_string_lossy();
-    let data = test.base_dir.path().join("tx_data");
-    std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
-        .expect("Test failed");
-    let data_path = data.to_string_lossy();
-
-    // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
-    ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("Started node")?;
-    // Wait to commit a block
-    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
-
-    // 2. Submit a valid wrapper tx and check it is accepted.
-    let keypair_str = keypair.to_string();
-    let tx_args = vec![
-        "tx",
-        "--code-path",
-        &wasm_path,
-        "--data-path",
-        &data_path,
-        "--signing-key",
-        &keypair_str,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-    // check that it is accepted by the process proposal method
-    client.exp_string("Process proposal accepted this transaction")?;
-    // check that it is placed on - chain
-    client.exp_string("Transaction is valid.")?;
-    drop(client);
-
-    // 3. Submit a wrapper tx without signing
-    let tx_args =
-        vec!["tx", "--code-path", &wasm_path, "--data-path", &data_path];
-    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-    // check that it is rejected by the process proposal method
-    client.exp_string("Expected signed WrapperTx data")?;
-    drop(client);
-
-    // 4. Submit a wrapper tx signed with wrong key
-    let tx_args = vec![
-        "tx",
-        "--code-path",
-        &wasm_path,
-        "--data-path",
-        &data_path,
-        "--signing-key",
-        ALBERT_KEY,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-    // check that it is rejected by the process proposal method
-    client.exp_string("Signature verification failed")?;
-    drop(client);
-
-    // 5. Submit a wrapper tx where the fee > user's balance
-    let tx = WrapperTx::new(
-        Fee {
-            amount: Amount::whole(1_000_001),
-            token: find_address(&test, XAN)?,
-        },
-        &keypair,
-        Epoch(1),
-        1.into(),
-        Tx::new(vec![], Some("transaction data".as_bytes().to_owned())),
-    );
-
-    // write out the tx data to file
-    let data = test.base_dir.path().join("tx_data");
-    std::fs::write(&data, tx.try_to_vec().expect("Test failed"))
-        .expect("Test failed");
-    let tx_args = vec![
-        "tx",
-        "--code-path",
-        &wasm_path,
-        "--data-path",
-        &data_path,
-        "--signing-key",
-        &keypair_str,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(20))?;
-    // check that it is rejected by the process proposal method
-    client.exp_string(
-        "The address given does not have sufficient balance to pay fee",
-    )?;
-
     Ok(())
 }

@@ -41,6 +41,7 @@ dependencies = [
  "sha2",
  "sparse-merkle-tree",
  "tendermint",
+ "tendermint-proto",
  "thiserror",
  "tonic-build",
  "tracing",
@@ -143,8 +144,15 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
 dependencies = [
+ "block-padding",
  "generic-array",
 ]
+
+[[package]]
+name = "block-padding"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
 name = "borsh"
@@ -485,6 +493,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "ics23"
+version = "0.6.5"
+source = "git+https://github.com/heliaxdev/ics23?branch=tomas/update-prost#493dd786046d8ca0edfbfca5ac73586e5b87d901"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "hex",
+ "prost",
+ "ripemd160",
+ "sha2",
+ "sha3",
+ "sp-std",
+]
+
+[[package]]
 name = "idna"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -519,6 +542,12 @@ name = "itoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
+
+[[package]]
+name = "keccak"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
 
 [[package]]
 name = "lazy_static"
@@ -850,6 +879,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ripemd160"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2eca4ecc81b7f313189bf73ce724400a07da2a6dac19588b03c8bd76a2dcc251"
+dependencies = [
+ "block-buffer",
+ "digest",
+ "opaque-debug",
+]
+
+[[package]]
 name = "rust_decimal"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -937,6 +977,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha3"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f81199417d4e5de3f04b1e871023acea7389672c4135918f05aa9cbf2f2fa809"
+dependencies = [
+ "block-buffer",
+ "digest",
+ "keccak",
+ "opaque-debug",
+]
+
+[[package]]
 name = "signature"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -949,12 +1001,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c307a32c1c5c437f38c7fd45d753050587732ba8628319fbdf12a7e289ccc590"
 
 [[package]]
+name = "sp-std"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35391ea974fa5ee869cb094d5b437688fbf3d8127d64d1b9fed5822a1ed39b12"
+
+[[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=tomas/encoding-0.9.0b#2e4770b4b4e4f4af86bfe082a048bc66b2156003"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=yuji/ics23-proof#7a7fb9eaa095ba619854a21ffc8928018db1f832"
 dependencies = [
  "borsh",
  "cfg-if 1.0.0",
+ "ics23",
+ "sha2",
 ]
 
 [[package]]

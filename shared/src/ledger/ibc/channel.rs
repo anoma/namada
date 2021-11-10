@@ -1,24 +1,74 @@
 //! IBC validity predicate for channel module
 
 use borsh::BorshDeserialize;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_consensus::AnyConsensusState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_state::AnyClientState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::context::ClientReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::height::Height;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::connection::ConnectionEnd;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::context::ConnectionReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::channel::{ChannelEnd, Counterparty, State};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::context::ChannelReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::error::{Error as Ics04Error, Kind as Ics04Kind};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::handler::verify::verify_channel_proofs;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::packet::{Receipt, Sequence};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics05_port::capabilities::Capability;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics05_port::context::PortReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
+#[cfg(not(feature = "ABCI"))]
 use ibc::proofs::Proofs;
+#[cfg(not(feature = "ABCI"))]
 use ibc::timestamp::Timestamp;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_consensus::AnyConsensusState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_state::AnyClientState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::context::ClientReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::height::Height;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::connection::ConnectionEnd;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::context::ConnectionReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::channel::{ChannelEnd, Counterparty, State};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::context::ChannelReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::error::{Error as Ics04Error, Kind as Ics04Kind};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::handler::verify::verify_channel_proofs;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::packet::{Receipt, Sequence};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics05_port::capabilities::Capability;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics05_port::context::PortReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::proofs::Proofs;
+#[cfg(feature = "ABCI")]
+use ibc_abci::timestamp::Timestamp;
 use sha2::Digest;
 use thiserror::Error;
 

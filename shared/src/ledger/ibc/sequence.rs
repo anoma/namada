@@ -1,9 +1,18 @@
 //! IBC validity predicate for sequences
 
 use borsh::BorshDeserialize;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::channel::Order;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::context::ChannelReader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::PortChannelId;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::channel::Order;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::context::ChannelReader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::PortChannelId;
 use thiserror::Error;
 
 use super::storage::{port_channel_id, Error as IbcStorageError};

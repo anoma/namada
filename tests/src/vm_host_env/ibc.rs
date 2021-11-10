@@ -20,28 +20,94 @@ use anoma::types::address::{Address, InternalAddress};
 pub use anoma::types::ibc::*;
 use anoma::types::storage::Key;
 use anoma_vm_env::tx_prelude::BorshSerialize;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_consensus::ConsensusState;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::client_state::{AnyClientState, ClientState};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics02_client::header::Header;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::connection::Counterparty as ConnCounterparty;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics03_connection::version::Version;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order,
 };
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics04_channel::packet::{Packet, Sequence};
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics23_commitment::commitment::CommitmentProofBytes;
+#[cfg(not(feature = "ABCI"))]
 use ibc::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
+#[cfg(not(feature = "ABCI"))]
 use ibc::mock::client_state::{MockClientState, MockConsensusState};
+#[cfg(not(feature = "ABCI"))]
 use ibc::mock::header::MockHeader;
+#[cfg(not(feature = "ABCI"))]
 use ibc::timestamp::Timestamp;
+#[cfg(not(feature = "ABCI"))]
 use ibc::Height;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_consensus::ConsensusState;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::client_state::{AnyClientState, ClientState};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics02_client::header::Header;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::connection::Counterparty as ConnCounterparty;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics03_connection::version::Version;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::channel::{
+    ChannelEnd, Counterparty as ChanCounterparty, Order,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics04_channel::packet::{Packet, Sequence};
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics23_commitment::commitment::CommitmentProofBytes;
+#[cfg(feature = "ABCI")]
+use ibc_abci::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortId,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::mock::client_state::{MockClientState, MockConsensusState};
+#[cfg(feature = "ABCI")]
+use ibc_abci::mock::header::MockHeader;
+#[cfg(feature = "ABCI")]
+use ibc_abci::timestamp::Timestamp;
+#[cfg(feature = "ABCI")]
+use ibc_abci::Height;
+#[cfg(not(feature = "ABCI"))]
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
+#[cfg(feature = "ABCI")]
+use ibc_proto_abci::ibc::core::commitment::v1::MerkleProof;
+#[cfg(not(feature = "ABCI"))]
 use tendermint::account::Id as TmAccountId;
+#[cfg(not(feature = "ABCI"))]
 use tendermint::block::header::{Header as TmHeader, Version as TmVersion};
+#[cfg(not(feature = "ABCI"))]
 use tendermint::block::Height as TmHeight;
+#[cfg(not(feature = "ABCI"))]
 use tendermint::chain::Id as TmChainId;
+#[cfg(not(feature = "ABCI"))]
 use tendermint::hash::{AppHash, Hash as TmHash};
+#[cfg(not(feature = "ABCI"))]
 use tendermint::time::Time as TmTime;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::account::Id as TmAccountId;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::block::header::{
+    Header as TmHeader, Version as TmVersion,
+};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::block::Height as TmHeight;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::chain::Id as TmChainId;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::hash::{AppHash, Hash as TmHash};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::time::Time as TmTime;
 
 use crate::tx::TestTxEnv;
 

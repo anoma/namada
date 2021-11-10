@@ -3,17 +3,23 @@ use std::rc::Rc;
 
 use anoma::gossip::mm::MmHost;
 use anoma::proto::{Intent, IntentId, Tx};
-use anoma::types::address::Address;
+use anoma::types::address::{xan, Address};
 use anoma::types::intent::{IntentTransfers, MatchedExchanges};
 use anoma::types::key::ed25519::Keypair;
+use anoma::types::transaction::{Fee, WrapperTx};
 use anoma::vm::wasm;
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "ABCI"))]
 use tendermint::net;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net;
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
+use crate::cli::args;
+use crate::client::rpc;
 use crate::client::tx::broadcast_tx;
 use crate::types::MatchmakerMessage;
 use crate::{config, wasm_loader};
@@ -164,12 +170,26 @@ impl Matchmaker {
                     source: self.tx_source_address.clone(),
                 };
                 let tx_data = intent_transfers.try_to_vec().unwrap();
-                let tx =
-                    Tx::new(tx_code, Some(tx_data)).sign(&self.tx_signing_key);
-                let tx_bytes = tx.to_bytes();
+                let tx = WrapperTx::new(
+                    Fee {
+                        amount: 0.into(),
+                        token: xan(),
+                    },
+                    &self.tx_signing_key,
+                    rpc::query_epoch(args::Query {
+                        ledger_address: self.ledger_address.clone(),
+                    })
+                    .await,
+                    0.into(),
+                    Tx::new(tx_code, Some(tx_data)).sign(&self.tx_signing_key),
+                );
 
-                let response =
-                    broadcast_tx(self.ledger_address.clone(), tx_bytes).await;
+                let response = broadcast_tx(
+                    self.ledger_address.clone(),
+                    tx,
+                    &self.tx_signing_key,
+                )
+                .await;
                 match response {
                     Ok(tx_response) => {
                         tracing::info!(

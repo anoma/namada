@@ -940,7 +940,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.6.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id#f6d9b39cd3b2e5b95543a12884f5e99709527f34"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration#740058b9b6f0c3f075768e23478e137abdd92a3a"
 dependencies = [
  "anomaly",
  "borsh",
@@ -967,7 +967,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.8.2"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=tomas/tm-lowercase-node-id#f6d9b39cd3b2e5b95543a12884f5e99709527f34"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abci++-integration#740058b9b6f0c3f075768e23478e137abdd92a3a"
 dependencies = [
  "anomaly",
  "bytes",
@@ -1995,7 +1995,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id#ca0bffdde9a3f1597aea3e0faf518de453b72518"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "anomaly",
  "async-trait",
@@ -2026,7 +2026,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id#ca0bffdde9a3f1597aea3e0faf518de453b72518"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "anomaly",
  "bytes",
@@ -2044,7 +2044,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.20.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tomas/lowercase-node-id#ca0bffdde9a3f1597aea3e0faf518de453b72518"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abci++-integration#45282e0d254dac267190b2703dc2a9233347481a"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",

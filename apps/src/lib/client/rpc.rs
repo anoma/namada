@@ -16,13 +16,24 @@ use anoma::types::storage::Epoch;
 use anoma::types::{address, storage, token};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::abci::Code;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::net::Address as TendermintAddress;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::{Client, HttpClient};
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::{Client, HttpClient};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::Code;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address as TendermintAddress;
 
 use crate::cli::{self, args, Context};
 use crate::node::ledger::rpc::{Path, PrefixValue};
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch(ctx: Context, args: args::Query) -> (Context, Epoch) {
+pub async fn query_epoch(args: args::Query) -> Epoch {
     let client = HttpClient::new(args.ledger_address).unwrap();
     let path = Path::Epoch;
     let data = vec![];
@@ -31,19 +42,17 @@ pub async fn query_epoch(ctx: Context, args: args::Query) -> (Context, Epoch) {
         .await
         .unwrap();
     match response.code {
-        tendermint::abci::Code::Ok => {
-            match Epoch::try_from_slice(&response.value[..]) {
-                Ok(epoch) => {
-                    println!("Last committed epoch: {}", epoch);
-                    return (ctx, epoch);
-                }
-
-                Err(err) => {
-                    eprintln!("Error decoding the epoch value: {}", err)
-                }
+        Code::Ok => match Epoch::try_from_slice(&response.value[..]) {
+            Ok(epoch) => {
+                println!("Last committed epoch: {}", epoch);
+                return epoch;
             }
-        }
-        tendermint::abci::Code::Err(err) => eprintln!(
+
+            Err(err) => {
+                eprintln!("Error decoding the epoch value: {}", err)
+            }
+        },
+        Code::Err(err) => eprintln!(
             "Error in the query {} (error code {})",
             response.info, err
         ),
@@ -145,7 +154,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
 
 /// Query PoS bond(s)
 pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
-    let (ctx, epoch) = query_epoch(ctx, args.query.clone()).await;
+    let epoch = query_epoch(args.query.clone()).await;
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     match (args.owner, args.validator) {
         (Some(owner), Some(validator)) => {
@@ -500,9 +509,9 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
 
 /// Query PoS voting power
 pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
-    let (ctx, epoch) = match args.epoch {
-        Some(epoch) => (ctx, epoch),
-        None => query_epoch(ctx, args.query.clone()).await,
+    let epoch = match args.epoch {
+        Some(epoch) => epoch,
+        None => query_epoch(args.query.clone()).await,
     };
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
@@ -673,10 +682,7 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx(
-    ledger_address: &tendermint::net::Address,
-    tx_bytes: Vec<u8>,
-) {
+pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
     let client = HttpClient::new(ledger_address.clone()).unwrap();
     let path = Path::DryRunTx;
     let response = client
@@ -689,7 +695,7 @@ pub async fn dry_run_tx(
 /// Get account's public key stored in its storage sub-space
 pub async fn get_public_key(
     address: &Address,
-    ledger_address: tendermint::net::Address,
+    ledger_address: TendermintAddress,
 ) -> Option<ed25519::PublicKey> {
     let client = HttpClient::new(ledger_address).unwrap();
     let key = ed25519::pk_key(address);
@@ -699,7 +705,7 @@ pub async fn get_public_key(
 /// Check if the given address is a known validator.
 pub async fn is_validator(
     address: &Address,
-    ledger_address: tendermint::net::Address,
+    ledger_address: TendermintAddress,
 ) -> bool {
     let client = HttpClient::new(ledger_address).unwrap();
     // Check if there's any validator state
@@ -716,7 +722,7 @@ pub async fn is_validator(
 /// true.
 pub async fn known_address(
     address: &Address,
-    ledger_address: tendermint::net::Address,
+    ledger_address: TendermintAddress,
 ) -> bool {
     let client = HttpClient::new(ledger_address).unwrap();
     match address {
@@ -875,13 +881,11 @@ where
         .await
         .unwrap();
     match response.code {
-        tendermint::abci::Code::Ok => {
-            match T::try_from_slice(&response.value[..]) {
-                Ok(value) => return Some(value),
-                Err(err) => eprintln!("Error decoding the value: {}", err),
-            }
-        }
-        tendermint::abci::Code::Err(err) => {
+        Code::Ok => match T::try_from_slice(&response.value[..]) {
+            Ok(value) => return Some(value),
+            Err(err) => eprintln!("Error decoding the value: {}", err),
+        },
+        Code::Err(err) => {
             if err == 1 {
                 return None;
             } else {
@@ -912,7 +916,7 @@ where
         .await
         .unwrap();
     match response.code {
-        tendermint::abci::Code::Ok => {
+        Code::Ok => {
             match Vec::<PrefixValue>::try_from_slice(&response.value[..]) {
                 Ok(values) => {
                     let decode = |PrefixValue { key, value }: PrefixValue| {
@@ -933,7 +937,7 @@ where
                 Err(err) => eprintln!("Error decoding the values: {}", err),
             }
         }
-        tendermint::abci::Code::Err(err) => {
+        Code::Err(err) => {
             if err == 1 {
                 return None;
             } else {
@@ -959,13 +963,11 @@ pub async fn query_has_storage_key(
         .await
         .unwrap();
     match response.code {
-        tendermint::abci::Code::Ok => {
-            match bool::try_from_slice(&response.value[..]) {
-                Ok(value) => return value,
-                Err(err) => eprintln!("Error decoding the value: {}", err),
-            }
-        }
-        tendermint::abci::Code::Err(err) => {
+        Code::Ok => match bool::try_from_slice(&response.value[..]) {
+            Ok(value) => return value,
+            Err(err) => eprintln!("Error decoding the value: {}", err),
+        },
+        Code::Err(err) => {
             eprintln!(
                 "Error in the query {} (error code {})",
                 response.info, err

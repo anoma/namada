@@ -113,6 +113,10 @@ impl Drop for RocksDB {
 }
 
 impl DB for RocksDB {
+    fn open(db_path: impl AsRef<Path>) -> Self {
+        open(db_path).expect("cannot open the DB")
+    }
+
     fn flush(&self) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(true);

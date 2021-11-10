@@ -2,6 +2,7 @@
 
 use std::collections::{btree_map, BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
+use std::path::Path;
 
 use super::{BlockState, DBIter, Error, Result, DB};
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
@@ -19,6 +20,10 @@ impl Default for MockDB {
 }
 
 impl DB for MockDB {
+    fn open(_db_path: impl AsRef<Path>) -> Self {
+        Self::default()
+    }
+
     fn flush(&self) -> Result<()> {
         Ok(())
     }

@@ -20,7 +20,14 @@ use libp2p::multihash::Multihash;
 use libp2p::PeerId;
 use regex::Regex;
 use serde::{de, Deserialize, Serialize};
-use tendermint::net;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::net::{self, Address as TendermintAddress};
+#[cfg(not(feature = "ABCI"))]
+use tendermint::Timeout;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::{self, Address as TendermintAddress};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::Timeout;
 use thiserror::Error;
 
 use crate::cli;
@@ -35,6 +42,38 @@ pub struct Config {
     pub wasm_dir: PathBuf,
     pub ledger: Ledger,
     pub intent_gossiper: IntentGossiper,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TendermintMode {
+    Full,
+    Validator,
+    Seed,
+}
+
+impl TendermintMode {
+    pub fn to_str(&self) -> &str {
+        match *self {
+            TendermintMode::Full => "full",
+            TendermintMode::Validator => "validator",
+            TendermintMode::Seed => "seed",
+        }
+    }
+}
+
+impl From<Option<String>> for TendermintMode {
+    fn from(opt: Option<String>) -> Self {
+        if let Some(mode) = opt {
+            match mode.as_str() {
+                "full" => TendermintMode::Full,
+                "validator" => TendermintMode::Validator,
+                "seed" => TendermintMode::Seed,
+                _ => panic!("Unrecognized mode"),
+            }
+        } else {
+            TendermintMode::Validator
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -60,7 +99,7 @@ pub struct Tendermint {
     pub rpc_address: SocketAddr,
     pub p2p_address: SocketAddr,
     /// The persistent peers addresses must include node ID
-    pub p2p_persistent_peers: Vec<tendermint::net::Address>,
+    pub p2p_persistent_peers: Vec<TendermintAddress>,
     /// Turns the peer exchange reactor on or off. Validator node will want the
     /// pex turned off.
     pub p2p_pex: bool,
@@ -68,7 +107,8 @@ pub struct Tendermint {
     pub p2p_allow_duplicate_ip: bool,
     /// How long we wait after committing a block, before starting on the new
     /// height
-    pub consensus_timeout_commit: tendermint::Timeout,
+    pub consensus_timeout_commit: Timeout,
+    pub tendermint_mode: TendermintMode,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -83,7 +123,11 @@ pub struct IntentGossiper {
 }
 
 impl Ledger {
-    pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
+    pub fn new(
+        base_dir: impl AsRef<Path>,
+        chain_id: ChainId,
+        mode: TendermintMode,
+    ) -> Self {
         Self {
             genesis_time: Rfc3339String("1970-01-01T00:00:00Z".to_owned()),
             chain_id,
@@ -108,8 +152,8 @@ impl Ledger {
                 p2p_persistent_peers: vec![],
                 p2p_pex: true,
                 p2p_allow_duplicate_ip: false,
-                consensus_timeout_commit: tendermint::Timeout::from_str("1s")
-                    .unwrap(),
+                consensus_timeout_commit: Timeout::from_str("1s").unwrap(),
+                tendermint_mode: mode,
             },
         }
     }
@@ -217,10 +261,14 @@ pub enum SerdeError {
 }
 
 impl Config {
-    pub fn new(base_dir: impl AsRef<Path>, chain_id: ChainId) -> Self {
+    pub fn new(
+        base_dir: impl AsRef<Path>,
+        chain_id: ChainId,
+        mode: TendermintMode,
+    ) -> Self {
         Self {
             wasm_dir: "wasm".into(),
-            ledger: Ledger::new(base_dir, chain_id),
+            ledger: Ledger::new(base_dir, chain_id, mode),
             intent_gossiper: IntentGossiper::default(),
         }
     }
@@ -228,9 +276,13 @@ impl Config {
     /// Load config from expected path in the `base_dir` or generate a new one
     /// if it doesn't exist. Terminates with an error if the config loading
     /// fails.
-    pub fn load(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Self {
+    pub fn load(
+        base_dir: impl AsRef<Path>,
+        chain_id: &ChainId,
+        mode: TendermintMode,
+    ) -> Self {
         let base_dir = base_dir.as_ref();
-        match Self::read(base_dir, chain_id) {
+        match Self::read(base_dir, chain_id, mode) {
             Ok(mut config) => {
                 config.ledger.shell.base_dir = base_dir.to_path_buf();
                 config
@@ -248,11 +300,15 @@ impl Config {
 
     /// Read the config from a file, or generate a default one and write it to
     /// a file if it doesn't already exist.
-    pub fn read(base_dir: &Path, chain_id: &ChainId) -> Result<Self> {
+    pub fn read(
+        base_dir: &Path,
+        chain_id: &ChainId,
+        mode: TendermintMode,
+    ) -> Result<Self> {
         let file_path = Self::file_path(base_dir, chain_id);
         let file_name = file_path.to_str().expect("Expected UTF-8 file path");
         if !file_path.exists() {
-            return Self::generate(base_dir, chain_id, true);
+            return Self::generate(base_dir, chain_id, mode, true);
         };
         let mut config = config::Config::new();
         config
@@ -265,9 +321,10 @@ impl Config {
     pub fn generate(
         base_dir: &Path,
         chain_id: &ChainId,
+        mode: TendermintMode,
         replace: bool,
     ) -> Result<Self> {
-        let config = Config::new(base_dir, chain_id.clone());
+        let config = Config::new(base_dir, chain_id.clone(), mode);
         config.write(base_dir, chain_id, replace)?;
         Ok(config)
     }
@@ -327,7 +384,7 @@ impl IntentGossiper {
         rpc: Option<SocketAddr>,
         matchmaker_path: Option<PathBuf>,
         tx_code_path: Option<PathBuf>,
-        ledger_addr: Option<tendermint::net::Address>,
+        ledger_addr: Option<TendermintAddress>,
         filter_path: Option<PathBuf>,
     ) {
         if let Some(addr) = addr {

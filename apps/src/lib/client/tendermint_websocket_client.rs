@@ -5,12 +5,28 @@ use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use anoma::types::transaction::{hash_tx as hash_tx_bytes, Hash};
 use async_trait::async_trait;
-use sha2::{Digest, Sha256};
+#[cfg(not(feature = "ABCI"))]
 use tendermint::abci::transaction;
+#[cfg(not(feature = "ABCI"))]
 use tendermint::net::Address;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::Query;
-use tendermint_rpc::{Client, Request, Response, SimpleRequest};
+#[cfg(not(feature = "ABCI"))]
+use tendermint_rpc::{
+    Client, Error as RpcError, Request, Response, SimpleRequest,
+};
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::query::Query;
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::{
+    Client, Error as RpcError, Request, Response, SimpleRequest,
+};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::transaction;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address;
 use thiserror::Error;
 use tokio::time::Instant;
 use websocket::result::WebSocketError;
@@ -19,7 +35,7 @@ use websocket::{ClientBuilder, Message, OwnedMessage};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Could not convert into websocket address: {0:?}")]
-    Address(tendermint::net::Address),
+    Address(Address),
     #[error("Websocket Error: {0:?}")]
     Websocket(WebSocketError),
     #[error("Failed to subscribe to the event: {0}")]
@@ -50,9 +66,18 @@ mod rpc_types {
     use std::str::FromStr;
 
     use serde::{de, Deserialize, Serialize, Serializer};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::method::Method;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::query::{EventType, Query};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::{request, response};
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::method::Method;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::query::{EventType, Query};
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::{request, response};
 
     use super::Json;
 
@@ -153,7 +178,7 @@ pub struct WebSocketAddress {
     port: u16,
 }
 
-impl TryFrom<tendermint::net::Address> for WebSocketAddress {
+impl TryFrom<Address> for WebSocketAddress {
     type Error = Error;
 
     fn try_from(value: Address) -> Result<Self, Self::Error> {
@@ -357,10 +382,7 @@ impl TendermintWebsocketClient {
 
 #[async_trait]
 impl Client for TendermintWebsocketClient {
-    async fn perform<R>(
-        &self,
-        request: R,
-    ) -> Result<R::Response, tendermint_rpc::error::Error>
+    async fn perform<R>(&self, request: R) -> Result<R::Response, RpcError>
     where
         R: SimpleRequest,
     {
@@ -390,7 +412,7 @@ impl Client for TendermintWebsocketClient {
                 tracing::error!(
                     "Websocket connection timed out while waiting for response"
                 );
-                return Err(tendermint_rpc::error::Error::websocket_error(
+                return Err(RpcError::websocket_error(
                     Error::ConnectionTimeout.to_string(),
                 ));
             }
@@ -437,9 +459,7 @@ impl Client for TendermintWebsocketClient {
 }
 
 pub fn hash_tx(tx_bytes: &[u8]) -> transaction::Hash {
-    let digest = Sha256::digest(tx_bytes);
-    let mut hash_bytes = [0u8; 32];
-    hash_bytes.copy_from_slice(&digest);
+    let Hash(hash_bytes) = hash_tx_bytes(tx_bytes);
     transaction::Hash::new(hash_bytes)
 }
 
@@ -465,9 +485,18 @@ mod test_tendermint_websocket_client {
     use std::time::Duration;
 
     use serde::{Deserialize, Serialize};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::endpoint::abci_info::AbciInfo;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::query::{EventType, Query};
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::Client;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::endpoint::abci_info::AbciInfo;
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::query::{EventType, Query};
+    #[cfg(feature = "ABCI")]
+    use tendermint_rpc_abci::Client;
     use websocket::sync::Server;
     use websocket::{Message, OwnedMessage};
 

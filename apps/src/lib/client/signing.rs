@@ -5,6 +5,10 @@ use std::rc::Rc;
 
 use anoma::types::address::{Address, ImplicitAddress};
 use anoma::types::key::ed25519::Keypair;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::net::Address as TendermintAddress;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::net::Address as TendermintAddress;
 
 use super::rpc;
 use crate::cli;
@@ -15,7 +19,7 @@ use crate::wallet::Wallet;
 pub async fn find_keypair(
     wallet: &mut Wallet,
     addr: &Address,
-    ledger_address: tendermint::net::Address,
+    ledger_address: TendermintAddress,
 ) -> Rc<Keypair> {
     match addr {
         Address::Established(_) => {

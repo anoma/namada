@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -8,11 +8,15 @@ use anoma::types::chain::ChainId;
 use anoma::types::storage::BlockHeight;
 use futures::future::FutureExt;
 use tower::Service;
+#[cfg(not(feature = "ABCI"))]
 use tower_abci::{BoxError, Request as Req, Response as Resp};
+#[cfg(feature = "ABCI")]
+use tower_abci_old::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
-use super::abcipp_shim_types::shim::{
-    request, Error, Request, Response, TxBytes,
+use super::abcipp_shim_types::shim::{request, Error, Request, Response};
+use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
+    BeginBlock, ProcessedTx,
 };
 
 /// The shim wraps the shell, which implements ABCI++
@@ -21,7 +25,8 @@ use super::abcipp_shim_types::shim::{
 /// interface
 pub struct AbcippShim {
     service: Shell,
-    block_txs: Vec<TxBytes>,
+    begin_block_request: Option<BeginBlock>,
+    block_txs: Vec<ProcessedTx>,
 }
 
 impl AbcippShim {
@@ -33,6 +38,7 @@ impl AbcippShim {
     ) -> Self {
         Self {
             service: Shell::new(base_dir, db_path, chain_id, wasm_dir),
+            begin_block_request: None,
             block_txs: vec![],
         }
     }
@@ -56,34 +62,40 @@ impl Service<Req> for AbcippShim {
 
     fn call(&mut self, req: Req) -> Self::Future {
         let rsp = match req {
-            Req::CheckTx(tx_request) => self
-                .service
-                .call(Request::ProcessProposal(tx_request.tx.into()))
-                .map_err(Error::from)
-                .and_then(|res| match res {
-                    Response::ProcessProposal(resp) => {
-                        Ok(Resp::CheckTx(resp.into()))
-                    }
-                    _ => Err(Error::ConvertResp(res)),
-                }),
             Req::BeginBlock(block) => {
-                // we simply forward BeginBlock request to the PrepareProposal
-                // request
-                self.service
-                    .call(Request::PrepareProposal(block.into()))
-                    .map_err(Error::from)
-                    .and_then(|res| match res {
-                        Response::PrepareProposal(resp) => {
-                            Ok(Resp::BeginBlock(resp.into()))
-                        }
-                        _ => Err(Error::ConvertResp(res)),
-                    })
+                // we save this data to be forwarded to finalize later
+                self.begin_block_request =
+                    Some(block.try_into().unwrap_or_else(|_| {
+                        panic!("Could not read begin block request");
+                    }));
+                Ok(Resp::BeginBlock(Default::default()))
             }
             Req::DeliverTx(deliver_tx) => {
-                // We store all the transactions to be applied in
-                // bulk at a later step
-                self.block_txs.push(deliver_tx.tx);
-                Ok(Resp::DeliverTx(Default::default()))
+                // We call [`process_proposal`] to report back the validity
+                // of the tx to tendermint.
+                // Invariant: The service call with `Request::ProcessProposal`
+                // must always return `Response::ProcessProposal`
+                self.service
+                    .call(Request::ProcessProposal(
+                        #[cfg(not(feature = "ABCI"))]
+                        deliver_tx.tx.clone().into(),
+                        #[cfg(feature = "ABCI")]
+                        deliver_tx.tx.into(),
+                    ))
+                    .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::ProcessProposal(resp) => {
+                            self.block_txs.push(ProcessedTx {
+                                #[cfg(not(feature = "ABCI"))]
+                                tx: deliver_tx.tx,
+                                #[cfg(feature = "ABCI")]
+                                tx: resp.tx,
+                                result: resp.result,
+                            });
+                            Ok(Resp::DeliverTx(Default::default()))
+                        }
+                        _ => unreachable!(),
+                    })
             }
             Req::EndBlock(end) => {
                 BlockHeight::try_from(end.height).unwrap_or_else(|_| {
@@ -91,11 +103,24 @@ impl Service<Req> for AbcippShim {
                 });
                 let mut txs = vec![];
                 std::mem::swap(&mut txs, &mut self.block_txs);
-
+                // If the wrapper txs were not properly submitted, reject all
+                // txs
+                let out_of_order = txs.iter().any(|tx| tx.result.code > 3u32);
+                if out_of_order {
+                    // The wrapper txs will need to be decrypted again
+                    // and included in the proposed block after the current
+                    self.service.reset_queue();
+                }
+                let begin_block_request =
+                    self.begin_block_request.take().unwrap();
                 self.service
                     .call(Request::FinalizeBlock(request::FinalizeBlock {
-                        height: end.height,
+                        hash: begin_block_request.hash,
+                        header: begin_block_request.header,
+                        byzantine_validators: begin_block_request
+                            .byzantine_validators,
                         txs,
+                        reject_all_decrypted: out_of_order,
                     }))
                     .map_err(Error::from)
                     .and_then(|res| match res {

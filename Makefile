@@ -28,14 +28,17 @@ audit-ignores += RUSTSEC-2021-0076
 build:
 	$(cargo) build
 
+build-abci-plus-plus:
+	$(cargo) build --no-default-features --features "ABCI-plus-plus"
+
 build-test:
 	$(cargo) build --tests
 
 build-release:
-	ANOMA_DEV=false $(cargo) build --release --package anoma_apps
+	$(cargo) build --release --package anoma_apps
 
 check-release:
-	ANOMA_DEV=false $(cargo) check --release --package anoma_apps
+	$(cargo) check --release --package anoma_apps
 
 package: build-release
 	mkdir -p $(package-name)/wasm && \
@@ -61,8 +64,33 @@ check:
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
+
+clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --no-default-features --features "ABCI-plus-plus" -- -D warnings
+
 clippy:
 	$(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	make -C $(wasms) clippy && \
+	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+
+clippy-abci-plus-plus:
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "std testing ABCI-plus-plus" && \
+	$(cargo) +$(nightly) clippy --all-targets --manifest-path ./proof_of_stake/Cargo.toml && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing ABCI-plus-plus" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./tests/Cargo.toml \
+		--no-default-features \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" && \
+	$(cargo) +$(nightly) clippy \
+		--all-targets \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "ABCI-plus-plus" && \
 	make -C $(wasms) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
@@ -79,6 +107,10 @@ run-ledger:
 	# runs the node
 	$(cargo) run --bin anoman -- ledger run
 
+run-ledger-abci-plus-plus:
+	# runs the node
+	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger run
+
 run-gossip:
 	# runs the node gossip node
 	$(cargo) run --bin anoman -- gossip run
@@ -87,6 +119,11 @@ reset-ledger:
 	# runs the node
 	$(cargo) run --bin anoman -- ledger reset
 
+reset-ledger-abci-plus-plus:
+	# runs the node
+	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger reset
+
+
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
@@ -94,6 +131,33 @@ test: test-unit test-e2e test-wasm
 
 test-e2e:
 	RUST_BACKTRACE=1 $(cargo) test e2e -- --test-threads=1
+
+test-e2e-abci-plus-plus:
+	RUST_BACKTRACE=1 $(cargo) test e2e \
+		--manifest-path ./tests/Cargo.toml \
+		--no-default-features \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+		-- --test-threads=1
+
+test-unit-abci-plus-plus:
+	$(cargo) test \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "testing std ABCI-plus-plus" && \
+	$(cargo) test --manifest-path ./proof_of_stake/Cargo.toml && \
+	$(cargo) test \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing ABCI-plus-plus" && \
+	$(cargo) test \
+		--manifest-path ./tests/Cargo.toml \
+		--no-default-features \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+		-- --skip e2e && \
+	$(cargo) test \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "ABCI-plus-plus"
 
 test-unit:
 	$(cargo) test -- --skip e2e

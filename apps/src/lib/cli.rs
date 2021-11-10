@@ -29,6 +29,7 @@ pub mod cmds {
     use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
 
     /// Commands for `anoma` binary.
+    #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     pub enum Anoma {
         Node(AnomaNode),
@@ -1080,13 +1081,23 @@ pub mod args {
     use anoma::types::key::ed25519::PublicKey;
     use anoma::types::storage::Epoch;
     use anoma::types::token;
+    use anoma::types::transaction::GasLimit;
     use libp2p::Multiaddr;
     use serde::Deserialize;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint::net::Address as TendermintAddress;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint::Timeout;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::net::Address as TendermintAddress;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::Timeout;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
     use super::ArgMatches;
     use crate::config;
+    use crate::config::TendermintMode;
 
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -1105,32 +1116,34 @@ pub mod args {
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<tendermint::Timeout> =
-        arg_default(
-            "consensus-timeout-commit",
-            DefaultFn(|| tendermint::Timeout::from_str("1s").unwrap()),
-        );
+    const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
+        "consensus-timeout-commit",
+        DefaultFn(|| Timeout::from_str("1s").unwrap()),
+    );
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DECRYPT: ArgFlag = flag("decrypt");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
+    const FEE_AMOUNT: Arg<token::Amount> = arg("fee-amount");
+    const FEE_TOKEN: Arg<WalletAddress> = arg("fee-token");
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
     const FORCE: ArgFlag = flag("force");
+    const GAS_LIMIT: Arg<token::Amount> = arg("gas-limit");
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
-    const LEDGER_ADDRESS_DEFAULT: ArgDefault<tendermint::net::Address> =
+    const LEDGER_ADDRESS_DEFAULT: ArgDefault<TendermintAddress> =
         LEDGER_ADDRESS.default(DefaultFn(|| {
             let raw = "127.0.0.1:26657";
-            tendermint::net::Address::from_str(raw).unwrap()
+            TendermintAddress::from_str(raw).unwrap()
         }));
-    const LEDGER_ADDRESS_OPT: ArgOpt<tendermint::net::Address> =
-        LEDGER_ADDRESS.opt();
-    const LEDGER_ADDRESS: Arg<tendermint::net::Address> = arg("ledger-address");
+    const LEDGER_ADDRESS_OPT: ArgOpt<TendermintAddress> = LEDGER_ADDRESS.opt();
+    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
+    const MODE: ArgOpt<String> = arg_opt("mode");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE_OPT: ArgOpt<String> = arg_opt("node");
     const NODE: Arg<String> = arg("node");
@@ -1173,6 +1186,7 @@ pub mod args {
         pub chain_id: Option<ChainId>,
         pub base_dir: PathBuf,
         pub wasm_dir: Option<PathBuf>,
+        pub mode: TendermintMode,
     }
 
     impl Global {
@@ -1181,10 +1195,12 @@ pub mod args {
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let base_dir = BASE_DIR.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches);
+            let mode = TendermintMode::from(MODE.parse(matches));
             Global {
                 chain_id,
                 base_dir,
                 wasm_dir,
+                mode,
             }
         }
 
@@ -1205,6 +1221,10 @@ pub mod args {
                      be set via `ANOMA_WASM_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
                      `wasm` path, relative to current working directory.",
+                ))
+                .arg(MODE.def().about(
+                    "The mode in which to run Anoma. Options are \n\t * \
+                     Validator (default)\n\t * Full\n\t * Seed",
                 ))
         }
     }
@@ -1769,7 +1789,7 @@ pub mod args {
         /// Exchanges description
         pub exchanges: Vec<Exchange>,
         /// The address of the ledger node as host:port
-        pub ledger_address: tendermint::net::Address,
+        pub ledger_address: TendermintAddress,
         /// Print output to stdout
         pub to_stdout: bool,
     }
@@ -1892,7 +1912,7 @@ pub mod args {
         pub rpc: Option<SocketAddr>,
         pub matchmaker_path: Option<PathBuf>,
         pub tx_code_path: Option<PathBuf>,
-        pub ledger_addr: Option<tendermint::net::Address>,
+        pub ledger_addr: Option<TendermintAddress>,
         pub filter_path: Option<PathBuf>,
         pub tx_signing_key: Option<WalletKeypair>,
         pub tx_source_address: Option<WalletAddress>,
@@ -1970,10 +1990,16 @@ pub mod args {
         /// Submit the transaction even if it doesn't pass client checks
         pub force: bool,
         /// The address of the ledger node as host:port
-        pub ledger_address: tendermint::net::Address,
+        pub ledger_address: TendermintAddress,
         /// If any new account is initialized by the tx, use the given alias to
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
+        /// The amount being payed to include the transaction
+        pub fee_amount: token::Amount,
+        /// The token in which the fee is being paid
+        pub fee_token: WalletAddress,
+        /// The max amount of gas used to process tx
+        pub gas_limit: GasLimit,
         /// Sign the tx with the key for the given alias from your wallet
         pub signing_key: Option<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
@@ -1997,6 +2023,15 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
+            .arg(FEE_AMOUNT.def().about(
+                "The amount being paid for the inclusion of this transaction",
+            ))
+            .arg(FEE_TOKEN.def().about("The token for paying the fee"))
+            .arg(
+                GAS_LIMIT.def().about(
+                    "The maximum amount of gas needed to run transaction",
+                ),
+            )
             .arg(
                 SIGNING_KEY_OPT
                     .def()
@@ -2023,6 +2058,10 @@ pub mod args {
             let force = FORCE.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
+            let fee_amount = FEE_AMOUNT.parse(matches);
+            let fee_token = FEE_TOKEN.parse(matches);
+            let gas_limit = GAS_LIMIT.parse(matches).into();
+
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
             Self {
@@ -2030,6 +2069,9 @@ pub mod args {
                 force,
                 ledger_address,
                 initialized_account_alias,
+                fee_amount,
+                fee_token,
+                gas_limit,
                 signing_key,
                 signer,
             }
@@ -2040,7 +2082,7 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct Query {
         /// The address of the ledger node as host:port
-        pub ledger_address: tendermint::net::Address,
+        pub ledger_address: TendermintAddress,
     }
 
     impl Args for Query {
@@ -2254,7 +2296,7 @@ pub mod args {
         pub genesis_path: PathBuf,
         pub chain_id_prefix: ChainIdPrefix,
         pub unsafe_dont_encrypt: bool,
-        pub consensus_timeout_commit: tendermint::Timeout,
+        pub consensus_timeout_commit: Timeout,
         pub localhost: bool,
         pub allow_duplicate_ip: bool,
     }

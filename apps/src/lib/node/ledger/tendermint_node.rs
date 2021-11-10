@@ -12,8 +12,14 @@ use anoma::types::time::DateTimeUtc;
 use serde_json::json;
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::iterator::Signals;
-use tendermint::config::TendermintConfig;
-use tendermint::net;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::error::Error as TendermintError;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::{config::TendermintConfig, net, Genesis};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::error::Error as TendermintError;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::{config::TendermintConfig, net, Genesis};
 use thiserror::Error;
 
 use crate::config;
@@ -24,7 +30,7 @@ pub enum Error {
     #[error("Failed to initialize Tendermint: {0}")]
     Init(std::io::Error),
     #[error("Failed to load Tendermint config file: {0}")]
-    LoadConfig(tendermint::error::Error),
+    LoadConfig(TendermintError),
     #[error("Failed to open Tendermint config for writing: {0}")]
     OpenWriteConfig(std::io::Error),
     #[error("Failed to serialize Tendermint config TOML to string: {0}")]
@@ -35,9 +41,28 @@ pub enum Error {
     StartUp(std::io::Error),
     #[error("Runtime error")]
     Runtime,
+    #[error("Failed to convert to String: {0:?}")]
+    TendermintPath(std::ffi::OsString),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Check if the TENDERMINT env var has been set and use that as the
+/// location of the tendermint binary. Otherwise, assume it is on path
+///
+/// Returns an error if the env var is defined but not a valid Unicode.
+fn from_env_or_default() -> Result<String> {
+    match std::env::var("TENDERMINT") {
+        Ok(path) => {
+            tracing::info!("Using tendermint path from env variable: {}", path);
+            Ok(path)
+        }
+        Err(std::env::VarError::NotPresent) => Ok(String::from("tendermint")),
+        Err(std::env::VarError::NotUnicode(msg)) => {
+            Err(Error::TendermintPath(msg))
+        }
+    }
+}
 
 /// Run the tendermint node.
 pub fn run(
@@ -50,6 +75,8 @@ pub fn run(
     abort_receiver: Receiver<bool>,
 ) -> Result<()> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
+    let tendermint_path = from_env_or_default()?;
+    let mode = config.tendermint_mode.to_str().to_owned();
 
     #[cfg(feature = "dev")]
     // This has to be checked before we run tendermint init
@@ -59,10 +86,17 @@ pub fn run(
     };
 
     // init and run a tendermint node child process
-    let output = Command::new("tendermint")
-        .args(&["init", "--home", &home_dir_string])
-        .output()
-        .map_err(Error::Init)?;
+    let output = if !cfg!(featuer = "ABCI") {
+        Command::new(&tendermint_path)
+            .args(&["init", &mode, "--home", &home_dir_string])
+            .output()
+            .map_err(Error::Init)?
+    } else {
+        Command::new(&tendermint_path)
+            .args(&["init", "--home", &home_dir_string])
+            .output()
+            .map_err(Error::Init)?
+    };
     if !output.status.success() {
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
@@ -91,16 +125,31 @@ pub fn run(
 
     update_tendermint_config(&home_dir, config)?;
 
-    let tendermint_node = Command::new("tendermint")
-        .args(&[
-            "node",
-            "--proxy_app",
-            &ledger_address,
-            "--home",
-            &home_dir_string,
-        ])
-        .spawn()
-        .map_err(Error::StartUp)?;
+    let tendermint_node = if !cfg!(feature = "ABCI") {
+        Command::new(&tendermint_path)
+            .args(&[
+                "start",
+                "--mode",
+                &mode,
+                "--proxy-app",
+                &ledger_address,
+                "--home",
+                &home_dir_string,
+            ])
+            .spawn()
+            .map_err(Error::StartUp)?
+    } else {
+        Command::new(&tendermint_path)
+            .args(&[
+                "start",
+                "--proxy_app",
+                &ledger_address,
+                "--home",
+                &home_dir_string,
+            ])
+            .spawn()
+            .map_err(Error::StartUp)?
+    };
     let pid = tendermint_node.id();
     tracing::info!("Tendermint node started");
     // make sure to shut down when receiving a termination signal
@@ -154,9 +203,10 @@ fn monitor_process(
 }
 
 pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
+    let tendermint_path = from_env_or_default()?;
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
     // reset all the Tendermint state, if any
-    Command::new("tendermint")
+    Command::new(tendermint_path)
         .args(&[
             "unsafe-reset-all",
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
@@ -249,7 +299,7 @@ fn update_tendermint_config(
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
-    config.consensus.create_empty_blocks = !cfg!(feature = "dev");
+    config.consensus.create_empty_blocks = true; // !cfg!(feature = "dev");
     config.consensus.timeout_commit =
         tendermint_config.consensus_timeout_commit;
 
@@ -290,7 +340,7 @@ fn write_tm_genesis(
         )
     });
     let reader = BufReader::new(file);
-    let mut genesis: tendermint::Genesis = serde_json::from_reader(reader)
+    let mut genesis: Genesis = serde_json::from_reader(reader)
         .expect("Couldn't deserialize the genesis file");
     genesis.chain_id =
         FromStr::from_str(chain_id.as_str()).expect("Invalid chain ID");

@@ -176,7 +176,15 @@ impl From<DateTimeUtc> for Rfc3339String {
     }
 }
 
+#[cfg(not(feature = "ABCI"))]
 impl From<DateTimeUtc> for tendermint::time::Time {
+    fn from(dt: DateTimeUtc) -> Self {
+        dt.0.into()
+    }
+}
+
+#[cfg(feature = "ABCI")]
+impl From<DateTimeUtc> for tendermint_stable::time::Time {
     fn from(dt: DateTimeUtc) -> Self {
         dt.0.into()
     }

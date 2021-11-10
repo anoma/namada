@@ -2,7 +2,7 @@
 
 pub mod address;
 pub mod chain;
-#[cfg(feature = "ibc-vp")]
+#[cfg(any(feature = "ibc-vp", feature = "ibc-vp-abci"))]
 pub mod ibc;
 pub mod intent;
 pub mod internal;

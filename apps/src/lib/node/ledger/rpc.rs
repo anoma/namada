@@ -6,6 +6,10 @@ use std::str::FromStr;
 use anoma::types::address::Address;
 use anoma::types::storage;
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(not(feature = "ABCI"))]
+use tendermint::abci::Path as AbciPath;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::Path as AbciPath;
 use thiserror::Error;
 
 /// RPC query path
@@ -90,12 +94,12 @@ impl FromStr for Path {
     }
 }
 
-impl From<Path> for tendermint::abci::Path {
+impl From<Path> for AbciPath {
     fn from(path: Path) -> Self {
         let path = path.to_string();
         // TODO: update in tendermint-rs to allow to construct this from owned
         // string. It's what `from_str` does anyway
-        tendermint::abci::Path::from_str(&path).unwrap()
+        AbciPath::from_str(&path).unwrap()
     }
 }
 
