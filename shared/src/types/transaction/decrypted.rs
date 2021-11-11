@@ -69,21 +69,6 @@ pub mod decrypted_tx {
             )
         }
     }
-
-    // impl TryFrom<&Tx> for DecryptedTx {
-    //     type Error = crate::types::transaction::WrapperTxErr;
-    //
-    //     fn try_from(tx: &Tx) -> Result<Self, Self::Error> {
-    //         if let Some(data) = tx.data.as_ref() {
-    //             <Self as BorshDeserialize>::deserialize(&mut data.as_ref())
-    //                 .map_err(|_| {
-    //                     crate::types::transaction::WrapperTxErr::InvalidTx
-    //                 })
-    //         } else {
-    //             Err(crate::types::transaction::WrapperTxErr::InvalidTx)
-    //         }
-    //     }
-    // }
 }
 
 #[cfg(feature = "ferveo-tpke")]
