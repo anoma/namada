@@ -247,9 +247,11 @@ mod test_process_proposal {
             0.into(),
             tx,
         );
-        let tx =
-            Tx::new(vec![], Some(wrapper.try_to_vec().expect("Test failed")))
-                .to_bytes();
+        let tx = Tx::new(
+            vec![],
+            Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
+        )
+        .to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal { tx: tx.clone() };
 
@@ -296,14 +298,20 @@ mod test_process_proposal {
             .take()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
-            let mut new_wrapper = <WrapperTx as BorshDeserialize>::deserialize(
-                &mut data.as_ref(),
-            )
-            .expect("Test failed");
+            let mut new_wrapper = if let TxType::Wrapper(wrapper) =
+                <TxType as BorshDeserialize>::deserialize(&mut data.as_ref())
+                    .expect("Test failed")
+            {
+                wrapper
+            } else {
+                panic!("Test failed")
+            };
 
             // we mount a malleability attack to try and remove the fee
             new_wrapper.fee.amount = 0.into();
-            let new_data = new_wrapper.try_to_vec().expect("Test failed");
+            let new_data = TxType::Wrapper(new_wrapper)
+                .try_to_vec()
+                .expect("Test failed");
             Tx {
                 code: vec![],
                 data: Some(

@@ -56,9 +56,13 @@ where
             if ErrorCodes::from_u32(tx.result.code).unwrap()
                 == ErrorCodes::InvalidSig
             {
-                let wrapper =
-                    WrapperTx::try_from(&Tx::try_from(tx.tx.as_ref()).unwrap())
-                        .unwrap();
+                let wrapper = if let Ok(TxType::Wrapper(wrapper)) =
+                    TxType::try_from(Tx::try_from(tx.tx.as_ref()).unwrap())
+                {
+                    wrapper
+                } else {
+                    unreachable!()
+                };
                 let mut tx_result =
                     Event::new_tx_event(&TxType::Wrapper(wrapper), height.0);
                 tx_result["code"] = tx.result.code.to_string();
