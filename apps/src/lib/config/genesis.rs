@@ -38,6 +38,7 @@ pub mod genesis_config {
     use super::{
         EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator,
     };
+    use crate::cli;
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct HexString(pub String);
@@ -267,6 +268,9 @@ pub mod genesis_config {
     fn load_token(
         config: &TokenAccountConfig,
         wasm: &HashMap<String, WasmConfig>,
+        validators: &HashMap<String, Validator>,
+        established_accounts: &HashMap<String, EstablishedAccount>,
+        implicit_accounts: &HashMap<String, ImplicitAccount>,
     ) -> TokenAccount {
         let token_vp_name = config.vp.as_ref().unwrap();
         let token_vp_config = wasm.get(token_vp_name).unwrap();
@@ -281,9 +285,56 @@ pub mod genesis_config {
                 .as_ref()
                 .unwrap_or(&HashMap::default())
                 .iter()
-                .map(|(address, amount)| {
+                .map(|(alias_or_address, amount)| {
                     (
-                        Address::decode(&address).unwrap(),
+                        match Address::decode(&alias_or_address) {
+                            Ok(address) => address,
+                            Err(decode_err) => {
+                                if let Some(alias) =
+                                    alias_or_address.strip_suffix(".public_key")
+                                {
+                                    if let Some(established) =
+                                        established_accounts.get(alias)
+                                    {
+                                        established
+                                            .public_key
+                                            .as_ref()
+                                            .unwrap()
+                                            .into()
+                                    } else if let Some(validator) =
+                                        validators.get(alias)
+                                    {
+                                        (&validator.account_key).into()
+                                    } else {
+                                        eprintln!(
+                                            "No established or validator \
+                                             account with alias {} found",
+                                            alias
+                                        );
+                                        cli::safe_exit(1)
+                                    }
+                                } else if let Some(established) =
+                                    established_accounts.get(alias_or_address)
+                                {
+                                    established.address.clone()
+                                } else if let Some(validator) =
+                                    validators.get(alias_or_address)
+                                {
+                                    validator.pos_data.address.clone()
+                                } else if let Some(implicit) =
+                                    implicit_accounts.get(alias_or_address)
+                                {
+                                    (&implicit.public_key).into()
+                                } else {
+                                    eprintln!(
+                                        "{} is unknown alias and not a valid \
+                                         address: {}",
+                                        alias_or_address, decode_err
+                                    );
+                                    cli::safe_exit(1)
+                                }
+                            }
+                        },
                         token::Amount::whole(*amount),
                     )
                 })
@@ -335,28 +386,36 @@ pub mod genesis_config {
 
     pub fn load_genesis_config(config: GenesisConfig) -> Genesis {
         let wasms = config.wasm;
-        let validators = config
+        let validators: HashMap<String, Validator> = config
             .validator
             .iter()
-            .map(|(_name, cfg)| load_validator(cfg, &wasms))
+            .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasms)))
+            .collect();
+        let established_accounts: HashMap<String, EstablishedAccount> = config
+            .established
+            .unwrap_or_default()
+            .iter()
+            .map(|(name, cfg)| (name.clone(), load_established(cfg, &wasms)))
+            .collect();
+        let implicit_accounts: HashMap<String, ImplicitAccount> = config
+            .implicit
+            .unwrap_or_default()
+            .iter()
+            .map(|(name, cfg)| (name.clone(), load_implicit(cfg)))
             .collect();
         let token_accounts = config
             .token
             .unwrap_or_default()
             .iter()
-            .map(|(_name, cfg)| load_token(cfg, &wasms))
-            .collect();
-        let established_accounts = config
-            .established
-            .unwrap_or_default()
-            .iter()
-            .map(|(_name, cfg)| load_established(cfg, &wasms))
-            .collect();
-        let implicit_accounts = config
-            .implicit
-            .unwrap_or_default()
-            .iter()
-            .map(|(_name, cfg)| load_implicit(cfg))
+            .map(|(_name, cfg)| {
+                load_token(
+                    cfg,
+                    &wasms,
+                    &validators,
+                    &established_accounts,
+                    &implicit_accounts,
+                )
+            })
             .collect();
 
         let parameters = Parameters {
@@ -388,10 +447,10 @@ pub mod genesis_config {
 
         let mut genesis = Genesis {
             genesis_time: config.genesis_time.try_into().unwrap(),
-            validators,
+            validators: validators.into_values().collect(),
             token_accounts,
-            established_accounts,
-            implicit_accounts,
+            established_accounts: established_accounts.into_values().collect(),
+            implicit_accounts: implicit_accounts.into_values().collect(),
             parameters,
             pos_params,
         };
