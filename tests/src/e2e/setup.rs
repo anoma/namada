@@ -538,13 +538,15 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
         Some(1)
     )?;
     let (unread, matched) = find.exp_regex("Found address .*\n")?;
-    let address = matched.trim().rsplit_once(" ").unwrap().1;
-    Address::from_str(address).map_err(|e| {
+    let address_str = matched.trim().rsplit_once(" ").unwrap().1;
+    let address = Address::from_str(address_str).map_err(|e| {
         eyre!(format!(
             "Address: {} parsed from {}, Error: {}\n\nOutput: {}",
-            address, matched, e, unread
+            address_str, matched, e, unread
         ))
-    })
+    })?;
+    println!("Found {}", address);
+    Ok(address)
 }
 
 /// Find the address of an account by its alias from the wallet
