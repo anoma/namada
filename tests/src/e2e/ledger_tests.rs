@@ -12,7 +12,6 @@
 use std::process::Command;
 
 use anoma::types::token;
-use anoma_apps::wallet;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use setup::constants::*;
@@ -293,8 +292,6 @@ fn invalid_transactions() -> Result<()> {
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
-    let keypair = wallet::defaults::daewon_keypair();
-    let daewon = keypair.to_string();
     ledger.exp_string("Anoma ledger node started")?;
     if !cfg!(feature = "ABCI") {
         ledger.exp_string("started node")?;
@@ -328,7 +325,7 @@ fn invalid_transactions() -> Result<()> {
         "--data-path",
         &tx_data_path,
         "--signing-key",
-        &daewon,
+        DAEWON,
         "--fee-amount",
         "0",
         "--gas-limit",
@@ -370,7 +367,7 @@ fn invalid_transactions() -> Result<()> {
         "--source",
         DAEWON,
         "--signing-key",
-        &daewon,
+        DAEWON,
         "--target",
         ALBERT,
         "--token",
