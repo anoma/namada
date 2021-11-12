@@ -667,11 +667,32 @@ pub fn genesis() -> Genesis {
         public_key: wallet::defaults::daewon_keypair().public,
     }];
     let default_user_tokens = token::Amount::whole(1_000_000);
+    let default_key_tokens = token::Amount::whole(1_000);
     let balances: HashMap<Address, token::Amount> = HashMap::from_iter([
+        // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),
         (wallet::defaults::bertha_address(), default_user_tokens),
         (wallet::defaults::christel_address(), default_user_tokens),
+        // implicit accounts' balances
         (wallet::defaults::daewon_address(), default_user_tokens),
+        // implicit accounts derived from public keys balances
+        (
+            bertha.public_key.as_ref().unwrap().into(),
+            default_key_tokens,
+        ),
+        (
+            albert.public_key.as_ref().unwrap().into(),
+            default_key_tokens,
+        ),
+        (
+            christel.public_key.as_ref().unwrap().into(),
+            default_key_tokens,
+        ),
+        ((&validator.account_key).into(), default_key_tokens),
+        (
+            matchmaker.public_key.as_ref().unwrap().into(),
+            default_key_tokens,
+        ),
     ]);
     let token_accounts = address::tokens()
         .into_iter()
