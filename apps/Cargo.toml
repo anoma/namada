@@ -44,13 +44,13 @@ dev = ["anoma/dev"]
 std = ["ed25519-dalek/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 ABCI = [
-  "ibc-abci",
   "tendermint-stable",
   "tendermint-config-abci",
   "tendermint-proto-abci",
   "tendermint-rpc-abci",
   "tower-abci-old",
   "anoma/ABCI",
+  "anoma/ibc-vp-abci",
 ]
 ABCI-plus-plus = [
   "ibc",
@@ -60,6 +60,7 @@ ABCI-plus-plus = [
   "tendermint-rpc",
   "tower-abci",
   "anoma/ABCI-plus-plus",
+  "anoma/ibc-vp",
 ]
 testing = ["dev"]
 

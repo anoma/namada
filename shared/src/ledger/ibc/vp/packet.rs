@@ -55,11 +55,13 @@ use ibc_abci::proofs::Proofs;
 use ibc_abci::timestamp::Expiry;
 use thiserror::Error;
 
-use super::storage::{port_channel_sequence_id, Error as IbcStorageError};
+use super::super::handler::{make_send_packet_event, make_timeout_event};
+use super::super::storage::{
+    port_channel_sequence_id, Error as IbcStorageError,
+};
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
-use crate::types::ibc::{
-    make_send_packet_event, make_timeout_event, make_timeout_on_close_event,
+use crate::types::ibc::data::{
     Error as IbcDataError, PacketAckData, PacketReceiptData, PacketSendData,
     TimeoutData,
 };
@@ -616,10 +618,6 @@ where
                     &data.proofs()?,
                 )
                 .map_err(Error::ProofVerificationFailure)?;
-
-                let event = make_timeout_on_close_event(packet.clone());
-                self.check_emitted_event(event)
-                    .map_err(|e| Error::IbcEvent(e.to_string()))?;
             }
             Err(_) => {
                 // the packet timed out

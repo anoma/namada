@@ -19,7 +19,8 @@ mod tests {
 
     use std::panic;
 
-    use anoma::ledger::ibc::{init_genesis_storage, Error as IbcError};
+    use anoma::ledger::ibc::init_genesis_storage;
+    use anoma::ledger::ibc::vp::Error as IbcError;
     use anoma::proto::Tx;
     use anoma::types::key::ed25519::SignedTxData;
     use anoma::types::storage::{self, Key, KeySeg};
@@ -538,7 +539,7 @@ mod tests {
             ibc::consensus_state_key(&client_id, height).to_string();
         tx_host_env::write(&consensus_state_key, data.consensus_state.clone());
         let event = ibc::make_create_client_event(&client_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -573,7 +574,7 @@ mod tests {
             ibc::consensus_state_key(&client_id, height).to_string();
         tx_host_env::write(&consensus_state_key, same_consensus_state);
         let event = ibc::make_update_client_event(&client_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check should fail due to the invalid updating
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -608,7 +609,7 @@ mod tests {
             ibc::consensus_state_key(&client_id, height).to_string();
         tx_host_env::write(&consensus_state_key, new_consensus_state);
         let event = ibc::make_update_client_event(&client_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -641,7 +642,7 @@ mod tests {
         tx_host_env::write(&client_state_key, new_client_state);
         tx_host_env::write(&consensus_state_key, new_consensus_state);
         let event = ibc::make_upgrade_client_event(&client_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -686,7 +687,7 @@ mod tests {
         let conn = ibc::open_connection(&mut data.connection());
         tx_host_env::write(&conn_key, conn);
         let event = ibc::make_open_init_connection_event(&conn_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check should fail due to directly opening a connection
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -718,7 +719,7 @@ mod tests {
         let conn_key = ibc::connection_key(&conn_id).to_string();
         tx_host_env::write(&conn_key, data.connection());
         let event = ibc::make_open_init_connection_event(&conn_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -749,7 +750,7 @@ mod tests {
         ibc::open_connection(&mut conn);
         tx_host_env::write(&conn_key, conn);
         let event = ibc::make_open_ack_connection_event(&data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -794,7 +795,7 @@ mod tests {
         let conn_key = ibc::connection_key(&conn_id).to_string();
         tx_host_env::write(&conn_key, data.connection());
         let event = ibc::make_open_try_connection_event(&conn_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -825,7 +826,7 @@ mod tests {
         ibc::open_connection(&mut conn);
         tx_host_env::write(&conn_key, conn);
         let event = ibc::make_open_confirm_connection_event(&data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -873,7 +874,7 @@ mod tests {
         let channel_key = ibc::channel_key(&port_channel_id).to_string();
         tx_host_env::write(&channel_key, data.channel());
         let event = ibc::make_open_init_channel_event(&channel_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check should fail due to no port binding
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -916,7 +917,7 @@ mod tests {
         let channel = ibc::open_channel(&mut data.channel());
         tx_host_env::write(&channel_key, channel);
         let event = ibc::make_open_init_channel_event(&channel_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check should fail due to directly opening a channel
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -959,7 +960,7 @@ mod tests {
         let channel_key = ibc::channel_key(&port_channel_id).to_string();
         tx_host_env::write(&channel_key, data.channel());
         let event = ibc::make_open_init_channel_event(&channel_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -990,7 +991,7 @@ mod tests {
         ibc::open_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
         let event = ibc::make_open_ack_channel_event(&data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -1046,7 +1047,7 @@ mod tests {
         let channel_key = ibc::channel_key(&port_channel_id).to_string();
         tx_host_env::write(&channel_key, data.channel());
         let event = ibc::make_open_try_channel_event(&channel_id, &data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -1077,7 +1078,7 @@ mod tests {
         ibc::open_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
         let event = ibc::make_open_confirm_channel_event(&data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -1124,7 +1125,7 @@ mod tests {
         ibc::close_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
         let event = ibc::make_close_init_channel_event(&data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -1171,7 +1172,7 @@ mod tests {
         ibc::close_channel(&mut channel);
         tx_host_env::write(&channel_key, channel);
         let event = ibc::make_close_confirm_channel_event(&data);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -1227,7 +1228,7 @@ mod tests {
         let commitment = ibc::commitment(&packet);
         tx_host_env::write(&commitment_key, commitment);
         let event = ibc::make_send_packet_event(packet.clone());
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // the transaction does something before senging a packet
 
@@ -1267,7 +1268,7 @@ mod tests {
         let seq_index: u64 = tx_host_env::read(&next_seq_ack_key).unwrap_or(1);
         tx_host_env::write(&next_seq_ack_key, seq_index + 1);
         let event = ibc::make_ack_event(packet);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // the transaction does something after the ack
 
@@ -1388,7 +1389,7 @@ mod tests {
         let commitment = ibc::commitment(&packet);
         tx_host_env::write(&commitment_key, commitment);
         let event = ibc::make_send_packet_event(packet.clone());
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // the transaction does something before senging a packet
 
@@ -1536,7 +1537,7 @@ mod tests {
         let commitment = ibc::commitment(&packet);
         tx_host_env::write(&commitment_key, commitment);
         let event = ibc::make_send_packet_event(packet.clone());
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Commit
         env.write_log.commit_tx();
@@ -1567,7 +1568,7 @@ mod tests {
                 .to_string();
         tx_host_env::delete(&commitment_key);
         let event = ibc::make_timeout_event(packet);
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -1617,7 +1618,7 @@ mod tests {
         let commitment = ibc::commitment(&packet);
         tx_host_env::write(&commitment_key, commitment);
         let event = ibc::make_send_packet_event(packet.clone());
-        tx_host_env::emit_ibc_event(&event);
+        tx_host_env::emit_ibc_event(&event.try_into().unwrap());
 
         // Commit
         env.write_log.commit_tx();
@@ -1647,8 +1648,6 @@ mod tests {
             ibc::commitment_key(&port_id, &channel_id, packet.sequence)
                 .to_string();
         tx_host_env::delete(&commitment_key);
-        let event = ibc::make_timeout_on_close_event(packet);
-        tx_host_env::emit_ibc_event(&event);
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);

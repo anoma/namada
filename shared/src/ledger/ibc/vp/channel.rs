@@ -68,7 +68,12 @@ use ibc_abci::timestamp::Timestamp;
 use sha2::Digest;
 use thiserror::Error;
 
-use super::storage::{
+use super::super::handler::{
+    make_close_confirm_channel_event, make_close_init_channel_event,
+    make_open_ack_channel_event, make_open_confirm_channel_event,
+    make_open_init_channel_event, make_open_try_channel_event,
+};
+use super::super::storage::{
     ack_key, channel_counter_key, channel_key, commitment_key,
     is_channel_counter_key, next_sequence_ack_key, next_sequence_recv_key,
     next_sequence_send_key, port_channel_id, receipt_key,
@@ -77,10 +82,7 @@ use super::storage::{
 use super::{Ibc, StateChange};
 use crate::ledger::native_vp::Error as NativeVpError;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::types::ibc::{
-    make_close_confirm_channel_event, make_close_init_channel_event,
-    make_open_ack_channel_event, make_open_confirm_channel_event,
-    make_open_init_channel_event, make_open_try_channel_event,
+use crate::types::ibc::data::{
     ChannelCloseConfirmData, ChannelCloseInitData, ChannelOpenAckData,
     ChannelOpenConfirmData, ChannelOpenInitData, ChannelOpenTryData,
     Error as IbcDataError, TimeoutData,

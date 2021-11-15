@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::{fmt, panic};
 
 use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
-use anoma::ledger::ibc::{self, Ibc};
+use anoma::ledger::ibc::vp::Ibc;
 use anoma::ledger::native_vp::{self, NativeVp};
 use anoma::ledger::parameters::{self, ParametersVp};
 use anoma::ledger::pos::{self, PosVP};
@@ -36,7 +36,7 @@ pub enum Error {
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("IBC native VP: {0}")]
-    IbcNativeVpError(ibc::Error),
+    IbcNativeVpError(anoma::ledger::ibc::vp::Error),
     #[error("PoS native VP: {0}")]
     PosNativeVpError(pos::vp::Error),
     #[error("PoS native VP panicked")]

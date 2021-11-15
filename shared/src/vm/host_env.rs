@@ -19,7 +19,7 @@ use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_env;
 use crate::proto::Tx;
 use crate::types::address::{self, Address};
-use crate::types::ibc::IbcEvent;
+use crate::types::ibc::wrapper::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::key::ed25519::{verify_tx_sig, PublicKey, Signature};
 use crate::types::storage::Key;

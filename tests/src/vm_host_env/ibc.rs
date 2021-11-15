@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anoma::ledger::gas::VpGasMeter;
+pub use anoma::ledger::ibc::handler::*;
 pub use anoma::ledger::ibc::storage::{
     ack_key, capability_index_key, capability_key, channel_counter_key,
     channel_key, client_counter_key, client_state_key, client_type_key,
@@ -11,13 +12,13 @@ pub use anoma::ledger::ibc::storage::{
     consensus_state_key, next_sequence_ack_key, next_sequence_recv_key,
     next_sequence_send_key, port_key, receipt_key,
 };
-use anoma::ledger::ibc::Ibc;
+use anoma::ledger::ibc::vp::Ibc;
 use anoma::ledger::native_vp::{Ctx, NativeVp};
 use anoma::ledger::storage::mockdb::MockDB;
 use anoma::ledger::storage::testing::Sha256Hasher;
 use anoma::proto::Tx;
 use anoma::types::address::{Address, InternalAddress};
-pub use anoma::types::ibc::*;
+pub use anoma::types::ibc::data::*;
 use anoma::types::storage::Key;
 use anoma::vm::{wasm, WasmCacheRwAccess};
 use anoma_vm_env::tx_prelude::BorshSerialize;
@@ -124,7 +125,7 @@ impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
         tx_data: &[u8],
-    ) -> std::result::Result<bool, anoma::ledger::ibc::Error> {
+    ) -> std::result::Result<bool, anoma::ledger::ibc::vp::Error> {
         self.ibc
             .validate_tx(tx_data, &self.keys_changed, &HashSet::new())
     }

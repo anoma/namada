@@ -15,10 +15,12 @@ use ibc_abci::core::ics04_channel::context::ChannelReader;
 use ibc_abci::core::ics24_host::identifier::PortChannelId;
 use thiserror::Error;
 
-use super::storage::{port_channel_id, Error as IbcStorageError};
+use super::super::storage::{port_channel_id, Error as IbcStorageError};
 use super::Ibc;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::types::ibc::{PacketAckData, PacketReceiptData, PacketSendData};
+use crate::types::ibc::data::{
+    PacketAckData, PacketReceiptData, PacketSendData,
+};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
