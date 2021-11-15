@@ -209,7 +209,6 @@ steps:
     pull: never
   - commands:
       - sccache --start-server
-      - make dev-deps
       - make clippy
     depends_on:
       - check-scripts-integrity
@@ -333,7 +332,6 @@ steps:
       restore: true
   - commands:
       - cp wasm/checksums.json wasm/original-checksums.json
-      - make dev-deps
       - make build-wasm-scripts
     depends_on:
       - restore-cache
