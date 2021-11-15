@@ -22,15 +22,20 @@ ferveo-tpke = [
   "rand",
 ]
 # for integration tests and test utilies
-ABCI = [
+ibc-vp = [
+  "ibc",
+  "ibc-proto",
+]
+ibc-vp-abci = [
   "ibc-abci",
   "ibc-proto-abci",
+]
+# for integration tests and test utilies
+ABCI = [
   "tendermint-stable",
   "tendermint-proto-abci",
 ]
 ABCI-plus-plus = [
-  "ibc",
-  "ibc-proto",
   "tendermint",
   "tendermint-proto",
 ]

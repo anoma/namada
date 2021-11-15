@@ -2,24 +2,13 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
-use anoma::types::ibc::{Error as IbcError, IbcEvent};
+use anoma::types::ibc::wrapper::IbcEvent;
 use anoma::types::transaction::{hash_tx, TxType};
 use borsh::BorshSerialize;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::EventAttribute;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::EventAttribute;
-use thiserror::Error;
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Conversion error of IBC event: {0}")]
-    IbcEvent(IbcError),
-}
-
-/// Event functions result
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
@@ -100,16 +89,10 @@ impl Event {
         event
     }
 
-    pub fn merge_ibc_event(&mut self, ibc_event: &IbcEvent) -> Result<()> {
-        self.event_type = EventType::Ibc(ibc_event.event_type());
-        match ibc_event.attributes() {
-            Ok(event) => {
-                for (key, value) in event.iter() {
-                    self[key] = value.clone();
-                }
-                Ok(())
-            }
-            Err(e) => Err(Error::IbcEvent(e)),
+    pub fn merge_ibc_event(&mut self, ibc_event: &IbcEvent) {
+        self.event_type = EventType::Ibc(ibc_event.event_type.clone());
+        for (key, value) in ibc_event.attributes.iter() {
+            self[key] = value.clone();
         }
     }
 }

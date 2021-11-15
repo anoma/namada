@@ -55,16 +55,18 @@ use ibc_abci::core::ics23_commitment::commitment::CommitmentPrefix;
 use ibc_abci::core::ics24_host::identifier::{ClientId, ConnectionId};
 use thiserror::Error;
 
-use super::storage::{
+use super::super::handler::{
+    make_open_ack_connection_event, make_open_confirm_connection_event,
+    make_open_init_connection_event, make_open_try_connection_event,
+};
+use super::super::storage::{
     connection_counter_key, connection_id, connection_key,
     is_connection_counter_key, Error as IbcStorageError,
 };
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::{
-    make_open_ack_connection_event, make_open_confirm_connection_event,
-    make_open_init_connection_event, make_open_try_connection_event,
+use crate::types::ibc::data::{
     ConnectionOpenAckData, ConnectionOpenConfirmData, ConnectionOpenInitData,
     ConnectionOpenTryData, Error as IbcDataError,
 };

@@ -23,7 +23,7 @@ use ibc_abci::core::ics05_port::error::Error as Ics05Error;
 use ibc_abci::core::ics24_host::identifier::PortId;
 use thiserror::Error;
 
-use super::storage::{
+use super::super::storage::{
     capability, capability_index_key, capability_key, is_capability_index_key,
     port_id, port_key, Error as IbcStorageError,
 };

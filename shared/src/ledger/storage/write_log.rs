@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::{Address, EstablishedAddressGen};
-use crate::types::ibc::IbcEvent;
+use crate::types::ibc::wrapper::IbcEvent;
 use crate::types::storage::Key;
 
 #[allow(missing_docs)]
@@ -96,7 +96,11 @@ impl WriteLog {
                         key.len() + vp.len()
                     }
                     &StorageModification::Ibc { ref event } => {
-                        event.0.to_json().len()
+                        key.len()
+                            + event
+                                .attributes
+                                .iter()
+                                .fold(0, |acc, (k, v)| acc + k.len() + v.len())
                     }
                 };
                 (Some(v), gas as _)
@@ -185,12 +189,15 @@ impl WriteLog {
 
     /// Set an IBC event and return the gas cost.
     pub fn set_ibc_event(&mut self, event: IbcEvent) -> u64 {
-        let len = event.0.to_json().len() as _;
+        let len = event
+            .attributes
+            .iter()
+            .fold(0, |acc, (k, v)| acc + k.len() + v.len());
         self.tx_write_log.insert(
             crate::ledger::ibc::storage::event_key(),
             StorageModification::Ibc { event },
         );
-        len
+        len as _
     }
 
     /// Get the storage keys changed and accounts keys initialized in the

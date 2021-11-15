@@ -35,15 +35,18 @@ use ibc_abci::core::ics02_client::height::Height;
 use ibc_abci::core::ics24_host::identifier::ClientId;
 use thiserror::Error;
 
-use super::storage::{
+use super::super::handler::{
+    make_create_client_event, make_update_client_event,
+    make_upgrade_client_event,
+};
+use super::super::storage::{
     client_counter_key, client_state_key, client_type_key, consensus_state_key,
 };
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
-use crate::types::ibc::{
-    make_create_client_event, make_update_client_event,
-    make_upgrade_client_event, ClientCreationData, ClientUpdateData,
-    ClientUpgradeData, Error as IbcDataError,
+use crate::types::ibc::data::{
+    ClientCreationData, ClientUpdateData, ClientUpgradeData,
+    Error as IbcDataError,
 };
 use crate::vm::WasmCacheAccess;
 
