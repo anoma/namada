@@ -167,17 +167,16 @@ where
         match process_tx(req_tx.clone()) {
             Ok(TxType::Wrapper(_)) => {}
             Ok(_) => {
-                let mut resp: shim::response::ProcessProposal =
-                    shim::response::TxResult {
+                return shim::response::ProcessProposal {
+                    result: shim::response::TxResult {
                         code: ErrorCodes::InvalidTx.into(),
                         info: "Transaction rejected: Non-encrypted \
                                transactions are not supported"
                             .into(),
-                    }
-                    .into();
-                // this ensures that emitted events are of the correct type
-                resp.tx = req.tx;
-                return resp;
+                    },
+                    // this ensures that emitted events are of the correct type
+                    resp.tx = req.tx,
+                }
             }
             Err(_) => {
                 // This will be caught later
