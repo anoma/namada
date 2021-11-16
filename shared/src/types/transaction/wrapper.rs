@@ -18,7 +18,7 @@ pub mod wrapper_tx {
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::types::transaction::{hash_tx, Hash};
+    use crate::types::transaction::{hash_tx, Hash, TxType};
 
     /// TODO: Determine a sane number for this
     const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
@@ -40,6 +40,8 @@ pub mod wrapper_tx {
         Unsigned,
         #[error("{0}")]
         SigError(String),
+        #[error("Unable to deserialize the Tx data: {0}")]
+        Deserialization(String),
         #[error(
             "Attempted to sign WrapperTx with keypair whose public key \
              differs from that in the WrapperTx"
@@ -244,22 +246,13 @@ pub mod wrapper_tx {
             }
             Ok(Tx::new(
                 vec![],
-                Some(self.try_to_vec().expect("Could not serialize WrapperTx")),
+                Some(
+                    TxType::Wrapper(self.clone())
+                        .try_to_vec()
+                        .expect("Could not serialize WrapperTx"),
+                ),
             )
             .sign(keypair))
-        }
-    }
-
-    impl TryFrom<&Tx> for WrapperTx {
-        type Error = WrapperTxErr;
-
-        fn try_from(tx: &Tx) -> Result<Self, Self::Error> {
-            if let Some(data) = tx.data.as_ref() {
-                BorshDeserialize::deserialize(&mut data.as_ref())
-                    .map_err(|_| WrapperTxErr::InvalidWrapperTx)
-            } else {
-                Err(WrapperTxErr::Unsigned)
-            }
         }
     }
 
@@ -344,7 +337,6 @@ pub mod wrapper_tx {
         #[test]
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
-            println!("{}", keypair.public.to_string());
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
@@ -420,11 +412,15 @@ pub mod wrapper_tx {
             .expect("Test failed");
 
             // we now try to alter the inner tx maliciously
-            let mut wrapper = WrapperTx::try_from(&Tx::from(
+            let mut wrapper = if let TxType::Wrapper(wrapper) =
                 crate::types::transaction::process_tx(tx.clone())
-                    .expect("Test failed"),
-            ))
-            .expect("Test failed");
+                    .expect("Test failed")
+            {
+                wrapper
+            } else {
+                panic!("Test failed")
+            };
+
             let mut signed_tx_data =
                 SignedTxData::try_from_slice(&tx.data.unwrap()[..])
                     .expect("Test failed");
@@ -450,8 +446,9 @@ pub mod wrapper_tx {
             assert_eq!(decrypted, malicious);
 
             // we substitute in the modified wrapper
-            signed_tx_data.data =
-                Some(wrapper.try_to_vec().expect("Test failed"));
+            signed_tx_data.data = Some(
+                TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
+            );
             tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
 
             // check that the signature is not valid

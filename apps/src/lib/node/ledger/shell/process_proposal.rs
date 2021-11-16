@@ -41,8 +41,17 @@ where
         &mut self,
         req: shim::request::ProcessProposal,
     ) -> shim::response::ProcessProposal {
-        let tx = Tx::try_from(req.tx.as_ref())
-            .expect("Deserializing tx should not fail");
+        let tx = match Tx::try_from(req.tx.as_ref()) {
+            Ok(tx) => tx,
+            Err(_) => {
+                return shim::response::TxResult {
+                    code: ErrorCodes::InvalidTx.into(),
+                    info: "The submitted transaction was not deserializable"
+                        .into(),
+                }
+                .into();
+            }
+        };
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
@@ -140,17 +149,34 @@ where
         req: shim::request::ProcessProposal,
     ) -> shim::response::ProcessProposal {
         // check the wrapper tx
-        match process_tx(
-            Tx::try_from(req.tx.as_ref())
-                .expect("Deserializing tx should not fail"),
-        ) {
+        let req_tx = match Tx::try_from(req.tx.as_ref()) {
+            Ok(tx) => tx,
+            Err(_) => {
+                shim::response::ProcessProposal {
+                    result: shim::response::TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: "The submitted transaction was not \
+                               deserializable"
+                            .into(),
+                    },
+                    // this ensures that emitted events are of the correct type
+                    tx: req.tx
+                }
+            }
+        };
+        match process_tx(req_tx.clone()) {
             Ok(TxType::Wrapper(_)) => {}
             Ok(_) => {
-                return shim::response::TxResult {
-                    code: ErrorCodes::InvalidSig.into(),
-                    info: "The submitted transaction was not encrypted".into(),
+                return shim::response::ProcessProposal {
+                    result: shim::response::TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: "Transaction rejected: Non-encrypted \
+                               transactions are not supported"
+                            .into(),
+                    },
+                    // this ensures that emitted events are of the correct type
+                    resp.tx = req.tx,
                 }
-                .into();
             }
             Err(_) => {
                 // This will be caught later
@@ -162,9 +188,7 @@ where
 
         if wrapper_resp.result.code == 0 {
             // if the wrapper passed, decode it
-            if let Ok(TxType::Wrapper(wrapper)) =
-                process_tx(Tx::try_from(req.tx.as_slice()).unwrap())
-            {
+            if let Ok(TxType::Wrapper(wrapper)) = process_tx(req_tx) {
                 let decoded = Tx::from(match wrapper.decrypt(privkey) {
                     Ok(tx) => DecryptedTx::Decrypted(tx),
                     _ => DecryptedTx::Undecryptable(wrapper.clone()),
@@ -247,9 +271,11 @@ mod test_process_proposal {
             0.into(),
             tx,
         );
-        let tx =
-            Tx::new(vec![], Some(wrapper.try_to_vec().expect("Test failed")))
-                .to_bytes();
+        let tx = Tx::new(
+            vec![],
+            Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
+        )
+        .to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal { tx: tx.clone() };
 
@@ -296,14 +322,20 @@ mod test_process_proposal {
             .take()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
-            let mut new_wrapper = <WrapperTx as BorshDeserialize>::deserialize(
-                &mut data.as_ref(),
-            )
-            .expect("Test failed");
+            let mut new_wrapper = if let TxType::Wrapper(wrapper) =
+                <TxType as BorshDeserialize>::deserialize(&mut data.as_ref())
+                    .expect("Test failed")
+            {
+                wrapper
+            } else {
+                panic!("Test failed")
+            };
 
             // we mount a malleability attack to try and remove the fee
             new_wrapper.fee.amount = 0.into();
-            let new_data = new_wrapper.try_to_vec().expect("Test failed");
+            let new_data = TxType::Wrapper(new_wrapper)
+                .try_to_vec()
+                .expect("Test failed");
             Tx {
                 code: vec![],
                 data: Some(
@@ -601,5 +633,31 @@ mod test_process_proposal {
             response.result.info,
             String::from("Received more decrypted txs than expected"),
         );
+    }
+
+    /// Process Proposal should reject a RawTx, but not panic
+    #[test]
+    fn test_raw_tx_rejected() {
+        let mut shell = TestShell::new();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let tx = Tx::from(TxType::Raw(tx));
+        let request = ProcessProposal { tx: tx.to_bytes() };
+        let response = shell.process_proposal(request);
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(
+            response.result.info,
+            String::from(
+                "Transaction rejected: Non-encrypted transactions are not \
+                 supported"
+            ),
+        );
+        #[cfg(feature = "ABCI")]
+        {
+            assert_eq!(response.tx, tx.to_bytes());
+        }
     }
 }
