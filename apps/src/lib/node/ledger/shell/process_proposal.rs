@@ -160,8 +160,8 @@ where
                             .into(),
                     },
                     // this ensures that emitted events are of the correct type
-                    tx: req.tx
-                }
+                    tx: req.tx,
+                };
             }
         };
         match process_tx(req_tx.clone()) {
@@ -176,7 +176,7 @@ where
                     },
                     // this ensures that emitted events are of the correct type
                     tx: req.tx,
-                }
+                };
             }
             Err(_) => {
                 // This will be caught later
