@@ -152,18 +152,16 @@ where
         let req_tx = match Tx::try_from(req.tx.as_ref()) {
             Ok(tx) => tx,
             Err(_) => {
-                let mut resp: shim::response::ProcessProposal =
-                    shim::response::TxResult {
+                shim::response::ProcessProposal {
+                    result: shim::response::TxResult {
                         code: ErrorCodes::InvalidTx.into(),
                         info: "The submitted transaction was not \
                                deserializable"
                             .into(),
-                    }
-                    .into();
-
-                // this ensures that emitted events are of the correct type
-                resp.tx = req.tx;
-                return resp;
+                    },
+                    // this ensures that emitted events are of the correct type
+                    tx: req.tx
+                }
             }
         };
         match process_tx(req_tx.clone()) {
