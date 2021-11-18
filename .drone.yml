@@ -337,7 +337,8 @@ steps:
   name: udeps
   pull: never
 trigger:
-  event: [pull_request]
+  cron: [audit]
+  event: [cron]
 type: docker
 workspace: {path: /usr/local/rust/project}
 ---
@@ -694,6 +695,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 5746bc99cc885724814f1f8b23305d46a29eb515f976867f8235e4406737b7c6
+hmac: 2059ad23b479ea41c9d1787e7fa821c38ad01f7dfa216bd28347a01efa915259
 
 ...
