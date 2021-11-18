@@ -71,7 +71,7 @@ table_row = '|{}|{}|{}|{}|'
 table = [table_header]
 
 nightly_version = get_nightly_from_file()
-command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--all-features', '--locked', '--output', 'json']
+command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--all-features', '--output', 'json']
 p = subprocess.Popen(command, stdout=subprocess.PIPE)
 output = p.stdout.read()
 retcode = p.wait()
