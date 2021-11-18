@@ -74,7 +74,7 @@ table = [table_header]
 
 nightly_version = get_nightly_from_file()
 command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--output', 'json']
-p = subprocess.Popen(command, stdout=subprocess.PIPE)
+p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd="/usr/local/rust/project")
 output = p.stdout.read()
 retcode = p.wait()
 
