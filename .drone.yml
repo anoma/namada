@@ -247,7 +247,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: check-scripts-integrity
   pull: never
-- commands: [sccache --start-server, make clippy-wasm-abci-plus-plus]
+- commands: [sccache --start-server, make clippy-abci-plus-plus]
   depends_on: [check-scripts-integrity]
   environment:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
@@ -822,6 +822,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: b21560ec6da0400ad40c0e8e5552e3d5c4a8cea03b26d81d762d6e10c013771c
+hmac: 520635dd9486c90b34f85fb43c296e5976526f92d4077f585dd94470c27cc2c5
 
 ...
