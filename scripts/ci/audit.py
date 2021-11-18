@@ -5,7 +5,7 @@ import urllib
 import urllib.request
 from urllib.request import urlopen
 
-GH_TOKEN = os.environ['GITHUB_TOKEN']
+GH_TOKEN = os.environ['GITHUB_TOKEN'] if 'GITHUB_TOKEN' in os.environ else ""
 
 GET_ISSUES_URL = 'https://api.github.com/repos/{}/{}/issues'.format('anoma', 'anoma')
 CREATE_ISSUE_URL = 'https://api.github.com/repos/{}/{}/issues'.format('anoma', 'anoma')
@@ -64,7 +64,7 @@ table_row = '|[{0}]({advisory_db}{0})|{1}|{2}|{3}|'
 table = [table_header]
 
 command = ['cargo', 'audit', '--json']
-p = subprocess.Popen(command, stdout=subprocess.PIPE)
+p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd=os.path.dirname(__file__) + "/../..")
 output = p.stdout.read()
 retcode = p.wait()
 
@@ -72,6 +72,8 @@ vulnerabilities = json.loads(output)['vulnerabilities']
 if int(vulnerabilities['count']) == 0:
     print("No vulnerabilities found.")
     exit(0)
+
+print(vulnerabilities)
 
 for vulnerability in vulnerabilities['list']:
     vuln_description = vulnerability['advisory']
@@ -86,6 +88,10 @@ for vulnerability in vulnerabilities['list']:
 
 table_rendered = '\n'.join(table)
 issue_body = issue_template.format(table_rendered)
+
+if not GH_TOKEN:
+    print("Invalid github token.")
+    exit(0)
 
 issue_status = check_issue_status(issue_body)
 
