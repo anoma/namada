@@ -315,20 +315,18 @@ steps:
   name: check-scripts-integrity
   pull: never
 - commands: ['curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
-      | python3 -', . $HOME/.poetry/env, cd scripts/ci && poetry install]
+      | python3 -', . $HOME/.poetry/env, cargo generate-lockfile, cd scripts/ci &&
+      poetry install && poetry run python3 audit.py]
   depends_on: [check-scripts-integrity]
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
-  name: requirements
-  pull: never
-- commands: [cargo generate-lockfile, cd scripts/ci && poetry run python3 audit.py]
-  depends_on: [requirements]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: audit
   pull: never
-- commands: [cd scripts/ci && poetry run python3 udeps.py]
-  depends_on: [requirements]
+- commands: ['curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
+      | python3 -', . $HOME/.poetry/env, cd scripts/ci && poetry install && poetry
+      run python3 udeps.py]
+  depends_on: [check-scripts-integrity]
   environment:
     GITHUB_TOKEN: {from_secret: github_token}
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
@@ -692,6 +690,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 12337b13f2f46a1531db61b9f46689c34bb92e4b869796bd9a08f58284944020
+hmac: bacf3dcf424eec2fed0c433eb3101cf61d07ad4efa7059978483e76c20f2b175
 
 ...
