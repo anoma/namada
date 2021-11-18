@@ -116,7 +116,7 @@ steps:
     AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     SCCACHE_BUCKET: heliax-drone-cache-v2
-    SCCACHE_S3_KEY_PREFIX: sccache-build
+    SCCACHE_S3_KEY_PREFIX: sccache-build-abci
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: build
   pull: never
@@ -822,6 +822,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 520635dd9486c90b34f85fb43c296e5976526f92d4077f585dd94470c27cc2c5
+hmac: 2e7f087144792b07c8d97c867544c169c0499cee28ec5adb193a2cc317c3e680
 
 ...
