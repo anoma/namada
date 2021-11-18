@@ -34,6 +34,9 @@ build-abci-plus-plus:
 build-test:
 	$(cargo) build --tests
 
+build-test-abci-plus-plus:
+	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus"
+
 build-release:
 	$(cargo) build --release --package anoma_apps
 

@@ -1,6 +1,6 @@
 ---
 clone: {disable: true}
-environment: {CARGO_INCREMENTAL: 0, GIT_LFS_SKIP_SMUDGE: 1}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-build-pr
 node: {project: anoma}
@@ -10,7 +10,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -84,6 +84,88 @@ workspace: {path: /usr/local/rust/project}
 clone: {disable: true}
 environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
+name: anoma-ci-build-abci-pr
+node: {project: anoma}
+steps:
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
+      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
+      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "5790acb842cd5d1dc0120e4258f30f796de7cd44ac775d836e40eec9a16bea28  scripts/ci/release.sh"
+      | sha256sum -c -, echo "22083f12f97de4455bc87e00ad5df8ec969e4015f80f696f3c03c3c08b1b4b41  scripts/ci/build-and-publish-docs.sh"
+      | sha256sum -c -, echo "64abe3dc5eb578b6ce3f62a815699b94083d928f3ebc2783d1eef1e6530b2366  scripts/ci/audit.py"
+      | sha256sum -c -, echo "720f5d9af13d9830670a603031c546bdd53a0ee4457a5cc78891ae15d46129fb  scripts/ci/udeps.py"
+      | sha256sum -c -, echo "36e8de3f31a5f8a9e4b0f45b105cb7116def8a7204c662f129678fda2dfa0f04  wasm/checksums.py"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: check-scripts-integrity
+  pull: never
+- commands: [sccache --start-server, make build-abci-plus-plus]
+  depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: build
+  pull: never
+- commands: [sccache --start-server, make build-test-abci-plus-plus]
+  depends_on: [build]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-build-test-abci
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: build-test
+  pull: never
+- commands: ['aws s3api head-object --bucket heliax-drone-wasm-v2 --key ${DRONE_COMMIT}.json',
+    'if [ $? -ne 0  ]; then exit 1; fi', 'aws s3 cp s3://heliax-drone-wasm-v2/${DRONE_COMMIT}.json
+      wasm', 'cp wasm/${DRONE_COMMIT}.json wasm/checksums.json', 'jq -r -c ''.[]''
+      wasm/checksums.json | parallel aws s3 cp s3://heliax-drone-wasm-v2/{} wasm']
+  depends_on: [build-test]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: download-wasm
+  pull: never
+- commands: [sccache --start-server, make test-unit-abci-plus-plus]
+  depends_on: [download-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-test-unit-abci
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: test-unit
+  pull: never
+- commands: [sccache --start-server, make test-e2e-abci-plus-plus]
+  depends_on: [download-wasm]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-test-e2e-abci
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: test-e2e
+  pull: never
+trigger:
+  event: [pull_request]
+type: docker
+workspace: {path: /usr/local/rust/project}
+---
+clone: {disable: true}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
+kind: pipeline
 name: anoma-ci-checks-pr
 node: {project: anoma}
 steps:
@@ -92,7 +174,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -137,6 +219,51 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 clone: {disable: true}
+environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
+kind: pipeline
+name: anoma-ci-checks-abci-pr
+node: {project: anoma}
+steps:
+- commands: ['git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+      --single-branch .']
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: clone
+  pull: never
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
+      | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
+      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
+      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
+      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_template/Makefile"
+      | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/mm_filter_template/Makefile"
+      | sha256sum -c -, echo "f01f320575fbbbd3d0ba0f2dd7e9b0132e8448e4e07ce99d425d9ad03d811428  docs/Makefile"
+      | sha256sum -c -, echo "1f7193a7d75f6ee0b5ad4f067f0974873de6c52942e79d0559b58fb8a140c083  scripts/ci/pre-run.sh"
+      | sha256sum -c -, echo "5790acb842cd5d1dc0120e4258f30f796de7cd44ac775d836e40eec9a16bea28  scripts/ci/release.sh"
+      | sha256sum -c -, echo "22083f12f97de4455bc87e00ad5df8ec969e4015f80f696f3c03c3c08b1b4b41  scripts/ci/build-and-publish-docs.sh"
+      | sha256sum -c -, echo "64abe3dc5eb578b6ce3f62a815699b94083d928f3ebc2783d1eef1e6530b2366  scripts/ci/audit.py"
+      | sha256sum -c -, echo "720f5d9af13d9830670a603031c546bdd53a0ee4457a5cc78891ae15d46129fb  scripts/ci/udeps.py"
+      | sha256sum -c -, echo "36e8de3f31a5f8a9e4b0f45b105cb7116def8a7204c662f129678fda2dfa0f04  wasm/checksums.py"
+      | sha256sum -c -, sh scripts/ci/pre-run.sh]
+  depends_on: [clone]
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  name: check-scripts-integrity
+  pull: never
+- commands: [sccache --start-server, make clippy-wasm-abci-plus-plus]
+  depends_on: [check-scripts-integrity]
+  environment:
+    AWS_ACCESS_KEY_ID: {from_secret: aws_access_key_id}
+    AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
+    SCCACHE_BUCKET: heliax-drone-cache-v2
+    SCCACHE_S3_KEY_PREFIX: sccache-clippy-abci
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
+  name: clippy
+  pull: never
+trigger:
+  branch: [develop, master]
+  event: [push, pull_request]
+type: docker
+workspace: {path: /usr/local/rust/project}
+---
+clone: {disable: true}
 environment: {GIT_LFS_SKIP_SMUDGE: '1'}
 kind: pipeline
 name: anoma-ci-wasm-pr
@@ -147,7 +274,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -251,7 +378,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -296,7 +423,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -353,7 +480,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -398,7 +525,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -444,7 +571,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -527,7 +654,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -643,7 +770,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   name: clone
   pull: never
-- commands: [echo "23668cddb26b15a2410ef03b6c86f702a77728faca730a3f1677ebc4042248e8  Makefile"
+- commands: [echo "2c217c6b8df5bbf9703b82acaee71443d386d1ed45f016d8e6ef0e335b2ff0bb  Makefile"
       | sha256sum -c -, echo "96f503edaeb65d5b75855c75ead35c6c3e394ee82ec6fd4aa15d0e7d9f1051d6  wasm/wasm_source/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/vp_template/Makefile"
       | sha256sum -c -, echo "52d59575c0767b4738ea9b4c07844c761dce6f54a59b3429e75fb5f4410cdc7e  wasm/tx_template/Makefile"
@@ -695,6 +822,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 2059ad23b479ea41c9d1787e7fa821c38ad01f7dfa216bd28347a01efa915259
+hmac: b21560ec6da0400ad40c0e8e5552e3d5c4a8cea03b26d81d762d6e10c013771c
 
 ...
