@@ -74,8 +74,6 @@ if int(vulnerabilities['count']) == 0:
     print("No vulnerabilities found.")
     exit(0)
 
-print(vulnerabilities)
-
 for vulnerability in vulnerabilities['list']:
     vuln_description = vulnerability['advisory']
     vuln_id = vuln_description['id']
