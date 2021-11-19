@@ -138,7 +138,7 @@ pub mod tx_types {
 
     /// Struct that classifies that kind of Tx
     /// based on the contents of its data.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub enum TxType {
         /// An ordinary tx
         Raw(Tx),
@@ -150,44 +150,25 @@ pub mod tx_types {
 
     impl From<TxType> for Tx {
         fn from(ty: TxType) -> Self {
-            match ty {
-                TxType::Raw(tx) => tx,
-                TxType::Wrapper(tx) => Tx::new(vec![], tx.try_to_vec().ok()),
-                TxType::Decrypted(tx) => Tx::new(vec![], tx.try_to_vec().ok()),
-            }
+            Tx::new(vec![], Some(ty.try_to_vec().unwrap()))
         }
     }
 
-    /// Used to determine the type of a Tx
-    impl From<Tx> for TxType {
-        fn from(tx: Tx) -> Self {
+    /// We deserialize the Tx data; it should be a TxType which
+    /// tells us how to handle it. Otherwise, we return an error.
+    /// The exception is when the Tx data field is empty. We
+    /// allow this and type it as a Raw TxType.
+    impl TryFrom<Tx> for TxType {
+        type Error = std::io::Error;
+
+        fn try_from(tx: Tx) -> std::io::Result<TxType> {
             if let Some(ref data) = tx.data {
-                if let Ok(wrapper) =
-                    <WrapperTx as BorshDeserialize>::deserialize(
-                        &mut data.as_ref(),
-                    )
-                {
-                    TxType::Wrapper(wrapper)
-                } else if let Ok(decrypted) =
-                    <DecryptedTx as BorshDeserialize>::deserialize(
-                        &mut data.as_ref(),
-                    )
-                {
-                    TxType::Decrypted(decrypted)
-                } else {
-                    TxType::Raw(tx)
-                }
+                BorshDeserialize::deserialize(&mut data.as_ref())
             } else {
-                TxType::Raw(tx)
+                // We allow Txs with empty data fields, which we
+                // will assume to be of Raw TxType
+                Ok(TxType::Raw(tx))
             }
-        }
-    }
-
-    impl<'a> TryFrom<&'a [u8]> for TxType {
-        type Error = <Tx as TryFrom<&'a [u8]>>::Error;
-
-        fn try_from(tx_bytes: &[u8]) -> Result<Self, Self::Error> {
-            Ok(TxType::from(Tx::try_from(tx_bytes)?))
         }
     }
 
@@ -220,11 +201,13 @@ pub mod tx_types {
             .as_ref()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
-            match TxType::from(Tx {
+            match TxType::try_from(Tx {
                 code: vec![],
                 data: Some(data),
                 timestamp: tx.timestamp,
-            }) {
+            })
+            .map_err(|err| WrapperTxErr::Deserialization(err.to_string()))?
+            {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
                     verify_tx_sig(&wrapper.pk, &tx, sig).map_err(|err| {
@@ -235,10 +218,12 @@ pub mod tx_types {
                 // we extract the signed data, but don't check the signature
                 decrypted @ TxType::Decrypted(_) => Ok(decrypted),
                 // return as is
-                TxType::Raw(_) => Ok(TxType::Raw(tx)),
+                raw @ TxType::Raw(_) => Ok(raw),
             }
         } else {
-            match TxType::from(tx) {
+            match TxType::try_from(tx)
+                .map_err(|err| WrapperTxErr::Deserialization(err.to_string()))?
+            {
                 // we only accept signed wrappers
                 TxType::Wrapper(_) => Err(WrapperTxErr::Unsigned),
                 // return as is
@@ -274,33 +259,50 @@ pub mod tx_types {
             }
         }
 
-        /// Test that process_tx correctly identifies a raw tx with some
-        /// data and returns an identical copy
+        /// Test that process_tx correctly identifies tx containing
+        /// a raw tx with some data and returns an identical copy
+        /// of the inner data
         #[test]
         fn test_process_tx_raw_tx_some_data() {
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
+            let inner = Tx::new(
+                "code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
+            let tx = Tx::new(
+                "wasm code".as_bytes().to_owned(),
+                Some(
+                    TxType::Raw(inner.clone())
+                        .try_to_vec()
+                        .expect("Test failed"),
+                ),
+            );
 
-            match process_tx(tx.clone()).expect("Test failed") {
-                TxType::Raw(raw) => assert_eq!(tx, raw),
+            match process_tx(tx).expect("Test failed") {
+                TxType::Raw(raw) => assert_eq!(inner, raw),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
         }
 
         /// Test that process_tx correctly identifies a raw tx with some
-        /// signed data and returns an identical copy
+        /// signed data and returns an identical copy of the inner data
         #[test]
         fn test_process_tx_raw_tx_some_signed_data() {
+            let inner = Tx::new(
+                "code".as_bytes().to_owned(),
+                Some("transaction data".as_bytes().to_owned()),
+            );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
+                Some(
+                    TxType::Raw(inner.clone())
+                        .try_to_vec()
+                        .expect("Test failed"),
+                ),
             )
             .sign(&gen_keypair());
 
-            match process_tx(tx.clone()).expect("Test failed") {
-                TxType::Raw(raw) => assert_eq!(tx, raw),
+            match process_tx(tx).expect("Test failed") {
+                TxType::Raw(raw) => assert_eq!(inner, raw),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
         }
@@ -362,7 +364,9 @@ pub mod tx_types {
 
             let tx = Tx::new(
                 vec![],
-                Some(wrapper.try_to_vec().expect("Test failed")),
+                Some(
+                    TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
+                ),
             );
             let result = process_tx(tx).expect_err("Test failed");
             assert_eq!(result, WrapperTxErr::Unsigned);
@@ -399,7 +403,11 @@ pub mod tx_types {
         let decrypted = DecryptedTx::Decrypted(payload.clone());
         // Invalid signed data
         let signed = SignedTxData {
-            data: Some(decrypted.try_to_vec().expect("Test failed")),
+            data: Some(
+                TxType::Decrypted(decrypted)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            ),
             sig: ed25519_dalek::Signature::from([0u8; 64]).into(),
         };
         // create the tx with signed decrypted data

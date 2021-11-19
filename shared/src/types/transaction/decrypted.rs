@@ -3,14 +3,13 @@
 /// *Not wasm compatible*
 #[cfg(feature = "ferveo-tpke")]
 pub mod decrypted_tx {
-    use std::convert::TryFrom;
 
     use ark_bls12_381::Bls12_381 as EllipticCurve;
     use ark_ec::PairingEngine;
     use borsh::{BorshDeserialize, BorshSerialize};
 
     use crate::proto::Tx;
-    use crate::types::transaction::{hash_tx, Hash, WrapperTx};
+    use crate::types::transaction::{hash_tx, Hash, TxType, WrapperTx};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     #[allow(clippy::large_enum_variant)]
@@ -63,26 +62,11 @@ pub mod decrypted_tx {
             Tx::new(
                 vec![],
                 Some(
-                    decrypted
+                    TxType::Decrypted(decrypted)
                         .try_to_vec()
                         .expect("Encrypting transaction should not fail"),
                 ),
             )
-        }
-    }
-
-    impl TryFrom<&Tx> for DecryptedTx {
-        type Error = crate::types::transaction::WrapperTxErr;
-
-        fn try_from(tx: &Tx) -> Result<Self, Self::Error> {
-            if let Some(data) = tx.data.as_ref() {
-                <Self as BorshDeserialize>::deserialize(&mut data.as_ref())
-                    .map_err(|_| {
-                        crate::types::transaction::WrapperTxErr::InvalidTx
-                    })
-            } else {
-                Err(crate::types::transaction::WrapperTxErr::InvalidTx)
-            }
         }
     }
 }
