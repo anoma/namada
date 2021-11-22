@@ -62,6 +62,10 @@ pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
             // If not set, default to quarter of logical CPUs count
             logical_cores / 4
         };
+    tracing::debug!(
+        "Using {} compactions threads for RocksDB.",
+        compaction_threads
+    );
 
     let mut cf_opts = Options::default();
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
