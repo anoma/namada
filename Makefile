@@ -215,7 +215,7 @@ build-wasm-scripts:
 
 # need python
 checksum-wasm:
-	python wasm/checksums.py
+	python3 wasm/checksums.py
 
 # this command needs wasm-opt installed
 opt-wasm:
