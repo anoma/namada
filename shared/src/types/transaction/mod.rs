@@ -210,9 +210,8 @@ pub mod tx_types {
             {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
-                    verify_tx_sig(&wrapper.pk, &tx, sig).map_err(|err| {
-                        WrapperTxErr::SigError(err.to_string())
-                    })?;
+                    verify_tx_sig(&wrapper.pk, &tx, sig)
+                        .map_err(WrapperTxErr::SigError)?;
                     Ok(TxType::Wrapper(wrapper))
                 }
                 // we extract the signed data, but don't check the signature
@@ -369,7 +368,7 @@ pub mod tx_types {
                 ),
             );
             let result = process_tx(tx).expect_err("Test failed");
-            assert_eq!(result, WrapperTxErr::Unsigned);
+            assert_matches!(result, WrapperTxErr::Unsigned);
         }
     }
 

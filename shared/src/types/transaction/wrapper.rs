@@ -14,7 +14,7 @@ pub mod wrapper_tx {
 
     use crate::proto::Tx;
     use crate::types::address::Address;
-    use crate::types::key::ed25519::{Keypair, PublicKey};
+    use crate::types::key::ed25519::{Keypair, PublicKey, VerifySigError};
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
@@ -26,7 +26,7 @@ pub mod wrapper_tx {
     /// Errors relating to decrypting a wrapper tx and its
     /// encrypted payload from a Tx type
     #[allow(missing_docs)]
-    #[derive(Error, Debug, PartialEq)]
+    #[derive(Error, Debug)]
     pub enum WrapperTxErr {
         #[error(
             "The hash of the decrypted tx does not match the hash commitment"
@@ -39,7 +39,7 @@ pub mod wrapper_tx {
         #[error("Expected signed WrapperTx data")]
         Unsigned,
         #[error("{0}")]
-        SigError(String),
+        SigError(VerifySigError),
         #[error("Unable to deserialize the Tx data: {0}")]
         Deserialization(String),
         #[error(
@@ -382,7 +382,7 @@ pub mod wrapper_tx {
             assert!(wrapper.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             let err = wrapper.decrypt(privkey).expect_err("Test failed");
-            assert_eq!(err, WrapperTxErr::DecryptedHash);
+            assert_matches!(err, WrapperTxErr::DecryptedHash);
         }
 
         /// We check that even if the encrypted payload and has of its
@@ -457,12 +457,7 @@ pub mod wrapper_tx {
             // check that the try from method also fails
             let err = crate::types::transaction::process_tx(tx)
                 .expect_err("Test failed");
-            assert_eq!(
-                err,
-                WrapperTxErr::SigError(
-                    "Signature verification failed: signature error".into()
-                )
-            );
+            assert_matches!(err, WrapperTxErr::SigError(_));
         }
     }
 }
