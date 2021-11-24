@@ -155,7 +155,7 @@ steps:
     AWS_SECRET_ACCESS_KEY: {from_secret: aws_secret_access_key}
     SCCACHE_BUCKET: heliax-drone-cache-v2
     SCCACHE_S3_KEY_PREFIX: sccache-test-e2e-abci
-    TENDERMINT: /usr/local/bin/tendermin
+    TENDERMINT: /usr/local/bin/tendermint++
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   name: test-e2e
   pull: never
@@ -823,6 +823,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 4dde41b0950f7a9ececa077446276ee728fdc4d027cc1508b5492dd4b18c3166
+hmac: c5d3bee5fbbf34f9b29a19656583c62e4d1ad313efddfb68b333cc69f8e2c708
 
 ...
