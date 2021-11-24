@@ -764,7 +764,7 @@ fn pos_init_validator() -> Result<()> {
 /// Test that multiple txs submitted in the same block all get the tx result.
 ///
 /// In this test we:
-/// 1. Run the ledger node with 10ms consensus timeout
+/// 1. Run the ledger node with 10s consensus timeout
 /// 2. Spawn threads each submitting token transfer tx
 #[test]
 fn ledger_many_txs_in_a_block() -> Result<()> {
