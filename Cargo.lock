@@ -5779,23 +5779,6 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abci++-v0.23.0#a072e7da5acf4196febf8229cb20b5235aefcbf2"
-dependencies = [
- "bytes 1.1.0",
- "chrono",
- "flex-error",
- "num-derive",
- "num-traits 0.2.14",
- "prost 0.9.0",
- "prost-types 0.9.0",
- "serde 1.0.130",
- "serde_bytes",
- "subtle-encoding",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.23.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0#a072e7da5acf4196febf8229cb20b5235aefcbf2"
 dependencies = [
  "bytes 1.1.0",
@@ -6303,13 +6286,13 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci?branch=yuji/abcipp-v0.23.0#44c520d46c56bc7dc051b9144c25d29d07c61a24"
+source = "git+https://github.com/heliaxdev/tower-abci?branch=yuji/abcipp-v0.23.0#06941c168d3aa7120d4025160057a3e599808e64"
 dependencies = [
  "bytes 1.1.0",
  "futures 0.3.17",
  "pin-project 1.0.8",
  "prost 0.9.0",
- "tendermint-proto 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abci++-v0.23.0)",
+ "tendermint-proto 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
  "tokio",
  "tokio-stream",
  "tokio-util",
