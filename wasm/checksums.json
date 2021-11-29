@@ -1,15 +1,15 @@
 {
-    "mm_filter_token_exch.wasm": "mm_filter_token_exch.ea57e49340b3179700db2714ad9eeb319b3d53639ba1659f49454c4052d50e3a.wasm",
-    "mm_token_exch.wasm": "mm_token_exch.84173609ec7ff4071f348d57354ceec7e49685d59e2c58e396031035045e0469.wasm",
+    "mm_filter_token_exch.wasm": "mm_filter_token_exch.fa0981179c45f2fb14916ac80e999a9b178062757ce701d824fccea7232ecce8.wasm",
+    "mm_token_exch.wasm": "mm_token_exch.d1570e71fdb17ce5bd2c7146d918501964b6a51983c979d4411fc07f5390f8f2.wasm",
     "tx_bond.wasm": "tx_bond.14de185172f8158a057c4a43e2cc59c7016184e3c82e9e63d0c36a5cd7ea11d7.wasm",
-    "tx_from_intent.wasm": "tx_from_intent.9400b54ecc1cc04d13f2d76e8888ec04779288692f848787f1fac4b054866918.wasm",
+    "tx_from_intent.wasm": "tx_from_intent.339730ad8b749f58886229d119b80d1e993bc005eb21c42cbf70b6097a665dfe.wasm",
     "tx_init_account.wasm": "tx_init_account.3edb0e9109a111999253086a0f739619f77d7189cfa94d3a9c377c09cde00bd6.wasm",
     "tx_init_validator.wasm": "tx_init_validator.167f433ab950fedc6c4d7263e506107fb70384283909871064bc1e101f7cbd5d.wasm",
     "tx_transfer.wasm": "tx_transfer.8e4a01cdd277ad2e1b0d031f0e1b34f964ce062cc60cbf644036dee20dcae0ee.wasm",
     "tx_unbond.wasm": "tx_unbond.e069e7c3d5ab8acca0e1ee39a21a2f46475d7fa62f6412a69ff73f32318e7a5c.wasm",
     "tx_update_vp.wasm": "tx_update_vp.b1b53bb5ce08b3c58439360559133e0071a3d274cc7be73f5aad023c3237f74a.wasm",
     "tx_withdraw.wasm": "tx_withdraw.273855227a400ba461e06225ab4c8c1403a15e97e095cc3f03bd70537098eaff.wasm",
-    "vp_testnet_faucet.wasm": "vp_testnet_faucet.c6e3656e0a18934939b7b5b0e022444fd23475475e8019f83be202cac18039ae.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.966b38e2ff6ed15d200a2edd80e019abe4aebcbe93032fc19c049f9a96a3e394.wasm",
     "vp_token.wasm": "vp_token.4c9942034747ef0d628b3ea3965adc51b76db5387bd1333bacdbcd92dc100283.wasm",
-    "vp_user.wasm": "vp_user.39a98c15e41ded2d694f33e6cc02371feaa6d6cbfe1868d0ee216253acea7e40.wasm"
+    "vp_user.wasm": "vp_user.8071092ce5ef8b2585c608838111013e94f4ed9ff0640ef65eb03edc58e393bb.wasm"
 }
