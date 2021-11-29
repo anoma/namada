@@ -19,7 +19,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anoma::ledger::storage::types::PrefixIterator;
-use anoma::ledger::storage::{types, BlockState, DBIter, Error, Result, DB};
+use anoma::ledger::storage::{
+    types, BlockStateRead, BlockStateWrite, DBIter, Error, Result, DB,
+};
 use anoma::types::storage::{BlockHeight, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use anoma::types::time::DateTimeUtc;
 use rocksdb::{
@@ -112,9 +114,9 @@ impl DB for RocksDB {
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
-    fn write_block(&mut self, state: BlockState) -> Result<()> {
+    fn write_block(&mut self, state: BlockStateWrite) -> Result<()> {
         let mut batch = WriteBatch::default();
-        let BlockState {
+        let BlockStateWrite {
             root,
             store,
             hash,
@@ -125,7 +127,7 @@ impl DB for RocksDB {
             next_epoch_min_start_time,
             subspaces,
             address_gen,
-        }: BlockState = state;
+        }: BlockStateWrite = state;
 
         // Epoch start height and time
         batch.put(
@@ -225,7 +227,7 @@ impl DB for RocksDB {
         }
     }
 
-    fn read_last_block(&mut self) -> Result<Option<BlockState>> {
+    fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
         // Block height
         let height: BlockHeight;
         match self
@@ -357,7 +359,7 @@ impl DB for RocksDB {
                 Some(epoch),
                 Some(pred_epochs),
                 Some(address_gen),
-            ) => Ok(Some(BlockState {
+            ) => Ok(Some(BlockStateRead {
                 root,
                 store,
                 hash,
