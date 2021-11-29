@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euEo pipefail
+set -Eo pipefail
 
 # an examplary download-url
 # https://github.com/tendermint/tendermint/releases/download/v0.34.13/tendermint_0.34.13_linux_amd64.tar.gz
