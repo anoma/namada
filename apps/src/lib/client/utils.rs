@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -8,6 +9,8 @@ use anoma::types::chain::ChainId;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::{address, token};
 use borsh::BorshSerialize;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
@@ -74,6 +77,7 @@ pub fn init_network(
         consensus_timeout_commit,
         localhost,
         allow_duplicate_ip,
+        dont_archive,
     }: args::InitNetwork,
 ) {
     let mut config = genesis_config::open_genesis_config(&genesis_path);
@@ -501,6 +505,41 @@ pub fn init_network(
         "Genesis file generated at {}",
         genesis_path.to_string_lossy()
     );
+
+    // Create a release tarball for anoma-network-config
+    if !dont_archive {
+        let mut release = tar::Builder::new(Vec::new());
+        let release_genesis_path = PathBuf::from(config::DEFAULT_BASE_DIR)
+            .join(format!("{}.toml", chain_id.as_str()));
+        release
+            .append_path_with_name(genesis_path, release_genesis_path)
+            .unwrap();
+        let global_config_path = GlobalConfig::file_path(&global_args.base_dir);
+        let release_global_config_path =
+            GlobalConfig::file_path(config::DEFAULT_BASE_DIR);
+        release
+            .append_path_with_name(
+                global_config_path,
+                release_global_config_path,
+            )
+            .unwrap();
+        let chain_config_path =
+            Config::file_path(&global_args.base_dir, &chain_id);
+        let release_chain_config_path =
+            Config::file_path(config::DEFAULT_BASE_DIR, &chain_id);
+        release
+            .append_path_with_name(chain_config_path, release_chain_config_path)
+            .unwrap();
+
+        // Gzip tar release and write to file
+        let release_file = format!("{}.tar.gz", chain_id);
+        let compressed_file = File::create(&release_file).unwrap();
+        let mut encoder =
+            GzEncoder::new(compressed_file, Compression::default());
+        encoder.write_all(&release.into_inner().unwrap()).unwrap();
+        encoder.finish().unwrap();
+        println!("Release archive created at {}", release_file);
+    }
 }
 
 fn init_established_account(

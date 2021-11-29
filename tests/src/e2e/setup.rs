@@ -122,6 +122,7 @@ pub fn network(
             "--chain-prefix",
             "e2e-test",
             "--localhost",
+            "--dont-archive",
         ],
         Some(5),
         &working_dir,
