@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -9,6 +9,7 @@ use anoma::types::chain::ChainId;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::{address, token};
 use borsh::BorshSerialize;
+use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use rand::prelude::ThreadRng;
@@ -34,9 +35,12 @@ use crate::wallet::Wallet;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
 pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
+/// Github URL prefix of released Anoma network configs
+const RELEASE_PREFIX: &str =
+    "https://github.com/heliaxdev/anoma-network-config/releases/download";
 
-/// Configure Anoma to join an existing network. The chain must be known in the
-/// <https://github.com/heliaxdev/anoma-network-config> repository.
+/// Configure Anoma to join an existing network. The chain must be released in
+/// the <https://github.com/heliaxdev/anoma-network-config> repository.
 pub async fn join_network(
     global_args: args::Global,
     args::JoinNetwork { chain_id }: args::JoinNetwork,
@@ -44,27 +48,22 @@ pub async fn join_network(
     let chain_dir = global_args.base_dir.join(chain_id.as_str());
     fs::create_dir_all(&chain_dir).expect("Couldn't create chain directory");
 
-    let genesis_file = format!("{}.toml", chain_id);
-    let global_config_file = "global-config.toml";
-    let config_file = format!("{}/config.toml", chain_id);
+    let release_filename = format!("{}.tar.gz", chain_id);
+    let release_url =
+        format!("{}/{}/{}", RELEASE_PREFIX, chain_id, release_filename);
 
-    let file_url_prefix = format!("https://raw.githubusercontent.com/heliaxdev/anoma-network-config/master/final/{}/.anoma", chain_id);
-    let genesis_url = format!("{}/{}", file_url_prefix, genesis_file);
-    let global_config_url =
-        format!("{}/{}", file_url_prefix, global_config_file);
-    let config_url = format!("{}/{}", file_url_prefix, config_file);
+    // Read or download the release archive
+    println!("Downloading config release from {} ...", release_url);
+    let release = download_file(release_url).await;
 
-    let genesis = download_file(genesis_url).await;
-    let global_config = download_file(global_config_url).await;
-    let config = download_file(config_url).await;
+    // Decode and unpack the archive
+    let mut decoder = GzDecoder::new(&release[..]);
+    let mut tar = String::new();
+    decoder.read_to_string(&mut tar).unwrap();
+    let mut archive = tar::Archive::new(tar.as_bytes());
+    archive.unpack(".").unwrap();
 
-    std::fs::write(global_args.base_dir.join(genesis_file), genesis).unwrap();
-    std::fs::write(
-        global_args.base_dir.join(global_config_file),
-        global_config,
-    )
-    .unwrap();
-    std::fs::write(global_args.base_dir.join(config_file), config).unwrap();
+    println!("Successfully configured for chain ID {}", chain_id);
 }
 
 /// Initialize a new test network with the given validators and faucet accounts.
@@ -691,7 +690,7 @@ fn init_genesis_validator_aux(
     genesis_validator
 }
 
-async fn download_file(url: impl AsRef<str>) -> String {
+async fn download_file(url: impl AsRef<str>) -> Vec<u8> {
     let url = url.as_ref();
     reqwest::get(url)
         .await
@@ -699,7 +698,7 @@ async fn download_file(url: impl AsRef<str>) -> String {
             eprintln!("File not found at {}. Error: {}", url, err);
             cli::safe_exit(1)
         })
-        .text()
+        .bytes()
         .await
         .unwrap_or_else(|err| {
             eprintln!(
@@ -708,4 +707,5 @@ async fn download_file(url: impl AsRef<str>) -> String {
             );
             cli::safe_exit(1)
         })
+        .to_vec()
 }
