@@ -110,7 +110,7 @@ assert_matches = "1.5.0"
 pretty_assertions = "0.7.2"
 proptest = "1.0.0"
 serde_json = "1.0.62"
-test-env-log = {version = "0.2.7", default-features = false, features = ["trace"]}
+test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing-subscriber = {version = "0.2.25", default-features = false, features = ["env-filter", "fmt"]}
 
 [build-dependencies]
