@@ -9,7 +9,7 @@ use std::{env, fs, mem, thread, time};
 use anoma::types::chain::ChainId;
 use anoma_apps::client::utils;
 use anoma_apps::config::genesis::genesis_config::{self, GenesisConfig};
-use anoma_apps::{config, wallet, wasm_loader};
+use anoma_apps::{config, wallet};
 use assert_cmd::assert::OutputAssertExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
@@ -85,28 +85,10 @@ pub fn network(
     );
 
     // Run the provided function on it
-    let mut genesis = update_genesis(genesis);
-
-    // Update the WASM sha256 fields
-    let checksums =
-        wasm_loader::Checksums::read_checksums(working_dir.join("wasm"));
-    genesis.wasm.iter_mut().for_each(|(name, config)| {
-        // Find the sha256 from checksums.json
-        let name = format!("{}.wasm", name);
-        // Full name in format `{name}.{sha256}.wasm`
-        let full_name = checksums.0.get(&name).unwrap();
-        let hash = full_name
-            .split_once(".")
-            .unwrap()
-            .1
-            .split_once(".")
-            .unwrap()
-            .0;
-        config.sha256 = genesis_config::HexString(hash.to_owned());
-    });
+    let genesis = update_genesis(genesis);
 
     // Run `init-network` to generate the finalized genesis config, keys and
-    // addresses
+    // addresses and update WASM checksums
     let genesis_file = base_dir.path().join("e2e-test-genesis-src.toml");
     genesis_config::write_genesis_config(&genesis, &genesis_file);
     let genesis_path = genesis_file.to_string_lossy();
@@ -123,6 +105,8 @@ pub fn network(
             "e2e-test",
             "--localhost",
             "--dont-archive",
+            "--wasm-checksums-path",
+            &working_dir.join("wasm/checksums.json").to_string_lossy(),
         ],
         Some(5),
         &working_dir,
