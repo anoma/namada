@@ -539,7 +539,7 @@ mod test_utils {
 
     use anoma::ledger::storage::mockdb::MockDB;
     use anoma::ledger::storage::testing::Sha256Hasher;
-    use anoma::ledger::storage::BlockState;
+    use anoma::ledger::storage::BlockStateWrite;
     use anoma::types::address::{xan, EstablishedAddressGen};
     use anoma::types::key::ed25519::Keypair;
     use anoma::types::storage::{BlockHash, Epoch};
@@ -716,20 +716,25 @@ mod test_utils {
         shell.tx_queue.push(wrapper);
         // Artificially increase the block height so that chain
         // will read the ".tx_queue" file when restarted
+        let store = Default::default();
+        let hash = BlockHash([0; 32]);
+        let pred_epochs = Default::default();
+        let subspaces = Default::default();
+        let address_gen = EstablishedAddressGen::new("test");
         shell
             .storage
             .db
-            .write_block(BlockState {
+            .write_block(BlockStateWrite {
                 root: [0; 32].into(),
-                store: Default::default(),
-                hash: BlockHash([0; 32]),
+                store: &store,
+                hash: &hash,
                 height: BlockHeight(1),
                 epoch: Epoch(0),
-                pred_epochs: Default::default(),
+                pred_epochs: &pred_epochs,
                 next_epoch_min_start_height: BlockHeight(3),
                 next_epoch_min_start_time: DateTimeUtc::now(),
-                subspaces: Default::default(),
-                address_gen: EstablishedAddressGen::new("test"),
+                subspaces: &subspaces,
+                address_gen: &address_gen,
             })
             .expect("Test failed");
 
@@ -779,20 +784,25 @@ mod test_utils {
         shell.tx_queue.push(wrapper);
         // Artificially increase the block height so that chain
         // will read the ".tx_queue" file when restarted
+        let store = Default::default();
+        let hash = BlockHash([0; 32]);
+        let pred_epochs = Default::default();
+        let subspaces = Default::default();
+        let address_gen = EstablishedAddressGen::new("test");
         shell
             .storage
             .db
-            .write_block(BlockState {
+            .write_block(BlockStateWrite {
                 root: [0; 32].into(),
-                store: Default::default(),
-                hash: BlockHash([0; 32]),
+                store: &store,
+                hash: &hash,
                 height: BlockHeight(1),
                 epoch: Epoch(0),
-                pred_epochs: Default::default(),
+                pred_epochs: &pred_epochs,
                 next_epoch_min_start_height: BlockHeight(3),
                 next_epoch_min_start_time: DateTimeUtc::now(),
-                subspaces: Default::default(),
-                address_gen: EstablishedAddressGen::new("test"),
+                subspaces: &subspaces,
+                address_gen: &address_gen,
             })
             .expect("Test failed");
 
