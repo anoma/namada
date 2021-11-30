@@ -113,6 +113,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 2. Shut it down
     ledger.send_control('c')?;
+    // Wait for it to stop
+    ledger.exp_eof()?;
     drop(ledger);
 
     // 3. Run the ledger again, it should load its previous state
@@ -126,6 +128,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 4. Shut it down
     ledger.send_control('c')?;
+    // Wait for it to stop
+    ledger.exp_eof()?;
     drop(ledger);
 
     // 5. Reset the ledger's state
