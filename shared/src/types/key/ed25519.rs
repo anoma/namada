@@ -7,7 +7,6 @@ use std::io::{ErrorKind, Write};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use ed25519_dalek::ed25519::signature::Signature as RawSignature;
 pub use ed25519_dalek::SignatureError;
 use ed25519_dalek::{ExpandedSecretKey, Signer, Verifier};
 #[cfg(feature = "rand")]

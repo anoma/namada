@@ -1,15 +1,15 @@
 {
-    "mm_filter_token_exch.wasm": "mm_filter_token_exch.71f65ee573c6a21ef5a66aaea5c4962a955dd1cd070fb76567c964ecea614bc7.wasm",
-    "mm_token_exch.wasm": "mm_token_exch.ce70ede25b834215b59e3c7670613826291aeb04264255c6b000e9d13883d5b4.wasm",
+    "mm_filter_token_exch.wasm": "mm_filter_token_exch.7e04ec9d8b438ff39e7dae7f9e7f1aa938340f0726a1908dcc35414218a8ae6f.wasm",
+    "mm_token_exch.wasm": "mm_token_exch.dcb111110448c7ebe80381eceaa1335d98bc76c3b077e873cb9e3ae5f81cab3a.wasm",
     "tx_bond.wasm": "tx_bond.f3334ceed4d739787ee0c8e4d29ba2e60b8665ffa94ada4b2cbbe45cbe63bfdf.wasm",
-    "tx_from_intent.wasm": "tx_from_intent.4e051719be0f127903d69b60a20bee3f7b60c00c007a7bd602821acbac4a8648.wasm",
-    "tx_init_account.wasm": "tx_init_account.cbad7cf2f40677dc0a241e3b555179825a7c2e431d8242664004a8efbe045523.wasm",
-    "tx_init_validator.wasm": "tx_init_validator.00d0f564bb90913bf1c8d11ff14b835c06d834686d9f0f39b63e4f210d96717f.wasm",
+    "tx_from_intent.wasm": "tx_from_intent.6dd04a2bc6bc3561f6ab08015a84259f3bd363e984560fac59b7cf3619d6aedf.wasm",
+    "tx_init_account.wasm": "tx_init_account.4df363c94280271450ebc0943e78131df9fa9567022aba4f1783803c8f2877ab.wasm",
+    "tx_init_validator.wasm": "tx_init_validator.4b16416ab4c8f8e36d75b5cf0d0673b0bd0df5a2b8a9e145db2f5d877c3ec564.wasm",
     "tx_transfer.wasm": "tx_transfer.e60d44fb5b2fb3c8c8cf37e586b4b9840cf29e32873d22cdee8a3d3f033747af.wasm",
     "tx_unbond.wasm": "tx_unbond.ffc6963980674f4740d79597383f53bf821afd048954260f18569daeb7841346.wasm",
     "tx_update_vp.wasm": "tx_update_vp.82d1c250b895516ee4ffc985441c72371a9a93f447539b91012b3c041c4394d3.wasm",
     "tx_withdraw.wasm": "tx_withdraw.801de5a39aedbe01e97c8a60b732b09e81a6b0829ca590acd5b80ddca6f68cad.wasm",
-    "vp_testnet_faucet.wasm": "vp_testnet_faucet.6f8a8c990cf9064c8bd34e7c86327c4a461e146496f778e15088b9340441cea5.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.04dc1b6dfd59260211c464ed5fd0749179478971131967cb0d6480fa786b2303.wasm",
     "vp_token.wasm": "vp_token.cd4b3be7ef457803300999a474f99cb1d8f06fac167aa9757ab5d7eb6853a2cd.wasm",
-    "vp_user.wasm": "vp_user.e68bcc259f09f16db48f05904fee6184aa6c2f12cde2e7afcdba133afa21d640.wasm"
+    "vp_user.wasm": "vp_user.eac0e6d5b4235d366deb988e1002b0e5283bef0d415fb0e3029dd2ccedfbf019.wasm"
 }

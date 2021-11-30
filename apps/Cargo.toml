@@ -80,6 +80,7 @@ derivative = "2.2.0"
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
 ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend", "serde"]}
 eyre = "0.6.5"
+flate2 = "1.0.22"
 futures = "0.3"
 hex = "0.4.3"
 itertools = "0.10.1"
@@ -107,6 +108,7 @@ serde_regex = "1.1.0"
 sha2 = "0.9.3"
 signal-hook = "0.3.9"
 sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "yuji/prost-0.9", features = ["borsh"]}
+tar = "0.4.37"
 # temporarily using fork work-around for https://github.com/informalsystems/tendermint-rs/issues/971
 tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/abcipp-v0.23.0", optional = true}
 tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/abcipp-v0.23.0", optional = true}
@@ -122,6 +124,7 @@ toml = "0.5.8"
 tonic = "0.6.1"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
+# with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci", branch = "yuji/abcipp-v0.23.0", optional = true}
 tower-abci-old = {package = "tower-abci", git = "https://github.com/heliaxdev/tower-abci", branch = "yuji/rebase_v0.23.0", optional = true}
 tracing = "0.1.29"

@@ -354,9 +354,13 @@ impl Config {
         }
     }
 
-    fn file_path(base_dir: &Path, chain_id: &ChainId) -> PathBuf {
+    /// Get the file path to the config
+    pub fn file_path(
+        base_dir: impl AsRef<Path>,
+        chain_id: &ChainId,
+    ) -> PathBuf {
         // Join base dir to the chain ID
-        base_dir.join(chain_id.to_string()).join(FILENAME)
+        base_dir.as_ref().join(chain_id.to_string()).join(FILENAME)
     }
 }
 
