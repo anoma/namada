@@ -439,7 +439,11 @@ fn pos_bonds() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("Started node")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
 
     // 2. Submit a self-bond for the genesis validator
     let tx_args = vec![
@@ -613,7 +617,11 @@ fn pos_init_validator() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("Started node")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
 
     // 2. Initialize a new validator account
     let new_validator = "new-validator";
