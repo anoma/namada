@@ -23,7 +23,7 @@ use serde::{de, Deserialize, Serialize};
 #[cfg(not(feature = "ABCI"))]
 use tendermint::Timeout;
 #[cfg(not(feature = "ABCI"))]
-use tendermint_config::Address as TendermintAddress;
+use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]

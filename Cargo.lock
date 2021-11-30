@@ -2500,7 +2500,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.8.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/abcipp-v0.23.0#4d2cabebf1c6c754295558dfd964e521ceb5b6cc"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/abcipp-v0.23.0#d8300b0c3c1939ad3fdad572ccbb15c0e0a0fc44"
 dependencies = [
  "borsh",
  "bytes 1.1.0",
@@ -2516,10 +2516,10 @@ dependencies = [
  "serde_json",
  "sha2 0.9.8",
  "subtle-encoding",
- "tendermint 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0)",
- "tendermint-light-client",
- "tendermint-proto 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0)",
- "tendermint-testgen",
+ "tendermint 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
+ "tendermint-light-client 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
+ "tendermint-proto 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
+ "tendermint-testgen 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
  "thiserror",
  "tracing",
 ]
@@ -2544,9 +2544,9 @@ dependencies = [
  "sha2 0.9.8",
  "subtle-encoding",
  "tendermint 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0)",
- "tendermint-light-client",
+ "tendermint-light-client 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0)",
  "tendermint-proto 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0)",
- "tendermint-testgen",
+ "tendermint-testgen 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0)",
  "thiserror",
  "tracing",
 ]
@@ -2554,13 +2554,13 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.12.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/abcipp-v0.23.0#4d2cabebf1c6c754295558dfd964e521ceb5b6cc"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/abcipp-v0.23.0#d8300b0c3c1939ad3fdad572ccbb15c0e0a0fc44"
 dependencies = [
  "bytes 1.1.0",
  "getrandom 0.2.3",
  "prost 0.9.0",
  "prost-types 0.9.0",
- "tendermint-proto 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0)",
+ "tendermint-proto 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
  "tonic",
 ]
 
@@ -5760,6 +5760,25 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client"
 version = "0.23.0"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0#a072e7da5acf4196febf8229cb20b5235aefcbf2"
+dependencies = [
+ "chrono",
+ "contracts",
+ "crossbeam-channel 0.4.4",
+ "derive_more",
+ "flex-error",
+ "futures 0.3.17",
+ "serde 1.0.130",
+ "serde_cbor",
+ "serde_derive",
+ "static_assertions",
+ "tendermint 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
+ "tendermint-rpc 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
+]
+
+[[package]]
+name = "tendermint-light-client"
+version = "0.23.0"
 source = "git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0#fc60795115b887db147e88280321acc08592c4b9"
 dependencies = [
  "chrono",
@@ -5874,6 +5893,21 @@ dependencies = [
  "url 2.2.2",
  "uuid",
  "walkdir",
+]
+
+[[package]]
+name = "tendermint-testgen"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0#a072e7da5acf4196febf8229cb20b5235aefcbf2"
+dependencies = [
+ "chrono",
+ "ed25519-dalek",
+ "gumdrop",
+ "serde 1.0.130",
+ "serde_json",
+ "simple-error",
+ "tempfile",
+ "tendermint 0.23.0 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.0)",
 ]
 
 [[package]]
