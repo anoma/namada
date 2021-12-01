@@ -79,8 +79,7 @@ impl DB for MockDB {
         // Load data at the height
         let prefix = format!("{}/", height.raw());
         let upper_prefix = format!("{}/", height.next_height().raw());
-        let mut root = None;
-        let mut store = None;
+        let mut merkle_tree_stores = None;
         let mut hash = None;
         let mut epoch = None;
         let mut pred_epochs = None;
@@ -94,24 +93,11 @@ impl DB for MockDB {
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
                 Some(prefix) => match *prefix {
-                    "tree" => match segments.get(2) {
-                        Some(smt) => match *smt {
-                            "root" => {
-                                root = Some(
-                                    types::decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                )
-                            }
-                            "store" => {
-                                store = Some(
-                                    types::decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                )
-                            }
-                            _ => unknown_key_error(path)?,
-                        },
-                        None => unknown_key_error(path)?,
-                    },
+                    "tree" => {
+                        merkle_tree_stores = Some(
+                            types::decode(bytes).map_err(Error::CodingError)?,
+                        )
+                    }
                     "hash" => {
                         hash = Some(
                             types::decode(bytes).map_err(Error::CodingError)?,
@@ -137,17 +123,15 @@ impl DB for MockDB {
                 None => unknown_key_error(path)?,
             }
         }
-        match (root, store, hash, epoch, pred_epochs, address_gen) {
+        match (merkle_tree_stores, hash, epoch, pred_epochs, address_gen) {
             (
-                Some(root),
-                Some(store),
+                Some(merkle_tree_stores),
                 Some(hash),
                 Some(epoch),
                 Some(pred_epochs),
                 Some(address_gen),
             ) => Ok(Some(BlockStateRead {
-                root,
-                store,
+                merkle_tree_stores,
                 hash,
                 height,
                 epoch,
@@ -167,8 +151,7 @@ impl DB for MockDB {
 
     fn write_block(&mut self, state: BlockStateWrite) -> Result<()> {
         let BlockStateWrite {
-            root,
-            store,
+            merkle_tree_stores,
             hash,
             height,
             epoch,
@@ -199,27 +182,13 @@ impl DB for MockDB {
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
-            let prefix_key = prefix_key
+            let key = prefix_key
                 .push(&"tree".to_owned())
                 .map_err(Error::KeyError)?;
-            // Merkle root hash
-            {
-                let key = prefix_key
-                    .push(&"root".to_owned())
-                    .map_err(Error::KeyError)?;
-                self.0
-                    .borrow_mut()
-                    .insert(key.to_string(), types::encode(&root));
-            }
-            // Tree's store
-            {
-                let key = prefix_key
-                    .push(&"store".to_owned())
-                    .map_err(Error::KeyError)?;
-                self.0
-                    .borrow_mut()
-                    .insert(key.to_string(), types::encode(&store));
-            }
+            // Merkle stores
+            self.0
+                .borrow_mut()
+                .insert(key.to_string(), types::encode(&merkle_tree_stores));
         }
         // Block hash
         {

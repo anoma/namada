@@ -94,9 +94,7 @@ where
     ) -> response::Query {
         let proof_ops = if is_proven {
             match self.storage.get_proof(key) {
-                Ok(proof_op) => Some(ProofOps {
-                    ops: vec![proof_op.into()],
-                }),
+                Ok(proof) => Some(proof.into()),
                 Err(err) => {
                     return response::Query {
                         code: 2,

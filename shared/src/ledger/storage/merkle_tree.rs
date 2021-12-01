@@ -169,12 +169,12 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     }
 
     /// Update the tree with the given key and value
-    pub fn update(&mut self, key: &Key, value: Vec<u8>) -> Result<()> {
+    pub fn update(&mut self, key: &Key, value: impl AsRef<[u8]>) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
         match self.sub_trees.get_mut(&store_type) {
             Some(smt) => {
                 let sub_root =
-                    smt.update(H::hash(sub_key.to_string()), H::hash(&value))?;
+                    smt.update(H::hash(sub_key.to_string()), H::hash(value))?;
                 let base_key = H::hash(&store_type.to_string());
                 // update the base tree with the updated sub root
                 self.base.update(base_key, *sub_root)?;
