@@ -31,27 +31,33 @@ pub struct Checksums(pub HashMap<String, String>);
 const S3_URL: &str = "https://heliax-anoma-wasm-v1.s3.eu-west-1.amazonaws.com";
 
 impl Checksums {
-    pub fn read_checksums(wasm_directory: impl AsRef<Path>) -> Self {
-        let checksums_path = wasm_directory.as_ref().join("checksums.json");
-        match fs::File::open(checksums_path) {
+    /// Read WASM checksums from the given path
+    pub fn read_checksums_file(checksums_path: impl AsRef<Path>) -> Self {
+        match fs::File::open(&checksums_path) {
             Ok(file) => match serde_json::from_reader(file) {
                 Ok(result) => result,
                 Err(_) => {
                     eprintln!(
-                        "Can't read checksums.json in {}",
-                        wasm_directory.as_ref().to_string_lossy()
+                        "Can't read checksums from {}",
+                        checksums_path.as_ref().to_string_lossy()
                     );
                     safe_exit(1);
                 }
             },
             Err(_) => {
                 eprintln!(
-                    "Can't find checksums.json in {}",
-                    wasm_directory.as_ref().to_string_lossy()
+                    "Can't find checksums at {}",
+                    checksums_path.as_ref().to_string_lossy()
                 );
                 safe_exit(1);
             }
         }
+    }
+
+    /// Read WASM checksums from "checksums.json" in the given directory
+    pub fn read_checksums(wasm_directory: impl AsRef<Path>) -> Self {
+        let checksums_path = wasm_directory.as_ref().join("checksums.json");
+        Self::read_checksums_file(checksums_path)
     }
 }
 

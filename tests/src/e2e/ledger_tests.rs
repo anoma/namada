@@ -113,6 +113,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 2. Shut it down
     ledger.send_control('c')?;
+    // Wait for it to stop
+    ledger.exp_eof()?;
     drop(ledger);
 
     // 3. Run the ledger again, it should load its previous state
@@ -126,6 +128,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 4. Shut it down
     ledger.send_control('c')?;
+    // Wait for it to stop
+    ledger.exp_eof()?;
     drop(ledger);
 
     // 5. Reset the ledger's state
@@ -439,7 +443,11 @@ fn pos_bonds() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("Started node")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
 
     // 2. Submit a self-bond for the genesis validator
     let tx_args = vec![
@@ -613,7 +621,11 @@ fn pos_init_validator() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    ledger.exp_string("Started node")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
 
     // 2. Initialize a new validator account
     let new_validator = "new-validator";
