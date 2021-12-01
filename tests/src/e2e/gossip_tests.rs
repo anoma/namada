@@ -25,7 +25,8 @@ use crate::{run, run_as};
 /// bootstrap kademia and connect to the other peer.
 #[test]
 fn run_gossip() -> Result<()> {
-    let test = setup::network(|genesis| setup::add_validators(1, genesis))?;
+    let test =
+        setup::network(|genesis| setup::add_validators(1, genesis), None)?;
 
     let mut cmd =
         run_as!(test, Who::Validator(0), Bin::Node, &["gossip"], Some(20),)?;

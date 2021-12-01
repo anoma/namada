@@ -64,12 +64,13 @@ pub fn add_validators(num: u8, mut genesis: GenesisConfig) -> GenesisConfig {
 
 /// Setup a network with a single genesis validator node.
 pub fn single_node_net() -> Result<Test> {
-    network(|genesis| genesis)
+    network(|genesis| genesis, None)
 }
 
 /// Setup a configurable network.
 pub fn network(
     update_genesis: impl Fn(GenesisConfig) -> GenesisConfig,
+    consensus_timeout_commit: Option<&'static str>,
 ) -> Result<Test> {
     INIT.call_once(|| {
         if let Err(err) = color_eyre::install() {
@@ -92,22 +93,30 @@ pub fn network(
     let genesis_file = base_dir.path().join("e2e-test-genesis-src.toml");
     genesis_config::write_genesis_config(&genesis, &genesis_file);
     let genesis_path = genesis_file.to_string_lossy();
-
+    let checksums_path = working_dir
+        .join("wasm/checksums.json")
+        .to_string_lossy()
+        .into_owned();
+    let mut args = vec![
+        "utils",
+        "init-network",
+        "--unsafe-dont-encrypt",
+        "--genesis-path",
+        &genesis_path,
+        "--chain-prefix",
+        "e2e-test",
+        "--localhost",
+        "--dont-archive",
+        "--wasm-checksums-path",
+        &checksums_path,
+    ];
+    if let Some(consensus_timeout_commit) = consensus_timeout_commit {
+        args.push("--consensus-timeout-commit");
+        args.push(consensus_timeout_commit)
+    }
     let mut init_network = run_cmd(
         Bin::Client,
-        [
-            "utils",
-            "init-network",
-            "--unsafe-dont-encrypt",
-            "--genesis-path",
-            genesis_path.as_ref(),
-            "--chain-prefix",
-            "e2e-test",
-            "--localhost",
-            "--dont-archive",
-            "--wasm-checksums-path",
-            &working_dir.join("wasm/checksums.json").to_string_lossy(),
-        ],
+        args,
         Some(5),
         &working_dir,
         &base_dir,

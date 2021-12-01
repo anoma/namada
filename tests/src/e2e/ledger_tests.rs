@@ -10,6 +10,7 @@
 //! `ANOMA_E2E_KEEP_TEMP=true`.
 
 use std::process::Command;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anoma::types::token;
@@ -167,7 +168,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 6. Query token balance
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
-    let test = setup::network(|genesis| genesis)?;
+    let test = setup::network(|genesis| genesis, None)?;
 
     // 1. Run the ledger node
     let mut ledger =
@@ -431,34 +432,35 @@ fn invalid_transactions() -> Result<()> {
 #[test]
 fn pos_bonds() -> Result<()> {
     let unbonding_len = 2;
-    let test = setup::network(|genesis| {
-        let parameters = ParametersConfig {
-            min_num_of_blocks: 2,
-            min_duration: 1,
-        };
-        let pos_params = PosParamsConfig {
-            pipeline_len: 1,
-            unbonding_len,
-            ..genesis.pos_params
-        };
-        GenesisConfig {
-            parameters,
-            pos_params,
-            ..genesis
-        }
-    })?;
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                min_num_of_blocks: 2,
+                min_duration: 1,
+            };
+            let pos_params = PosParamsConfig {
+                pipeline_len: 1,
+                unbonding_len,
+                ..genesis.pos_params
+            };
+            GenesisConfig {
+                parameters,
+                pos_params,
+                ..genesis
+            }
+        },
+        None,
+    )?;
 
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
-
     ledger.exp_string("Anoma ledger node started")?;
     if !cfg!(feature = "ABCI") {
         ledger.exp_string("started node")?;
     } else {
         ledger.exp_string("Started node")?;
     }
-
     // 2. Submit a self-bond for the genesis validator
     let tx_args = vec![
         "bond",
@@ -609,22 +611,25 @@ fn pos_bonds() -> Result<()> {
 #[test]
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
-    let test = setup::network(|genesis| {
-        let parameters = ParametersConfig {
-            min_num_of_blocks: 2,
-            min_duration: 1,
-        };
-        let pos_params = PosParamsConfig {
-            pipeline_len,
-            unbonding_len: 2,
-            ..genesis.pos_params
-        };
-        GenesisConfig {
-            parameters,
-            pos_params,
-            ..genesis
-        }
-    })?;
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                min_num_of_blocks: 2,
+                min_duration: 1,
+            };
+            let pos_params = PosParamsConfig {
+                pipeline_len,
+                unbonding_len: 2,
+                ..genesis.pos_params
+            };
+            GenesisConfig {
+                parameters,
+                pos_params,
+                ..genesis
+            }
+        },
+        None,
+    )?;
 
     // 1. Run the ledger node
     let mut ledger =
@@ -763,6 +768,79 @@ fn pos_init_validator() -> Result<()> {
     // 7. Check the new validator's voting power
     let voting_power = find_voting_power(&test, new_validator)?;
     assert_eq!(voting_power, 11);
+
+    Ok(())
+}
+/// Test that multiple txs submitted in the same block all get the tx result.
+///
+/// In this test we:
+/// 1. Run the ledger node with 10s consensus timeout
+/// 2. Spawn threads each submitting token transfer tx
+#[test]
+fn ledger_many_txs_in_a_block() -> Result<()> {
+    let test = Arc::new(setup::network(
+        |genesis| genesis,
+        // Set 10s consensus timeout to have more time to submit txs
+        Some("10s"),
+    )?);
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
+
+    ledger.exp_string("Anoma ledger node started")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
+
+    // Wait to commit a block
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+
+    // A token transfer tx args
+    let tx_args = Arc::new(vec![
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        XAN,
+        "--amount",
+        "10.1",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+    ]);
+
+    // 2. Spawn threads each submitting token transfer tx
+    // We collect to run the threads in parallel.
+    #[allow(clippy::needless_collect)]
+    let tasks: Vec<std::thread::JoinHandle<_>> = (0..3)
+        .into_iter()
+        .map(|_| {
+            let test = Arc::clone(&test);
+            let tx_args = Arc::clone(&tx_args);
+            std::thread::spawn(move || {
+                let mut client = run!(*test, Bin::Client, &*tx_args, Some(20))?;
+                if !cfg!(feature = "ABCI") {
+                    client.exp_string("Transaction accepted")?;
+                }
+                client.exp_string("Transaction applied")?;
+                client.exp_string("Transaction is valid.")?;
+                client.assert_success();
+                let res: Result<()> = Ok(());
+                res
+            })
+        })
+        .collect();
+    for task in tasks.into_iter() {
+        task.join().unwrap()?;
+    }
 
     Ok(())
 }
