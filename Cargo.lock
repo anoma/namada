@@ -2497,7 +2497,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.8.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/rebase_v0.23.0#c52d2ac6184f4cbbc13a4c869c70ba7c3c2a4352"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/rebase_v0.23.0#a6ea99397f23daa697ceb579c8d9d9fd15ab36a6"
 dependencies = [
  "borsh",
  "bytes 1.1.0",
@@ -2537,7 +2537,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.12.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/rebase_v0.23.0#c52d2ac6184f4cbbc13a4c869c70ba7c3c2a4352"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/rebase_v0.23.0#a6ea99397f23daa697ceb579c8d9d9fd15ab36a6"
 dependencies = [
  "bytes 1.1.0",
  "getrandom 0.2.3",
