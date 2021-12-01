@@ -1126,11 +1126,14 @@ pub mod args {
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
-    const FEE_AMOUNT: Arg<token::Amount> = arg("fee-amount");
-    const FEE_TOKEN: Arg<WalletAddress> = arg("fee-token");
+    const FEE_AMOUNT: ArgDefault<token::Amount> =
+        arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
+    const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+        arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
     const FILTER_PATH: ArgOpt<PathBuf> = arg_opt("filter-path");
     const FORCE: ArgFlag = flag("force");
-    const GAS_LIMIT: Arg<token::Amount> = arg("gas-limit");
+    const GAS_LIMIT: ArgDefault<token::Amount> =
+        arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
