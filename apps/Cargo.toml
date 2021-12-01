@@ -89,6 +89,7 @@ libc = "0.2.97"
 libp2p = "0.38.0"
 num-derive = "0.3.3"
 num-traits = "0.2.14"
+num_cpus = "1.13.0"
 orion = "0.16.0"
 prost = "0.9.0"
 prost-types = "0.9.0"
@@ -97,7 +98,7 @@ rand = {version = "0.7", default-features = false}
 rand_core = {version = "0.5", default-features = false}
 rayon = "=1.5.0"
 regex = "1.4.5"
-reqwest = {version = "0.11.4", features = ["blocking"]}
+reqwest = "0.11.4"
 rlimit = "0.5.4"
 rocksdb = "0.16.0"
 rpassword = "5.0.1"

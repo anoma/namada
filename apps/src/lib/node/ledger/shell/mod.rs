@@ -76,6 +76,8 @@ pub enum Error {
     GasOverflow,
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
+    #[error("Server error: {0}")]
+    TowerServer(String),
 }
 
 /// The different error codes that the ledger may
@@ -206,6 +208,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     fn drop(&mut self) {
+        tracing::info!("Storing a transaction queue...");
         let cache_path = self.base_dir.clone().join(".tx_queue");
         let _ = std::fs::File::create(&cache_path)
             .expect("Creating the file for the tx_queue dump should not fail");
@@ -218,6 +221,7 @@ where
         .expect(
             "Failed to write tx queue to file. Good luck booting back up now",
         );
+        tracing::info!("Transaction queue has been stored.");
     }
 }
 
