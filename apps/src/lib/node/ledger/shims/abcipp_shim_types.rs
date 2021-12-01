@@ -229,6 +229,7 @@ pub mod shim {
             pub result: super::response::TxResult,
         }
 
+        #[derive(Debug)]
         pub struct BeginBlock {
             pub hash: BlockHash,
             pub header: Header,

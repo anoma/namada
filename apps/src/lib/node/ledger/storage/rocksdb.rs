@@ -16,7 +16,9 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::env;
 use std::path::Path;
+use std::str::FromStr;
 
 use anoma::ledger::storage::types::PrefixIterator;
 use anoma::ledger::storage::{
@@ -29,18 +31,50 @@ use rocksdb::{
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
 };
 
+use crate::cli;
+
 // TODO the DB schema will probably need some kind of versioning
+
+/// Env. var to set a number of Rayon global worker threads
+const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
+    "ANOMA_ROCKSDB_COMPACTION_THREADS";
 
 #[derive(Debug)]
 pub struct RocksDB(rocksdb::DB);
 
 /// Open RocksDB for the DB
 pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
+    let logical_cores = num_cpus::get() as i32;
+    let compaction_threads =
+        if let Ok(num_str) = env::var(ENV_VAR_ROCKSDB_COMPACTION_THREADS) {
+            match i32::from_str(&num_str) {
+                Ok(num) if num > 0 => num,
+                _ => {
+                    eprintln!(
+                        "Invalid env. var {} value: {}. Expecting a positive \
+                         number.",
+                        ENV_VAR_ROCKSDB_COMPACTION_THREADS, num_str
+                    );
+                    cli::safe_exit(1)
+                }
+            }
+        } else {
+            // If not set, default to quarter of logical CPUs count
+            logical_cores / 4
+        };
+    tracing::debug!(
+        "Using {} compactions threads for RocksDB.",
+        compaction_threads
+    );
+
     let mut cf_opts = Options::default();
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
     cf_opts.set_level_compaction_dynamic_level_bytes(true);
-    // compactions + flushes
-    cf_opts.set_max_background_jobs(6);
+
+    // This gives `compaction_threads` number to compaction threads and 1 thread
+    // for flush background jobs: https://github.com/facebook/rocksdb/blob/17ce1ca48be53ba29138f92dafc9c853d9241377/options/options.cc#L622
+    cf_opts.increase_parallelism(compaction_threads);
+
     cf_opts.set_bytes_per_sync(1048576);
     set_max_open_files(&mut cf_opts);
 
