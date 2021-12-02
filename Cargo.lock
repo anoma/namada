@@ -4866,8 +4866,7 @@ dependencies = [
 [[package]]
 name = "rexpect"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "862c0149d91461fab225ddd06a5af919913f5c57405ed4f27d2466d6cc877186"
+source = "git+https://github.com/heliaxdev/rexpect.git?branch=tomas/eof-hack-fix#3b5d729bfae74bd2c1d7bccf91b82273f05a1f45"
 dependencies = [
  "error-chain",
  "nix 0.14.1",
