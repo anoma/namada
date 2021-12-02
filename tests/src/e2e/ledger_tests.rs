@@ -69,7 +69,7 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 
     // 1. Run the ledger node
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     ledger.exp_string("Anoma ledger node started")?;
 
@@ -87,6 +87,7 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 
     // 4. Check that the ledger node shuts down
     ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_eof()?;
 
     Ok(())
 }
@@ -104,7 +105,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 1. Run the ledger node
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     ledger.exp_string("Anoma ledger node started")?;
     // There should be no previous state
@@ -118,11 +119,12 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     // queue
     ledger.exp_string("Anoma ledger node has shut down.")?;
     ledger.exp_string("Transaction queue has been stored.")?;
+    ledger.exp_eof()?;
     drop(ledger);
 
     // 3. Run the ledger again, it should load its previous state
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     ledger.exp_string("Anoma ledger node started")?;
 
@@ -131,8 +133,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 4. Shut it down
     ledger.send_control('c')?;
-    ledger.exp_string("Anoma ledger node has shut down.")?;
-    ledger.exp_string("Transaction queue has been stored.")?;
+    // Wait for it to stop
+    ledger.exp_eof()?;
     drop(ledger);
 
     // 5. Reset the ledger's state
@@ -143,7 +145,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
         &["ledger", "reset"],
         Some(10),
     )?;
-    session.exp_string("Chain ID:")?;
+    session.exp_eof()?;
 
     // 6. Run the ledger again, it should start from fresh state
     let mut session =
@@ -170,7 +172,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 
     // 1. Run the ledger node
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     ledger.exp_string("Anoma ledger node started")?;
     if !cfg!(feature = "ABCI") {
@@ -367,11 +369,12 @@ fn invalid_transactions() -> Result<()> {
     // queue
     ledger.exp_string("Anoma ledger node has shut down.")?;
     ledger.exp_string("Transaction queue has been stored.")?;
+    ledger.exp_eof()?;
     drop(ledger);
 
     // 4. Restart the ledger
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     ledger.exp_string("Anoma ledger node started")?;
 
@@ -451,7 +454,8 @@ fn pos_bonds() -> Result<()> {
 
     // 1. Run the ledger node
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
+
     ledger.exp_string("Anoma ledger node started")?;
     if !cfg!(feature = "ABCI") {
         ledger.exp_string("started node")?;
@@ -630,7 +634,7 @@ fn pos_init_validator() -> Result<()> {
 
     // 1. Run the ledger node
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     ledger.exp_string("Anoma ledger node started")?;
     if !cfg!(feature = "ABCI") {
