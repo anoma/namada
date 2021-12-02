@@ -6291,7 +6291,7 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci?branch=yuji/abcipp-v0.23.0#06941c168d3aa7120d4025160057a3e599808e64"
+source = "git+https://github.com/heliaxdev/tower-abci?branch=yuji/abcipp-v0.23.0#e108b8a0032bda7a3156b5aa1de7574bf8a8aaf3"
 dependencies = [
  "bytes 1.1.0",
  "futures 0.3.18",
