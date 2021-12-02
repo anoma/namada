@@ -87,7 +87,6 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 
     // 4. Check that the ledger node shuts down
     ledger.exp_string("Anoma ledger node has shut down.")?;
-    ledger.exp_eof()?;
 
     Ok(())
 }
@@ -119,7 +118,6 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     // queue
     ledger.exp_string("Anoma ledger node has shut down.")?;
     ledger.exp_string("Transaction queue has been stored.")?;
-    ledger.exp_eof()?;
     drop(ledger);
 
     // 3. Run the ledger again, it should load its previous state
@@ -133,8 +131,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 4. Shut it down
     ledger.send_control('c')?;
-    // Wait for it to stop
-    ledger.exp_eof()?;
+    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Transaction queue has been stored.")?;
     drop(ledger);
 
     // 5. Reset the ledger's state
@@ -145,7 +143,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
         &["ledger", "reset"],
         Some(10),
     )?;
-    session.exp_eof()?;
+    session.exp_string("Chain ID:")?;
 
     // 6. Run the ledger again, it should start from fresh state
     let mut session =
@@ -369,7 +367,6 @@ fn invalid_transactions() -> Result<()> {
     // queue
     ledger.exp_string("Anoma ledger node has shut down.")?;
     ledger.exp_string("Transaction queue has been stored.")?;
-    ledger.exp_eof()?;
     drop(ledger);
 
     // 4. Restart the ledger
