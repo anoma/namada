@@ -10,9 +10,9 @@ use anoma::types::transaction::{Fee, WrapperTx};
 use anoma::vm::wasm;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(not(feature = "ABCI"))]
-use tendermint::net;
+use tendermint_config::net;
 #[cfg(feature = "ABCI")]
-use tendermint_stable::net;
+use tendermint_config_abci::net;
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 

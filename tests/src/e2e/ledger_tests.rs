@@ -105,7 +105,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 1. Run the ledger node
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
     // There should be no previous state
@@ -124,7 +124,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 3. Run the ledger again, it should load its previous state
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
 
@@ -149,7 +149,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 
     // 6. Run the ledger again, it should start from fresh state
     let mut session =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20),)?;
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     session.exp_string("Anoma ledger node started")?;
 

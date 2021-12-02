@@ -579,13 +579,8 @@ pub mod testing {
     use super::*;
 
     /// The storage hasher used for the merkle tree.
+    #[derive(Default)]
     pub struct Sha256Hasher(Sha256);
-
-    impl Default for Sha256Hasher {
-        fn default() -> Self {
-            Self(Sha256::default())
-        }
-    }
 
     impl sparse_merkle_tree::traits::Hasher for Sha256Hasher {
         fn write_h256(&mut self, h: &H256) {

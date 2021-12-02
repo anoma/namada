@@ -21,11 +21,11 @@ use libp2p::PeerId;
 use regex::Regex;
 use serde::{de, Deserialize, Serialize};
 #[cfg(not(feature = "ABCI"))]
-use tendermint::net::{self, Address as TendermintAddress};
-#[cfg(not(feature = "ABCI"))]
 use tendermint::Timeout;
+#[cfg(not(feature = "ABCI"))]
+use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
-use tendermint_stable::net::{self, Address as TendermintAddress};
+use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_stable::Timeout;
 use thiserror::Error;
@@ -192,7 +192,7 @@ pub struct RpcServer {
 pub struct Matchmaker {
     pub matchmaker: PathBuf,
     pub tx_code: PathBuf,
-    pub ledger_address: net::Address,
+    pub ledger_address: TendermintAddress,
     pub filter: Option<PathBuf>,
 }
 

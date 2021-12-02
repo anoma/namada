@@ -422,7 +422,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
         prefix: &Key,
     ) -> PersistentPrefixIterator<'iter> {
         let db_prefix = format!("{}/subspace/", height.raw());
-        let prefix = format!("{}{}", db_prefix, prefix.to_string());
+        let prefix = format!("{}{}", db_prefix, prefix);
 
         let mut read_opts = ReadOptions::default();
         // don't use the prefix bloom filter

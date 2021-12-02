@@ -16,11 +16,11 @@ use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
 #[cfg(not(feature = "ABCI"))]
-use tendermint::net::Address as TendermintAddress;
-#[cfg(not(feature = "ABCI"))]
 use tendermint::node::Id as TendermintNodeId;
+#[cfg(not(feature = "ABCI"))]
+use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
-use tendermint_stable::net::Address as TendermintAddress;
+use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_stable::node::Id as TendermintNodeId;
 

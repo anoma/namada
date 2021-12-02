@@ -108,7 +108,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .and_then(|matches| <Self as Cmd>::parse(matches))
+                .and_then(<Self as Cmd>::parse)
         }
 
         fn def() -> App {
@@ -123,6 +123,7 @@ pub mod cmds {
     /// Used as top-level commands (`Cmd` instance) in `anomac` binary.
     /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
     #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum AnomaClient {
         /// The [`super::Context`] provides access to the wallet and the
         /// config. It will generate a new wallet and config, if they
@@ -214,7 +215,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .and_then(|matches| <Self as Cmd>::parse(matches))
+                .and_then(<Self as Cmd>::parse)
         }
 
         fn def() -> App {
@@ -274,7 +275,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .and_then(|matches| <Self as Cmd>::parse(matches))
+                .and_then(<Self as Cmd>::parse)
         }
 
         fn def() -> App {
@@ -1085,11 +1086,11 @@ pub mod args {
     use libp2p::Multiaddr;
     use serde::Deserialize;
     #[cfg(not(feature = "ABCI"))]
-    use tendermint::net::Address as TendermintAddress;
-    #[cfg(not(feature = "ABCI"))]
     use tendermint::Timeout;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint_config::net::Address as TendermintAddress;
     #[cfg(feature = "ABCI")]
-    use tendermint_stable::net::Address as TendermintAddress;
+    use tendermint_config_abci::net::Address as TendermintAddress;
     #[cfg(feature = "ABCI")]
     use tendermint_stable::Timeout;
 
