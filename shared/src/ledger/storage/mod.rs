@@ -462,9 +462,18 @@ where
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
 
-    /// Get the membership or non-membership proof
-    pub fn get_proof(&self, key: &Key) -> Result<Proof> {
-        Ok(self.block.tree.get_proof(key)?)
+    /// Get the existence proof
+    pub fn get_existence_proof(
+        &self,
+        key: &Key,
+        value: Vec<u8>,
+    ) -> Result<Proof> {
+        Ok(self.block.tree.get_existence_proof(key, value)?)
+    }
+
+    /// Get the non-existence proof
+    pub fn get_non_existence_proof(&self, key: &Key) -> Result<Proof> {
+        Ok(self.block.tree.get_non_existence_proof(key)?)
     }
 
     /// Get the current (yet to be committed) block epoch
