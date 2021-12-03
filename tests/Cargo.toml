@@ -58,7 +58,7 @@ eyre = "0.6.5"
 itertools = "0.10.0"
 libp2p = "0.38.0"
 pretty_assertions = "0.7.2"
-rexpect = "0.4.0"
+rexpect = {git = "https://github.com/heliaxdev/rexpect.git", branch = "tomas/eof-hack-fix"}
 tempfile = "3.2.0"
 
 # This is used to enable logging from tests
