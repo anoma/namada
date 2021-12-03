@@ -162,7 +162,7 @@ steps:
 trigger:
   event: [pull_request]
 type: docker
-workspace: {path: /usr/local/rust/project}
+workspace: {path: /usr/local/rust/project-abci}
 ---
 clone: {disable: true}
 environment: {CARGO_INCREMENTAL: '0', GIT_LFS_SKIP_SMUDGE: '1'}
@@ -262,7 +262,7 @@ trigger:
   branch: [develop, master]
   event: [push, pull_request]
 type: docker
-workspace: {path: /usr/local/rust/project}
+workspace: {path: /usr/local/rust/project-abci}
 ---
 clone: {disable: true}
 environment: {GIT_LFS_SKIP_SMUDGE: '1'}
@@ -823,6 +823,6 @@ type: docker
 workspace: {path: /usr/local/rust/project}
 ---
 kind: signature
-hmac: 511cd0334c6b7c5b91a7aa38dcbab1f4f7aee363db159ab2b46dbd1edd5c6806
+hmac: 3f5e8771131308aab321ccdf8c4f86b36cc139327840fbe793598860e8ce4e2e
 
 ...
