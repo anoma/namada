@@ -1,4 +1,4 @@
-//! IBC-related data wrappers
+//! IBC event without IBC-related data types
 
 use std::collections::HashMap;
 

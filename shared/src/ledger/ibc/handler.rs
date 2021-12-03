@@ -41,7 +41,7 @@ use ibc::core::ics04_channel::events::{
     CloseConfirm as ChanCloseConfirm, CloseInit as ChanCloseInit,
     OpenAck as ChanOpenAck, OpenConfirm as ChanOpenConfirm,
     OpenInit as ChanOpenInit, OpenTry as ChanOpenTry, SendPacket,
-    TimeoutOnClosePacket, TimeoutPacket, WriteAcknowledgement,
+    TimeoutPacket, WriteAcknowledgement,
 };
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::packet::{Packet, Sequence};
