@@ -794,9 +794,9 @@ mod imp {
 
 #[cfg(test)]
 mod test {
+    use anoma::ledger::storage::MerkleTreeStores;
     use anoma::types::address::EstablishedAddressGen;
     use anoma::types::storage::{BlockHash, Epoch, Epochs};
-    use anoma::ledger::storage::MerkleTreeStores;
     use tempfile::tempdir;
 
     use super::*;

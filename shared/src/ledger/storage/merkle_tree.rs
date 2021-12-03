@@ -7,8 +7,8 @@ use std::fmt;
 use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{
-    CommitmentProof, ExistenceProof, LeafOp, LengthOp, NonExistenceProof,
-    ProofSpec,
+    CommitmentProof, ExistenceProof, HashOp, LeafOp, LengthOp,
+    NonExistenceProof, ProofSpec,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -31,8 +31,6 @@ use crate::types::storage::{DbKeySeg, Error as StorageError, Key};
 pub enum Error {
     #[error("Invalid key: {0}")]
     InvalidKey(StorageError),
-    #[error("Unexpected store type: {store_type}")]
-    StoreType { store_type: StoreType },
     #[error("Empty Key: {0}")]
     EmptyKey(String),
     #[error("SMT error: {0}")]
@@ -106,22 +104,21 @@ impl fmt::Display for StoreType {
 /// Merkle tree storage
 pub struct MerkleTree<H: StorageHasher + Default> {
     base: SparseMerkleTree<H, H256, DefaultStore<H256>>,
-    sub_trees:
-        HashMap<StoreType, SparseMerkleTree<H, H256, DefaultStore<H256>>>,
+    subtrees: HashMap<StoreType, SparseMerkleTree<H, H256, DefaultStore<H256>>>,
 }
 
 impl<H: StorageHasher + Default> Default for MerkleTree<H> {
     fn default() -> Self {
-        let mut sub_trees = HashMap::new();
+        let mut subtrees = HashMap::new();
         for st in StoreType::sub_tree_iter() {
-            sub_trees.insert(
+            subtrees.insert(
                 *st,
                 SparseMerkleTree::<H, H256, DefaultStore<H256>>::default(),
             );
         }
         Self {
             base: SparseMerkleTree::default(),
-            sub_trees,
+            subtrees,
         }
     }
 }
@@ -138,82 +135,72 @@ impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
 impl<H: StorageHasher + Default> MerkleTree<H> {
     /// Restore the tree from the stores
     pub fn new(stores: MerkleTreeStores) -> Result<Self> {
-        let mut sub_trees = HashMap::new();
+        let mut subtrees = HashMap::new();
 
-        let (root, store) =
-            stores.0.get(&StoreType::Base).ok_or(Error::StoreType {
-                store_type: StoreType::Base,
-            })?;
+        let (root, store) = stores
+            .0
+            .get(&StoreType::Base)
+            .expect("The base tree should exist");
         let base = SparseMerkleTree::new(*root, store.clone());
 
         for st in StoreType::sub_tree_iter() {
-            let (sub_root, store) = stores
-                .0
-                .get(st)
-                .ok_or_else(|| Error::StoreType { store_type: *st })?;
-            sub_trees.insert(
+            let (sub_root, store) =
+                stores.0.get(st).expect("The subtree should exist");
+            subtrees.insert(
                 *st,
                 SparseMerkleTree::<H, H256, _>::new(*sub_root, store.clone()),
             );
         }
 
-        Ok(Self { base, sub_trees })
+        Ok(Self { base, subtrees })
     }
 
     /// Check if the key exists in the tree
     pub fn has_key(&self, key: &Key) -> Result<bool> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        match self.sub_trees.get(&store_type) {
-            Some(smt) => {
-                let value = smt.get(&H::hash(sub_key.to_string()))?;
-                Ok(!value.is_zero())
-            }
-            None => Err(Error::StoreType { store_type }),
-        }
+        let subtree = self
+            .subtrees
+            .get(&store_type)
+            .expect("The subtree should exist");
+        let value = subtree.get(&H::hash(sub_key.to_string()))?;
+        Ok(!value.is_zero())
     }
 
     /// Update the tree with the given key and value
     pub fn update(&mut self, key: &Key, value: impl AsRef<[u8]>) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        match self.sub_trees.get_mut(&store_type) {
-            Some(smt) => {
-                let sub_root =
-                    smt.update(H::hash(sub_key.to_string()), H::hash(value))?;
-                let base_key = H::hash(&store_type.to_string());
-                // update the base tree with the updated sub root
-                self.base.update(base_key, *sub_root)?;
-                Ok(())
-            }
-            None => Err(Error::StoreType { store_type }),
-        }
+        let subtree = self
+            .subtrees
+            .get_mut(&store_type)
+            .expect("The subtree should exist");
+        let sub_root =
+            subtree.update(H::hash(sub_key.to_string()), H::hash(value))?;
+
+        let base_key = H::hash(&store_type.to_string());
+        // update the base tree with the updated sub root without hashing
+        self.base.update(base_key, *sub_root)?;
+        Ok(())
     }
 
     /// Delete the value corresponding to the given key
     pub fn delete(&mut self, key: &Key) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        match self.sub_trees.get_mut(&store_type) {
-            Some(smt) => {
-                let sub_root =
-                    smt.update(H::hash(sub_key.to_string()), H256::zero())?;
-                let base_key = H::hash(&store_type.to_string());
-                // update the base tree with the updated sub root
-                self.base.update(base_key, *sub_root)?;
-                Ok(())
-            }
-            None => Err(Error::StoreType { store_type }),
-        }
+        let subtree = self
+            .subtrees
+            .get_mut(&store_type)
+            .expect("The subtree should exist");
+        let sub_root =
+            subtree.update(H::hash(sub_key.to_string()), H256::zero())?;
+
+        let base_key = H::hash(&store_type.to_string());
+        // update the base tree with the updated sub root without hashing
+        self.base.update(base_key, *sub_root)?;
+        Ok(())
     }
 
     /// Get the root
     pub fn root(&self) -> MerkleRoot {
         (*self.base.root()).into()
-    }
-
-    /// Get the sub root
-    fn sub_root(&self, store_type: &StoreType) -> Result<MerkleRoot> {
-        let key = H::hash(&store_type.to_string());
-        let sub_root = self.base.get(&key)?;
-        Ok(sub_root.into())
     }
 
     /// Get the stores of the base and sub trees
@@ -224,11 +211,9 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             (*self.base.root(), self.base.store().clone()),
         );
         for st in StoreType::sub_tree_iter() {
-            let (sub_root, store) = match self.sub_trees.get(st) {
-                Some(smt) => (*smt.root(), smt.store().clone()),
-                None => return Err(Error::StoreType { store_type: *st }),
-            };
-            stores.insert(*st, (sub_root, store));
+            let subtree =
+                self.subtrees.get(st).expect("The subtree should exist");
+            stores.insert(*st, (*subtree.root(), subtree.store().clone()));
         }
         Ok(MerkleTreeStores(stores))
     }
@@ -240,14 +225,14 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         value: Vec<u8>,
     ) -> Result<Proof> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        let smt = self
-            .sub_trees
+        let subtree = self
+            .subtrees
             .get(&store_type)
-            .ok_or(Error::StoreType { store_type })?;
+            .expect("The subtree should exist");
 
         // Get a proof of the sub tree
         let hashed_sub_key = H::hash(&sub_key.to_string());
-        let cp = smt.membership_proof(&hashed_sub_key)?;
+        let cp = subtree.membership_proof(&hashed_sub_key)?;
         // Replace the values and the leaf op for the verification
         let sub_proof = match cp.proof.expect("The proof should exist") {
             Ics23Proof::Exist(ep) => CommitmentProof {
@@ -267,14 +252,14 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     /// Get the non-existence proof
     pub fn get_non_existence_proof(&self, key: &Key) -> Result<Proof> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        let smt = self
-            .sub_trees
+        let subtree = self
+            .subtrees
             .get(&store_type)
-            .ok_or(Error::StoreType { store_type })?;
+            .expect("The subtree should exist");
 
         // Get a proof of the sub tree
         let hashed_sub_key = H::hash(&sub_key.to_string());
-        let cp = smt.non_membership_proof(&hashed_sub_key)?;
+        let cp = subtree.non_membership_proof(&hashed_sub_key)?;
         // Replace the key with the non-hashed key for the verification
         let sub_proof = match cp.proof.expect("The proof should exist") {
             Ics23Proof::Nonexist(nep) => CommitmentProof {
@@ -309,21 +294,20 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         // exist
         let (store_type, _) = StoreType::sub_key(key)?;
         let base_key = store_type.to_string();
-        let sub_root = self.sub_root(&store_type)?;
         let cp = self.base.membership_proof(&H::hash(&base_key))?;
         // Replace the values and the leaf op for the verification
         let base_proof = match cp.proof.expect("The proof should exist") {
             Ics23Proof::Exist(ep) => CommitmentProof {
                 proof: Some(Ics23Proof::Exist(ExistenceProof {
-                    key: base_key.to_string().as_bytes().to_vec(),
-                    value: sub_root.0,
-                    leaf: Some(self.leaf_spec()),
+                    key: base_key.as_bytes().to_vec(),
+                    leaf: Some(self.base_leaf_spec()),
                     ..ep
                 })),
             },
             // the proof should have an ExistenceProof
             _ => unreachable!(),
         };
+
         let mut data = vec![];
         base_proof
             .encode(&mut data)
@@ -340,18 +324,35 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         })
     }
 
-    /// Get the proof spec
-    pub fn proof_spec(&self) -> Result<ProofSpec> {
+    /// Get the proof specs
+    pub fn proof_specs(&self) -> Vec<ProofSpec> {
         let spec = sparse_merkle_tree::proof_ics23::get_spec(H::hash_op());
-        Ok(ProofSpec {
+        let sub_tree_spec = ProofSpec {
             leaf_spec: Some(self.leaf_spec()),
+            ..spec.clone()
+        };
+        let base_tree_spec = ProofSpec {
+            leaf_spec: Some(self.base_leaf_spec()),
             ..spec
-        })
+        };
+        vec![sub_tree_spec, base_tree_spec]
     }
 
-    /// Get the leaf spec to update the spec and proofs. Non-hashed values can
-    /// be used for the verification with this spec because the SMT stores the
-    /// key-value pairs after hashing.
+    /// Get the leaf spec for the base tree. The key is stored after hashing,
+    /// but the stored value is the subtree's root without hashing.
+    fn base_leaf_spec(&self) -> LeafOp {
+        LeafOp {
+            hash: H::hash_op().into(),
+            prehash_key: H::hash_op().into(),
+            prehash_value: HashOp::NoHash.into(),
+            length: LengthOp::NoPrefix.into(),
+            prefix: H256::zero().as_slice().to_vec(),
+        }
+    }
+
+    /// Get the leaf spec for the subtree. Non-hashed values are used for the
+    /// verification with this spec because a subtree stores the key-value pairs
+    /// after hashing.
     fn leaf_spec(&self) -> LeafOp {
         LeafOp {
             hash: H::hash_op().into(),
@@ -513,16 +514,18 @@ mod test {
         let pos_val = [2u8; 8].to_vec();
         tree.update(&pos_key, pos_val).unwrap();
 
-        let spec = tree.proof_spec().unwrap();
+        let specs = tree.proof_specs();
         let proof =
             tree.get_existence_proof(&ibc_key, ibc_val.clone()).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&ibc_key).unwrap();
         let paths = vec![sub_key.to_string(), store_type.to_string()];
         let mut sub_root = ibc_val.clone();
         let mut value = ibc_val;
-        // First, the sub proof is verified, next the base proof is verified
+        // First, the sub proof is verified. Next the base proof is verified
         // with the sub root
-        for (p, key) in proof.ops.iter().zip(paths.iter()) {
+        for ((p, spec), key) in
+            proof.ops.iter().zip(specs.iter()).zip(paths.iter())
+        {
             let commitment_proof = CommitmentProof::decode(&*p.data).unwrap();
             let existence_proof = match commitment_proof.clone().proof.unwrap()
             {
@@ -533,7 +536,7 @@ mod test {
                 ics23::calculate_existence_root(&existence_proof).unwrap();
             assert!(ics23::verify_membership(
                 &commitment_proof,
-                &spec,
+                spec,
                 &sub_root,
                 key.as_bytes(),
                 &value,
