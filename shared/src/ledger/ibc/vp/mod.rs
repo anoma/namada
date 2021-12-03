@@ -24,7 +24,7 @@ use super::storage::{client_id, ibc_prefix, is_client_counter_key, IbcPrefix};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::wrapper::IbcEvent as WrappedIbcEvent;
+use crate::types::ibc::IbcEvent as WrappedIbcEvent;
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 

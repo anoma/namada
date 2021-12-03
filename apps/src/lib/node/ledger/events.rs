@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
-use anoma::types::ibc::wrapper::IbcEvent;
+use anoma::types::ibc::IbcEvent;
 use anoma::types::transaction::{hash_tx, TxType};
 use borsh::BorshSerialize;
 #[cfg(not(feature = "ABCI"))]

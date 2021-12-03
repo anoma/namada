@@ -2,6 +2,6 @@
 
 #[cfg(any(feature = "ibc-vp", feature = "ibc-vp-abci"))]
 pub mod data;
-pub mod wrapper;
+pub mod event;
 
-pub use wrapper::*;
+pub use event::*;

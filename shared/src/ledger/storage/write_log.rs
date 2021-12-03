@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::types::address::{Address, EstablishedAddressGen};
-use crate::types::ibc::wrapper::IbcEvent;
+use crate::types::ibc::IbcEvent;
 use crate::types::storage::Key;
 
 #[allow(missing_docs)]
