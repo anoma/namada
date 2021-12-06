@@ -73,12 +73,13 @@ table_row = '|{}|{}|{}|{}|'
 table = [table_header]
 
 nightly_version = get_nightly_from_file()
-command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--output', 'json']
+command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--locked', '--output', 'json']
 p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd="/usr/local/rust/project")
 output = p.stdout.read()
 retcode = p.wait()
 
 unused_deps = json.loads(output)
+print(output)
 if unused_deps['success']:
     print("No unused dependencies found.")
     exit(0)
