@@ -240,11 +240,14 @@ impl Store {
             StoredKeypair::new(keypair, password);
         let address = Address::Implicit(ImplicitAddress::Ed25519(pkh.clone()));
         let alias = alias.unwrap_or_else(|| pkh.clone().into());
-        if self.insert_keypair(alias.clone(), keypair_to_store, pkh) == None {
+        if self
+            .insert_keypair(alias.clone(), keypair_to_store, pkh)
+            .is_none()
+        {
             eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1);
         }
-        if self.insert_address(alias.clone(), address) == None {
+        if self.insert_address(alias.clone(), address).is_none() {
             eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1);
         }
@@ -262,14 +265,17 @@ impl Store {
         pkh: PublicKeyHash,
     ) -> Option<Alias> {
         if alias.is_empty() {
-            println!("Empty alias given, defaulting to {}.",
-                     alias = Into::<Alias>::into(pkh.clone()));
+            println!(
+                "Empty alias given, defaulting to {}.",
+                alias = Into::<Alias>::into(pkh.clone())
+            );
         }
         if self.keys.contains_key(&alias) {
             match show_overwrite_confirmation(&alias, "a key") {
-                ConfirmationResponse::Replace => {},
-                ConfirmationResponse::Reselect(new_alias) =>
-                    return self.insert_keypair(new_alias, keypair, pkh),
+                ConfirmationResponse::Replace => {}
+                ConfirmationResponse::Reselect(new_alias) => {
+                    return self.insert_keypair(new_alias, keypair, pkh);
+                }
                 ConfirmationResponse::Skip => return None,
             }
         }
@@ -282,16 +288,23 @@ impl Store {
     /// will prompt for overwrite/reselection confirmation, which when declined,
     /// the address won't be added. Return the selected alias if the address has
     /// been added.
-    pub fn insert_address(&mut self, alias: Alias, address: Address) -> Option<Alias> {
+    pub fn insert_address(
+        &mut self,
+        alias: Alias,
+        address: Address,
+    ) -> Option<Alias> {
         if alias.is_empty() {
-            println!("Empty alias given, defaulting to {}.",
-                     alias = address.encode());
+            println!(
+                "Empty alias given, defaulting to {}.",
+                alias = address.encode()
+            );
         }
         if self.addresses.contains_key(&alias) {
             match show_overwrite_confirmation(&alias, "an address") {
-                ConfirmationResponse::Replace => {},
-                ConfirmationResponse::Reselect(new_alias) =>
-                    return self.insert_address(new_alias, address),
+                ConfirmationResponse::Replace => {}
+                ConfirmationResponse::Reselect(new_alias) => {
+                    return self.insert_address(new_alias, address);
+                }
                 ConfirmationResponse::Skip => return None,
             }
         }
@@ -323,8 +336,9 @@ fn show_overwrite_confirmation(
     alias_for: &str,
 ) -> ConfirmationResponse {
     print!(
-        "You're trying to create an alias \"{}\" that already exists for {} in\
-         your store.\nWould you like to replace it? s(k)ip/re(p)lace/re(s)elect: ",
+        "You're trying to create an alias \"{}\" that already exists for {} \
+         inyour store.\nWould you like to replace it? \
+         s(k)ip/re(p)lace/re(s)elect: ",
         alias, alias_for
     );
     io::stdout().flush().unwrap();
@@ -342,19 +356,18 @@ fn show_overwrite_confirmation(
                     // In the case of reselection, elicit new alias
                     print!("Please enter a different alias: ");
                     io::stdout().flush().unwrap();
-                    match io::stdin().read_line(&mut buffer) {
-                        Ok(_) =>
-                            return ConfirmationResponse::Reselect(buffer.trim().to_string()),
-                        // Input is senseless, fall through to repeat prompt
-                        _ => {},
+                    if io::stdin().read_line(&mut buffer).is_ok() {
+                        return ConfirmationResponse::Reselect(
+                            buffer.trim().to_string(),
+                        );
                     }
-                },
+                }
                 'k' | 'K' => return ConfirmationResponse::Skip,
                 // Input is senseless fall through to repeat prompt
-                _ => {},
+                _ => {}
             };
         }
-        _ => {},
+        _ => {}
     }
     // Input is senseless fall through to repeat prompt
     println!("Invalid option, try again.");

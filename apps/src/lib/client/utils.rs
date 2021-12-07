@@ -641,8 +641,9 @@ fn init_genesis_validator_aux(
     let validator_address =
         address::gen_established_address("genesis validator address");
     let validator_address_alias = alias.clone();
-    if None == wallet
+    if wallet
         .add_address(validator_address_alias.clone(), validator_address.clone())
+        .is_none()
     {
         cli::safe_exit(1)
     }
@@ -650,8 +651,9 @@ fn init_genesis_validator_aux(
     let rewards_address =
         address::gen_established_address("genesis validator reward address");
     let rewards_address_alias = format!("{}-rewards", alias);
-    if None == wallet
+    if wallet
         .add_address(rewards_address_alias.clone(), rewards_address.clone())
+        .is_none()
     {
         cli::safe_exit(1)
     }

@@ -231,7 +231,11 @@ impl Wallet {
     /// alias is desired, or the alias creation should be cancelled. Return
     /// the chosen alias if the address has been added, otherwise return
     /// nothing.
-    pub fn add_address(&mut self, alias: Alias, address: Address) -> Option<Alias> {
+    pub fn add_address(
+        &mut self,
+        alias: Alias,
+        address: Address,
+    ) -> Option<Alias> {
         self.store.insert_address(alias, address)
     }
 

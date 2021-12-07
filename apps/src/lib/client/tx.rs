@@ -727,8 +727,7 @@ async fn save_initialized_accounts(
                         // If there're multiple accounts, use
                         // the alias as prefix, followed by
                         // index number
-                        format!("{}{}", initialized_account_alias, ix)
-                            .into()
+                        format!("{}{}", initialized_account_alias, ix).into()
                     }
                 }
                 None => {
@@ -740,16 +739,15 @@ async fn save_initialized_accounts(
                 }
             };
             let alias = alias.into_owned();
-            let added =
-                wallet.add_address(alias.clone(), address.clone());
+            let added = wallet.add_address(alias.clone(), address.clone());
             match added {
                 Some(new_alias) if new_alias != encoded => {
                     println!(
                         "Added alias {} for address {}.",
                         new_alias, encoded
                     );
-                },
-                _ => println!("No alias added for address {}.", encoded)
+                }
+                _ => println!("No alias added for address {}.", encoded),
             };
         }
         if !args.dry_run {
