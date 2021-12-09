@@ -22,10 +22,6 @@ pub enum Error {
     UpdateVpOfNewAccount,
     #[error("Trying to delete a validity predicate")]
     DeleteVp,
-    #[error("Trying to update an IBC event which has been already set")]
-    UpdateIbcEvent,
-    #[error("Trying to delete an IBC event")]
-    DeleteIbcEvent,
 }
 
 /// Result for functions that may fail
@@ -48,11 +44,6 @@ pub enum StorageModification {
         /// Validity predicate bytes
         vp: Vec<u8>,
     },
-    /// IBC event
-    Ibc {
-        /// IBC event
-        event: IbcEvent,
-    },
 }
 
 /// The write log storage
@@ -65,6 +56,8 @@ pub struct WriteLog {
     block_write_log: HashMap<Key, StorageModification>,
     /// The storage modifications for the current transaction
     tx_write_log: HashMap<Key, StorageModification>,
+    /// The IBC event for the current transaction
+    ibc_event: Option<IbcEvent>,
 }
 
 impl Default for WriteLog {
@@ -73,6 +66,7 @@ impl Default for WriteLog {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
+            ibc_event: None,
         }
     }
 }
@@ -94,13 +88,6 @@ impl WriteLog {
                     StorageModification::Delete => key.len(),
                     StorageModification::InitAccount { ref vp } => {
                         key.len() + vp.len()
-                    }
-                    &StorageModification::Ibc { ref event } => {
-                        key.len()
-                            + event
-                                .attributes
-                                .iter()
-                                .fold(0, |acc, (k, v)| acc + k.len() + v.len())
                     }
                 };
                 (Some(v), gas as _)
@@ -127,9 +114,6 @@ impl WriteLog {
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::UpdateVpOfNewAccount);
                 }
-                StorageModification::Ibc { .. } => {
-                    return Err(Error::UpdateIbcEvent);
-                }
             },
             // set just the length of the value because we don't know if
             // the previous value exists on the storage
@@ -155,9 +139,6 @@ impl WriteLog {
                 StorageModification::Delete => 0,
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::DeleteVp);
-                }
-                StorageModification::Ibc { .. } => {
-                    return Err(Error::DeleteIbcEvent);
                 }
             },
             // set 0 because we don't know if the previous value exists on the
@@ -193,10 +174,7 @@ impl WriteLog {
             .attributes
             .iter()
             .fold(0, |acc, (k, v)| acc + k.len() + v.len());
-        self.tx_write_log.insert(
-            crate::ledger::ibc::storage::event_key(),
-            StorageModification::Ibc { event },
-        );
+        self.ibc_event = Some(event);
         len as _
     }
 
@@ -241,14 +219,8 @@ impl WriteLog {
     }
 
     /// Get the IBC event of the current transaction
-    pub fn get_ibc_event(&self) -> Option<IbcEvent> {
-        match self
-            .tx_write_log
-            .get(&crate::ledger::ibc::storage::event_key())
-        {
-            Some(StorageModification::Ibc { event }) => Some(event.clone()),
-            _ => None,
-        }
+    pub fn get_ibc_event(&self) -> Option<&IbcEvent> {
+        self.ibc_event.as_ref()
     }
 
     /// Commit the current transaction's write log to the block when it's
@@ -260,12 +232,14 @@ impl WriteLog {
             HashMap::with_capacity(100),
         );
         self.block_write_log.extend(tx_write_log);
+        self.ibc_event = None;
     }
 
     /// Drop the current transaction's write log when it's declined by any of
     /// the triggered validity predicates. Starts a new transaction write log.
     pub fn drop_tx(&mut self) {
         self.tx_write_log.clear();
+        self.ibc_event = None;
     }
 
     /// Commit the current block's write log to the storage. Starts a new block
@@ -300,7 +274,6 @@ impl WriteLog {
                         .batch_write_subspace_val(&mut batch, key, vp.clone())
                         .map_err(Error::StorageError)?;
                 }
-                StorageModification::Ibc { .. } => {}
             }
         }
         storage.exec_batch(batch).map_err(Error::StorageError)?;

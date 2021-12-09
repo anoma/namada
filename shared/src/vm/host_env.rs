@@ -584,9 +584,6 @@ where
         Some(&write_log::StorageModification::InitAccount { .. }) => {
             HostEnvResult::Success.to_i64()
         }
-        Some(&write_log::StorageModification::Ibc { .. }) => {
-            HostEnvResult::Success.to_i64()
-        }
         None => {
             // when not found in write log, try to check the storage
             let storage = unsafe { env.ctx.storage.get() };
@@ -654,10 +651,6 @@ where
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(vp.clone());
             len
-        }
-        Some(&write_log::StorageModification::Ibc { .. }) => {
-            // fail, IBC event doesn't need to be read
-            HostEnvResult::Fail.to_i64()
         }
         None => {
             // when not found in write log, try to read from the storage
@@ -789,10 +782,6 @@ where
             }
             Some(&write_log::StorageModification::InitAccount { .. }) => {
                 // a VP of a new account doesn't need to be iterated
-                continue;
-            }
-            Some(&write_log::StorageModification::Ibc { .. }) => {
-                // The IBC event doesn't need to be iterated
                 continue;
             }
             None => {
