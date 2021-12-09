@@ -211,7 +211,7 @@ where
             Some(event) => {
                 let expected = WrappedIbcEvent::try_from(expected_event)
                     .map_err(|e| Error::IbcEvent(e.to_string()))?;
-                if event == expected {
+                if *event == expected {
                     Ok(())
                 } else {
                     Err(Error::IbcEvent(format!(

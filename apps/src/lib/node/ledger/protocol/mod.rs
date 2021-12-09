@@ -125,7 +125,7 @@ where
                 .map_err(Error::GasError)?;
             let initialized_accounts = write_log.get_initialized_accounts();
             let changed_keys = write_log.get_keys();
-            let ibc_event = write_log.get_ibc_event();
+            let ibc_event = write_log.get_ibc_event().cloned();
 
             Ok(TxResult {
                 gas_used,
