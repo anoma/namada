@@ -1,8 +1,8 @@
 //! The merkle tree in the storage
 
-use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
@@ -35,13 +35,14 @@ pub enum Error {
     EmptyKey(String),
     #[error("SMT error: {0}")]
     Smt(SmtError),
-    #[error("Proof spec error")]
-    InvalidProofSpec,
+    #[error("Invalid store type: {0}")]
+    StoreType(String),
 }
 
 /// Result for functions that may fail
 type Result<T> = std::result::Result<T, Error>;
 
+/// Store types for the merkle tree
 #[derive(
     Clone,
     Copy,
@@ -54,16 +55,25 @@ type Result<T> = std::result::Result<T, Error>;
     BorshDeserialize,
 )]
 pub enum StoreType {
+    /// Base tree, which has roots of the subtrees
     Base,
+    /// For Account and other data
     Account,
-    PoS,
+    /// For IBC-related data
     Ibc,
+    /// For PoS-related data
+    PoS,
 }
 
 impl StoreType {
-    fn sub_tree_iter() -> std::slice::Iter<'static, Self> {
-        static SUB_TREE_TYPES: [StoreType; 3] =
-            [StoreType::Account, StoreType::PoS, StoreType::Ibc];
+    /// Get an iterator for the base tree and subtrees
+    pub fn iter() -> std::slice::Iter<'static, Self> {
+        static SUB_TREE_TYPES: [StoreType; 4] = [
+            StoreType::Base,
+            StoreType::Account,
+            StoreType::PoS,
+            StoreType::Ibc,
+        ];
         SUB_TREE_TYPES.iter()
     }
 
@@ -90,37 +100,38 @@ impl StoreType {
     }
 }
 
+impl FromStr for StoreType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "base" => Ok(StoreType::Base),
+            "account" => Ok(StoreType::Account),
+            "ibc" => Ok(StoreType::Ibc),
+            "pos" => Ok(StoreType::PoS),
+            _ => Err(Error::StoreType(s.to_string())),
+        }
+    }
+}
+
 impl fmt::Display for StoreType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StoreType::Base => write!(f, "base"),
             StoreType::Account => write!(f, "account"),
-            StoreType::PoS => write!(f, "pos"),
             StoreType::Ibc => write!(f, "ibc"),
+            StoreType::PoS => write!(f, "pos"),
         }
     }
 }
 
 /// Merkle tree storage
+#[derive(Default)]
 pub struct MerkleTree<H: StorageHasher + Default> {
     base: SparseMerkleTree<H, H256, DefaultStore<H256>>,
-    subtrees: HashMap<StoreType, SparseMerkleTree<H, H256, DefaultStore<H256>>>,
-}
-
-impl<H: StorageHasher + Default> Default for MerkleTree<H> {
-    fn default() -> Self {
-        let mut subtrees = HashMap::new();
-        for st in StoreType::sub_tree_iter() {
-            subtrees.insert(
-                *st,
-                SparseMerkleTree::<H, H256, DefaultStore<H256>>::default(),
-            );
-        }
-        Self {
-            base: SparseMerkleTree::default(),
-            subtrees,
-        }
-    }
+    account: SparseMerkleTree<H, H256, DefaultStore<H256>>,
+    ibc: SparseMerkleTree<H, H256, DefaultStore<H256>>,
+    pos: SparseMerkleTree<H, H256, DefaultStore<H256>>,
 }
 
 impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
@@ -134,34 +145,59 @@ impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
 
 impl<H: StorageHasher + Default> MerkleTree<H> {
     /// Restore the tree from the stores
-    pub fn new(stores: MerkleTreeStores) -> Result<Self> {
-        let mut subtrees = HashMap::new();
+    pub fn new(stores: MerkleTreeStoresRead) -> Self {
+        let base = SparseMerkleTree::new(stores.base.0, stores.base.1);
+        let account = SparseMerkleTree::new(stores.account.0, stores.account.1);
+        let ibc = SparseMerkleTree::new(stores.ibc.0, stores.ibc.1);
+        let pos = SparseMerkleTree::new(stores.pos.0, stores.pos.1);
 
-        let (root, store) = stores
-            .0
-            .get(&StoreType::Base)
-            .expect("The base tree should exist");
-        let base = SparseMerkleTree::new(*root, store.clone());
-
-        for st in StoreType::sub_tree_iter() {
-            let (sub_root, store) =
-                stores.0.get(st).expect("The subtree should exist");
-            subtrees.insert(
-                *st,
-                SparseMerkleTree::<H, H256, _>::new(*sub_root, store.clone()),
-            );
+        Self {
+            base,
+            account,
+            ibc,
+            pos,
         }
+    }
 
-        Ok(Self { base, subtrees })
+    fn tree(
+        &self,
+        store_type: &StoreType,
+    ) -> &SparseMerkleTree<H, H256, DefaultStore<H256>> {
+        match store_type {
+            StoreType::Base => &self.base,
+            StoreType::Account => &self.account,
+            StoreType::Ibc => &self.ibc,
+            StoreType::PoS => &self.pos,
+        }
+    }
+
+    fn update_tree(
+        &mut self,
+        store_type: &StoreType,
+        key: H256,
+        value: H256,
+    ) -> Result<()> {
+        let tree = match store_type {
+            StoreType::Account => &mut self.account,
+            StoreType::Ibc => &mut self.ibc,
+            StoreType::PoS => &mut self.pos,
+            // base tree should not be directly updated
+            StoreType::Base => unreachable!(),
+        };
+        let sub_root = tree.update(key, value).map_err(Error::Smt)?;
+
+        // update the base tree with the updated sub root without hashing
+        if *store_type != StoreType::Base {
+            let base_key = H::hash(&store_type.to_string());
+            self.base.update(base_key, *sub_root)?;
+        }
+        Ok(())
     }
 
     /// Check if the key exists in the tree
     pub fn has_key(&self, key: &Key) -> Result<bool> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        let subtree = self
-            .subtrees
-            .get(&store_type)
-            .expect("The subtree should exist");
+        let subtree = self.tree(&store_type);
         let value = subtree.get(&H::hash(sub_key.to_string()))?;
         Ok(!value.is_zero())
     }
@@ -169,33 +205,21 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     /// Update the tree with the given key and value
     pub fn update(&mut self, key: &Key, value: impl AsRef<[u8]>) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        let subtree = self
-            .subtrees
-            .get_mut(&store_type)
-            .expect("The subtree should exist");
-        let sub_root = subtree
-            .update(H::hash(sub_key.to_string()), H::hash(value))?;
-
-        let base_key = H::hash(&store_type.to_string());
-        // update the base tree with the updated sub root without hashing
-        self.base.update(base_key, *sub_root)?;
-        Ok(())
+        self.update_tree(
+            &store_type,
+            H::hash(sub_key.to_string()),
+            H::hash(value),
+        )
     }
 
     /// Delete the value corresponding to the given key
     pub fn delete(&mut self, key: &Key) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        let subtree = self
-            .subtrees
-            .get_mut(&store_type)
-            .expect("The subtree should exist");
-        let sub_root =
-            subtree.update(H::hash(sub_key.to_string()), H256::zero())?;
-
-        let base_key = H::hash(&store_type.to_string());
-        // update the base tree with the updated sub root without hashing
-        self.base.update(base_key, *sub_root)?;
-        Ok(())
+        self.update_tree(
+            &store_type,
+            H::hash(sub_key.to_string()),
+            H256::zero(),
+        )
     }
 
     /// Get the root
@@ -204,18 +228,13 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     }
 
     /// Get the stores of the base and sub trees
-    pub fn stores(&self) -> Result<MerkleTreeStores> {
-        let mut stores = HashMap::new();
-        stores.insert(
-            StoreType::Base,
-            (*self.base.root(), self.base.store().clone()),
-        );
-        for st in StoreType::sub_tree_iter() {
-            let subtree =
-                self.subtrees.get(st).expect("The subtree should exist");
-            stores.insert(*st, (*subtree.root(), subtree.store().clone()));
+    pub fn stores(&self) -> MerkleTreeStoresWrite {
+        MerkleTreeStoresWrite {
+            base: (self.base.root(), self.base.store()),
+            account: (self.account.root(), self.account.store()),
+            ibc: (self.ibc.root(), self.ibc.store()),
+            pos: (self.pos.root(), self.pos.store()),
         }
-        Ok(MerkleTreeStores(stores))
     }
 
     /// Get the existence proof
@@ -225,10 +244,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         value: Vec<u8>,
     ) -> Result<Proof> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        let subtree = self
-            .subtrees
-            .get(&store_type)
-            .expect("The subtree should exist");
+        let subtree = self.tree(&store_type);
 
         // Get a proof of the sub tree
         let hashed_sub_key = H::hash(&sub_key.to_string());
@@ -252,10 +268,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     /// Get the non-existence proof
     pub fn get_non_existence_proof(&self, key: &Key) -> Result<Proof> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        let subtree = self
-            .subtrees
-            .get(&store_type)
-            .expect("The subtree should exist");
+        let subtree = self.tree(&store_type);
 
         // Get a proof of the sub tree
         let hashed_sub_key = H::hash(&sub_key.to_string());
@@ -379,21 +392,68 @@ impl fmt::Display for MerkleRoot {
     }
 }
 
-/// The root and store pairs to be persistent
-#[derive(BorshSerialize, BorshDeserialize)]
-pub struct MerkleTreeStores(HashMap<StoreType, (H256, DefaultStore<H256>)>);
+/// The root and store pairs to restore the trees
+#[derive(Default)]
+pub struct MerkleTreeStoresRead {
+    base: (H256, DefaultStore<H256>),
+    account: (H256, DefaultStore<H256>),
+    ibc: (H256, DefaultStore<H256>),
+    pos: (H256, DefaultStore<H256>),
+}
 
-impl Default for MerkleTreeStores {
-    fn default() -> Self {
-        let mut stores = HashMap::new();
-        stores.insert(
-            StoreType::Base,
-            (H256::default(), DefaultStore::default()),
-        );
-        for st in StoreType::sub_tree_iter() {
-            stores.insert(*st, (H256::default(), DefaultStore::default()));
+impl MerkleTreeStoresRead {
+    /// Set the root of the given store type
+    pub fn set_root(&mut self, store_type: &StoreType, root: H256) {
+        match store_type {
+            StoreType::Base => self.base.0 = root,
+            StoreType::Account => self.account.0 = root,
+            StoreType::Ibc => self.ibc.0 = root,
+            StoreType::PoS => self.pos.0 = root,
         }
-        Self(stores)
+    }
+
+    /// Set the store of the given store type
+    pub fn set_store(
+        &mut self,
+        store_type: &StoreType,
+        store: DefaultStore<H256>,
+    ) {
+        match store_type {
+            StoreType::Base => self.base.1 = store,
+            StoreType::Account => self.account.1 = store,
+            StoreType::Ibc => self.ibc.1 = store,
+            StoreType::PoS => self.pos.1 = store,
+        }
+    }
+}
+
+/// The root and store pairs to be persistent
+pub struct MerkleTreeStoresWrite<'a> {
+    base: (&'a H256, &'a DefaultStore<H256>),
+    account: (&'a H256, &'a DefaultStore<H256>),
+    ibc: (&'a H256, &'a DefaultStore<H256>),
+    pos: (&'a H256, &'a DefaultStore<H256>),
+}
+
+impl<'a> MerkleTreeStoresWrite<'a> {
+    /// Get the root of the given store type
+    pub fn root(&self, store_type: &StoreType) -> &H256 {
+        match store_type {
+            StoreType::Base => self.base.0,
+            StoreType::Account => self.account.0,
+            StoreType::Ibc => self.ibc.0,
+            StoreType::PoS => self.pos.0,
+        }
+    }
+
+    /// Get the store of the given store type
+    pub fn store(&self, store_type: &StoreType) -> &DefaultStore<H256> {
+        match store_type {
+            StoreType::Base => self.base.1,
+            StoreType::Account => self.account.1,
+            StoreType::Ibc => self.ibc.1,
+            StoreType::PoS => self.pos.1,
+        }
     }
 }
 
@@ -492,8 +552,13 @@ mod test {
         tree.update(&ibc_key, [1u8; 8].to_vec()).unwrap();
         tree.update(&pos_key, [2u8; 8].to_vec()).unwrap();
 
-        let stores = tree.stores().unwrap();
-        let restored_tree = MerkleTree::<Sha256Hasher>::new(stores).unwrap();
+        let stores_write = tree.stores();
+        let mut stores_read = MerkleTreeStoresRead::default();
+        for st in StoreType::iter() {
+            stores_read.set_root(st, *stores_write.root(st));
+            stores_read.set_store(st, stores_write.store(st).clone());
+        }
+        let restored_tree = MerkleTree::<Sha256Hasher>::new(stores_read);
         assert!(restored_tree.has_key(&ibc_key).unwrap());
         assert!(restored_tree.has_key(&pos_key).unwrap());
     }

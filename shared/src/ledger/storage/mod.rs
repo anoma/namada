@@ -22,10 +22,11 @@ use super::parameters::Parameters;
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::{self, EpochDuration};
 use crate::ledger::storage::merkle_tree::{
-    Error as MerkleTreeError, MerkleRoot, MerkleTree,
+    Error as MerkleTreeError, MerkleRoot,
 };
 pub use crate::ledger::storage::merkle_tree::{
-    MerkleTreeStores, Sha256Hasher, StorageHasher,
+    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, Sha256Hasher,
+    StorageHasher, StoreType,
 };
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
@@ -104,7 +105,7 @@ pub enum Error {
 /// The block's state as stored in the database.
 pub struct BlockStateRead {
     /// Merkle tree stores
-    pub merkle_tree_stores: MerkleTreeStores,
+    pub merkle_tree_stores: MerkleTreeStoresRead,
     /// Hash of the block
     pub hash: BlockHash,
     /// Height of the block
@@ -127,7 +128,7 @@ pub struct BlockStateRead {
 /// The block's state to write into the database.
 pub struct BlockStateWrite<'a> {
     /// Merkle tree stores
-    pub merkle_tree_stores: &'a MerkleTreeStores,
+    pub merkle_tree_stores: MerkleTreeStoresWrite<'a>,
     /// Hash of the block
     pub hash: &'a BlockHash,
     /// Height of the block
@@ -292,7 +293,7 @@ where
             tx_queue,
         }) = self.db.read_last_block()?
         {
-            self.block.tree = MerkleTree::new(merkle_tree_stores)?;
+            self.block.tree = MerkleTree::new(merkle_tree_stores);
             self.block.hash = hash;
             self.block.height = height;
             self.block.epoch = epoch;
@@ -326,7 +327,7 @@ where
     /// Persist the current block's state to the database
     pub fn commit(&mut self) -> Result<()> {
         let state = BlockStateWrite {
-            merkle_tree_stores: &self.block.tree.stores()?,
+            merkle_tree_stores: self.block.tree.stores(),
             hash: &self.block.hash,
             height: self.block.height,
             epoch: self.block.epoch,

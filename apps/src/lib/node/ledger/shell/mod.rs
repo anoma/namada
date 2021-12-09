@@ -475,9 +475,7 @@ mod test_utils {
     use std::path::PathBuf;
 
     use anoma::ledger::storage::mockdb::MockDB;
-    use anoma::ledger::storage::{
-        BlockStateWrite, MerkleTreeStores, Sha256Hasher,
-    };
+    use anoma::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use anoma::types::address::{xan, EstablishedAddressGen};
     use anoma::types::key::ed25519::Keypair;
     use anoma::types::storage::{BlockHash, Epoch};
@@ -664,7 +662,8 @@ mod test_utils {
         shell.storage.tx_queue.push(wrapper);
         // Artificially increase the block height so that chain
         // will read the new block when restarted
-        let store = MerkleTreeStores::default();
+        let merkle_tree = MerkleTree::<Sha256Hasher>::default();
+        let stores = merkle_tree.stores();
         let hash = BlockHash([0; 32]);
         let pred_epochs = Default::default();
         let address_gen = EstablishedAddressGen::new("test");
@@ -672,7 +671,7 @@ mod test_utils {
             .storage
             .db
             .write_block(BlockStateWrite {
-                merkle_tree_stores: &store,
+                merkle_tree_stores: stores,
                 hash: &hash,
                 height: BlockHeight(1),
                 epoch: Epoch(0),
