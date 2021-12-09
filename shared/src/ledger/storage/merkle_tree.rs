@@ -173,8 +173,8 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             .subtrees
             .get_mut(&store_type)
             .expect("The subtree should exist");
-        let sub_root =
-            subtree.update(H::hash(sub_key.to_string()), H::hash(value))?;
+        let sub_root = subtree
+            .update(H::hash(sub_key.to_string()), H::hash(value))?;
 
         let base_key = H::hash(&store_type.to_string());
         // update the base tree with the updated sub root without hashing

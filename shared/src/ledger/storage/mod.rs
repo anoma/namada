@@ -7,7 +7,6 @@ pub mod types;
 pub mod write_log;
 
 use core::fmt::Debug;
-use std::fmt::Display;
 
 #[cfg(not(feature = "ABCI"))]
 use tendermint::block::Header;
