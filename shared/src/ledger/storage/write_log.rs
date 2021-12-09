@@ -218,6 +218,11 @@ impl WriteLog {
             .collect()
     }
 
+    /// Take the IBC event of the current transaction
+    pub fn take_ibc_event(&mut self) -> Option<IbcEvent> {
+        self.ibc_event.take()
+    }
+
     /// Get the IBC event of the current transaction
     pub fn get_ibc_event(&self) -> Option<&IbcEvent> {
         self.ibc_event.as_ref()
@@ -232,14 +237,12 @@ impl WriteLog {
             HashMap::with_capacity(100),
         );
         self.block_write_log.extend(tx_write_log);
-        self.ibc_event = None;
     }
 
     /// Drop the current transaction's write log when it's declined by any of
     /// the triggered validity predicates. Starts a new transaction write log.
     pub fn drop_tx(&mut self) {
         self.tx_write_log.clear();
-        self.ibc_event = None;
     }
 
     /// Commit the current block's write log to the storage. Starts a new block
