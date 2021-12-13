@@ -17,8 +17,6 @@ pub struct Identity {
     #[serde(with = "keypair_serde")]
     pub key: Keypair,
 }
-// TODO Here instead of encoding to bytes, it would be nice to encode to hex
-// instead. Bytes makes the config file a bit less readable
 
 // TODO this is needed because libp2p does not export ed255519 serde
 // feature maybe a MR for libp2p to export theses functions ?
@@ -26,7 +24,6 @@ mod keypair_serde {
     use libp2p::identity::ed25519::Keypair;
     use serde::de::Error;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use serde_bytes::{ByteBuf as SerdeByteBuf, Bytes as SerdeBytes};
 
     pub fn serialize<S>(
         value: &Keypair,
@@ -35,15 +32,16 @@ mod keypair_serde {
     where
         S: Serializer,
     {
-        let bytes = &value.encode()[..];
-        SerdeBytes::new(bytes).serialize(serializer)
+        let bytes = value.encode();
+        let string = hex::encode(&bytes[..]);
+        string.serialize(serializer)
     }
     pub fn deserialize<'d, D>(deserializer: D) -> Result<Keypair, D::Error>
     where
         D: Deserializer<'d>,
     {
-        let mut bytes = <SerdeByteBuf>::deserialize(deserializer)?;
-
+        let string = String::deserialize(deserializer)?;
+        let mut bytes = hex::decode(&string).map_err(Error::custom)?;
         Keypair::decode(bytes.as_mut()).map_err(Error::custom)
     }
 }
