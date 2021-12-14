@@ -61,20 +61,15 @@ def create_issue(body: str):
         json.load(response)
 
 
-def format_manifest_path(path: str) -> str:
-    base_path_index = path.split('/').index('anoma')
-    return '/'.join(path.split('/')[base_path_index:])
-
-
 issue_template = '# Unused dependencies \n{}'
-table_header = '| Crate | Manifest Path | Package | Type |\n|----:|---------:|-------:|-------:|'
-table_row = '|{}|{}|{}|{}|'
+table_header = '| Crate | Package | Type |\n|----:|-------:|-------:|'
+table_row = '|{}|{}|{}|'
 
 table = [table_header]
 
 nightly_version = get_nightly_from_file()
-command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--output', 'json']
-p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd="/usr/local/rust/project")
+command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--locked', '--output', 'json']
+p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd="/Users/fraccaman/Heliax/anoma")
 output = p.stdout.read()
 retcode = p.wait()
 
@@ -85,20 +80,21 @@ if unused_deps['success']:
 
 for crate in unused_deps['unused_deps'].keys():
     info = unused_deps['unused_deps'][crate]
-    manifest_path = format_manifest_path(info['manifest_path'])
     create_name = crate.split(" (")[0]
     for normal in info['normal']:
-        new_table_row = table_row.format(create_name, manifest_path, normal, 'normal')
+        new_table_row = table_row.format(create_name, normal, 'normal')
         table.append(new_table_row)
     for development in info['development']:
-        new_table_row = table_row.format(create_name, manifest_path, development, 'development')
+        new_table_row = table_row.format(create_name, development, 'development')
         table.append(new_table_row)
     for build in info['build']:
-        new_table_row = table_row.format(create_name, manifest_path, build, 'build')
+        new_table_row = table_row.format(create_name, build, 'build')
         table.append(new_table_row)
 
 table_rendered = '\n'.join(table)
 issue_body = issue_template.format(table_rendered)
+
+print(table_rendered)
 
 if not GH_TOKEN:
     print("Invalid github token.")
