@@ -62,7 +62,7 @@ pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
             // If not set, default to quarter of logical CPUs count
             logical_cores / 4
         };
-    tracing::debug!(
+    tracing::info!(
         "Using {} compactions threads for RocksDB.",
         compaction_threads
     );
