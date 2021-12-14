@@ -274,25 +274,25 @@ pub async fn submit_init_validator(
                         } else {
                             validator_address_alias
                         };
-                    if ctx.wallet.add_address(
+                    if let Some(new_alias) = ctx.wallet.add_address(
                         validator_address_alias.clone(),
                         validator_address.clone(),
                     ) {
                         println!(
                             "Added alias {} for address {}.",
-                            validator_address_alias,
+                            new_alias,
                             validator_address.encode()
                         );
                     }
                     let rewards_address_alias =
                         format!("{}-rewards", validator_address_alias);
-                    if ctx.wallet.add_address(
+                    if let Some(new_alias) = ctx.wallet.add_address(
                         rewards_address_alias.clone(),
                         rewards_address.clone(),
                     ) {
                         println!(
                             "Added alias {} for address {}.",
-                            rewards_address_alias,
+                            new_alias,
                             rewards_address.encode()
                         );
                     }
@@ -717,49 +717,38 @@ async fn save_initialized_accounts(
         let wallet = &mut ctx.wallet;
         for (ix, address) in initialized_accounts.iter().enumerate() {
             let encoded = address.encode();
-            let mut added = false;
-            while !added {
-                let alias: Cow<str> = match &args.initialized_account_alias {
-                    Some(initialized_account_alias) => {
-                        if len == 1 {
-                            // If there's only one account, use the
-                            // alias as is
-                            initialized_account_alias.into()
-                        } else {
-                            // If there're multiple accounts, use
-                            // the alias as prefix, followed by
-                            // index number
-                            format!("{}{}", initialized_account_alias, ix)
-                                .into()
-                        }
+            let alias: Cow<str> = match &args.initialized_account_alias {
+                Some(initialized_account_alias) => {
+                    if len == 1 {
+                        // If there's only one account, use the
+                        // alias as is
+                        initialized_account_alias.into()
+                    } else {
+                        // If there're multiple accounts, use
+                        // the alias as prefix, followed by
+                        // index number
+                        format!("{}{}", initialized_account_alias, ix).into()
                     }
-                    None => {
-                        print!("Choose an alias for {}: ", encoded);
-                        io::stdout().flush().await.unwrap();
-                        let mut alias = String::new();
-                        io::stdin().read_line(&mut alias).await.unwrap();
-                        alias.trim().to_owned().into()
-                    }
-                };
-                added = if alias.is_empty() {
-                    println!(
-                        "Empty alias given, using {} as the alias.",
-                        encoded
-                    );
-                    wallet.add_address(encoded.clone(), address.clone())
-                } else {
-                    let alias = alias.into_owned();
-                    let added =
-                        wallet.add_address(alias.clone(), address.clone());
-                    if added {
-                        println!(
-                            "Added alias {} for address {}.",
-                            alias, encoded
-                        );
-                    }
-                    added
                 }
-            }
+                None => {
+                    print!("Choose an alias for {}: ", encoded);
+                    io::stdout().flush().await.unwrap();
+                    let mut alias = String::new();
+                    io::stdin().read_line(&mut alias).await.unwrap();
+                    alias.trim().to_owned().into()
+                }
+            };
+            let alias = alias.into_owned();
+            let added = wallet.add_address(alias.clone(), address.clone());
+            match added {
+                Some(new_alias) if new_alias != encoded => {
+                    println!(
+                        "Added alias {} for address {}.",
+                        new_alias, encoded
+                    );
+                }
+                _ => println!("No alias added for address {}.", encoded),
+            };
         }
         if !args.dry_run {
             wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
