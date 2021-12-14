@@ -121,7 +121,6 @@ reset-ledger-abci-plus-plus:
 	# runs the node
 	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger reset
 
-
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
@@ -218,6 +217,9 @@ opt-wasm:
 
 clean-wasm-scripts:
 	make -C $(wasms) clean
+
+publish-wasm:
+	aws s3 sync wasm s3://heliax-anoma-wasm-v1 --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*"
 
 dev-deps:
 	$(rustup) toolchain install $(nightly)
