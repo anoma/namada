@@ -63,9 +63,11 @@ table_row = '|[{0}]({advisory_db}{0})|{1}|{2}|{3}|'
 
 table = [table_header]
 
-command = ['cargo', 'audit', '--json']
+project_root = os.path.dirname(os.path.dirname(__file__))
+cwd = os.path.join(project_root, '../')
 
-p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd="/usr/local/rust/project")
+command = ['cargo', 'audit', '--json']
+p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd=cwd)
 output = p.stdout.read()
 retcode = p.wait()
 
