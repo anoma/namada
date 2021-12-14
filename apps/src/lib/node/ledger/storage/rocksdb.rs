@@ -14,7 +14,7 @@
 //!   - `subspace`: any byte data associated with accounts
 //!   - `address_gen`: established address generator
 
-use std::cmp::Ordering;
+use std::cmp::{self, Ordering};
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
@@ -60,7 +60,7 @@ pub fn open(path: impl AsRef<Path>) -> Result<RocksDB> {
             }
         } else {
             // If not set, default to quarter of logical CPUs count
-            logical_cores / 4
+            cmp::max(1, logical_cores / 4)
         };
     tracing::debug!(
         "Using {} compactions threads for RocksDB.",
