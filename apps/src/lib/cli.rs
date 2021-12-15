@@ -142,6 +142,7 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxInitValidator::def().display_order(1))
+                .subcommand(TxResult::def().display_order(1))
                 // PoS transactions
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
@@ -165,6 +166,7 @@ pub mod cmds {
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
+            let tx_result = Self::parse_with_ctx(matches, TxResult);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
             let bond = Self::parse_with_ctx(matches, Bond);
@@ -184,6 +186,7 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(tx_init_account)
                 .or(tx_init_validator)
+                .or(tx_result)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -232,6 +235,7 @@ pub mod cmds {
         // Ledger cmds
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
+        TxResult(TxResult),
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
@@ -670,6 +674,25 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Generate the default configuration file.")
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxResult(pub args::TxResult);
+
+    impl SubCmd for TxResult {
+        const CMD: &'static str = "tx-result";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxResult(args::TxResult::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Get the result associated with a transaction.")
+                .add_args::<args::TxResult>()
         }
     }
 
@@ -1173,6 +1196,7 @@ pub mod args {
     const TOPIC: Arg<String> = arg("topic");
     const TOPICS: ArgMulti<String> = TOPIC.multi();
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
+    const TX_HASH: Arg<String> = arg("tx-hash");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     const VALIDATOR: Arg<WalletAddress> = arg("validator");
@@ -1232,6 +1256,31 @@ pub mod args {
                     "The mode in which to run Anoma. Options are \n\t * \
                      Validator (default)\n\t * Full\n\t * Seed",
                 ))
+        }
+    }
+
+    /// Transaction associated results arguments
+    #[derive(Clone, Debug)]
+    pub struct TxResult {
+        /// Common query args
+        pub query: Query,
+        /// Hash of transaction to lookup
+        pub tx_hash: String,
+    }
+
+    impl Args for TxResult {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let tx_hash = TX_HASH.parse(matches);
+            Self { query, tx_hash }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                TX_HASH
+                    .def()
+                    .about("The hash of the transaction being looked up."),
+            )
         }
     }
 

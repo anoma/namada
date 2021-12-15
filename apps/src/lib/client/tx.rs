@@ -6,7 +6,8 @@ use anoma::proto::Tx;
 use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::transaction::{
-    pos, Fee, InitAccount, InitValidator, UpdateVp, WrapperTx,
+    pos, process_tx, Fee, InitAccount, InitValidator, TxType, UpdateVp,
+    WrapperTx,
 };
 use anoma::types::{address, token};
 use anoma::{ledger, vm};
@@ -21,11 +22,13 @@ use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::{EventType, Query};
 #[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{Client, HttpClient};
+use tendermint_rpc::{Client, HttpClient, SubscriptionClient, WebSocketClient};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::query::{EventType, Query};
 #[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{Client, HttpClient};
+use tendermint_rpc_abci::{
+    Client, HttpClient, SubscriptionClient, WebSocketClient,
+};
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
@@ -334,6 +337,59 @@ pub async fn submit_init_validator(
     } else {
         println!("Transaction dry run. No addresses have been saved.")
     }
+}
+
+pub async fn lookup_result(ctx: Context, args: args::TxResult) {
+    // Connect to the Tendermint server holding the transactions
+    let (client, driver) =
+        WebSocketClient::new(args.query.ledger_address.clone())
+            .await
+            .unwrap_or_else(|x| {
+                eprintln!("{}", x);
+                safe_exit(1)
+            });
+    let driver_handle = tokio::spawn(async move { driver.run().await });
+    // Parse hash string and use it to lookup transaction
+    let parsed_tx_hash = args.tx_hash.parse().unwrap_or_else(|x| {
+        eprintln!("{}", x);
+        safe_exit(1)
+    });
+    let response = client.tx(parsed_tx_hash, true).await.unwrap_or_else(|x| {
+        eprintln!("{}", x);
+        safe_exit(1)
+    });
+    // Partially parse the raw transaction bytes
+    let response_tx = Tx::try_from(response.tx.as_bytes())
+        .expect("Unable to deserialize raw transaction bytes");
+    // Complete the parsing of transaction bytes
+    let response_txtype = process_tx(response_tx)
+        .expect("Unable to deserialize raw transaction bytes");
+    if let TxType::Wrapper(wrapper_tx) = response_txtype {
+        let result = TxResponse {
+            info: response.tx_result.info.to_string(),
+            height: response.height.to_string(),
+            hash: response.hash.to_string(),
+            code: response.tx_result.code.value().to_string(),
+            gas_used: response.tx_result.gas_used.to_string(),
+            initialized_accounts: vec![],
+        };
+        println!("Epoch: {:?}", wrapper_tx.epoch.to_string());
+        println!("Hash: {:?}", wrapper_tx.tx_hash.to_string());
+        println!("Result: {:?}", result);
+    } else {
+        eprintln!("Retrieved transaction was expected to be a wrapper");
+        safe_exit(1)
+    }
+    // Signal to the driver to terminate.
+    client.close().unwrap_or_else(|x| {
+        eprintln!("{}", x);
+        safe_exit(1)
+    });
+    // Await the driver's termination to ensure proper connection closure.
+    let _ = driver_handle.await.unwrap_or_else(|x| {
+        eprintln!("{}", x);
+        safe_exit(1)
+    });
 }
 
 pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
