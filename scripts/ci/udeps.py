@@ -70,8 +70,8 @@ table = [table_header]
 nightly_version = get_nightly_from_file()
 command = ['cargo', '+{}'.format(nightly_version), 'udeps', '--locked', '--output', 'json']
 
-project_root = os.path.dirname(os.path.dirname(__file__))
-cwd = os.path.join(project_root, '../')
+current_dir = os.path.dirname(os.path.dirname(__file__))
+cwd = os.path.join(current_dir, '../')
 
 p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd=cwd)
 output = p.stdout.read()

@@ -63,8 +63,8 @@ table_row = '|[{0}]({advisory_db}{0})|{1}|{2}|{3}|'
 
 table = [table_header]
 
-project_root = os.path.dirname(os.path.dirname(__file__))
-cwd = os.path.join(project_root, '../')
+current_dir = os.path.dirname(os.path.dirname(__file__))
+cwd = os.path.join(current_dir, '../')
 
 command = ['cargo', 'audit', '--json']
 p = subprocess.Popen(command, stdout=subprocess.PIPE, cwd=cwd)
