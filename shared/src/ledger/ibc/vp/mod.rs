@@ -284,17 +284,41 @@ mod tests {
     #[cfg(not(feature = "ABCI"))]
     use ibc::core::ics02_client::client_type::ClientType;
     #[cfg(not(feature = "ABCI"))]
-    use ibc::core::ics02_client::header::AnyHeader;
+    use ibc::core::ics02_client::header::{AnyHeader, Header};
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
     #[cfg(not(feature = "ABCI"))]
     use ibc::core::ics03_connection::connection::{
         ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
     };
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
     #[cfg(not(feature = "ABCI"))]
     use ibc::core::ics03_connection::version::Version;
     #[cfg(not(feature = "ABCI"))]
     use ibc::core::ics04_channel::channel::{
         ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
     };
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
     #[cfg(not(feature = "ABCI"))]
     use ibc::core::ics04_channel::packet::{Packet, Sequence};
     #[cfg(not(feature = "ABCI"))]
@@ -310,7 +334,13 @@ mod tests {
     #[cfg(not(feature = "ABCI"))]
     use ibc::mock::header::MockHeader;
     #[cfg(not(feature = "ABCI"))]
+    use ibc::proofs::{ConsensusProof, Proofs};
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::signer::Signer;
+    #[cfg(not(feature = "ABCI"))]
     use ibc::timestamp::Timestamp;
+    #[cfg(not(feature = "ABCI"))]
+    use ibc::tx_msg::Msg;
     #[cfg(not(feature = "ABCI"))]
     use ibc::Height;
     #[cfg(feature = "ABCI")]
@@ -320,17 +350,41 @@ mod tests {
     #[cfg(feature = "ABCI")]
     use ibc_abci::core::ics02_client::client_type::ClientType;
     #[cfg(feature = "ABCI")]
-    use ibc_abci::core::ics02_client::header::AnyHeader;
+    use ibc_abci::core::ics02_client::header::Header;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
     #[cfg(feature = "ABCI")]
     use ibc_abci::core::ics03_connection::connection::{
         ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
     };
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
     #[cfg(feature = "ABCI")]
     use ibc_abci::core::ics03_connection::version::Version;
     #[cfg(feature = "ABCI")]
     use ibc_abci::core::ics04_channel::channel::{
         ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
     };
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
     #[cfg(feature = "ABCI")]
     use ibc_abci::core::ics04_channel::packet::{Packet, Sequence};
     #[cfg(feature = "ABCI")]
@@ -346,9 +400,16 @@ mod tests {
     #[cfg(feature = "ABCI")]
     use ibc_abci::mock::header::MockHeader;
     #[cfg(feature = "ABCI")]
+    use ibc_abci::proofs::{ConsensusProof, Proofs};
+    #[cfg(feature = "ABCI")]
+    use ibc_abci::signer::Signer;
+    #[cfg(feature = "ABCI")]
     use ibc_abci::timestamp::Timestamp;
     #[cfg(feature = "ABCI")]
+    use ibc_abci::tx_msg::Msg;
+    #[cfg(feature = "ABCI")]
     use ibc_abci::Height;
+    use prost::Message;
     use sha2::Digest;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::account::Id as TmAccountId;
@@ -378,12 +439,12 @@ mod tests {
     use tendermint_stable::time::Time as TmTime;
 
     use super::super::handler::{
-        make_create_client_event, make_open_ack_channel_event,
+        init_connection, make_create_client_event, make_open_ack_channel_event,
         make_open_ack_connection_event, make_open_confirm_channel_event,
         make_open_confirm_connection_event, make_open_init_channel_event,
         make_open_init_connection_event, make_open_try_channel_event,
         make_open_try_connection_event, make_send_packet_event,
-        make_update_client_event,
+        make_update_client_event, try_connection,
     };
     use super::super::storage::{
         ack_key, capability_key, channel_key, client_state_key,
@@ -396,13 +457,7 @@ mod tests {
     use crate::ledger::storage::testing::TestStorage;
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
-    use crate::types::ibc::data::{
-        ChannelOpenAckData, ChannelOpenConfirmData, ChannelOpenInitData,
-        ChannelOpenTryData, ClientCreationData, ClientUpdateData,
-        ConnectionOpenAckData, ConnectionOpenConfirmData,
-        ConnectionOpenInitData, ConnectionOpenTryData, PacketAckData,
-        PacketReceiptData, PacketSendData,
-    };
+    use crate::types::ibc::data::PacketSendData;
     use crate::types::storage::KeySeg;
     use crate::vm::wasm;
 
@@ -600,12 +655,17 @@ mod tests {
         };
         let client_state = MockClientState(header).wrap_any();
         let consensus_state = MockConsensusState::new(header).wrap_any();
-        let data = ClientCreationData::new(client_state, consensus_state);
-        let event = make_create_client_event(&get_client_id(), &data);
+        let msg = MsgCreateAnyClient {
+            client_state,
+            consensus_state,
+            signer: Signer::new("account0"),
+        };
+        let event = make_create_client_event(&get_client_id(), &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -668,11 +728,11 @@ mod tests {
             height,
             timestamp: Timestamp::now(),
         };
-        let data = ClientUpdateData::new(
-            client_id.clone(),
-            vec![AnyHeader::from(header)],
-        );
-
+        let msg = MsgUpdateAnyClient {
+            client_id: client_id.clone(),
+            header: header.wrap_any(),
+            signer: Signer::new("account0"),
+        };
         let client_state = MockClientState(header).wrap_any();
         let bytes = client_state.try_to_vec().expect("encoding failed");
         write_log
@@ -684,11 +744,12 @@ mod tests {
         write_log
             .write(&consensus_key, bytes)
             .expect("write failed");
-        let event = make_update_client_event(&client_id, &data);
+        let event = make_update_client_event(&client_id, &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -713,25 +774,27 @@ mod tests {
         let (mut storage, mut write_log) = insert_init_states();
         write_log.commit_block(&mut storage).expect("commit failed");
 
-        // prepare data
-        let data = ConnectionOpenInitData::new(
-            get_client_id(),
-            get_conn_counterparty(),
-            Version::default(),
-            Duration::new(100, 0),
-        );
+        // prepare a message
+        let msg = MsgConnectionOpenInit {
+            client_id: get_client_id(),
+            counterparty: get_conn_counterparty(),
+            version: Version::default(),
+            delay_period: Duration::new(100, 0),
+            signer: Signer::new("account0"),
+        };
 
         // insert an INIT connection
         let conn_id = get_connection_id();
         let conn_key = connection_key(&conn_id);
-        let conn = data.connection();
+        let conn = init_connection(&msg);
         let bytes = conn.try_to_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
-        let event = make_open_init_connection_event(&conn_id, &data);
+        let event = make_open_init_connection_event(&conn_id, &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -757,21 +820,23 @@ mod tests {
         let mut write_log = WriteLog::default();
 
         // prepare data
-        let data = ConnectionOpenInitData::new(
-            get_client_id(),
-            get_conn_counterparty(),
-            Version::default(),
-            Duration::new(100, 0),
-        );
+        let msg = MsgConnectionOpenInit {
+            client_id: get_client_id(),
+            counterparty: get_conn_counterparty(),
+            version: Version::default(),
+            delay_period: Duration::new(100, 0),
+            signer: Signer::new("account0"),
+        };
 
         // insert an Init connection
         let conn_key = connection_key(&get_connection_id());
-        let conn = data.connection();
+        let conn = init_connection(&msg);
         let bytes = conn.try_to_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -808,30 +873,40 @@ mod tests {
         let client_state = MockClientState(header).wrap_any();
         let proof_conn = CommitmentProofBytes::from(vec![0]);
         let proof_client = CommitmentProofBytes::from(vec![0]);
-        let proof_consensus = CommitmentProofBytes::from(vec![0]);
-        let data = ConnectionOpenTryData::new(
-            get_client_id(),
-            client_state,
-            get_conn_counterparty(),
-            vec![Version::default()],
-            height,
+        let proof_consensus =
+            ConsensusProof::new(CommitmentProofBytes::from(vec![0]), height)
+                .unwrap();
+        let proofs = Proofs::new(
             proof_conn,
-            proof_client,
-            proof_consensus,
-            Duration::new(100, 0),
-        );
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            height,
+        )
+        .unwrap();
+        let msg = MsgConnectionOpenTry {
+            previous_connection_id: None,
+            client_id: get_client_id(),
+            client_state: Some(client_state),
+            counterparty: get_conn_counterparty(),
+            counterparty_versions: vec![Version::default()],
+            proofs,
+            delay_period: Duration::new(100, 0),
+            signer: Signer::new("account0"),
+        };
 
         // insert a TryOpen connection
         let conn_id = get_connection_id();
         let conn_key = connection_key(&conn_id);
-        let conn = data.connection();
+        let conn = try_connection(&msg);
         let bytes = conn.try_to_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
-        let event = make_open_try_connection_event(&conn_id, &data);
+        let event = make_open_try_connection_event(&conn_id, &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -876,22 +951,34 @@ mod tests {
         let counterparty = get_conn_counterparty();
         let proof_conn = CommitmentProofBytes::from(vec![0]);
         let proof_client = CommitmentProofBytes::from(vec![0]);
-        let proof_consensus = CommitmentProofBytes::from(vec![0]);
-        let tx_code = vec![];
-        let data = ConnectionOpenAckData::new(
-            get_connection_id(),
-            counterparty.connection_id().unwrap().clone(),
-            client_state,
-            height,
+        let proof_consensus =
+            ConsensusProof::new(CommitmentProofBytes::from(vec![0]), height)
+                .unwrap();
+        let proofs = Proofs::new(
             proof_conn,
-            proof_client,
-            proof_consensus,
-            Version::default(),
-        );
-        let event = make_open_ack_connection_event(&data);
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            height,
+        )
+        .unwrap();
+        let tx_code = vec![];
+        let msg = MsgConnectionOpenAck {
+            connection_id: get_connection_id(),
+            counterparty_connection_id: counterparty
+                .connection_id()
+                .unwrap()
+                .clone(),
+            client_state: Some(client_state),
+            proofs,
+            version: Version::default(),
+            signer: Signer::new("account0"),
+        };
+        let event = make_open_ack_connection_event(&msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -929,19 +1016,28 @@ mod tests {
         let height = Height::new(1, 10);
         let proof_conn = CommitmentProofBytes::from(vec![0]);
         let proof_client = CommitmentProofBytes::from(vec![0]);
-        let proof_consensus = CommitmentProofBytes::from(vec![0]);
-        let tx_code = vec![];
-        let data = ConnectionOpenConfirmData::new(
-            get_connection_id(),
-            height,
+        let proof_consensus =
+            ConsensusProof::new(CommitmentProofBytes::from(vec![0]), height)
+                .unwrap();
+        let proofs = Proofs::new(
             proof_conn,
-            proof_client,
-            proof_consensus,
-        );
-        let event = make_open_confirm_connection_event(&data);
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            height,
+        )
+        .unwrap();
+        let tx_code = vec![];
+        let msg = MsgConnectionOpenConfirm {
+            connection_id: get_connection_id(),
+            proofs,
+            signer: Signer::new("account0"),
+        };
+        let event = make_open_confirm_connection_event(&msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -971,25 +1067,24 @@ mod tests {
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // prepare data
-        let data = ChannelOpenInitData::new(
-            get_port_id(),
-            Order::Ordered,
-            get_channel_counterparty(),
-            vec![get_connection_id()],
-            Order::Ordered.to_string(),
-        );
+        let channel = get_channel(ChanState::Init, Order::Ordered);
+        let msg = MsgChannelOpenInit {
+            port_id: get_port_id(),
+            channel: channel.clone(),
+            signer: Signer::new("account0"),
+        };
 
         // insert an Init channel
         set_port(&mut write_log, 0);
         let channel_key = channel_key(&get_port_channel_id());
-        let channel = data.channel();
         let bytes = channel.try_to_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_init_channel_event(&get_channel_id(), &data);
+        let event = make_open_init_channel_event(&get_channel_id(), &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1019,33 +1114,41 @@ mod tests {
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // prepare data
+        let height = Height::new(1, 10);
         let proof_channel = CommitmentProofBytes::from(vec![0]);
         let proof_client = CommitmentProofBytes::from(vec![0]);
-        let proof_consensus = CommitmentProofBytes::from(vec![0]);
-        let data = ChannelOpenTryData::new(
-            get_port_id(),
-            Order::Ordered,
-            get_channel_counterparty(),
-            vec![get_connection_id()],
-            Order::Ordered.to_string(),
-            Order::Ordered.to_string(),
-            Height::new(1, 10),
+        let proof_consensus =
+            ConsensusProof::new(CommitmentProofBytes::from(vec![0]), height)
+                .unwrap();
+        let proofs = Proofs::new(
             proof_channel,
-            proof_client,
-            proof_consensus,
-        );
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            height,
+        )
+        .unwrap();
+        let channel = get_channel(ChanState::TryOpen, Order::Ordered);
+        let msg = MsgChannelOpenTry {
+            port_id: get_port_id(),
+            previous_channel_id: None,
+            channel: channel.clone(),
+            counterparty_version: Order::Ordered.to_string(),
+            proofs,
+            signer: Signer::new("account0"),
+        };
 
         // insert a TryOpen channel
         set_port(&mut write_log, 0);
         let channel_key = channel_key(&get_port_channel_id());
-        let channel = data.channel();
         let bytes = channel.try_to_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_try_channel_event(&get_channel_id(), &data);
+        let event = make_open_try_channel_event(&get_channel_id(), &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1082,29 +1185,42 @@ mod tests {
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // prepare data
+        let height = Height::new(1, 10);
         let proof_channel = CommitmentProofBytes::from(vec![0]);
         let proof_client = CommitmentProofBytes::from(vec![0]);
-        let proof_consensus = CommitmentProofBytes::from(vec![0]);
-        let data = ChannelOpenAckData::new(
-            get_port_id(),
-            get_channel_id(),
-            get_channel_counterparty().channel_id().unwrap().clone(),
-            Order::Ordered.to_string(),
-            Height::new(1, 10),
+        let proof_consensus =
+            ConsensusProof::new(CommitmentProofBytes::from(vec![0]), height)
+                .unwrap();
+        let proofs = Proofs::new(
             proof_channel,
-            proof_client,
-            proof_consensus,
-        );
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            height,
+        )
+        .unwrap();
+        let msg = MsgChannelOpenAck {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            counterparty_channel_id: get_channel_counterparty()
+                .channel_id()
+                .unwrap()
+                .clone(),
+            counterparty_version: Order::Ordered.to_string(),
+            proofs,
+            signer: Signer::new("account0"),
+        };
 
         // update the channel to Open
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.try_to_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_ack_channel_event(&data);
+        let event = make_open_ack_channel_event(&msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1141,27 +1257,37 @@ mod tests {
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // prepare data
+        let height = Height::new(1, 10);
         let proof_channel = CommitmentProofBytes::from(vec![0]);
         let proof_client = CommitmentProofBytes::from(vec![0]);
-        let proof_consensus = CommitmentProofBytes::from(vec![0]);
-        let data = ChannelOpenConfirmData::new(
-            get_port_id(),
-            get_channel_id(),
-            Height::new(1, 10),
+        let proof_consensus =
+            ConsensusProof::new(CommitmentProofBytes::from(vec![0]), height)
+                .unwrap();
+        let proofs = Proofs::new(
             proof_channel,
-            proof_client,
-            proof_consensus,
-        );
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            height,
+        )
+        .unwrap();
+        let msg = MsgChannelOpenConfirm {
+            port_id: get_port_id(),
+            channel_id: get_channel_id(),
+            proofs,
+            signer: Signer::new("account0"),
+        };
 
         // update the channel to Open
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.try_to_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_confirm_channel_event(&data);
+        let event = make_open_confirm_channel_event(&msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1337,8 +1463,14 @@ mod tests {
             timeout_timestamp,
         };
         let proof_packet = CommitmentProofBytes::from(vec![0]);
-        let data =
-            PacketReceiptData::new(packet, Height::new(1, 10), proof_packet);
+        let proofs =
+            Proofs::new(proof_packet, None, None, None, Height::new(1, 10))
+                .unwrap();
+        let msg = MsgRecvPacket {
+            packet,
+            proofs,
+            signer: Signer::new("account0"),
+        };
 
         // insert a receipt and an ack
         let key = receipt_key(&get_port_id(), &get_channel_id(), sequence);
@@ -1352,7 +1484,8 @@ mod tests {
         write_log.commit_tx();
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1418,8 +1551,15 @@ mod tests {
         // prepare data
         let ack = "test_ack".try_to_vec().expect("encoding failed");
         let proof_packet = CommitmentProofBytes::from(vec![0]);
-        let data =
-            PacketAckData::new(packet, ack, Height::new(1, 10), proof_packet);
+        let proofs =
+            Proofs::new(proof_packet, None, None, None, Height::new(1, 10))
+                .unwrap();
+        let msg = MsgAcknowledgement {
+            packet,
+            acknowledgement: ack,
+            proofs,
+            signer: Signer::new("account0"),
+        };
 
         // increment the nextSequenceAck
         increment_seq(&mut write_log, &seq_key, sequence);
@@ -1428,7 +1568,8 @@ mod tests {
         write_log.commit_tx();
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1550,22 +1691,28 @@ mod tests {
             timeout_timestamp,
         };
         let proof_packet = CommitmentProofBytes::from(vec![0]);
-        let data =
-            PacketReceiptData::new(packet, Height::new(1, 10), proof_packet);
+        let proofs =
+            Proofs::new(proof_packet, None, None, None, Height::new(1, 10))
+                .unwrap();
+        let msg = MsgRecvPacket {
+            packet,
+            proofs,
+            signer: Signer::new("account0"),
+        };
 
         // insert a receipt and an ack
         let receipt_key = receipt_key(
-            &data.packet.destination_port,
-            &data.packet.destination_channel,
-            data.packet.sequence,
+            &msg.packet.destination_port,
+            &msg.packet.destination_channel,
+            msg.packet.sequence,
         );
         write_log
             .write(&receipt_key, 0_u64.try_to_vec().unwrap())
             .expect("write failed");
         let ack_key = ack_key(
-            &data.packet.destination_port,
-            &data.packet.destination_channel,
-            data.packet.sequence,
+            &msg.packet.destination_port,
+            &msg.packet.destination_channel,
+            msg.packet.sequence,
         );
         write_log
             .write(&ack_key, "test_ack".to_owned().try_to_vec().unwrap())
@@ -1573,7 +1720,8 @@ mod tests {
         write_log.commit_tx();
 
         let tx_code = vec![];
-        let tx_data = data.try_to_vec().expect("encoding failed");
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data.clone()));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =

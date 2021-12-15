@@ -16,7 +16,15 @@ use ibc::core::ics02_client::error::Error as Ics02Error;
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics02_client::height::Height;
 #[cfg(not(feature = "ABCI"))]
+use ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics02_client::msgs::ClientMsg;
+#[cfg(not(feature = "ABCI"))]
 use ibc::core::ics24_host::identifier::ClientId;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics26_routing::msgs::Ics26Envelope;
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics02_client::client_consensus::AnyConsensusState;
 #[cfg(feature = "ABCI")]
@@ -32,7 +40,15 @@ use ibc_abci::core::ics02_client::error::Error as Ics02Error;
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics02_client::height::Height;
 #[cfg(feature = "ABCI")]
+use ibc_abci::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics02_client::msgs::ClientMsg;
+#[cfg(feature = "ABCI")]
 use ibc_abci::core::ics24_host::identifier::ClientId;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics26_routing::msgs::Ics26Envelope;
 use thiserror::Error;
 
 use super::super::handler::{
@@ -44,10 +60,7 @@ use super::super::storage::{
 };
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
-use crate::types::ibc::data::{
-    ClientCreationData, ClientUpdateData, ClientUpgradeData,
-    Error as IbcDataError,
-};
+use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -115,7 +128,8 @@ where
         client_id: &ClientId,
         tx_data: &[u8],
     ) -> Result<()> {
-        let data = ClientCreationData::try_from_slice(tx_data)?;
+        let ibc_msg = IbcMessage::decode(tx_data)?;
+        let msg = ibc_msg.msg_create_any_client()?;
         let client_type = self.client_type(client_id).map_err(|_| {
             Error::InvalidClient(format!(
                 "The client type doesn't exist: ID {}",
@@ -145,7 +159,7 @@ where
             ));
         }
 
-        let event = make_create_client_event(client_id, &data);
+        let event = make_create_client_event(client_id, &msg);
         self.check_emitted_event(event)
             .map_err(|e| Error::IbcEvent(e.to_string()))
     }
@@ -156,28 +170,30 @@ where
         tx_data: &[u8],
     ) -> Result<()> {
         // check the type of data in tx_data
-        match ClientUpdateData::try_from_slice(tx_data) {
-            Ok(data) => {
-                // "UpdateClient"
-                self.verify_update_client(client_id, data)
+        let ibc_msg = IbcMessage::decode(tx_data)?;
+        match ibc_msg.0 {
+            Ics26Envelope::Ics2Msg(ClientMsg::UpdateClient(msg)) => {
+                self.verify_update_client(client_id, msg)
             }
-            Err(_) => {
-                // "UpgradeClient"
-                let data = ClientUpgradeData::try_from_slice(tx_data)?;
-                self.verify_upgrade_client(client_id, data)
+            Ics26Envelope::Ics2Msg(ClientMsg::UpgradeClient(msg)) => {
+                self.verify_upgrade_client(client_id, msg)
             }
+            _ => Err(Error::InvalidStateChange(format!(
+                "The state change of the client is invalid: ID {}",
+                client_id
+            ))),
         }
     }
 
     fn verify_update_client(
         &self,
         client_id: &ClientId,
-        data: ClientUpdateData,
+        msg: MsgUpdateAnyClient,
     ) -> Result<()> {
-        if data.client_id != *client_id {
+        if msg.client_id != *client_id {
             return Err(Error::InvalidClient(format!(
                 "The client ID is mismatched: {} in the tx data, {} in the key",
-                data.client_id, client_id,
+                msg.client_id, client_id,
             )));
         }
 
@@ -199,44 +215,31 @@ where
             })?;
         // check the prior states
         let prev_client_state = self.client_state_pre(client_id)?;
-        let prev_consensus_state = self.consensus_state_pre(
-            client_id,
-            prev_client_state.latest_height(),
-        )?;
 
         let client = AnyClient::from_client_type(client_state.client_type());
-        let updated = data.headers.iter().try_fold(
-            (prev_client_state, prev_consensus_state),
-            |(new_client_state, _), header| {
-                client.check_header_and_update_state(
-                    self,
-                    client_id.clone(),
-                    new_client_state,
-                    header.clone(),
-                )
-            },
-        );
-        match updated {
-            Ok((new_client_state, new_consensus_state)) => {
-                if new_client_state != client_state
-                    || new_consensus_state != consensus_state
-                {
-                    return Err(Error::InvalidClient(
-                        "The updated client state or consensus state is \
-                         unexpected"
-                            .to_owned(),
-                    ));
-                }
-            }
-            Err(e) => {
-                return Err(Error::InvalidHeader(format!(
+        let (new_client_state, new_consensus_state) = client
+            .check_header_and_update_state(
+                self,
+                client_id.clone(),
+                prev_client_state,
+                msg.header.clone(),
+            )
+            .map_err(|e| {
+                Error::InvalidHeader(format!(
                     "The header is invalid: ID {}, {}",
                     client_id, e,
-                )));
-            }
+                ))
+            })?;
+        if new_client_state != client_state
+            || new_consensus_state != consensus_state
+        {
+            return Err(Error::InvalidClient(
+                "The updated client state or consensus state is unexpected"
+                    .to_owned(),
+            ));
         }
 
-        let event = make_update_client_event(client_id, &data);
+        let event = make_update_client_event(client_id, &msg);
         self.check_emitted_event(event)
             .map_err(|e| Error::IbcEvent(e.to_string()))
     }
@@ -244,12 +247,12 @@ where
     fn verify_upgrade_client(
         &self,
         client_id: &ClientId,
-        data: ClientUpgradeData,
+        msg: MsgUpgradeAnyClient,
     ) -> Result<()> {
-        if data.client_id != *client_id {
+        if msg.client_id != *client_id {
             return Err(Error::InvalidClient(format!(
                 "The client ID is mismatched: {} in the tx data, {} in the key",
-                data.client_id, client_id,
+                msg.client_id, client_id,
             )));
         }
 
@@ -271,10 +274,6 @@ where
             })?;
 
         // verify the given states
-        let client_state = data.client_state.clone();
-        let consensus_state = data.consensus_state.clone();
-        let client_proof = data.proof_client()?;
-        let consensus_proof = data.proof_consensus_state()?;
         let client_type = self.client_type(client_id).map_err(|_| {
             Error::InvalidClient(format!(
                 "The client type doesn't exist: ID {}",
@@ -283,10 +282,10 @@ where
         })?;
         let client = AnyClient::from_client_type(client_type);
         match client.verify_upgrade_and_update_state(
-            &client_state,
-            &consensus_state,
-            client_proof,
-            consensus_proof,
+            &msg.client_state,
+            &msg.consensus_state,
+            msg.proof_upgrade_client.clone(),
+            msg.proof_upgrade_consensus_state.clone(),
         ) {
             Ok((new_client_state, new_consensus_state)) => {
                 if new_client_state != client_state_post
@@ -304,7 +303,7 @@ where
             }
         }
 
-        let event = make_upgrade_client_event(client_id, &data);
+        let event = make_upgrade_client_event(client_id, &msg);
         self.check_emitted_event(event)
             .map_err(|e| Error::IbcEvent(e.to_string()))
     }
@@ -330,28 +329,6 @@ where
         let key = client_counter_key();
         self.read_counter_pre(&key)
             .map_err(|e| Error::InvalidClient(e.to_string()))
-    }
-
-    fn consensus_state_pre(
-        &self,
-        client_id: &ClientId,
-        height: Height,
-    ) -> Result<AnyConsensusState> {
-        let key = consensus_state_key(client_id, height);
-        match self.ctx.read_pre(&key) {
-            Ok(Some(value)) => AnyConsensusState::try_from_slice(&value[..])
-                .map_err(|e| {
-                    Error::InvalidClient(format!(
-                        "Decoding the consensus state failed: ID {}, Height \
-                         {}, {}",
-                        client_id, height, e
-                    ))
-                }),
-            _ => Err(Error::InvalidClient(format!(
-                "The prior consensus state doesn't exist: ID {}, Height {}",
-                client_id, height
-            ))),
-        }
     }
 }
 

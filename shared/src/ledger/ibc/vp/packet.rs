@@ -18,11 +18,15 @@ use ibc::core::ics04_channel::handler::verify::{
     verify_packet_recv_proofs,
 };
 #[cfg(not(feature = "ABCI"))]
+use ibc::core::ics04_channel::msgs::PacketMsg;
+#[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::packet::{Packet, Sequence};
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, PortChannelId, PortId,
 };
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics26_routing::msgs::Ics26Envelope;
 #[cfg(not(feature = "ABCI"))]
 use ibc::proofs::Proofs;
 #[cfg(not(feature = "ABCI"))]
@@ -44,11 +48,15 @@ use ibc_abci::core::ics04_channel::handler::verify::{
     verify_packet_recv_proofs,
 };
 #[cfg(feature = "ABCI")]
+use ibc_abci::core::ics04_channel::msgs::PacketMsg;
+#[cfg(feature = "ABCI")]
 use ibc_abci::core::ics04_channel::packet::{Packet, Sequence};
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics24_host::identifier::{
     ChannelId, ClientId, PortChannelId, PortId,
 };
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics26_routing::msgs::Ics26Envelope;
 #[cfg(feature = "ABCI")]
 use ibc_abci::proofs::Proofs;
 #[cfg(feature = "ABCI")]
@@ -62,8 +70,7 @@ use super::super::storage::{
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::ibc::data::{
-    Error as IbcDataError, PacketAckData, PacketReceiptData, PacketSendData,
-    TimeoutData,
+    Error as IbcDataError, IbcMessage, PacketSendData,
 };
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -160,28 +167,26 @@ where
                 match channel.state() {
                     State::Open => {
                         // "PacketAcknowledgement"
-                        let data = PacketAckData::try_from_slice(tx_data)?;
+                        let ibc_msg = IbcMessage::decode(tx_data)?;
+                        let msg = ibc_msg.msg_acknowledgement()?;
                         let commitment_pre = self
                             .get_packet_commitment_pre(&commitment_key)
                             .map_err(|e| Error::InvalidPacket(e.to_string()))?;
                         self.validate_packet_commitment(
-                            &data.packet,
+                            &msg.packet,
                             commitment_pre,
                         )
                         .map_err(|e| Error::InvalidPacket(e.to_string()))?;
-                        self.validate_ack_packet(
-                            &commitment_key,
-                            &data.packet,
-                        )?;
+                        self.validate_ack_packet(&commitment_key, &msg.packet)?;
                         let port_channel_id = PortChannelId {
                             port_id: commitment_key.0,
                             channel_id: commitment_key.1,
                         };
                         self.verify_ack_proof(
                             &port_channel_id,
-                            &data.packet,
-                            data.ack.clone(),
-                            &data.proofs()?,
+                            &msg.packet,
+                            msg.acknowledgement.clone(),
+                            &msg.proofs,
                         )
                     }
                     State::Closed => {
@@ -211,18 +216,15 @@ where
         {
             StateChange::Created => {
                 let receipt_key = port_channel_sequence_id(key)?;
-                let data = PacketReceiptData::try_from_slice(tx_data)?;
-                let packet = &data.packet;
+                let ibc_msg = IbcMessage::decode(tx_data)?;
+                let msg = ibc_msg.msg_recv_packet()?;
+                let packet = &msg.packet;
                 self.validate_recv_packet(&receipt_key, packet)?;
                 let port_channel_id = PortChannelId {
                     port_id: receipt_key.0,
                     channel_id: receipt_key.1,
                 };
-                self.verify_recv_proof(
-                    &port_channel_id,
-                    packet,
-                    &data.proofs()?,
-                )
+                self.verify_recv_proof(&port_channel_id, packet, &msg.proofs)
             }
             _ => Err(Error::InvalidStateChange(
                 "The state change of the receipt is invalid".to_owned(),
@@ -539,8 +541,22 @@ where
         commitment_key: &(PortId, ChannelId, Sequence),
         tx_data: &[u8],
     ) -> Result<()> {
-        let data = TimeoutData::try_from_slice(tx_data)?;
-        let packet = data.packet.clone();
+        let ibc_msg = IbcMessage::decode(tx_data)?;
+        let (packet, proofs, next_sequence_recv) = match ibc_msg.0 {
+            Ics26Envelope::Ics4PacketMsg(PacketMsg::ToPacket(msg)) => {
+                (msg.packet, msg.proofs, msg.next_sequence_recv)
+            }
+            Ics26Envelope::Ics4PacketMsg(PacketMsg::ToClosePacket(msg)) => {
+                (msg.packet, msg.proofs, msg.next_sequence_recv)
+            }
+            _ => {
+                return Err(Error::InvalidChannel(format!(
+                    "Unexpected message was given for timeout: Port/Channel \
+                     {}/{}",
+                    commitment_key.0, commitment_key.1,
+                )));
+            }
+        };
         // deleted commitment should be for the packet sent from this channel
         let commitment = self
             .get_packet_commitment_pre(commitment_key)
@@ -585,7 +601,7 @@ where
         let client_id = connection.client_id().clone();
 
         // check if the packet actually timed out
-        match self.check_timeout(&client_id, data.proof_height, &packet) {
+        match self.check_timeout(&client_id, proofs.height(), &packet) {
             Ok(()) => {
                 // "TimedoutOnClose" because the packet didn't time out
                 // check that the counterpart channel has been closed
@@ -615,7 +631,7 @@ where
                     &channel,
                     &connection,
                     &expected_channel,
-                    &data.proofs()?,
+                    &proofs,
                 )
                 .map_err(Error::ProofVerificationFailure)?;
             }
@@ -634,7 +650,7 @@ where
                     port_channel_id
                 )));
             }
-            if packet.sequence < data.sequence {
+            if packet.sequence < next_sequence_recv {
                 return Err(Error::InvalidPacket(
                     "The sequence is invalid. The packet might have been \
                      already received"
@@ -645,18 +661,15 @@ where
                 self,
                 client_id,
                 packet,
-                data.sequence,
-                &data.proofs()?,
+                next_sequence_recv,
+                &proofs,
             ) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(Error::ProofVerificationFailure(e)),
             }
         } else {
             match verify_packet_receipt_absence(
-                self,
-                client_id,
-                packet,
-                &data.proofs()?,
+                self, client_id, packet, &proofs,
             ) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(Error::ProofVerificationFailure(e)),
