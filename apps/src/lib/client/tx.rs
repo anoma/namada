@@ -22,12 +22,12 @@ use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::{EventType, Query};
 #[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{Client, HttpClient, SubscriptionClient, WebSocketClient};
+use tendermint_rpc::{Client, HttpClient, SubscriptionClient, WebSocketClient, Order};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::query::{EventType, Query};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::{
-    Client, HttpClient, SubscriptionClient, WebSocketClient,
+    Client, HttpClient, SubscriptionClient, WebSocketClient, Order
 };
 
 use super::{rpc, signing};
@@ -339,6 +339,9 @@ pub async fn submit_init_validator(
     }
 }
 
+/// Lookup the results of applying the specified transaction to the
+/// blockchain.
+
 pub async fn lookup_result(ctx: Context, args: args::TxResult) {
     // Connect to the Tendermint server holding the transactions
     let (client, driver) =
@@ -349,37 +352,50 @@ pub async fn lookup_result(ctx: Context, args: args::TxResult) {
                 safe_exit(1)
             });
     let driver_handle = tokio::spawn(async move { driver.run().await });
-    // Parse hash string and use it to lookup transaction
-    let parsed_tx_hash = args.tx_hash.parse().unwrap_or_else(|x| {
-        eprintln!("{}", x);
-        safe_exit(1)
-    });
-    let response = client.tx(parsed_tx_hash, true).await.unwrap_or_else(|x| {
-        eprintln!("{}", x);
-        safe_exit(1)
-    });
-    // Partially parse the raw transaction bytes
-    let response_tx = Tx::try_from(response.tx.as_bytes())
-        .expect("Unable to deserialize raw transaction bytes");
-    // Complete the parsing of transaction bytes
-    let response_txtype = process_tx(response_tx)
-        .expect("Unable to deserialize raw transaction bytes");
-    if let TxType::Wrapper(wrapper_tx) = response_txtype {
-        let result = TxResponse {
-            info: response.tx_result.info.to_string(),
-            height: response.height.to_string(),
-            hash: response.hash.to_string(),
-            code: response.tx_result.code.value().to_string(),
-            gas_used: response.tx_result.gas_used.to_string(),
-            initialized_accounts: vec![],
-        };
-        println!("Epoch: {:?}", wrapper_tx.epoch.to_string());
-        println!("Hash: {:?}", wrapper_tx.tx_hash.to_string());
-        println!("Result: {:?}", result);
-    } else {
-        eprintln!("Retrieved transaction was expected to be a wrapper");
-        safe_exit(1)
-    }
+    // Find all blocks that apply a transaction with the specified hash
+    let blocks = &client
+        .block_search(
+            Query::default()
+                .and_eq("applied.hash", args.tx_hash.as_str()),
+            1, 255, Order::Ascending)
+        .await
+        .expect("Unable to query for transaction with given hash")
+        .blocks;
+    // Get the block results corresponding to a block to which
+    // the specified transaction belongs
+    let block = &blocks.get(0)
+        .expect("Unable to find a block applying the given transaction")
+        .block;
+    let response_block_results = client.block_results(block.header.height)
+        .await
+        .expect("Unable to retrieve block containing transaction");
+    // Search for the event where the specified transaction is
+    // applied to the blockchain
+    let apply_event_opt = response_block_results.end_block_events
+        .and_then(|events| (&events)
+                  .into_iter()
+                  .find(|event| event.type_str == "applied" &&
+                        (&event.attributes)
+                        .into_iter().any(|tag|
+                                         tag.key.as_ref() == "hash" &&
+                                         tag.value.as_ref() == args.tx_hash))
+                  .cloned());
+    let apply_event = apply_event_opt
+        .expect("Unable to find the event corresponding to the specified transaction");
+    // Reformat the event attributes so as to ease value extraction
+    let event_map:std::collections::HashMap<&str, &str> = (&apply_event.attributes)
+        .into_iter()
+        .map(|tag| (tag.key.as_ref(), tag.value.as_ref())).collect();
+    // Summarize the transaction results that we were searching for
+    let result = TxResponse {
+        info: event_map["info"].to_string(),
+        height: event_map["height"].to_string(),
+        hash: event_map["hash"].to_string(),
+        code: event_map["code"].to_string(),
+        gas_used: event_map["gas_used"].to_string(),
+        initialized_accounts: vec![],
+    };
+    println!("Result: {:?}", result);
     // Signal to the driver to terminate.
     client.close().unwrap_or_else(|x| {
         eprintln!("{}", x);
