@@ -28,6 +28,8 @@ use ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
 #[cfg(not(feature = "ABCI"))]
+use ibc::core::ics02_client::msgs::ClientMsg;
+#[cfg(not(feature = "ABCI"))]
 use ibc::core::ics03_connection::connection::{
     ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
 };
@@ -46,8 +48,10 @@ use ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
 #[cfg(not(feature = "ABCI"))]
+use ibc::core::ics03_connection::msgs::ConnectionMsg;
+#[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::channel::{
-    ChannelEnd, Counterparty as ChanCounterparty, State as ChanState,
+    ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::events::{
@@ -57,6 +61,8 @@ use ibc::core::ics04_channel::events::{
     OpenInit as ChanOpenInit, OpenTry as ChanOpenTry, SendPacket,
     TimeoutPacket, WriteAcknowledgement,
 };
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
 #[cfg(not(feature = "ABCI"))]
@@ -70,6 +76,14 @@ use ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
 #[cfg(not(feature = "ABCI"))]
+use ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
+#[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::packet::{Packet, Sequence};
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
@@ -79,6 +93,8 @@ use ibc::core::ics24_host::error::ValidationError as Ics24Error;
 use ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics26_routing::msgs::Ics26Envelope;
 #[cfg(not(feature = "ABCI"))]
 use ibc::events::IbcEvent;
 #[cfg(not(feature = "ABCI"))]
@@ -108,6 +124,8 @@ use ibc_abci::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
 #[cfg(feature = "ABCI")]
+use ibc_abci::core::ics02_client::msgs::ClientMsg;
+#[cfg(feature = "ABCI")]
 use ibc_abci::core::ics03_connection::connection::{
     ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
 };
@@ -126,8 +144,10 @@ use ibc_abci::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenIni
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
 #[cfg(feature = "ABCI")]
+use ibc_abci::core::ics03_connection::msgs::ConnectionMsg;
+#[cfg(feature = "ABCI")]
 use ibc_abci::core::ics04_channel::channel::{
-    ChannelEnd, Counterparty as ChanCounterparty, State as ChanState,
+    ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics04_channel::events::{
@@ -137,6 +157,8 @@ use ibc_abci::core::ics04_channel::events::{
     OpenInit as ChanOpenInit, OpenTry as ChanOpenTry, SendPacket,
     TimeoutPacket, WriteAcknowledgement,
 };
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
 #[cfg(feature = "ABCI")]
@@ -150,6 +172,14 @@ use ibc_abci::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
 #[cfg(feature = "ABCI")]
+use ibc_abci::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics04_channel::msgs::timeout::MsgTimeout;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
+#[cfg(feature = "ABCI")]
 use ibc_abci::core::ics04_channel::packet::{Packet, Sequence};
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics23_commitment::commitment::CommitmentPrefix;
@@ -160,14 +190,31 @@ use ibc_abci::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 #[cfg(feature = "ABCI")]
+use ibc_abci::core::ics26_routing::msgs::Ics26Envelope;
+#[cfg(feature = "ABCI")]
 use ibc_abci::events::IbcEvent;
 #[cfg(feature = "ABCI")]
 use ibc_abci::mock::client_state::{MockClientState, MockConsensusState};
+#[cfg(not(feature = "ABCI"))]
+use ibc_proto::ibc::core::channel::v1::acknowledgement::Response;
+#[cfg(not(feature = "ABCI"))]
+use ibc_proto::ibc::core::channel::v1::Acknowledgement;
+#[cfg(feature = "ABCI")]
+use ibc_proto_abci::ibc::core::channel::v1::acknowledgement::Response;
+#[cfg(feature = "ABCI")]
+use ibc_proto_abci::ibc::core::channel::v1::Acknowledgement;
+use prost::Message;
 use sha2::Digest;
+#[cfg(not(feature = "ABCI"))]
+use tendermint_proto::Protobuf;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::Protobuf;
 use thiserror::Error;
 
+use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::KeySeg;
+use crate::types::ibc::data::{IbcMessage, PacketSendData};
+use crate::types::storage::{Key, KeySeg};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -182,6 +229,494 @@ pub enum Error {
 
 /// for handling IBC modules
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// IBC trait to be implemented in integration that can read and write
+pub trait IbcActions {
+    /// Read IBC-related data
+    fn read_ibc_data(&self, key: &Key) -> Vec<u8>;
+
+    /// Write IBC-related data
+    fn write_ibc_data(&self, key: &Key, data: impl AsRef<[u8]>);
+
+    /// Delete IBC-related data
+    fn delete_ibc_data(&self, key: &Key);
+
+    /// Emit an IBC event
+    fn emit_ibc_event(&self, event: IbcEvent);
+
+    /// dispatch according to ICS26 routing
+    fn dispatch(&self, tx_data: &[u8]) {
+        let ibc_msg =
+            IbcMessage::decode(tx_data).expect("decoding IBC message failed");
+        match &ibc_msg.0 {
+            Ics26Envelope::Ics2Msg(ics02_msg) => match ics02_msg {
+                ClientMsg::CreateClient(msg) => self.create_client(msg),
+                ClientMsg::UpdateClient(msg) => self.update_client(msg),
+                ClientMsg::Misbehaviour(_msg) => todo!(),
+                ClientMsg::UpgradeClient(msg) => self.upgrade_client(msg),
+            },
+            Ics26Envelope::Ics3Msg(ics03_msg) => match ics03_msg {
+                ConnectionMsg::ConnectionOpenInit(msg) => {
+                    self.init_connection(msg)
+                }
+                ConnectionMsg::ConnectionOpenTry(msg) => {
+                    self.try_connection(msg)
+                }
+                ConnectionMsg::ConnectionOpenAck(msg) => {
+                    self.ack_connection(msg)
+                }
+                ConnectionMsg::ConnectionOpenConfirm(msg) => {
+                    self.confirm_connection(msg)
+                }
+            },
+            Ics26Envelope::Ics4ChannelMsg(ics04_msg) => match ics04_msg {
+                ChannelMsg::ChannelOpenInit(msg) => self.init_channel(msg),
+                ChannelMsg::ChannelOpenTry(msg) => self.try_channel(msg),
+                ChannelMsg::ChannelOpenAck(msg) => self.ack_channel(msg),
+                ChannelMsg::ChannelOpenConfirm(msg) => {
+                    self.confirm_channel(msg)
+                }
+                ChannelMsg::ChannelCloseInit(msg) => {
+                    self.close_init_channel(msg)
+                }
+                ChannelMsg::ChannelCloseConfirm(msg) => {
+                    self.close_confirm_channel(msg)
+                }
+            },
+            Ics26Envelope::Ics4PacketMsg(ics04_msg) => match ics04_msg {
+                PacketMsg::AckPacket(msg) => self.acknowledge_packet(msg),
+                PacketMsg::RecvPacket(msg) => self.receive_packet(msg),
+                PacketMsg::ToPacket(msg) => self.timeout_packet(msg),
+                PacketMsg::ToClosePacket(msg) => {
+                    self.timeout_on_close_packet(msg)
+                }
+            },
+            Ics26Envelope::Ics20Msg(_ics20_msg) => todo!(),
+        }
+    }
+
+    /// Create a new client
+    fn create_client(&self, msg: &MsgCreateAnyClient) {
+        let counter_key = storage::client_counter_key();
+        let counter = self.get_and_inc_counter(&counter_key);
+        let client_type = msg.client_state.client_type();
+        let client_id = client_id(client_type, counter)
+            .expect("creating ID shouldn't fail");
+        // client type
+        let client_type_key = storage::client_type_key(&client_id);
+        self.write_ibc_data(&client_type_key, client_type.as_str().as_bytes());
+        // client state
+        let client_state_key = storage::client_state_key(&client_id);
+        self.write_ibc_data(
+            &client_state_key,
+            msg.client_state
+                .encode_vec()
+                .expect("encoding shouldn't fail"),
+        );
+        // consensus state
+        let height = msg.client_state.latest_height();
+        let consensus_state_key =
+            storage::consensus_state_key(&client_id, height);
+        self.write_ibc_data(
+            &consensus_state_key,
+            msg.consensus_state
+                .encode_vec()
+                .expect("encoding shouldn't fail"),
+        );
+
+        let event = make_create_client_event(&client_id, msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Update a client
+    fn update_client(&self, msg: &MsgUpdateAnyClient) {
+        // get and update the client
+        let client_id = msg.client_id.clone();
+        let client_state_key = storage::client_state_key(&client_id);
+        let client_state =
+            AnyClientState::decode_vec(&self.read_ibc_data(&client_state_key))
+                .expect("cannot get the client state");
+        let (new_client_state, new_consensus_state) =
+            update_client(client_state, msg.header.clone())
+                .expect("updating a client failed");
+
+        let height = new_client_state.latest_height();
+        self.write_ibc_data(
+            &client_state_key,
+            new_client_state
+                .encode_vec()
+                .expect("encoding shouldn't fail"),
+        );
+        let consensus_state_key =
+            storage::consensus_state_key(&client_id, height);
+        self.write_ibc_data(
+            &consensus_state_key,
+            new_consensus_state
+                .encode_vec()
+                .expect("encoding shouldn't fail"),
+        );
+
+        let event = make_update_client_event(&client_id, msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Upgrade a client
+    fn upgrade_client(&self, msg: &MsgUpgradeAnyClient) {
+        let client_state_key = storage::client_state_key(&msg.client_id);
+        let height = msg.client_state.latest_height();
+        let consensus_state_key =
+            storage::consensus_state_key(&msg.client_id, height);
+        self.write_ibc_data(
+            &client_state_key,
+            msg.client_state
+                .encode_vec()
+                .expect("encoding shouldn't fail"),
+        );
+        self.write_ibc_data(
+            &consensus_state_key,
+            msg.consensus_state
+                .encode_vec()
+                .expect("encoding shouldn't fail"),
+        );
+
+        let event = make_upgrade_client_event(&msg.client_id, msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Initialize a connection for ConnectionOpenInit
+    fn init_connection(&self, msg: &MsgConnectionOpenInit) {
+        let counter_key = storage::connection_counter_key();
+        let counter = self.get_and_inc_counter(&counter_key);
+        // new connection
+        let conn_id = connection_id(counter);
+        let conn_key = storage::connection_key(&conn_id);
+        let connection = init_connection(msg);
+        self.write_ibc_data(
+            &conn_key,
+            connection.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_open_init_connection_event(&conn_id, msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Initialize a connection for ConnectionOpenTry
+    fn try_connection(&self, msg: &MsgConnectionOpenTry) {
+        let counter_key = storage::connection_counter_key();
+        let counter = self.get_and_inc_counter(&counter_key);
+        // new connection
+        let conn_id = connection_id(counter);
+        let conn_key = storage::connection_key(&conn_id);
+        let connection = try_connection(msg);
+        self.write_ibc_data(
+            &conn_key,
+            connection.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_open_try_connection_event(&conn_id, msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Open the connection for ConnectionOpenAck
+    fn ack_connection(&self, msg: &MsgConnectionOpenAck) {
+        let conn_key = storage::connection_key(&msg.connection_id);
+        let mut connection =
+            ConnectionEnd::decode_vec(&self.read_ibc_data(&conn_key))
+                .expect("cannot get the connection");
+        open_connection(&mut connection);
+        self.write_ibc_data(
+            &conn_key,
+            connection.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_open_ack_connection_event(msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Open the connection for ConnectionOpenConfirm
+    fn confirm_connection(&self, msg: &MsgConnectionOpenConfirm) {
+        let conn_key = storage::connection_key(&msg.connection_id);
+        let mut connection =
+            ConnectionEnd::decode_vec(&self.read_ibc_data(&conn_key))
+                .expect("cannot get the connection");
+        open_connection(&mut connection);
+        self.write_ibc_data(
+            &conn_key,
+            connection.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_open_confirm_connection_event(msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Initialize a channel for ChannelOpenInit
+    fn init_channel(&self, msg: &MsgChannelOpenInit) {
+        self.bind_port(&msg.port_id);
+        let counter_key = storage::channel_counter_key();
+        let counter = self.get_and_inc_counter(&counter_key);
+        let channel_id = channel_id(counter);
+        let port_channel_id =
+            port_channel_id(msg.port_id.clone(), channel_id.clone());
+        let channel_key = storage::channel_key(&port_channel_id);
+        self.write_ibc_data(
+            &channel_key,
+            msg.channel.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_open_init_channel_event(&channel_id, msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Initialize a channel for ChannelOpenTry
+    fn try_channel(&self, msg: &MsgChannelOpenTry) {
+        self.bind_port(&msg.port_id);
+        let counter_key = storage::channel_counter_key();
+        let counter = self.get_and_inc_counter(&counter_key);
+        let channel_id = channel_id(counter);
+        let port_channel_id =
+            port_channel_id(msg.port_id.clone(), channel_id.clone());
+        let channel_key = storage::channel_key(&port_channel_id);
+        self.write_ibc_data(
+            &channel_key,
+            msg.channel.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_open_try_channel_event(&channel_id, msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Open the channel for ChannelOpenAck
+    fn ack_channel(&self, msg: &MsgChannelOpenAck) {
+        let port_channel_id =
+            port_channel_id(msg.port_id.clone(), msg.channel_id.clone());
+        let channel_key = storage::channel_key(&port_channel_id);
+        let mut channel =
+            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
+                .expect("cannot get the channel");
+        open_channel(&mut channel);
+        self.write_ibc_data(
+            &channel_key,
+            channel.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_open_ack_channel_event(msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Open the channel for ChannelOpenConfirm
+    fn confirm_channel(&self, msg: &MsgChannelOpenConfirm) {
+        let port_channel_id =
+            port_channel_id(msg.port_id.clone(), msg.channel_id.clone());
+        let channel_key = storage::channel_key(&port_channel_id);
+        let mut channel =
+            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
+                .expect("cannot get the channel");
+        open_channel(&mut channel);
+        self.write_ibc_data(
+            &channel_key,
+            channel.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_open_confirm_channel_event(msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Close the channel for ChannelCloseInit
+    fn close_init_channel(&self, msg: &MsgChannelCloseInit) {
+        let port_channel_id =
+            port_channel_id(msg.port_id.clone(), msg.channel_id.clone());
+        let channel_key = storage::channel_key(&port_channel_id);
+        let mut channel =
+            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
+                .expect("cannot get the channel");
+        close_channel(&mut channel);
+        self.write_ibc_data(
+            &channel_key,
+            channel.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_close_init_channel_event(msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Close the channel for ChannelCloseConfirm
+    fn close_confirm_channel(&self, msg: &MsgChannelCloseConfirm) {
+        let port_channel_id =
+            port_channel_id(msg.port_id.clone(), msg.channel_id.clone());
+        let channel_key = storage::channel_key(&port_channel_id);
+        let mut channel =
+            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
+                .expect("cannot get the channel");
+        close_channel(&mut channel);
+        self.write_ibc_data(
+            &channel_key,
+            channel.encode_vec().expect("encoding shouldn't fail"),
+        );
+
+        let event = make_close_confirm_channel_event(msg);
+        self.emit_ibc_event(event);
+    }
+
+    /// Send a packet
+    fn send_packet(&self, data: &PacketSendData) {
+        // get and increment the next sequence send
+        let port_channel_id = port_channel_id(
+            data.source_port.clone(),
+            data.source_channel.clone(),
+        );
+        let seq_key = storage::next_sequence_send_key(&port_channel_id);
+        let sequence = self.get_and_inc_sequence(&seq_key);
+
+        // store the commitment of the packet
+        let packet = data.packet(sequence);
+        let commitment_key = storage::commitment_key(
+            &data.source_port,
+            &data.source_channel,
+            packet.sequence,
+        );
+        let commitment = commitment(&packet);
+        self.write_ibc_data(&commitment_key, commitment.as_bytes());
+
+        let event = make_send_packet_event(packet);
+        self.emit_ibc_event(event);
+    }
+
+    /// Receive a packet
+    fn receive_packet(&self, msg: &MsgRecvPacket) {
+        // store the receipt
+        let receipt_key = storage::receipt_key(
+            &msg.packet.destination_port,
+            &msg.packet.destination_channel,
+            msg.packet.sequence,
+        );
+        // write 1 as a receipt
+        self.write_ibc_data(&receipt_key, vec![1_u8]);
+
+        // store the ack
+        let ack_key = storage::ack_key(
+            &msg.packet.destination_port,
+            &msg.packet.destination_channel,
+            msg.packet.sequence,
+        );
+        let ack = make_acknowledgement().encode_to_vec();
+        self.write_ibc_data(&ack_key, ack.clone());
+
+        // increment the next sequence receive
+        let port_channel_id = port_channel_id(
+            msg.packet.destination_port.clone(),
+            msg.packet.destination_channel.clone(),
+        );
+        let seq_key = storage::next_sequence_recv_key(&port_channel_id);
+        self.get_and_inc_sequence(&seq_key);
+
+        let event = make_write_ack_event(msg.packet.clone(), ack);
+        self.emit_ibc_event(event);
+    }
+
+    /// Receive a acknowledgement
+    fn acknowledge_packet(&self, msg: &MsgAcknowledgement) {
+        let commitment_key = storage::commitment_key(
+            &msg.packet.source_port,
+            &msg.packet.source_channel,
+            msg.packet.sequence,
+        );
+        self.delete_ibc_data(&commitment_key);
+
+        let event = make_ack_event(msg.packet.clone());
+        self.emit_ibc_event(event);
+    }
+
+    /// Receive a timeout
+    fn timeout_packet(&self, msg: &MsgTimeout) {
+        // delete the commitment of the packet
+        let commitment_key = storage::commitment_key(
+            &msg.packet.source_port,
+            &msg.packet.source_channel,
+            msg.packet.sequence,
+        );
+        self.delete_ibc_data(&commitment_key);
+
+        // close the channel
+        let port_channel_id = port_channel_id(
+            msg.packet.source_port.clone(),
+            msg.packet.source_channel.clone(),
+        );
+        let channel_key = storage::channel_key(&port_channel_id);
+        let mut channel =
+            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
+                .expect("cannot get the channel");
+        if channel.order_matches(&Order::Ordered) {
+            close_channel(&mut channel);
+            self.write_ibc_data(
+                &channel_key,
+                channel.encode_vec().expect("encoding shouldn't fail"),
+            );
+        }
+
+        let event = make_timeout_event(msg.packet.clone());
+        self.emit_ibc_event(event);
+    }
+
+    /// Receive a timeout for TimeoutOnClose
+    fn timeout_on_close_packet(&self, msg: &MsgTimeoutOnClose) {
+        // delete the commitment of the packet
+        let commitment_key = storage::commitment_key(
+            &msg.packet.source_port,
+            &msg.packet.source_channel,
+            msg.packet.sequence,
+        );
+        self.delete_ibc_data(&commitment_key);
+
+        // close the channel
+        let port_channel_id = port_channel_id(
+            msg.packet.source_port.clone(),
+            msg.packet.source_channel.clone(),
+        );
+        let channel_key = storage::channel_key(&port_channel_id);
+        let mut channel =
+            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
+                .expect("cannot get the channel");
+        if channel.order_matches(&Order::Ordered) {
+            close_channel(&mut channel);
+            self.write_ibc_data(
+                &channel_key,
+                channel.encode_vec().expect("encoding shouldn't fail"),
+            );
+        }
+    }
+
+    /// Get and increment the counter
+    fn get_and_inc_counter(&self, key: &Key) -> u64 {
+        let counter: [u8; 8] = self
+            .read_ibc_data(key)
+            .try_into()
+            .expect("cannot get the counter");
+        let counter = u64::from_be_bytes(counter);
+        self.write_ibc_data(key, (counter + 1).to_be_bytes());
+        counter
+    }
+
+    /// Get and increment the sequence
+    fn get_and_inc_sequence(&self, key: &Key) -> Sequence {
+        let index: [u8; 8] = self
+            .read_ibc_data(key)
+            .try_into()
+            .expect("cannot get the sequence");
+        let index: u64 = u64::from_be_bytes(index);
+        self.write_ibc_data(key, (index + 1).to_be_bytes());
+        Sequence::from(index)
+    }
+
+    /// Bind a new port
+    fn bind_port(&self, port_id: &PortId) {
+        let index_key = storage::capability_index_key();
+        let cap_index = self.get_and_inc_counter(&index_key);
+        let port_key = storage::port_key(port_id);
+        self.write_ibc_data(&port_key, cap_index.to_be_bytes());
+        let cap_key = storage::capability_key(cap_index);
+        self.write_ibc_data(&cap_key, port_id.as_bytes());
+    }
+}
 
 /// Update a client with the given state and headers
 pub fn update_client(
@@ -292,6 +827,13 @@ pub fn commitment(packet: &Packet) -> String {
     );
     let r = sha2::Sha256::digest(input.as_bytes());
     format!("{:x}", r)
+}
+
+/// Make a new acknowledgement
+pub fn make_acknowledgement() -> Acknowledgement {
+    Acknowledgement {
+        response: Some(Response::Result(vec![1u8])),
+    }
 }
 
 /// Returns a counterparty of a connection
