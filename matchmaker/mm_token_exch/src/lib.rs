@@ -1,9 +1,9 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use anoma::types::address::Address;
 use anoma::types::intent::{Exchange, FungibleTokenIntent, MatchedExchanges};
 use anoma::types::key::ed25519::Signed;
-use anoma::types::matchmaker::MatchmakerMessage;
+use anoma::types::matchmaker::AddIntentResult;
 use anoma::types::token;
 use borsh::{BorshDeserialize, BorshSerialize};
 use good_lp::{
@@ -15,7 +15,6 @@ use petgraph::visit::{depth_first_search, Control, DfsEvent, EdgeRef};
 use petgraph::Graph;
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::Sender;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ExchangeNode {
@@ -30,70 +29,61 @@ impl PartialEq for ExchangeNode {
     }
 }
 
+// TODO: For some reason, using `&[u8]` causes the `decode_intent_data` to fail
+// decoding
+#[allow(clippy::ptr_arg)]
 #[no_mangle]
 fn add_intent(
-    graph_bytes: Vec<u8>,
-    id: Vec<u8>,
-    data: Vec<u8>,
-    sender: Sender<MatchmakerMessage>,
-) -> bool {
-    let intent = decode_intent_data(&data);
+    state: &Vec<u8>,
+    id: &Vec<u8>,
+    data: &Vec<u8>,
+) -> AddIntentResult {
+    let intent = decode_intent_data(&data[..]);
     let exchanges = intent.data.exchange.clone();
 
-    let mut graph = decode_graph(graph_bytes);
+    let mut graph = decode_graph(state);
     println!("trying to match new intent");
     exchanges.into_iter().for_each(|exchange| {
-        add_node(&mut graph, id.clone(), exchange, intent.clone())
+        add_intent_node(&mut graph, id.to_vec(), exchange, intent.clone())
     });
-    find_match_and_remove_node(&mut graph, sender.clone());
-    update_graph_data(&graph, sender);
-    true
-}
-
-fn create_transfer(
-    from_node: &ExchangeNode,
-    to_node: &ExchangeNode,
-    amount: token::Amount,
-) -> token::Transfer {
-    token::Transfer {
-        source: from_node.exchange.data.addr.clone(),
-        target: to_node.exchange.data.addr.clone(),
-        token: to_node.exchange.data.token_buy.clone(),
-        amount,
+    let (tx, matched_intents) = match try_match(&mut graph) {
+        Some((tx, matched_intents)) => (Some(tx), Some(matched_intents)),
+        None => (None, None),
+    };
+    let state = encode_graph(&graph);
+    AddIntentResult {
+        tx,
+        state,
+        matched_intents,
     }
 }
 
-fn send_tx(tx_data: MatchedExchanges, sender: Sender<MatchmakerMessage>) {
-    let tx_data_bytes = tx_data.try_to_vec().unwrap();
-    sender
-        .try_send(MatchmakerMessage::InjectTx(tx_data_bytes))
-        .expect("Sending matchmaker message")
-}
-
-fn decode_intent_data(bytes: &[u8]) -> Signed<FungibleTokenIntent> {
-    Signed::<FungibleTokenIntent>::try_from_slice(bytes).unwrap()
-}
-
-fn decode_graph(bytes: Vec<u8>) -> DiGraph<ExchangeNode, Address> {
-    if bytes.is_empty() {
-        Graph::new()
-    } else {
-        serde_json::from_slice(&bytes[..]).expect("error in json format")
-    }
-}
-
-fn update_graph_data(
-    graph: &DiGraph<ExchangeNode, Address>,
-    sender: Sender<MatchmakerMessage>,
+/// Add a new node to the graph for the intent
+fn add_intent_node(
+    graph: &mut DiGraph<ExchangeNode, Address>,
+    id: Vec<u8>,
+    exchange: Signed<Exchange>,
+    intent: Signed<FungibleTokenIntent>,
 ) {
-    // update_state(serde_json::to_vec(graph).unwrap());
-    let state_bytes = serde_json::to_vec(graph).unwrap();
-    sender
-        .try_send(MatchmakerMessage::UpdateState(state_bytes))
-        .expect("Sending matchmaker message")
+    let new_node = ExchangeNode {
+        id,
+        exchange,
+        intent,
+    };
+    let new_node_index = graph.add_node(new_node.clone());
+    let (connect_sell, connect_buy) = find_nodes_to_update(graph, &new_node);
+    let sell_edge = new_node.exchange.data.token_sell;
+    let buy_edge = new_node.exchange.data.token_buy;
+    for node_index in connect_sell {
+        graph.update_edge(new_node_index, node_index, sell_edge.clone());
+    }
+    for node_index in connect_buy {
+        graph.update_edge(node_index, new_node_index, buy_edge.clone());
+    }
 }
 
-fn find_to_update_node(
+/// Find the nodes that are matching the intent on sell side and buy side.
+fn find_nodes_to_update(
     graph: &DiGraph<ExchangeNode, Address>,
     new_node: &ExchangeNode,
 ) -> (Vec<NodeIndex>, Vec<NodeIndex>) {
@@ -123,40 +113,76 @@ fn find_to_update_node(
     (connect_sell, connect_buy)
 }
 
-fn add_node(
-    graph: &mut DiGraph<ExchangeNode, Address>,
-    id: Vec<u8>,
-    exchange: Signed<Exchange>,
-    intent: Signed<FungibleTokenIntent>,
-) {
-    let new_node = ExchangeNode {
-        id,
-        exchange,
-        intent,
-    };
-    let new_node_index = graph.add_node(new_node.clone());
-    let (connect_sell, connect_buy) = find_to_update_node(graph, &new_node);
-    let sell_edge = new_node.exchange.data.token_sell;
-    let buy_edge = new_node.exchange.data.token_buy;
-    for node_index in connect_sell {
-        graph.update_edge(new_node_index, node_index, sell_edge.clone());
+// The cycle returned by tarjan_scc only contains the node_index in an arbitrary
+// order without edges. we must reorder them to craft the transfer
+fn sort_intents(
+    graph: &DiGraph<ExchangeNode, Address>,
+    matched_intents_indices: &[NodeIndex],
+) -> Vec<NodeIndex> {
+    let mut cycle_ordered = Vec::new();
+    let mut cycle_intents = VecDeque::from(matched_intents_indices.to_vec());
+    let mut to_connect_node = cycle_intents.pop_front().unwrap();
+    cycle_ordered.push(to_connect_node);
+    while !cycle_intents.is_empty() {
+        let pop_node = cycle_intents.pop_front().unwrap();
+        if graph.contains_edge(to_connect_node, pop_node) {
+            cycle_ordered.push(pop_node);
+            to_connect_node = pop_node;
+        } else {
+            cycle_intents.push_back(pop_node);
+        }
     }
-    for node_index in connect_buy {
-        graph.update_edge(node_index, new_node_index, buy_edge.clone());
-    }
+    cycle_ordered.reverse();
+    cycle_ordered
 }
 
-fn create_and_send_tx_data(
+/// Try to find matching intents in the graph. If found, returns the tx bytes
+/// and a hash set of the matched intent IDs.
+fn try_match(
+    graph: &mut DiGraph<ExchangeNode, Address>,
+) -> Option<(Vec<u8>, HashSet<Vec<u8>>)> {
+    // We only use the first found cycle, because an intent cannot be matched
+    // into more than one tx
+    if let Some(mut matchned_intents_indices) =
+        petgraph::algo::tarjan_scc(&*graph).into_iter().next()
+    {
+        // a node is a cycle with itself
+        if matchned_intents_indices.len() > 1 {
+            println!("found a match: {:?}", matchned_intents_indices);
+            // Must be sorted in reverse order because it removes the node by
+            // index otherwise it would not remove the correct node
+            matchned_intents_indices.sort_by(|a, b| b.cmp(a));
+            if let Some(tx_data) =
+                prepare_tx_data(graph, &matchned_intents_indices)
+            {
+                let removed_intent_ids = matchned_intents_indices
+                    .into_iter()
+                    .filter_map(|i| {
+                        if let Some(removed) = graph.remove_node(i) {
+                            Some(removed.id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                return Some((tx_data, removed_intent_ids));
+            }
+        }
+    }
+    None
+}
+
+/// Prepare the transaction's data from the matched intents
+fn prepare_tx_data(
     graph: &DiGraph<ExchangeNode, Address>,
-    cycle_intents: Vec<NodeIndex>,
-    sender: Sender<MatchmakerMessage>,
-) {
+    matched_intent_indices: &[NodeIndex],
+) -> Option<Vec<u8>> {
     println!(
         "found match; creating tx with {:?} nodes",
-        cycle_intents.len()
+        matched_intent_indices.len()
     );
-    let cycle_intents = sort_cycle(graph, cycle_intents);
-    let amounts = compute_amounts(graph, &cycle_intents);
+    let matched_intents = sort_intents(graph, matched_intent_indices);
+    let amounts = compute_amounts(graph, &matched_intents);
 
     match amounts {
         Ok(res) => {
@@ -167,14 +193,12 @@ fn create_and_send_tx_data(
                     .collect::<Vec<String>>()
                     .join(", ")
             );
-            let mut cycle_intents_iter = cycle_intents.into_iter();
-            let first_node =
-                cycle_intents_iter.next().map(|i| &graph[i]).unwrap();
+            let mut matched_intents = matched_intents.into_iter();
+            let first_node = matched_intents.next().map(|i| &graph[i]).unwrap();
             let mut tx_data = MatchedExchanges::empty();
 
-            let last_node = cycle_intents_iter.fold(
-                first_node,
-                |prev_node, intent_index| {
+            let last_node =
+                matched_intents.fold(first_node, |prev_node, intent_index| {
                     let node = &graph[intent_index];
                     let exchanged_amount =
                         *res.get(&node.exchange.data).unwrap();
@@ -199,8 +223,7 @@ fn create_and_send_tx_data(
                         node.intent.clone(),
                     );
                     node
-                },
-            );
+                });
             let last_amount = *res.get(&first_node.exchange.data).unwrap();
             println!(
                 "crafting transfer: {}, {}, {}",
@@ -222,10 +245,11 @@ fn create_and_send_tx_data(
                 first_node.intent.clone(),
             );
             println!("tx data: {:?}", tx_data.transfers);
-            send_tx(tx_data, sender)
+            Some(tx_data.try_to_vec().unwrap())
         }
         Err(err) => {
             println!("Invalid exchange: {}.", err);
+            None
         }
     }
 }
@@ -324,54 +348,31 @@ fn compute_amounts(
     }
 }
 
-// The cycle returned by tarjan_scc only contains the node_index in an arbitrary
-// order without edges. we must reorder them to craft the transfer
-fn sort_cycle(
-    graph: &DiGraph<ExchangeNode, Address>,
-    cycle_intents: Vec<NodeIndex>,
-) -> Vec<NodeIndex> {
-    let mut cycle_ordered = Vec::new();
-    let mut cycle_intents = VecDeque::from(cycle_intents);
-    let mut to_connect_node = cycle_intents.pop_front().unwrap();
-    cycle_ordered.push(to_connect_node);
-    while !cycle_intents.is_empty() {
-        let pop_node = cycle_intents.pop_front().unwrap();
-        if graph.contains_edge(to_connect_node, pop_node) {
-            cycle_ordered.push(pop_node);
-            to_connect_node = pop_node;
-        } else {
-            cycle_intents.push_back(pop_node);
-        }
+fn create_transfer(
+    from_node: &ExchangeNode,
+    to_node: &ExchangeNode,
+    amount: token::Amount,
+) -> token::Transfer {
+    token::Transfer {
+        source: from_node.exchange.data.addr.clone(),
+        target: to_node.exchange.data.addr.clone(),
+        token: to_node.exchange.data.token_buy.clone(),
+        amount,
     }
-    cycle_ordered.reverse();
-    cycle_ordered
 }
 
-fn find_match_and_send_tx(
-    graph: &DiGraph<ExchangeNode, Address>,
-    sender: Sender<MatchmakerMessage>,
-) -> Vec<NodeIndex> {
-    let mut to_remove_nodes = Vec::new();
-    for cycle_intents in petgraph::algo::tarjan_scc(&graph) {
-        // a node is a cycle with itself
-        if cycle_intents.len() > 1 {
-            to_remove_nodes.extend(&cycle_intents);
-            create_and_send_tx_data(graph, cycle_intents, sender.clone());
-        }
-    }
-    println!("found: {:?}", to_remove_nodes);
-    to_remove_nodes
+fn decode_intent_data(bytes: &[u8]) -> Signed<FungibleTokenIntent> {
+    Signed::<FungibleTokenIntent>::try_from_slice(bytes).unwrap()
 }
 
-fn find_match_and_remove_node(
-    graph: &mut DiGraph<ExchangeNode, Address>,
-    sender: Sender<MatchmakerMessage>,
-) {
-    let mut to_remove_nodes = find_match_and_send_tx(graph, sender);
-    // Must be sorted in reverse order because it removes the node by index
-    // otherwise it would not remove the correct node
-    to_remove_nodes.sort_by(|a, b| b.cmp(a));
-    to_remove_nodes.into_iter().for_each(|i| {
-        graph.remove_node(i);
-    });
+fn decode_graph(bytes: &[u8]) -> DiGraph<ExchangeNode, Address> {
+    if bytes.is_empty() {
+        Graph::new()
+    } else {
+        serde_json::from_slice(bytes).expect("error in json format")
+    }
+}
+
+fn encode_graph(graph: &DiGraph<ExchangeNode, Address>) -> Vec<u8> {
+    serde_json::to_vec(graph).unwrap()
 }

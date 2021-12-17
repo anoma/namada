@@ -162,6 +162,7 @@ dependencies = [
  "itertools 0.10.1",
  "jsonpath_lib",
  "libc",
+ "libloading 0.7.2",
  "libp2p",
  "num-derive",
  "num-traits 0.2.14",
@@ -3677,6 +3678,14 @@ name = "miracl_core"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94c7128ba23c81f6471141b90f17654f89ef44a56e14b8a4dd0fddfccd655277"
+
+[[package]]
+name = "mm_template"
+version = "0.2.0"
+dependencies = [
+ "anoma",
+ "tokio",
+]
 
 [[package]]
 name = "mm_token_exch"
