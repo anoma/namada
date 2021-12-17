@@ -112,12 +112,7 @@ impl Matchmaker {
             unsafe { Library::new(matchmaker_dylib).unwrap() };
 
         let tx_code = wasm_loader::read_wasm(&wasm_dir, &config.tx_code);
-        let filter = config
-            .filter
-            .as_ref()
-            .map(Filter::from_file)
-            .transpose()
-            .map_err(Error::FilterInit)?;
+        let filter = Some(Filter);
 
         Ok((
             Self {

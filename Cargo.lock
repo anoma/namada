@@ -127,7 +127,6 @@ dependencies = [
  "tracing-subscriber",
  "wasmer",
  "wasmer-cache",
- "wasmer-compiler-cranelift",
  "wasmer-compiler-singlepass",
  "wasmer-engine-jit",
  "wasmer-vm",
