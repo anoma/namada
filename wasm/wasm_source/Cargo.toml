@@ -12,7 +12,6 @@ crate-type = ["cdylib"]
 # The features should be used individually to build the selected wasm.
 # Newly added wasms should also be added into the Makefile `$(wasms)` list.
 [features]
-mm_filter_token_exch = []
 tx_bond = []
 tx_from_intent = []
 tx_init_account = []
