@@ -1,11 +1,8 @@
-{ pkgs ? import ../nix { }
-}:
-
-with pkgs;
+{ stdenv, nix-gitignore, mdbook, mdbook-mermaid, mdbook-linkcheck }:
 
 stdenv.mkDerivation {
   name = "anoma-docs";
-  src = nix-gitignore.gitignoreSource [] ./.;
+  src = nix-gitignore.gitignoreSource [ ] ../docs;
   buildInputs = [ mdbook mdbook-mermaid mdbook-linkcheck ];
 
   patchPhase = ''
