@@ -211,7 +211,7 @@ where
     /// Iterate lazily over the wrapper txs in order
     #[cfg(not(feature = "ABCI"))]
     fn next_wrapper(&mut self) -> Option<&WrapperTx> {
-        self.storage.tx_queue.next()
+        self.storage.tx_queue.lazy_next()
     }
 
     /// Iterate lazily over the wrapper txs in order
@@ -222,7 +222,7 @@ where
 
     /// If we reject the decrypted txs because they were out of
     /// order, reset the iterator.
-    pub fn reset_queue(&mut self) {
+    pub fn reset_tx_queue_iter(&mut self) {
         self.storage.tx_queue.rewind()
     }
 
@@ -594,9 +594,10 @@ mod test_utils {
 
         /// Add a wrapper tx to the queue of txs to be decrypted
         /// in the current block proposal
+        #[cfg(test)]
         pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
             self.shell.storage.tx_queue.push(wrapper);
-            self.shell.reset_queue();
+            self.shell.reset_tx_queue_iter();
         }
 
         #[cfg(not(feature = "ABCI"))]

@@ -226,7 +226,7 @@ where
             .gas_meter
             .finalize_transaction()
             .map_err(|_| Error::GasOverflow)?;
-        self.reset_queue();
+        self.reset_tx_queue_iter();
         Ok(response)
     }
 

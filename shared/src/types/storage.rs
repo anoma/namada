@@ -570,9 +570,10 @@ impl TxQueue {
         self.queue.pop_front()
     }
 
-    /// Iterate lazily over the queue
+    /// Iterate lazily over the queue. Finds the next value and advances the
+    /// lazy iterator.
     #[allow(dead_code)]
-    pub fn next(&mut self) -> Option<&WrapperTx> {
+    pub fn lazy_next(&mut self) -> Option<&WrapperTx> {
         let next = self.queue.get(self.next_wrapper);
         if self.next_wrapper < self.queue.len() {
             self.next_wrapper += 1;
