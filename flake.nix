@@ -1,15 +1,18 @@
 {
   description = "Anoma";
 
-  inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
+  inputs.nixpkgs.follows = "rust-overlay/nixpkgs";
+  inputs.flake-utils.follows = "rust-overlay/flake-utils";
   inputs.flake-compat = {
     url = "github:edolstra/flake-compat";
     flake = false;
   };
+  # we need tendermint 0.34
+  inputs.nixpkgs-tendermint.url = "nixpkgs/nixos-21.11-small";
 
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, flake-compat }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, flake-compat, nixpkgs-tendermint }:
     let
       supportedSystems = [ "x86_64-linux" "x86_64-darwin" ];
     in
@@ -20,7 +23,10 @@
     eachSystem supportedSystems (system:
 
       let
-        overlays = [ (import rust-overlay) ] ++ import nix/overlays.nix;
+        overlays = [
+          (import rust-overlay)
+          (final: prev: { inherit (import nixpkgs-tendermint { inherit system; }) tendermint; })
+        ] ++ import nix/overlays.nix;
 
         pkgs = import nixpkgs { inherit system overlays; };
 
