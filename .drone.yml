@@ -8,7 +8,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -139,7 +139,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -243,7 +243,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -348,7 +348,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -419,7 +419,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -533,7 +533,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -598,7 +598,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -705,7 +705,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -761,7 +761,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -867,7 +867,7 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
   pull: never
   commands:
-  - git clone $DRONE_GIT_HTTP_URL --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
     --single-branch .
 - name: download-scripts
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
@@ -1090,6 +1090,6 @@ clone:
   disable: true
 ---
 kind: signature
-hmac: 60ef46471e43aa92449b033bab536b1e516ab234fef671df5bc44964ee7da99d
+hmac: 1d6e885272f05a192049cd320b29bec23d58b06db00ea70247756834d5a4cb3a
 
 ...
