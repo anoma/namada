@@ -14,18 +14,18 @@ wasm-runtime = ["anoma/wasm-runtime"]
 ABCI = [
   "ibc-abci",
   "ibc-proto-abci",
-  "anoma/ibc-vp-abci",
   "tendermint-stable",
   "anoma/ABCI",
+  "anoma/ibc-vp-abci",
   "anoma_vm_env/ABCI",
 ]
 
 ABCI-plus-plus = [
   "ibc",
   "ibc-proto",
-  "anoma/ibc-vp",
   "tendermint",
   "anoma/ABCI-plus-plus",
+  "anoma/ibc-vp",
   "anoma_vm_env/ABCI-plus-plus",
 ]
 

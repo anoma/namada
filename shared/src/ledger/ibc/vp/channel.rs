@@ -68,7 +68,12 @@ use ibc_abci::timestamp::Timestamp;
 use sha2::Digest;
 use thiserror::Error;
 
-use super::storage::{
+use super::super::handler::{
+    make_close_confirm_channel_event, make_close_init_channel_event,
+    make_open_ack_channel_event, make_open_confirm_channel_event,
+    make_open_init_channel_event, make_open_try_channel_event,
+};
+use super::super::storage::{
     ack_key, channel_counter_key, channel_key, commitment_key,
     is_channel_counter_key, next_sequence_ack_key, next_sequence_recv_key,
     next_sequence_send_key, port_channel_id, receipt_key,
@@ -77,10 +82,10 @@ use super::storage::{
 use super::{Ibc, StateChange};
 use crate::ledger::native_vp::Error as NativeVpError;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::types::ibc::{
+use crate::types::ibc::data::{
     ChannelCloseConfirmData, ChannelCloseInitData, ChannelOpenAckData,
-    ChannelOpenConfirmData, ChannelOpenTryData, Error as IbcDataError,
-    TimeoutData,
+    ChannelOpenConfirmData, ChannelOpenInitData, ChannelOpenTryData,
+    Error as IbcDataError, TimeoutData,
 };
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -112,6 +117,8 @@ pub enum Error {
     InvalidIbcData(IbcDataError),
     #[error("IBC storage error: {0}")]
     IbcStorage(IbcStorageError),
+    #[error("IBC event error: {0}")]
+    IbcEvent(String),
 }
 
 /// IBC channel functions result
@@ -177,12 +184,29 @@ where
 
         match self.get_channel_state_change(&port_channel_id)? {
             StateChange::Created => match channel.state() {
-                State::Init => Ok(()),
-                State::TryOpen => self.verify_channel_try_proof(
-                    port_channel_id,
-                    &channel,
-                    tx_data,
-                ),
+                State::Init => {
+                    let data = ChannelOpenInitData::try_from_slice(tx_data)?;
+                    let event = make_open_init_channel_event(
+                        &port_channel_id.channel_id,
+                        &data,
+                    );
+                    self.check_emitted_event(event)
+                        .map_err(|e| Error::IbcEvent(e.to_string()))
+                }
+                State::TryOpen => {
+                    let data = ChannelOpenTryData::try_from_slice(tx_data)?;
+                    self.verify_channel_try_proof(
+                        &port_channel_id,
+                        &channel,
+                        &data,
+                    )?;
+                    let event = make_open_try_channel_event(
+                        &port_channel_id.channel_id,
+                        &data,
+                    );
+                    self.check_emitted_event(event)
+                        .map_err(|e| Error::IbcEvent(e.to_string()))
+                }
                 _ => Err(Error::InvalidChannel(format!(
                     "The channel state is invalid: Port/Channel {}, State {}",
                     port_channel_id,
@@ -242,16 +266,28 @@ where
         let prev_channel = self.channel_end_pre(port_channel_id)?;
         match channel.state() {
             State::Open => match prev_channel.state() {
-                State::Init => self.verify_channel_ack_proof(
-                    port_channel_id,
-                    channel,
-                    tx_data,
-                ),
-                State::TryOpen => self.verify_channel_confirm_proof(
-                    port_channel_id,
-                    channel,
-                    tx_data,
-                ),
+                State::Init => {
+                    let data = ChannelOpenAckData::try_from_slice(tx_data)?;
+                    self.verify_channel_ack_proof(
+                        port_channel_id,
+                        channel,
+                        &data,
+                    )?;
+                    let event = make_open_ack_channel_event(&data);
+                    self.check_emitted_event(event)
+                        .map_err(|e| Error::IbcEvent(e.to_string()))
+                }
+                State::TryOpen => {
+                    let data = ChannelOpenConfirmData::try_from_slice(tx_data)?;
+                    self.verify_channel_confirm_proof(
+                        port_channel_id,
+                        channel,
+                        &data,
+                    )?;
+                    let event = make_open_confirm_channel_event(&data);
+                    self.check_emitted_event(event)
+                        .map_err(|e| Error::IbcEvent(e.to_string()))
+                }
                 _ => Err(Error::InvalidStateChange(format!(
                     "The state change of the channel is invalid: Port {}, \
                      Channel {}",
@@ -267,15 +303,32 @@ where
                     )));
                 }
                 match TimeoutData::try_from_slice(tx_data) {
-                    Ok(data) => self.validate_commitment_absence(data),
+                    // The timeout event will be checked in the commitment
+                    // validation
+                    Ok(data) => self.validate_commitment_absence(&data),
                     Err(_) => {
                         match ChannelCloseInitData::try_from_slice(tx_data) {
-                            Ok(_) => Ok(()),
-                            Err(_) => self.verify_channel_close_proof(
-                                port_channel_id,
-                                channel,
-                                tx_data,
-                            ),
+                            Ok(data) => {
+                                let event =
+                                    make_close_init_channel_event(&data);
+                                self.check_emitted_event(event)
+                                    .map_err(|e| Error::IbcEvent(e.to_string()))
+                            }
+                            Err(_) => {
+                                let data =
+                                    ChannelCloseConfirmData::try_from_slice(
+                                        tx_data,
+                                    )?;
+                                self.verify_channel_close_proof(
+                                    port_channel_id,
+                                    channel,
+                                    &data,
+                                )?;
+                                let event =
+                                    make_close_confirm_channel_event(&data);
+                                self.check_emitted_event(event)
+                                    .map_err(|e| Error::IbcEvent(e.to_string()))
+                            }
                         }
                     }
                 }
@@ -288,13 +341,12 @@ where
         }
     }
 
-    fn validate_commitment_absence(&self, data: TimeoutData) -> Result<()> {
+    fn validate_commitment_absence(&self, data: &TimeoutData) -> Result<()> {
         // check if the commitment has been deleted
-        let packet = data.packet;
         let key = commitment_key(
-            &packet.source_port,
-            &packet.source_channel,
-            packet.sequence,
+            &data.packet.source_port,
+            &data.packet.source_channel,
+            data.packet.sequence,
         );
         let state_change = self
             .get_state_change(&key)
@@ -305,20 +357,21 @@ where
             _ => Err(Error::InvalidStateChange(format!(
                 "The commitment hasn't been deleted yet: Port {}, Channel {}, \
                  Sequence {}",
-                packet.source_port, packet.source_channel, packet.sequence
+                data.packet.source_port,
+                data.packet.source_channel,
+                data.packet.sequence
             ))),
         }
     }
 
     fn verify_channel_try_proof(
         &self,
-        port_channel_id: PortChannelId,
+        port_channel_id: &PortChannelId,
         channel: &ChannelEnd,
-        tx_data: &[u8],
+        data: &ChannelOpenTryData,
     ) -> Result<()> {
-        let data = ChannelOpenTryData::try_from_slice(tx_data)?;
-        let expected_my_side = Counterparty::new(port_channel_id.port_id, None);
-
+        let expected_my_side =
+            Counterparty::new(port_channel_id.port_id.clone(), None);
         self.verify_proofs(
             channel,
             expected_my_side,
@@ -331,14 +384,12 @@ where
         &self,
         port_channel_id: &PortChannelId,
         channel: &ChannelEnd,
-        tx_data: &[u8],
+        data: &ChannelOpenAckData,
     ) -> Result<()> {
-        let data = ChannelOpenAckData::try_from_slice(tx_data)?;
         let expected_my_side = Counterparty::new(
             port_channel_id.port_id.clone(),
             Some(port_channel_id.channel_id.clone()),
         );
-
         self.verify_proofs(
             channel,
             expected_my_side,
@@ -351,14 +402,12 @@ where
         &self,
         port_channel_id: &PortChannelId,
         channel: &ChannelEnd,
-        tx_data: &[u8],
+        data: &ChannelOpenConfirmData,
     ) -> Result<()> {
-        let data = ChannelOpenConfirmData::try_from_slice(tx_data)?;
         let expected_my_side = Counterparty::new(
             port_channel_id.port_id.clone(),
             Some(port_channel_id.channel_id.clone()),
         );
-
         self.verify_proofs(
             channel,
             expected_my_side,
@@ -371,14 +420,12 @@ where
         &self,
         port_channel_id: &PortChannelId,
         channel: &ChannelEnd,
-        tx_data: &[u8],
+        data: &ChannelCloseConfirmData,
     ) -> Result<()> {
-        let data = ChannelCloseConfirmData::try_from_slice(tx_data)?;
         let expected_my_side = Counterparty::new(
             port_channel_id.port_id.clone(),
             Some(port_channel_id.channel_id.clone()),
         );
-
         self.verify_proofs(
             channel,
             expected_my_side,

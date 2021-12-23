@@ -21,13 +21,11 @@ ferveo-tpke = [
   "rand_new",
   "rand",
 ]
-
 # for integration tests and test utilies
 ibc-vp = [
   "ibc",
   "ibc-proto",
 ]
-
 ibc-vp-abci = [
   "ibc-abci",
   "ibc-proto-abci",

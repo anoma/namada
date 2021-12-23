@@ -55,16 +55,20 @@ use ibc_abci::core::ics23_commitment::commitment::CommitmentPrefix;
 use ibc_abci::core::ics24_host::identifier::{ClientId, ConnectionId};
 use thiserror::Error;
 
-use super::storage::{
+use super::super::handler::{
+    make_open_ack_connection_event, make_open_confirm_connection_event,
+    make_open_init_connection_event, make_open_try_connection_event,
+};
+use super::super::storage::{
     connection_counter_key, connection_id, connection_key,
     is_connection_counter_key, Error as IbcStorageError,
 };
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::{
-    ConnectionOpenAckData, ConnectionOpenConfirmData, ConnectionOpenTryData,
-    Error as IbcDataError,
+use crate::types::ibc::data::{
+    ConnectionOpenAckData, ConnectionOpenConfirmData, ConnectionOpenInitData,
+    ConnectionOpenTryData, Error as IbcDataError,
 };
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg};
 use crate::vm::WasmCacheAccess;
@@ -88,6 +92,8 @@ pub enum Error {
     InvalidIbcData(IbcDataError),
     #[error("IBC storage error: {0}")]
     IbcStorage(IbcStorageError),
+    #[error("IBC event error: {0}")]
+    IbcEvent(String),
 }
 
 /// IBC connection functions result
@@ -163,16 +169,27 @@ where
         match conn.state() {
             State::Init => {
                 let client_id = conn.client_id();
-                match ConnectionReader::client_state(self, client_id) {
-                    Ok(_) => Ok(()),
-                    Err(_) => Err(Error::InvalidClient(format!(
-                        "The client state for the connection doesn't exist: \
-                         ID {}",
-                        conn_id,
-                    ))),
-                }
+                ConnectionReader::client_state(self, client_id).map_err(
+                    |_| {
+                        Error::InvalidClient(format!(
+                            "The client state for the connection doesn't \
+                             exist: ID {}",
+                            conn_id,
+                        ))
+                    },
+                )?;
+                let data = ConnectionOpenInitData::try_from_slice(tx_data)?;
+                let event = make_open_init_connection_event(conn_id, &data);
+                self.check_emitted_event(event)
+                    .map_err(|e| Error::IbcEvent(e.to_string()))
             }
-            State::TryOpen => self.verify_connection_try_proof(conn, tx_data),
+            State::TryOpen => {
+                let data = ConnectionOpenTryData::try_from_slice(tx_data)?;
+                self.verify_connection_try_proof(conn, &data)?;
+                let event = make_open_try_connection_event(conn_id, &data);
+                self.check_emitted_event(event)
+                    .map_err(|e| Error::IbcEvent(e.to_string()))
+            }
             _ => Err(Error::InvalidConnection(format!(
                 "The connection state is invalid: ID {}",
                 conn_id
@@ -191,11 +208,23 @@ where
                 let prev_conn = self.connection_end_pre(conn_id)?;
                 match prev_conn.state() {
                     State::Init => {
-                        self.verify_connection_ack_proof(conn_id, conn, tx_data)
+                        let data =
+                            ConnectionOpenAckData::try_from_slice(tx_data)?;
+                        self.verify_connection_ack_proof(conn_id, conn, &data)?;
+                        let event = make_open_ack_connection_event(&data);
+                        self.check_emitted_event(event)
+                            .map_err(|e| Error::IbcEvent(e.to_string()))
                     }
-                    State::TryOpen => self.verify_connection_confirm_proof(
-                        conn_id, conn, tx_data,
-                    ),
+                    State::TryOpen => {
+                        let data =
+                            ConnectionOpenConfirmData::try_from_slice(tx_data)?;
+                        self.verify_connection_confirm_proof(
+                            conn_id, conn, &data,
+                        )?;
+                        let event = make_open_confirm_connection_event(&data);
+                        self.check_emitted_event(event)
+                            .map_err(|e| Error::IbcEvent(e.to_string()))
+                    }
                     _ => Err(Error::InvalidStateChange(format!(
                         "The state change of connection is invalid: ID {}",
                         conn_id
@@ -212,10 +241,8 @@ where
     fn verify_connection_try_proof(
         &self,
         conn: ConnectionEnd,
-        tx_data: &[u8],
+        data: &ConnectionOpenTryData,
     ) -> Result<()> {
-        let data = ConnectionOpenTryData::try_from_slice(tx_data)?;
-
         let client_id = conn.client_id().clone();
         let counterpart_client_id = conn.counterparty().client_id().clone();
         // expected connection end
@@ -230,7 +257,7 @@ where
         let proofs = data.proofs()?;
         match verify_proofs(
             self,
-            Some(data.client_state),
+            Some(data.client_state.clone()),
             &conn,
             &expected_conn,
             &proofs,
@@ -244,10 +271,8 @@ where
         &self,
         conn_id: &ConnectionId,
         conn: ConnectionEnd,
-        tx_data: &[u8],
+        data: &ConnectionOpenAckData,
     ) -> Result<()> {
-        let data = ConnectionOpenAckData::try_from_slice(tx_data)?;
-
         // version check
         if !conn.versions().contains(&data.version) {
             return Err(Error::InvalidVersion(
@@ -281,7 +306,7 @@ where
         let proofs = data.proofs()?;
         match verify_proofs(
             self,
-            Some(data.client_state),
+            Some(data.client_state.clone()),
             &conn,
             &expected_conn,
             &proofs,
@@ -295,10 +320,8 @@ where
         &self,
         conn_id: &ConnectionId,
         conn: ConnectionEnd,
-        tx_data: &[u8],
+        data: &ConnectionOpenConfirmData,
     ) -> Result<()> {
-        let data = ConnectionOpenConfirmData::try_from_slice(tx_data)?;
-
         // expected counterpart connection
         let expected_conn = ConnectionEnd::new(
             State::Open,

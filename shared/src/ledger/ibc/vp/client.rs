@@ -35,13 +35,18 @@ use ibc_abci::core::ics02_client::height::Height;
 use ibc_abci::core::ics24_host::identifier::ClientId;
 use thiserror::Error;
 
-use super::storage::{
+use super::super::handler::{
+    make_create_client_event, make_update_client_event,
+    make_upgrade_client_event,
+};
+use super::super::storage::{
     client_counter_key, client_state_key, client_type_key, consensus_state_key,
 };
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
-use crate::types::ibc::{
-    ClientUpdateData, ClientUpgradeData, Error as IbcDataError,
+use crate::types::ibc::data::{
+    ClientCreationData, ClientUpdateData, ClientUpgradeData,
+    Error as IbcDataError,
 };
 use crate::vm::WasmCacheAccess;
 
@@ -62,6 +67,8 @@ pub enum Error {
     DecodingClientData(std::io::Error),
     #[error("IBC data error: {0}")]
     InvalidIbcData(IbcDataError),
+    #[error("IBC event error: {0}")]
+    IbcEvent(String),
 }
 
 /// IBC client functions result
@@ -81,7 +88,9 @@ where
         tx_data: &[u8],
     ) -> Result<()> {
         match self.get_client_state_change(client_id)? {
-            StateChange::Created => self.validate_created_client(client_id),
+            StateChange::Created => {
+                self.validate_created_client(client_id, tx_data)
+            }
             StateChange::Updated => {
                 self.validate_updated_client(client_id, tx_data)
             }
@@ -101,7 +110,12 @@ where
             .map_err(|e| Error::InvalidStateChange(e.to_string()))
     }
 
-    fn validate_created_client(&self, client_id: &ClientId) -> Result<()> {
+    fn validate_created_client(
+        &self,
+        client_id: &ClientId,
+        tx_data: &[u8],
+    ) -> Result<()> {
+        let data = ClientCreationData::try_from_slice(tx_data)?;
         let client_type = self.client_type(client_id).map_err(|_| {
             Error::InvalidClient(format!(
                 "The client type doesn't exist: ID {}",
@@ -123,15 +137,17 @@ where
                     client_id, height
                 ))
             })?;
-        if client_type == client_state.client_type()
-            && client_type == consensus_state.client_type()
+        if client_type != client_state.client_type()
+            || client_type != consensus_state.client_type()
         {
-            Ok(())
-        } else {
-            Err(Error::InvalidClient(
+            return Err(Error::InvalidClient(
                 "The client type is mismatched".to_owned(),
-            ))
+            ));
         }
+
+        let event = make_create_client_event(client_id, &data);
+        self.check_emitted_event(event)
+            .map_err(|e| Error::IbcEvent(e.to_string()))
     }
 
     fn validate_updated_client(
@@ -202,23 +218,27 @@ where
         );
         match updated {
             Ok((new_client_state, new_consensus_state)) => {
-                if new_client_state == client_state
-                    && new_consensus_state == consensus_state
+                if new_client_state != client_state
+                    || new_consensus_state != consensus_state
                 {
-                    Ok(())
-                } else {
-                    Err(Error::InvalidClient(
+                    return Err(Error::InvalidClient(
                         "The updated client state or consensus state is \
                          unexpected"
                             .to_owned(),
-                    ))
+                    ));
                 }
             }
-            Err(e) => Err(Error::InvalidHeader(format!(
-                "The header is invalid: ID {}, {}",
-                client_id, e,
-            ))),
+            Err(e) => {
+                return Err(Error::InvalidHeader(format!(
+                    "The header is invalid: ID {}, {}",
+                    client_id, e,
+                )));
+            }
         }
+
+        let event = make_update_client_event(client_id, &data);
+        self.check_emitted_event(event)
+            .map_err(|e| Error::IbcEvent(e.to_string()))
     }
 
     fn verify_upgrade_client(
@@ -269,20 +289,24 @@ where
             consensus_proof,
         ) {
             Ok((new_client_state, new_consensus_state)) => {
-                if new_client_state == client_state_post
-                    && new_consensus_state == consensus_state_post
+                if new_client_state != client_state_post
+                    || new_consensus_state != consensus_state_post
                 {
-                    Ok(())
-                } else {
-                    Err(Error::InvalidClient(
+                    return Err(Error::InvalidClient(
                         "The updated client state or consensus state is \
                          unexpected"
                             .to_owned(),
-                    ))
+                    ));
                 }
             }
-            Err(e) => Err(Error::ProofVerificationFailure(e.to_string())),
+            Err(e) => {
+                return Err(Error::ProofVerificationFailure(e.to_string()));
+            }
         }
+
+        let event = make_upgrade_client_event(client_id, &data);
+        self.check_emitted_event(event)
+            .map_err(|e| Error::IbcEvent(e.to_string()))
     }
 
     fn client_state_pre(&self, client_id: &ClientId) -> Result<AnyClientState> {

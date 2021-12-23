@@ -56,6 +56,7 @@ pub mod tx {
     use anoma::types::address;
     use anoma::types::address::Address;
     use anoma::types::chain::CHAIN_ID_LENGTH;
+    use anoma::types::ibc::IbcEvent;
     use anoma::types::internal::HostEnvResult;
     use anoma::types::storage::{
         BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
@@ -173,6 +174,15 @@ pub mod tx {
             .expect("Decoding address created by the ledger shouldn't fail")
     }
 
+    /// Emit an IBC event. There can be only one event per transaction. On
+    /// multiple calls, only the last emitted event will be used.
+    pub fn emit_ibc_event(event: &IbcEvent) {
+        let event = BorshSerialize::try_to_vec(event).unwrap();
+        unsafe {
+            anoma_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
+        };
+    }
+
     /// Get the chain ID
     pub fn get_chain_id() -> String {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
@@ -263,6 +273,9 @@ pub mod tx {
 
         // Initialize a new account
         fn anoma_tx_init_account(code_ptr: u64, code_len: u64, result_ptr: u64);
+
+        // Emit an IBC event
+        fn anoma_tx_emit_ibc_event(event_ptr: u64, event_len: u64);
 
         // Get the chain ID
         fn anoma_tx_get_chain_id(result_ptr: u64);
