@@ -130,6 +130,154 @@ environment:
 clone:
   disable: true
 ---
+name: anoma-ci-wasm-master
+kind: pipeline
+node:
+  project: anoma
+steps:
+- name: clone
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  pull: never
+  commands:
+  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
+    --single-branch .
+- name: download-scripts
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  pull: never
+  commands:
+  - aws s3 cp s3://$S3_BUCKET_SCRIPTS/anoma.zip scripts/ci/anoma.zip
+  - cd scripts/ci && unzip anoma.zip
+  environment:
+    S3_BUCKET_SCRIPTS: drone-ci-scripts
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
+  depends_on:
+  - clone
+- name: restore-cache
+  image: meltwater/drone-cache:latest
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    mount:
+    - wasm/wasm_source/target
+    region: eu-west-1
+    restore: true
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
+  depends_on:
+  - download-scripts
+- name: build-wasm
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  pull: never
+  commands:
+  - cp wasm/checksums.json wasm/original-checksums.json
+  - make build-wasm-scripts
+  depends_on:
+  - restore-cache
+- name: update-wasm
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  pull: never
+  commands:
+  - sh scripts/ci/update-wasm.sh
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
+    GITHUB_TOKEN:
+      from_secret: github_token
+  depends_on:
+  - build-wasm
+- name: test-wasm
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  pull: never
+  commands:
+  - make test-wasm
+  depends_on:
+  - update-wasm
+- name: check-wasm
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  pull: never
+  commands:
+  - cmp -- wasm/checksums.json wasm/original-checksums.json
+  depends_on:
+  - update-wasm
+- name: upload-wasm
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
+  pull: never
+  commands:
+  - aws s3 sync wasm s3://heliax-anoma-wasm-v1 --acl public-read --exclude "*" --include
+    "*.wasm" --exclude "*/*"
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
+  depends_on:
+  - test-wasm
+  - check-wasm
+- name: clean-cache
+  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
+  pull: never
+  commands:
+  - rm -f  ./wasm/wasm_source/target/.rustc_info.json
+  - rm -rf ./wasm/wasm_source/target/debug
+  - find ./wasm/wasm_source/target/release -maxdepth 1 -type f -delete
+  - find ./wasm/wasm_source/target/wasm32-unknown-unknown -maxdepth 1 -type f -delete
+  depends_on:
+  - test-wasm
+  - check-wasm
+  - upload-wasm
+  when:
+    status:
+    - success
+    - failure
+- name: rebuild-cache
+  image: meltwater/drone-cache:latest
+  pull: never
+  settings:
+    archive_format: gzip
+    backend: s3
+    bucket: heliax-drone-cache-v2
+    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    mount:
+    - wasm/wasm_source/target
+    override: false
+    region: eu-west-1
+    rebuild: true
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
+    BACKEND_OPERATION_TIMEOUT: 8m
+  depends_on:
+  - clean-cache
+  when:
+    status:
+    - success
+    - failure
+trigger:
+  event:
+  - push
+  branch:
+  - master
+type: docker
+workspace:
+  path: /usr/local/rust/wasm
+environment:
+  GIT_LFS_SKIP_SMUDGE: '1'
+clone:
+  disable: true
+---
 name: anoma-ci-build-pr
 kind: pipeline
 node:
@@ -553,20 +701,22 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   pull: never
   commands:
-  - cd scripts/ci && python3 audit.py
+  - pip3 install github3.py boto3
+  - cd scripts/ci/ && python3 audit.py
   environment:
-    GITHUB_TOKEN:
-      from_secret: github_token
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
   depends_on:
   - download-scripts
 - name: udeps
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/anoma:latest
   pull: never
   commands:
+  - pip3 install github3.py boto3
   - cd scripts/ci && python3 udeps.py
   environment:
-    GITHUB_TOKEN:
-      from_secret: github_token
     AWS_ACCESS_KEY_ID:
       from_secret: aws_access_key_id
     AWS_SECRET_ACCESS_KEY:
@@ -858,154 +1008,6 @@ environment:
 clone:
   disable: true
 ---
-name: anoma-ci-wasm-master
-kind: pipeline
-node:
-  project: anoma
-steps:
-- name: clone
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
-  pull: never
-  commands:
-  - git clone $DRONE_GIT_HTTP_URL --depth 1 --quiet --branch ${DRONE_SOURCE_BRANCH:-master}
-    --single-branch .
-- name: download-scripts
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
-  pull: never
-  commands:
-  - aws s3 cp s3://$S3_BUCKET_SCRIPTS/anoma.zip scripts/ci/anoma.zip
-  - cd scripts/ci && unzip anoma.zip
-  environment:
-    S3_BUCKET_SCRIPTS: drone-ci-scripts
-    AWS_ACCESS_KEY_ID:
-      from_secret: aws_access_key_id
-    AWS_SECRET_ACCESS_KEY:
-      from_secret: aws_secret_access_key
-  depends_on:
-  - clone
-- name: restore-cache
-  image: meltwater/drone-cache:latest
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
-    mount:
-    - wasm/wasm_source/target
-    region: eu-west-1
-    restore: true
-  environment:
-    AWS_ACCESS_KEY_ID:
-      from_secret: aws_access_key_id
-    AWS_SECRET_ACCESS_KEY:
-      from_secret: aws_secret_access_key
-  depends_on:
-  - download-scripts
-- name: build-wasm
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  pull: never
-  commands:
-  - cp wasm/checksums.json wasm/original-checksums.json
-  - make build-wasm-scripts
-  depends_on:
-  - restore-cache
-- name: update-wasm
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
-  pull: never
-  commands:
-  - sh scripts/ci/update-wasm.sh
-  environment:
-    AWS_ACCESS_KEY_ID:
-      from_secret: aws_access_key_id
-    AWS_SECRET_ACCESS_KEY:
-      from_secret: aws_secret_access_key
-    GITHUB_TOKEN:
-      from_secret: github_token
-  depends_on:
-  - build-wasm
-- name: test-wasm
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  pull: never
-  commands:
-  - make test-wasm
-  depends_on:
-  - update-wasm
-- name: check-wasm
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  pull: never
-  commands:
-  - cmp -- wasm/checksums.json wasm/original-checksums.json
-  depends_on:
-  - update-wasm
-- name: upload-wasm
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/git:latest
-  pull: never
-  commands:
-  - aws s3 sync wasm s3://heliax-anoma-wasm-v1 --acl public-read --exclude "*" --include
-    "*.wasm" --exclude "*/*"
-  environment:
-    AWS_ACCESS_KEY_ID:
-      from_secret: aws_access_key_id
-    AWS_SECRET_ACCESS_KEY:
-      from_secret: aws_secret_access_key
-  depends_on:
-  - test-wasm
-  - check-wasm
-- name: clean-cache
-  image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
-  pull: never
-  commands:
-  - rm -f  ./wasm/wasm_source/target/.rustc_info.json
-  - rm -rf ./wasm/wasm_source/target/debug
-  - find ./wasm/wasm_source/target/release -maxdepth 1 -type f -delete
-  - find ./wasm/wasm_source/target/wasm32-unknown-unknown -maxdepth 1 -type f -delete
-  depends_on:
-  - test-wasm
-  - check-wasm
-  - upload-wasm
-  when:
-    status:
-    - success
-    - failure
-- name: rebuild-cache
-  image: meltwater/drone-cache:latest
-  pull: never
-  settings:
-    archive_format: gzip
-    backend: s3
-    bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
-    mount:
-    - wasm/wasm_source/target
-    override: false
-    region: eu-west-1
-    rebuild: true
-  environment:
-    AWS_ACCESS_KEY_ID:
-      from_secret: aws_access_key_id
-    AWS_SECRET_ACCESS_KEY:
-      from_secret: aws_secret_access_key
-    BACKEND_OPERATION_TIMEOUT: 8m
-  depends_on:
-  - clean-cache
-  when:
-    status:
-    - success
-    - failure
-trigger:
-  event:
-  - push
-  branch:
-  - master
-type: docker
-workspace:
-  path: /usr/local/rust/wasm
-environment:
-  GIT_LFS_SKIP_SMUDGE: '1'
-clone:
-  disable: true
----
 name: anoma-ci-release
 kind: pipeline
 node:
@@ -1090,6 +1092,6 @@ clone:
   disable: true
 ---
 kind: signature
-hmac: 1d6e885272f05a192049cd320b29bec23d58b06db00ea70247756834d5a4cb3a
+hmac: ae33df7be9557aeb7a450a6bfc8dda2a192b6f2440ca6fd7e626220ff0f92c71
 
 ...
