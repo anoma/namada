@@ -32,7 +32,6 @@ ibc-vp-abci = [
 ]
 # for integration tests and test utilies
 ABCI = [
-  "tendermint-proto-abci",
   "tendermint-stable",
   "tendermint-proto-abci",
 ]

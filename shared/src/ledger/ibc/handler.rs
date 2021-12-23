@@ -206,14 +206,20 @@ use ibc_proto_abci::ibc::core::channel::v1::Acknowledgement;
 use prost::Message;
 use sha2::Digest;
 #[cfg(not(feature = "ABCI"))]
+use tendermint_proto::Error as ProtoError;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::Protobuf;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::Error as ProtoError;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::Protobuf;
 use thiserror::Error;
 
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::data::{IbcMessage, PacketSendData};
+use crate::types::ibc::data::{
+    Error as IbcDataError, IbcMessage, PacketSendData,
+};
 use crate::types::storage::{Key, KeySeg};
 
 #[allow(missing_docs)]
@@ -225,6 +231,20 @@ pub enum Error {
     PortId(Ics24Error),
     #[error("Updating a client error: {0}")]
     ClientUpdate(String),
+    #[error("IBC data error: {0}")]
+    IbcData(IbcDataError),
+    #[error("Decoding IBC data error: {0}")]
+    Decoding(ProtoError),
+    #[error("Client error: {0}")]
+    Client(String),
+    #[error("Connection error: {0}")]
+    Connection(String),
+    #[error("Channel error: {0}")]
+    Channel(String),
+    #[error("Counter error: {0}")]
+    Counter(String),
+    #[error("Sequence error: {0}")]
+    Sequence(String),
 }
 
 /// for handling IBC modules
@@ -233,7 +253,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// IBC trait to be implemented in integration that can read and write
 pub trait IbcActions {
     /// Read IBC-related data
-    fn read_ibc_data(&self, key: &Key) -> Vec<u8>;
+    fn read_ibc_data(&self, key: &Key) -> Option<Vec<u8>>;
 
     /// Write IBC-related data
     fn write_ibc_data(&self, key: &Key, data: impl AsRef<[u8]>);
@@ -245,9 +265,8 @@ pub trait IbcActions {
     fn emit_ibc_event(&self, event: IbcEvent);
 
     /// dispatch according to ICS26 routing
-    fn dispatch(&self, tx_data: &[u8]) {
-        let ibc_msg =
-            IbcMessage::decode(tx_data).expect("decoding IBC message failed");
+    fn dispatch(&self, tx_data: &[u8]) -> Result<()> {
+        let ibc_msg = IbcMessage::decode(tx_data).map_err(Error::IbcData)?;
         match &ibc_msg.0 {
             Ics26Envelope::Ics2Msg(ics02_msg) => match ics02_msg {
                 ClientMsg::CreateClient(msg) => self.create_client(msg),
@@ -296,12 +315,11 @@ pub trait IbcActions {
     }
 
     /// Create a new client
-    fn create_client(&self, msg: &MsgCreateAnyClient) {
+    fn create_client(&self, msg: &MsgCreateAnyClient) -> Result<()> {
         let counter_key = storage::client_counter_key();
-        let counter = self.get_and_inc_counter(&counter_key);
+        let counter = self.get_and_inc_counter(&counter_key)?;
         let client_type = msg.client_state.client_type();
-        let client_id = client_id(client_type, counter)
-            .expect("creating ID shouldn't fail");
+        let client_id = client_id(client_type, counter)?;
         // client type
         let client_type_key = storage::client_type_key(&client_id);
         self.write_ibc_data(&client_type_key, client_type.as_str().as_bytes());
@@ -326,19 +344,22 @@ pub trait IbcActions {
 
         let event = make_create_client_event(&client_id, msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Update a client
-    fn update_client(&self, msg: &MsgUpdateAnyClient) {
+    fn update_client(&self, msg: &MsgUpdateAnyClient) -> Result<()> {
         // get and update the client
         let client_id = msg.client_id.clone();
         let client_state_key = storage::client_state_key(&client_id);
+        let value = self.read_ibc_data(&client_state_key).ok_or_else(|| {
+            Error::Client(format!("The client doesn't exist: ID {}", client_id))
+        })?;
         let client_state =
-            AnyClientState::decode_vec(&self.read_ibc_data(&client_state_key))
-                .expect("cannot get the client state");
+            AnyClientState::decode_vec(&value).map_err(Error::Decoding)?;
         let (new_client_state, new_consensus_state) =
-            update_client(client_state, msg.header.clone())
-                .expect("updating a client failed");
+            update_client(client_state, msg.header.clone())?;
 
         let height = new_client_state.latest_height();
         self.write_ibc_data(
@@ -358,10 +379,12 @@ pub trait IbcActions {
 
         let event = make_update_client_event(&client_id, msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Upgrade a client
-    fn upgrade_client(&self, msg: &MsgUpgradeAnyClient) {
+    fn upgrade_client(&self, msg: &MsgUpgradeAnyClient) -> Result<()> {
         let client_state_key = storage::client_state_key(&msg.client_id);
         let height = msg.client_state.latest_height();
         let consensus_state_key =
@@ -381,12 +404,14 @@ pub trait IbcActions {
 
         let event = make_upgrade_client_event(&msg.client_id, msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Initialize a connection for ConnectionOpenInit
-    fn init_connection(&self, msg: &MsgConnectionOpenInit) {
+    fn init_connection(&self, msg: &MsgConnectionOpenInit) -> Result<()> {
         let counter_key = storage::connection_counter_key();
-        let counter = self.get_and_inc_counter(&counter_key);
+        let counter = self.get_and_inc_counter(&counter_key)?;
         // new connection
         let conn_id = connection_id(counter);
         let conn_key = storage::connection_key(&conn_id);
@@ -398,12 +423,14 @@ pub trait IbcActions {
 
         let event = make_open_init_connection_event(&conn_id, msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Initialize a connection for ConnectionOpenTry
-    fn try_connection(&self, msg: &MsgConnectionOpenTry) {
+    fn try_connection(&self, msg: &MsgConnectionOpenTry) -> Result<()> {
         let counter_key = storage::connection_counter_key();
-        let counter = self.get_and_inc_counter(&counter_key);
+        let counter = self.get_and_inc_counter(&counter_key)?;
         // new connection
         let conn_id = connection_id(counter);
         let conn_key = storage::connection_key(&conn_id);
@@ -415,14 +442,21 @@ pub trait IbcActions {
 
         let event = make_open_try_connection_event(&conn_id, msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Open the connection for ConnectionOpenAck
-    fn ack_connection(&self, msg: &MsgConnectionOpenAck) {
+    fn ack_connection(&self, msg: &MsgConnectionOpenAck) -> Result<()> {
         let conn_key = storage::connection_key(&msg.connection_id);
+        let value = self.read_ibc_data(&conn_key).ok_or_else(|| {
+            Error::Connection(format!(
+                "The connection doesn't exist: ID {}",
+                msg.connection_id
+            ))
+        })?;
         let mut connection =
-            ConnectionEnd::decode_vec(&self.read_ibc_data(&conn_key))
-                .expect("cannot get the connection");
+            ConnectionEnd::decode_vec(&value).map_err(Error::Decoding)?;
         open_connection(&mut connection);
         self.write_ibc_data(
             &conn_key,
@@ -431,14 +465,21 @@ pub trait IbcActions {
 
         let event = make_open_ack_connection_event(msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Open the connection for ConnectionOpenConfirm
-    fn confirm_connection(&self, msg: &MsgConnectionOpenConfirm) {
+    fn confirm_connection(&self, msg: &MsgConnectionOpenConfirm) -> Result<()> {
         let conn_key = storage::connection_key(&msg.connection_id);
+        let value = self.read_ibc_data(&conn_key).ok_or_else(|| {
+            Error::Connection(format!(
+                "The connection doesn't exist: ID {}",
+                msg.connection_id
+            ))
+        })?;
         let mut connection =
-            ConnectionEnd::decode_vec(&self.read_ibc_data(&conn_key))
-                .expect("cannot get the connection");
+            ConnectionEnd::decode_vec(&value).map_err(Error::Decoding)?;
         open_connection(&mut connection);
         self.write_ibc_data(
             &conn_key,
@@ -447,13 +488,15 @@ pub trait IbcActions {
 
         let event = make_open_confirm_connection_event(msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Initialize a channel for ChannelOpenInit
-    fn init_channel(&self, msg: &MsgChannelOpenInit) {
-        self.bind_port(&msg.port_id);
+    fn init_channel(&self, msg: &MsgChannelOpenInit) -> Result<()> {
+        self.bind_port(&msg.port_id)?;
         let counter_key = storage::channel_counter_key();
-        let counter = self.get_and_inc_counter(&counter_key);
+        let counter = self.get_and_inc_counter(&counter_key)?;
         let channel_id = channel_id(counter);
         let port_channel_id =
             port_channel_id(msg.port_id.clone(), channel_id.clone());
@@ -465,13 +508,15 @@ pub trait IbcActions {
 
         let event = make_open_init_channel_event(&channel_id, msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Initialize a channel for ChannelOpenTry
-    fn try_channel(&self, msg: &MsgChannelOpenTry) {
-        self.bind_port(&msg.port_id);
+    fn try_channel(&self, msg: &MsgChannelOpenTry) -> Result<()> {
+        self.bind_port(&msg.port_id)?;
         let counter_key = storage::channel_counter_key();
-        let counter = self.get_and_inc_counter(&counter_key);
+        let counter = self.get_and_inc_counter(&counter_key)?;
         let channel_id = channel_id(counter);
         let port_channel_id =
             port_channel_id(msg.port_id.clone(), channel_id.clone());
@@ -483,16 +528,23 @@ pub trait IbcActions {
 
         let event = make_open_try_channel_event(&channel_id, msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Open the channel for ChannelOpenAck
-    fn ack_channel(&self, msg: &MsgChannelOpenAck) {
+    fn ack_channel(&self, msg: &MsgChannelOpenAck) -> Result<()> {
         let port_channel_id =
             port_channel_id(msg.port_id.clone(), msg.channel_id.clone());
         let channel_key = storage::channel_key(&port_channel_id);
+        let value = self.read_ibc_data(&channel_key).ok_or_else(|| {
+            Error::Channel(format!(
+                "The channel doesn't exist: Port/Channel {}",
+                port_channel_id
+            ))
+        })?;
         let mut channel =
-            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
-                .expect("cannot get the channel");
+            ChannelEnd::decode_vec(&value).map_err(Error::Decoding)?;
         open_channel(&mut channel);
         self.write_ibc_data(
             &channel_key,
@@ -501,16 +553,23 @@ pub trait IbcActions {
 
         let event = make_open_ack_channel_event(msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Open the channel for ChannelOpenConfirm
-    fn confirm_channel(&self, msg: &MsgChannelOpenConfirm) {
+    fn confirm_channel(&self, msg: &MsgChannelOpenConfirm) -> Result<()> {
         let port_channel_id =
             port_channel_id(msg.port_id.clone(), msg.channel_id.clone());
         let channel_key = storage::channel_key(&port_channel_id);
+        let value = self.read_ibc_data(&channel_key).ok_or_else(|| {
+            Error::Channel(format!(
+                "The channel doesn't exist: Port/Channel {}",
+                port_channel_id
+            ))
+        })?;
         let mut channel =
-            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
-                .expect("cannot get the channel");
+            ChannelEnd::decode_vec(&value).map_err(Error::Decoding)?;
         open_channel(&mut channel);
         self.write_ibc_data(
             &channel_key,
@@ -519,16 +578,23 @@ pub trait IbcActions {
 
         let event = make_open_confirm_channel_event(msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Close the channel for ChannelCloseInit
-    fn close_init_channel(&self, msg: &MsgChannelCloseInit) {
+    fn close_init_channel(&self, msg: &MsgChannelCloseInit) -> Result<()> {
         let port_channel_id =
             port_channel_id(msg.port_id.clone(), msg.channel_id.clone());
         let channel_key = storage::channel_key(&port_channel_id);
+        let value = self.read_ibc_data(&channel_key).ok_or_else(|| {
+            Error::Channel(format!(
+                "The channel doesn't exist: Port/Channel {}",
+                port_channel_id
+            ))
+        })?;
         let mut channel =
-            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
-                .expect("cannot get the channel");
+            ChannelEnd::decode_vec(&value).map_err(Error::Decoding)?;
         close_channel(&mut channel);
         self.write_ibc_data(
             &channel_key,
@@ -537,16 +603,26 @@ pub trait IbcActions {
 
         let event = make_close_init_channel_event(msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Close the channel for ChannelCloseConfirm
-    fn close_confirm_channel(&self, msg: &MsgChannelCloseConfirm) {
+    fn close_confirm_channel(
+        &self,
+        msg: &MsgChannelCloseConfirm,
+    ) -> Result<()> {
         let port_channel_id =
             port_channel_id(msg.port_id.clone(), msg.channel_id.clone());
         let channel_key = storage::channel_key(&port_channel_id);
+        let value = self.read_ibc_data(&channel_key).ok_or_else(|| {
+            Error::Channel(format!(
+                "The channel doesn't exist: Port/Channel {}",
+                port_channel_id
+            ))
+        })?;
         let mut channel =
-            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
-                .expect("cannot get the channel");
+            ChannelEnd::decode_vec(&value).map_err(Error::Decoding)?;
         close_channel(&mut channel);
         self.write_ibc_data(
             &channel_key,
@@ -555,17 +631,19 @@ pub trait IbcActions {
 
         let event = make_close_confirm_channel_event(msg);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Send a packet
-    fn send_packet(&self, data: &PacketSendData) {
+    fn send_packet(&self, data: &PacketSendData) -> Result<()> {
         // get and increment the next sequence send
         let port_channel_id = port_channel_id(
             data.source_port.clone(),
             data.source_channel.clone(),
         );
         let seq_key = storage::next_sequence_send_key(&port_channel_id);
-        let sequence = self.get_and_inc_sequence(&seq_key);
+        let sequence = self.get_and_inc_sequence(&seq_key)?;
 
         // store the commitment of the packet
         let packet = data.packet(sequence);
@@ -579,10 +657,12 @@ pub trait IbcActions {
 
         let event = make_send_packet_event(packet);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Receive a packet
-    fn receive_packet(&self, msg: &MsgRecvPacket) {
+    fn receive_packet(&self, msg: &MsgRecvPacket) -> Result<()> {
         // store the receipt
         let receipt_key = storage::receipt_key(
             &msg.packet.destination_port,
@@ -607,14 +687,16 @@ pub trait IbcActions {
             msg.packet.destination_channel.clone(),
         );
         let seq_key = storage::next_sequence_recv_key(&port_channel_id);
-        self.get_and_inc_sequence(&seq_key);
+        self.get_and_inc_sequence(&seq_key)?;
 
         let event = make_write_ack_event(msg.packet.clone(), ack);
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Receive a acknowledgement
-    fn acknowledge_packet(&self, msg: &MsgAcknowledgement) {
+    fn acknowledge_packet(&self, msg: &MsgAcknowledgement) -> Result<()> {
         let commitment_key = storage::commitment_key(
             &msg.packet.source_port,
             &msg.packet.source_channel,
@@ -624,10 +706,12 @@ pub trait IbcActions {
 
         let event = make_ack_event(msg.packet.clone());
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Receive a timeout
-    fn timeout_packet(&self, msg: &MsgTimeout) {
+    fn timeout_packet(&self, msg: &MsgTimeout) -> Result<()> {
         // delete the commitment of the packet
         let commitment_key = storage::commitment_key(
             &msg.packet.source_port,
@@ -642,9 +726,14 @@ pub trait IbcActions {
             msg.packet.source_channel.clone(),
         );
         let channel_key = storage::channel_key(&port_channel_id);
+        let value = self.read_ibc_data(&channel_key).ok_or_else(|| {
+            Error::Channel(format!(
+                "The channel doesn't exist: Port/Channel {}",
+                port_channel_id
+            ))
+        })?;
         let mut channel =
-            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
-                .expect("cannot get the channel");
+            ChannelEnd::decode_vec(&value).map_err(Error::Decoding)?;
         if channel.order_matches(&Order::Ordered) {
             close_channel(&mut channel);
             self.write_ibc_data(
@@ -655,10 +744,12 @@ pub trait IbcActions {
 
         let event = make_timeout_event(msg.packet.clone());
         self.emit_ibc_event(event);
+
+        Ok(())
     }
 
     /// Receive a timeout for TimeoutOnClose
-    fn timeout_on_close_packet(&self, msg: &MsgTimeoutOnClose) {
+    fn timeout_on_close_packet(&self, msg: &MsgTimeoutOnClose) -> Result<()> {
         // delete the commitment of the packet
         let commitment_key = storage::commitment_key(
             &msg.packet.source_port,
@@ -673,9 +764,14 @@ pub trait IbcActions {
             msg.packet.source_channel.clone(),
         );
         let channel_key = storage::channel_key(&port_channel_id);
+        let value = self.read_ibc_data(&channel_key).ok_or_else(|| {
+            Error::Channel(format!(
+                "The channel doesn't exist: Port/Channel {}",
+                port_channel_id
+            ))
+        })?;
         let mut channel =
-            ChannelEnd::decode_vec(&self.read_ibc_data(&channel_key))
-                .expect("cannot get the channel");
+            ChannelEnd::decode_vec(&value).map_err(Error::Decoding)?;
         if channel.order_matches(&Order::Ordered) {
             close_channel(&mut channel);
             self.write_ibc_data(
@@ -683,38 +779,50 @@ pub trait IbcActions {
                 channel.encode_vec().expect("encoding shouldn't fail"),
             );
         }
+
+        Ok(())
     }
 
     /// Get and increment the counter
-    fn get_and_inc_counter(&self, key: &Key) -> u64 {
-        let counter: [u8; 8] = self
-            .read_ibc_data(key)
-            .try_into()
-            .expect("cannot get the counter");
-        let counter = u64::from_be_bytes(counter);
+    fn get_and_inc_counter(&self, key: &Key) -> Result<u64> {
+        let value = self.read_ibc_data(key).ok_or_else(|| {
+            Error::Counter(format!("The counter doesn't exist: {}", key))
+        })?;
+        let value: [u8; 8] = value.try_into().map_err(|_| {
+            Error::Counter(format!("The counter value wasn't u64: Key {}", key))
+        })?;
+        let counter = u64::from_be_bytes(value);
         self.write_ibc_data(key, (counter + 1).to_be_bytes());
-        counter
+        Ok(counter)
     }
 
     /// Get and increment the sequence
-    fn get_and_inc_sequence(&self, key: &Key) -> Sequence {
-        let index: [u8; 8] = self
-            .read_ibc_data(key)
-            .try_into()
-            .expect("cannot get the sequence");
-        let index: u64 = u64::from_be_bytes(index);
-        self.write_ibc_data(key, (index + 1).to_be_bytes());
-        Sequence::from(index)
+    fn get_and_inc_sequence(&self, key: &Key) -> Result<Sequence> {
+        if let Some(v) = self.read_ibc_data(key) {
+            let index: [u8; 8] = v.try_into().map_err(|_| {
+                Error::Sequence(format!(
+                    "The sequence index wasn't u64: Key {}",
+                    key
+                ))
+            })?;
+            let index: u64 = u64::from_be_bytes(index);
+            self.write_ibc_data(key, (index + 1).to_be_bytes());
+            Ok(index.into())
+        } else {
+            // when the sequence has never been used, returns the initial value
+            Ok(1.into())
+        }
     }
 
     /// Bind a new port
-    fn bind_port(&self, port_id: &PortId) {
+    fn bind_port(&self, port_id: &PortId) -> Result<()> {
         let index_key = storage::capability_index_key();
-        let cap_index = self.get_and_inc_counter(&index_key);
+        let cap_index = self.get_and_inc_counter(&index_key)?;
         let port_key = storage::port_key(port_id);
         self.write_ibc_data(&port_key, cap_index.to_be_bytes());
         let cap_key = storage::capability_key(cap_index);
         self.write_ibc_data(&cap_key, port_id.as_bytes());
+        Ok(())
     }
 }
 
