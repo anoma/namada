@@ -1,5 +1,8 @@
 //! IBC-related data definitions and transaction and validity-predicate helpers.
 
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::fmt::Display;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -7,13 +10,17 @@ use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(not(feature = "ABCI"))]
 use ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 #[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::client_consensus::{
-    AnyConsensusState, ConsensusState,
-};
+use ibc::core::ics02_client::client_consensus::{AnyConsensusState, ConsensusState};
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics02_client::client_state::{AnyClientState, ClientState};
 #[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::header::AnyHeader;
+use ibc::core::ics02_client::client_type::ClientType;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics02_client::events::{
+    Attributes as ClientAttributes, CreateClient, UpdateClient, UpgradeClient,
+};
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics02_client::header::{AnyHeader, Header};
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics02_client::height::Height;
 #[cfg(not(feature = "ABCI"))]
@@ -21,10 +28,24 @@ use ibc::core::ics03_connection::connection::{
     ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
 };
 #[cfg(not(feature = "ABCI"))]
+use ibc::core::ics03_connection::events::{
+    Attributes as ConnectionAttributes, OpenAck as ConnOpenAck,
+    OpenConfirm as ConnOpenConfirm, OpenInit as ConnOpenInit,
+    OpenTry as ConnOpenTry,
+};
+#[cfg(not(feature = "ABCI"))]
 use ibc::core::ics03_connection::version::Version;
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
+};
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics04_channel::events::{
+    AcknowledgePacket, Attributes as ChannelAttributes,
+    CloseConfirm as ChanCloseConfirm, CloseInit as ChanCloseInit,
+    OpenAck as ChanOpenAck, OpenConfirm as ChanOpenConfirm,
+    OpenInit as ChanOpenInit, OpenTry as ChanOpenTry, SendPacket,
+    TimeoutOnClosePacket, TimeoutPacket, WriteAcknowledgement,
 };
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics04_channel::packet::{Packet, Sequence};
@@ -37,6 +58,8 @@ use ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 #[cfg(not(feature = "ABCI"))]
+use ibc::events::{IbcEvent as RawIbcEvent, Error as IbcEventError};
+#[cfg(not(feature = "ABCI"))]
 use ibc::mock::client_state::{MockClientState, MockConsensusState};
 #[cfg(not(feature = "ABCI"))]
 use ibc::proofs::{ConsensusProof, ProofError, Proofs};
@@ -45,13 +68,17 @@ use ibc::timestamp::Timestamp;
 #[cfg(feature = "ABCI")]
 use ibc_abci::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 #[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::client_consensus::{
-    AnyConsensusState, ConsensusState,
-};
+use ibc_abci::core::ics02_client::client_consensus::{AnyConsensusState, ConsensusState};
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics02_client::client_state::{AnyClientState, ClientState};
 #[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::header::AnyHeader;
+use ibc_abci::core::ics02_client::client_type::ClientType;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics02_client::events::{
+    Attributes as ClientAttributes, CreateClient, UpdateClient, UpgradeClient,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics02_client::header::{AnyHeader, Header};
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics02_client::height::Height;
 #[cfg(feature = "ABCI")]
@@ -59,10 +86,24 @@ use ibc_abci::core::ics03_connection::connection::{
     ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
 };
 #[cfg(feature = "ABCI")]
+use ibc_abci::core::ics03_connection::events::{
+    Attributes as ConnectionAttributes, OpenAck as ConnOpenAck,
+    OpenConfirm as ConnOpenConfirm, OpenInit as ConnOpenInit,
+    OpenTry as ConnOpenTry,
+};
+#[cfg(feature = "ABCI")]
 use ibc_abci::core::ics03_connection::version::Version;
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
+};
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics04_channel::events::{
+    AcknowledgePacket, Attributes as ChannelAttributes,
+    CloseConfirm as ChanCloseConfirm, CloseInit as ChanCloseInit,
+    OpenAck as ChanOpenAck, OpenConfirm as ChanOpenConfirm,
+    OpenInit as ChanOpenInit, OpenTry as ChanOpenTry, SendPacket,
+    TimeoutOnClosePacket, TimeoutPacket, WriteAcknowledgement,
 };
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics04_channel::packet::{Packet, Sequence};
@@ -75,6 +116,8 @@ use ibc_abci::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 #[cfg(feature = "ABCI")]
+use ibc_abci::events::{IbcEvent as RawIbcEvent, Error as IbcEventError};
+#[cfg(feature = "ABCI")]
 use ibc_abci::mock::client_state::{MockClientState, MockConsensusState};
 #[cfg(feature = "ABCI")]
 use ibc_abci::proofs::{ConsensusProof, ProofError, Proofs};
@@ -86,6 +129,10 @@ use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use ibc_proto_abci::ibc::core::commitment::v1::MerkleProof;
 use prost::Message;
 use sha2::Digest;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::abci::Event as AbciEvent;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::Event as AbciEvent;
 use thiserror::Error;
 
 use crate::types::address::{Address, InternalAddress};
@@ -105,6 +152,8 @@ pub enum Error {
     ClientUpdate(String),
     #[error("Decoding MerkleProof error: {0}")]
     DecodingMerkleProof(prost::DecodeError),
+    #[error("Event conversion error: {0}")]
+    EventConversion(IbcEventError),
 }
 
 /// Decode result for IBC data
@@ -1076,4 +1125,273 @@ fn commitment_prefix() -> CommitmentPrefix {
         .try_to_vec()
         .expect("Encoding an address string shouldn't fail");
     CommitmentPrefix::from(bytes)
+}
+
+/// Wapped IbcEvent
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, PartialEq)]
+pub struct IbcEvent(pub RawIbcEvent);
+
+impl From<RawIbcEvent> for IbcEvent {
+    fn from(e: RawIbcEvent) -> Self {
+        IbcEvent(e)
+    }
+}
+
+impl IbcEvent {
+    /// Gets the event type as String
+    pub fn event_type(&self) -> String {
+        self.0.event_type().as_str().to_string()
+    }
+
+    /// Gets attributes as String
+    pub fn attributes(&self) -> Result<HashMap<String, String>> {
+        let mut attributes = HashMap::new();
+        let abci_event = AbciEvent::try_from(self.0.clone())
+            .map_err(Error::EventConversion)?;
+        for tag in abci_event.attributes.iter() {
+            attributes.insert(tag.key.to_string(), tag.value.to_string());
+        }
+        Ok(attributes)
+    }
+}
+
+impl Display for IbcEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Makes CreateClient event
+pub fn make_create_client_event(
+    client_id: &ClientId,
+    data: &ClientCreationData,
+) -> IbcEvent {
+    let attributes = ClientAttributes {
+        client_id: client_id.clone(),
+        client_type: data.client_state.client_type(),
+        consensus_height: data.client_state.latest_height(),
+        ..Default::default()
+    };
+    RawIbcEvent::CreateClient(CreateClient::from(attributes)).into()
+}
+
+/// Makes UpdateClient event
+pub fn make_update_client_event(
+    client_id: &ClientId,
+    data: &ClientUpdateData,
+) -> IbcEvent {
+    let (client_type, consensus_height) = match data.headers.last() {
+        Some(header) => (header.client_type(), header.height()),
+        // set default values
+        None => (ClientType::Tendermint, Height::default()),
+    };
+    let attributes = ClientAttributes {
+        client_id: client_id.clone(),
+        client_type,
+        consensus_height,
+        ..Default::default()
+    };
+    RawIbcEvent::UpdateClient(UpdateClient::from(attributes)).into()
+}
+
+/// Makes UpgradeClient event
+pub fn make_upgrade_client_event(
+    client_id: &ClientId,
+    data: &ClientUpgradeData,
+) -> IbcEvent {
+    let attributes = ClientAttributes {
+        client_id: client_id.clone(),
+        client_type: data.client_state.client_type(),
+        consensus_height: data.client_state.latest_height(),
+        ..Default::default()
+    };
+    RawIbcEvent::UpgradeClient(UpgradeClient::from(attributes)).into()
+}
+
+/// Makes OpenInitConnection event
+pub fn make_open_init_connection_event(
+    conn_id: &ConnectionId,
+    data: &ConnectionOpenInitData,
+) -> IbcEvent {
+    let attributes = ConnectionAttributes {
+        connection_id: Some(conn_id.clone()),
+        client_id: data.client_id.clone(),
+        counterparty_connection_id: data.counterparty.connection_id().cloned(),
+        counterparty_client_id: data.counterparty.client_id().clone(),
+        ..Default::default()
+    };
+    RawIbcEvent::OpenInitConnection(ConnOpenInit::from(attributes)).into()
+}
+
+/// Makes OpenTryConnection event
+pub fn make_open_try_connection_event(
+    conn_id: &ConnectionId,
+    data: &ConnectionOpenTryData,
+) -> IbcEvent {
+    let attributes = ConnectionAttributes {
+        connection_id: Some(conn_id.clone()),
+        client_id: data.client_id.clone(),
+        counterparty_connection_id: data.counterparty.connection_id().cloned(),
+        counterparty_client_id: data.counterparty.client_id().clone(),
+        ..Default::default()
+    };
+    RawIbcEvent::OpenTryConnection(ConnOpenTry::from(attributes)).into()
+}
+
+/// Makes OpenAckConnection event
+pub fn make_open_ack_connection_event(
+    data: &ConnectionOpenAckData,
+) -> IbcEvent {
+    let attributes = ConnectionAttributes {
+        connection_id: Some(data.conn_id.clone()),
+        counterparty_connection_id: Some(data.counterpart_conn_id.clone()),
+        ..Default::default()
+    };
+    RawIbcEvent::OpenAckConnection(ConnOpenAck::from(attributes)).into()
+}
+
+/// Makes OpenConfirmConnection event
+pub fn make_open_confirm_connection_event(
+    data: &ConnectionOpenConfirmData,
+) -> IbcEvent {
+    let attributes = ConnectionAttributes {
+        connection_id: Some(data.conn_id.clone()),
+        ..Default::default()
+    };
+    RawIbcEvent::OpenConfirmConnection(ConnOpenConfirm::from(attributes)).into()
+}
+
+/// Makes OpenInitChannel event
+pub fn make_open_init_channel_event(
+    channel_id: &ChannelId,
+    data: &ChannelOpenInitData,
+) -> IbcEvent {
+    let connection_id = match data.connection_hops.get(0) {
+        Some(c) => c.clone(),
+        None => ConnectionId::default(),
+    };
+    let attributes = ChannelAttributes {
+        port_id: data.port_id.clone(),
+        channel_id: Some(channel_id.clone()),
+        connection_id,
+        counterparty_port_id: data.counterparty.port_id().clone(),
+        counterparty_channel_id: data.counterparty.channel_id().cloned(),
+        ..Default::default()
+    };
+    RawIbcEvent::OpenInitChannel(ChanOpenInit::from(attributes)).into()
+}
+
+/// Makes OpenTryChannel event
+pub fn make_open_try_channel_event(
+    channel_id: &ChannelId,
+    data: &ChannelOpenTryData,
+) -> IbcEvent {
+    let connection_id = match data.connection_hops.get(0) {
+        Some(c) => c.clone(),
+        None => ConnectionId::default(),
+    };
+    let attributes = ChannelAttributes {
+        port_id: data.port_id.clone(),
+        channel_id: Some(channel_id.clone()),
+        connection_id,
+        counterparty_port_id: data.counterparty.port_id().clone(),
+        counterparty_channel_id: data.counterparty.channel_id().cloned(),
+        ..Default::default()
+    };
+    RawIbcEvent::OpenTryChannel(ChanOpenTry::from(attributes)).into()
+}
+
+/// Makes OpenAckChannel event
+pub fn make_open_ack_channel_event(data: &ChannelOpenAckData) -> IbcEvent {
+    let attributes = ChannelAttributes {
+        port_id: data.port_id.clone(),
+        channel_id: Some(data.channel_id.clone()),
+        counterparty_channel_id: Some(data.counterpart_channel_id.clone()),
+        ..Default::default()
+    };
+    RawIbcEvent::OpenAckChannel(ChanOpenAck::from(attributes)).into()
+}
+
+/// Makes OpenConfirmChannel event
+pub fn make_open_confirm_channel_event(
+    data: &ChannelOpenConfirmData,
+) -> IbcEvent {
+    let attributes = ChannelAttributes {
+        port_id: data.port_id.clone(),
+        channel_id: Some(data.channel_id.clone()),
+        ..Default::default()
+    };
+    RawIbcEvent::OpenConfirmChannel(ChanOpenConfirm::from(attributes)).into()
+}
+
+/// Makes CloseInitChannel event
+pub fn make_close_init_channel_event(data: &ChannelCloseInitData) -> IbcEvent {
+    let attributes = ChannelAttributes {
+        port_id: data.port_id.clone(),
+        channel_id: Some(data.channel_id.clone()),
+        ..Default::default()
+    };
+    RawIbcEvent::CloseInitChannel(ChanCloseInit::from(attributes)).into()
+}
+
+/// Makes CloseConfirmChannel event
+pub fn make_close_confirm_channel_event(
+    data: &ChannelCloseConfirmData,
+) -> IbcEvent {
+    let attributes = ChannelAttributes {
+        port_id: data.port_id.clone(),
+        channel_id: Some(data.channel_id.clone()),
+        ..Default::default()
+    };
+    RawIbcEvent::CloseConfirmChannel(ChanCloseConfirm::from(attributes)).into()
+}
+
+/// Makes SendPacket event
+pub fn make_send_packet_event(packet: Packet) -> IbcEvent {
+    RawIbcEvent::SendPacket(SendPacket {
+        height: packet.timeout_height.clone(),
+        packet,
+    })
+    .into()
+}
+
+/// Makes WriteAcknowledgement event
+pub fn make_write_ack_event(packet: Packet, ack: Vec<u8>) -> IbcEvent {
+    RawIbcEvent::WriteAcknowledgement(WriteAcknowledgement {
+        // this height is not used
+        height: Height::default(),
+        packet,
+        ack,
+    })
+    .into()
+}
+
+/// Makes AcknowledgePacket event
+pub fn make_ack_event(packet: Packet) -> IbcEvent {
+    RawIbcEvent::AcknowledgePacket(AcknowledgePacket {
+        // this height is not used
+        height: Height::default(),
+        packet,
+    })
+    .into()
+}
+
+/// Makes TimeoutPacket event
+pub fn make_timeout_event(packet: Packet) -> IbcEvent {
+    RawIbcEvent::TimeoutPacket(TimeoutPacket {
+        // this height is not used
+        height: Height::default(),
+        packet,
+    })
+    .into()
+}
+
+/// Makes TimeoutOnClosePacket event
+pub fn make_timeout_on_close_event(packet: Packet) -> IbcEvent {
+    RawIbcEvent::TimeoutOnClosePacket(TimeoutOnClosePacket {
+        // this height is not used
+        height: Height::default(),
+        packet,
+    })
+    .into()
 }

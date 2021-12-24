@@ -24,6 +24,7 @@ use thiserror::Error;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
+use crate::types::ibc::IbcEvent;
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
@@ -48,6 +49,8 @@ pub enum Error {
     PacketError(packet::Error),
     #[error("Sequence validation error: {0}")]
     SequenceError(sequence::Error),
+    #[error("IBC event error: {0}")]
+    IbcEvent(String),
 }
 
 /// IBC functions result
@@ -161,6 +164,7 @@ where
                 }
                 IbcPrefix::Receipt => self.validate_receipt(key, tx_data)?,
                 IbcPrefix::Ack => self.validate_ack(key)?,
+                IbcPrefix::Event => {}
                 IbcPrefix::Unknown => {
                     return Err(Error::KeyError(format!(
                         "Invalid IBC-related key: {}",
@@ -234,6 +238,24 @@ where
                 "Reading the counter failed: {}",
                 e
             ))),
+        }
+    }
+
+    fn check_emitted_event(&self, expected_event: IbcEvent) -> Result<()> {
+        match self.ctx.write_log.get_ibc_event() {
+            Some(event) => {
+                if event == expected_event {
+                    Ok(())
+                } else {
+                    Err(Error::IbcEvent(format!(
+                        "The IBC event is invalid: Event {}",
+                        event
+                    )))
+                }
+            }
+            None => {
+                Err(Error::IbcEvent("No event has been emitted".to_owned()))
+            }
         }
     }
 }

@@ -11,6 +11,7 @@ use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use anoma::proto::{self, Tx};
 use anoma::types::address::{Address, InternalAddress};
+use anoma::types::ibc::IbcEvent;
 use anoma::types::storage::Key;
 use anoma::types::transaction::{DecryptedTx, TxType};
 use anoma::vm::wasm::{TxCache, VpCache};
@@ -55,6 +56,7 @@ pub struct TxResult {
     pub changed_keys: HashSet<Key>,
     pub vps_result: VpsResult,
     pub initialized_accounts: Vec<Address>,
+    pub ibc_event: Option<IbcEvent>,
 }
 
 impl TxResult {
@@ -123,12 +125,14 @@ where
                 .map_err(Error::GasError)?;
             let initialized_accounts = write_log.get_initialized_accounts();
             let changed_keys = write_log.get_keys();
+            let ibc_event = write_log.get_ibc_event();
 
             Ok(TxResult {
                 gas_used,
                 changed_keys,
                 vps_result,
                 initialized_accounts,
+                ibc_event,
             })
         }
         _ => {
