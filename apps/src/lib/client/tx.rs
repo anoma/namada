@@ -6,7 +6,7 @@ use anoma::proto::Tx;
 use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::transaction::{
-    pos, process_tx, Fee, InitAccount, InitValidator, TxType, UpdateVp,
+    pos, Fee, InitAccount, InitValidator, UpdateVp,
     WrapperTx,
 };
 use anoma::types::{address, token};
@@ -352,11 +352,18 @@ pub async fn lookup_result(ctx: Context, args: args::TxResult) {
                 safe_exit(1)
             });
     let driver_handle = tokio::spawn(async move { driver.run().await });
+    // Construct the query depending on whether we are using ABCI/ABCI++
+    //#[cfg(feature = "ABCI")]
+    let (evt_key, ext_evt_key) = ("applied", "applied.hash");
+    //#[cfg(not(feature = "ABCI"))]
+    //let (evt_key, ext_evt_key) = ("accepted", "accepted.hash");
     // Find all blocks that apply a transaction with the specified hash
+    println!("{:?}", Query::default()
+                .and_eq(ext_evt_key, args.tx_hash.as_str()));
     let blocks = &client
         .block_search(
             Query::default()
-                .and_eq("applied.hash", args.tx_hash.as_str()),
+                .and_eq(ext_evt_key, args.tx_hash.as_str()),
             1, 255, Order::Ascending)
         .await
         .expect("Unable to query for transaction with given hash")
@@ -374,7 +381,7 @@ pub async fn lookup_result(ctx: Context, args: args::TxResult) {
     let apply_event_opt = response_block_results.end_block_events
         .and_then(|events| (&events)
                   .into_iter()
-                  .find(|event| event.type_str == "applied" &&
+                  .find(|event| event.type_str == evt_key &&
                         (&event.attributes)
                         .into_iter().any(|tag|
                                          tag.key.as_ref() == "hash" &&
@@ -393,9 +400,10 @@ pub async fn lookup_result(ctx: Context, args: args::TxResult) {
         hash: event_map["hash"].to_string(),
         code: event_map["code"].to_string(),
         gas_used: event_map["gas_used"].to_string(),
-        initialized_accounts: vec![],
+        initialized_accounts: serde_json::from_str(event_map["initialized_accounts"])
+            .unwrap_or(vec![]),
     };
-    println!("Result: {:?}", result);
+    println!("Transaction was accepted with result: {:?}", result);
     // Signal to the driver to terminate.
     client.close().unwrap_or_else(|x| {
         eprintln!("{}", x);
@@ -1022,10 +1030,14 @@ impl TxResponse {
         let tx_hash_json = serde_json::Value::String(tx_hash.clone());
         let mut selector = jsonpath::selector(&json);
         let mut index = 0;
+        #[cfg(feature = "ABCI")]
+        let evt_key = "applied";
+        #[cfg(not(feature = "ABCI"))]
+        let evt_key = "accepted";
         // Find the tx with a matching hash
         let hash = loop {
             if let Ok(hash) =
-                selector(&format!("$.events.['applied.hash'][{}]", index))
+                selector(&format!("$.events.['{}.hash'][{}]", evt_key, index))
             {
                 let hash = hash[0].clone();
                 if hash == tx_hash_json {
@@ -1042,18 +1054,18 @@ impl TxResponse {
             }
         };
         let info =
-            selector(&format!("$.events.['applied.info'][{}]", index)).unwrap();
+            selector(&format!("$.events.['{}.info'][{}]", evt_key, index)).unwrap();
         let height =
-            selector(&format!("$.events.['applied.height'][{}]", index))
+            selector(&format!("$.events.['{}.height'][{}]", evt_key, index))
                 .unwrap();
         let code =
-            selector(&format!("$.events.['applied.code'][{}]", index)).unwrap();
+            selector(&format!("$.events.['{}.code'][{}]", evt_key, index)).unwrap();
         let gas_used =
-            selector(&format!("$.events.['applied.gas_used'][{}]", index))
+            selector(&format!("$.events.['{}.gas_used'][{}]", evt_key, index))
                 .unwrap();
         let initialized_accounts = selector(&format!(
-            "$.events.['applied.initialized_accounts'][{}]",
-            index
+            "$.events.['{}.initialized_accounts'][{}]",
+            evt_key, index
         ));
         let initialized_accounts = match initialized_accounts {
             Ok(values) if !values.is_empty() => {
