@@ -66,11 +66,18 @@ dependencies = [
  "tracing",
  "wasmer",
  "wasmer-cache",
- "wasmer-compiler-cranelift",
  "wasmer-compiler-singlepass",
  "wasmer-engine-jit",
  "wasmer-vm",
  "wasmparser 0.81.0",
+]
+
+[[package]]
+name = "anoma_macros"
+version = "0.3.0"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -112,16 +119,8 @@ name = "anoma_vm_env"
 version = "0.3.0"
 dependencies = [
  "anoma",
- "anoma_vm_macro",
+ "anoma_macros",
  "borsh",
-]
-
-[[package]]
-name = "anoma_vm_macro"
-version = "0.3.0"
-dependencies = [
- "quote",
- "syn",
 ]
 
 [[package]]

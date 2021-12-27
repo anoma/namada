@@ -1,10 +1,15 @@
-#[allow(clippy::ptr_arg)]
-#[no_mangle]
-fn add_intent(
-    _last_state: &Vec<u8>,
-    _intent_id: &Vec<u8>,
-    _intent_data: &Vec<u8>,
-) -> bool {
-    // Was the new intent matched into a transaction?
-    false
+use anoma::types::matchmaker::{AddIntent, AddIntentResult};
+use anoma_macros::Matchmaker;
+
+#[derive(Default, Matchmaker)]
+struct MyMatchmaker;
+
+impl AddIntent for MyMatchmaker {
+    fn add_intent(
+        &mut self,
+        _intent_id: &Vec<u8>,
+        _intent_data: &Vec<u8>,
+    ) -> AddIntentResult {
+        AddIntentResult::default()
+    }
 }

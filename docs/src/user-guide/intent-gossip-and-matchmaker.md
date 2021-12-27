@@ -94,15 +94,28 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
 
 A custom matchmaker code can be built from [`matchmaker/mm_template`](https://github.com/anoma/anoma/tree/master/matchmaker/mm_template).
 
-A matchmaker code must contain the following function, which will be called when a new intent is received:
+The `anoma_macros::Matchmaker` macro can be used to derive the binding code for the matchmaker runner on any custom implementation, e.g.:
 
 ```rust
-#[no_mangle]
-fn add_intent(
-    last_state: &Vec<u8>,
-    intent_id: &Vec<u8>,
-    intent_data: &Vec<u8>,
-) -> AddIntentResult;
+#[derive(Default, Matchmaker)]
+struct MyMatchmaker;
 ```
 
-The matchmaker can keep some state between its runs. The state can be updated via the [`AddIntentResult`](https://docs.anoma.network/rustdoc/anoma/types/matchmaker/struct.AddIntentResult.html) and received from the `last_state` argument on a next invocation. To submit a transaction from the matchmaker, add it to the `AddIntentResult` along with a hash set of the intent IDs that were matched into the transaction.
+This macro requires that there is a `Default` implementation (derived or custom) for the matchmaker, which can be used by the runner to instantiate the matchmaker.
+
+The matchmaker must also implement `AddIntent`, e.g.:
+
+```rust
+impl AddIntent for MyMatchmaker {
+    // This function will be called when a new intent is received
+    fn add_intent(
+        &mut self,
+        _intent_id: &Vec<u8>,
+        _intent_data: &Vec<u8>,
+    ) -> AddIntentResult {
+        AddIntentResult::default()
+    }
+}
+```
+
+To submit a transaction from the matchmaker, add it to the `AddIntentResult` along with a hash set of the intent IDs that were matched into the transaction.

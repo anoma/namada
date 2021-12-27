@@ -10,7 +10,7 @@ members = [
   "tests",
   "tx_prelude",
   "vm_env",
-  "vm_macro",
+  "macros",
   "vp_prelude",
 ]
 

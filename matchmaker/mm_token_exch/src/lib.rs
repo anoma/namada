@@ -3,8 +3,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use anoma::types::address::Address;
 use anoma::types::intent::{Exchange, FungibleTokenIntent, MatchedExchanges};
 use anoma::types::key::ed25519::Signed;
-use anoma::types::matchmaker::AddIntentResult;
+use anoma::types::matchmaker::{AddIntent, AddIntentResult};
 use anoma::types::token;
+use anoma_macros::Matchmaker;
 use borsh::{BorshDeserialize, BorshSerialize};
 use good_lp::{
     constraint, default_solver, variable, variables, Expression,
@@ -12,9 +13,42 @@ use good_lp::{
 };
 use petgraph::graph::{node_index, DiGraph, NodeIndex};
 use petgraph::visit::{depth_first_search, Control, DfsEvent, EdgeRef};
-use petgraph::Graph;
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
+
+#[derive(Default, Matchmaker)]
+struct TokenExchange {
+    graph: DiGraph<ExchangeNode, Address>,
+}
+
+impl AddIntent for TokenExchange {
+    fn add_intent(
+        &mut self,
+        intent_id: &Vec<u8>,
+        intent_data: &Vec<u8>,
+    ) -> AddIntentResult {
+        let intent = decode_intent_data(&intent_data[..]);
+        let exchanges = intent.data.exchange.clone();
+
+        println!("trying to match new intent");
+        exchanges.into_iter().for_each(|exchange| {
+            add_intent_node(
+                &mut self.graph,
+                intent_id.to_vec(),
+                exchange,
+                intent.clone(),
+            )
+        });
+        let (tx, matched_intents) = match try_match(&mut self.graph) {
+            Some((tx, matched_intents)) => (Some(tx), Some(matched_intents)),
+            None => (None, None),
+        };
+        AddIntentResult {
+            tx,
+            matched_intents,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ExchangeNode {
@@ -26,35 +60,6 @@ struct ExchangeNode {
 impl PartialEq for ExchangeNode {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
-    }
-}
-
-// TODO: For some reason, using `&[u8]` causes the `decode_intent_data` to fail
-// decoding
-#[allow(clippy::ptr_arg)]
-#[no_mangle]
-fn add_intent(
-    state: &Vec<u8>,
-    id: &Vec<u8>,
-    data: &Vec<u8>,
-) -> AddIntentResult {
-    let intent = decode_intent_data(&data[..]);
-    let exchanges = intent.data.exchange.clone();
-
-    let mut graph = decode_graph(state);
-    println!("trying to match new intent");
-    exchanges.into_iter().for_each(|exchange| {
-        add_intent_node(&mut graph, id.to_vec(), exchange, intent.clone())
-    });
-    let (tx, matched_intents) = match try_match(&mut graph) {
-        Some((tx, matched_intents)) => (Some(tx), Some(matched_intents)),
-        None => (None, None),
-    };
-    let state = encode_graph(&graph);
-    AddIntentResult {
-        tx,
-        state,
-        matched_intents,
     }
 }
 
@@ -363,16 +368,4 @@ fn create_transfer(
 
 fn decode_intent_data(bytes: &[u8]) -> Signed<FungibleTokenIntent> {
     Signed::<FungibleTokenIntent>::try_from_slice(bytes).unwrap()
-}
-
-fn decode_graph(bytes: &[u8]) -> DiGraph<ExchangeNode, Address> {
-    if bytes.is_empty() {
-        Graph::new()
-    } else {
-        serde_json::from_slice(bytes).expect("error in json format")
-    }
-}
-
-fn encode_graph(graph: &DiGraph<ExchangeNode, Address>) -> Vec<u8> {
-    serde_json::to_vec(graph).unwrap()
 }
