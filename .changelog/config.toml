@@ -21,5 +21,5 @@ entry_indent = 2
 # docs = {name = "Documentation", path = "docs"}
 # proof_of_stake = {name = "Anoma's Proof-of-Stake crate", path = "proof_of_stake"}
 # vm_env = {name = "Anoma's WASM VM environment crate", path = "vm_env"}
-# vm_macro = {name = "Anoma's WASM VM procedural macro crate", path = "vm_macro"}
+# macros = {name = "Anoma's WASM VM procedural macros crate", path = "macros"}
 # wasm = {name = "Anoma's default WASM transactions and validity predicates", path = "wasm/wasm_source"}

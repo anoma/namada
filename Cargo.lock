@@ -214,6 +214,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma_macros"
+version = "0.3.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "anoma_proof_of_stake"
 version = "0.3.0"
 dependencies = [
@@ -266,16 +274,8 @@ name = "anoma_vm_env"
 version = "0.3.0"
 dependencies = [
  "anoma",
- "anoma_vm_macro",
+ "anoma_macros",
  "borsh",
-]
-
-[[package]]
-name = "anoma_vm_macro"
-version = "0.3.0"
-dependencies = [
- "quote",
- "syn",
 ]
 
 [[package]]

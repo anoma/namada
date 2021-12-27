@@ -15,7 +15,7 @@ pub mod token;
 pub mod tx_prelude {
     pub use anoma::types::address::Address;
     pub use anoma::types::*;
-    pub use anoma_vm_macro::transaction;
+    pub use anoma_macros::transaction;
 
     pub use crate::imports::tx::*;
     pub use crate::intent::tx as intent;
@@ -29,7 +29,7 @@ pub mod vp_prelude {
 
     pub use anoma::types::address::Address;
     pub use anoma::types::*;
-    pub use anoma_vm_macro::validity_predicate;
+    pub use anoma_macros::validity_predicate;
 
     pub use crate::imports::vp::*;
     pub use crate::intent::vp as intent;
