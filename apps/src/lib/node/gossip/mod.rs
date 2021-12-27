@@ -10,12 +10,11 @@ use std::rc::Rc;
 use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 use thiserror::Error;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 use self::intent_gossiper::GossipIntent;
 use self::p2p::P2P;
 use crate::config::IntentGossiper;
-use crate::proto::services::{rpc_message, RpcResponse};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -47,10 +46,7 @@ pub fn run(
         p2p::P2P::new(&config, base_dir, intent_gossip_app.mm_sender.clone())
             .map_err(Error::P2pInit)?;
 
-    // Start the rpc socket, if enabled in the config
-    let rpc_event_receiver = config.rpc.as_ref().map(rpc::start_rpc_server);
-
-    dispatcher(gossip, intent_gossip_app, rpc_event_receiver)
+    dispatcher(gossip, intent_gossip_app, config)
 }
 
 // loop over all possible event. The event can be from the rpc, a matchmaker
@@ -61,10 +57,17 @@ pub fn run(
 pub async fn dispatcher(
     mut gossip: P2P,
     mut intent_gossip_app: GossipIntent,
-    rpc_receiver: Option<
-        mpsc::Receiver<(rpc_message::Message, oneshot::Sender<RpcResponse>)>,
-    >,
+    config: IntentGossiper,
 ) -> Result<()> {
+    // Start the rpc socket, if enabled in the config
+    let rpc_receiver = config.rpc.map(|rpc_config| {
+        let (rpc_sender, rpc_receiver) = mpsc::channel(100);
+        tokio::spawn(async move {
+            rpc::start_rpc_server(&rpc_config, rpc_sender).await
+        });
+        rpc_receiver
+    });
+
     // TODO find a nice way to refactor here
     match (rpc_receiver, intent_gossip_app.mm_receiver.take()) {
         (Some(mut rpc_receiver), Some(mut mm_receiver)) => {
