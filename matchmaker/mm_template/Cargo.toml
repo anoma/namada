@@ -18,4 +18,5 @@ ABCI = ["anoma/ABCI"]
 
 [dependencies]
 anoma = {path = "../../shared", default-features = false}
+anoma_macros = {path = "../../macros"}
 tokio = {version = "1.15.0", features = ["sync"]}

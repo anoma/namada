@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::env;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use anoma::proto::{Intent, IntentId, Tx};
 use anoma::types::address::{xan, Address};
@@ -12,6 +13,7 @@ use anoma::types::matchmaker::AddIntentResult;
 use anoma::types::transaction::{Fee, WrapperTx};
 use anoma::vm::wasm;
 use borsh::{BorshDeserialize, BorshSerialize};
+use libc::c_void;
 use libloading::Library;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net;
@@ -32,16 +34,14 @@ use crate::{config, wasm_loader};
 /// received intent.
 #[derive(Debug)]
 pub struct Matchmaker {
-    /// Matchmaker's implementation loaded from dylib
-    matchmaker_code: Library,
+    /// The loaded implementation's dylib and its state
+    r#impl: MatchmakerImpl,
     /// All valid and received intent are saved in this mempool
     mempool: IntentMempool,
     /// Possible filter that filter any received intent.
     filter: Option<Filter>,
     /// The code of the transaction that is going to be send to a ledger.
     tx_code: Vec<u8>,
-    /// the matchmaker's state as arbitrary bytes
-    state: Vec<u8>,
     /// The ledger address to send any crafted transaction to
     ledger_address: net::Address,
     /// A source address for transactions created from intents.
@@ -49,6 +49,23 @@ pub struct Matchmaker {
     /// A keypair that will be used to sign transactions.
     tx_signing_key: Rc<Keypair>,
 }
+
+/// The loaded implementation's dylib and its state
+#[derive(Debug)]
+struct MatchmakerImpl {
+    /// The matchmaker's state as a raw mutable pointer to allow custom user
+    /// implementation in a dylib.
+    /// NOTE: The `state` field MUST be above the `library` field to ensure
+    /// that its destructor is ran before the implementation code is dropped.
+    state: MatchmakerState,
+    /// Matchmaker's implementation loaded from dylib
+    library: Library,
+}
+
+/// The matchmaker's state as a raw mutable pointer to allow custom user
+/// implementation in a dylib
+#[derive(Debug)]
+struct MatchmakerState(Arc<*mut c_void>);
 
 /// Matchmaker message for communication between the runner, P2P and the
 /// implementation
@@ -111,16 +128,27 @@ impl Matchmaker {
         let matchmaker_code =
             unsafe { Library::new(matchmaker_dylib).unwrap() };
 
+        // Instantiate the matchmaker
+        let new_matchmaker: libloading::Symbol<
+            unsafe extern "C" fn() -> *mut c_void,
+        > = unsafe { matchmaker_code.get(b"_new_matchmaker").unwrap() };
+
+        let state = MatchmakerState(Arc::new(unsafe { new_matchmaker() }));
+
         let tx_code = wasm_loader::read_wasm(&wasm_dir, &config.tx_code);
         let filter = Some(Filter);
 
+        let r#impl = MatchmakerImpl {
+            state,
+            library: matchmaker_code,
+        };
+
         Ok((
             Self {
+                r#impl,
                 mempool: IntentMempool::new(),
                 filter,
-                matchmaker_code,
                 tx_code,
-                state: Vec::new(),
                 ledger_address: config.ledger_address.clone(),
                 tx_source_address,
                 tx_signing_key,
@@ -150,18 +178,14 @@ impl Matchmaker {
 
             let add_intent: libloading::Symbol<
                 unsafe extern "C" fn(
-                    &Vec<u8>,
+                    *mut c_void,
                     &Vec<u8>,
                     &Vec<u8>,
                 ) -> AddIntentResult,
-            > = unsafe { self.matchmaker_code.get(b"add_intent").unwrap() };
+            > = unsafe { self.r#impl.library.get(b"_add_intent").unwrap() };
 
-            let _ = anoma::types::key::ed25519::Signed::<
-                anoma::types::intent::FungibleTokenIntent,
-            >::try_from_slice(&intent.data)
-            .unwrap();
             let result = unsafe {
-                add_intent(&self.state, &intent.id().0, &intent.data)
+                add_intent(*self.r#impl.state.0, &intent.id().0, &intent.data)
             };
 
             if let Some(tx) = result.tx {
@@ -170,7 +194,6 @@ impl Matchmaker {
             if let Some(matched_intents) = result.matched_intents {
                 self.removed_intents(matched_intents)
             }
-            self.state = result.state;
 
             true
         } else {
@@ -247,5 +270,15 @@ impl Matchmaker {
                 });
             }
         }
+    }
+}
+
+impl Drop for MatchmakerImpl {
+    fn drop(&mut self) {
+        let drop_matchmaker: libloading::Symbol<
+            unsafe extern "C" fn(*mut c_void),
+        > = unsafe { self.library.get(b"_drop_matchmaker").unwrap() };
+
+        unsafe { drop_matchmaker(*self.state.0) };
     }
 }

@@ -3683,6 +3683,7 @@ name = "mm_template"
 version = "0.2.0"
 dependencies = [
  "anoma",
+ "anoma_macros",
  "tokio",
 ]
 
@@ -3691,6 +3692,7 @@ name = "mm_token_exch"
 version = "0.2.0"
 dependencies = [
  "anoma",
+ "anoma_macros",
  "borsh",
  "good_lp",
  "petgraph 0.5.1",
