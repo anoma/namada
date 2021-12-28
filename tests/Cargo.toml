@@ -15,6 +15,7 @@ ABCI = [
   "ibc-abci",
   "ibc-proto-abci",
   "tendermint-stable",
+  "tendermint-proto-abci",
   "anoma/ABCI",
   "anoma/ibc-vp-abci",
   "anoma_vm_env/ABCI",
@@ -24,6 +25,7 @@ ABCI-plus-plus = [
   "ibc",
   "ibc-proto",
   "tendermint",
+  "tendermint-proto",
   "anoma/ABCI-plus-plus",
   "anoma/ibc-vp",
   "anoma_vm_env/ABCI-plus-plus",
@@ -39,6 +41,7 @@ ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/abcipp-v0.23.
 ibc-abci = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/rebase_v0.23.0", features = ["mocks", "borsh"], optional = true}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/abcipp-v0.23.0", optional = true}
 ibc-proto-abci = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/rebase_v0.23.0", optional = true}
+prost = "0.9.0"
 serde_json = {version = "1.0.65"}
 sha2 = "0.9.3"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
@@ -46,6 +49,8 @@ test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tempfile = "3.2.0"
 tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/abcipp-v0.23.0", optional = true}
 tendermint-stable = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.0", optional = true}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/abcipp-v0.23.0", optional = true}
+tendermint-proto-abci = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.0", optional = true}
 tracing = "0.1.26"
 tracing-subscriber = {version = "0.2.25", default-features = false, features = ["env-filter", "fmt"]}
 

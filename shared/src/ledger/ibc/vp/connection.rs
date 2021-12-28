@@ -24,6 +24,12 @@ use ibc::core::ics03_connection::error::Error as Ics03Error;
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics03_connection::handler::verify::verify_proofs;
 #[cfg(not(feature = "ABCI"))]
+use ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+#[cfg(not(feature = "ABCI"))]
+use ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
+#[cfg(not(feature = "ABCI"))]
 use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 #[cfg(not(feature = "ABCI"))]
 use ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
@@ -50,6 +56,12 @@ use ibc_abci::core::ics03_connection::error::Error as Ics03Error;
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics03_connection::handler::verify::verify_proofs;
 #[cfg(feature = "ABCI")]
+use ibc_abci::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+#[cfg(feature = "ABCI")]
+use ibc_abci::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
+#[cfg(feature = "ABCI")]
 use ibc_abci::core::ics23_commitment::commitment::CommitmentPrefix;
 #[cfg(feature = "ABCI")]
 use ibc_abci::core::ics24_host::identifier::{ClientId, ConnectionId};
@@ -66,10 +78,7 @@ use super::super::storage::{
 use super::{Ibc, StateChange};
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::data::{
-    ConnectionOpenAckData, ConnectionOpenConfirmData, ConnectionOpenInitData,
-    ConnectionOpenTryData, Error as IbcDataError,
-};
+use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg};
 use crate::vm::WasmCacheAccess;
 
@@ -178,15 +187,17 @@ where
                         ))
                     },
                 )?;
-                let data = ConnectionOpenInitData::try_from_slice(tx_data)?;
-                let event = make_open_init_connection_event(conn_id, &data);
+                let ibc_msg = IbcMessage::decode(tx_data)?;
+                let msg = ibc_msg.msg_connection_open_init()?;
+                let event = make_open_init_connection_event(conn_id, &msg);
                 self.check_emitted_event(event)
                     .map_err(|e| Error::IbcEvent(e.to_string()))
             }
             State::TryOpen => {
-                let data = ConnectionOpenTryData::try_from_slice(tx_data)?;
-                self.verify_connection_try_proof(conn, &data)?;
-                let event = make_open_try_connection_event(conn_id, &data);
+                let ibc_msg = IbcMessage::decode(tx_data)?;
+                let msg = ibc_msg.msg_connection_open_try()?;
+                self.verify_connection_try_proof(conn, &msg)?;
+                let event = make_open_try_connection_event(conn_id, &msg);
                 self.check_emitted_event(event)
                     .map_err(|e| Error::IbcEvent(e.to_string()))
             }
@@ -208,20 +219,20 @@ where
                 let prev_conn = self.connection_end_pre(conn_id)?;
                 match prev_conn.state() {
                     State::Init => {
-                        let data =
-                            ConnectionOpenAckData::try_from_slice(tx_data)?;
-                        self.verify_connection_ack_proof(conn_id, conn, &data)?;
-                        let event = make_open_ack_connection_event(&data);
+                        let ibc_msg = IbcMessage::decode(tx_data)?;
+                        let msg = ibc_msg.msg_connection_open_ack()?;
+                        self.verify_connection_ack_proof(conn_id, conn, &msg)?;
+                        let event = make_open_ack_connection_event(&msg);
                         self.check_emitted_event(event)
                             .map_err(|e| Error::IbcEvent(e.to_string()))
                     }
                     State::TryOpen => {
-                        let data =
-                            ConnectionOpenConfirmData::try_from_slice(tx_data)?;
+                        let ibc_msg = IbcMessage::decode(tx_data)?;
+                        let msg = ibc_msg.msg_connection_open_confirm()?;
                         self.verify_connection_confirm_proof(
-                            conn_id, conn, &data,
+                            conn_id, conn, &msg,
                         )?;
-                        let event = make_open_confirm_connection_event(&data);
+                        let event = make_open_confirm_connection_event(&msg);
                         self.check_emitted_event(event)
                             .map_err(|e| Error::IbcEvent(e.to_string()))
                     }
@@ -241,7 +252,7 @@ where
     fn verify_connection_try_proof(
         &self,
         conn: ConnectionEnd,
-        data: &ConnectionOpenTryData,
+        msg: &MsgConnectionOpenTry,
     ) -> Result<()> {
         let client_id = conn.client_id().clone();
         let counterpart_client_id = conn.counterparty().client_id().clone();
@@ -254,13 +265,12 @@ where
             conn.delay_period(),
         );
 
-        let proofs = data.proofs()?;
         match verify_proofs(
             self,
-            Some(data.client_state.clone()),
+            msg.client_state.clone(),
             &conn,
             &expected_conn,
-            &proofs,
+            &msg.proofs,
         ) {
             Ok(_) => Ok(()),
             Err(e) => Err(Error::ProofVerificationFailure(e)),
@@ -271,10 +281,10 @@ where
         &self,
         conn_id: &ConnectionId,
         conn: ConnectionEnd,
-        data: &ConnectionOpenAckData,
+        msg: &MsgConnectionOpenAck,
     ) -> Result<()> {
         // version check
-        if !conn.versions().contains(&data.version) {
+        if !conn.versions().contains(&msg.version) {
             return Err(Error::InvalidVersion(
                 "The version is unsupported".to_owned(),
             ));
@@ -282,7 +292,7 @@ where
 
         // counterpart connection ID check
         if let Some(counterpart_conn_id) = conn.counterparty().connection_id() {
-            if *counterpart_conn_id != data.counterpart_conn_id {
+            if *counterpart_conn_id != msg.counterparty_connection_id {
                 return Err(Error::InvalidConnection(format!(
                     "The counterpart connection ID mismatched: ID {}",
                     counterpart_conn_id
@@ -303,13 +313,12 @@ where
             conn.delay_period(),
         );
 
-        let proofs = data.proofs()?;
         match verify_proofs(
             self,
-            Some(data.client_state.clone()),
+            msg.client_state.clone(),
             &conn,
             &expected_conn,
-            &proofs,
+            &msg.proofs,
         ) {
             Ok(_) => Ok(()),
             Err(e) => Err(Error::ProofVerificationFailure(e)),
@@ -320,7 +329,7 @@ where
         &self,
         conn_id: &ConnectionId,
         conn: ConnectionEnd,
-        data: &ConnectionOpenConfirmData,
+        msg: &MsgConnectionOpenConfirm,
     ) -> Result<()> {
         // expected counterpart connection
         let expected_conn = ConnectionEnd::new(
@@ -335,8 +344,7 @@ where
             conn.delay_period(),
         );
 
-        let proofs = data.proofs()?;
-        match verify_proofs(self, None, &conn, &expected_conn, &proofs) {
+        match verify_proofs(self, None, &conn, &expected_conn, &msg.proofs) {
             Ok(_) => Ok(()),
             Err(e) => Err(Error::ProofVerificationFailure(e)),
         }

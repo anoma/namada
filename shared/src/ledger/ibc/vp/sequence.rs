@@ -19,7 +19,7 @@ use super::super::storage::{port_channel_id, Error as IbcStorageError};
 use super::Ibc;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::types::ibc::data::{
-    PacketAckData, PacketReceiptData, PacketSendData,
+    Error as IbcDataError, IbcMessage, PacketSendData,
 };
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -37,6 +37,8 @@ pub enum Error {
     InvalidPacket(String),
     #[error("Decoding TX data error: {0}")]
     DecodingTxData(std::io::Error),
+    #[error("IBC data error: {0}")]
+    InvalidIbcData(IbcDataError),
     #[error("IBC storage error: {0}")]
     IbcStorage(IbcStorageError),
 }
@@ -107,8 +109,9 @@ where
         tx_data: &[u8],
     ) -> Result<()> {
         let port_channel_id = port_channel_id(key)?;
-        let data = PacketReceiptData::try_from_slice(tx_data)?;
-        let packet = &data.packet;
+        let ibc_msg = IbcMessage::decode(tx_data)?;
+        let msg = ibc_msg.msg_recv_packet()?;
+        let packet = &msg.packet;
         let next_seq_pre = self
             .get_next_sequence_recv_pre(&port_channel_id)
             .map_err(|e| Error::InvalidSequence(e.to_string()))?;
@@ -164,8 +167,9 @@ where
         tx_data: &[u8],
     ) -> Result<()> {
         let port_channel_id = port_channel_id(key)?;
-        let data = PacketAckData::try_from_slice(tx_data)?;
-        let packet = &data.packet;
+        let ibc_msg = IbcMessage::decode(tx_data)?;
+        let msg = ibc_msg.msg_acknowledgement()?;
+        let packet = &msg.packet;
         let next_seq_pre = self
             .get_next_sequence_ack_pre(&port_channel_id)
             .map_err(|e| Error::InvalidSequence(e.to_string()))?;
@@ -231,6 +235,12 @@ where
 impl From<IbcStorageError> for Error {
     fn from(err: IbcStorageError) -> Self {
         Self::IbcStorage(err)
+    }
+}
+
+impl From<IbcDataError> for Error {
+    fn from(err: IbcDataError) -> Self {
+        Self::InvalidIbcData(err)
     }
 }
 
