@@ -1,5 +1,6 @@
 mod behaviour;
 mod intent_gossiper;
+pub mod matchmakers;
 pub mod p2p;
 mod rpc;
 
