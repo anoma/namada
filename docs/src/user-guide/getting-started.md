@@ -18,5 +18,5 @@ To explore the command-line interface, add `--help` argument at any sub-command 
 To configure your node to join the Feigenbaum public testnet, run:
 
 ```bash
-anoma client utils join-network --chain-id=anoma-feigenbaum-0.ebb9e9f9013
+anoma client utils join-network --chain-id=anoma-testnet-0.0.a1d4bbfafa49
 ```
