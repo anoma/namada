@@ -230,7 +230,7 @@ name = "anoma_proof_of_stake"
 version = "0.3.0"
 dependencies = [
  "borsh",
- "proptest 1.0.0 (git+https://github.com/heliaxdev/proptest?branch=tomas/state-machine)",
+ "proptest 1.0.0 (git+https://github.com/heliaxdev/proptest?branch=tomas/sm)",
  "thiserror",
 ]
 
@@ -4548,7 +4548,7 @@ dependencies = [
 [[package]]
 name = "proptest"
 version = "1.0.0"
-source = "git+https://github.com/heliaxdev/proptest?branch=tomas/state-machine#121b0544cc0b4f01132965adc3db2f538498c4cb"
+source = "git+https://github.com/heliaxdev/proptest?branch=tomas/sm#d8fd7ad8897df353987d2c41793b5fe164fed9b9"
 dependencies = [
  "bit-set",
  "bitflags",
