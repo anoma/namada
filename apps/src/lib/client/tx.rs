@@ -30,6 +30,11 @@ use tendermint_rpc_abci::{
     Client, HttpClient, SubscriptionClient, WebSocketClient, Order
 };
 
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::error::Error as TError;
+#[cfg(not(feature = "ABCI"))]
+use tendermint_rpc::error::Error as TError;
+
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
@@ -339,39 +344,62 @@ pub async fn submit_init_validator(
     }
 }
 
-/// Lookup the results of applying the specified transaction to the
-/// blockchain.
+/// Represents a query for an event pertaining to the specified transaction
 
-pub async fn lookup_result(ctx: Context, args: args::TxResult) {
+#[derive(Debug, Clone)]
+pub enum TxEventQuery {
+    Accepted(String),
+    Applied(String),
+}
+
+impl TxEventQuery {
+    /// The event type to which this event query pertains
+    fn event_type(&self) -> &'static str {
+        match self {
+            TxEventQuery::Accepted(_tx_hash) => "accepted",
+            TxEventQuery::Applied(_tx_hash) => "applied",
+        }
+    }
+    /// The transaction to which this event query pertains
+    fn tx_hash(&self) -> &String {
+        match self {
+            TxEventQuery::Accepted(tx_hash) => tx_hash,
+            TxEventQuery::Applied(tx_hash) => tx_hash,
+        }
+    }
+}
+
+/// Transaction event queries are semantically a subset of general queries
+
+impl From<TxEventQuery> for Query {
+    fn from(tx_query: TxEventQuery) -> Self {
+        match tx_query {
+            TxEventQuery::Accepted(tx_hash) => Query::default()
+                .and_eq("accepted.hash", tx_hash),
+            TxEventQuery::Applied(tx_hash) => Query::default()
+                .and_eq("applied.hash", tx_hash),
+        }
+    }
+}
+
+/// Lookup the full response accompanying the specified transaction event
+
+pub async fn lookup_tx_response(ledger_address: &TendermintAddress, tx_query: TxEventQuery) -> Result<TxResponse, TError> {
     // Connect to the Tendermint server holding the transactions
     let (client, driver) =
-        WebSocketClient::new(args.query.ledger_address.clone())
-            .await
-            .unwrap_or_else(|x| {
-                eprintln!("{}", x);
-                safe_exit(1)
-            });
+        WebSocketClient::new(ledger_address.clone())
+            .await?;
     let driver_handle = tokio::spawn(async move { driver.run().await });
-    // Construct the query depending on whether we are using ABCI/ABCI++
-    //#[cfg(feature = "ABCI")]
-    let (evt_key, ext_evt_key) = ("applied", "applied.hash");
-    //#[cfg(not(feature = "ABCI"))]
-    //let (evt_key, ext_evt_key) = ("accepted", "accepted.hash");
     // Find all blocks that apply a transaction with the specified hash
-    println!("{:?}", Query::default()
-                .and_eq(ext_evt_key, args.tx_hash.as_str()));
     let blocks = &client
-        .block_search(
-            Query::default()
-                .and_eq(ext_evt_key, args.tx_hash.as_str()),
-            1, 255, Order::Ascending)
+        .block_search(Query::from(tx_query.clone()), 1, 255, Order::Ascending)
         .await
         .expect("Unable to query for transaction with given hash")
         .blocks;
     // Get the block results corresponding to a block to which
     // the specified transaction belongs
     let block = &blocks.get(0)
-        .expect("Unable to find a block applying the given transaction")
+        .ok_or(TError::server("Unable to find a block applying the given transaction".to_string()))?
         .block;
     let response_block_results = client.block_results(block.header.height)
         .await
@@ -381,14 +409,14 @@ pub async fn lookup_result(ctx: Context, args: args::TxResult) {
     let apply_event_opt = response_block_results.end_block_events
         .and_then(|events| (&events)
                   .into_iter()
-                  .find(|event| event.type_str == evt_key &&
+                  .find(|event| event.type_str == tx_query.event_type() &&
                         (&event.attributes)
                         .into_iter().any(|tag|
                                          tag.key.as_ref() == "hash" &&
-                                         tag.value.as_ref() == args.tx_hash))
+                                         tag.value.as_ref() == tx_query.tx_hash()))
                   .cloned());
     let apply_event = apply_event_opt
-        .expect("Unable to find the event corresponding to the specified transaction");
+        .ok_or(TError::server("Unable to find the event corresponding to the specified transaction".to_string()))?;
     // Reformat the event attributes so as to ease value extraction
     let event_map:std::collections::HashMap<&str, &str> = (&apply_event.attributes)
         .into_iter()
@@ -403,17 +431,45 @@ pub async fn lookup_result(ctx: Context, args: args::TxResult) {
         initialized_accounts: serde_json::from_str(event_map["initialized_accounts"])
             .unwrap_or(vec![]),
     };
-    println!("Transaction was accepted with result: {:?}", result);
     // Signal to the driver to terminate.
-    client.close().unwrap_or_else(|x| {
-        eprintln!("{}", x);
-        safe_exit(1)
-    });
+    client.close()?;
     // Await the driver's termination to ensure proper connection closure.
     let _ = driver_handle.await.unwrap_or_else(|x| {
         eprintln!("{}", x);
         safe_exit(1)
     });
+    Ok(result)
+}
+
+/// Lookup the results of applying the specified transaction to the
+/// blockchain.
+
+pub async fn lookup_result(_ctx: Context, args: args::TxResult) {
+    // First try looking up application event pertaining to given hash.
+    let tx_response = lookup_tx_response(
+        &args.query.ledger_address,
+        TxEventQuery::Applied(args.tx_hash.clone()))
+        .await;
+    match tx_response {
+        Ok(result) =>
+            println!("Transaction was applied with result: {:?}", result),
+        Err(err1) => {
+            // If this fails then instead look for an acceptance event.
+            let tx_response = lookup_tx_response(
+                &args.query.ledger_address,
+                TxEventQuery::Accepted(args.tx_hash))
+                .await;
+            match tx_response {
+                Ok(result) =>
+                    println!("Transaction was accepted with result: {:?}", result),
+                Err(err2) => {
+                    // Print the errors that caused the lookups to fail
+                    eprintln!("{}\n{}", err1, err2);
+                    safe_exit(1)
+                }
+            }
+        },
+    }
 }
 
 pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
