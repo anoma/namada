@@ -290,7 +290,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let tendermint_config = config.tendermint.clone();
 
     // Channel for signalling shut down from the shell or from Tendermint
-    let (abort_send, mut abort_recv) =
+    let (abort_send, abort_recv) =
         tokio::sync::mpsc::unbounded_channel::<&'static str>();
 
     // Channel for signalling shut down to Tendermint process
@@ -361,21 +361,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         .expect("Must be able to start a thread for the shell");
 
     // Wait for interrupt signal or abort message
-    tokio::select! {
-        signal = tokio::signal::ctrl_c() => {
-            match signal {
-                Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
-                Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {}", err),
-            }
-        },
-        msg = abort_recv.recv() => {
-            // When the msg is `None`, there are no more abort senders, so both
-            // Tendermint and the shell must have already exited
-            if let Some(who) = msg {
-                 tracing::info!("{} has exited, shutting down...", who);
-            }
-        }
-    };
+    wait_for_abort(abort_recv).await;
 
     // Abort the ABCI service task
     abci.abort();
@@ -471,4 +457,56 @@ impl Drop for Aborter {
         // Send abort message, ignore result
         let _ = self.sender.send(self.who);
     }
+}
+
+#[cfg(unix)]
+async fn wait_for_abort(
+    mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
+) {
+    let mut sigterm = tokio::signal::unix::signal(
+        tokio::signal::unix::SignalKind::terminate(),
+    )
+    .unwrap();
+    let _ = tokio::select! {
+        signal = tokio::signal::ctrl_c() => {
+            match signal {
+                Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
+                Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {}", err),
+            }
+        },
+        signal = sigterm.recv() => {
+            match signal {
+                Some(()) => tracing::info!("Received termination signal, exiting..."),
+                None => tracing::error!("Termination signal cannot be caught anymore, exiting..."),
+            }
+        },
+        msg = abort_recv.recv() => {
+            // When the msg is `None`, there are no more abort senders, so both
+            // Tendermint and the shell must have already exited
+            if let Some(who) = msg {
+                 tracing::info!("{} has exited, shutting down...", who);
+            }
+        }
+    };
+}
+
+#[cfg(not(unix))]
+async fn wait_for_abort(
+    mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
+) {
+    let _ = tokio::select! {
+        signal = tokio::signal::ctrl_c() => {
+            match signal {
+                Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
+                Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {}", err),
+            }
+        },
+        msg = abort_recv.recv() => {
+            // When the msg is `None`, there are no more abort senders, so both
+            // Tendermint and the shell must have already exited
+            if let Some(who) = msg {
+                 tracing::info!("{} has exited, shutting down...", who);
+            }
+        }
+    };
 }
