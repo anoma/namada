@@ -1,7 +1,7 @@
 use std::collections::HashSet;
+use std::sync::mpsc::Sender;
 
 use anoma::proto::Intent;
-use std::sync::mpsc::Sender;
 
 #[derive(Debug)]
 pub enum MatchmakerMessage {
