@@ -6,8 +6,7 @@ use anoma::proto::Tx;
 use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
 use anoma::types::transaction::{
-    pos, Fee, InitAccount, InitValidator, UpdateVp,
-    WrapperTx,
+    pos, Fee, InitAccount, InitValidator, UpdateVp, WrapperTx,
 };
 use anoma::types::{address, token};
 use anoma::{ledger, vm};
@@ -20,20 +19,21 @@ use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(not(feature = "ABCI"))]
+use tendermint_rpc::error::Error as TError;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::{EventType, Query};
 #[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{Client, HttpClient, SubscriptionClient, WebSocketClient, Order};
+use tendermint_rpc::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+};
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::error::Error as TError;
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::query::{EventType, Query};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::{
-    Client, HttpClient, SubscriptionClient, WebSocketClient, Order
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
-
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::error::Error as TError;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::error::Error as TError;
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
@@ -360,6 +360,7 @@ impl TxEventQuery {
             TxEventQuery::Applied(_tx_hash) => "applied",
         }
     }
+
     /// The transaction to which this event query pertains
     fn tx_hash(&self) -> &String {
         match self {
@@ -374,21 +375,24 @@ impl TxEventQuery {
 impl From<TxEventQuery> for Query {
     fn from(tx_query: TxEventQuery) -> Self {
         match tx_query {
-            TxEventQuery::Accepted(tx_hash) => Query::default()
-                .and_eq("accepted.hash", tx_hash),
-            TxEventQuery::Applied(tx_hash) => Query::default()
-                .and_eq("applied.hash", tx_hash),
+            TxEventQuery::Accepted(tx_hash) => {
+                Query::default().and_eq("accepted.hash", tx_hash)
+            }
+            TxEventQuery::Applied(tx_hash) => {
+                Query::default().and_eq("applied.hash", tx_hash)
+            }
         }
     }
 }
 
 /// Lookup the full response accompanying the specified transaction event
 
-pub async fn lookup_tx_response(ledger_address: &TendermintAddress, tx_query: TxEventQuery) -> Result<TxResponse, TError> {
+pub async fn lookup_tx_response(
+    ledger_address: &TendermintAddress,
+    tx_query: TxEventQuery,
+) -> Result<TxResponse, TError> {
     // Connect to the Tendermint server holding the transactions
-    let (client, driver) =
-        WebSocketClient::new(ledger_address.clone())
-            .await?;
+    let (client, driver) = WebSocketClient::new(ledger_address.clone()).await?;
     let driver_handle = tokio::spawn(async move { driver.run().await });
     // Find all blocks that apply a transaction with the specified hash
     let blocks = &client
@@ -398,29 +402,47 @@ pub async fn lookup_tx_response(ledger_address: &TendermintAddress, tx_query: Tx
         .blocks;
     // Get the block results corresponding to a block to which
     // the specified transaction belongs
-    let block = &blocks.get(0)
-        .ok_or(TError::server("Unable to find a block applying the given transaction".to_string()))?
+    let block = &blocks
+        .get(0)
+        .ok_or_else(|| {
+            TError::server(
+                "Unable to find a block applying the given transaction"
+                    .to_string(),
+            )
+        })?
         .block;
-    let response_block_results = client.block_results(block.header.height)
+    let response_block_results = client
+        .block_results(block.header.height)
         .await
         .expect("Unable to retrieve block containing transaction");
     // Search for the event where the specified transaction is
     // applied to the blockchain
-    let apply_event_opt = response_block_results.end_block_events
-        .and_then(|events| (&events)
-                  .into_iter()
-                  .find(|event| event.type_str == tx_query.event_type() &&
-                        (&event.attributes)
-                        .into_iter().any(|tag|
-                                         tag.key.as_ref() == "hash" &&
-                                         tag.value.as_ref() == tx_query.tx_hash()))
-                  .cloned());
-    let apply_event = apply_event_opt
-        .ok_or(TError::server("Unable to find the event corresponding to the specified transaction".to_string()))?;
+    let query_event_opt =
+        response_block_results.end_block_events.and_then(|events| {
+            (&events)
+                .iter()
+                .find(|event| {
+                    event.type_str == tx_query.event_type()
+                        && (&event.attributes).iter().any(|tag| {
+                            tag.key.as_ref() == "hash"
+                                && tag.value.as_ref() == tx_query.tx_hash()
+                        })
+                })
+                .cloned()
+        });
+    let query_event = query_event_opt.ok_or_else(|| {
+        TError::server(
+            "Unable to find the event corresponding to the specified \
+             transaction"
+                .to_string(),
+        )
+    })?;
     // Reformat the event attributes so as to ease value extraction
-    let event_map:std::collections::HashMap<&str, &str> = (&apply_event.attributes)
-        .into_iter()
-        .map(|tag| (tag.key.as_ref(), tag.value.as_ref())).collect();
+    let event_map: std::collections::HashMap<&str, &str> = (&query_event
+        .attributes)
+        .iter()
+        .map(|tag| (tag.key.as_ref(), tag.value.as_ref()))
+        .collect();
     // Summarize the transaction results that we were searching for
     let result = TxResponse {
         info: event_map["info"].to_string(),
@@ -428,8 +450,10 @@ pub async fn lookup_tx_response(ledger_address: &TendermintAddress, tx_query: Tx
         hash: event_map["hash"].to_string(),
         code: event_map["code"].to_string(),
         gas_used: event_map["gas_used"].to_string(),
-        initialized_accounts: serde_json::from_str(event_map["initialized_accounts"])
-            .unwrap_or(vec![]),
+        initialized_accounts: serde_json::from_str(
+            event_map["initialized_accounts"],
+        )
+        .unwrap_or_default(),
     };
     // Signal to the driver to terminate.
     client.close()?;
@@ -448,27 +472,32 @@ pub async fn lookup_result(_ctx: Context, args: args::TxResult) {
     // First try looking up application event pertaining to given hash.
     let tx_response = lookup_tx_response(
         &args.query.ledger_address,
-        TxEventQuery::Applied(args.tx_hash.clone()))
-        .await;
+        TxEventQuery::Applied(args.tx_hash.clone()),
+    )
+    .await;
     match tx_response {
-        Ok(result) =>
-            println!("Transaction was applied with result: {:?}", result),
+        Ok(result) => {
+            println!("Transaction was applied with result: {:?}", result)
+        }
         Err(err1) => {
             // If this fails then instead look for an acceptance event.
             let tx_response = lookup_tx_response(
                 &args.query.ledger_address,
-                TxEventQuery::Accepted(args.tx_hash))
-                .await;
+                TxEventQuery::Accepted(args.tx_hash),
+            )
+            .await;
             match tx_response {
-                Ok(result) =>
-                    println!("Transaction was accepted with result: {:?}", result),
+                Ok(result) => println!(
+                    "Transaction was accepted with result: {:?}",
+                    result
+                ),
                 Err(err2) => {
                     // Print the errors that caused the lookups to fail
                     eprintln!("{}\n{}", err1, err2);
                     safe_exit(1)
                 }
             }
-        },
+        }
     }
 }
 
@@ -1110,12 +1139,14 @@ impl TxResponse {
             }
         };
         let info =
-            selector(&format!("$.events.['{}.info'][{}]", evt_key, index)).unwrap();
+            selector(&format!("$.events.['{}.info'][{}]", evt_key, index))
+                .unwrap();
         let height =
             selector(&format!("$.events.['{}.height'][{}]", evt_key, index))
                 .unwrap();
         let code =
-            selector(&format!("$.events.['{}.code'][{}]", evt_key, index)).unwrap();
+            selector(&format!("$.events.['{}.code'][{}]", evt_key, index))
+                .unwrap();
         let gas_used =
             selector(&format!("$.events.['{}.gas_used'][{}]", evt_key, index))
                 .unwrap();
