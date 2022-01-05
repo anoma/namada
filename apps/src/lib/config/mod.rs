@@ -339,6 +339,7 @@ impl Config {
         config
             .merge(defaults)
             .and_then(|c| c.merge(config::File::with_name(file_name)))
+            .and_then(|c| c.merge(config::Environment::with_prefix("anoma").separator("__")))
             .map_err(Error::ReadError)?;
         config.try_into().map_err(Error::DeserializationError)
     }
