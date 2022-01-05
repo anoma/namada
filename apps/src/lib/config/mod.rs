@@ -317,7 +317,8 @@ impl Config {
     }
 
     /// Read the config from a file, or generate a default one and write it to
-    /// a file if it doesn't already exist.
+    /// a file if it doesn't already exist. Keys that are expected but not set
+    /// in the config file are filled in with default values.
     pub fn read(
         base_dir: &Path,
         chain_id: &ChainId,
@@ -328,9 +329,16 @@ impl Config {
         if !file_path.exists() {
             return Self::generate(base_dir, chain_id, mode, true);
         };
+        let defaults = config::Config::try_from(&Self::new(
+            base_dir,
+            chain_id.clone(),
+            mode,
+        ))
+        .map_err(Error::ReadError)?;
         let mut config = config::Config::new();
         config
-            .merge(config::File::with_name(file_name))
+            .merge(defaults)
+            .and_then(|c| c.merge(config::File::with_name(file_name)))
             .map_err(Error::ReadError)?;
         config.try_into().map_err(Error::DeserializationError)
     }
