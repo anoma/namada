@@ -874,20 +874,12 @@ pub async fn submit_tx(
     // Broadcast the supplied transaction
     broadcast_tx(address, tx, keypair).await?;
 
-    let parsed = if !cfg!(feature = "ABCI") {
-        parse(
-            wrapper_tx_subscription.receive_response()?,
-            TmEventType::Accepted,
-            &wrapper_tx_hash.to_string(),
-        )
-    } else {
-        TxResponse::find_tx(
-            wrapper_tx_subscription.receive_response()?,
-            wrapper_tx_hash,
-        )
-    };
     #[cfg(feature = "ABCI")]
     let parsed = {
+        let parsed = TxResponse::find_tx(
+            wrapper_tx_subscription.receive_response()?,
+            wrapper_tx_hash,
+        );
         println!(
             "Transaction applied with result: {}",
             serde_json::to_string_pretty(&parsed).unwrap()
@@ -896,6 +888,11 @@ pub async fn submit_tx(
     };
     #[cfg(not(feature = "ABCI"))]
     let parsed = {
+        let parsed = parse(
+            wrapper_tx_subscription.receive_response()?,
+            TmEventType::Accepted,
+            &wrapper_tx_hash.to_string(),
+        );
         println!(
             "Transaction accepted with result: {}",
             serde_json::to_string_pretty(&parsed).unwrap()
