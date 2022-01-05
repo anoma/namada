@@ -762,6 +762,20 @@ async fn save_initialized_accounts(
     }
 }
 
+/// Extract the wrapper transaction's hash and, if in ABCI++ mode, the inner
+/// transaction's hash. Useful for determining when parts of the given
+/// tranasaction make it on-chain.
+
+pub fn tx_hashes(tx: &WrapperTx) -> (String, Option<String>) {
+    let tx_hash = tx.tx_hash.to_string();
+    if !cfg!(feature = "ABCI") {
+        (hash_tx(&tx.try_to_vec().unwrap()).to_string(), Some(tx_hash))
+    } else {
+        (tx_hash, None)
+    }
+}
+
+
 /// Broadcast a transaction to be included in the blockchain and checks that
 /// the tx has been successfully included into the mempool of a validator
 ///
@@ -771,6 +785,9 @@ pub async fn broadcast_tx(
     tx: WrapperTx,
     keypair: &Keypair,
 ) -> Result<Response, Error> {
+    // These can later be used to determine when parts of the tx make it on-chain
+    let (wrapper_tx_hash, decrypted_tx_hash) = tx_hashes(&tx);
+
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,
         None,
@@ -788,7 +805,19 @@ pub async fn broadcast_tx(
     
     wrapper_tx_subscription.unsubscribe()?;
     wrapper_tx_subscription.close();
-    Ok(response)
+
+    if response.code == 0.into() {
+        println!("Transaction added to mempool: {:?}", response);
+        if let Some(hash) = decrypted_tx_hash {
+            println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
+            println!("Inner transaction hash: {:?}", hash);
+        } else {
+            println!("Transaction hash: {:?}", wrapper_tx_hash);
+        }
+        Ok(response)
+    } else {
+        Err(Error::Response(response.log.to_string()))
+    }
 }
 
 /// Submits a transaction to the blockchain.
@@ -804,21 +833,13 @@ pub async fn submit_tx(
     tx: WrapperTx,
     keypair: &Keypair,
 ) -> Result<TxResponse, Error> {
-    // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_tx_hash = if !cfg!(feature = "ABCI") {
-        hash_tx(&tx.try_to_vec().unwrap()).to_string()
-    } else {
-        tx.tx_hash.to_string()
-    };
-    // We use this to determine when the decrypted inner tx makes it on-chain
-    #[cfg(not(feature = "ABCI"))]
-    let decrypted_tx_hash = tx.tx_hash.to_string();
-
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,
         None,
     )?;
 
+    // We use these to determine when parts of the tx make it on-chain
+    let (wrapper_tx_hash, decrypted_tx_hash) = tx_hashes(&tx);
     // It is better to subscribe to the transaction before it is broadcast
     //
     // Note that the `applied.hash` key comes from a custom event
@@ -839,7 +860,7 @@ pub async fn submit_tx(
         )?;
         let query = Query::from(EventType::NewBlock).and_eq(
             "applied.hash",
-            decrypted_tx_hash.as_str(),
+            decrypted_tx_hash.as_ref().unwrap().as_str(),
         );
         decrypted_tx_subscription.subscribe(query)?;
         decrypted_tx_subscription
@@ -847,7 +868,7 @@ pub async fn submit_tx(
     // Broadcast the supplied transaction
     let response = broadcast_tx(address, tx, keypair).await?;
 
-    let parsed = if response.code == 0.into() {
+    let parsed = {
         println!("Transaction added to mempool: {:?}", response);
         let parsed = if !cfg!(feature = "ABCI") {
             parse(
@@ -882,7 +903,7 @@ pub async fn submit_tx(
                     decrypted_tx_subscription
                         .receive_response()?,
                     TmEventType::Applied,
-                    &decrypted_tx_hash,
+                    decrypted_tx_hash.as_ref().unwrap(),
                 );
                 println!(
                     "Transaction applied with result: {}",
@@ -893,8 +914,6 @@ pub async fn submit_tx(
                 Ok(parsed)
             }
         }
-    } else {
-        Err(Error::Response(response.log.to_string()))
     };
     wrapper_tx_subscription.unsubscribe()?;
     wrapper_tx_subscription.close();
