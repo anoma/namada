@@ -19,17 +19,17 @@ use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(not(feature = "ABCI"))]
+use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::{EventType, Query};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::{Client, HttpClient};
 #[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::endpoint::broadcast::tx_sync::Response;
+#[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::query::{EventType, Query};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::{Client, HttpClient};
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::endpoint::broadcast::tx_sync::Response;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
@@ -769,12 +769,14 @@ async fn save_initialized_accounts(
 pub fn tx_hashes(tx: &WrapperTx) -> (String, Option<String>) {
     let tx_hash = tx.tx_hash.to_string();
     if !cfg!(feature = "ABCI") {
-        (hash_tx(&tx.try_to_vec().unwrap()).to_string(), Some(tx_hash))
+        (
+            hash_tx(&tx.try_to_vec().unwrap()).to_string(),
+            Some(tx_hash),
+        )
     } else {
         (tx_hash, None)
     }
 }
-
 
 /// Broadcast a transaction to be included in the blockchain and checks that
 /// the tx has been successfully included into the mempool of a validator
@@ -785,7 +787,8 @@ pub async fn broadcast_tx(
     tx: WrapperTx,
     keypair: &Keypair,
 ) -> Result<Response, Error> {
-    // These can later be used to determine when parts of the tx make it on-chain
+    // These can later be used to determine when parts of the tx make it
+    // on-chain
     let (wrapper_tx_hash, decrypted_tx_hash) = tx_hashes(&tx);
 
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
@@ -802,7 +805,7 @@ pub async fn broadcast_tx(
         .broadcast_tx_sync(tx_bytes.into())
         .await
         .map_err(|err| Error::Response(format!("{:?}", err)))?;
-    
+
     wrapper_tx_subscription.unsubscribe()?;
     wrapper_tx_subscription.close();
 
@@ -844,8 +847,11 @@ pub async fn submit_tx(
     //
     // Note that the `applied.hash` key comes from a custom event
     // created by the shell
-    let query_key =
-        if !cfg!(feature = "ABCI") { "applied.hash" } else { "accepted.hash" };
+    let query_key = if !cfg!(feature = "ABCI") {
+        "applied.hash"
+    } else {
+        "accepted.hash"
+    };
     let query = Query::from(EventType::NewBlock)
         .and_eq(query_key, wrapper_tx_hash.as_str());
     wrapper_tx_subscription.subscribe(query)?;
@@ -866,53 +872,49 @@ pub async fn submit_tx(
         decrypted_tx_subscription
     };
     // Broadcast the supplied transaction
-    let response = broadcast_tx(address, tx, keypair).await?;
+    broadcast_tx(address, tx, keypair).await?;
 
+    let parsed = if !cfg!(feature = "ABCI") {
+        parse(
+            wrapper_tx_subscription.receive_response()?,
+            TmEventType::Accepted,
+            &wrapper_tx_hash.to_string(),
+        )
+    } else {
+        TxResponse::find_tx(
+            wrapper_tx_subscription.receive_response()?,
+            wrapper_tx_hash,
+        )
+    };
+    #[cfg(feature = "ABCI")]
     let parsed = {
-        println!("Transaction added to mempool: {:?}", response);
-        let parsed = if !cfg!(feature = "ABCI") {
-            parse(
-                wrapper_tx_subscription.receive_response()?,
-                TmEventType::Accepted,
-                &wrapper_tx_hash.to_string(),
-            )
-        } else {
-            TxResponse::find_tx(
-                wrapper_tx_subscription.receive_response()?,
-                wrapper_tx_hash,
-            )
-        };
-        #[cfg(feature = "ABCI")]
-        {
+        println!(
+            "Transaction applied with result: {}",
+            serde_json::to_string_pretty(&parsed).unwrap()
+        );
+        Ok(parsed)
+    };
+    #[cfg(not(feature = "ABCI"))]
+    let parsed = {
+        println!(
+            "Transaction accepted with result: {}",
+            serde_json::to_string_pretty(&parsed).unwrap()
+        );
+        // The transaction is now on chain. We wait for it to be decrypted
+        // and applied
+        if parsed.code == 0.to_string() {
+            let parsed = parse(
+                decrypted_tx_subscription.receive_response()?,
+                TmEventType::Applied,
+                decrypted_tx_hash.as_ref().unwrap(),
+            );
             println!(
                 "Transaction applied with result: {}",
                 serde_json::to_string_pretty(&parsed).unwrap()
             );
             Ok(parsed)
-        }
-        #[cfg(not(feature = "ABCI"))]
-        {
-            println!(
-                "Transaction accepted with result: {}",
-                serde_json::to_string_pretty(&parsed).unwrap()
-            );
-            // The transaction is now on chain. We wait for it to be decrypted
-            // and applied
-            if parsed.code == 0.to_string() {
-                let parsed = parse(
-                    decrypted_tx_subscription
-                        .receive_response()?,
-                    TmEventType::Applied,
-                    decrypted_tx_hash.as_ref().unwrap(),
-                );
-                println!(
-                    "Transaction applied with result: {}",
-                    serde_json::to_string_pretty(&parsed).unwrap()
-                );
-                Ok(parsed)
-            } else {
-                Ok(parsed)
-            }
+        } else {
+            Ok(parsed)
         }
     };
     wrapper_tx_subscription.unsubscribe()?;
