@@ -116,6 +116,9 @@ pub struct Tendermint {
     /// height
     pub consensus_timeout_commit: Timeout,
     pub tendermint_mode: TendermintMode,
+    pub instrumentation_prometheus: bool,
+    pub instrumentation_prometheus_listen_addr: SocketAddr,
+    pub instrumentation_namespace: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -163,6 +166,12 @@ impl Ledger {
                 p2p_allow_duplicate_ip: false,
                 consensus_timeout_commit: Timeout::from_str("1s").unwrap(),
                 tendermint_mode: mode,
+                instrumentation_prometheus: false,
+                instrumentation_prometheus_listen_addr: SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    26661,
+                ),
+                instrumentation_namespace: "anoman_tm".to_string(),
             },
         }
     }
