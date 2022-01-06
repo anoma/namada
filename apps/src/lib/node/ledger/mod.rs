@@ -502,7 +502,35 @@ async fn wait_for_abort(
     };
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+async fn wait_for_abort(
+    mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
+) {
+    let mut sigbreak = tokio::signal::windows::ctrl_break().unwrap();
+    let _ = tokio::select! {
+        signal = tokio::signal::ctrl_c() => {
+            match signal {
+                Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
+                Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {}", err),
+            }
+        },
+        signal = sigbreak.recv() => {
+            match signal {
+                Some(()) => tracing::info!("Received break signal, exiting..."),
+                None => tracing::error!("Break signal cannot be caught anymore, exiting..."),
+            }
+        },
+        msg = abort_recv.recv() => {
+            // When the msg is `None`, there are no more abort senders, so both
+            // Tendermint and the shell must have already exited
+            if let Some(who) = msg {
+                 tracing::info!("{} has exited, shutting down...", who);
+            }
+        }
+    };
+}
+
+#[cfg(not(any(unix, windows)))]
 async fn wait_for_abort(
     mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
 ) {
