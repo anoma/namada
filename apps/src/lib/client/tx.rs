@@ -691,14 +691,27 @@ async fn process_tx(
             args.gas_limit.clone(),
             tx,
         );
-        match submit_tx(args.ledger_address.clone(), tx, keypair).await {
-            Ok(result) => (ctx, result.initialized_accounts),
-            Err(err) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
+        if args.broadcast_only {
+            match broadcast_tx(args.ledger_address.clone(), tx, keypair).await {
+                Ok(_result) => (ctx, Vec::default()),
+                Err(err) => {
+                    eprintln!(
+                        "Encountered error while broadcasting transaction: {}",
+                        err
+                    );
+                    safe_exit(1)
+                }
+            }
+        } else {
+            match submit_tx(args.ledger_address.clone(), tx, keypair).await {
+                Ok(result) => (ctx, result.initialized_accounts),
+                Err(err) => {
+                    eprintln!(
+                        "Encountered error while broadcasting transaction: {}",
+                        err
+                    );
+                    safe_exit(1)
+                }
             }
         }
     }

@@ -1112,6 +1112,7 @@ pub mod args {
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
     );
+    const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
@@ -1998,6 +1999,8 @@ pub mod args {
         pub dry_run: bool,
         /// Submit the transaction even if it doesn't pass client checks
         pub force: bool,
+        /// Do not wait for the transaction to be added to the blockchain
+        pub broadcast_only: bool,
         /// The address of the ledger node as host:port
         pub ledger_address: TendermintAddress,
         /// If any new account is initialized by the tx, use the given alias to
@@ -2024,6 +2027,10 @@ pub mod args {
             )
             .arg(FORCE.def().about(
                 "Submit the transaction even if it doesn't pass client checks.",
+            ))
+            .arg(BROADCAST_ONLY.def().about(
+                "Do not wait for the transaction to be added to the \
+                 blockchain.",
             ))
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
             .arg(ALIAS_OPT.def().about(
@@ -2065,6 +2072,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
             let force = FORCE.parse(matches);
+            let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let fee_amount = FEE_AMOUNT.parse(matches);
@@ -2076,6 +2084,7 @@ pub mod args {
             Self {
                 dry_run,
                 force,
+                broadcast_only,
                 ledger_address,
                 initialized_account_alias,
                 fee_amount,
