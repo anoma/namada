@@ -463,10 +463,10 @@ impl Drop for Aborter {
 async fn wait_for_abort(
     mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
 ) {
-    let mut sigterm = tokio::signal::unix::signal(
-        tokio::signal::unix::SignalKind::terminate(),
-    )
-    .unwrap();
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+    let mut sighup = signal(SignalKind::hangup()).unwrap();
+    let mut sigpipe = signal(SignalKind::pipe()).unwrap();
     let _ = tokio::select! {
         signal = tokio::signal::ctrl_c() => {
             match signal {
@@ -478,6 +478,18 @@ async fn wait_for_abort(
             match signal {
                 Some(()) => tracing::info!("Received termination signal, exiting..."),
                 None => tracing::error!("Termination signal cannot be caught anymore, exiting..."),
+            }
+        },
+        signal = sighup.recv() => {
+            match signal {
+                Some(()) => tracing::info!("Received hangup signal, exiting..."),
+                None => tracing::error!("Hangup signal cannot be caught anymore, exiting..."),
+            }
+        },
+        signal = sigpipe.recv() => {
+            match signal {
+                Some(()) => tracing::info!("Received pipe signal, exiting..."),
+                None => tracing::error!("Pipe signal cannot be caught anymore, exiting..."),
             }
         },
         msg = abort_recv.recv() => {
