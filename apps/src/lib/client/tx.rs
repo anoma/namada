@@ -37,6 +37,7 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::tendermint_websocket_client::{
     hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
 };
+#[cfg(not(feature = "ABCI"))]
 use crate::node::ledger::events::{Attributes, EventType as TmEventType};
 use crate::node::ledger::tendermint_node;
 
@@ -795,6 +796,7 @@ pub async fn broadcast_tx(
         WebSocketAddress::try_from(address.clone())?,
         None,
     )?;
+
     // we sign all txs
     let tx = tx
         .sign(keypair)
@@ -806,7 +808,6 @@ pub async fn broadcast_tx(
         .await
         .map_err(|err| Error::Response(format!("{:?}", err)))?;
 
-    wrapper_tx_subscription.unsubscribe()?;
     wrapper_tx_subscription.close();
 
     if response.code == 0.into() {
@@ -842,15 +843,15 @@ pub async fn submit_tx(
     )?;
 
     // We use these to determine when parts of the tx make it on-chain
-    let (wrapper_tx_hash, decrypted_tx_hash) = tx_hashes(&tx);
+    let (wrapper_tx_hash, _decrypted_tx_hash) = tx_hashes(&tx);
     // It is better to subscribe to the transaction before it is broadcast
     //
     // Note that the `applied.hash` key comes from a custom event
     // created by the shell
     let query_key = if !cfg!(feature = "ABCI") {
-        "applied.hash"
-    } else {
         "accepted.hash"
+    } else {
+        "applied.hash"
     };
     let query = Query::from(EventType::NewBlock)
         .and_eq(query_key, wrapper_tx_hash.as_str());
@@ -866,7 +867,7 @@ pub async fn submit_tx(
         )?;
         let query = Query::from(EventType::NewBlock).and_eq(
             "applied.hash",
-            decrypted_tx_hash.as_ref().unwrap().as_str(),
+            _decrypted_tx_hash.as_ref().unwrap().as_str(),
         );
         decrypted_tx_subscription.subscribe(query)?;
         decrypted_tx_subscription
@@ -903,7 +904,7 @@ pub async fn submit_tx(
             let parsed = parse(
                 decrypted_tx_subscription.receive_response()?,
                 TmEventType::Applied,
-                decrypted_tx_hash.as_ref().unwrap(),
+                _decrypted_tx_hash.as_ref().unwrap(),
             );
             println!(
                 "Transaction applied with result: {}",
@@ -939,6 +940,7 @@ pub struct TxResponse {
 ///
 /// Searches for custom events emitted from the ledger and converts
 /// them back to thin wrapper around a hashmap for further parsing.
+#[cfg(not(feature = "ABCI"))]
 fn parse(
     json: serde_json::Value,
     event_type: TmEventType,
