@@ -123,6 +123,7 @@ pub struct IntentGossiper {
     pub address: Multiaddr,
     pub topics: HashSet<String>,
     pub subscription_filter: SubscriptionFilter,
+    pub seed_peers: HashSet<PeerAddress>,
     pub rpc: Option<RpcServer>,
     pub discover_peer: Option<DiscoverPeer>,
     pub matchmaker: Option<Matchmaker>,
@@ -233,7 +234,6 @@ pub struct DiscoverPeer {
     pub max_discovery_peers: u64,
     pub kademlia: bool,
     pub mdns: bool,
-    pub bootstrap_peers: HashSet<PeerAddress>,
 }
 
 #[derive(Error, Debug)]
@@ -377,14 +377,14 @@ impl Default for IntentGossiper {
     fn default() -> Self {
         Self {
             address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/26659").unwrap(),
-            rpc: None,
+            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
             subscription_filter: SubscriptionFilter::RegexFilter(
                 Regex::new("asset_v\\d{1,2}").unwrap(),
             ),
-
-            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
-            matchmaker: None,
+            seed_peers: HashSet::default(),
+            rpc: None,
             discover_peer: Some(DiscoverPeer::default()),
+            matchmaker: None,
         }
     }
 }
@@ -458,27 +458,11 @@ impl IntentGossiper {
         matchmaker: bool,
         rpc: bool,
     ) -> Self {
-        let mut gossiper_config = IntentGossiper::default();
-        let mut discover_config = DiscoverPeer::default();
-
-        gossiper_config.address =
+        let address =
             Multiaddr::from_str(format!("/ip4/{}/tcp/{}", ip, port).as_str())
                 .unwrap();
 
-        if matchmaker {
-            gossiper_config.matchmaker = Some(Matchmaker {
-                matchmaker: "../wasm/mm_token_exch.wasm".parse().unwrap(),
-                tx_code: "../wasm/tx_from_intent.wasm".parse().unwrap(),
-                ledger_address: "0.0.0.0:26657".parse().unwrap(),
-                filter: None,
-            })
-        }
-
-        if rpc {
-            gossiper_config.rpc = Some(RpcServer::default())
-        }
-
-        let bootstrap_peers: HashSet<PeerAddress> = peers_info
+        let seed_peers = peers_info
             .iter()
             .map(|info| PeerAddress {
                 address: Multiaddr::from_str(
@@ -488,13 +472,38 @@ impl IntentGossiper {
                 peer_id: info.2,
             })
             .collect();
-        discover_config.bootstrap_peers = bootstrap_peers;
-        discover_config.mdns = mdns;
-        discover_config.kademlia = kademlia;
 
-        gossiper_config.discover_peer = Some(discover_config);
+        let rpc = if rpc {
+            Some(RpcServer::default())
+        } else {
+            None
+        };
 
-        gossiper_config
+        let discover_peer = Some(DiscoverPeer {
+            mdns,
+            kademlia,
+            ..Default::default()
+        });
+
+        let matchmaker = if matchmaker {
+            Some(Matchmaker {
+                matchmaker: "../wasm/mm_token_exch.wasm".parse().unwrap(),
+                tx_code: "../wasm/tx_from_intent.wasm".parse().unwrap(),
+                ledger_address: "0.0.0.0:26657".parse().unwrap(),
+                filter: None,
+            })
+        } else {
+            None
+        };
+
+        IntentGossiper {
+            address,
+            seed_peers,
+            rpc,
+            discover_peer,
+            matchmaker,
+            ..Default::default()
+        }
     }
 }
 
@@ -559,7 +568,6 @@ impl Default for DiscoverPeer {
             max_discovery_peers: 16,
             kademlia: true,
             mdns: true,
-            bootstrap_peers: HashSet::new(),
         }
     }
 }
