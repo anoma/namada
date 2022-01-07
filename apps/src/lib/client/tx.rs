@@ -34,8 +34,10 @@ use tendermint_rpc_abci::{Client, HttpClient};
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
+#[cfg(not(feature = "ABCI"))]
+use crate::client::tendermint_websocket_client::hash_tx;
 use crate::client::tendermint_websocket_client::{
-    hash_tx, Error, TendermintWebsocketClient, WebSocketAddress,
+    Error, TendermintWebsocketClient, WebSocketAddress,
 };
 #[cfg(not(feature = "ABCI"))]
 use crate::node::ledger::events::{Attributes, EventType as TmEventType};
@@ -691,27 +693,24 @@ async fn process_tx(
             args.gas_limit.clone(),
             tx,
         );
-        if args.broadcast_only {
-            match broadcast_tx(args.ledger_address.clone(), tx, keypair).await {
-                Ok(_result) => (ctx, Vec::default()),
-                Err(err) => {
-                    eprintln!(
-                        "Encountered error while broadcasting transaction: {}",
-                        err
-                    );
-                    safe_exit(1)
-                }
-            }
+        // Either broadcast or submit transaction and collect result into
+        // sum type
+        let result = if args.broadcast_only {
+            Err(broadcast_tx(args.ledger_address.clone(), tx, keypair).await)
         } else {
-            match submit_tx(args.ledger_address.clone(), tx, keypair).await {
-                Ok(result) => (ctx, result.initialized_accounts),
-                Err(err) => {
-                    eprintln!(
-                        "Encountered error while broadcasting transaction: {}",
-                        err
-                    );
-                    safe_exit(1)
-                }
+            Ok(submit_tx(args.ledger_address.clone(), tx, keypair).await)
+        };
+        // Return result based on executed operation, otherwise deal with
+        // the encountered errors uniformly
+        match result {
+            Ok(Ok(result)) => (ctx, result.initialized_accounts),
+            Err(Ok(_)) => (ctx, Vec::default()),
+            Ok(Err(err)) | Err(Err(err)) => {
+                eprintln!(
+                    "Encountered error while broadcasting transaction: {}",
+                    err
+                );
+                safe_exit(1)
             }
         }
     }
@@ -780,16 +779,14 @@ async fn save_initialized_accounts(
 /// transaction's hash. Useful for determining when parts of the given
 /// tranasaction make it on-chain.
 
-pub fn tx_hashes(tx: &WrapperTx) -> (String, Option<String>) {
+pub fn tx_hashes(tx: &WrapperTx) -> (String, String) {
     let tx_hash = tx.tx_hash.to_string();
-    if !cfg!(feature = "ABCI") {
-        (
-            hash_tx(&tx.try_to_vec().unwrap()).to_string(),
-            Some(tx_hash),
-        )
-    } else {
-        (tx_hash, None)
-    }
+    #[cfg(not(feature = "ABCI"))]
+    return (hash_tx(&tx.try_to_vec().unwrap()).to_string(), tx_hash);
+    // In the case of ABCI, proceed as if inner and wrapper transaction
+    // are synonymous
+    #[cfg(feature = "ABCI")]
+    return (tx_hash.clone(), tx_hash);
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that
@@ -803,7 +800,7 @@ pub async fn broadcast_tx(
 ) -> Result<Response, Error> {
     // These can later be used to determine when parts of the tx make it
     // on-chain
-    let (wrapper_tx_hash, decrypted_tx_hash) = tx_hashes(&tx);
+    let (wrapper_tx_hash, _decrypted_tx_hash) = tx_hashes(&tx);
 
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,
@@ -825,12 +822,15 @@ pub async fn broadcast_tx(
 
     if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
-        if let Some(hash) = decrypted_tx_hash {
+        // Print the transaction identifiers to enable the extraction of
+        // acceptance/application results later
+        #[cfg(not(feature = "ABCI"))]
+        {
             println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", hash);
-        } else {
-            println!("Transaction hash: {:?}", wrapper_tx_hash);
+            println!("Inner transaction hash: {:?}", _decrypted_tx_hash);
         }
+        #[cfg(feature = "ABCI")]
+        println!("Transaction hash: {:?}", wrapper_tx_hash);
         Ok(response)
     } else {
         Err(Error::Response(response.log.to_string()))
@@ -878,10 +878,8 @@ pub async fn submit_tx(
             WebSocketAddress::try_from(address.clone())?,
             None,
         )?;
-        let query = Query::from(EventType::NewBlock).and_eq(
-            "applied.hash",
-            _decrypted_tx_hash.as_ref().unwrap().as_str(),
-        );
+        let query = Query::from(EventType::NewBlock)
+            .and_eq("applied.hash", _decrypted_tx_hash.as_str());
         decrypted_tx_subscription.subscribe(query)?;
         decrypted_tx_subscription
     };
@@ -917,7 +915,7 @@ pub async fn submit_tx(
             let parsed = parse(
                 decrypted_tx_subscription.receive_response()?,
                 TmEventType::Applied,
-                _decrypted_tx_hash.as_ref().unwrap(),
+                _decrypted_tx_hash.as_str(),
             );
             println!(
                 "Transaction applied with result: {}",
