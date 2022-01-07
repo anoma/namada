@@ -96,9 +96,22 @@ pub fn network(
     let base_dir = tempdir().unwrap();
 
     // Open the source genesis file
-    let genesis = genesis_config::open_genesis_config(
+    let mut genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
     );
+
+    if !cfg!(feature = "ABCI") {
+        // For the ABCI++ feature, we set the port to be the current+10, to
+        // avoid using shared resources with ABCI feature if running at the same
+        // time.
+        let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
+        let mut net_address_0 =
+            SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
+                .unwrap();
+        let current_port = net_address_0.port();
+        net_address_0.set_port(current_port + 10);
+        validator_0.net_address = Some(net_address_0.to_string());
+    }
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);

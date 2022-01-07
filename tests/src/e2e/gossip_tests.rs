@@ -195,9 +195,19 @@ fn match_intents() -> Result<()> {
         Some(40)
     )?;
 
-    // Wait gossip to start
-    session_gossip.exp_string("RPC started at 127.0.0.1:26660")?;
+    // The RPC port is either 26660 for ABCI or 26670 for ABCI++ (see
+    // `setup::network`)
+    let rpc_port = if cfg!(feature = "ABCI") {
+        "26660"
+    } else {
+        "26670"
+    };
+    let rpc_address = format!("127.0.0.1:{}", rpc_port);
 
+    // Wait gossip to start
+    session_gossip.exp_string(&format!("RPC started at {}", rpc_address))?;
+
+    let rpc_address = format!("http://{}", rpc_address);
     // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.A --topic "asset_v1"
     // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.B --topic "asset_v1"
     // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.C --topic "asset_v1"
@@ -208,7 +218,7 @@ fn match_intents() -> Result<()> {
         &[
             "intent",
             "--node",
-            "http://127.0.0.1:26660",
+            &rpc_address,
             "--data-path",
             intent_a_path_input.to_str().unwrap(),
             "--topic",
@@ -235,7 +245,7 @@ fn match_intents() -> Result<()> {
         &[
             "intent",
             "--node",
-            "http://127.0.0.1:26660",
+            &rpc_address,
             "--data-path",
             intent_b_path_input.to_str().unwrap(),
             "--topic",
@@ -262,7 +272,7 @@ fn match_intents() -> Result<()> {
         &[
             "intent",
             "--node",
-            "http://127.0.0.1:26660",
+            &rpc_address,
             "--data-path",
             intent_c_path_input.to_str().unwrap(),
             "--topic",
