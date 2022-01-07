@@ -486,6 +486,8 @@ mod test_tendermint_websocket_client {
     use anoma::types::transaction::hash_tx as hash_tx_bytes;
     use serde::{Deserialize, Serialize};
     #[cfg(not(feature = "ABCI"))]
+    use tendermint::abci::transaction;
+    #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::endpoint::abci_info::AbciInfo;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_rpc::query::{EventType, Query};
