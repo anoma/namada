@@ -691,7 +691,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Get the result associated with a transaction.")
+                .about("Query the result of a transaction.")
                 .add_args::<args::TxResult>()
         }
     }
