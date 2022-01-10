@@ -142,7 +142,6 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxInitValidator::def().display_order(1))
-                .subcommand(TxResult::def().display_order(1))
                 // PoS transactions
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
@@ -153,6 +152,7 @@ pub mod cmds {
                 .subcommand(QueryBonds::def().display_order(3))
                 .subcommand(QueryVotingPower::def().display_order(3))
                 .subcommand(QuerySlashes::def().display_order(3))
+                .subcommand(QueryResult::def().display_order(3))
                 // Intents
                 .subcommand(Intent::def().display_order(4))
                 .subcommand(SubscribeTopic::def().display_order(4))
@@ -166,7 +166,6 @@ pub mod cmds {
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
-            let tx_result = Self::parse_with_ctx(matches, TxResult);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
             let bond = Self::parse_with_ctx(matches, Bond);
@@ -178,6 +177,7 @@ pub mod cmds {
             let query_voting_power =
                 Self::parse_with_ctx(matches, QueryVotingPower);
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
+            let query_result = Self::parse_with_ctx(matches, QueryResult);
             let intent = Self::parse_with_ctx(matches, Intent);
             let subscribe_topic = Self::parse_with_ctx(matches, SubscribeTopic);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
@@ -186,7 +186,6 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(tx_init_account)
                 .or(tx_init_validator)
-                .or(tx_result)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -195,6 +194,7 @@ pub mod cmds {
                 .or(query_bonds)
                 .or(query_voting_power)
                 .or(query_slashes)
+                .or(query_result)
                 .or(intent)
                 .or(subscribe_topic)
                 .or(utils)
@@ -235,7 +235,7 @@ pub mod cmds {
         // Ledger cmds
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
-        TxResult(TxResult),
+        QueryResult(QueryResult),
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
@@ -678,21 +678,21 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxResult(pub args::TxResult);
+    pub struct QueryResult(pub args::QueryResult);
 
-    impl SubCmd for TxResult {
+    impl SubCmd for QueryResult {
         const CMD: &'static str = "tx-result";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| TxResult(args::TxResult::parse(matches)))
+                .map(|matches| QueryResult(args::QueryResult::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the result of a transaction.")
-                .add_args::<args::TxResult>()
+                .add_args::<args::QueryResult>()
         }
     }
 
@@ -1261,14 +1261,14 @@ pub mod args {
 
     /// Transaction associated results arguments
     #[derive(Clone, Debug)]
-    pub struct TxResult {
+    pub struct QueryResult {
         /// Common query args
         pub query: Query,
         /// Hash of transaction to lookup
         pub tx_hash: String,
     }
 
-    impl Args for TxResult {
+    impl Args for QueryResult {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let tx_hash = TX_HASH.parse(matches);

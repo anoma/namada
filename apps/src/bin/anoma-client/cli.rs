@@ -18,9 +18,6 @@ pub async fn main() -> Result<()> {
                 Sub::TxTransfer(TxTransfer(args)) => {
                     tx::submit_transfer(ctx, args).await;
                 }
-                Sub::TxResult(TxResult(args)) => {
-                    tx::lookup_result(ctx, args).await;
-                }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
                     tx::submit_update_vp(ctx, args).await;
                 }
@@ -54,6 +51,9 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QuerySlashes(QuerySlashes(args)) => {
                     rpc::query_slashes(ctx, args).await;
+                }
+                Sub::QueryResult(QueryResult(args)) => {
+                    rpc::query_result(ctx, args).await;
                 }
                 // Gossip cmds
                 Sub::Intent(Intent(args)) => {
