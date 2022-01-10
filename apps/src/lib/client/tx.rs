@@ -21,15 +21,11 @@ use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::{EventType, Query};
 #[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{
-    Client, HttpClient,
-};
+use tendermint_rpc::{Client, HttpClient};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::query::{EventType, Query};
 #[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{
-    Client, HttpClient,
-};
+use tendermint_rpc_abci::{Client, HttpClient};
 
 use super::{rpc, signing};
 use crate::cli::context::WalletAddress;

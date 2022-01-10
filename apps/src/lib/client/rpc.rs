@@ -23,32 +23,27 @@ use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{Client, HttpClient};
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{Client, HttpClient};
-#[cfg(feature = "ABCI")]
-use tendermint_stable::abci::Code;
-
-#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::error::Error as TError;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::Query;
 #[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{
-    Order, SubscriptionClient, WebSocketClient,
-};
+use tendermint_rpc::{Client, HttpClient};
+#[cfg(not(feature = "ABCI"))]
+use tendermint_rpc::{Order, SubscriptionClient, WebSocketClient};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::error::Error as TError;
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::query::Query;
 #[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{
-    Order, SubscriptionClient, WebSocketClient,
-};
+use tendermint_rpc_abci::{Client, HttpClient};
+#[cfg(feature = "ABCI")]
+use tendermint_rpc_abci::{Order, SubscriptionClient, WebSocketClient};
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::Code;
 
 use crate::cli::{self, args, Context};
-use crate::node::ledger::rpc::{Path, PrefixValue};
 use crate::client::tx::TxResponse;
+use crate::node::ledger::rpc::{Path, PrefixValue};
 
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {
@@ -1132,8 +1127,10 @@ pub async fn query_result(_ctx: Context, args: args::QueryResult) {
     .await;
     match tx_response {
         Ok(result) => {
-            println!("Transaction was applied with result: {}",
-                     serde_json::to_string_pretty(&result).unwrap())
+            println!(
+                "Transaction was applied with result: {}",
+                serde_json::to_string_pretty(&result).unwrap()
+            )
         }
         Err(err1) => {
             // If this fails then instead look for an acceptance event.
