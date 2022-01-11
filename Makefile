@@ -28,10 +28,10 @@ build-test-abci-plus-plus:
 	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus"
 
 build-release:
-	$(cargo) build --release --package anoma_apps
+	ANOMA_DEV=false $(cargo) build --release --package anoma_apps
 
 check-release:
-	$(cargo) check --release --package anoma_apps
+	ANOMA_DEV=false $(cargo) check --release --package anoma_apps
 
 package: build-release
 	scripts/make-package.sh
