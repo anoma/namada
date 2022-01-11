@@ -67,7 +67,7 @@ $ tmux
 
 # inside the tmux/or not
 
-$ ./anoman ledger
+$ ./anoma ledger
 
 # can detach the tmux (Ctrl-B then D)
 ```
@@ -148,7 +148,7 @@ $ ./anomac init-validator --alias example-validator --source example-established
 Generating validator account key...
 ```
 
-You will be asked to enter encryption passwords to generate a validator account key, consensus key and a staking reward account key. After entering the encryption password and a decryption password for the "example-established" account's key, the transaction should be added to the mempool.
+You will be asked to enter encryption passwords to generate a validator account key, consensus key and a staking reward account key. After entering the encryption password and a decryption password for the "example-established" account's key, the transaction should be added to the mempool and applied in a future block.
 
 ```shell
 ➜ Transaction added to mempool: Response { code: Ok, data: Data([]), log: Log("Mempool validation passed"), hash: transaction::Hash(F61D3D73CE7EFCC2021940A75B713C499D4942F820F6EC0F7924B70E7F2E751A) }
@@ -174,6 +174,12 @@ The validator's addresses and keys were stored in the wallet:
   Staking reward key "example-validator-rewards-key"
 The ledger node has been setup to use this validator's address and consensus key.
 ```
+
+Once the `init-validator` transaction is applied in the block and the on-chain generated validator's address is stored in your wallet, you MUST restart the `anoma ledger` node to start the node as a validator that you've just created.
+
+When you restart the node, you might notice log message "This node is not a validator" from Tendermint. This is expected, because your validator doesn't yet have any stake in the [PoS system](./user-guide/ledger/pos.md).
+
+We will now add some stake to your validator account.
 
 Transfer 1000 XAN to your validator account ("example-validator"):
 
@@ -227,7 +233,7 @@ Self-bonds:
 Bonds total: 1000
 ```
 
-Check the voting power - this will be 0 until the active-from epoch is reached:
+Check the voting power - this will be 0 until the active-from epoch is reached (in this case `22395`):
 
 ```shell
 $ ./anomac voting-power --validator example-validator
@@ -237,5 +243,7 @@ Last committed epoch: 22395
 Validator atest1v4ehgw36g3prx3pjxapyvve3xvury3fkxg6nqsesxccnzw2rxdryg335xcmnysjzxdzyvd2pamfmwd is active, voting power: 1
 Total voting power: 44
 ```
+
+Note that with the above command, you can also specify `--epoch` argument to check a future epoch.
 
 Congratulations, you have set up a validator node!
