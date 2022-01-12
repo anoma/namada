@@ -85,8 +85,8 @@ impl P2P {
 }
 
 // TODO explain a bit the choice made here
-/// Create transport used by libp2p. see
-/// https://docs.libp2p.io/concepts/transport/ for more information on libp2p
+/// Create transport used by libp2p. See
+/// <https://docs.libp2p.io/concepts/transport/> for more information on libp2p
 /// transport
 pub async fn build_transport(
     peer_key: &Keypair,
