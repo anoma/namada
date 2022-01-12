@@ -127,6 +127,7 @@ pub struct IntentGossiper {
     pub address: Multiaddr,
     pub topics: HashSet<String>,
     pub subscription_filter: SubscriptionFilter,
+    pub seed_peers: HashSet<PeerAddress>,
     pub rpc: Option<RpcServer>,
     pub discover_peer: Option<DiscoverPeer>,
     pub matchmaker: Option<Matchmaker>,
@@ -241,9 +242,10 @@ pub struct PeerAddress {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiscoverPeer {
     pub max_discovery_peers: u64,
+    /// Toggle Kademlia remote peer discovery, on by default
     pub kademlia: bool,
+    /// Toggle local network mDNS peer discovery, off by default
     pub mdns: bool,
-    pub bootstrap_peers: HashSet<PeerAddress>,
 }
 
 #[derive(Error, Debug)]
@@ -400,14 +402,14 @@ impl Default for IntentGossiper {
     fn default() -> Self {
         Self {
             address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/26659").unwrap(),
-            rpc: None,
+            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
             subscription_filter: SubscriptionFilter::RegexFilter(
                 Regex::new("asset_v\\d{1,2}").unwrap(),
             ),
-
-            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
-            matchmaker: None,
+            seed_peers: HashSet::default(),
+            rpc: None,
             discover_peer: Some(DiscoverPeer::default()),
+            matchmaker: None,
         }
     }
 }
@@ -524,16 +526,11 @@ impl<'de> Deserialize<'de> for PeerAddress {
 }
 
 impl Default for DiscoverPeer {
-    /// default configuration for discovering peer.
-    /// max_discovery_peers: 16,
-    /// kademlia: true,
-    /// mdns: true,
     fn default() -> Self {
         Self {
             max_discovery_peers: 16,
             kademlia: true,
-            mdns: true,
-            bootstrap_peers: HashSet::new(),
+            mdns: false,
         }
     }
 }
