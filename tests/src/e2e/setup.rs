@@ -39,7 +39,7 @@ const SINGLE_NODE_NET_GENESIS: &str = "genesis/e2e-tests-single-node.toml";
 /// An E2E test network.
 #[derive(Debug)]
 pub struct Network {
-    chain_id: ChainId,
+    pub chain_id: ChainId,
 }
 
 /// Add `num` validators to the genesis config. Note that called from inside
@@ -177,6 +177,7 @@ pub fn network(
         working_dir,
         base_dir,
         net,
+        genesis,
     })
 }
 
@@ -193,6 +194,7 @@ pub struct Test {
     pub working_dir: PathBuf,
     pub base_dir: TempDir,
     pub net: Network,
+    pub genesis: GenesisConfig,
 }
 
 impl Drop for Test {
@@ -327,6 +329,11 @@ impl Test {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
+        let base_dir = self.get_base_dir(&who);
+        run_cmd(bin, args, timeout_sec, &self.working_dir, &base_dir, loc)
+    }
+
+    pub fn get_base_dir(&self, who: &Who) -> PathBuf {
         let base_dir = match who {
             Who::NonValidator => self.base_dir.path().to_owned(),
             Who::Validator(index) => self
@@ -337,7 +344,7 @@ impl Test {
                 .join(format!("validator-{}", index))
                 .join(config::DEFAULT_BASE_DIR),
         };
-        run_cmd(bin, args, timeout_sec, &self.working_dir, &base_dir, loc)
+        base_dir
     }
 }
 

@@ -19,7 +19,7 @@ use serde_json::json;
 use setup::constants::*;
 
 use super::setup::ENV_VAR_DEBUG;
-use crate::e2e::helpers::find_address;
+use crate::e2e::helpers::{find_address, get_actor_rpc};
 use crate::e2e::setup::{self, Bin, Who};
 use crate::{run, run_as};
 
@@ -180,6 +180,17 @@ fn match_intents() -> Result<()> {
     generate_intent_json(intent_b_path_input.clone(), intent_b_json);
     generate_intent_json(intent_c_path_input.clone(), intent_c_json);
 
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // The RPC port is either 26660 for ABCI or 26670 for ABCI++ (see
+    // `setup::network`)
+    let rpc_port = if cfg!(feature = "ABCI") {
+        "26660"
+    } else {
+        "26670"
+    };
+    let rpc_address = format!("127.0.0.1:{}", rpc_port);
+
     // Start gossip
     let mut session_gossip = run_as!(
         test,
@@ -191,26 +202,21 @@ fn match_intents() -> Result<()> {
             "matchmaker",
             "--signing-key",
             "matchmaker-key",
+            "--rpc",
+            &rpc_address,
+            "--ledger-address",
+            &validator_one_rpc
         ],
         Some(40)
     )?;
-
-    // The RPC port is either 26660 for ABCI or 26670 for ABCI++ (see
-    // `setup::network`)
-    let rpc_port = if cfg!(feature = "ABCI") {
-        "26660"
-    } else {
-        "26670"
-    };
-    let rpc_address = format!("127.0.0.1:{}", rpc_port);
 
     // Wait gossip to start
     session_gossip.exp_string(&format!("RPC started at {}", rpc_address))?;
 
     let rpc_address = format!("http://{}", rpc_address);
-    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.A --topic "asset_v1"
-    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.B --topic "asset_v1"
-    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.C --topic "asset_v1"
+    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.A --topic "asset_v1" --ledger-address ...
+    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.B --topic "asset_v1" --ledger-address ...
+    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.C --topic "asset_v1" --ledger-address ...
     //  Send intent A
     let mut session_send_intent_a = run!(
         test,
@@ -225,6 +231,8 @@ fn match_intents() -> Result<()> {
             "asset_v1",
             "--signing-key",
             BERTHA_KEY,
+            "--ledger-address",
+            &validator_one_rpc
         ],
         Some(40),
     )?;
@@ -252,6 +260,8 @@ fn match_intents() -> Result<()> {
             "asset_v1",
             "--signing-key",
             ALBERT_KEY,
+            "--ledger-address",
+            &validator_one_rpc
         ],
         Some(40),
     )?;
@@ -279,6 +289,8 @@ fn match_intents() -> Result<()> {
             "asset_v1",
             "--signing-key",
             CHRISTEL_KEY,
+            "--ledger-address",
+            &validator_one_rpc
         ],
         Some(40),
     )?;
