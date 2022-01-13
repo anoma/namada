@@ -893,12 +893,12 @@ pub async fn broadcast_tx(
 
 #[derive(Debug, Serialize)]
 pub struct TxResponse {
-    info: String,
-    height: String,
-    hash: String,
-    code: String,
-    gas_used: String,
-    initialized_accounts: Vec<Address>,
+    pub info: String,
+    pub height: String,
+    pub hash: String,
+    pub code: String,
+    pub gas_used: String,
+    pub initialized_accounts: Vec<Address>,
 }
 
 /// Parse the JSON payload received from a subscription
@@ -950,10 +950,14 @@ impl TxResponse {
         let tx_hash_json = serde_json::Value::String(tx_hash.clone());
         let mut selector = jsonpath::selector(&json);
         let mut index = 0;
+        #[cfg(feature = "ABCI")]
+        let evt_key = "applied";
+        #[cfg(not(feature = "ABCI"))]
+        let evt_key = "accepted";
         // Find the tx with a matching hash
         let hash = loop {
             if let Ok(hash) =
-                selector(&format!("$.events.['applied.hash'][{}]", index))
+                selector(&format!("$.events.['{}.hash'][{}]", evt_key, index))
             {
                 let hash = hash[0].clone();
                 if hash == tx_hash_json {
@@ -970,18 +974,20 @@ impl TxResponse {
             }
         };
         let info =
-            selector(&format!("$.events.['applied.info'][{}]", index)).unwrap();
+            selector(&format!("$.events.['{}.info'][{}]", evt_key, index))
+                .unwrap();
         let height =
-            selector(&format!("$.events.['applied.height'][{}]", index))
+            selector(&format!("$.events.['{}.height'][{}]", evt_key, index))
                 .unwrap();
         let code =
-            selector(&format!("$.events.['applied.code'][{}]", index)).unwrap();
+            selector(&format!("$.events.['{}.code'][{}]", evt_key, index))
+                .unwrap();
         let gas_used =
-            selector(&format!("$.events.['applied.gas_used'][{}]", index))
+            selector(&format!("$.events.['{}.gas_used'][{}]", evt_key, index))
                 .unwrap();
         let initialized_accounts = selector(&format!(
-            "$.events.['applied.initialized_accounts'][{}]",
-            index
+            "$.events.['{}.initialized_accounts'][{}]",
+            evt_key, index
         ));
         let initialized_accounts = match initialized_accounts {
             Ok(values) if !values.is_empty() => {
