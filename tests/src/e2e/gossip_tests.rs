@@ -107,16 +107,7 @@ fn match_intents() -> Result<()> {
         .join("matchmaker")
         .join("mm_token_exch")
         .join("Cargo.toml");
-    let cmd = if !cfg!(feature = "ABCI") {
-        CargoBuild::new()
-            .manifest_path(manifest_path)
-            .no_default_features()
-            .features("ABCI-plus-plus")
-    } else {
-        CargoBuild::new()
-            .manifest_path(manifest_path)
-            .features("ABCI")
-    };
+    let cmd = CargoBuild::new().manifest_path(manifest_path);
     let cmd = if run_debug { cmd } else { cmd.release() };
     let msgs = cmd.exec().unwrap();
     for msg in msgs {
