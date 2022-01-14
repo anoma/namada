@@ -12,7 +12,7 @@ use thiserror::Error;
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
-use crate::types::address::{self, Address};
+use crate::types::address::{self, Address, InternalAddress};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -249,6 +249,23 @@ impl Key {
                 Some(address)
             }
             _ => None,
+        }
+    }
+
+    /// Check if the given key should be persisted
+    pub fn is_persist(&self) -> bool {
+        match &self.segments[..] {
+            [
+                DbKeySeg::AddressSeg(_),
+                DbKeySeg::StringSeg(key),
+                DbKeySeg::AddressSeg(owner),
+            ] if key == "balance"
+                && (*owner == Address::Internal(InternalAddress::Burn)
+                    || *owner == Address::Internal(InternalAddress::Mint)) =>
+            {
+                false
+            }
+            _ => true,
         }
     }
 

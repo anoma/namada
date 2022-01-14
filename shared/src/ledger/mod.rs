@@ -6,4 +6,5 @@ pub mod native_vp;
 pub mod parameters;
 pub mod pos;
 pub mod storage;
+pub mod token;
 pub mod vp_env;

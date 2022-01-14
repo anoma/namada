@@ -43,6 +43,10 @@ mod internal {
         "ano::Inter-Blockchain Communication          ";
     pub const PARAMETERS: &str =
         "ano::Protocol Parameters                     ";
+    pub const BURN: &str =
+        "ano::Burn Address                            ";
+    pub const MINT: &str =
+        "ano::Mint Address                            ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -155,6 +159,11 @@ impl Address {
                     InternalAddress::PosSlashPool => internal::POS_SLASH_POOL,
                     InternalAddress::Ibc => internal::IBC,
                     InternalAddress::Parameters => internal::PARAMETERS,
+                    InternalAddress::Escrow(hash) => {
+                        &format!("{}::{}", PREFIX_INTERNAL, hash)
+                    }
+                    InternalAddress::Burn => internal::BURN,
+                    InternalAddress::Mint => internal::MINT,
                 }
                 .to_string();
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
@@ -192,7 +201,7 @@ impl Address {
                     .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
                 Ok(Address::Implicit(ImplicitAddress::Ed25519(pkh)))
             }
-            Some((PREFIX_INTERNAL, _raw)) => match string {
+            Some((PREFIX_INTERNAL, raw)) => match string {
                 internal::POS => Ok(Address::Internal(InternalAddress::PoS)),
                 internal::POS_SLASH_POOL => {
                     Ok(Address::Internal(InternalAddress::PosSlashPool))
@@ -201,6 +210,11 @@ impl Address {
                 internal::PARAMETERS => {
                     Ok(Address::Internal(InternalAddress::Parameters))
                 }
+                internal::BURN => Ok(Address::Internal(InternalAddress::Burn)),
+                internal::MINT => Ok(Address::Internal(InternalAddress::Mint)),
+                _ if raw.len() == HASH_LEN => Ok(Address::Internal(
+                    InternalAddress::Escrow(raw.to_string()),
+                )),
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
@@ -383,6 +397,22 @@ pub enum InternalAddress {
     Ibc,
     /// Protocol parameters
     Parameters,
+    /// Escrow
+    Escrow(String),
+    /// Burn tokens
+    Burn,
+    /// Mint tokens from this address
+    Mint,
+}
+
+impl InternalAddress {
+    pub fn ibc_escrow_address(port_id: String, channel_id: String) -> Address {
+        let mut hasher = Sha256::new();
+        let s = format!("{}/{}", port_id, channel_id);
+        hasher.update(&s);
+        let hash = format!("{:.width$X}", hasher.finalize(), width = HASH_LEN);
+        Address::Internal(InternalAddress::Escrow(hash))
+    }
 }
 
 impl Display for InternalAddress {
@@ -395,6 +425,9 @@ impl Display for InternalAddress {
                 Self::PosSlashPool => "PosSlashPool",
                 Self::Ibc => "IBC",
                 Self::Parameters => "Parameters",
+                Self::Escrow(hash) => &format!("Escrow: {}", hash),
+                Self::Burn => "Burn",
+                Self::Mint => "Mint",
             }
         )
     }

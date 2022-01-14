@@ -11,10 +11,12 @@ default = ["ABCI"]
 
 ABCI = [
   "anoma/ABCI",
+  "anoma/ibc-vp-abci",
 ]
 
 ABCI-plus-plus = [
   "anoma/ABCI-plus-plus",
+  "anoma/ibc-vp",
 ]
 
 [dependencies]

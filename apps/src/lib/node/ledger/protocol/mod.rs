@@ -9,6 +9,7 @@ use anoma::ledger::parameters::{self, ParametersVp};
 use anoma::ledger::pos::{self, PosVP};
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use anoma::ledger::token::Token;
 use anoma::proto::{self, Tx};
 use anoma::types::address::{Address, InternalAddress};
 use anoma::types::ibc::IbcEvent;
@@ -43,6 +44,8 @@ pub enum Error {
     PosNativeVpRuntime,
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
+    #[error("Token native VP: {0}")]
+    TokenNativeVpError(anoma::ledger::token::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -351,6 +354,16 @@ where
                             Err(Error::AccessForbidden(
                                 (*internal_addr).clone(),
                             ))
+                        }
+                        InternalAddress::Escrow(_)
+                        | InternalAddress::Burn
+                        | InternalAddress::Mint => {
+                            // validate the transfer
+                            let token = Token { ctx };
+                            let result = token
+                                .validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::TokenNativeVpError);
+                            gas_meter = ctx.gas_meter.into_inner();
                         }
                     };
 

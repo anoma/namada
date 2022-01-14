@@ -1,5 +1,6 @@
 //! A basic fungible token
 
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::str::FromStr;
@@ -8,7 +9,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::types::address::Address;
+use crate::types::address::{Address, Error as AddressError};
+use crate::types::ibc::data::FungibleTokenPacketData;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
@@ -270,6 +272,43 @@ pub struct Transfer {
     pub token: Address,
     /// The amount of tokens
     pub amount: Amount,
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum TransferError {
+    #[error("Invalid address is specified: {0}")]
+    Address(AddressError),
+    #[error("Invalid amount: {0}")]
+    Amount(AmountParseError),
+    #[error("No token is specified")]
+    NoToken,
+}
+
+impl TryFrom<FungibleTokenPacketData> for Transfer {
+    type Error = TransferError;
+
+    fn try_from(data: FungibleTokenPacketData) -> Result<Self, Self::Error> {
+        let source = Address::decode(data.sender.to_string())
+            .map_err(TransferError::Address)?;
+        let target = Address::decode(data.receiver.to_string())
+            .map_err(TransferError::Address)?;
+        let token_str = data
+            .denomination
+            .split('/')
+            .last()
+            .ok_or(TransferError::NoToken)?;
+        let token =
+            Address::decode(token_str).map_err(TransferError::Address)?;
+        let amount =
+            Amount::from_str(&data.amount).map_err(TransferError::Amount)?;
+        Ok(Self {
+            source,
+            target,
+            token,
+            amount,
+        })
+    }
 }
 
 #[cfg(test)]
