@@ -73,7 +73,16 @@ pub fn add_validators(num: u8, mut genesis: GenesisConfig) -> GenesisConfig {
         validator.intent_gossip_seed = None;
         let mut net_address = net_address_0;
         // 5 ports for each validator
-        net_address.set_port(net_address_port_0 + 5 * (ix as u16 + 1));
+        let first_port = net_address_port_0
+            + 5 * (ix as u16 + 1)
+            + if cfg!(feature = "ABCI") {
+                0
+            } else {
+                // The ABCI++ ports at `26670 + ABCI_PLUS_PLUS_PORT_OFFSET`,
+                // see `network`
+                ABCI_PLUS_PLUS_PORT_OFFSET
+            };
+        net_address.set_port(first_port);
         validator.net_address = Some(net_address.to_string());
         let name = format!("validator-{}", ix + 1);
         genesis.validator.insert(name, validator);
