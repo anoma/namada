@@ -42,6 +42,10 @@ pub struct Network {
     pub chain_id: ChainId,
 }
 
+/// Offset the ports used in the network configuration by 1000 for ABCI++ to
+/// avoid shared resources
+pub const ABCI_PLUS_PLUS_PORT_OFFSET: u16 = 1000;
+
 /// Add `num` validators to the genesis config. Note that called from inside
 /// the [`network`]'s first argument's closure, there is 1 validator already
 /// present to begin with, so e.g. `add_validators(1, _)` will configure a
@@ -101,17 +105,17 @@ pub fn network(
     );
 
     if !cfg!(feature = "ABCI") {
-        // For the ABCI++ feature, we set the port to be the current+10, to
-        // avoid using shared resources with ABCI feature if running at the same
-        // time.
+        // The ABCI ports start at `26670`, ABCI++ at `26670 +
+        // ABCI_PLUS_PLUS_PORT_OFFSET`to avoid using shared resources with ABCI
+        // feature if running at the same time.
         let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
         let mut net_address_0 =
             SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
                 .unwrap();
         let current_port = net_address_0.port();
-        net_address_0.set_port(current_port + 10);
+        net_address_0.set_port(current_port + ABCI_PLUS_PLUS_PORT_OFFSET);
         validator_0.net_address = Some(net_address_0.to_string());
-    }
+    };
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);

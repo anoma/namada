@@ -173,13 +173,15 @@ fn match_intents() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    // The RPC port is either 26660 for ABCI or 26670 for ABCI++ (see
+    // The RPC port is either 27660 for ABCI or 28660 for ABCI++ (see
     // `setup::network`)
-    let rpc_port = if cfg!(feature = "ABCI") {
-        "26660"
-    } else {
-        "26670"
-    };
+    let rpc_port = (27660
+        + if cfg!(feature = "ABCI") {
+            0
+        } else {
+            setup::ABCI_PLUS_PLUS_PORT_OFFSET
+        })
+    .to_string();
     let rpc_address = format!("127.0.0.1:{}", rpc_port);
 
     // Start gossip
@@ -205,9 +207,6 @@ fn match_intents() -> Result<()> {
     session_gossip.exp_string(&format!("RPC started at {}", rpc_address))?;
 
     let rpc_address = format!("http://{}", rpc_address);
-    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.A --topic "asset_v1" --ledger-address ...
-    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.B --topic "asset_v1" --ledger-address ...
-    // cargo run --bin anomac -- intent --node "http://127.0.0.1:26660" --data-path intent.C --topic "asset_v1" --ledger-address ...
     //  Send intent A
     let mut session_send_intent_a = run!(
         test,
