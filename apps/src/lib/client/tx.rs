@@ -860,11 +860,10 @@ pub async fn submit_tx(
     //
     // Note that the `applied.hash` key comes from a custom event
     // created by the shell
-    let query_key = if !cfg!(feature = "ABCI") {
-        "accepted.hash"
-    } else {
-        "applied.hash"
-    };
+    #[cfg(not(feature = "ABCI"))]
+    let query_key = "accepted.hash";
+    #[cfg(feature = "ABCI")]
+    let query_key = "applied.hash";
     let query = Query::from(EventType::NewBlock)
         .and_eq(query_key, wrapper_tx_hash.as_str());
     wrapper_tx_subscription.subscribe(query)?;
