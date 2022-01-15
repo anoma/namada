@@ -12,9 +12,9 @@ use anoma::types::{address, token};
 use anoma::{ledger, vm};
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
+use itertools::Either::*;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
-use itertools::Either::*;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]

@@ -2029,8 +2029,8 @@ pub mod args {
                 "Submit the transaction even if it doesn't pass client checks.",
             ))
             .arg(BROADCAST_ONLY.def().about(
-                "Do not wait for the transaction to be added to the \
-                 blockchain.",
+                "Do not wait for the transaction to be applied. This will \
+                 return once the transaction is added to the mempool.",
             ))
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
             .arg(ALIAS_OPT.def().about(
