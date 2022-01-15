@@ -778,7 +778,6 @@ async fn save_initialized_accounts(
 /// Extract the wrapper transaction's hash and, if in ABCI++ mode, the inner
 /// transaction's hash. Useful for determining when parts of the given
 /// tranasaction make it on-chain.
-
 pub fn tx_hashes(tx: &WrapperTx) -> (String, String) {
     let tx_hash = tx.tx_hash.to_string();
     #[cfg(not(feature = "ABCI"))]
