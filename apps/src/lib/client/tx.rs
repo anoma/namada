@@ -14,6 +14,7 @@ use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
+use itertools::Either::*;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
@@ -696,16 +697,16 @@ async fn process_tx(
         // Either broadcast or submit transaction and collect result into
         // sum type
         let result = if args.broadcast_only {
-            Err(broadcast_tx(args.ledger_address.clone(), tx, keypair).await)
+            Left(broadcast_tx(args.ledger_address.clone(), tx, keypair).await)
         } else {
-            Ok(submit_tx(args.ledger_address.clone(), tx, keypair).await)
+            Right(submit_tx(args.ledger_address.clone(), tx, keypair).await)
         };
         // Return result based on executed operation, otherwise deal with
         // the encountered errors uniformly
         match result {
-            Ok(Ok(result)) => (ctx, result.initialized_accounts),
-            Err(Ok(_)) => (ctx, Vec::default()),
-            Ok(Err(err)) | Err(Err(err)) => {
+            Right(Ok(result)) => (ctx, result.initialized_accounts),
+            Left(Ok(_)) => (ctx, Vec::default()),
+            Right(Err(err)) | Left(Err(err)) => {
                 eprintln!(
                     "Encountered error while broadcasting transaction: {}",
                     err
