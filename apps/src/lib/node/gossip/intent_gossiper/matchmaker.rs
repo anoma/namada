@@ -26,7 +26,7 @@ use super::filter::Filter;
 use super::mempool::{self, IntentMempool};
 use crate::cli::args;
 use crate::client::rpc;
-use crate::client::tx::broadcast_tx;
+use crate::client::tx::submit_tx;
 use crate::{config, wasm_loader};
 
 /// A matchmaker receive intents and tries to find a match with previously
@@ -223,7 +223,7 @@ impl Matchmaker {
         );
 
         let response =
-            broadcast_tx(self.ledger_address.clone(), tx, &self.tx_signing_key)
+            submit_tx(self.ledger_address.clone(), tx, &self.tx_signing_key)
                 .await;
         match response {
             Ok(tx_response) => {
