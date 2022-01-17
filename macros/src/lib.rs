@@ -124,12 +124,24 @@ pub fn validity_predicate(
     TokenStream::from(gen)
 }
 
-/// Generate WASM binding for matchmaker main entrypoint function.
+/// Derive dynamic library binding for a matchmaker implementation.
 ///
-/// This macro expects a function with signature:
+/// This macro requires that the data structure implements
+/// [`std::default::Default`] that is used to instantiate the matchmaker and
+/// `anoma::types::matchmaker::AddIntent` to implement a custom matchmaker
+/// algorithm.
+///
+/// # Examples
 ///
 /// ```compiler_fail
-/// fn match_intent(matchmaker_data:Vec<u8>, intent_id: Vec<u8>, intent: Vec<u8>) -> bool
+/// use anoma::types::matchmaker::AddIntent;
+/// use anoma_macros::Matchmaker;
+///
+/// #[derive(Default, Matchmaker)]
+/// struct Matchmaker;
+///
+/// impl AddIntent for Matchmaker {
+/// }
 /// ```
 #[proc_macro_derive(Matchmaker)]
 pub fn matchmaker(input: TokenStream) -> TokenStream {
