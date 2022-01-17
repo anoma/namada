@@ -148,9 +148,8 @@ pub fn matchmaker(input: TokenStream) -> TokenStream {
         #[no_mangle]
         #[automatically_derived]
         fn _new_matchmaker() -> *mut std::ffi::c_void {
-            let mut state = #ident::default();
-            let state_ptr = &mut state as *mut #ident as *mut std::ffi::c_void;
-            std::mem::forget(state);
+            let state = Box::new(#ident::default());
+            let state_ptr = Box::into_raw(state) as *mut std::ffi::c_void;
             state_ptr
         }
 
@@ -159,8 +158,7 @@ pub fn matchmaker(input: TokenStream) -> TokenStream {
         #[automatically_derived]
         fn _drop_matchmaker(state_ptr: *mut std::ffi::c_void) {
             // The state will be dropped on going out of scope
-            let _state: #ident =
-                unsafe { std::ptr::read(state_ptr as *mut #ident) };
+            let _state = unsafe { Box::from_raw(state_ptr as *mut #ident) };
         }
 
         /// Ask the matchmaker to process a new intent
