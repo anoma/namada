@@ -37,6 +37,7 @@
     - [Crypto primitives](./explore/design/crypto-primitives.md)
     - [Actors](./explore/design/actors.md)
     - [Proof of Stake system](./explore/design/pos.md)
+    - [Testnet setup](./explore/design/testnet-setup.md)
   - [Prototypes](./explore/prototypes/README.md)
     - [Base ledger](./explore/prototypes/base-ledger.md)
     - [Gossip layer](./explore/prototypes/gossip-layer.md)
