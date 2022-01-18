@@ -57,6 +57,7 @@ dependencies = [
  "hex",
  "ibc",
  "ibc-proto",
+ "ics23",
  "itertools",
  "loupe",
  "parity-wasm",
