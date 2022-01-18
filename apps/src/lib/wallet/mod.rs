@@ -97,7 +97,10 @@ impl Wallet {
         let pwd = if unsafe_dont_encrypt {
             None
         } else {
-            Some(read_password("To confirm, please enter the same encryption password once more: "))
+            Some(read_password(
+                "To confirm, please enter the same encryption password once \
+                 more: ",
+            ))
         };
         if pwd != password {
             eprintln!("Your two inputs do not match!");
