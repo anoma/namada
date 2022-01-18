@@ -34,6 +34,31 @@ Last, to build and install anoma you can run the following command:
 make install
 ```
 
+## Nix
+
+If you have [Nix](https://nixos.org/), you can get Anoma easily as a flake. For
+this to work, make sure that you have Nix 2.4 or later and that you have
+`experimental-features = nix-command flakes` in your `~/.config/nix/nix.conf`.
+
+```shell
+# Install to user profile
+nix profile install github:anoma/anoma/<revision>
+
+# Run without installing
+nix run github:anoma/anoma/<revision> -- --help
+
+# Enter a shell where anoma executables are available
+nix run github:anoma/anoma/<revision>
+```
+
+Set `<revision>` to the git tag, branch or hash you want.
+
+With Nix versions older than 2.4, use this command instead:
+
+```shell
+nix-env -f https://github.com/anoma/anoma/archive/<revision>.tar.gz -iA default
+```
+
 ## Github release
 
 Go to [anoma github release page](https://github.com/anoma/anoma/releases) and download the last release.
