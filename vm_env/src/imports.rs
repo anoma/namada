@@ -191,6 +191,20 @@ pub mod tx {
             .expect("Decoding address created by the ledger shouldn't fail")
     }
 
+    // Initialize a new token
+    pub fn init_token(addr: &Address, code: impl AsRef<[u8]>) {
+        let addr = addr.encode();
+        let code = code.as_ref();
+        unsafe {
+            anoma_tx_init_token(
+                addr.as_ptr() as _,
+                addr.len() as _,
+                code.as_ptr() as _,
+                code.len() as _,
+            )
+        };
+    }
+
     /// Emit an IBC event. There can be only one event per transaction. On
     /// multiple calls, only the last emitted event will be used.
     pub fn emit_ibc_event(event: &IbcEvent) {
@@ -290,6 +304,14 @@ pub mod tx {
 
         // Initialize a new account
         fn anoma_tx_init_account(code_ptr: u64, code_len: u64, result_ptr: u64);
+
+        // Initialize a new token
+        fn anoma_tx_init_token(
+            addr_ptr: u64,
+            addr_len: u64,
+            code_ptr: u64,
+            code_len: u64,
+        );
 
         // Emit an IBC event
         fn anoma_tx_emit_ibc_event(event_ptr: u64, event_len: u64);

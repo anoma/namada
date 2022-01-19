@@ -155,17 +155,20 @@ impl Address {
             }
             Address::Internal(internal) => {
                 let string = match internal {
-                    InternalAddress::PoS => internal::POS,
-                    InternalAddress::PosSlashPool => internal::POS_SLASH_POOL,
-                    InternalAddress::Ibc => internal::IBC,
-                    InternalAddress::Parameters => internal::PARAMETERS,
-                    InternalAddress::Escrow(hash) => {
-                        &format!("{}::{}", PREFIX_INTERNAL, hash)
+                    InternalAddress::PoS => internal::POS.to_string(),
+                    InternalAddress::PosSlashPool => {
+                        internal::POS_SLASH_POOL.to_string()
                     }
-                    InternalAddress::Burn => internal::BURN,
-                    InternalAddress::Mint => internal::MINT,
-                }
-                .to_string();
+                    InternalAddress::Ibc => internal::IBC.to_string(),
+                    InternalAddress::Parameters => {
+                        internal::PARAMETERS.to_string()
+                    }
+                    InternalAddress::Escrow(hash) => {
+                        format!("{}::{}", PREFIX_INTERNAL, hash)
+                    }
+                    InternalAddress::Burn => internal::BURN.to_string(),
+                    InternalAddress::Mint => internal::MINT.to_string(),
+                };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
             }
@@ -406,12 +409,13 @@ pub enum InternalAddress {
 }
 
 impl InternalAddress {
-    pub fn ibc_escrow_address(port_id: String, channel_id: String) -> Address {
+    /// Get an escrow address from the port ID and channel ID
+    pub fn ibc_escrow_address(port_id: String, channel_id: String) -> Self {
         let mut hasher = Sha256::new();
         let s = format!("{}/{}", port_id, channel_id);
         hasher.update(&s);
         let hash = format!("{:.width$X}", hasher.finalize(), width = HASH_LEN);
-        Address::Internal(InternalAddress::Escrow(hash))
+        InternalAddress::Escrow(hash)
     }
 }
 
@@ -421,13 +425,13 @@ impl Display for InternalAddress {
             f,
             "{}",
             match self {
-                Self::PoS => "PoS",
-                Self::PosSlashPool => "PosSlashPool",
-                Self::Ibc => "IBC",
-                Self::Parameters => "Parameters",
-                Self::Escrow(hash) => &format!("Escrow: {}", hash),
-                Self::Burn => "Burn",
-                Self::Mint => "Mint",
+                Self::PoS => "PoS".to_string(),
+                Self::PosSlashPool => "PosSlashPool".to_string(),
+                Self::Ibc => "IBC".to_string(),
+                Self::Parameters => "Parameters".to_string(),
+                Self::Escrow(hash) => format!("Escrow: {}", hash),
+                Self::Burn => "Burn".to_string(),
+                Self::Mint => "Mint".to_string(),
             }
         )
     }
@@ -655,14 +659,26 @@ pub mod testing {
             InternalAddress::PoS => {}
             InternalAddress::PosSlashPool => {}
             InternalAddress::Ibc => {}
-            InternalAddress::Parameters => {} /* Add new addresses in the
-                                               * `prop_oneof` below. */
+            InternalAddress::Parameters => {}
+            InternalAddress::Escrow(_) => {}
+            InternalAddress::Burn => {}
+            InternalAddress::Mint => {} /* Add new addresses in the
+                                         * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
             Just(InternalAddress::PosSlashPool),
             Just(InternalAddress::Ibc),
             Just(InternalAddress::Parameters),
+            arb_port_channel_id()
+                .prop_map(|(p, c)| InternalAddress::ibc_escrow_address(p, c)),
+            Just(InternalAddress::Burn),
+            Just(InternalAddress::Mint),
         ]
+    }
+
+    fn arb_port_channel_id() -> impl Strategy<Value = (String, String)> {
+        ("[a-zA-Z0-9_]{2,128}", any::<u64>())
+            .prop_map(|(id, counter)| (id, format!("channel-{}", counter)))
     }
 }

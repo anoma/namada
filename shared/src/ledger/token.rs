@@ -82,9 +82,10 @@ where
     fn validate_tx(
         &self,
         tx_data: &[u8],
-        keys_changed: &HashSet<Key>,
+        _keys_changed: &HashSet<Key>,
         _verifiers: &HashSet<Address>,
     ) -> Result<bool> {
+        // TODO check other escrow/mint/burn addresses
         // Check the message
         let ibc_msg = IbcMessage::decode(tx_data).map_err(Error::IbcMessage)?;
         match &ibc_msg.0 {
@@ -127,10 +128,10 @@ where
             Address::Internal(InternalAddress::Burn)
         } else {
             // source zone
-            InternalAddress::ibc_escrow_address(
+            Address::Internal(InternalAddress::ibc_escrow_address(
                 msg.source_port.to_string(),
                 msg.source_channel.to_string(),
-            )
+            ))
         };
 
         let target_key = token::balance_key(&token, &target);
@@ -170,10 +171,10 @@ where
         );
         let source = if data.denomination.starts_with(&prefix) {
             // this chain is the source
-            InternalAddress::ibc_escrow_address(
+            Address::Internal(InternalAddress::ibc_escrow_address(
                 packet.destination_port.to_string(),
                 packet.destination_channel.to_string(),
-            )
+            ))
         } else {
             // the sender is the source
             Address::Internal(InternalAddress::Mint)
@@ -182,14 +183,17 @@ where
         let source_key = token::balance_key(&token, &source);
         let pre = match self.ctx.read_pre(&source_key)? {
             Some(v) => Amount::try_from_slice(&v).map_err(Error::Decoding)?,
-            None => Amount::default(),
+            None => match source {
+                Address::Internal(InternalAddress::Mint) => Amount::max(),
+                _ => Amount::default(),
+            },
         };
         let post = match self.ctx.read_post(&source_key)? {
             Some(v) => Amount::try_from_slice(&v).map_err(Error::Decoding)?,
             None => Amount::default(),
         };
 
-        let change = post.change() - pre.change();
+        let change = pre.change() - post.change();
         if change == amount.change() {
             Ok(true)
         } else {
@@ -220,29 +224,32 @@ where
             Address::Internal(InternalAddress::Mint)
         } else {
             // source zone: unescrow the token for the refund
-            InternalAddress::ibc_escrow_address(
+            Address::Internal(InternalAddress::ibc_escrow_address(
                 packet.source_port.to_string(),
                 packet.source_channel.to_string(),
-            )
+            ))
         };
 
         let source_key = token::balance_key(&token, &source);
         let pre = match self.ctx.read_pre(&source_key)? {
             Some(v) => Amount::try_from_slice(&v).map_err(Error::Decoding)?,
-            None => Amount::default(),
+            None => match source {
+                Address::Internal(InternalAddress::Mint) => Amount::max(),
+                _ => Amount::default(),
+            },
         };
         let post = match self.ctx.read_post(&source_key)? {
             Some(v) => Amount::try_from_slice(&v).map_err(Error::Decoding)?,
             None => Amount::default(),
         };
 
-        let change = post.change() - pre.change();
+        let change = pre.change() - post.change();
         if change == amount.change() {
             Ok(true)
         } else {
             Err(Error::TokenTransfer(format!(
                 "Refunding the token is invalid: {}",
-                data
+                data,
             )))
         }
     }

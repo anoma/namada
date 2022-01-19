@@ -363,7 +363,8 @@ where
                             let result = token
                                 .validate_tx(tx_data, keys, &verifiers_addr)
                                 .map_err(Error::TokenNativeVpError);
-                            gas_meter = ctx.gas_meter.into_inner();
+                            gas_meter = token.ctx.gas_meter.into_inner();
+                            result
                         }
                     };
 

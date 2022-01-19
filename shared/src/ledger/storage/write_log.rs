@@ -168,6 +168,15 @@ impl WriteLog {
         (addr, gas)
     }
 
+    /// Initialize a new token and return the gas cost.
+    pub fn init_token(&mut self, addr: &Address, vp: Vec<u8>) -> u64 {
+        let key = Key::validity_predicate(addr);
+        let gas = (key.len() + vp.len()) as _;
+        self.tx_write_log
+            .insert(key, StorageModification::InitAccount { vp });
+        gas
+    }
+
     /// Set an IBC event and return the gas cost.
     pub fn set_ibc_event(&mut self, event: IbcEvent) -> u64 {
         let len = event
@@ -256,8 +265,10 @@ impl WriteLog {
         H: StorageHasher,
     {
         let mut batch = Storage::<DB, H>::batch();
-        for (key, entry) in
-            self.block_write_log.iter().filter(|(k, _)| k.is_persist())
+        for (key, entry) in self
+            .block_write_log
+            .iter()
+            .filter(|(k, _)| k.is_updatable())
         {
             match entry {
                 StorageModification::Write { value } => {

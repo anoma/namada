@@ -13,6 +13,7 @@ use thiserror::Error;
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
 use crate::types::address::{self, Address, InternalAddress};
+use crate::types::token::BALANCE_STORAGE_KEY;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -252,14 +253,14 @@ impl Key {
         }
     }
 
-    /// Check if the given key should be persisted
-    pub fn is_persist(&self) -> bool {
+    /// Check if the given key can be updated
+    pub fn is_updatable(&self) -> bool {
         match &self.segments[..] {
             [
                 DbKeySeg::AddressSeg(_),
                 DbKeySeg::StringSeg(key),
                 DbKeySeg::AddressSeg(owner),
-            ] if key == "balance"
+            ] if key == BALANCE_STORAGE_KEY
                 && (*owner == Address::Internal(InternalAddress::Burn)
                     || *owner == Address::Internal(InternalAddress::Mint)) =>
             {

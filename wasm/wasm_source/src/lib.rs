@@ -197,19 +197,6 @@ pub mod tx_transfer {
     }
 }
 
-/// A tx for IBC.
-#[cfg(feature = "tx_ibc")]
-pub mod tx_ibc {
-    use anoma_vm_env::tx_prelude::*;
-
-    #[transaction]
-    fn apply_tx(tx_data: Vec<u8>) {
-        let signed =
-            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-        Ibc.dispatch(&signed.data.unwrap())
-    }
-}
-
 /// A tx for updating an account's validity predicate.
 /// This tx wraps the validity predicate inside `key::ed25519::SignedTxData` as
 /// its input as declared in `shared` crate.
@@ -226,6 +213,22 @@ pub mod tx_update_vp {
                 .unwrap();
         debug_log!("update VP for: {:#?}", update_vp.addr);
         update_validity_predicate(&update_vp.addr, update_vp.vp_code)
+    }
+}
+
+/// A tx for IBC.
+/// This tx executes an IBC operation according to the given IBC message as the
+/// tx_data. This tx uses an IBC message wrapped inside
+/// `key::ed25519::SignedTxData` as its input as declared in `ibc` crate.
+#[cfg(feature = "tx_ibc")]
+pub mod tx_ibc {
+    use anoma_vm_env::tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        let signed =
+            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        Ibc.dispatch(&signed.data.unwrap())
     }
 }
 

@@ -69,6 +69,7 @@ pub enum IbcPrefix {
     Ack,
     Event,
     Unknown,
+    NonIbc,
 }
 
 /// Returns the prefix from the given key
@@ -93,7 +94,7 @@ pub fn ibc_prefix(key: &Key) -> IbcPrefix {
                 _ => IbcPrefix::Unknown,
             }
         }
-        _ => IbcPrefix::Unknown,
+        _ => IbcPrefix::NonIbc,
     }
 }
 

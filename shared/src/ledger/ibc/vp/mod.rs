@@ -135,6 +135,7 @@ where
                         key
                     )));
                 }
+                IbcPrefix::NonIbc => {}
             };
         }
 

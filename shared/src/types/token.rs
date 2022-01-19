@@ -1,5 +1,6 @@
 //! A basic fungible token
 
+#[cfg(any(feature = "ibc-vp", feature = "ibc-vp-abci"))]
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
@@ -10,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::types::address::{Address, Error as AddressError};
+#[cfg(any(feature = "ibc-vp", feature = "ibc-vp-abci"))]
 use crate::types::ibc::data::FungibleTokenPacketData;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -64,6 +66,11 @@ impl Amount {
         Self {
             micro: amount * SCALE,
         }
+    }
+
+    /// Create a new amount with the maximum value
+    pub fn max() -> Self {
+        Self { micro: u64::MAX }
     }
 }
 
@@ -203,7 +210,8 @@ impl From<Amount> for Change {
     }
 }
 
-const BALANCE_STORAGE_KEY: &str = "balance";
+/// Key segment for a balance key
+pub const BALANCE_STORAGE_KEY: &str = "balance";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -285,6 +293,7 @@ pub enum TransferError {
     NoToken,
 }
 
+#[cfg(any(feature = "ibc-vp", feature = "ibc-vp-abci"))]
 impl TryFrom<FungibleTokenPacketData> for Transfer {
     type Error = TransferError;
 

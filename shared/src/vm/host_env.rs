@@ -1289,6 +1289,49 @@ where
     tx_add_gas(env, gas)
 }
 
+/// Initialize a new account established address.
+pub fn tx_init_token<MEM, DB, H, CA>(
+    env: &TxEnv<MEM, DB, H, CA>,
+    addr_ptr: u64,
+    addr_len: u64,
+    code_ptr: u64,
+    code_len: u64,
+) -> TxResult<()>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let (addr, gas) = env
+        .memory
+        .read_string(addr_ptr, addr_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_add_gas(env, gas)?;
+
+    let addr = Address::decode(addr).map_err(TxRuntimeError::AddressError)?;
+    tracing::debug!("tx_init_token for addr {}", addr);
+
+    let (code, gas) = env
+        .memory
+        .read_bytes(code_ptr, code_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_add_gas(env, gas)?;
+
+    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
+    validate_untrusted_wasm(&code)
+        .map_err(TxRuntimeError::InitAccountInvalidVpWasm)?;
+    #[cfg(feature = "wasm-runtime")]
+    {
+        let vp_wasm_cache = unsafe { env.ctx.vp_wasm_cache.get() };
+        vp_wasm_cache.pre_compile(&code);
+    }
+
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let gas = write_log.init_token(&addr, code);
+    tx_add_gas(env, gas)
+}
+
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
 pub fn tx_get_chain_id<MEM, DB, H, CA>(
     env: &TxEnv<MEM, DB, H, CA>,

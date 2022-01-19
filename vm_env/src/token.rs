@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use anoma::types::address::Address;
+use anoma::types::address::{Address, InternalAddress};
 use anoma::types::storage::Key;
 use anoma::types::token;
 
@@ -27,7 +27,13 @@ pub mod vp {
                 Some(owner) => {
                     // accumulate the change
                     let key = key.to_string();
-                    let pre: Amount = vp::read_pre(&key).unwrap_or_default();
+                    let pre: Amount =
+                        vp::read_pre(&key).unwrap_or_else(|| match owner {
+                            Address::Internal(InternalAddress::Mint) => {
+                                Amount::max()
+                            }
+                            _ => Amount::default(),
+                        });
                     let post: Amount = vp::read_post(&key).unwrap_or_default();
                     let this_change = post.change() - pre.change();
                     change += this_change;
