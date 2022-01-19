@@ -29,7 +29,9 @@ To add a change log entry using `unclog`, you can fill in the following command 
 
 ```shell
 unclog add \
-  --id           <branch name> \
+  --id           <branch name (omit owner name before the /)> \
+  --section      <section name> \
+  # only include one of --issue-no or --pull-request
   --issue-no     <issue number> \
   --pull-request <PR number> \
   --message      <message>
