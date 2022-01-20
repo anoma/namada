@@ -87,6 +87,7 @@ pub mod cmds {
     pub enum AnomaNode {
         Ledger(Ledger),
         Gossip(Gossip),
+        Matchmaker(Matchmaker),
         Config(Config),
     }
 
@@ -94,14 +95,16 @@ pub mod cmds {
         fn add_sub(app: App) -> App {
             app.subcommand(Ledger::def())
                 .subcommand(Gossip::def())
+                .subcommand(Matchmaker::def())
                 .subcommand(Config::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let gossip = SubCmd::parse(matches).map(Self::Gossip);
+            let matchmaker = SubCmd::parse(matches).map(Self::Matchmaker);
             let config = SubCmd::parse(matches).map(Self::Config);
-            ledger.or(gossip).or(config)
+            ledger.or(gossip).or(matchmaker).or(config)
         }
     }
     impl SubCmd for AnomaNode {
@@ -619,6 +622,25 @@ pub mod cmds {
                 )
                 .subcommand(GossipRun::def())
                 .add_args::<args::GossipRun>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Matchmaker(pub args::Matchmaker);
+
+    impl SubCmd for Matchmaker {
+        const CMD: &'static str = "matchmaker";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Matchmaker(args::Matchmaker::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Run a matchmaker.")
+                .add_args::<args::Matchmaker>()
         }
     }
 
@@ -1162,6 +1184,13 @@ pub mod args {
     const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
+    const INTENT_GOSSIPER_ADDR: ArgDefault<SocketAddr> = arg_default(
+        "intent-gossiper",
+        DefaultFn(|| {
+            let raw = "127.0.0.1:26661";
+            SocketAddr::from_str(raw).unwrap()
+        }),
+    );
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -2039,6 +2068,66 @@ pub mod args {
                 "Source address or alias of an address of the transactions \
                  created by the matchmaker (if enabled). This must be \
                  matching the signing key.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Matchmaker {
+        pub matchmaker_path: Option<PathBuf>,
+        pub tx_code_path: Option<PathBuf>,
+        pub intent_gossiper_addr: SocketAddr,
+        pub ledger_addr: TendermintAddress,
+        pub tx_signing_key: WalletKeypair,
+        pub tx_source_address: WalletAddress,
+    }
+
+    impl Args for Matchmaker {
+        fn parse(matches: &ArgMatches) -> Self {
+            let intent_gossiper_addr = INTENT_GOSSIPER_ADDR.parse(matches);
+            let matchmaker_path = MATCHMAKER_PATH.parse(matches);
+            let tx_code_path = TX_CODE_PATH.parse(matches);
+            let ledger_addr = LEDGER_ADDRESS_DEFAULT.parse(matches);
+            let tx_signing_key = SIGNING_KEY.parse(matches);
+            let tx_source_address = SOURCE.parse(matches);
+            Self {
+                intent_gossiper_addr,
+                matchmaker_path,
+                tx_code_path,
+                ledger_addr,
+                tx_signing_key,
+                tx_source_address,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(INTENT_GOSSIPER_ADDR.def().about(
+                "Intent Gossiper endpoint for matchmaker connections as \
+                 \"{host}:{port}\".",
+            ))
+            .arg(MATCHMAKER_PATH.def().about(
+                "The file name of the matchmaker compiled to a dynamic \
+                 library without its extension.",
+            ))
+            .arg(
+                TX_CODE_PATH
+                    .def()
+                    .about("The transaction code to use with the matchmaker."),
+            )
+            .arg(LEDGER_ADDRESS_DEFAULT.def().about(
+                "The address of the ledger as \"{scheme}://{host}:{port}\" \
+                 that the matchmaker must send transactions to. If the scheme \
+                 is not supplied, it is assumed to be TCP.",
+            ))
+            .arg(SIGNING_KEY.def().about(
+                "Sign the transactions created by the matchmaker with the key \
+                 for the given public key, public key hash or alias from your \
+                 wallet.",
+            ))
+            .arg(SOURCE.def().about(
+                "Source address or alias of an address of the transactions \
+                 created by the matchmaker. This must be matching the signing \
+                 key.",
             ))
         }
     }

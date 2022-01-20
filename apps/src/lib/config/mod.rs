@@ -41,6 +41,8 @@ pub struct Config {
     pub wasm_dir: PathBuf,
     pub ledger: Ledger,
     pub intent_gossiper: IntentGossiper,
+    // TODO allow to configure multiple matchmakers
+    pub matchmaker: Option<Matchmaker>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -133,6 +135,17 @@ pub struct IntentGossiper {
     pub matchmaker: Option<Matchmaker>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RpcServer {
+    pub address: SocketAddr,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Matchmaker {
+    pub matchmaker_path: PathBuf,
+    pub tx_code_path: PathBuf,
+}
+
 impl Ledger {
     pub fn new(
         base_dir: impl AsRef<Path>,
@@ -201,19 +214,6 @@ impl Shell {
             .join(chain_id.as_str())
             .join(&self.tendermint_dir)
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct RpcServer {
-    pub address: SocketAddr,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Matchmaker {
-    pub matchmaker: PathBuf,
-    pub tx_code: PathBuf,
-    pub ledger_address: TendermintAddress,
-    pub filter: Option<PathBuf>,
 }
 
 // TODO maybe add also maxCount for a maximum number of subscription for a
@@ -291,6 +291,7 @@ impl Config {
             wasm_dir: "wasm".into(),
             ledger: Ledger::new(base_dir, chain_id, mode),
             intent_gossiper: IntentGossiper::default(),
+            matchmaker: None,
         }
     }
 
