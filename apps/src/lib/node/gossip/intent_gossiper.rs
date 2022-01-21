@@ -1,99 +1,123 @@
-use std::path::Path;
-use std::rc::Rc;
+use std::net::ToSocketAddrs;
+use std::sync::{Arc, RwLock};
 
-use anoma::proto::Intent;
-use anoma::types::address::Address;
-use anoma::types::key::ed25519::Keypair;
-use thiserror::Error;
-use tokio::sync::mpsc::{Receiver, Sender};
+use anoma::proto::{Intent, IntentId};
 
-use super::matchmaker_runner::{self, Matchmaker, MatchmakerMessage};
+use super::mempool::IntentMempool;
+use super::rpc::matchmakers::{
+    MsgFromClient, MsgFromServer, ServerDialer, ServerListener,
+};
 
-// TODO split Error and Result type in two, one for Result/Error that can only
-// happens locally and the other that can happens locally and in the network
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Error while decoding intent: {0}")]
-    Decode(prost::DecodeError),
-    #[error("Error initializing the matchmaker: {0}")]
-    MatchmakerInit(matchmaker_runner::Error),
-    #[error("Error running the matchmaker: {0}")]
-    Matchmaker(matchmaker_runner::Error),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-/// The gossip intent app is mainly useful for the moment when the matchmaker is
-/// activated
+/// A server for connected matchmakers that can receive intents from the intent
+/// gossiper node and send back the results from their filter, if any, or from
+/// trying to match them.
 #[derive(Debug, Default)]
-pub struct GossipIntent {
-    pub matchmaker: Option<Matchmaker>,
-    pub mm_sender: Option<Sender<MatchmakerMessage>>,
-    pub mm_receiver: Option<Receiver<MatchmakerMessage>>,
+pub struct MatchmakersServer {
+    /// A node listener and its abort receiver. These are consumed once the
+    /// listener is started with [`MatchmakersServer::listen`].
+    listener: Option<ServerListener>,
+    /// Known intents mempool, shared with [`IntentGossiper`].
+    mempool: Arc<RwLock<IntentMempool>>,
 }
 
-impl GossipIntent {
+/// Intent gossiper handle can be cloned and is thread safe.
+#[derive(Clone, Debug)]
+pub struct IntentGossiper {
+    /// Known intents mempool, shared with [`MatchmakersServer`].
+    mempool: Arc<RwLock<IntentMempool>>,
+    /// A dialer can send messages to the connected matchmaker
+    dialer: ServerDialer,
+}
+
+impl MatchmakersServer {
     /// Create a new gossip intent app with a matchmaker, if enabled.
-    pub fn new(
-        config: &crate::config::IntentGossiper,
-        wasm_dir: impl AsRef<Path>,
-        tx_source_address: Option<Address>,
-        tx_signing_key: Option<Rc<Keypair>>,
-    ) -> Result<Self> {
-        if let (
-            Some(matchmaker),
-            Some(tx_source_address),
-            Some(tx_signing_key),
-        ) = (&config.matchmaker, tx_source_address, tx_signing_key)
-        {
-            let (mm, mm_sender, mm_receiver) = Matchmaker::new(
-                matchmaker,
-                wasm_dir,
-                tx_source_address,
-                tx_signing_key,
-            )
-            .map_err(Error::MatchmakerInit)?;
-            Ok(Self {
-                matchmaker: Some(mm),
-                mm_sender: Some(mm_sender),
-                mm_receiver: Some(mm_receiver),
+    pub fn new_pair(
+        matchmakers_server_addr: impl ToSocketAddrs,
+    ) -> (Self, IntentGossiper) {
+        // Prepare a server for matchmakers connections
+        let (listener, dialer) =
+            ServerListener::new_pair(matchmakers_server_addr);
+
+        let mempool = Arc::new(RwLock::new(IntentMempool::default()));
+        let intent_gossiper = IntentGossiper {
+            mempool: mempool.clone(),
+            dialer,
+        };
+        (
+            Self {
+                listener: Some(listener),
+                mempool,
+            },
+            intent_gossiper,
+        )
+    }
+
+    pub async fn listen(mut self) {
+        self.listener
+            .take()
+            .unwrap()
+            .listen(|msg| match msg {
+                MsgFromClient::InvalidIntent { id } => {
+                    let id = IntentId(id);
+                    // Remove matched intents from mempool
+                    tracing::info!("Removing matched intent ID {}", id);
+                    let mut w_mempool = self.mempool.write().unwrap();
+                    w_mempool.remove(&id);
+                }
+                MsgFromClient::IntentConstraintsTooComplex { id } => {
+                    let id = IntentId(id);
+                    tracing::info!(
+                        "Intent ID {} has constraints that are too complex \
+                         for a connected matchmaker",
+                        id
+                    );
+                }
+                MsgFromClient::IgnoredIntent { id } => {
+                    let id = IntentId(id);
+                    tracing::info!(
+                        "Intent ID {} ignored by a connected matchmaker",
+                        id
+                    );
+                }
+                MsgFromClient::Matched { intent_ids } => {
+                    // Remove matched intents from mempool
+                    let mut w_mempool = self.mempool.write().unwrap();
+                    for id in intent_ids {
+                        let id = IntentId(id);
+                        tracing::info!("Removing matched intent ID {}", id);
+                        w_mempool.remove(&id);
+                    }
+                }
+                MsgFromClient::Unmatched { id } => {
+                    let id = IntentId(id);
+                    tracing::info!("No match found for intent ID {}", id);
+                }
             })
-        } else {
-            Ok(Self::default())
-        }
+            .await
     }
+}
 
-    /// Apply the matchmaker logic on a new intent. Return `Ok(true) if a
-    /// transaction have been crafted or if there's no matchmaker.
-    async fn apply_matchmaker(&mut self, intent: Intent) -> Result<bool> {
-        if let Some(matchmaker) = self.matchmaker.as_mut() {
-            matchmaker
-                .try_match_intent(&intent)
-                .await
-                .map_err(Error::Matchmaker)
-        } else {
-            Ok(true)
-        }
-    }
-
+impl IntentGossiper {
     // Apply the logic to a new intent. It only tries to apply the matchmaker if
     // this one exists. If no matchmaker then returns true.
-    pub async fn apply_intent(&mut self, intent: Intent) -> Result<bool> {
-        self.apply_matchmaker(intent).await
-    }
+    pub async fn add_intent(&mut self, intent: Intent) {
+        let id = intent.id();
 
-    /// pass the matchmaker message to the matchmaker. If no matchmaker is
-    /// define then fail. This case should never happens because only when a
-    /// matchmaker exists that it can send message.
-    pub async fn handle_mm_message(&mut self, mm_message: MatchmakerMessage) {
-        match self.matchmaker.as_mut() {
-            Some(mm) => mm.handle_mm_message(mm_message).await,
-            None => {
-                tracing::error!(
-                    "cannot handle mesage {:?} because no matchmaker started",
-                    mm_message
-                )
-            }
+        let r_mempool = self.mempool.read().unwrap();
+        let is_known = r_mempool.contains(&id);
+        drop(r_mempool);
+        if !is_known {
+            let mut w_mempool = self.mempool.write().unwrap();
+            w_mempool.insert(intent.clone());
         }
+
+        tracing::info!(
+            "Sending intent ID {} to connected matchmakers, if any",
+            id
+        );
+        self.dialer.send(MsgFromServer::AddIntent {
+            id: id.0,
+            data: intent.data,
+        })
     }
 }

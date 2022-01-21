@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use anoma::proto::{Intent, Tx};
+use anoma::proto::Tx;
 use anoma::types::address::{self, Address};
 use anoma::types::dylib;
 use anoma::types::intent::{IntentTransfers, MatchedExchanges};
@@ -22,9 +22,8 @@ use tendermint_config::net::Address as TendermintAddress;
 use tendermint_config_abci::net;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::net::Address as TendermintAddress;
-use tokio::sync::oneshot;
 
-use super::gossip::matchmakers::{
+use super::gossip::rpc::matchmakers::{
     ClientDialer, ClientListener, MsgFromClient, MsgFromServer,
 };
 use crate::cli::args;
@@ -75,7 +74,7 @@ pub async fn run(
 pub struct Runner {
     matchmaker_path: PathBuf,
     /// The client listener. This is consumed once the listener is started with
-    /// [`Matchmaker::listen`].
+    /// [`Runner::listen`].
     listener: Option<ClientListener>,
     /// Sender of results of matched intents to the [`ResultHandler`].
     result_send: tokio::sync::mpsc::UnboundedSender<AddIntentResult>,
@@ -114,14 +113,6 @@ struct MatchmakerImpl {
 /// implementation in a dylib
 #[derive(Debug)]
 struct MatchmakerState(Arc<*mut c_void>);
-
-/// Matchmaker message for communication between the runner, P2P and the
-/// implementation
-#[derive(Debug)]
-pub enum MatchmakerMessage {
-    /// Run the matchmaker with the given intent
-    ApplyIntent(Intent, oneshot::Sender<bool>),
-}
 
 impl Runner {
     /// Create a new matchmaker and a dialer that can be used to send messages

@@ -123,7 +123,9 @@ pub fn init_network(
     // each validator's node
     let mut seed_peers: HashSet<PeerAddress> =
         HashSet::with_capacity(config.validator.len());
-    let mut gossiper_configs: HashMap<String, IntentGossiper> =
+    let mut gossiper_configs: HashMap<String, config::IntentGossiper> =
+        HashMap::with_capacity(config.validator.len());
+    let mut matchmaker_configs: HashMap<String, config::Matchmaker> =
         HashMap::with_capacity(config.validator.len());
     // Other accounts owned by one of the validators
     let mut validator_owned_accounts: HashMap<
@@ -281,16 +283,12 @@ pub fn init_network(
                         validator_owned_accounts
                             .insert(account.clone(), matchmaker);
 
-                        let ledger_address = TendermintAddress::from_str(
-                            &format!("127.0.0.1:{}", first_port + 1),
-                        )
-                        .unwrap();
-                        gossiper_config.matchmaker = Some(config::Matchmaker {
-                            matchmaker: mm_code.clone().into(),
-                            tx_code: tx_code.clone().into(),
-                            ledger_address,
-                            filter: None,
-                        });
+                        let matchmaker_config = config::Matchmaker {
+                            matchmaker_path: mm_code.clone().into(),
+                            tx_code_path: tx_code.clone().into(),
+                        };
+                        matchmaker_configs
+                            .insert(name.clone(), matchmaker_config);
                     }
                     None => {
                         eprintln!(
@@ -504,9 +502,10 @@ pub fn init_network(
             // Validator node should turned off peer exchange reactor
             config.ledger.tendermint.p2p_pex = false;
 
-            // Configure the intent gossiper
+            // Configure the intent gossiper, matchmaker (if any) and RPC
             config.intent_gossiper = gossiper_configs.remove(name).unwrap();
             config.intent_gossiper.seed_peers = seed_peers.clone();
+            config.matchmaker = matchmaker_configs.remove(name);
             config.intent_gossiper.rpc = Some(config::RpcServer {
                 address: SocketAddr::new(
                     IpAddr::V4(if localhost {
@@ -517,6 +516,10 @@ pub fn init_network(
                     first_port + 4,
                 ),
             });
+            config
+                .intent_gossiper
+                .matchmakers_server_addr
+                .set_port(first_port + 5);
 
             config.write(&validator_dir, &chain_id, true).unwrap();
         },
