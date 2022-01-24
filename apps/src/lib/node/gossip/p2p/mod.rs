@@ -1,8 +1,10 @@
+pub mod behaviour;
 mod identity;
 
 use std::path::Path;
 use std::time::Duration;
 
+use behaviour::Behaviour;
 use libp2p::core::connection::ConnectionLimits;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
@@ -16,8 +18,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::Sender;
 
 pub use self::identity::Identity;
-use super::behaviour::Behaviour;
-use super::intent_gossiper::matchmaker::MatchmakerMessage;
+use super::matchmaker_runner::MatchmakerMessage;
 
 pub type Swarm = libp2p::Swarm<Behaviour>;
 
@@ -26,7 +27,7 @@ pub enum Error {
     #[error("Failed initializing the transport: {0}")]
     Transport(std::io::Error),
     #[error("Error with the network behavior: {0}")]
-    Behavior(super::behaviour::Error),
+    Behavior(crate::node::gossip::p2p::behaviour::Error),
     #[error("Error while dialing: {0}")]
     Dialing(libp2p::swarm::DialError),
     #[error("Error while starting to listing: {0}")]

@@ -1,8 +1,9 @@
-mod behaviour;
-mod intent_gossiper;
-pub mod matchmakers;
+mod filter;
+pub mod intent_gossiper;
+mod matchmaker_runner;
+mod mempool;
 pub mod p2p;
-mod rpc;
+pub mod rpc;
 
 use std::borrow::Cow;
 use std::path::Path;
@@ -64,7 +65,7 @@ pub async fn dispatcher(
     let rpc_receiver = config.rpc.map(|rpc_config| {
         let (rpc_sender, rpc_receiver) = mpsc::channel(100);
         tokio::spawn(async move {
-            rpc::start_rpc_server(&rpc_config, rpc_sender).await
+            rpc::client::start_rpc_server(&rpc_config, rpc_sender).await
         });
         rpc_receiver
     });
@@ -81,7 +82,7 @@ pub async fn dispatcher(
                     Some((event, inject_response)) = rpc_receiver.recv() =>
                     {
                         let gossip_sub = &mut gossip.0.behaviour_mut().intent_gossip_behaviour;
-                        let (response, maybe_intent) = rpc::handle_rpc_event(event, gossip_sub).await;
+                        let (response, maybe_intent) = rpc::client::handle_rpc_event(event, gossip_sub).await;
                         inject_response.send(response).expect("failed to send response to rpc server");
 
                         // apply intents in matchmaker
@@ -110,7 +111,7 @@ pub async fn dispatcher(
                 Some((event, inject_response)) = rpc_receiver.recv() =>
                 {
                     let gossip_sub = &mut gossip.0.behaviour_mut().intent_gossip_behaviour;
-                    let (response, _maybe_intent) = rpc::handle_rpc_event(event, gossip_sub).await;
+                    let (response, _maybe_intent) = rpc::client::handle_rpc_event(event, gossip_sub).await;
                     inject_response.send(response).expect("failed to send response to rpc server")
                 },
                 swarm_event = gossip.0.next() => {

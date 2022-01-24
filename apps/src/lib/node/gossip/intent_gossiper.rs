@@ -1,18 +1,13 @@
-mod filter;
-pub mod matchmaker;
-mod mempool;
-
 use std::path::Path;
 use std::rc::Rc;
 
 use anoma::proto::Intent;
 use anoma::types::address::Address;
 use anoma::types::key::ed25519::Keypair;
-use matchmaker::Matchmaker;
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use self::matchmaker::MatchmakerMessage;
+use super::matchmaker_runner::{self, Matchmaker, MatchmakerMessage};
 
 // TODO split Error and Result type in two, one for Result/Error that can only
 // happens locally and the other that can happens locally and in the network
@@ -21,9 +16,9 @@ pub enum Error {
     #[error("Error while decoding intent: {0}")]
     Decode(prost::DecodeError),
     #[error("Error initializing the matchmaker: {0}")]
-    MatchmakerInit(matchmaker::Error),
+    MatchmakerInit(matchmaker_runner::Error),
     #[error("Error running the matchmaker: {0}")]
-    Matchmaker(matchmaker::Error),
+    Matchmaker(matchmaker_runner::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

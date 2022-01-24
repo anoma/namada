@@ -23,9 +23,9 @@ use thiserror::Error;
 use tokio::sync::mpsc::Sender;
 
 use self::discovery::DiscoveryEvent;
-use super::intent_gossiper;
-use super::intent_gossiper::matchmaker::MatchmakerMessage;
-use crate::node::gossip::behaviour::discovery::{
+use crate::node::gossip::intent_gossiper;
+use crate::node::gossip::matchmaker_runner::MatchmakerMessage;
+use crate::node::gossip::p2p::behaviour::discovery::{
     DiscoveryBehaviour, DiscoveryConfigBuilder,
 };
 
