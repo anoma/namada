@@ -78,46 +78,39 @@ pub async fn run(
 // logic.
 pub async fn dispatcher(
     mut p2p: P2P,
-    rpc_receiver: Option<RpcReceiver>,
+    mut rpc_receiver: Option<RpcReceiver>,
     mut peer_intent_recv: tokio::sync::mpsc::Receiver<Intent>,
     mut intent_gossiper: IntentGossiper,
     _mms_join_handle: tokio::task::JoinHandle<()>,
 ) -> Result<()> {
-    // TODO find a nice way to refactor here
-    match rpc_receiver {
-        Some(mut rpc_receiver) => {
-            loop {
-                tokio::select! {
-                    Some((event, inject_response)) = rpc_receiver.recv() =>
-                    {
-                        let gossip_sub = &mut p2p.0.behaviour_mut().intent_gossip_behaviour;
-                        let (response, maybe_intent) = rpc::client::handle_rpc_event(event, gossip_sub).await;
-                        inject_response.send(response).expect("failed to send response to rpc server");
+    loop {
+        tokio::select! {
+            Some((event, inject_response)) = recv_rpc_option(rpc_receiver.as_mut()), if rpc_receiver.is_some() =>
+            {
+                let gossip_sub = &mut p2p.0.behaviour_mut().intent_gossip_behaviour;
+                let (response, maybe_intent) = rpc::client::handle_rpc_event(event, gossip_sub).await;
+                inject_response.send(response).expect("failed to send response to rpc server");
 
-                        if let Some(intent) = maybe_intent {
-                            intent_gossiper.add_intent(intent).await;
-                        }
-                    },
-                    Some(intent) = peer_intent_recv.recv() => {
-                        intent_gossiper.add_intent(intent).await;
-                    }
-                    swarm_event = p2p.0.next() => {
-                        // Never occurs, but call for the event must exists.
-                        tracing::info!("event, {:?}", swarm_event);
-                    },
-                };
-            }
-        }
-        None => loop {
-            tokio::select! {
-                Some(intent) = peer_intent_recv.recv() => {
+                if let Some(intent) = maybe_intent {
                     intent_gossiper.add_intent(intent).await;
                 }
-                swarm_event = p2p.0.next() => {
-                    // Never occurs, but call for the event must exists.
-                    tracing::info!("event, {:?}", swarm_event);
-                },
+            },
+            Some(intent) = peer_intent_recv.recv() => {
+                intent_gossiper.add_intent(intent).await;
             }
-        },
+            swarm_event = p2p.0.next() => {
+                // Never occurs, but call for the event must exists.
+                tracing::info!("event, {:?}", swarm_event);
+            },
+        };
     }
+}
+
+async fn recv_rpc_option(
+    x: Option<&mut RpcReceiver>,
+) -> Option<(
+    rpc_message::Message,
+    tokio::sync::oneshot::Sender<RpcResponse>,
+)> {
+    x?.recv().await
 }
