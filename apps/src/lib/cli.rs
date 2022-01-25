@@ -2013,7 +2013,7 @@ pub mod args {
             .arg(RPC_SOCKET_ADDR.def().about("Enable RPC service."))
             .arg(MATCHMAKER_PATH.def().about(
                 "The file name of the matchmaker compiled to a dynamic \
-                 library without its extension.",
+                 library (the filename extension is optional).",
             ))
             .arg(
                 TX_CODE_PATH
