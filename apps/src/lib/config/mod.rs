@@ -32,6 +32,7 @@ use thiserror::Error;
 use crate::cli;
 
 pub const DEFAULT_BASE_DIR: &str = ".anoma";
+pub const DEFAULT_WASM_DIR: &str = "wasm";
 pub const FILENAME: &str = "config.toml";
 pub const TENDERMINT_DIR: &str = "tendermint";
 pub const DB_DIR: &str = "db";
@@ -288,7 +289,7 @@ impl Config {
         mode: TendermintMode,
     ) -> Self {
         Self {
-            wasm_dir: "wasm".into(),
+            wasm_dir: DEFAULT_WASM_DIR.into(),
             ledger: Ledger::new(base_dir, chain_id, mode),
             intent_gossiper: IntentGossiper::default(),
         }
