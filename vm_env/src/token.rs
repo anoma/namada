@@ -66,19 +66,18 @@ pub mod tx {
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = tx::read(&src_key.to_string());
-        match src_bal {
-            None => {
+        let mut src_bal = src_bal.unwrap_or_else(|| match src {
+            Address::Internal(InternalAddress::Mint) => Amount::max(),
+            _ => {
                 tx::log_string(format!("src {} has no balance", src));
                 unreachable!()
             }
-            Some(mut src_bal) => {
-                src_bal.spend(&amount);
-                let mut dest_bal: Amount =
-                    tx::read(&dest_key.to_string()).unwrap_or_default();
-                dest_bal.receive(&amount);
-                tx::write(&src_key.to_string(), src_bal);
-                tx::write(&dest_key.to_string(), dest_bal);
-            }
-        }
+        });
+        src_bal.spend(&amount);
+        let mut dest_bal: Amount =
+            tx::read(&dest_key.to_string()).unwrap_or_default();
+        dest_bal.receive(&amount);
+        tx::write(&src_key.to_string(), src_bal);
+        tx::write(&dest_key.to_string(), dest_bal);
     }
 }

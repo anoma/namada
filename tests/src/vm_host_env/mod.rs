@@ -1255,7 +1255,7 @@ mod tests {
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        let (_token, receiver) = ibc::init_storage(&mut env.storage);
+        let (token, receiver) = ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1271,7 +1271,7 @@ mod tests {
             port_id,
             channel_id,
             ibc::sequence(1),
-            address::btc().to_string(),
+            token.to_string(),
             &receiver,
         );
 

@@ -10,7 +10,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::types::address::{Address, Error as AddressError};
+use crate::types::address::{Address, Error as AddressError, InternalAddress};
 #[cfg(any(feature = "ibc-vp", feature = "ibc-vp-abci"))]
 use crate::types::ibc::data::FungibleTokenPacketData;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
@@ -254,6 +254,24 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
             DbKeySeg::StringSeg(key),
             DbKeySeg::AddressSeg(owner),
         ] if key == BALANCE_STORAGE_KEY => Some(owner),
+        _ => None,
+    }
+}
+
+/// Check if the given storage key is non-owner's balance key. If it is, returns
+/// the address.
+pub fn is_non_owner_balance_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(_),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::AddressSeg(owner),
+        ] if key == BALANCE_STORAGE_KEY => match owner {
+            Address::Internal(InternalAddress::Escrow(_))
+            | Address::Internal(InternalAddress::Burn)
+            | Address::Internal(InternalAddress::Mint) => Some(owner),
+            _ => None,
+        },
         _ => None,
     }
 }

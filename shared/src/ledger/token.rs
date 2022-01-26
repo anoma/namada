@@ -29,7 +29,9 @@ use crate::types::ibc::data::{
     Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
 };
 use crate::types::storage::Key;
-use crate::types::token::{self, Amount, AmountParseError};
+use crate::types::token::{
+    self, is_non_owner_balance_key, Amount, AmountParseError,
+};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -45,7 +47,7 @@ pub enum Error {
     Address(AddressError),
     #[error("Token error")]
     NoToken,
-    #[error("Token error")]
+    #[error("Parsing amount error")]
     Amount(AmountParseError),
     #[error("Decoding error")]
     Decoding(std::io::Error),
@@ -82,10 +84,22 @@ where
     fn validate_tx(
         &self,
         tx_data: &[u8],
-        _keys_changed: &HashSet<Key>,
+        keys_changed: &HashSet<Key>,
         _verifiers: &HashSet<Address>,
     ) -> Result<bool> {
-        // TODO check other escrow/mint/burn addresses
+        // Check the non-onwer balance updates
+        let keys_changed: HashSet<Key> = keys_changed
+            .into_iter()
+            .filter(|k| is_non_owner_balance_key(k).is_some())
+            .cloned()
+            .collect();
+        if keys_changed.len() != 1 {
+            // a transaction can update at most 1 non-owner balance for now
+            return Err(Error::TokenTransfer(
+                "Invalid transfer for multiple non-owner balances".to_owned(),
+            ));
+        }
+
         // Check the message
         let ibc_msg = IbcMessage::decode(tx_data).map_err(Error::IbcMessage)?;
         match &ibc_msg.0 {

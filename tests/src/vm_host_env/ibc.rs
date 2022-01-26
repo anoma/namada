@@ -279,15 +279,7 @@ impl IbcActions for TestIbcActions {
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = tx_host_env::read(&src_key.to_string());
         let mut src_bal = src_bal.unwrap_or_else(|| match src {
-            Address::Internal(InternalAddress::Mint) => {
-                let vp_token_key = Key::validity_predicate(token);
-                if !tx_host_env::has_key(vp_token_key.to_string()) {
-                    let code = std::fs::read(VP_ALWAYS_TRUE_WASM)
-                        .expect("cannot load wasm");
-                    tx_host_env::init_token(token, code);
-                }
-                Amount::max()
-            }
+            Address::Internal(InternalAddress::Mint) => Amount::max(),
             _ => unreachable!(),
         });
         src_bal.spend(&amount);
@@ -365,9 +357,8 @@ pub fn init_storage(storage: &mut TestStorage) -> (Address, Address) {
     storage.set_header(tm_dummy_header()).unwrap();
 
     // initialize a token
-    let token = address::xan();
     let code = std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
-    tx_host_env::init_token(&token, code.clone());
+    let token = tx_host_env::init_account(code.clone());
 
     // initialize an account
     let account = tx_host_env::init_account(code);
