@@ -89,7 +89,7 @@ where
     ) -> Result<bool> {
         // Check the non-onwer balance updates
         let keys_changed: HashSet<Key> = keys_changed
-            .into_iter()
+            .iter()
             .filter(|k| is_non_owner_balance_key(k).is_some())
             .cloned()
             .collect();
