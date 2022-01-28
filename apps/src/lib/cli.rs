@@ -34,12 +34,17 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     pub enum Anoma {
+        // Sub-binary-commands
         Node(AnomaNode),
         Client(AnomaClient),
         Wallet(AnomaWallet),
-        // Inlined commands from the node and the client.
+
+        // Inlined commands from the node.
         Ledger(Ledger),
         Gossip(Gossip),
+        Matchmaker(Matchmaker),
+
+        // Inlined commands from the client.
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxUpdateVp(TxUpdateVp),
@@ -53,6 +58,7 @@ pub mod cmds {
                 .subcommand(AnomaWallet::def())
                 .subcommand(Ledger::def())
                 .subcommand(Gossip::def())
+                .subcommand(Matchmaker::def())
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxUpdateVp::def())
@@ -65,6 +71,7 @@ pub mod cmds {
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let gossip = SubCmd::parse(matches).map(Self::Gossip);
+            let matchmaker = SubCmd::parse(matches).map(Self::Matchmaker);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
@@ -73,6 +80,7 @@ pub mod cmds {
                 .or(wallet)
                 .or(ledger)
                 .or(gossip)
+                .or(matchmaker)
                 .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_update_vp)
