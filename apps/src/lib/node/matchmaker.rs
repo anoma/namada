@@ -44,6 +44,15 @@ pub async fn run(
     tx_source_address: Address,
     wasm_dir: impl AsRef<Path>,
 ) {
+    let matchmaker_path = matchmaker_path.unwrap_or_else(|| {
+        eprintln!("Please configure or specify the matchmaker path");
+        cli::safe_exit(1);
+    });
+    let tx_code_path = tx_code_path.unwrap_or_else(|| {
+        eprintln!("Please configure or specify the transaction code path");
+        cli::safe_exit(1);
+    });
+
     let (runner, result_handler) = Runner::new_pair(
         intent_gossiper_addr,
         matchmaker_path,

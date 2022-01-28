@@ -42,7 +42,7 @@ pub struct Config {
     pub ledger: Ledger,
     pub intent_gossiper: IntentGossiper,
     // TODO allow to configure multiple matchmakers
-    pub matchmaker: Option<Matchmaker>,
+    pub matchmaker: Matchmaker,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -144,10 +144,10 @@ pub struct RpcServer {
     pub address: SocketAddr,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct Matchmaker {
-    pub matchmaker_path: PathBuf,
-    pub tx_code_path: PathBuf,
+    pub matchmaker_path: Option<PathBuf>,
+    pub tx_code_path: Option<PathBuf>,
 }
 
 impl Ledger {
@@ -295,7 +295,7 @@ impl Config {
             wasm_dir: "wasm".into(),
             ledger: Ledger::new(base_dir, chain_id, mode),
             intent_gossiper: IntentGossiper::default(),
-            matchmaker: None,
+            matchmaker: Matchmaker::default(),
         }
     }
 

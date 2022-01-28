@@ -1,7 +1,6 @@
 //! Anoma node CLI.
 
 use anoma_apps::cli::{self, args, cmds};
-use anoma_apps::config;
 use anoma_apps::node::{gossip, ledger, matchmaker};
 use eyre::{Context, Result};
 
@@ -47,23 +46,15 @@ pub fn main() -> Result<()> {
             let tx_signing_key = ctx.get_cached(&tx_signing_key);
             let tx_source_address = ctx.get(&tx_source_address);
 
-            let mut config = ctx.config;
+            let config = ctx.config;
             let wasm_dir = config.wasm_dir;
-            let mm_config = match config.matchmaker.take() {
-                Some(mut mm_config) => {
-                    if let Some(matchmaker_path) = matchmaker_path.as_ref() {
-                        mm_config.matchmaker_path = matchmaker_path.clone();
-                    }
-                    if let Some(tx_code_path) = tx_code_path.as_ref() {
-                        mm_config.tx_code_path = tx_code_path.clone();
-                    }
-                    mm_config
-                }
-                None => config::Matchmaker {
-                    matchmaker_path: matchmaker_path.unwrap(),
-                    tx_code_path: tx_code_path.unwrap(),
-                },
-            };
+            let mut mm_config = config.matchmaker;
+            if matchmaker_path.is_some() {
+                mm_config.matchmaker_path = matchmaker_path;
+            }
+            if tx_code_path.is_some() {
+                mm_config.tx_code_path = tx_code_path;
+            }
 
             matchmaker::run(
                 mm_config,

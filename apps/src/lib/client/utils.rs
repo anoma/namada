@@ -284,8 +284,8 @@ pub fn init_network(
                             .insert(account.clone(), matchmaker);
 
                         let matchmaker_config = config::Matchmaker {
-                            matchmaker_path: mm_code.clone().into(),
-                            tx_code_path: tx_code.clone().into(),
+                            matchmaker_path: Some(mm_code.clone().into()),
+                            tx_code_path: Some(tx_code.clone().into()),
                         };
                         matchmaker_configs
                             .insert(name.clone(), matchmaker_config);
@@ -505,7 +505,8 @@ pub fn init_network(
             // Configure the intent gossiper, matchmaker (if any) and RPC
             config.intent_gossiper = gossiper_configs.remove(name).unwrap();
             config.intent_gossiper.seed_peers = seed_peers.clone();
-            config.matchmaker = matchmaker_configs.remove(name);
+            config.matchmaker =
+                matchmaker_configs.remove(name).unwrap_or_default();
             config.intent_gossiper.rpc = Some(config::RpcServer {
                 address: SocketAddr::new(
                     IpAddr::V4(if localhost {
