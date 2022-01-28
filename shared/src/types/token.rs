@@ -62,7 +62,7 @@ impl Amount {
     }
 
     /// Create a new amount from whole number of tokens
-    pub fn whole(amount: u64) -> Self {
+    pub const fn whole(amount: u64) -> Self {
         Self {
             micro: amount * SCALE,
         }
@@ -267,9 +267,9 @@ pub fn is_non_owner_balance_key(key: &Key) -> Option<&Address> {
             DbKeySeg::StringSeg(key),
             DbKeySeg::AddressSeg(owner),
         ] if key == BALANCE_STORAGE_KEY => match owner {
-            Address::Internal(InternalAddress::Escrow(_))
-            | Address::Internal(InternalAddress::Burn)
-            | Address::Internal(InternalAddress::Mint) => Some(owner),
+            Address::Internal(InternalAddress::IbcEscrow(_))
+            | Address::Internal(InternalAddress::IbcBurn)
+            | Address::Internal(InternalAddress::IbcMint) => Some(owner),
             _ => None,
         },
         _ => None,

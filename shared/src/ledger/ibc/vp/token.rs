@@ -1,4 +1,4 @@
-//! Token transfer validation as a native validity predicate
+//! IBC token transfer validation as a native validity predicate
 
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -57,11 +57,11 @@ pub enum Error {
     TokenTransfer(String),
 }
 
-/// Result for Token VP
+/// Result for IBC token VP
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Token native VP for escrow, unescrow, burn, and mint
-pub struct Token<'a, DB, H, CA>
+/// IBC token native VP for IBC token transfer
+pub struct IbcToken<'a, DB, H, CA>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: StorageHasher,
@@ -71,7 +71,7 @@ where
     pub ctx: Ctx<'a, DB, H, CA>,
 }
 
-impl<'a, DB, H, CA> NativeVp for Token<'a, DB, H, CA>
+impl<'a, DB, H, CA> NativeVp for IbcToken<'a, DB, H, CA>
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -79,7 +79,7 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = InternalAddress::Burn;
+    const ADDR: InternalAddress = InternalAddress::IbcBurn;
 
     fn validate_tx(
         &self,
@@ -118,7 +118,7 @@ where
     }
 }
 
-impl<'a, DB, H, CA> Token<'a, DB, H, CA>
+impl<'a, DB, H, CA> IbcToken<'a, DB, H, CA>
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -139,7 +139,7 @@ where
         );
         let target = if data.denomination.starts_with(&prefix) {
             // sink zone
-            Address::Internal(InternalAddress::Burn)
+            Address::Internal(InternalAddress::IbcBurn)
         } else {
             // source zone
             Address::Internal(InternalAddress::ibc_escrow_address(
@@ -191,14 +191,14 @@ where
             ))
         } else {
             // the sender is the source
-            Address::Internal(InternalAddress::Mint)
+            Address::Internal(InternalAddress::IbcMint)
         };
 
         let source_key = token::balance_key(&token, &source);
         let pre = match self.ctx.read_pre(&source_key)? {
             Some(v) => Amount::try_from_slice(&v).map_err(Error::Decoding)?,
             None => match source {
-                Address::Internal(InternalAddress::Mint) => Amount::max(),
+                Address::Internal(InternalAddress::IbcMint) => Amount::max(),
                 _ => Amount::default(),
             },
         };
@@ -235,7 +235,7 @@ where
         );
         let source = if data.denomination.starts_with(&prefix) {
             // sink zone: mint the token for the refund
-            Address::Internal(InternalAddress::Mint)
+            Address::Internal(InternalAddress::IbcMint)
         } else {
             // source zone: unescrow the token for the refund
             Address::Internal(InternalAddress::ibc_escrow_address(
@@ -248,7 +248,7 @@ where
         let pre = match self.ctx.read_pre(&source_key)? {
             Some(v) => Amount::try_from_slice(&v).map_err(Error::Decoding)?,
             None => match source {
-                Address::Internal(InternalAddress::Mint) => Amount::max(),
+                Address::Internal(InternalAddress::IbcMint) => Amount::max(),
                 _ => Amount::default(),
             },
         };

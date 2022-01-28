@@ -1239,7 +1239,8 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was burned
-        let burn = address::Address::Internal(address::InternalAddress::Burn);
+        let burn =
+            address::Address::Internal(address::InternalAddress::IbcBurn);
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &burn);
         assert!(
             token_vp
@@ -1297,7 +1298,8 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was minted
-        let mint = address::Address::Internal(address::InternalAddress::Mint);
+        let mint =
+            address::Address::Internal(address::InternalAddress::IbcMint);
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &mint);
         assert!(
             token_vp

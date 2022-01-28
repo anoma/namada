@@ -13,12 +13,11 @@ pub use anoma::ledger::ibc::storage::{
     consensus_state_key, next_sequence_ack_key, next_sequence_recv_key,
     next_sequence_send_key, port_key, receipt_key,
 };
-use anoma::ledger::ibc::vp::Ibc;
+use anoma::ledger::ibc::vp::{Ibc, IbcToken};
 use anoma::ledger::native_vp::{Ctx, NativeVp};
 use anoma::ledger::storage::mockdb::MockDB;
 use anoma::ledger::storage::testing::TestStorage;
 use anoma::ledger::storage::Sha256Hasher;
-use anoma::ledger::token::Token;
 use anoma::proto::Tx;
 use anoma::types::address::{self, Address, InternalAddress};
 use anoma::types::ibc::data::FungibleTokenPacketData;
@@ -230,16 +229,16 @@ impl<'a> TestIbcVp<'a> {
     }
 }
 
-pub struct TestTokenVp<'a> {
-    pub token: Token<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
+pub struct TestIbcTokenVp<'a> {
+    pub token: IbcToken<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
     pub keys_changed: HashSet<Key>,
 }
 
-impl<'a> TestTokenVp<'a> {
+impl<'a> TestIbcTokenVp<'a> {
     pub fn validate(
         &self,
         tx_data: &[u8],
-    ) -> std::result::Result<bool, anoma::ledger::token::Error> {
+    ) -> std::result::Result<bool, anoma::ledger::ibc::vp::IbcTokenError> {
         self.token
             .validate_tx(tx_data, &self.keys_changed, &HashSet::new())
     }
@@ -279,7 +278,7 @@ impl IbcActions for TestIbcActions {
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = tx_host_env::read(&src_key.to_string());
         let mut src_bal = src_bal.unwrap_or_else(|| match src {
-            Address::Internal(InternalAddress::Mint) => Amount::max(),
+            Address::Internal(InternalAddress::IbcMint) => Amount::max(),
             _ => unreachable!(),
         });
         src_bal.spend(&amount);
@@ -322,7 +321,7 @@ pub fn init_token_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
     addr: &Address,
-) -> (TestTokenVp<'a>, TempDir) {
+) -> (TestIbcTokenVp<'a>, TempDir) {
     let keys_changed = tx_env
         .write_log
         .verifiers_changed_keys(&HashSet::new())
@@ -339,10 +338,10 @@ pub fn init_token_vp_from_tx<'a>(
         VpGasMeter::new(0),
         vp_wasm_cache,
     );
-    let token = Token { ctx };
+    let token = IbcToken { ctx };
 
     (
-        TestTokenVp {
+        TestIbcTokenVp {
             token,
             keys_changed,
         },

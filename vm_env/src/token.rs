@@ -29,7 +29,7 @@ pub mod vp {
                     let key = key.to_string();
                     let pre: Amount =
                         vp::read_pre(&key).unwrap_or_else(|| match owner {
-                            Address::Internal(InternalAddress::Mint) => {
+                            Address::Internal(InternalAddress::IbcMint) => {
                                 Amount::max()
                             }
                             _ => Amount::default(),
@@ -67,7 +67,7 @@ pub mod tx {
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = tx::read(&src_key.to_string());
         let mut src_bal = src_bal.unwrap_or_else(|| match src {
-            Address::Internal(InternalAddress::Mint) => Amount::max(),
+            Address::Internal(InternalAddress::IbcMint) => Amount::max(),
             _ => {
                 tx::log_string(format!("src {} has no balance", src));
                 unreachable!()

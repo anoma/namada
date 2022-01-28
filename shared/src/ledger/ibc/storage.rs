@@ -69,16 +69,15 @@ pub enum IbcPrefix {
     Ack,
     Event,
     Unknown,
-    NonIbc,
 }
 
 /// Returns the prefix from the given key
-pub fn ibc_prefix(key: &Key) -> IbcPrefix {
+pub fn ibc_prefix(key: &Key) -> Option<IbcPrefix> {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), ..]
             if addr == &Address::Internal(InternalAddress::Ibc) =>
         {
-            match &*prefix.raw() {
+            Some(match &*prefix.raw() {
                 "clients" => IbcPrefix::Client,
                 "connections" => IbcPrefix::Connection,
                 "channelEnds" => IbcPrefix::Channel,
@@ -92,9 +91,9 @@ pub fn ibc_prefix(key: &Key) -> IbcPrefix {
                 "acks" => IbcPrefix::Ack,
                 "event" => IbcPrefix::Event,
                 _ => IbcPrefix::Unknown,
-            }
+            })
         }
-        _ => IbcPrefix::NonIbc,
+        _ => None,
     }
 }
 

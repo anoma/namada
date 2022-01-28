@@ -937,7 +937,7 @@ pub trait IbcActions {
         );
         if data.denomination.starts_with(&prefix) {
             // sink zone
-            let burn = Address::Internal(InternalAddress::Burn);
+            let burn = Address::Internal(InternalAddress::IbcBurn);
             self.transfer_token(&source, &burn, &token, amount);
         } else {
             // source zone
@@ -1011,7 +1011,7 @@ pub trait IbcActions {
             self.transfer_token(&escrow, &dest, &token, amount);
         } else {
             // mint the token because the sender chain is the source
-            let mint = Address::Internal(InternalAddress::Mint);
+            let mint = Address::Internal(InternalAddress::IbcMint);
             self.transfer_token(&mint, &dest, &token, amount);
         }
         Ok(())
@@ -1056,7 +1056,7 @@ pub trait IbcActions {
         );
         if data.denomination.starts_with(&prefix) {
             // mint the token because the sender chain is the sink zone
-            let mint = Address::Internal(InternalAddress::Mint);
+            let mint = Address::Internal(InternalAddress::IbcMint);
             self.transfer_token(&mint, &dest, &token, amount);
         } else {
             // unescrow the token because the sender chain is the source zone

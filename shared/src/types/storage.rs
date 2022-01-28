@@ -255,19 +255,13 @@ impl Key {
 
     /// Check if the given key can be updated
     pub fn is_updatable(&self) -> bool {
-        match &self.segments[..] {
-            [
-                DbKeySeg::AddressSeg(_),
-                DbKeySeg::StringSeg(key),
-                DbKeySeg::AddressSeg(owner),
-            ] if key == BALANCE_STORAGE_KEY
-                && (*owner == Address::Internal(InternalAddress::Burn)
-                    || *owner == Address::Internal(InternalAddress::Mint)) =>
-            {
-                false
-            }
-            _ => true,
-        }
+        !matches!(&self.segments[..], [
+            DbKeySeg::AddressSeg(_),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::AddressSeg(Address::Internal(
+                InternalAddress::IbcBurn | InternalAddress::IbcMint)),
+        ] if key == BALANCE_STORAGE_KEY
+        )
     }
 
     /// Returns a key from the given DB key path that has the height and

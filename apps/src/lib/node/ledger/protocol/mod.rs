@@ -3,13 +3,12 @@ use std::collections::HashSet;
 use std::{fmt, panic};
 
 use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
-use anoma::ledger::ibc::vp::Ibc;
+use anoma::ledger::ibc::vp::{Ibc, IbcToken};
 use anoma::ledger::native_vp::{self, NativeVp};
 use anoma::ledger::parameters::{self, ParametersVp};
 use anoma::ledger::pos::{self, PosVP};
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use anoma::ledger::token::Token;
 use anoma::proto::{self, Tx};
 use anoma::types::address::{Address, InternalAddress};
 use anoma::types::ibc::IbcEvent;
@@ -44,8 +43,8 @@ pub enum Error {
     PosNativeVpRuntime,
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
-    #[error("Token native VP: {0}")]
-    TokenNativeVpError(anoma::ledger::token::Error),
+    #[error("IBC Token native VP: {0}")]
+    IbcTokenNativeVpError(anoma::ledger::ibc::vp::IbcTokenError),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -355,15 +354,15 @@ where
                                 (*internal_addr).clone(),
                             ))
                         }
-                        InternalAddress::Escrow(_)
-                        | InternalAddress::Burn
-                        | InternalAddress::Mint => {
+                        InternalAddress::IbcEscrow(_)
+                        | InternalAddress::IbcBurn
+                        | InternalAddress::IbcMint => {
                             // validate the transfer
-                            let token = Token { ctx };
-                            let result = token
+                            let ibc_token = IbcToken { ctx };
+                            let result = ibc_token
                                 .validate_tx(tx_data, keys, &verifiers_addr)
-                                .map_err(Error::TokenNativeVpError);
-                            gas_meter = token.ctx.gas_meter.into_inner();
+                                .map_err(Error::IbcTokenNativeVpError);
+                            gas_meter = ibc_token.ctx.gas_meter.into_inner();
                             result
                         }
                     };
