@@ -22,12 +22,12 @@ mod tests {
     #[cfg(not(feature = "ABCI"))]
     use ::ibc::tx_msg::Msg;
     use anoma::ledger::ibc::handler::IbcActions;
-    use anoma::ledger::ibc::init_genesis_storage;
     use anoma::ledger::ibc::vp::Error as IbcError;
     use anoma::proto::Tx;
     use anoma::types::key::ed25519::SignedTxData;
     use anoma::types::storage::{self, Key, KeySeg};
     use anoma::types::time::DateTimeUtc;
+    use anoma::types::token::{self, Amount};
     use anoma::types::{address, key};
     use anoma_vm_env::tx_prelude::{
         BorshDeserialize, BorshSerialize, KeyValIterator,
@@ -490,8 +490,7 @@ mod tests {
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
 
-        // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        ibc::init_storage(&mut env.storage);
 
         // Start an invalid transaction
         let msg = ibc::msg_create_client();
@@ -652,11 +651,9 @@ mod tests {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
-        // block header
-        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        ibc::init_storage(&mut env.storage);
         let (client_id, client_state, writes) = ibc::prepare_client();
         writes.into_iter().for_each(|(key, val)| {
             env.storage.write(&key, val).expect("write error");
@@ -755,11 +752,9 @@ mod tests {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
-        // block header
-        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        ibc::init_storage(&mut env.storage);
         let (client_id, client_state, writes) = ibc::prepare_client();
         writes.into_iter().for_each(|(key, val)| {
             env.storage.write(&key, val).expect("write error");
@@ -824,7 +819,7 @@ mod tests {
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -973,7 +968,7 @@ mod tests {
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1039,7 +1034,7 @@ mod tests {
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1080,7 +1075,7 @@ mod tests {
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1116,13 +1111,13 @@ mod tests {
     }
 
     #[test]
-    fn test_ibc_send_packet() {
+    fn test_ibc_send_token() {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        let (token, sender) = ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1134,7 +1129,8 @@ mod tests {
         });
 
         // Start a transaction to send a packet
-        let msg = ibc::msg_transfer(port_id, channel_id);
+        let msg =
+            ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
         let mut tx_data = vec![];
         msg.clone()
             .to_any()
@@ -1145,12 +1141,10 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
         };
-        // send a packet with the data
+        // send the token and a packet with the data
         ibc::TestIbcActions
             .dispatch(&tx_data)
             .expect("sending a packet failed");
-
-        // the transaction does something before senging a packet
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -1158,6 +1152,19 @@ mod tests {
             ibc_vp
                 .validate(&tx_data)
                 .expect("validation failed unexpectedly")
+        );
+        // Check if the token was escrowed
+        let escrow = address::Address::Internal(
+            address::InternalAddress::ibc_escrow_address(
+                msg.source_port.to_string(),
+                msg.source_channel.to_string(),
+            ),
+        );
+        let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
+        assert!(
+            token_vp
+                .validate(&tx_data)
+                .expect("token validation failed unexpectedly")
         );
 
         // Commit
@@ -1181,8 +1188,6 @@ mod tests {
             .dispatch(&tx_data)
             .expect("the packet ack failed");
 
-        // the transaction does something after the ack
-
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
@@ -1193,15 +1198,65 @@ mod tests {
     }
 
     #[test]
-    fn test_ibc_receive_packet() {
+    fn test_ibc_burn_token() {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
-        // block header to check timeout timestamp
-        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        let (token, sender) = ibc::init_storage(&mut env.storage);
+        let (client_id, _client_state, mut writes) = ibc::prepare_client();
+        let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
+        writes.extend(conn_writes);
+        let (port_id, channel_id, channel_writes) =
+            ibc::prepare_opened_channel(&conn_id);
+        writes.extend(channel_writes);
+        writes.into_iter().for_each(|(key, val)| {
+            env.storage.write(&key, val).expect("write error");
+        });
+
+        // Start a transaction to send a packet
+        // Set this chain is the sink zone
+        let token = format!("{}/{}/{}", port_id, channel_id, token);
+        let msg = ibc::msg_transfer(port_id, channel_id, token, &sender);
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        };
+        // send the token and a packet with the data
+        ibc::TestIbcActions
+            .dispatch(&tx_data)
+            .expect("sending a packet failed");
+
+        // Check
+        let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
+        assert!(
+            ibc_vp
+                .validate(&tx_data)
+                .expect("validation failed unexpectedly")
+        );
+        // Check if the token was burned
+        let burn =
+            address::Address::Internal(address::InternalAddress::IbcBurn);
+        let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &burn);
+        assert!(
+            token_vp
+                .validate(&tx_data)
+                .expect("token validation failed unexpectedly")
+        );
+    }
+
+    #[test]
+    fn test_ibc_receive_token() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        // Set the initial state before starting transactions
+        let (token, receiver) = ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1213,8 +1268,13 @@ mod tests {
         });
 
         // packet
-        let packet =
-            ibc::received_packet(port_id, channel_id, ibc::sequence(1));
+        let packet = ibc::received_packet(
+            port_id,
+            channel_id,
+            ibc::sequence(1),
+            token.to_string(),
+            &receiver,
+        );
 
         // Start a transaction to receive a packet
         let msg = ibc::msg_packet_recv(packet);
@@ -1230,7 +1290,82 @@ mod tests {
             .dispatch(&tx_data)
             .expect("receiving a packet failed");
 
-        // the transaction does something according to the packet
+        // Check
+        let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
+        assert!(
+            ibc_vp
+                .validate(&tx_data)
+                .expect("validation failed unexpectedly")
+        );
+        // Check if the token was minted
+        let mint =
+            address::Address::Internal(address::InternalAddress::IbcMint);
+        let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &mint);
+        assert!(
+            token_vp
+                .validate(&tx_data)
+                .expect("token validation failed unexpectedly")
+        );
+    }
+
+    #[test]
+    fn test_ibc_unescrow_token() {
+        // The environment must be initialized first
+        let mut env = TestTxEnv::default();
+        init_tx_env(&mut env);
+
+        // Set the initial state before starting transactions
+        let (token, receiver) = ibc::init_storage(&mut env.storage);
+        let (client_id, _client_state, mut writes) = ibc::prepare_client();
+        let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
+        writes.extend(conn_writes);
+        let (port_id, channel_id, channel_writes) =
+            ibc::prepare_opened_channel(&conn_id);
+        writes.extend(channel_writes);
+        writes.into_iter().for_each(|(key, val)| {
+            env.storage.write(&key, val).expect("write error");
+        });
+        // escrow in advance
+        let counterparty = ibc::dummy_channel_counterparty();
+        let escrow = address::Address::Internal(
+            address::InternalAddress::ibc_escrow_address(
+                port_id.to_string(),
+                channel_id.to_string(),
+            ),
+        );
+        let key = token::balance_key(&token, &escrow);
+        let val = Amount::from(1_000_000_000u64).try_to_vec().unwrap();
+        env.storage.write(&key, val).expect("write error");
+
+        // Set this chain as the source zone
+        let token = format!(
+            "{}/{}/{}",
+            counterparty.port_id().clone(),
+            counterparty.channel_id().unwrap().clone(),
+            token
+        );
+        // packet
+        let packet = ibc::received_packet(
+            port_id,
+            channel_id,
+            ibc::sequence(1),
+            token,
+            &receiver,
+        );
+
+        // Start a transaction to receive a packet
+        let msg = ibc::msg_packet_recv(packet);
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        };
+        // receive a packet with the message
+        ibc::TestIbcActions
+            .dispatch(&tx_data)
+            .expect("receiving a packet failed");
 
         // Check
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -1238,6 +1373,13 @@ mod tests {
             ibc_vp
                 .validate(&tx_data)
                 .expect("validation failed unexpectedly")
+        );
+        // Check if the token was unescrowed
+        let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
+        assert!(
+            token_vp
+                .validate(&tx_data)
+                .expect("token validation failed unexpectedly")
         );
     }
 
@@ -1248,7 +1390,7 @@ mod tests {
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        let (token, sender) = ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1260,7 +1402,8 @@ mod tests {
         });
 
         // Start a transaction to send a packet
-        let msg = ibc::msg_transfer(port_id, channel_id);
+        let msg =
+            ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
         let mut tx_data = vec![];
         msg.clone()
             .to_any()
@@ -1323,11 +1466,9 @@ mod tests {
         // The environment must be initialized first
         let mut env = TestTxEnv::default();
         init_tx_env(&mut env);
-        // block header to check timeout timestamp
-        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        let (token, receiver) = ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1339,8 +1480,13 @@ mod tests {
         });
 
         // packet (sequence number isn't checked for the unordered channel)
-        let packet =
-            ibc::received_packet(port_id, channel_id, ibc::sequence(100));
+        let packet = ibc::received_packet(
+            port_id,
+            channel_id,
+            ibc::sequence(100),
+            token.to_string(),
+            &receiver,
+        );
 
         // Start a transaction to receive a packet
         let msg = ibc::msg_packet_recv(packet);
@@ -1374,7 +1520,7 @@ mod tests {
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        let (token, sender) = ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1386,7 +1532,8 @@ mod tests {
         });
 
         // Start a transaction to send a packet
-        let mut msg = ibc::msg_transfer(port_id, channel_id);
+        let mut msg =
+            ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
         ibc::set_timeout_height(&mut msg);
         let mut tx_data = vec![];
         msg.clone()
@@ -1406,7 +1553,7 @@ mod tests {
         let counterparty = ibc::dummy_channel_counterparty();
         let packet =
             ibc::packet_from_message(&msg, ibc::sequence(1), &counterparty);
-        let msg = ibc::msg_timeout(packet, ibc::sequence(1));
+        let msg = ibc::msg_timeout(packet.clone(), ibc::sequence(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
@@ -1427,6 +1574,19 @@ mod tests {
                 .validate(&tx_data)
                 .expect("validation failed unexpectedly")
         );
+        // Check if the token was refunded
+        let escrow = address::Address::Internal(
+            address::InternalAddress::ibc_escrow_address(
+                packet.source_port.to_string(),
+                packet.source_channel.to_string(),
+            ),
+        );
+        let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
+        assert!(
+            token_vp
+                .validate(&tx_data)
+                .expect("token validation failed unexpectedly")
+        );
     }
 
     #[test]
@@ -1436,7 +1596,7 @@ mod tests {
         init_tx_env(&mut env);
 
         // Set the initial state before starting transactions
-        init_genesis_storage(&mut env.storage);
+        let (token, sender) = ibc::init_storage(&mut env.storage);
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
@@ -1448,7 +1608,8 @@ mod tests {
         });
 
         // Start a transaction to send a packet
-        let msg = ibc::msg_transfer(port_id, channel_id);
+        let msg =
+            ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
         let mut tx_data = vec![];
         msg.clone()
             .to_any()
@@ -1467,7 +1628,7 @@ mod tests {
         let counterparty = ibc::dummy_channel_counterparty();
         let packet =
             ibc::packet_from_message(&msg, ibc::sequence(1), &counterparty);
-        let msg = ibc::msg_timeout_on_close(packet, ibc::sequence(1));
+        let msg = ibc::msg_timeout_on_close(packet.clone(), ibc::sequence(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
@@ -1487,6 +1648,19 @@ mod tests {
             ibc_vp
                 .validate(&tx_data)
                 .expect("validation failed unexpectedly")
+        );
+        // Check if the token was refunded
+        let escrow = address::Address::Internal(
+            address::InternalAddress::ibc_escrow_address(
+                packet.source_port.to_string(),
+                packet.source_channel.to_string(),
+            ),
+        );
+        let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
+        assert!(
+            token_vp
+                .validate(&tx_data)
+                .expect("token validation failed unexpectedly")
         );
     }
 }
