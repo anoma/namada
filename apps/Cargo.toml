@@ -94,6 +94,7 @@ jsonpath_lib = "0.3.0"
 libc = "0.2.97"
 libloading = "0.7.2"
 libp2p = "0.38.0"
+message-io = {version = "0.14.3", default-features = false, features = ["websocket"]}
 num-derive = "0.3.3"
 num-traits = "0.2.14"
 num_cpus = "1.13.0"
@@ -147,8 +148,11 @@ winapi = "0.3.9"
 [dev-dependencies]
 anoma = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 cargo-watch = "7.5.0"
-proptest = "1.0.0"
+bit-set = "0.5.2"
+# A fork with state machime testing
+proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
 tempfile = "3.2.0"
+test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tokio-test = "0.4.2"
 
 [build-dependencies]
