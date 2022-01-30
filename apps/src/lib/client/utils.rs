@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -24,6 +25,7 @@ use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_stable::node::Id as TendermintNodeId;
 
+use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args};
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
@@ -47,9 +49,26 @@ pub async fn join_network(
     global_args: args::Global,
     args::JoinNetwork { chain_id }: args::JoinNetwork,
 ) {
+    let base_dir = &global_args.base_dir;
+    let wasm_dir = global_args.wasm_dir.as_ref().cloned().or_else(|| {
+        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
+            let wasm_dir: PathBuf = wasm_dir.into();
+            fs::create_dir_all(&wasm_dir).unwrap();
+            Some(wasm_dir)
+        } else {
+            None
+        }
+    });
+    fs::create_dir_all(base_dir).unwrap();
+    let temp_dir = "temp_unpack";
+    let base_dir_full = fs::canonicalize(base_dir).unwrap();
+    let wasm_dir_full =
+        wasm_dir.as_ref().and_then(|dir| fs::canonicalize(dir).ok());
+
     let release_filename = format!("{}.tar.gz", chain_id);
     let release_url =
         format!("{}/{}/{}", RELEASE_PREFIX, chain_id, release_filename);
+    let cwd = env::current_dir().unwrap();
 
     // Read or download the release archive
     println!("Downloading config release from {} ...", release_url);
@@ -60,14 +79,64 @@ pub async fn join_network(
     let mut tar = String::new();
     decoder.read_to_string(&mut tar).unwrap();
     let mut archive = tar::Archive::new(tar.as_bytes());
-    archive.unpack(".").unwrap();
 
-    // If the base-dir is not the default, move the network config into it
-    let base_dir_name = global_args.base_dir.file_name();
-    if let Some(base_dir_name) = base_dir_name {
-        if base_dir_name != config::DEFAULT_BASE_DIR {
-            tokio::fs::rename(".anoma", base_dir_name).await.unwrap();
+    // If the base-dir or wasm-dir is non-default, unpack the archive into a
+    // temp dir inside first.
+    let (unpack_dir, non_default_dir) =
+        if base_dir_full != cwd.join(config::DEFAULT_BASE_DIR) {
+            (base_dir.join(temp_dir), true)
+        } else if wasm_dir.is_some()
+            && wasm_dir_full != Some(cwd.join(config::DEFAULT_WASM_DIR))
+        {
+            (wasm_dir.as_ref().unwrap().join(temp_dir), true)
+        } else {
+            (PathBuf::from_str(".").unwrap(), false)
+        };
+    archive.unpack(dbg!(&unpack_dir)).unwrap();
+
+    // Rename the base-dir from the default and rename wasm-dir, if non-default.
+    if dbg!(non_default_dir) {
+        // Because we unpacked the archive into one of the non-default
+        // directories, we have to re-pack it to remove it from fs.
+        // Create an in-memory archive from renamed files
+        let mut archive_build = tar::Builder::new(vec![]);
+
+        // Must `strip_prefix` because the path must be relative
+        let base_dir_rel = if base_dir.is_absolute() {
+            pathdiff::diff_paths(&base_dir, &cwd).unwrap()
+        } else {
+            base_dir.clone()
+        };
+
+        archive_build
+            .append_dir_all(
+                dbg!(base_dir_rel),
+                dbg!(unpack_dir.join(config::DEFAULT_BASE_DIR)),
+            )
+            .unwrap();
+        if let Some(wasm_dir) = wasm_dir.as_ref() {
+            // Again, must be relative
+            let wasm_dir_rel = if wasm_dir.is_absolute() {
+                pathdiff::diff_paths(&wasm_dir, &cwd).unwrap()
+            } else {
+                wasm_dir.clone()
+            };
+
+            archive_build
+                .append_dir_all(
+                    dbg!(wasm_dir_rel),
+                    dbg!(unpack_dir.join(config::DEFAULT_WASM_DIR)),
+                )
+                .unwrap();
         }
+        let archive_bytes = archive_build.into_inner().unwrap();
+
+        // Delete the temp directory
+        tokio::fs::remove_dir_all(unpack_dir).await.unwrap();
+
+        // Unarchive to get them dirs in the right place
+        let mut archive = tar::Archive::new(&archive_bytes[..]);
+        archive.unpack(".").unwrap();
     }
 
     println!("Successfully configured for chain ID {}", chain_id);

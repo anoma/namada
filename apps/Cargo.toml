@@ -101,6 +101,7 @@ num-traits = "0.2.14"
 num_cpus = "1.13.0"
 once_cell = "1.8.0"
 orion = "0.16.0"
+pathdiff = "0.2.1"
 prost = "0.9.0"
 prost-types = "0.9.0"
 # TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
