@@ -166,28 +166,77 @@ impl Runner {
         // that here instead of `Self::new_pair`, because we cannot send
         // it across threads and the listener is launched in a dedicated thread.
 
-        // The dylib should be built in the same directory as where Anoma
-        // binaries are, even when ran via `cargo run`. Anoma's pre-built
-        // binaries are distributed with the dylib(s) in the same directory.
-        let dylib_dir = {
-            let anoma_path = env::current_exe().unwrap();
-            anoma_path
-                .parent()
-                .map(|path| path.to_owned())
-                .unwrap_or_else(|| ".".into())
+        // Check or add a filename extension to matchmaker path
+        let matchmaker_filename =
+            if let Some(ext) = self.matchmaker_path.extension() {
+                if ext != dylib::FILE_EXT {
+                    tracing::warn!(
+                        "Unexpected matchmaker file extension. Expected {}, \
+                         got {}.",
+                        dylib::FILE_EXT,
+                        ext.to_string_lossy(),
+                    );
+                }
+                self.matchmaker_path.clone()
+            } else {
+                let mut filename = self.matchmaker_path.clone();
+                filename.set_extension(dylib::FILE_EXT);
+                filename
+            };
+
+        let matchmaker_dylib = if matchmaker_filename.is_absolute() {
+            // If the path is absolute, use it as is
+            matchmaker_filename
+        } else {
+            // The dylib should be built in the same directory as where Anoma
+            // binaries are, even when ran via `cargo run`. Anoma's pre-built
+            // binaries are distributed with the dylib(s) in the same directory.
+            let dylib_dir_with_bins = || {
+                let anoma_path = env::current_exe().unwrap();
+                anoma_path
+                    .parent()
+                    .map(|path| path.to_owned())
+                    .unwrap()
+                    .join(&matchmaker_filename)
+            };
+            // Anoma built from source (`make install`) will install the
+            // dylib(s) to `~/.cargo/lib`.
+            let dylib_dir_installed = || {
+                directories::BaseDirs::new()
+                    .expect("Couldn't determine the $HOME directory")
+                    .home_dir()
+                    .join(".cargo")
+                    .join("lib")
+                    .join(&matchmaker_filename)
+            };
+            // Argument with file path relative to the current dir.
+            let dylib_dir_in_cwd = || {
+                let anoma_path = env::current_dir().unwrap();
+                anoma_path.join(&matchmaker_filename)
+            };
+
+            // Try to find the matchmaker lib in either directory (computed
+            // lazily)
+            let matchmaker_dylib: Option<PathBuf> =
+                check_file_exists(dylib_dir_with_bins)
+                    .or_else(|| check_file_exists(dylib_dir_installed))
+                    .or_else(|| check_file_exists(dylib_dir_in_cwd));
+            matchmaker_dylib.unwrap_or_else(|| {
+                panic!(
+                    "The matchmaker library couldn't not be found. Did you \
+                     build it? Attempted to find it in directories \"{}\", \
+                     \"{}\" and \"{}\".",
+                    dylib_dir_with_bins().to_string_lossy(),
+                    dylib_dir_installed().to_string_lossy(),
+                    dylib_dir_in_cwd().to_string_lossy(),
+                );
+            })
         };
-        let mut matchmaker_dylib = dylib_dir.join(&self.matchmaker_path);
-        matchmaker_dylib.set_extension(dylib::FILE_EXT);
         tracing::info!(
             "Running matchmaker from {}",
             matchmaker_dylib.to_string_lossy()
         );
-        if !matchmaker_dylib.exists() {
-            panic!(
-                "The matchmaker library couldn't not be found. Did you build \
-                 it?"
-            )
-        }
+
         let matchmaker_code =
             unsafe { Library::new(matchmaker_dylib).unwrap() };
 
@@ -297,4 +346,10 @@ impl ResultHandler {
             }
         }
     }
+}
+
+/// Return the path of the file returned by `lazy_path` argument, if it exists.
+fn check_file_exists(lazy_path: impl Fn() -> PathBuf) -> Option<PathBuf> {
+    let path = lazy_path();
+    if path.exists() { Some(path) } else { None }
 }
