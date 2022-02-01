@@ -12,6 +12,7 @@ use thiserror::Error;
 use tokio::io::AsyncReadExt;
 
 use crate::cli::safe_exit;
+use crate::config::DEFAULT_WASM_CHECKSUMS_FILE;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -58,34 +59,39 @@ impl Checksums {
 
     /// Read WASM checksums from "checksums.json" in the given directory
     pub fn read_checksums(wasm_directory: impl AsRef<Path>) -> Self {
-        let checksums_path = wasm_directory.as_ref().join("checksums.json");
+        let checksums_path =
+            wasm_directory.as_ref().join(DEFAULT_WASM_CHECKSUMS_FILE);
         Self::read_checksums_file(checksums_path)
     }
 
     pub async fn read_checksums_async(
         wasm_directory: impl AsRef<Path>,
     ) -> Self {
-        let checksums_path = wasm_directory.as_ref().join("checksums.json");
-        match tokio::fs::File::open(checksums_path).await {
+        let checksums_path =
+            wasm_directory.as_ref().join(DEFAULT_WASM_CHECKSUMS_FILE);
+        match tokio::fs::File::open(&checksums_path).await {
             Ok(mut file) => {
                 let mut contents = vec![];
                 // Ignoring the result, next step will fail if not read
                 let _ = file.read_to_end(&mut contents).await;
                 match serde_json::from_slice(&contents[..]) {
                     Ok(checksums) => checksums,
-                    Err(_) => {
+                    Err(err) => {
                         eprintln!(
-                            "Can't read checksums.json in {}",
-                            wasm_directory.as_ref().to_string_lossy()
+                            "Failed decoding WASM checksums from {}. Failed \
+                             with {}",
+                            checksums_path.to_string_lossy(),
+                            err
                         );
                         safe_exit(1);
                     }
                 }
             }
-            Err(_) => {
+            Err(err) => {
                 eprintln!(
-                    "Can't find checksums.json in {}",
-                    wasm_directory.as_ref().to_string_lossy()
+                    "Unable to read WASM checksums from {}. Failed with {}",
+                    checksums_path.to_string_lossy(),
+                    err
                 );
                 safe_exit(1);
             }
