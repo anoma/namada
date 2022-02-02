@@ -103,6 +103,31 @@ impl Checksums {
 /// their checksums. Download all the pre-build WASMs, or if they're already
 /// downloaded, verify their checksums.
 pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
+    #[cfg(feature = "dev")]
+    {
+        let checksums_path = wasm_directory
+            .as_ref()
+            .join(crate::config::DEFAULT_WASM_CHECKSUMS_FILE);
+        // If the checksums file doesn't exists ...
+        if tokio::fs::canonicalize(&checksums_path).await.is_err() {
+            tokio::fs::create_dir_all(&wasm_directory).await.unwrap();
+            // ... try to copy checksums from the Anoma WASM root dir
+            if tokio::fs::copy(
+                std::env::current_dir()
+                    .unwrap()
+                    .join(crate::config::DEFAULT_WASM_DIR)
+                    .join(crate::config::DEFAULT_WASM_CHECKSUMS_FILE),
+                &checksums_path,
+            )
+            .await
+            .is_ok()
+            {
+                tracing::info!("WASM checksums copied from WASM root dir.");
+                return;
+            }
+        }
+    }
+
     // load json with wasm hashes
     let checksums = Checksums::read_checksums_async(&wasm_directory).await;
 
@@ -128,11 +153,32 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                         return;
                     }
                     tracing::info!(
-                        "Wasm checksum mismatch: Got {}, expected {}. \
+                        "WASM checksum mismatch: Got {}, expected {}. \
                          Fetching new version...",
                         &derived_name,
                         &full_name
                     );
+                    #[cfg(feature = "dev")]
+                    {
+                        // try to copy built file from the Anoma WASM root dir
+                        if tokio::fs::copy(
+                            std::env::current_dir()
+                                .unwrap()
+                                .join(crate::config::DEFAULT_WASM_DIR)
+                                .join(&full_name),
+                            wasm_directory.join(&full_name),
+                        )
+                        .await
+                        .is_ok()
+                        {
+                            tracing::info!(
+                                "File {} copied from WASM root dir.",
+                                full_name
+                            );
+                            return;
+                        }
+                    }
+
                     let url = format!("{}/{}", S3_URL, full_name);
                     match download_wasm(url).await {
                         Ok(bytes) => {
@@ -155,6 +201,28 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                 // if the doesn't file exist, download it.
                 Err(err) => match err.kind() {
                     std::io::ErrorKind::NotFound => {
+                        #[cfg(feature = "dev")]
+                        {
+                            // try to copy built file from the Anoma WASM root
+                            // dir
+                            if tokio::fs::copy(
+                                std::env::current_dir()
+                                    .unwrap()
+                                    .join(crate::config::DEFAULT_WASM_DIR)
+                                    .join(&full_name),
+                                wasm_directory.join(&full_name),
+                            )
+                            .await
+                            .is_ok()
+                            {
+                                tracing::info!(
+                                    "File {} copied from WASM root dir.",
+                                    full_name
+                                );
+                                return;
+                            }
+                        }
+
                         let url = format!("{}/{}", S3_URL, full_name);
                         match download_wasm(url).await {
                             Ok(bytes) => {
