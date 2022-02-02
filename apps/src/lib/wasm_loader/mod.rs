@@ -106,12 +106,12 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
     // load json with wasm hashes
     let checksums = Checksums::read_checksums_async(&wasm_directory).await;
 
-    join_all(checksums.0.into_iter().map(|(name, hash)| {
+    join_all(checksums.0.into_iter().map(|(name, full_name)| {
         let wasm_directory = wasm_directory.as_ref().to_owned();
 
         // Async check and download (if needed) each file
         tokio::spawn(async move {
-            let wasm_path = wasm_directory.join(&hash);
+            let wasm_path = wasm_directory.join(&full_name);
             match tokio::fs::read(&wasm_path).await {
                 // if the file exist, first check the hash. If not matching
                 // download it again.
@@ -119,20 +119,21 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                     let mut hasher = Sha256::new();
                     hasher.update(bytes);
                     let result = hex::encode(hasher.finalize());
-                    let checksum = format!(
+                    let derived_name = format!(
                         "{}.{}.wasm",
                         &name.split('.').collect::<Vec<&str>>()[0],
                         result
                     );
-                    if hash == checksum {
+                    if full_name == derived_name {
                         return;
                     }
                     tracing::info!(
-                        "Wasm checksum mismatch for {}. Fetching new \
-                         version...",
-                        &name,
+                        "Wasm checksum mismatch: Got {}, expected {}. \
+                         Fetching new version...",
+                        &derived_name,
+                        &full_name
                     );
-                    let url = format!("{}/{}", S3_URL, hash);
+                    let url = format!("{}/{}", S3_URL, full_name);
                     match download_wasm(url).await {
                         Ok(bytes) => {
                             if let Err(e) =
@@ -154,7 +155,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                 // if the doesn't file exist, download it.
                 Err(err) => match err.kind() {
                     std::io::ErrorKind::NotFound => {
-                        let url = format!("{}/{}", S3_URL, hash);
+                        let url = format!("{}/{}", S3_URL, full_name);
                         match download_wasm(url).await {
                             Ok(bytes) => {
                                 if let Err(e) =
