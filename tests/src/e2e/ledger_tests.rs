@@ -256,7 +256,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--code-path",
             &vp_user,
             "--alias",
-            "test-account",
+            "Test-Account",
             "--fee-amount",
             "0",
             "--gas-limit",
