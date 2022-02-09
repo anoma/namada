@@ -216,6 +216,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma_encoding_spec"
+version = "0.4.0"
+dependencies = [
+ "anoma",
+ "borsh",
+ "itertools 0.10.3",
+ "lazy_static 1.4.0",
+ "madato",
+]
+
+[[package]]
 name = "anoma_macros"
 version = "0.4.0"
 dependencies = [
@@ -1757,6 +1768,12 @@ name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
+
+[[package]]
+name = "dtoa"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
 
 [[package]]
 name = "dynasm"
@@ -3537,6 +3554,10 @@ name = "linked-hash-map"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
+dependencies = [
+ "serde 1.0.136",
+ "serde_test",
+]
 
 [[package]]
 name = "lock_api"
@@ -3621,6 +3642,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b823e83b2affd8f40a9ee8c29dbc56404c1e34cd2710921f2801e2cf29527afa"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "madato"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c36112680b23ee7a5d2a10e56b59a74e4028963e9080b8abec4e69d0d773dc06"
+dependencies = [
+ "indexmap",
+ "linked-hash-map",
+ "regex",
+ "serde 1.0.136",
+ "serde_derive",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -5622,6 +5657,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_test"
+version = "1.0.136"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21675ba6f9d97711cc00eee79d8dd7d0a31e571c350fb4d8a7c78f70c0e7b0e9"
+dependencies = [
+ "serde 1.0.136",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5631,6 +5675,18 @@ dependencies = [
  "itoa 1.0.1",
  "ryu",
  "serde 1.0.136",
+]
+
+[[package]]
+name = "serde_yaml"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef8099d3df28273c99a1728190c7a9f19d444c941044f64adf986bee7ec53051"
+dependencies = [
+ "dtoa",
+ "linked-hash-map",
+ "serde 1.0.136",
+ "yaml-rust",
 ]
 
 [[package]]
