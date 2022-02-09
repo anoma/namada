@@ -140,7 +140,7 @@ tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 # with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci", branch = "yuji/abcipp-v0.23.0", optional = true}
-tower-abci-old = {package = "tower-abci", git = "https://github.com/heliaxdev/tower-abci", branch = "bat/connection-error-handling", optional = true}
+tower-abci-old = {package = "tower-abci", git = "https://github.com/heliaxdev/tower-abci", branch = "yuji/rebase_v0.23.0", optional = true}
 tracing = "0.1.29"
 tracing-log = "0.1.2"
 tracing-subscriber = "0.2.25"
