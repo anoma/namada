@@ -10,7 +10,7 @@ pub mod wrapper;
 
 use std::fmt::{self, Display};
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use decrypted::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -31,6 +31,7 @@ use crate::types::key::*;
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -67,6 +68,7 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -84,6 +86,7 @@ pub struct UpdateVp {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -104,6 +107,7 @@ pub struct InitAccount {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -137,7 +141,7 @@ pub mod tx_types {
 
     /// Struct that classifies that kind of Tx
     /// based on the contents of its data.
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     pub enum TxType {
         /// An ordinary tx
         Raw(Tx),

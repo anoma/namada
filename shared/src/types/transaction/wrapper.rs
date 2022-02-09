@@ -4,11 +4,10 @@
 #[cfg(feature = "ferveo-tpke")]
 pub mod wrapper_tx {
     use std::convert::TryFrom;
-    use std::io::Write;
 
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     pub use ark_ec::{AffineCurve, PairingEngine};
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
@@ -56,6 +55,7 @@ pub mod wrapper_tx {
         PartialEq,
         BorshSerialize,
         BorshDeserialize,
+        BorshSchema,
         Serialize,
         Deserialize,
     )]
@@ -73,7 +73,16 @@ pub mod wrapper_tx {
     ///
     /// This struct only stores the multiple of GAS_LIMIT_RESOLUTION,
     /// not the raw amount
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Serialize,
+        Deserialize,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+    )]
     #[serde(from = "u64")]
     #[serde(into = "u64")]
     pub struct GasLimit {
@@ -144,24 +153,17 @@ pub mod wrapper_tx {
         }
     }
 
-    impl borsh::ser::BorshSerialize for GasLimit {
-        fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-            BorshSerialize::serialize(&u64::from(self), writer)
-        }
-    }
-
-    impl borsh::BorshDeserialize for GasLimit {
-        fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-            let raw: u64 = BorshDeserialize::deserialize(buf)?;
-            Ok(GasLimit::from(raw))
-        }
-    }
-
     /// A transaction with an encrypted payload as well
     /// as some non-encrypted metadata for inclusion
     /// and / or verification purposes
     #[derive(
-        Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+        Debug,
+        Clone,
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+        Serialize,
+        Deserialize,
     )]
     pub struct WrapperTx {
         /// The fee to be payed for including the tx
@@ -172,9 +174,9 @@ pub mod wrapper_tx {
         /// which decryption key will be used
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
-        gas_limit: GasLimit,
+        pub gas_limit: GasLimit,
         /// the encrypted payload
-        inner_tx: EncryptedTx,
+        pub inner_tx: EncryptedTx,
         /// sha-2 hash of the inner transaction acting as a commitment
         /// the contents of the encrypted payload
         pub tx_hash: Hash,

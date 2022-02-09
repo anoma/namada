@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::string;
 
 use bech32::{self, FromBase32, ToBase32, Variant};
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -87,6 +87,7 @@ pub type Result<T> = std::result::Result<T, Error>;
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -302,6 +303,7 @@ impl FromStr for Address {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -354,6 +356,7 @@ impl EstablishedAddressGen {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -382,6 +385,7 @@ impl From<&key::common::PublicKey> for Address {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
