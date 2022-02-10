@@ -136,7 +136,7 @@ pub struct SignedTxData {
 
 /// Sign a transaction using [`SignedTxData`].
 pub fn sign_tx(keypair: &Keypair, tx: Tx) -> Tx {
-    let to_sign = tx.to_bytes();
+    let to_sign = tx.hash();
     let sig = sign(keypair, &to_sign);
     let signed = SignedTxData { data: tx.data, sig }
         .try_to_vec()
@@ -165,7 +165,7 @@ pub fn verify_tx_sig(
         data,
         timestamp: tx.timestamp,
     };
-    let signed_data = tx.to_bytes();
+    let signed_data = tx.hash();
     verify_signature_raw(pk, &signed_data, sig)
 }
 
