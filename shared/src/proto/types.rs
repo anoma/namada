@@ -10,6 +10,7 @@ use thiserror::Error;
 use super::generated::types;
 use crate::types::key::ed25519::{self, Keypair};
 use crate::types::time::DateTimeUtc;
+use crate::types::transaction::hash_tx;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -81,6 +82,10 @@ impl Tx {
         tx.encode(&mut bytes)
             .expect("encoding a transaction failed");
         bytes
+    }
+
+    pub fn hash(&self) -> [u8; 32] {
+        hash_tx(&self.to_bytes()).0
     }
 
     pub fn sign(self, keypair: &Keypair) -> Tx {
