@@ -58,6 +58,7 @@
 - [Specifications](./specs/README.md)
   - [Overview](./specs/overview.md)
   - [The ledger](./specs/ledger.md)
+    - [Default transactions](./specs/ledger/default-transactions.md)
   - [Trade system]()
   - [Intent gossip system]()
   - [Fractal scaling]()
