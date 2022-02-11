@@ -9,6 +9,7 @@ use crate::ledger::gas;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
+use crate::proto::Tx;
 use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key};
 
 /// These runtime errors will abort VP execution immediately
@@ -214,6 +215,19 @@ where
     add_gas(gas_meter, gas)?;
     Ok(hash)
 }
+
+/// Getting the block hash. The height is that of the block to which the
+/// current transaction is being applied.
+pub fn get_tx_hash(
+    gas_meter: &mut VpGasMeter,
+    tx: &Tx,
+) -> Result<Vec<u8>>
+{
+    let hash = tx.hash();
+    add_gas(gas_meter, 32)?;
+    Ok(hash.to_vec())
+}
+
 
 /// Getting the block epoch. The epoch is that of the block to which the
 /// current transaction is being applied.

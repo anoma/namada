@@ -516,6 +516,18 @@ pub mod vp {
         BlockHash::try_from(slice).expect("Cannot convert the hash")
     }
 
+    /// Get a block hash
+    pub fn get_tx_hash() -> String {
+        let result = Vec::with_capacity(32);
+        unsafe {
+            anoma_vp_get_tx_hash(result.as_ptr() as _);
+        }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), 32)
+        };
+        hex::encode(slice)
+    }
+
     /// Get epoch of the current block
     pub fn get_block_epoch() -> Epoch {
         Epoch(unsafe { anoma_vp_get_block_epoch() })
@@ -622,6 +634,9 @@ pub mod vp {
 
         // Get the current block hash
         fn anoma_vp_get_block_hash(result_ptr: u64);
+
+        // Get the current tx hash
+        fn anoma_vp_get_tx_hash(result_ptr: u64);
 
         // Get the current block epoch
         fn anoma_vp_get_block_epoch() -> u64;
