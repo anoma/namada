@@ -58,6 +58,7 @@
 - [Specifications](./specs/README.md)
   - [Overview](./specs/overview.md)
   - [The ledger](./specs/ledger.md)
+    - [RPC](./specs/ledger/rpc.md)
     - [Default transactions](./specs/ledger/default-transactions.md)
     - [Default validity predicates](./specs/ledger/default-validity-predicates.md)
   - [Trade system]()
