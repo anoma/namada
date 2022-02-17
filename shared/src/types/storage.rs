@@ -637,6 +637,15 @@ impl TxQueue {
     }
 }
 
+/// A value of a storage prefix iterator.
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct PrefixValue {
+    /// Storage key
+    pub key: Key,
+    /// Raw value bytes
+    pub value: Vec<u8>,
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;

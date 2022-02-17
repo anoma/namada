@@ -4,7 +4,7 @@ use std::cmp::max;
 use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::PosParams;
 use anoma::types::address::Address;
-use anoma::types::storage::Key;
+use anoma::types::storage::{Key, PrefixValue};
 use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(not(feature = "ABCI"))]
@@ -22,7 +22,6 @@ use tendermint_proto_abci::types::EvidenceParams;
 
 use super::*;
 use crate::node::ledger::response;
-use crate::node::ledger::rpc::PrefixValue;
 
 impl<D, H> Shell<D, H>
 where
