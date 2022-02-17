@@ -2,18 +2,45 @@
 
 The ledger's main responsibility is to process and apply [transactions](#transactions) over the [distributed ledger's storage](#storage), following the ledger's [protocol](#the-protocol) to reach consensus.
 
+## Accounts
+
+The ledger is backed by an account-based system. Each account has a unique [address](#addresses) and exactly one [validity predicate](#validity-predicates-check) and a [dynamic storage sub-space](#dynamic-storage-sub-space).
+
+### Addresses
+
+There are two main types of address: transparent and shielded.
+
+The transparent addresses are the addresses of accounts associated with dynamic storage sub-spaces, where the address of the account is the prefix key segment of its sub-space.
+
+The shielded addresses are used for private transactions and they are not directly associated with storage sub-spaces.
+
+#### Transparent addresses
+
+Furthermore, there are three types of transparent addresses:
+
+- "implicit" addresses which are derived from [public keys](crypto.md#public-keys)
+- "established" addresses which are generated from the current address nonce and hence must be created via a request in the ledger
+- "internal" addresses are used for special modules integrated into the ledger such as PoS and IBC.
+
+The addresses are stored on-chain encoded with [bech32m](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki), which is an improved version of [bech32](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki).
+
+The human-readable prefix (as specified for [bech32](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki#specification)) in the transparent address encoding is:
+
+- `"a"` for Anoma live network (80 characters in total)
+- `"atest"` for test networks (84 characters in total)
+
 ## Transactions
 
 A transaction has two layers, each wrapped inside [`Tx` type encoded with proto3](./encoding.md#transactions).
 
 The outer layer is employed for front-running protection following DKG protocol to wrap the inner layer, which remains encrypted before its block order has been committed. The outer layer MUST contain `data` with a [`TxType::Wrapper`](encoding.md#txtype) that has a [`WrapperTx`](encoding.md#wrappertx) inside it.
 
-The SHA-256 hash of this data [encoded with Borsh](encoding.html#borsh-binary-encoding) MUST be signed by an implicit account's key. The encoded signed data together with the signature should be encoded as a [`SignedTxData`](encoding.md#signedtxdata) and also encoded with Borsh. This data should then be attached to a protobuf encoded transaction's `data` field and the field `code` in this layer MUST be empty. Note that the outer layer's signature is not relevant to the inner layer of the transaction, only itself.
+The SHA-256 hash of this data [encoded with Borsh](encoding.html#borsh-binary-encoding) MUST be [signed](crypto.md#signatures) by an implicit account's key. The encoded signed data together with the signature should be encoded as a [`SignedTxData`](encoding.md#signedtxdata) and also encoded with Borsh. This data should then be attached to a protobuf encoded transaction's `data` field and the field `code` in this layer MUST be empty. Note that the outer layer's signature is not relevant to the inner layer of the transaction, only itself.
 
 The fields of a `WrapperTx` are:
 
 - `fee`: Fee to be payed by the source implicit account for including the tx in a block.
-- `pk`: Public key of the source implicit account.
+- `pk`: [Public key](crypto.md#public-keys) of the source implicit account.
 - `epoch`: The epoch in which the transaction is being included. This should be queried from a synchronized ledger node before the transaction is fully constructed.
 
    Note that this is currently not used and so the default value `0` may be used for now (depends on <https://github.com/anoma/anoma/issues/669>).
@@ -81,8 +108,6 @@ For the transaction to be valid, all the triggered validity predicates must acce
 First, the addresses whose validity predicates should be triggered by the transaction are determined. In this process, the addresses get associated with a set of modified storage keys that are relevant to the address:
 
 1. The addresses set by the transaction (see `insert_verifier` in [transaction host environment functions](#transaction-host-environment-functions)) are associated with *all* the modified storage keys.
-
-   TODO - <https://github.com/anoma/anoma/issues/292>
 1. The storage keys that were modified by the transaction are associated with the addresses included in the storage keys. Note that a storage key may contain more than one address, in which case all its addresses are associated with this key.
 1. All these addresses are additionally associated with the storage key to the validity predicates of any newly initialized accounts' by the transaction (see `init_account` in [transaction host environment functions](#transaction-host-environment-functions)).
 
@@ -231,3 +256,13 @@ Additionally, the WASM module MUST export its memory as shown:
 ### Storage
 
 - TODO dynamic key-value storage paths, encoding agnostic, any ledger native keys such as the VP key
+- TODO VPs must be written into the storage as raw bytes without any additional encoding
+
+#### Storage keys
+
+- TODO spec the key segments, punct, reserved VP segment `?` and address prefix `#`
+
+#### Dynamic storage sub-space
+
+Each account can have an associated dynamic account state in the storage. This
+state may be comprised of keys with a format specified above and values of arbitrary user bytes. The first segment of all the keys must be the account's address.

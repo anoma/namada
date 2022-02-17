@@ -54,4 +54,4 @@ Attach [Withdraw](../encoding.md#withdraw) to the `data`.
 
 ## Signing transactions
 
-To sign transactions in format that is understood and thus can be verified by the [default validity predicates](default-validity-predicates.md), the SHA-256 hash of the `data` [encoded with Borsh](../encoding.html#borsh-binary-encoding) MUST be signed by an implicit or established account's key. The encoded signed data together with the signature should be encoded as a [`SignedTxData`](../encoding.md#signedtxdata) and also encoded with Borsh. This data should then be attached to a protobuf encoded transaction's `data` field.
+To sign transactions in format that is understood and thus can be verified by the [default validity predicates](default-validity-predicates.md), the SHA-256 hash of the `data` [encoded with Borsh](../encoding.html#borsh-binary-encoding) MUST be [signed](../crypto.md#signatures) by an implicit or established account's key. The encoded signed data together with the signature should be encoded as a [`SignedTxData`](../encoding.md#signedtxdata) and also encoded with Borsh. This data should then be attached to a protobuf encoded transaction's `data` field.
