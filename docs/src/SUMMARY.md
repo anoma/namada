@@ -65,6 +65,7 @@
   - [Intent gossip system]()
   - [Fractal scaling]()
   - [Upgrade system]()
+  - [Crypto](./specs/crypto.md)
   - [Encoding](./specs/encoding.md)
 - [Archive](./archive/README.md)
   - [Domain name addresses](./archive/domain-name-addresses.md)
