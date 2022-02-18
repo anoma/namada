@@ -41,7 +41,7 @@ The fields of a `WrapperTx` are:
 
 - `fee`: Fee to be payed by the source implicit account for including the tx in a block.
 - `pk`: [Public key](crypto.md#public-keys) of the source implicit account.
-- `epoch`: The epoch in which the transaction is being included. This should be queried from a synchronized ledger node before the transaction is fully constructed.
+- `epoch`: The [epoch](#epochs) in which the transaction is being included. This should be queried from a synchronized ledger node before the transaction is fully constructed.
 
    Note that this is currently not used and so the default value `0` may be used for now (depends on <https://github.com/anoma/anoma/issues/669>).
 
@@ -66,6 +66,23 @@ An inner transaction popped from the queue is applied in a block executed in two
 
 1. [Inner transaction execution](#inner-transaction-execution)
 1. [Validity predicates check](#validity-predicates-check)
+
+### Epochs
+
+An epoch is a range of blocks whose length is determined by the [epoch duration protocol parameter](#protocol-parameters): minimum epoch duration and minimum number of blocks in an epoch. They are identified by consecutive natural numbers starting at 0. The [Borsh encoded `Epoch`](encoding.md#epoch) for the last committed block can be queried via the [RPC](ledger/rpc.md#read-only-queries).
+
+### Protocol parameters
+
+The parameters are used to dynamically control certain variables in the protocol. They are implemented as an internal address with a native validity predicate. The current value of [Borsh encoded `Parameters`](encoding.md#parameters) is written into and read from the block storage in the parameters account's sub-space.
+
+Initial parameters for a chain are set in the genesis configuration.
+
+#### Epoch duration
+
+The parameters for [epoch](#epochs) duration are:
+
+- Minimum number of blocks in an epoch
+- Minimum duration of an epoch
 
 ### Mempool
 

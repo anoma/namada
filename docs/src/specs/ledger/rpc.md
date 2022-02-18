@@ -14,7 +14,7 @@ To find a result of the inner transaction, query for event with `type` equal to 
 
 Read-only queries can be requested via [ABCIQuery](https://github.com/tendermint/spec/tree/4566f1e3028278c5b3eca27b53254a48771b152b/spec/rpc#abciquery). The `path` for the query can be one of the following options:
 
-- `epoch`: Get the epoch of the last committed block. The response `value` is always known [Borsh encoded `Epoch`](../encoding.md#epoch)
+- `epoch`: Get the [epoch](../ledger.md#epochs) of the last committed block. The response `value` is always known [Borsh encoded `Epoch`](../encoding.md#epoch)
 - `dry_run_tx`: Simulate a transaction being applied in a block. The response `code = 0` means that the transaction would be accepted by all the validity predicates that verified its validity. On success, the response `info` contains the `TxResult` pretty-printed as a string (TODO proper encoding depends on <https://github.com/anoma/anoma/issues/455>).
 - `value/{dynamic}`: Look-up a raw [storage](../ledger.md#storage) value for the given `dynamic` key. When the response `code = 0`, the key is found and the response `value` contains the raw bytes of the value.
 - `prefix/{dynamic}`: Iterate a [storage](../ledger.md#storage) key prefix for the given `dynamic` key. When the response `code = 0`, the key is found and the response `value` contains [Borsh encoded `Vec<PrefixValue>`](../encoding.md#prefixvalue), where each `PrefixValue` contains the `key` and the raw bytes of the `value`.
