@@ -3128,13 +3128,3 @@ dependencies = [
  "syn",
  "synstructure",
 ]
-
-[[patch.unused]]
-name = "tendermint"
-version = "0.23.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0#fc60795115b887db147e88280321acc08592c4b9"
-
-[[patch.unused]]
-name = "tendermint-proto"
-version = "0.23.0"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.0#fc60795115b887db147e88280321acc08592c4b9"
