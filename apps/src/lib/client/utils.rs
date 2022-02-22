@@ -167,13 +167,13 @@ pub fn init_network(
         // Full name in format `{name}.{sha256}.wasm`
         let full_name = checksums.0.get(&name).unwrap();
         let hash = full_name
-            .split_once(".")
+            .split_once('.')
             .unwrap()
             .1
-            .split_once(".")
+            .split_once('.')
             .unwrap()
             .0;
-        config.sha256 = genesis_config::HexString(hash.to_owned());
+        config.sha256 = Some(genesis_config::HexString(hash.to_owned()));
     });
 
     let temp_chain_id = chain_id_prefix.temp_chain_id();
