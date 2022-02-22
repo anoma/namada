@@ -95,6 +95,10 @@ impl Event {
             self[key] = value.clone();
         }
     }
+
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.attributes.contains_key(key)
+    }
 }
 
 impl Index<&str> for Event {

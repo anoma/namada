@@ -125,7 +125,7 @@ where
                     }
                     Event::new_tx_event(&tx_type, height.0)
                 }
-                TxType::Decrypted(_) => {
+                TxType::Decrypted(inner) => {
                     // If [`process_proposal`] detected that decrypted txs were
                     // submitted out of order, we apply none
                     // of those. New encrypted txs may still
@@ -146,7 +146,13 @@ where
                     if !cfg!(feature = "ABCI") {
                         self.storage.tx_queue.pop();
                     }
-                    Event::new_tx_event(&tx_type, height.0)
+                    let mut event = Event::new_tx_event(&tx_type, height.0);
+                    if let DecryptedTx::Undecryptable(_) = inner {
+                        event["info"] =
+                            "Transaction could not be decrypted. ".into();
+                        event["code"] = ErrorCodes::Undecryptable.into();
+                    }
+                    event
                 }
                 TxType::Raw(_) => {
                     tracing::error!(
@@ -176,7 +182,9 @@ where
                             result
                         );
                         self.write_log.commit_tx();
-                        tx_result["code"] = ErrorCodes::Ok.into();
+                        if !tx_result.contains_key("code") {
+                            tx_result["code"] = ErrorCodes::Ok.into();
+                        }
                         if let Some(ibc_event) = &result.ibc_event {
                             tx_result.merge_ibc_event(ibc_event);
                         }
@@ -205,7 +213,7 @@ where
                         tx_result["code"] = ErrorCodes::InvalidTx.into();
                     }
                     tx_result["gas_used"] = result.gas_used.to_string();
-                    tx_result["info"] = result.to_string();
+                    tx_result["info"].push_str(&result.to_string());
                 }
                 Err(msg) => {
                     tracing::info!("Transaction failed with: {}", msg);
@@ -625,6 +633,151 @@ mod test_finalize_block {
                 String::from_utf8(code).expect("Test failed"),
                 String::from(ErrorCodes::InvalidTx)
             );
+        }
+        // check that the corresponding wrapper tx was removed from the queue
+        assert!(shell.next_wrapper().is_none());
+    }
+
+    #[cfg(not(feature = "ABCI"))]
+    /// Test that if a tx is undecryptable, it is applied
+    /// but the tx result contains the appropriate error code.
+    #[test]
+    fn test_undecryptable_returns_error_code() {
+        let mut shell = setup();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+        let pubkey = <EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator();
+        // not valid tx bytes
+        let tx = "garbage data".as_bytes().to_owned();
+        let inner_tx =
+            anoma::types::transaction::encrypted::EncryptedTx::encrypt(
+                &tx, pubkey,
+            );
+        let wrapper = WrapperTx {
+            fee: Fee {
+                amount: 0.into(),
+                token: xan(),
+            },
+            pk: keypair.public,
+            epoch: Epoch(0),
+            gas_limit: 0.into(),
+            inner_tx,
+            tx_hash: hash_tx(&tx),
+        };
+        let processed_tx = ProcessedTx {
+            tx: Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+                wrapper.clone(),
+            )))
+            .to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        shell.enqueue_tx(wrapper);
+
+        // check that correct error message is returned
+        for event in shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                reject_all_decrypted: false,
+                ..Default::default()
+            })
+            .expect("Test failed")
+        {
+            assert_eq!(event.r#type, "applied");
+            let code = event
+                .attributes
+                .iter()
+                .find(|attr| attr.key.as_str() == "code")
+                .expect("Test failed")
+                .value
+                .as_str();
+            assert_eq!(code, String::from(ErrorCodes::Undecryptable).as_str());
+            let info = event
+                .attributes
+                .iter()
+                .find(|attr| attr.key.as_str() == "info")
+                .expect("Test failed")
+                .value
+                .as_str();
+            assert!(info.contains("Transaction could not be decrypted."))
+        }
+        // check that the corresponding wrapper tx was removed from the queue
+        assert!(shell.next_wrapper().is_none());
+    }
+
+    #[cfg(feature = "ABCI")]
+    /// Test that if a tx is undecryptable, it is applied
+    /// but the tx result contains the appropriate error code.
+    #[test]
+    fn test_undecryptable_returns_error_code() {
+        let mut shell = setup();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+        let pubkey = <EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator();
+        // not valid tx bytes
+        let tx = "garbage data".as_bytes().to_owned();
+        let inner_tx =
+            anoma::types::transaction::encrypted::EncryptedTx::encrypt(
+                &tx, pubkey,
+            );
+        let wrapper = WrapperTx {
+            fee: Fee {
+                amount: 0.into(),
+                token: xan(),
+            },
+            pk: keypair.public,
+            epoch: Epoch(0),
+            gas_limit: 0.into(),
+            inner_tx,
+            tx_hash: hash_tx(&tx),
+        };
+        let processed_tx = ProcessedTx {
+            tx: Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+                wrapper,
+            )))
+            .to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        // check that correct error message is returned
+        for event in shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                reject_all_decrypted: false,
+                ..Default::default()
+            })
+            .expect("Test failed")
+        {
+            assert_eq!(event.r#type, "applied");
+            let code = event
+                .attributes
+                .iter()
+                .find(|attr| attr.key == "code".as_bytes())
+                .expect("Test failed")
+                .value
+                .clone();
+            assert_eq!(
+                String::from_utf8(code).expect("Test failed"),
+                String::from(ErrorCodes::Undecryptable)
+            );
+
+            let info = String::from_utf8(
+                event
+                    .attributes
+                    .iter()
+                    .find(|attr| attr.key == "info".as_bytes())
+                    .expect("Test failed")
+                    .value
+                    .clone(),
+            )
+            .expect("Test failed");
+            assert!(info.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
         assert!(shell.next_wrapper().is_none());

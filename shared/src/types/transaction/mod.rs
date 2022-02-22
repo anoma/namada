@@ -3,7 +3,8 @@
 /// txs that contain decrypted payloads or assertions of
 /// non-decryptability
 pub mod decrypted;
-mod encrypted;
+/// Types for wrapping encrypted data
+pub mod encrypted;
 pub mod pos;
 /// wrapper txs with encrypted payloads
 pub mod wrapper;
