@@ -228,7 +228,8 @@ where
                 Address::Implicit(_) => {
                     let (implicit_vp, gas) = read_implicit_vp(storage).unwrap();
                     gas_meter.add(gas).map_err(Error::GasError)?;
-                    // TODO: figure out the apposite error type (ProtocolNativeVpError?)
+                    // TODO: figure out the apposite error type
+                    // (ProtocolNativeVpError?)
                     gas_meter
                         .add_compiling_fee(implicit_vp.len())
                         .map_err(Error::GasError)?;
