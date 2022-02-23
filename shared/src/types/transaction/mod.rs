@@ -4,6 +4,8 @@
 /// non-decryptability
 pub mod decrypted;
 mod encrypted;
+/// txs to manage nfts
+pub mod nft;
 pub mod pos;
 /// transaction protocols made by validators
 pub mod protocol;

@@ -192,6 +192,9 @@ pub mod genesis_config {
         // Minimum duration of an epoch (in seconds).
         // TODO: this is i64 because datetime wants it
         pub min_duration: i64,
+        // Maximum duration per block (in seconds).
+        // TODO: this is i64 because datetime wants it
+        pub max_expected_time_per_block: i64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -477,6 +480,10 @@ pub mod genesis_config {
                 )
                 .into(),
             },
+            max_expected_time_per_block: anoma::types::time::Duration::seconds(
+                config.parameters.max_expected_time_per_block,
+            )
+            .into(),
         };
 
         let pos_params = PosParams {
@@ -683,6 +690,7 @@ pub fn genesis() -> Genesis {
             min_num_of_blocks: 10,
             min_duration: anoma::types::time::Duration::minutes(1).into(),
         },
+        max_expected_time_per_block: anoma::types::time::DurationSecs(30),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),

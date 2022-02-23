@@ -28,7 +28,7 @@ use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::chain::ChainId;
 use anoma::types::storage::{BlockHeight, Key};
-use anoma::types::time::{DateTime, DateTimeUtc, TimeZone, Utc};
+use anoma::types::time::{DateTimeUtc, TimeZone, Utc};
 use anoma::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -782,7 +782,7 @@ mod test_utils {
                         .try_into()
                         .expect("Should not fail"),
                     height: 0u64.try_into().expect("Should not fail"),
-                    time: Time::from(DateTimeUtc::now()),
+                    time: Time::now(),
                     last_block_id: None,
                     last_commit_hash: None,
                     data_hash: None,

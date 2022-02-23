@@ -276,8 +276,10 @@ where
             .as_ref()
             .expect("Header must have been set in prepare_proposal.");
         let height = BlockHeight(header.height.into());
-        let time: DateTime<Utc> = header.time.into();
-        let time: DateTimeUtc = time.into();
+        let time: DateTimeUtc = header
+            .time
+            .try_into()
+            .expect("Time conversion shouldn't failed");
         let new_epoch = self
             .storage
             .update_epoch(height, time)
