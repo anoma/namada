@@ -32,7 +32,7 @@ fn validate_tx(
 ) -> bool {
     debug_log!(
         "vp_implicit called with user addr: {}, key_changed: {:?}, verifiers: \
-        {:?}",
+         {:?}",
         addr,
         keys_changed,
         verifiers
