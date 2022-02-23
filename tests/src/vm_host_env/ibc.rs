@@ -1,5 +1,5 @@
 use core::time::Duration;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::str::FromStr;
 
@@ -220,7 +220,7 @@ const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
 
 pub struct TestIbcVp<'a> {
     pub ibc: Ibc<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
-    pub keys_changed: HashSet<Key>,
+    pub keys_changed: BTreeSet<Key>,
 }
 
 impl<'a> TestIbcVp<'a> {
@@ -235,7 +235,7 @@ impl<'a> TestIbcVp<'a> {
 
 pub struct TestIbcTokenVp<'a> {
     pub token: IbcToken<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
-    pub keys_changed: HashSet<Key>,
+    pub keys_changed: BTreeSet<Key>,
 }
 
 impl<'a> TestIbcTokenVp<'a> {

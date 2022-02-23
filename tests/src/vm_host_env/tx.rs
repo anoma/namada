@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use anoma::ledger::gas::BlockGasMeter;
 use anoma::ledger::storage::mockdb::MockDB;
@@ -60,7 +60,7 @@ impl Default for TestTxEnv {
 }
 
 impl TestTxEnv {
-    pub fn all_touched_storage_keys(&self) -> HashSet<Key> {
+    pub fn all_touched_storage_keys(&self) -> BTreeSet<Key> {
         self.write_log.get_keys()
     }
 

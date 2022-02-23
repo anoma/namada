@@ -1,6 +1,6 @@
 //! Wasm runners
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::marker::PhantomData;
 
 use parity_wasm::elements;
@@ -159,7 +159,7 @@ pub fn vp<DB, H, CA>(
     storage: &Storage<DB, H>,
     write_log: &WriteLog,
     gas_meter: &mut VpGasMeter,
-    keys_changed: &HashSet<Key>,
+    keys_changed: &BTreeSet<Key>,
     verifiers: &HashSet<Address>,
     mut vp_wasm_cache: VpCache<CA>,
 ) -> Result<bool>
@@ -223,7 +223,7 @@ fn run_vp(
     vp_imports: wasmer::ImportObject,
     input_data: &[u8],
     address: &Address,
-    keys_changed: &HashSet<Key>,
+    keys_changed: &BTreeSet<Key>,
     verifiers: &HashSet<Address>,
 ) -> Result<bool> {
     let input: VpInput = VpInput {
@@ -517,7 +517,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = HashSet::new();
+        let keys_changed = BTreeSet::new();
         let verifiers = HashSet::new();
 
         // This code will call `eval` with the other VP below
@@ -591,7 +591,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = HashSet::new();
+        let keys_changed = BTreeSet::new();
         let verifiers = HashSet::new();
 
         // This code will allocate memory of the given size
@@ -696,7 +696,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = HashSet::new();
+        let keys_changed = BTreeSet::new();
         let verifiers = HashSet::new();
 
         let vp_code =
@@ -794,7 +794,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = HashSet::new();
+        let keys_changed = BTreeSet::new();
         let verifiers = HashSet::new();
 
         let vp_read_key =
@@ -840,7 +840,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = HashSet::new();
+        let keys_changed = BTreeSet::new();
         let verifiers = HashSet::new();
 
         // This code will call `eval` with the other VP below
@@ -971,7 +971,7 @@ mod tests {
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
         let mut gas_meter = VpGasMeter::new(0);
-        let keys_changed = HashSet::new();
+        let keys_changed = BTreeSet::new();
         let verifiers = HashSet::new();
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         vp(
