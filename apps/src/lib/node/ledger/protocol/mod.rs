@@ -7,7 +7,7 @@ use anoma::ledger::ibc::vp::{Ibc, IbcToken};
 use anoma::ledger::native_vp::{self, NativeVp};
 use anoma::ledger::parameters::{self, ParametersVp};
 use anoma::ledger::pos::{self, PosVP};
-use anoma::ledger::protocol_vps::{self, ProtocolVp, read_implicit_vp};
+use anoma::ledger::protocol_vps::{self, read_implicit_vp, ProtocolVp};
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use anoma::proto::{self, Tx};
