@@ -2,6 +2,7 @@
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
+
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -27,40 +28,46 @@ mod prepare_block {
             // we'll reset again on the next proposal, until the
             // proposal is accepted
             self.gas_meter.reset();
-            // TODO: This should not be hardcoded
-            let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+            let txs = if let ShellMode::Validator { .. } = self.mode {
+                // TODO: This should not be hardcoded
+                let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-            // filter in half of the new txs from Tendermint, only keeping
-            // wrappers
-            let number_of_new_txs = 1 + req.block_data.len() / 2;
-            let mut txs: Vec<TxBytes> = req
-                .block_data
-                .into_iter()
-                .take(number_of_new_txs)
-                .filter(|tx_bytes| {
-                    if let Ok(tx) = Tx::try_from(tx_bytes.as_slice()) {
-                        matches!(process_tx(tx), Ok(TxType::Wrapper(_)))
-                    } else {
-                        false
-                    }
-                })
-                .collect();
-
-            // decrypt the wrapper txs included in the previous block
-            let mut decrypted_txs = self
-                .storage
-                .tx_queue
-                .iter()
-                .map(|tx| {
-                    Tx::from(match tx.decrypt(privkey) {
-                        Ok(tx) => DecryptedTx::Decrypted(tx),
-                        _ => DecryptedTx::Undecryptable(tx.clone()),
+                // TODO: Craft the Ethereum state update tx
+                // filter in half of the new txs from Tendermint, only keeping
+                // wrappers
+                let number_of_new_txs = 1 + req.block_data.len() / 2;
+                let mut txs: Vec<TxBytes> = req
+                    .block_data
+                    .into_iter()
+                    .take(number_of_new_txs)
+                    .filter(|tx_bytes| {
+                        if let Ok(tx) = Tx::try_from(tx_bytes.as_slice()) {
+                            matches!(process_tx(tx), Ok(TxType::Wrapper(_)))
+                        } else {
+                            false
+                        }
                     })
-                    .to_bytes()
-                })
-                .collect();
+                    .collect();
 
-            txs.append(&mut decrypted_txs);
+                // decrypt the wrapper txs included in the previous block
+                let mut decrypted_txs = self
+                    .storage
+                    .tx_queue
+                    .iter()
+                    .map(|tx| {
+                        Tx::from(match tx.decrypt(privkey) {
+                            Ok(tx) => DecryptedTx::Decrypted(tx),
+                            _ => DecryptedTx::Undecryptable(tx.clone()),
+                        })
+                        .to_bytes()
+                    })
+                    .collect();
+
+                txs.append(&mut decrypted_txs);
+                txs
+            } else {
+                vec![]
+            };
             response::PrepareProposal { block_data: txs }
         }
     }
@@ -72,14 +79,16 @@ mod prepare_block {
         use anoma::types::transaction::Fee;
 
         use super::*;
-        use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
+        use crate::node::ledger::shell::test_utils::{
+            gen_keypair, TestShell,
+        };
 
         /// Test that if a tx from the mempool is not a
         /// WrapperTx type, it is not included in the
         /// proposed block.
         #[test]
         fn test_prepare_proposal_rejects_non_wrapper_tx() {
-            let mut shell = TestShell::new();
+            let (mut shell, _) = TestShell::new();
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some("transaction_data".as_bytes().to_owned()),
@@ -96,7 +105,7 @@ mod prepare_block {
         /// we simply exclude it from the proposal
         #[test]
         fn test_error_in_processing_tx() {
-            let mut shell = TestShell::new();
+            let (mut shell, _) = TestShell::new();
             let keypair = gen_keypair();
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
@@ -115,6 +124,7 @@ mod prepare_block {
                         Epoch(0),
                         0.into(),
                         tx,
+                        Default::default(),
                     )
                     .try_to_vec()
                     .expect("Test failed"),
@@ -133,7 +143,7 @@ mod prepare_block {
         /// corresponding wrappers
         #[test]
         fn test_decrypted_txs_in_correct_order() {
-            let mut shell = TestShell::new();
+            let (mut shell, _) = TestShell::new();
             let keypair = gen_keypair();
             let mut expected_wrapper = vec![];
             let mut expected_decrypted = vec![];
@@ -164,6 +174,7 @@ mod prepare_block {
                     Epoch(0),
                     0.into(),
                     tx,
+                    Default::default(),
                 );
                 let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
                 shell.enqueue_tx(wrapper_tx);

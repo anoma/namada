@@ -36,6 +36,8 @@ use anoma::types::transaction::{
 use anoma::types::{address, key, token};
 use anoma::vm::wasm::{TxCache, VpCache};
 use anoma::vm::WasmCacheRwAccess;
+#[cfg(not(feature = "ABCI"))]
+use borsh::BorshDeserialize;
 use borsh::BorshSerialize;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -50,18 +52,21 @@ use tendermint_proto_abci::abci::ConsensusParams;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::{self, Evidence, ValidatorUpdate};
 use thiserror::Error;
+use tokio::sync::mpsc::UnboundedSender;
 #[cfg(not(feature = "ABCI"))]
 use tower_abci::{request, response};
 #[cfg(feature = "ABCI")]
 use tower_abci_old::{request, response};
 
 use super::rpc;
-use crate::config;
-use crate::config::genesis;
+use crate::config::{genesis, TendermintMode};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
+#[allow(unused_imports)]
+use crate::wallet::{AtomicKeypair, ValidatorData};
+use crate::{config, wallet};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -79,6 +84,8 @@ pub enum Error {
     Tendermint(tendermint_node::Error),
     #[error("Server error: {0}")]
     TowerServer(String),
+    #[error("{0}")]
+    Broadcaster(tokio::sync::mpsc::error::TryRecvError),
 }
 
 /// The different error codes that the ledger may
@@ -121,6 +128,28 @@ pub fn reset(config: config::Ledger) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
+#[allow(dead_code)]
+pub(super) enum ShellMode {
+    Validator {
+        data: ValidatorData,
+        broadcast_sender: UnboundedSender<Vec<u8>>,
+    },
+    Full,
+    Seed,
+}
+
+#[allow(dead_code)]
+impl ShellMode {
+    /// Get the validator address if ledger is in validator mode
+    pub fn get_validator_address(&self) -> Option<&address::Address> {
+        match &self {
+            ShellMode::Validator { data, .. } => Some(&data.address),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum MempoolTxType {
     /// A transaction that has not been validated by this node before
@@ -138,6 +167,9 @@ pub struct Shell<
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
+    /// The id of the current chain
+    #[allow(dead_code)]
+    chain_id: ChainId,
     /// The persistent storage
     pub(super) storage: Storage<D, H>,
     /// Gas meter for the current block
@@ -152,6 +184,9 @@ pub struct Shell<
     base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
     wasm_dir: PathBuf,
+    /// Information about the running shell instance
+    #[allow(dead_code)]
+    mode: ShellMode,
     /// VP WASM compilation cache
     vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
@@ -166,18 +201,22 @@ where
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
     pub fn new(
-        base_dir: PathBuf,
-        db_path: impl AsRef<Path>,
-        chain_id: ChainId,
+        config: config::Ledger,
         wasm_dir: PathBuf,
+        broadcast_sender: UnboundedSender<Vec<u8>>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
     ) -> Self {
+        let chain_id = config.chain_id;
+        let db_path = config.shell.db_dir(&chain_id);
+        let base_dir = config.shell.base_dir;
+        let mode = config.tendermint.tendermint_mode;
         if !Path::new(&base_dir).is_dir() {
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Anoma should not fail");
         }
+        // load last state from storage
         let mut storage = Storage::open(db_path, chain_id.clone(), db_cache);
         storage
             .load_last_state()
@@ -190,13 +229,65 @@ where
             base_dir.join(chain_id.as_str()).join("vp_wasm_cache");
         let tx_wasm_cache_dir =
             base_dir.join(chain_id.as_str()).join("tx_wasm_cache");
+        // load in keys and address from wallet if mode is set to `Validator`
+        let mode = match mode {
+            TendermintMode::Validator => {
+                #[cfg(not(feature = "dev"))]
+                {
+                    let wallet_path = &base_dir.join(chain_id.as_str());
+                    let genesis_path =
+                        &base_dir.join(format!("{}.toml", chain_id.as_str()));
+                    tracing::debug!(
+                        "{}",
+                        wallet_path.as_path().to_str().unwrap()
+                    );
+                    let wallet = wallet::Wallet::load_or_new_from_genesis(
+                        wallet_path,
+                        move || {
+                            genesis::genesis_config::open_genesis_config(
+                                genesis_path,
+                            )
+                        },
+                    );
+                    wallet
+                        .take_validator_data()
+                        .map(|data| ShellMode::Validator {
+                            data,
+                            broadcast_sender,
+                        })
+                        .expect(
+                            "Validator data should have been stored in the \
+                             wallet",
+                        )
+                }
+                #[cfg(feature = "dev")]
+                {
+                    let validator_keys = wallet::defaults::validator_keys();
+                    ShellMode::Validator {
+                        data: wallet::ValidatorData {
+                            address: wallet::defaults::validator_address(),
+                            keys: wallet::ValidatorKeys {
+                                protocol_keypair: validator_keys.0,
+                                dkg_keypair: Some(validator_keys.1),
+                            },
+                        },
+                        broadcast_sender,
+                    }
+                }
+            }
+            TendermintMode::Full => ShellMode::Full,
+            TendermintMode::Seed => ShellMode::Seed,
+        };
+
         Self {
+            chain_id,
             storage,
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
             byzantine_validators: vec![],
             base_dir,
             wasm_dir,
+            mode,
             vp_wasm_cache: VpCache::new(
                 vp_wasm_cache_dir,
                 vp_wasm_compilation_cache as usize,
@@ -466,6 +557,42 @@ where
             }
         }
     }
+
+    /// Lookup a validator's keypair for their established account from their
+    /// wallet. If the node is not validator, this function returns None
+    #[cfg(not(feature = "ABCI"))]
+    #[allow(dead_code)]
+    fn get_account_keypair(&self) -> Option<AtomicKeypair> {
+        let wallet_path = &self.base_dir.join(self.chain_id.as_str());
+        let genesis_path = &self
+            .base_dir
+            .join(format!("{}.toml", self.chain_id.as_str()));
+        let mut wallet =
+            wallet::Wallet::load_or_new_from_genesis(wallet_path, move || {
+                genesis::genesis_config::open_genesis_config(genesis_path)
+            });
+        self.mode.get_validator_address().map(|addr| {
+            let pk_bytes = self
+                .storage
+                .read(&key::ed25519::pk_key(addr))
+                .expect(
+                    "A validator should have a public key associated with \
+                     it's established account",
+                )
+                .0
+                .expect(
+                    "A validator should have a public key associated with \
+                     it's established account",
+                );
+            let pk =
+                key::ed25519::PublicKey::deserialize(&mut pk_bytes.as_slice())
+                    .expect("Validator's public key should be deserializable");
+            wallet.find_key_by_pk(&pk).expect(
+                "A validator's established keypair should be stored in its \
+                 wallet",
+            )
+        })
+    }
 }
 
 /// Helper functions and types for writing unit tests
@@ -477,10 +604,15 @@ mod test_utils {
     use anoma::ledger::storage::mockdb::MockDB;
     use anoma::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use anoma::types::address::{xan, EstablishedAddressGen};
+    use anoma::types::chain::ChainId;
     use anoma::types::key::ed25519::Keypair;
     use anoma::types::storage::{BlockHash, Epoch};
     use anoma::types::transaction::Fee;
     use tempfile::tempdir;
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint::block::{header::Version, Header};
+    #[cfg(not(feature = "ABCI"))]
+    use tendermint::{Hash, Time};
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::{
         Event as TmEvent, RequestInitChain, ResponsePrepareProposal,
@@ -491,6 +623,11 @@ mod test_utils {
     use tendermint_proto_abci::abci::{Event as TmEvent, RequestInitChain};
     #[cfg(feature = "ABCI")]
     use tendermint_proto_abci::google::protobuf::Timestamp;
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::block::{header::Version, Header};
+    #[cfg(feature = "ABCI")]
+    use tendermint_stable::{Hash, Time};
+    use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
@@ -530,21 +667,28 @@ mod test_utils {
 
     impl TestShell {
         /// Create a new shell
-        pub fn new() -> Self {
+        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>) {
+            let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-            Self {
-                shell: Shell::<MockDB, Sha256Hasher>::new(
-                    base_dir.clone(),
-                    base_dir.join("db").join("anoma-devchain-00000"),
-                    Default::default(),
-                    top_level_directory().join("wasm"),
-                    None,
-                    vp_wasm_compilation_cache,
-                    tx_wasm_compilation_cache,
-                ),
-            }
+            (
+                Self {
+                    shell: Shell::<MockDB, Sha256Hasher>::new(
+                        config::Ledger::new(
+                            base_dir,
+                            Default::default(),
+                            TendermintMode::Validator,
+                        ),
+                        top_level_directory().join("wasm"),
+                        sender,
+                        None,
+                        vp_wasm_compilation_cache,
+                        tx_wasm_compilation_cache,
+                    ),
+                },
+                receiver,
+            )
         }
 
         /// Forward a InitChain request and expect a success
@@ -613,8 +757,8 @@ mod test_utils {
     }
 
     /// Start a new test shell and initialize it
-    pub(super) fn setup() -> TestShell {
-        let mut test = TestShell::new();
+    pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>) {
+        let (mut test, receiver) = TestShell::new();
         test.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -623,7 +767,42 @@ mod test_utils {
             chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
-        test
+        (test, receiver)
+    }
+
+    /// This is just to be used in testing. It is not
+    /// a meaningful default.
+    impl Default for FinalizeBlock {
+        fn default() -> Self {
+            FinalizeBlock {
+                hash: BlockHash([0u8; 32]),
+                header: Header {
+                    version: Version { block: 0, app: 0 },
+                    chain_id: String::from("test")
+                        .try_into()
+                        .expect("Should not fail"),
+                    height: 0u64.try_into().expect("Should not fail"),
+                    time: Time::from(DateTimeUtc::now()),
+                    last_block_id: None,
+                    last_commit_hash: None,
+                    data_hash: None,
+                    validators_hash: Hash::None,
+                    next_validators_hash: Hash::None,
+                    consensus_hash: Hash::None,
+                    app_hash: Vec::<u8>::new()
+                        .try_into()
+                        .expect("Should not fail"),
+                    last_results_hash: None,
+                    evidence_hash: None,
+                    proposer_address: vec![0u8; 20]
+                        .try_into()
+                        .expect("Should not fail"),
+                },
+                byzantine_validators: vec![],
+                txs: vec![],
+                reject_all_decrypted: false,
+            }
+        }
     }
 
     /// We test that on shell shutdown, the tx queue gets persisted in a DB, and
@@ -632,13 +811,17 @@ mod test_utils {
     fn test_tx_queue_persistence() {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
+        let (sender, _) = tokio::sync::mpsc::unbounded_channel();
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
-            base_dir.clone(),
-            base_dir.join("db").join("anoma-devchain-00000"),
-            Default::default(),
+            config::Ledger::new(
+                base_dir.clone(),
+                Default::default(),
+                TendermintMode::Validator,
+            ),
             top_level_directory().join("wasm"),
+            sender.clone(),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
@@ -658,6 +841,7 @@ mod test_utils {
             Epoch(0),
             0.into(),
             tx,
+            Default::default(),
         );
         shell.storage.tx_queue.push(wrapper);
         // Artificially increase the block height so that chain
@@ -688,10 +872,13 @@ mod test_utils {
 
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
-            base_dir.clone(),
-            base_dir.join("db").join("anoma-devchain-00000"),
-            Default::default(),
+            config::Ledger::new(
+                base_dir,
+                Default::default(),
+                TendermintMode::Validator,
+            ),
             top_level_directory().join("wasm"),
+            sender,
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,

@@ -238,6 +238,25 @@ where
                         .expect("encode token amount"),
                 )
                 .expect("Unable to set genesis balance");
+            self.storage
+                .write(
+                    &key::ed25519::protocol_pk_key(addr),
+                    validator
+                        .protocol_key
+                        .try_to_vec()
+                        .expect("encode protocol public key"),
+                )
+                .expect("Unable to set genesis user protocol public key");
+
+            self.storage
+                .write(
+                    &key::dkg_session_keys::dkg_pk_key(addr),
+                    validator
+                        .dkg_public_key
+                        .try_to_vec()
+                        .expect("encode public DKG session key"),
+                )
+                .expect("Unable to set genesis user public DKG session key");
         }
 
         // PoS system depends on epoch being initialized
@@ -278,7 +297,6 @@ where
                 .expect("unexpected validator's voting power");
             response.validators.push(abci_validator);
         }
-
         Ok(response)
     }
 }
