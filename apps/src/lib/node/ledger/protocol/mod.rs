@@ -226,7 +226,7 @@ where
                     Vp::Wasm(vp)
                 }
                 Address::Implicit(_) => {
-                    let (implicit_vp, gas) = read_implicit_vp(&storage).unwrap();
+                    let (implicit_vp, gas) = read_implicit_vp(storage).unwrap();
                     gas_meter.add(gas).map_err(Error::GasError)?;
                     // TODO: figure out the apposite error type (ProtocolNativeVpError?)
                     gas_meter
