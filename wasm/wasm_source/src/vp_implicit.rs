@@ -11,7 +11,7 @@
 //! invalid intent set).
 //!
 //! Any other storage key changes are allowed only with a valid signature.
-//! 
+//!
 //! For more complex storage usage, a user must deploy their own VP.
 //! However, the network may elect to upgrade the implicit VP in the future.
 
@@ -31,7 +31,8 @@ fn validate_tx(
     verifiers: HashSet<Address>,
 ) -> bool {
     debug_log!(
-        "vp_implicit called with user addr: {}, key_changed: {:?}, verifiers: {:?}",
+        "vp_implicit called with user addr: {}, key_changed: {:?}, verifiers: \
+        {:?}",
         addr,
         keys_changed,
         verifiers
