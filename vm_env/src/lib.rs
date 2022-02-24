@@ -27,7 +27,7 @@ pub mod tx_prelude {
 
 pub mod vp_prelude {
     // used in the VP input
-    pub use std::collections::HashSet;
+    pub use std::collections::{BTreeSet, HashSet};
 
     pub use anoma::types::address::Address;
     pub use anoma::types::*;

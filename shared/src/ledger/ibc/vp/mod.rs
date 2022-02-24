@@ -82,7 +82,7 @@ where
         &self,
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
-        _verifiers: &HashSet<Address>,
+        _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let mut clients = HashSet::new();
 
@@ -708,7 +708,7 @@ mod tests {
         let client_state_key = client_state_key(&get_client_id());
         keys_changed.insert(client_state_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
@@ -734,7 +734,7 @@ mod tests {
         let client_state_key = client_state_key(&get_client_id());
         keys_changed.insert(client_state_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         // this should fail because no state is stored
@@ -803,7 +803,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(client_state_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
@@ -848,7 +848,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
@@ -890,7 +890,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         // this should fail because no client exists
@@ -962,7 +962,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
@@ -1036,7 +1036,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1097,7 +1097,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1144,7 +1144,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(channel_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1210,7 +1210,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(channel_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1284,7 +1284,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(channel_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1353,7 +1353,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(channel_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1380,7 +1380,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(port_key(&get_port_id()));
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1409,7 +1409,7 @@ mod tests {
         let cap_key = capability_key(index);
         keys_changed.insert(cap_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1478,7 +1478,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(seq_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1554,7 +1554,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(seq_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1635,7 +1635,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(seq_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1707,7 +1707,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(commitment_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1787,7 +1787,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(receipt_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1823,7 +1823,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(ack_key);
 
-        let verifiers = HashSet::new();
+        let verifiers = BTreeSet::new();
 
         let ibc = Ibc { ctx };
         assert!(

@@ -85,7 +85,7 @@ where
         &self,
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
-        _verifiers: &HashSet<Address>,
+        _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         // Check the non-onwer balance updates
         let keys_changed: HashSet<Key> = keys_changed

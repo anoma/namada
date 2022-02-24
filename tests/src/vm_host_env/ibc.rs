@@ -1,5 +1,5 @@
 use core::time::Duration;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::str::FromStr;
 
@@ -229,7 +229,7 @@ impl<'a> TestIbcVp<'a> {
         tx_data: &[u8],
     ) -> std::result::Result<bool, anoma::ledger::ibc::vp::Error> {
         self.ibc
-            .validate_tx(tx_data, &self.keys_changed, &HashSet::new())
+            .validate_tx(tx_data, &self.keys_changed, &BTreeSet::new())
     }
 }
 
@@ -244,7 +244,7 @@ impl<'a> TestIbcTokenVp<'a> {
         tx_data: &[u8],
     ) -> std::result::Result<bool, anoma::ledger::ibc::vp::IbcTokenError> {
         self.token
-            .validate_tx(tx_data, &self.keys_changed, &HashSet::new())
+            .validate_tx(tx_data, &self.keys_changed, &BTreeSet::new())
     }
 }
 
@@ -324,7 +324,7 @@ pub fn init_ibc_vp_from_tx<'a>(
 ) -> (TestIbcVp<'a>, TempDir) {
     let keys_changed = tx_env
         .write_log
-        .verifiers_changed_keys(&HashSet::new())
+        .verifiers_changed_keys(&BTreeSet::new())
         .get(&Address::Internal(InternalAddress::Ibc))
         .cloned()
         .expect("no IBC address");
@@ -351,7 +351,7 @@ pub fn init_token_vp_from_tx<'a>(
 ) -> (TestIbcTokenVp<'a>, TempDir) {
     let keys_changed = tx_env
         .write_log
-        .verifiers_changed_keys(&HashSet::new())
+        .verifiers_changed_keys(&BTreeSet::new())
         .get(addr)
         .cloned()
         .expect("no token address");

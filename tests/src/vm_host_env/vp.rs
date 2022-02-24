@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use anoma::ledger::gas::VpGasMeter;
 use anoma::ledger::storage::mockdb::MockDB;
@@ -33,7 +33,7 @@ pub struct TestVpEnv {
     pub gas_meter: VpGasMeter,
     pub tx: Tx,
     pub keys_changed: BTreeSet<storage::Key>,
-    pub verifiers: HashSet<Address>,
+    pub verifiers: BTreeSet<Address>,
     pub eval_runner: native_vp_host_env::VpEval,
     pub result_buffer: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
@@ -58,7 +58,7 @@ impl Default for TestVpEnv {
             gas_meter: VpGasMeter::new(0),
             tx: Tx::new(vec![], None),
             keys_changed: BTreeSet::default(),
-            verifiers: HashSet::default(),
+            verifiers: BTreeSet::default(),
             eval_runner,
             result_buffer: None,
             vp_wasm_cache,
@@ -72,10 +72,10 @@ impl TestVpEnv {
         self.write_log.get_keys()
     }
 
-    pub fn get_verifiers(&self) -> HashSet<Address> {
-        let mut verifiers: HashSet<Address> = self
+    pub fn get_verifiers(&self) -> BTreeSet<Address> {
+        let mut verifiers: BTreeSet<Address> = self
             .write_log
-            .verifiers_changed_keys(&HashSet::default())
+            .verifiers_changed_keys(&BTreeSet::default())
             .keys()
             .cloned()
             .collect();

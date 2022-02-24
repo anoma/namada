@@ -356,7 +356,7 @@ impl WriteLog {
     /// case every address will be the verifier of the key.
     pub fn verifiers_changed_keys(
         &self,
-        verifiers_from_tx: &HashSet<Address>,
+        verifiers_from_tx: &BTreeSet<Address>,
     ) -> HashMap<Address, BTreeSet<Key>> {
         let (changed_keys, initialized_accounts) = self.get_partitioned_keys();
         let mut verifiers =
@@ -604,7 +604,7 @@ mod tests {
             (verifiers_from_tx in testing::arb_verifiers_from_tx())
             (tx_write_log in testing::arb_tx_write_log(verifiers_from_tx.clone()),
                 verifiers_from_tx in Just(verifiers_from_tx))
-        -> (HashSet<Address>, HashMap<Key, StorageModification>) {
+        -> (BTreeSet<Address>, HashMap<Key, StorageModification>) {
             (verifiers_from_tx, tx_write_log)
         }
     }
@@ -679,7 +679,7 @@ pub mod testing {
     /// Generate an arbitrary tx write log of [`HashMap<Key,
     /// StorageModification>`].
     pub fn arb_tx_write_log(
-        verifiers_from_tx: HashSet<Address>,
+        verifiers_from_tx: BTreeSet<Address>,
     ) -> impl Strategy<Value = HashMap<Key, StorageModification>> + 'static
     {
         arb_key().prop_flat_map(move |key| {
@@ -697,9 +697,9 @@ pub mod testing {
         })
     }
 
-    /// Generate arbitrary verifiers from tx of [`HashSet<Address>`].
-    pub fn arb_verifiers_from_tx() -> impl Strategy<Value = HashSet<Address>> {
-        collection::hash_set(arb_address(), 0..10)
+    /// Generate arbitrary verifiers from tx of [`BTreeSet<Address>`].
+    pub fn arb_verifiers_from_tx() -> impl Strategy<Value = BTreeSet<Address>> {
+        collection::btree_set(arb_address(), 0..10)
     }
 
     /// Generate an arbitrary [`StorageModification`].

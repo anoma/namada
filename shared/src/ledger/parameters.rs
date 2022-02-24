@@ -1,6 +1,6 @@
 //! Protocol parameters
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
@@ -158,7 +158,7 @@ where
         &self,
         _tx_data: &[u8],
         _keys_changed: &BTreeSet<Key>,
-        _verifiers: &HashSet<Address>,
+        _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         // TODO allow parameters change by over 2/3 validator voting power
         // No changes are currently permitted

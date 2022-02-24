@@ -1,7 +1,6 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
 use std::collections::BTreeSet;
-use std::collections::HashSet;
 use std::convert::TryInto;
 use std::num::TryFromIntError;
 
@@ -98,7 +97,7 @@ where
     /// Transaction gas meter.
     pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
     /// The verifiers whose validity predicates should be triggered.
-    pub verifiers: MutHostRef<'a, &'a HashSet<Address>>,
+    pub verifiers: MutHostRef<'a, &'a BTreeSet<Address>>,
     /// Cache for 2-step reads from host environment.
     pub result_buffer: MutHostRef<'a, &'a Option<Vec<u8>>>,
     /// VP WASM compilation cache (this is available in tx context, because
@@ -134,7 +133,7 @@ where
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
         gas_meter: &mut BlockGasMeter,
-        verifiers: &mut HashSet<Address>,
+        verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
@@ -250,7 +249,7 @@ where
     pub keys_changed: HostRef<'a, &'a BTreeSet<Key>>,
     /// The verifiers whose validity predicates should be triggered. Used for
     /// calls to `eval`.
-    pub verifiers: HostRef<'a, &'a HashSet<Address>>,
+    pub verifiers: HostRef<'a, &'a BTreeSet<Address>>,
     /// VP WASM compilation cache
     #[cfg(feature = "wasm-runtime")]
     pub vp_wasm_cache: MutHostRef<'a, &'a VpCache<CA>>,
@@ -307,7 +306,7 @@ where
         gas_meter: &mut VpGasMeter,
         tx: &Tx,
         iterators: &mut PrefixIterators<'a, DB>,
-        verifiers: &HashSet<Address>,
+        verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
@@ -370,7 +369,7 @@ where
         gas_meter: &mut VpGasMeter,
         tx: &Tx,
         iterators: &mut PrefixIterators<'a, DB>,
-        verifiers: &HashSet<Address>,
+        verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
@@ -1744,7 +1743,7 @@ pub mod testing {
         storage: &Storage<DB, H>,
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
-        verifiers: &mut HashSet<Address>,
+        verifiers: &mut BTreeSet<Address>,
         gas_meter: &mut BlockGasMeter,
         result_buffer: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
@@ -1779,7 +1778,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut VpGasMeter,
         tx: &Tx,
-        verifiers: &HashSet<Address>,
+        verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,

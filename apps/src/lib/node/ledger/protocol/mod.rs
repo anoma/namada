@@ -157,7 +157,7 @@ fn execute_tx<D, H, CA>(
     write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
-) -> Result<HashSet<Address>>
+) -> Result<BTreeSet<Address>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -192,7 +192,7 @@ fn check_vps<D, H, CA>(
     storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
     write_log: &WriteLog,
-    verifiers_from_tx: &HashSet<Address>,
+    verifiers_from_tx: &BTreeSet<Address>,
     vp_wasm_cache: &mut VpCache<CA>,
 ) -> Result<VpsResult>
 where
@@ -266,7 +266,7 @@ where
         .iter()
         .map(|(addr, _, _)| addr)
         .cloned()
-        .collect::<HashSet<_>>();
+        .collect::<BTreeSet<_>>();
 
     verifiers
         .par_iter()

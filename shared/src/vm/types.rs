@@ -9,7 +9,7 @@
 //!    The environment inputs are passed guest-to-host and outputs back from
 //!    host-to-guest.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -26,7 +26,7 @@ pub struct VpInput<'a> {
     /// performed by the transaction for the account associated with the VP
     pub keys_changed: &'a BTreeSet<Key>,
     /// The verifiers to trigger VPs
-    pub verifiers: &'a HashSet<Address>,
+    pub verifiers: &'a BTreeSet<Address>,
 }
 
 /// Input for matchmaker wasm module call
