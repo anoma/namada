@@ -79,9 +79,7 @@ mod prepare_block {
         use anoma::types::transaction::Fee;
 
         use super::*;
-        use crate::node::ledger::shell::test_utils::{
-            gen_keypair, TestShell,
-        };
+        use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
 
         /// Test that if a tx from the mempool is not a
         /// WrapperTx type, it is not included in the

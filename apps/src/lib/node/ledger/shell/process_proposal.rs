@@ -260,9 +260,7 @@ mod test_process_proposal {
     use tendermint_proto_abci::google::protobuf::Timestamp;
 
     use super::*;
-    use crate::node::ledger::shell::test_utils::{
-        gen_keypair, TestShell,
-    };
+    use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessProposal;
 
     /// Test that if a wrapper tx is not signed, it is rejected

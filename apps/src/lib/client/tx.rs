@@ -5,10 +5,9 @@ use std::fs::File;
 use anoma::ledger::pos::{BondId, Bonds, Unbonds};
 use anoma::proto::Tx;
 use anoma::types::address::Address;
-use anoma::types::storage::Epoch;
 use anoma::types::nft::{self, Nft, NftToken};
+use anoma::types::storage::Epoch;
 use anoma::types::transaction::nft::{CreateNft, MintNft};
-
 use anoma::types::transaction::{
     hash_tx, pos, Fee, InitAccount, InitValidator, UpdateVp, WrapperTx,
 };
