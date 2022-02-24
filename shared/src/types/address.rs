@@ -47,8 +47,6 @@ mod internal {
         "ano::IBC Burn Address                        ";
     pub const IBC_MINT: &str =
         "ano::IBC Mint Address                        ";
-    pub const PROTOCOL: &str =
-        "ano::Implicit VP                             ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -170,7 +168,6 @@ impl Address {
                     }
                     InternalAddress::IbcBurn => internal::IBC_BURN.to_string(),
                     InternalAddress::IbcMint => internal::IBC_MINT.to_string(),
-                    InternalAddress::Protocol => internal::PROTOCOL.to_string(),
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -215,9 +212,6 @@ impl Address {
                 internal::IBC => Ok(Address::Internal(InternalAddress::Ibc)),
                 internal::PARAMETERS => {
                     Ok(Address::Internal(InternalAddress::Parameters))
-                }
-                internal::PROTOCOL => {
-                    Ok(Address::Internal(InternalAddress::Protocol))
                 }
                 internal::IBC_BURN => {
                     Ok(Address::Internal(InternalAddress::IbcBurn))
@@ -416,8 +410,6 @@ pub enum InternalAddress {
     IbcBurn,
     /// Mint tokens from this address with IBC token transfer
     IbcMint,
-    /// Implicit VP
-    Protocol,
 }
 
 impl InternalAddress {
@@ -444,7 +436,6 @@ impl Display for InternalAddress {
                 Self::IbcEscrow(hash) => format!("IbcEscrow: {}", hash),
                 Self::IbcBurn => "IbcBurn".to_string(),
                 Self::IbcMint => "IbcMint".to_string(),
-                Self::Protocol => "Protocol".to_string(),
             }
         )
     }
@@ -675,7 +666,6 @@ pub mod testing {
             InternalAddress::Parameters => {}
             InternalAddress::IbcEscrow(_) => {}
             InternalAddress::IbcBurn => {}
-            InternalAddress::Protocol => {}
             InternalAddress::IbcMint => {} /* Add new addresses in the
                                             * `prop_oneof` below. */
         };
@@ -688,7 +678,6 @@ pub mod testing {
                 .prop_map(|(p, c)| InternalAddress::ibc_escrow_address(p, c)),
             Just(InternalAddress::IbcBurn),
             Just(InternalAddress::IbcMint),
-            Just(InternalAddress::Protocol),
         ]
     }
 
