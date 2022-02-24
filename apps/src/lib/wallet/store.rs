@@ -244,7 +244,7 @@ impl Store {
         let (keypair_to_store, raw_keypair) =
             StoredKeypair::new(keypair, password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
-        let alias = alias.unwrap_or_else(|| pkh.clone().into());
+        let alias = alias.unwrap_or_else(|| pkh.clone().into()).to_lowercase();
         if self
             .insert_keypair(alias.clone(), keypair_to_store, pkh)
             .is_none()
