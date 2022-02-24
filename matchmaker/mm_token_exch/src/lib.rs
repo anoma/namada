@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use anoma::types::address::Address;
 use anoma::types::intent::{Exchange, FungibleTokenIntent, MatchedExchanges};
+use anoma::types::key::ed25519::Signed;
 use anoma::types::matchmaker::{AddIntent, AddIntentResult};
 use anoma::types::token;
 use anoma_macros::Matchmaker;
@@ -52,8 +53,8 @@ impl AddIntent for TokenExchange {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ExchangeNode {
     id: Vec<u8>,
-    exchange: anoma::proto::Signed<Exchange>,
-    intent: anoma::proto::Signed<FungibleTokenIntent>,
+    exchange: Signed<Exchange>,
+    intent: Signed<FungibleTokenIntent>,
 }
 
 impl PartialEq for ExchangeNode {
@@ -66,8 +67,8 @@ impl PartialEq for ExchangeNode {
 fn add_intent_node(
     graph: &mut DiGraph<ExchangeNode, Address>,
     id: Vec<u8>,
-    exchange: anoma::proto::Signed<Exchange>,
-    intent: anoma::proto::Signed<FungibleTokenIntent>,
+    exchange: Signed<Exchange>,
+    intent: Signed<FungibleTokenIntent>,
 ) {
     let new_node = ExchangeNode {
         id,
@@ -365,8 +366,6 @@ fn create_transfer(
     }
 }
 
-fn decode_intent_data(
-    bytes: &[u8],
-) -> anoma::proto::Signed<FungibleTokenIntent> {
-    anoma::proto::Signed::<FungibleTokenIntent>::try_from_slice(bytes).unwrap()
+fn decode_intent_data(bytes: &[u8]) -> Signed<FungibleTokenIntent> {
+    Signed::<FungibleTokenIntent>::try_from_slice(bytes).unwrap()
 }

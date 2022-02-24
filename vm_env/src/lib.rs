@@ -14,7 +14,6 @@ pub mod proof_of_stake;
 pub mod token;
 
 pub mod tx_prelude {
-    pub use anoma::proto::{Signed, SignedTxData};
     pub use anoma::types::address::Address;
     pub use anoma::types::*;
     pub use anoma_macros::transaction;
@@ -30,15 +29,17 @@ pub mod vp_prelude {
     // used in the VP input
     pub use std::collections::HashSet;
 
-    pub use anoma::ledger::pos as proof_of_stake;
-    pub use anoma::proto::{Signed, SignedTxData};
     pub use anoma::types::address::Address;
     pub use anoma::types::*;
     pub use anoma_macros::validity_predicate;
 
     pub use crate::imports::vp::*;
     pub use crate::intent::vp as intent;
-    pub use crate::key::vp as key;
+    pub mod key {
+        pub use crate::key::ed25519::vp as ed25519;
+    }
+    pub use anoma::ledger::pos as proof_of_stake;
+
     pub use crate::nft::vp as nft;
     pub use crate::token::vp as token;
 }

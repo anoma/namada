@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use anoma::types::address::Address;
 use anoma::types::chain::ChainId;
-use anoma::types::key::*;
+use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 
 use super::args;
 use crate::cli::safe_exit;
@@ -29,11 +29,11 @@ pub type WalletAddress = FromContext<Address>;
 
 /// A raw keypair (hex encoding), an alias, a public key or a public key hash of
 /// a keypair that may be found in the wallet
-pub type WalletKeypair = FromContext<Rc<common::SecretKey>>;
+pub type WalletKeypair = FromContext<Rc<Keypair>>;
 
 /// A raw public key (hex encoding), a public key hash (also hex encoding) or an
 /// alias of an public key that may be found in the wallet
-pub type WalletPublicKey = FromContext<common::PublicKey>;
+pub type WalletPublicKey = FromContext<PublicKey>;
 
 /// Command execution context
 #[derive(Debug)]
@@ -250,7 +250,7 @@ impl ArgFromContext for Address {
     }
 }
 
-impl ArgFromMutContext for Rc<common::SecretKey> {
+impl ArgFromMutContext for Rc<Keypair> {
     fn arg_from_mut_ctx(ctx: &mut Context, raw: impl AsRef<str>) -> Self {
         let raw = raw.as_ref();
         // A keypair can be either a raw keypair in hex string
@@ -266,7 +266,7 @@ impl ArgFromMutContext for Rc<common::SecretKey> {
     }
 }
 
-impl ArgFromMutContext for common::PublicKey {
+impl ArgFromMutContext for PublicKey {
     fn arg_from_mut_ctx(ctx: &mut Context, raw: impl AsRef<str>) -> Self {
         let raw = raw.as_ref();
         // A public key can be either a raw public key in hex string
@@ -275,12 +275,12 @@ impl ArgFromMutContext for common::PublicKey {
             FromStr::from_str(raw)
                 .map(|pkh: PublicKeyHash| {
                     let key = ctx.wallet.find_key_by_pkh(&pkh).unwrap();
-                    key.ref_to()
+                    key.public.clone()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .unwrap_or_else(|_parse_err| {
                     let key = ctx.wallet.find_key(raw).unwrap();
-                    key.ref_to()
+                    key.public.clone()
                 })
         })
     }

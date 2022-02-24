@@ -4,7 +4,7 @@
 use std::rc::Rc;
 
 use anoma::types::address::{Address, ImplicitAddress};
-use anoma::types::key::*;
+use anoma::types::key::ed25519::Keypair;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
@@ -20,7 +20,7 @@ pub async fn find_keypair(
     wallet: &mut Wallet,
     addr: &Address,
     ledger_address: TendermintAddress,
-) -> Rc<common::SecretKey> {
+) -> Rc<Keypair> {
     match addr {
         Address::Established(_) => {
             println!(
@@ -45,7 +45,7 @@ pub async fn find_keypair(
                 cli::safe_exit(1)
             })
         }
-        Address::Implicit(ImplicitAddress(pkh)) => {
+        Address::Implicit(ImplicitAddress::Ed25519(pkh)) => {
             wallet.find_key_by_pkh(pkh).unwrap_or_else(|err| {
                 eprintln!(
                     "Unable to load the keypair from the wallet for the \

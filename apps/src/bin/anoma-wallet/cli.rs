@@ -3,7 +3,7 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use anoma::types::key::*;
+use anoma::types::key::ed25519::PublicKeyHash;
 use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds, Context};
 use anoma_apps::wallet::DecryptionError;
@@ -87,11 +87,11 @@ fn key_find(
     };
     match found_keypair {
         Ok(keypair) => {
-            let pkh: PublicKeyHash = (&keypair.ref_to()).into();
+            let pkh: PublicKeyHash = (&keypair.public).into();
             println!("Public key hash: {}", pkh);
-            println!("Public key: {}", keypair.ref_to());
+            println!("Public key: {}", keypair.public);
             if unsafe_show_secret {
-                println!("Secret key: {}", keypair);
+                println!("Secret key: {}", keypair.secret);
             }
         }
         Err(err) => {
@@ -131,10 +131,10 @@ fn key_list(
             }
             match stored_keypair.get(decrypt) {
                 Ok(keypair) => {
-                    writeln!(w, "    Public key: {}", keypair.ref_to())
-                        .unwrap();
+                    writeln!(w, "    Public key: {}", keypair.public).unwrap();
                     if unsafe_show_secret {
-                        writeln!(w, "    Secret key: {}", keypair).unwrap();
+                        writeln!(w, "    Secret key: {}", keypair.secret)
+                            .unwrap();
                     }
                 }
                 Err(DecryptionError::NotDecrypting) if !decrypt => {

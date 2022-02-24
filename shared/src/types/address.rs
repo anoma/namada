@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::types::key;
-use crate::types::key::PublicKeyHash;
+use crate::types::key::ed25519::PublicKeyHash;
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 45;
@@ -137,7 +137,9 @@ impl Address {
     pub fn raw_hash(&self) -> Option<&str> {
         match self {
             Address::Established(established) => Some(&established.hash),
-            Address::Implicit(ImplicitAddress(implicit)) => Some(&implicit.0),
+            Address::Implicit(ImplicitAddress::Ed25519(implicit)) => {
+                Some(&implicit.0)
+            }
             Address::Internal(_) => None,
         }
     }
@@ -148,7 +150,7 @@ impl Address {
             Address::Established(EstablishedAddress { hash }) => {
                 format!("{}::{}", PREFIX_ESTABLISHED, hash)
             }
-            Address::Implicit(ImplicitAddress(pkh)) => {
+            Address::Implicit(ImplicitAddress::Ed25519(pkh)) => {
                 format!("{}::{}", PREFIX_IMPLICIT, pkh)
             }
             Address::Internal(internal) => {
@@ -200,7 +202,7 @@ impl Address {
             Some((PREFIX_IMPLICIT, pkh)) => {
                 let pkh = PublicKeyHash::from_str(pkh)
                     .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-                Ok(Address::Implicit(ImplicitAddress(pkh)))
+                Ok(Address::Implicit(ImplicitAddress::Ed25519(pkh)))
             }
             Some((PREFIX_INTERNAL, raw)) => match string {
                 internal::POS => Ok(Address::Internal(InternalAddress::PoS)),
@@ -362,16 +364,19 @@ impl EstablishedAddressGen {
     Serialize,
     Deserialize,
 )]
-pub struct ImplicitAddress(pub key::PublicKeyHash);
+pub enum ImplicitAddress {
+    /// Address derived from [`key::ed25519::PublicKeyHash`]
+    Ed25519(key::ed25519::PublicKeyHash),
+}
 
-impl From<&key::common::PublicKey> for ImplicitAddress {
-    fn from(pk: &key::common::PublicKey) -> Self {
-        ImplicitAddress(pk.into())
+impl From<&key::ed25519::PublicKey> for ImplicitAddress {
+    fn from(pk: &key::ed25519::PublicKey) -> Self {
+        ImplicitAddress::Ed25519(pk.into())
     }
 }
 
-impl From<&key::common::PublicKey> for Address {
-    fn from(pk: &key::common::PublicKey) -> Self {
+impl From<&key::ed25519::PublicKey> for Address {
+    fn from(pk: &key::ed25519::PublicKey) -> Self {
         Self::Implicit(pk.into())
     }
 }
@@ -573,7 +578,7 @@ pub mod testing {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::key::*;
+    use crate::types::key::ed25519;
 
     /// Generate a new established address.
     pub fn gen_established_address() -> Address {
@@ -583,12 +588,9 @@ pub mod testing {
 
     /// Generate a new implicit address.
     pub fn gen_implicit_address() -> Address {
-        let keypair: common::SecretKey =
-            key::testing::gen_keypair::<ed25519::SigScheme>()
-                .try_to_sk()
-                .unwrap();
-        let pkh = PublicKeyHash::from(&keypair.ref_to());
-        Address::Implicit(ImplicitAddress(pkh))
+        let keypair = ed25519::testing::gen_keypair();
+        let pkh = ed25519::PublicKeyHash::from(keypair.public);
+        Address::Implicit(ImplicitAddress::Ed25519(pkh))
     }
 
     /// A sampled established address for tests
@@ -647,10 +649,9 @@ pub mod testing {
 
     /// Generate an arbitrary [`ImplicitAddress`].
     pub fn arb_implicit_address() -> impl Strategy<Value = ImplicitAddress> {
-        key::testing::arb_keypair::<ed25519::SigScheme>().prop_map(|keypair| {
-            let keypair: common::SecretKey = keypair.try_to_sk().unwrap();
-            let pkh = PublicKeyHash::from(&keypair.ref_to());
-            ImplicitAddress(pkh)
+        ed25519::testing::arb_keypair().prop_map(|keypair| {
+            let pkh = ed25519::PublicKeyHash::from(keypair.public);
+            ImplicitAddress::Ed25519(pkh)
         })
     }
 

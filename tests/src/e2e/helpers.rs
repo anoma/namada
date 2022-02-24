@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use anoma::types::address::Address;
-use anoma::types::key::*;
+use anoma::types::key::ed25519::Keypair;
 use anoma::types::storage::Epoch;
 use anoma_apps::config::{Config, TendermintMode};
 use color_eyre::eyre::Result;
@@ -57,10 +57,7 @@ pub fn get_gossiper_mm_server(test: &Test, who: &Who) -> String {
 
 /// Find the address of an account by its alias from the wallet
 #[allow(dead_code)]
-pub fn find_keypair(
-    test: &Test,
-    alias: impl AsRef<str>,
-) -> Result<common::SecretKey> {
+pub fn find_keypair(test: &Test, alias: impl AsRef<str>) -> Result<Keypair> {
     let mut find = run!(
         test,
         Bin::Wallet,
@@ -78,7 +75,7 @@ pub fn find_keypair(
     let (unread, matched) = find.exp_regex("Secret key: .*\n")?;
     let sk = matched.trim().rsplit_once(' ').unwrap().1;
     let key = format!("{}{}", sk, pk);
-    common::SecretKey::from_str(&key).map_err(|e| {
+    Keypair::from_str(&key).map_err(|e| {
         eyre!(format!(
             "Key: {} parsed from {}, Error: {}\n\nOutput: {}",
             key, matched, e, unread
