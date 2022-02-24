@@ -77,10 +77,10 @@ impl Wallet {
     }
 
     /// Generate a new keypair and derive an implicit address from its public
-    /// and insert them into the store with the provided alias, converter to 
-    /// lower case. If none provided, the alias will be the public key hash. 
-    /// If the key is to be encrypted, will prompt for password from stdin. 
-    /// Stores the key in decrypted key cache and returns the alias of the key 
+    /// and insert them into the store with the provided alias, converter to
+    /// lower case. If none provided, the alias will be the public key hash.
+    /// If the key is to be encrypted, will prompt for password from stdin.
+    /// Stores the key in decrypted key cache and returns the alias of the key
     /// and a reference-counting pointer to the key.
     pub fn gen_key(
         &mut self,
@@ -260,7 +260,8 @@ impl Wallet {
         keypair: StoredKeypair,
         pkh: PublicKeyHash,
     ) -> Option<Alias> {
-        self.store.insert_keypair(alias.to_lowercase(), keypair, pkh)
+        self.store
+            .insert_keypair(alias.to_lowercase(), keypair, pkh)
     }
 }
 
