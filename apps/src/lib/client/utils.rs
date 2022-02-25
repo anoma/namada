@@ -677,7 +677,7 @@ fn init_established_account(
     if config.address.is_none() {
         let address = address::gen_established_address("established");
         config.address = Some(address.to_string());
-        wallet.add_address(name.as_ref().to_string(), address);
+        wallet.add_address(&name, address);
     }
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());

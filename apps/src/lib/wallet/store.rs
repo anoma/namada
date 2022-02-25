@@ -10,11 +10,10 @@ use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::alias::Alias;
 use super::keys::StoredKeypair;
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
-
-pub type Alias = String;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
@@ -155,7 +154,7 @@ impl Store {
         let alias_pkh_or_pk = alias_pkh_or_pk.as_ref();
         // Try to find by alias
         self.keys
-            .get(alias_pkh_or_pk)
+            .get(&alias_pkh_or_pk.into())
             // Try to find by PKH
             .or_else(|| {
                 let pkh = PublicKeyHash::from_str(alias_pkh_or_pk).ok()?;
@@ -190,7 +189,7 @@ impl Store {
 
     /// Find the stored address by an alias.
     pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
-        self.addresses.get(alias.as_ref())
+        self.addresses.get(&alias.into())
     }
 
     /// Get all known keys by their alias, paired with PKH, if known.
@@ -233,13 +232,13 @@ impl Store {
         &mut self,
         alias: Option<String>,
         password: Option<String>,
-    ) -> (String, Rc<Keypair>) {
+    ) -> (Alias, Rc<Keypair>) {
         let keypair = Self::generate_keypair();
         let pkh: PublicKeyHash = PublicKeyHash::from(&keypair.public);
         let (keypair_to_store, raw_keypair) =
             StoredKeypair::new(keypair, password);
         let address = Address::Implicit(ImplicitAddress::Ed25519(pkh.clone()));
-        let alias = alias.unwrap_or_else(|| pkh.clone().into()).to_lowercase();
+        let alias: Alias = alias.unwrap_or_else(|| pkh.clone().into()).into();
         if self
             .insert_keypair(alias.clone(), keypair_to_store, pkh)
             .is_none()
@@ -267,7 +266,7 @@ impl Store {
         if alias.is_empty() {
             println!(
                 "Empty alias given, defaulting to {}.",
-                alias = Into::<Alias>::into(pkh.clone())
+                alias = Into::<Alias>::into(pkh.to_string())
             );
         }
         if self.keys.contains_key(&alias) {
@@ -332,7 +331,7 @@ enum ConfirmationResponse {
 /// chosen alias to a name of their chosing, or cancel the aliasing.
 
 fn show_overwrite_confirmation(
-    alias: &str,
+    alias: &Alias,
     alias_for: &str,
 ) -> ConfirmationResponse {
     print!(
@@ -358,7 +357,7 @@ fn show_overwrite_confirmation(
                     io::stdout().flush().unwrap();
                     if io::stdin().read_line(&mut buffer).is_ok() {
                         return ConfirmationResponse::Reselect(
-                            buffer.trim().to_string(),
+                            buffer.trim().into(),
                         );
                     }
                 }

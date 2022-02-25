@@ -12,7 +12,7 @@ pub use dev::{
 };
 
 use crate::config::genesis::genesis_config::GenesisConfig;
-use crate::wallet::store::Alias;
+use crate::wallet::alias::Alias;
 
 /// The default addresses with their aliases.
 pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
@@ -25,14 +25,20 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
     let validator_addresses =
         genesis.validator.into_iter().map(|(alias, validator)| {
             // The address must be set in the genesis config file
-            (alias, Address::decode(validator.address.unwrap()).unwrap())
+            (
+                alias.into(),
+                Address::decode(validator.address.unwrap()).unwrap(),
+            )
         });
     addresses.extend(validator_addresses);
     // Genesis tokens
     if let Some(accounts) = genesis.token {
         let token_addresses = accounts.into_iter().map(|(alias, token)| {
             // The address must be set in the genesis config file
-            (alias, Address::decode(token.address.unwrap()).unwrap())
+            (
+                alias.into(),
+                Address::decode(token.address.unwrap()).unwrap(),
+            )
         });
         addresses.extend(token_addresses);
     }
@@ -41,7 +47,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         let est_addresses = accounts.into_iter().map(|(alias, established)| {
             // The address must be set in the genesis config file
             (
-                alias,
+                alias.into(),
                 Address::decode(established.address.unwrap()).unwrap(),
             )
         });
@@ -55,7 +61,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
                 implicit.public_key.map(|pk| {
                     let pk: PublicKey = pk.to_public_key().unwrap();
                     let addr: Address = (&pk).into();
-                    (alias, addr)
+                    (alias.into(), addr)
                 })
             });
         addresses.extend(imp_addresses);
@@ -69,7 +75,7 @@ mod dev {
     use anoma::types::address::{self, Address};
     use anoma::types::key::ed25519::Keypair;
 
-    use crate::wallet::store::Alias;
+    use crate::wallet::alias::Alias;
 
     /// The default keys with their aliases.
     pub fn keys() -> Vec<(Alias, Keypair)> {
@@ -97,7 +103,7 @@ mod dev {
         ];
         let token_addresses = address::tokens()
             .into_iter()
-            .map(|(addr, alias)| (alias.to_owned(), addr));
+            .map(|(addr, alias)| (alias.into(), addr));
         addresses.extend(token_addresses);
         addresses
     }
