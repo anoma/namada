@@ -61,7 +61,7 @@ use tendermint_rpc::{Client, HttpClient, Order};
 use tokio::runtime::Runtime;
 
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_epoch};
-use crate::e2e::setup::{self, constants, Bin, Test, Who};
+use crate::e2e::setup::{self, constants, sleep, Bin, Test, Who};
 use crate::{run, run_as};
 
 const TX_IBC_WASM: &str = "tx_ibc.wasm";
@@ -82,15 +82,17 @@ fn run_ledger_ibc() -> Result<()> {
         run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger_b.exp_string("Anoma ledger node started")?;
 
+    sleep(5);
+
     let (client_id_a, client_id_b) = create_client(&test_a, &test_b)?;
 
     let (conn_id_a, conn_id_b) =
         connection_handshake(&test_a, &test_b, &client_id_a, &client_id_b)?;
 
-    let (port_channel_id_a, port_channel_id_b) =
+    let (port_channel_id_a, _) =
         channel_handshake(&test_a, &test_b, &conn_id_a, &conn_id_b)?;
 
-    transfer_token(&test_a, &test_b, port_channel_id_a, port_channel_id_b)?;
+    transfer_token(&test_a, &test_b, &port_channel_id_a)?;
 
     // Check the balance on Chain A
     let rpc_a = get_actor_rpc(&test_a, &Who::Validator(0));
@@ -221,7 +223,7 @@ fn connection_handshake(
 
     // OpenTryConnection on Chain B
     // get the B's client state and the proofs on Chain A
-    let proofs = get_connection_proofs(test_a, client_id_a, &conn_id_a)?;
+    let proofs = get_connection_proofs(test_a, &conn_id_a)?;
     let counterparty = ConnCounterparty::new(
         client_id_a.clone(),
         Some(conn_id_a.clone()),
@@ -248,7 +250,7 @@ fn connection_handshake(
 
     // OpenAckConnection on Chain A
     // get the A's client state and the proofs on Chain B
-    let proofs = get_connection_proofs(test_b, client_id_b, &conn_id_b)?;
+    let proofs = get_connection_proofs(test_b, &conn_id_b)?;
     let msg = MsgConnectionOpenAck {
         connection_id: conn_id_a.clone(),
         counterparty_connection_id: conn_id_b.clone(),
@@ -261,7 +263,7 @@ fn connection_handshake(
 
     // OpenConfirmConnection on Chain B
     // get the proofs on Chain A
-    let proofs = get_connection_proofs(test_a, client_id_a, &conn_id_a)?;
+    let proofs = get_connection_proofs(test_a, &conn_id_a)?;
     let msg = MsgConnectionOpenConfirm {
         connection_id: conn_id_b.clone(),
         proofs,
@@ -274,7 +276,6 @@ fn connection_handshake(
 
 fn get_connection_proofs(
     test: &Test,
-    client_id: &ClientId,
     conn_id: &ConnectionId,
 ) -> Result<Proofs> {
     let height = query_height(test)?;
@@ -389,8 +390,7 @@ fn get_channel_proofs(
 fn transfer_token(
     test_a: &Test,
     test_b: &Test,
-    port_channel_id_a: PortChannelId,
-    port_channel_id_b: PortChannelId,
+    source_port_channel_id: &PortChannelId,
 ) -> Result<()> {
     let xan = find_address(&test_a, constants::XAN)?;
     let sender = find_address(&test_a, constants::ALBERT)?;
@@ -402,8 +402,8 @@ fn transfer_token(
         amount: "1000000".to_string(),
     });
     let msg = MsgTransfer {
-        source_port: port_channel_id_a.port_id,
-        source_channel: port_channel_id_a.channel_id,
+        source_port: source_port_channel_id.port_id.clone(),
+        source_channel: source_port_channel_id.channel_id.clone(),
         token,
         sender: Signer::new(sender.to_string()),
         receiver: Signer::new(receiver.to_string()),
@@ -479,7 +479,7 @@ fn submit_ibc_tx(test: &Test, message: impl Msg) -> Result<String> {
     }
     client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid.")?;
-    let (unread, matched) = if !cfg!(feature = "ABCI") {
+    let (_unread, matched) = if !cfg!(feature = "ABCI") {
         client.exp_regex("Wrapper transaction hash: .*\n")?
     } else {
         client.exp_regex("Transaction hash: .*\n")?
