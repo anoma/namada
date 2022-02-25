@@ -55,6 +55,8 @@ itertools = "0.10.0"
 libp2p = "0.38.0"
 pretty_assertions = "0.7.2"
 rexpect = {git = "https://github.com/heliaxdev/rexpect.git", branch = "tomas/eof-hack-fix"}
+# A fork with state machine testing
+proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
 
 # This is used to enable logging from tests
 [package.metadata.cargo-udeps.ignore]

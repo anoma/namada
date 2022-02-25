@@ -1,3 +1,5 @@
+mod pos;
+
 use std::collections::BTreeSet;
 
 use anoma::ledger::native_vp::{Ctx, NativeVp};
