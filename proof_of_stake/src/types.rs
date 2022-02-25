@@ -357,7 +357,9 @@ pub struct BasisPoints(u64);
 impl VotingPower {
     /// Convert token amount into a voting power.
     pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
-        Self(params.votes_per_token * tokens.into() / 1_000_000)
+        // The token amount is expected to be in micro units
+        let whole_tokens = tokens.into() / 1_000_000;
+        Self(params.votes_per_token * whole_tokens)
     }
 }
 
@@ -367,7 +369,9 @@ impl VotingPowerDelta {
         change: impl Into<i128>,
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
-        let delta: i128 = params.votes_per_token * change.into() / 1_000_000;
+        // The token amount is expected to be in micro units
+        let whole_tokens = change.into() / 1_000_000;
+        let delta: i128 = params.votes_per_token * whole_tokens;
         let delta: i64 = TryFrom::try_from(delta)?;
         Ok(Self(delta))
     }
@@ -377,9 +381,10 @@ impl VotingPowerDelta {
         tokens: impl Into<u64>,
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
-        let delta: i64 = TryFrom::try_from(
-            params.votes_per_token * tokens.into() / 1_000_000,
-        )?;
+        // The token amount is expected to be in micro units
+        let whole_tokens = tokens.into() / 1_000_000;
+        let delta: i64 =
+            TryFrom::try_from(params.votes_per_token * whole_tokens)?;
         Ok(Self(delta))
     }
 }
