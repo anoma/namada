@@ -18,8 +18,8 @@ use crate::wallet::alias::Alias;
 pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
     // Internal addresses
     let mut addresses: Vec<(Alias, Address)> = vec![
-        ("PoS".into(), pos::ADDRESS),
-        ("PosSlashPool".into(), pos::SLASH_POOL_ADDRESS),
+        ("pos".into(), pos::ADDRESS),
+        ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
     ];
     // Genesis validators
     let validator_addresses =
@@ -80,10 +80,10 @@ mod dev {
     /// The default keys with their aliases.
     pub fn keys() -> Vec<(Alias, Keypair)> {
         vec![
-            ("Albert".into(), albert_keypair()),
-            ("Bertha".into(), bertha_keypair()),
-            ("Christel".into(), christel_keypair()),
-            ("Daewon".into(), daewon_keypair()),
+            ("albert".into(), albert_keypair()),
+            ("bertha".into(), bertha_keypair()),
+            ("christel".into(), christel_keypair()),
+            ("daewon".into(), daewon_keypair()),
             ("matchmaker".into(), matchmaker_keypair()),
             ("validator".into(), validator_keypair()),
         ]
@@ -92,14 +92,14 @@ mod dev {
     /// The default addresses with their aliases.
     pub fn addresses() -> Vec<(Alias, Address)> {
         let mut addresses: Vec<(Alias, Address)> = vec![
-            ("PoS".into(), pos::ADDRESS),
-            ("PosSlashPool".into(), pos::SLASH_POOL_ADDRESS),
+            ("pos".into(), pos::ADDRESS),
+            ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
             ("matchmaker".into(), matchmaker_address()),
             ("validator".into(), validator_address()),
-            ("Albert".into(), albert_address()),
-            ("Bertha".into(), bertha_address()),
-            ("Christel".into(), christel_address()),
-            ("Daewon".into(), daewon_address()),
+            ("albert".into(), albert_address()),
+            ("bertha".into(), bertha_address()),
+            ("christel".into(), christel_address()),
+            ("daewon".into(), daewon_address()),
         ];
         let token_addresses = address::tokens()
             .into_iter()
