@@ -1,12 +1,10 @@
 //! Cryptographic keys for digital signatures support for the wallet.
 
-use std::borrow::Borrow;
 use std::fmt::Display;
-use std::io::Write;
+use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, MutexGuard};
 
-use anoma::types::key::ed25519::{Keypair, PublicKey};
+use anoma::types::key::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
@@ -17,54 +15,6 @@ use super::read_password;
 const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";
 const UNENCRYPTED_KEY_PREFIX: &str = "unencrypted:";
 
-/// Thread safe reference counted pointer to a keypair
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AtomicKeypair(Arc<Mutex<Keypair>>);
-
-impl AtomicKeypair {
-    /// Get the public key of the pair
-    pub fn public(&self) -> PublicKey {
-        self.0.lock().unwrap().public.clone()
-    }
-
-    /// Get a mutex guarded keypair
-    pub fn lock(&self) -> MutexGuard<Keypair> {
-        self.0.lock().unwrap()
-    }
-
-    /// Serialize keypair to bytes
-    pub fn to_bytes(&self) -> [u8; 64] {
-        self.0.lock().unwrap().to_bytes()
-    }
-}
-
-impl From<Keypair> for AtomicKeypair {
-    fn from(kp: Keypair) -> Self {
-        AtomicKeypair(Arc::new(Mutex::new(kp)))
-    }
-}
-
-impl Clone for AtomicKeypair {
-    fn clone(&self) -> Self {
-        AtomicKeypair(self.0.clone())
-    }
-}
-
-impl Display for AtomicKeypair {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let keypair = self.lock();
-        write!(f, "{}", keypair.borrow())
-    }
-}
-
-impl BorshSerialize for AtomicKeypair {
-    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        let keypair_mutex = self.lock();
-        let keypair = &*keypair_mutex;
-        BorshSerialize::serialize(keypair, writer)
-    }
-}
-
 /// A keypair stored in a wallet
 #[derive(Debug)]
 pub enum StoredKeypair {
@@ -72,8 +22,8 @@ pub enum StoredKeypair {
     Encrypted(EncryptedKeypair),
     /// An raw (unencrypted) keypair
     Raw(
-        // Wrapped in `Arc` to avoid reference lifetimes when we borrow the key
-        AtomicKeypair,
+        // Wrapped in `Rc` to avoid reference lifetimes when we borrow the key
+        Rc<common::SecretKey>,
     ),
 }
 
@@ -100,6 +50,7 @@ impl Serialize for StoredKeypair {
         }
     }
 }
+
 impl<'de> Deserialize<'de> for StoredKeypair {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
@@ -116,8 +67,8 @@ impl<'de> Deserialize<'de> for StoredKeypair {
                 })
                 .map_err(D::Error::custom)?;
         if let Some(raw) = keypair_string.strip_prefix(UNENCRYPTED_KEY_PREFIX) {
-            Keypair::from_str(raw)
-                .map(|keypair| Self::Raw(keypair.into()))
+            FromStr::from_str(raw)
+                .map(|keypair| Self::Raw(Rc::new(keypair)))
                 .map_err(|err| {
                     DeserializeStoredKeypairError::InvalidStoredKeypairString(
                         err.to_string(),
@@ -187,33 +138,36 @@ impl StoredKeypair {
     /// will be stored raw without encryption. Returns the key for storing and a
     /// reference-counting point to the raw key.
     pub fn new(
-        keypair: AtomicKeypair,
+        keypair: common::SecretKey,
         password: Option<String>,
-    ) -> (Self, AtomicKeypair) {
+    ) -> (Self, Rc<common::SecretKey>) {
         match password {
             Some(password) => {
-                let encrypted = {
-                    let keypair_mutex = keypair.lock();
-                    Self::Encrypted(EncryptedKeypair::new(
-                        keypair_mutex.borrow(),
-                        password,
-                    ))
-                };
-                (encrypted, keypair)
+                let keypair = Rc::new(keypair);
+                (
+                    Self::Encrypted(EncryptedKeypair::new(&keypair, password)),
+                    keypair,
+                )
             }
-            None => (Self::Raw(keypair.clone()), keypair),
+            None => {
+                let keypair = Rc::new(keypair);
+                (Self::Raw(keypair.clone()), keypair)
+            }
         }
     }
 
     /// Get a raw keypair from a stored keypair. If the keypair is encrypted, a
     /// password will be prompted from stdin.
-    pub fn get(&self, decrypt: bool) -> Result<AtomicKeypair, DecryptionError> {
+    pub fn get(
+        &self,
+        decrypt: bool,
+    ) -> Result<Rc<common::SecretKey>, DecryptionError> {
         match self {
             StoredKeypair::Encrypted(encrypted_keypair) => {
                 if decrypt {
                     let password = read_password("Enter decryption password: ");
                     let key = encrypted_keypair.decrypt(password)?;
-                    Ok(key.into())
+                    Ok(Rc::new(key))
                 } else {
                     Err(DecryptionError::NotDecrypting)
                 }
@@ -232,7 +186,7 @@ impl StoredKeypair {
 
 impl EncryptedKeypair {
     /// Encrypt a keypair and store it with its salt.
-    pub fn new(keypair: &Keypair, password: String) -> Self {
+    pub fn new(keypair: &common::SecretKey, password: String) -> Self {
         let salt = encryption_salt();
         let encryption_key = encryption_key(&salt, password);
 
@@ -252,7 +206,7 @@ impl EncryptedKeypair {
     pub fn decrypt(
         &self,
         password: String,
-    ) -> Result<Keypair, DecryptionError> {
+    ) -> Result<common::SecretKey, DecryptionError> {
         let salt_len = encryption_salt().len();
         let (raw_salt, cipher) = self.0.split_at(salt_len);
 
@@ -264,7 +218,7 @@ impl EncryptedKeypair {
         let decrypted_data = aead::open(&encryption_key, cipher)
             .map_err(|_| DecryptionError::DecryptionError)?;
 
-        Keypair::try_from_slice(&decrypted_data)
+        common::SecretKey::try_from_slice(&decrypted_data)
             .map_err(|_| DecryptionError::DeserializingError)
     }
 }

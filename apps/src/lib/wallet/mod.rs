@@ -4,14 +4,15 @@ mod store;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::{env, fs};
 
 use anoma::types::address::Address;
-use anoma::types::key::ed25519::{PublicKey, PublicKeyHash};
+use anoma::types::key::*;
 pub use store::wallet_file;
 use thiserror::Error;
 
-pub use self::keys::{AtomicKeypair, DecryptionError, StoredKeypair};
+pub use self::keys::{DecryptionError, StoredKeypair};
 use self::store::{Alias, Store};
 pub use self::store::{ValidatorData, ValidatorKeys};
 use crate::cli;
@@ -21,7 +22,7 @@ use crate::config::genesis::genesis_config::GenesisConfig;
 pub struct Wallet {
     store_dir: PathBuf,
     store: Store,
-    decrypted_key_cache: HashMap<Alias, AtomicKeypair>,
+    decrypted_key_cache: HashMap<Alias, Rc<common::SecretKey>>,
 }
 
 #[derive(Error, Debug)]
@@ -76,16 +77,16 @@ impl Wallet {
     }
 
     /// Generate a new keypair and derive an implicit address from its public
-    /// and insert them into the store with the provided alias. If none
-    /// provided, the alias will be the public key hash. If the key is to be
-    /// encrypted, will prompt for password from stdin. Stores the key in
-    /// decrypted key cache and returns the alias of the key and a
-    /// reference-counting pointer to the key.
+    /// and insert them into the store with the provided alias, converter to
+    /// lower case. If none provided, the alias will be the public key hash.
+    /// If the key is to be encrypted, will prompt for password from stdin.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and a reference-counting pointer to the key.
     pub fn gen_key(
         &mut self,
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
-    ) -> (String, AtomicKeypair) {
+    ) -> (String, Rc<common::SecretKey>) {
         let password = if unsafe_dont_encrypt {
             println!("Warning: The keypair will NOT be encrypted.");
             None
@@ -117,23 +118,25 @@ impl Wallet {
     /// we should re-use a keypair already in the wallet
     pub fn gen_validator_keys(
         &mut self,
-        protocol_pk: Option<PublicKey>,
+        protocol_pk: Option<common::PublicKey>,
     ) -> Result<ValidatorKeys, FindKeyError> {
         let protocol_keypair = protocol_pk.map(|pk| {
-            self.find_key_by_pkh(&PublicKeyHash::from(pk))
+            self.find_key_by_pkh(&PublicKeyHash::from(&pk))
                 .ok()
                 .or_else(|| {
                     self.store
                         .validator_data
                         .take()
-                        .map(|data| data.keys.protocol_keypair)
+                        .map(|data| Rc::new(data.keys.protocol_keypair))
                 })
                 .ok_or(FindKeyError::KeyNotFound)
         });
         match protocol_keypair {
             Some(Err(err)) => Err(err),
             other => {
-                Ok(Store::gen_validator_keys(other.map(|res| res.unwrap())))
+                Ok(Store::gen_validator_keys(other.map(|res| {
+                    Rc::get_mut(&mut res.unwrap()).unwrap().clone()
+                })))
             }
         }
     }
@@ -166,7 +169,7 @@ impl Wallet {
     pub fn find_key(
         &mut self,
         alias_pkh_or_pk: impl AsRef<str>,
-    ) -> Result<AtomicKeypair, FindKeyError> {
+    ) -> Result<Rc<common::SecretKey>, FindKeyError> {
         // Try cache first
         if let Some(cached_key) =
             self.decrypted_key_cache.get(alias_pkh_or_pk.as_ref())
@@ -191,8 +194,8 @@ impl Wallet {
     /// prompting for password multiple times.
     pub fn find_key_by_pk(
         &mut self,
-        pk: &PublicKey,
-    ) -> Result<AtomicKeypair, FindKeyError> {
+        pk: &common::PublicKey,
+    ) -> Result<Rc<common::SecretKey>, FindKeyError> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let pkh: PublicKeyHash = pk.into();
         let alias = self
@@ -222,7 +225,7 @@ impl Wallet {
     pub fn find_key_by_pkh(
         &mut self,
         pkh: &PublicKeyHash,
-    ) -> Result<AtomicKeypair, FindKeyError> {
+    ) -> Result<Rc<common::SecretKey>, FindKeyError> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let alias = self
             .store
@@ -248,10 +251,10 @@ impl Wallet {
     /// If a given storage key needs to be decrypted, prompt for password from
     /// stdin and if successfully decrypted, store it in a cache.
     fn decrypt_stored_key(
-        decrypted_key_cache: &mut HashMap<String, AtomicKeypair>,
+        decrypted_key_cache: &mut HashMap<String, Rc<common::SecretKey>>,
         stored_key: &StoredKeypair,
         alias_pkh_or_pk: impl AsRef<str>,
-    ) -> Result<AtomicKeypair, FindKeyError> {
+    ) -> Result<Rc<common::SecretKey>, FindKeyError> {
         match stored_key {
             StoredKeypair::Encrypted(encrypted) => {
                 let password = read_password("Enter decryption password: ");
@@ -259,7 +262,7 @@ impl Wallet {
                     .decrypt(password)
                     .map_err(FindKeyError::KeyDecryptionError)?;
                 let alias = alias_pkh_or_pk.as_ref().to_owned();
-                decrypted_key_cache.insert(alias.clone(), key.into());
+                decrypted_key_cache.insert(alias.clone(), Rc::new(key));
                 decrypted_key_cache
                     .get(&alias)
                     .cloned()
@@ -296,7 +299,7 @@ impl Wallet {
         alias: Alias,
         address: Address,
     ) -> Option<Alias> {
-        self.store.insert_address(alias, address)
+        self.store.insert_address(alias.to_lowercase(), address)
     }
 
     /// Insert a new key with the given alias. If the alias is already used,
@@ -307,7 +310,8 @@ impl Wallet {
         keypair: StoredKeypair,
         pkh: PublicKeyHash,
     ) -> Option<Alias> {
-        self.store.insert_keypair(alias, keypair, pkh)
+        self.store
+            .insert_keypair(alias.to_lowercase(), keypair, pkh)
     }
 }
 

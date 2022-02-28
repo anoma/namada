@@ -15,6 +15,7 @@ mod queries;
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
+
 use std::str::FromStr;
 
 use anoma::ledger::gas::BlockGasMeter;
@@ -27,13 +28,14 @@ use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::chain::ChainId;
+use anoma::types::key::*;
 use anoma::types::storage::{BlockHeight, Key};
 use anoma::types::time::{DateTimeUtc, TimeZone, Utc};
 use anoma::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
-use anoma::types::{address, key, token};
+use anoma::types::{address, token};
 use anoma::vm::wasm::{TxCache, VpCache};
 use anoma::vm::WasmCacheRwAccess;
 #[cfg(not(feature = "ABCI"))]
@@ -46,11 +48,15 @@ use tendermint_proto::abci::{
     self, Evidence, RequestPrepareProposal, ValidatorUpdate,
 };
 #[cfg(not(feature = "ABCI"))]
+use tendermint_proto::crypto::public_key;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::ConsensusParams;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::ConsensusParams;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::{self, Evidence, ValidatorUpdate};
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::crypto::public_key;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 #[cfg(not(feature = "ABCI"))]
@@ -65,8 +71,15 @@ use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
 #[allow(unused_imports)]
-use crate::wallet::{AtomicKeypair, ValidatorData};
+use crate::wallet::ValidatorData;
 use crate::{config, wallet};
+
+fn key_to_tendermint<PK: PublicKey>(
+    pk: &PK,
+) -> std::result::Result<public_key::Sum, ParsePublicKeyError> {
+    ed25519::PublicKey::try_from_pk(pk)
+        .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
+}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -129,7 +142,7 @@ pub fn reset(config: config::Ledger) -> Result<()> {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::large_enum_variant)]
 pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
@@ -562,7 +575,7 @@ where
     /// wallet. If the node is not validator, this function returns None
     #[cfg(not(feature = "ABCI"))]
     #[allow(dead_code)]
-    fn get_account_keypair(&self) -> Option<AtomicKeypair> {
+    fn get_account_keypair(&self) -> Option<Rc<common::SecretKey>> {
         let wallet_path = &self.base_dir.join(self.chain_id.as_str());
         let genesis_path = &self
             .base_dir
@@ -574,7 +587,7 @@ where
         self.mode.get_validator_address().map(|addr| {
             let pk_bytes = self
                 .storage
-                .read(&key::ed25519::pk_key(addr))
+                .read(&pk_key(addr))
                 .expect(
                     "A validator should have a public key associated with \
                      it's established account",
@@ -584,9 +597,9 @@ where
                     "A validator should have a public key associated with \
                      it's established account",
                 );
-            let pk =
-                key::ed25519::PublicKey::deserialize(&mut pk_bytes.as_slice())
-                    .expect("Validator's public key should be deserializable");
+            let pk = common::SecretKey::deserialize(&mut pk_bytes.as_slice())
+                .expect("Validator's public key should be deserializable")
+                .ref_to();
             wallet.find_key_by_pk(&pk).expect(
                 "A validator's established keypair should be stored in its \
                  wallet",
@@ -605,7 +618,7 @@ mod test_utils {
     use anoma::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use anoma::types::address::{xan, EstablishedAddressGen};
     use anoma::types::chain::ChainId;
-    use anoma::types::key::ed25519::Keypair;
+    use anoma::types::key::*;
     use anoma::types::storage::{BlockHash, Epoch};
     use anoma::types::transaction::Fee;
     use tempfile::tempdir;
@@ -649,12 +662,12 @@ mod test_utils {
     }
 
     /// Generate a random public/private keypair
-    pub(super) fn gen_keypair() -> Keypair {
+    pub(super) fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
         let mut rng: ThreadRng = thread_rng();
-        Keypair::generate(&mut rng)
+        ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
     }
 
     /// A wrapper around the shell that implements

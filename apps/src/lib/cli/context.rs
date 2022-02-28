@@ -2,19 +2,20 @@
 
 use std::env;
 use std::marker::PhantomData;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::str::FromStr;
 
 use anoma::types::address::Address;
 use anoma::types::chain::ChainId;
-use anoma::types::key::ed25519::{Keypair, PublicKey, PublicKeyHash};
+use anoma::types::key::*;
 
 use super::args;
 use crate::cli::safe_exit;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
-use crate::wallet::{AtomicKeypair, Wallet};
+use crate::wallet::Wallet;
 use crate::wasm_loader;
 
 /// Env. var to set chain ID
@@ -28,19 +29,11 @@ pub type WalletAddress = FromContext<Address>;
 
 /// A raw keypair (hex encoding), an alias, a public key or a public key hash of
 /// a keypair that may be found in the wallet
-pub type WalletKeypair = FromContext<AtomicKeypair>;
+pub type WalletKeypair = FromContext<Rc<common::SecretKey>>;
 
 /// A raw public key (hex encoding), a public key hash (also hex encoding) or an
 /// alias of an public key that may be found in the wallet
-pub type WalletPublicKey = FromContext<PublicKey>;
-
-/// Helper struct for retrieving this particular public key
-pub struct ProtocolPublicKey<'a>(pub &'a PublicKey);
-
-/// A raw public key (hex encoding), a public key hash (also hex encoding) or an
-/// alias of an public key that may be found in the wallet that corresponds
-/// to the protocol signing key
-pub type WalletProtocolPublicKey<'a> = FromContext<ProtocolPublicKey<'a>>;
+pub type WalletPublicKey = FromContext<common::PublicKey>;
 
 /// Command execution context
 #[derive(Debug)]
@@ -79,11 +72,27 @@ impl Context {
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
             Some(wasm_dir) => {
+                if wasm_dir.is_absolute() {
+                    eprintln!(
+                        "The arg `--wasm-dir` cannot be an absolute path. It \
+                         is nested inside the chain directory."
+                    );
+                    safe_exit(1);
+                }
                 config.wasm_dir = wasm_dir.clone();
             }
             None => {
                 if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-                    config.wasm_dir = wasm_dir.into();
+                    let wasm_dir: PathBuf = wasm_dir.into();
+                    if wasm_dir.is_absolute() {
+                        eprintln!(
+                            "The env var `{}` cannot be an absolute path. It \
+                             is nested inside the chain directory.",
+                            ENV_VAR_WASM_DIR
+                        );
+                        safe_exit(1);
+                    }
+                    config.wasm_dir = wasm_dir;
                 }
             }
         }
@@ -137,7 +146,10 @@ impl Context {
 
     /// Read the given WASM file from the WASM directory or an absolute path.
     pub fn read_wasm(&self, file_name: impl AsRef<Path>) -> Vec<u8> {
-        wasm_loader::read_wasm(&self.config.wasm_dir, file_name)
+        wasm_loader::read_wasm(
+            self.config.ledger.chain_dir().join(&self.config.wasm_dir),
+            file_name,
+        )
     }
 }
 
@@ -238,12 +250,12 @@ impl ArgFromContext for Address {
     }
 }
 
-impl ArgFromMutContext for AtomicKeypair {
+impl ArgFromMutContext for Rc<common::SecretKey> {
     fn arg_from_mut_ctx(ctx: &mut Context, raw: impl AsRef<str>) -> Self {
         let raw = raw.as_ref();
         // A keypair can be either a raw keypair in hex string
-        Keypair::from_str(raw)
-            .map(AtomicKeypair::from)
+        FromStr::from_str(raw)
+            .map(Rc::new)
             .unwrap_or_else(|_parse_err| {
                 // Or it can be an alias
                 ctx.wallet.find_key(raw).unwrap_or_else(|_find_err| {
@@ -254,7 +266,7 @@ impl ArgFromMutContext for AtomicKeypair {
     }
 }
 
-impl ArgFromMutContext for PublicKey {
+impl ArgFromMutContext for common::PublicKey {
     fn arg_from_mut_ctx(ctx: &mut Context, raw: impl AsRef<str>) -> Self {
         let raw = raw.as_ref();
         // A public key can be either a raw public key in hex string
@@ -262,22 +274,13 @@ impl ArgFromMutContext for PublicKey {
             // Or it can be a public key hash in hex string
             FromStr::from_str(raw)
                 .map(|pkh: PublicKeyHash| {
-                    // check if this corresponds to the protocol signing key
-                    if let Some(data) = ctx.wallet.get_validator_data() {
-                        if PublicKeyHash::from(
-                            &data.keys.protocol_keypair.public(),
-                        ) == pkh
-                        {
-                            return data.keys.protocol_keypair.public();
-                        }
-                    }
                     let key = ctx.wallet.find_key_by_pkh(&pkh).unwrap();
-                    key.public()
+                    key.ref_to()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .unwrap_or_else(|_parse_err| {
                     let key = ctx.wallet.find_key(raw).unwrap();
-                    key.public()
+                    key.ref_to()
                 })
         })
     }

@@ -1,10 +1,11 @@
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fs::File;
 
 use anoma::ledger::pos::{BondId, Bonds, Unbonds};
 use anoma::proto::Tx;
 use anoma::types::address::Address;
+use anoma::types::key::*;
 use anoma::types::nft::{self, Nft, NftToken};
 use anoma::types::storage::Epoch;
 use anoma::types::transaction::nft::{CreateNft, MintNft};
@@ -44,7 +45,6 @@ use crate::client::tendermint_websocket_client::{
 #[cfg(not(feature = "ABCI"))]
 use crate::node::ledger::events::{Attributes, EventType as TmEventType};
 use crate::node::ledger::tendermint_node;
-use crate::wallet::AtomicKeypair;
 
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
@@ -194,7 +194,7 @@ pub async fn submit_init_validator(
         ctx.wallet
             .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
             .1
-            .public()
+            .ref_to()
     });
 
     let consensus_key =
@@ -211,7 +211,7 @@ pub async fn submit_init_validator(
             ctx.wallet
                 .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
                 .1
-                .public()
+                .ref_to()
         });
     let protocol_key = ctx.get_opt_cached(&protocol_key);
 
@@ -220,7 +220,7 @@ pub async fn submit_init_validator(
     }
     // Generate the validator keys
     let validator_keys = ctx.wallet.gen_validator_keys(protocol_key).unwrap();
-    let protocol_key = validator_keys.get_protocol_keypair().public();
+    let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
         .as_ref()
@@ -260,7 +260,7 @@ pub async fn submit_init_validator(
 
     let data = InitValidator {
         account_key,
-        consensus_key: consensus_key.public(),
+        consensus_key: consensus_key.ref_to(),
         rewards_account_key,
         protocol_key,
         dkg_key,
@@ -350,14 +350,11 @@ pub async fn submit_init_validator(
         ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
         let tendermint_home = ctx.config.ledger.tendermint_dir();
-        {
-            let consensus_key_mutex = consensus_key.lock();
-            tendermint_node::write_validator_key(
-                &tendermint_home,
-                &validator_address,
-                consensus_key_mutex.borrow(),
-            );
-        }
+        tendermint_node::write_validator_key(
+            &tendermint_home,
+            &validator_address,
+            &consensus_key,
+        );
         tendermint_node::write_validator_state(tendermint_home);
 
         println!();
@@ -744,11 +741,7 @@ async fn sign_tx(
 ) -> (Context, TxBroadcastData) {
     let (tx, keypair) = if let Some(signing_key) = &args.signing_key {
         let signing_key = ctx.get_cached(signing_key);
-        let tx = {
-            let signing_key_mutex = signing_key.lock();
-            tx.sign(signing_key_mutex.borrow())
-        };
-        (tx, signing_key)
+        (tx.sign(&signing_key), signing_key)
     } else if let Some(signer) = args.signer.as_ref().or(default) {
         let signer = ctx.get(signer);
         let signing_key = signing::find_keypair(
@@ -757,11 +750,7 @@ async fn sign_tx(
             args.ledger_address.clone(),
         )
         .await;
-        let tx = {
-            let signing_key_mutex = signing_key.lock();
-            tx.sign(signing_key_mutex.borrow())
-        };
-        (tx, signing_key)
+        (tx.sign(&signing_key), signing_key)
     } else {
         panic!(
             "All transactions must be signed; please either specify the key \
@@ -788,16 +777,15 @@ async fn sign_wrapper(
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
-    keypair: &AtomicKeypair,
+    keypair: &common::SecretKey,
 ) -> TxBroadcastData {
     let tx = {
-        let keypair = keypair.lock();
         WrapperTx::new(
             Fee {
                 amount: args.fee_amount,
                 token: ctx.get(&args.fee_token),
             },
-            &keypair,
+            keypair,
             epoch,
             args.gas_limit.clone(),
             tx,
@@ -819,10 +807,9 @@ async fn sign_wrapper(
     } else {
         None
     };
-    let keypair = keypair.lock();
     TxBroadcastData::Wrapper {
         tx: tx
-            .sign(&keypair)
+            .sign(keypair)
             .expect("Wrapper tx signing keypair should be correct"),
         wrapper_hash,
         decrypted_hash,

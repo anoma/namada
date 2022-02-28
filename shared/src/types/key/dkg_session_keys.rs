@@ -9,7 +9,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
-use crate::types::key::ed25519::ParsePublicKeyError;
+use crate::types::key::ParsePublicKeyError;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::transaction::EllipticCurve;
 

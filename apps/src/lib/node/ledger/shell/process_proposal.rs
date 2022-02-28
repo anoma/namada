@@ -243,9 +243,9 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
+    use anoma::proto::SignedTxData;
     use anoma::types::address::xan;
     use anoma::types::chain::ChainId;
-    use anoma::types::key::ed25519::SignedTxData;
     use anoma::types::storage::Epoch;
     use anoma::types::token::Amount;
     use anoma::types::transaction::{Fee, Hash};
@@ -369,7 +369,7 @@ mod test_process_proposal {
             tx: new_tx.to_bytes(),
         };
         let response = shell.process_proposal(request);
-        let expected_error = "Signature verification failed: signature error";
+        let expected_error = "Signature verification failed: Invalid signature";
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert!(
             response.result.info.contains(expected_error),
@@ -390,7 +390,6 @@ mod test_process_proposal {
     fn test_wrapper_unknown_address() {
         let (mut shell, _) = TestShell::new();
         let keypair = crate::wallet::defaults::keys().remove(0).1;
-        let keypair = keypair.lock();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
@@ -440,7 +439,7 @@ mod test_process_proposal {
             ..Default::default()
         });
         let keypair = crate::wallet::defaults::daewon_keypair();
-        let keypair = keypair.lock();
+
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
@@ -580,7 +579,7 @@ mod test_process_proposal {
             ..Default::default()
         });
         let keypair = crate::wallet::defaults::daewon_keypair();
-        let keypair = keypair.lock();
+
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),

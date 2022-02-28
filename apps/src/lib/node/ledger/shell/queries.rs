@@ -4,8 +4,8 @@ use std::cmp::max;
 use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::PosParams;
 use anoma::types::address::Address;
+use anoma::types::key;
 use anoma::types::key::dkg_session_keys::DkgPublicKey;
-use anoma::types::key::ed25519::PublicKey;
 use anoma::types::storage::Key;
 use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -266,7 +266,7 @@ where
     #[allow(dead_code)]
     pub fn get_validator_from_protocol_pk(
         &self,
-        pk: &PublicKey,
+        pk: &key::common::PublicKey,
     ) -> Option<TendermintValidator<EllipticCurve>> {
         let pk_bytes = pk
             .try_to_vec()
@@ -281,7 +281,7 @@ where
             .active
             .iter()
             .find(|validator| {
-                let pk_key = key::ed25519::protocol_pk_key(&validator.address);
+                let pk_key = key::protocol_pk_key(&validator.address);
                 match self.storage.read(&pk_key) {
                     Ok((Some(bytes), _)) => bytes == pk_bytes,
                     _ => false,

@@ -34,9 +34,7 @@ mod protocol_txs {
 
     use super::*;
     use crate::proto::Tx;
-    use crate::types::key::ed25519::{
-        verify_tx_sig, Keypair, PublicKey, Signature,
-    };
+    use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
@@ -45,7 +43,7 @@ mod protocol_txs {
     /// Txs sent by validators as part of internal protocols
     pub struct ProtocolTx {
         /// we require ProtocolTxs be signed
-        pub pk: PublicKey,
+        pub pk: common::PublicKey,
         /// The type of protocol message being sent
         pub tx: ProtocolTxType,
     }
@@ -54,15 +52,16 @@ mod protocol_txs {
         /// Validate the signature of a protocol tx
         pub fn validate_sig(
             &self,
-            tx: &Tx,
-            sig: &Signature,
+            signed_hash: [u8; 32],
+            sig: &common::Signature,
         ) -> Result<(), TxError> {
-            verify_tx_sig(&self.pk, tx, sig).map_err(|err| {
-                TxError::SigError(format!(
-                    "ProtocolTx signature verification failed: {}",
-                    err
-                ))
-            })
+            common::SigScheme::verify_signature(&self.pk, &signed_hash, sig)
+                .map_err(|err| {
+                    TxError::SigError(format!(
+                        "ProtocolTx signature verification failed: {}",
+                        err
+                    ))
+                })
         }
     }
 
@@ -81,25 +80,29 @@ mod protocol_txs {
 
     impl ProtocolTxType {
         /// Sign a ProtocolTxType and wrap it up in a normal Tx
-        pub fn sign(self, keypair: &Keypair) -> Tx {
+        pub fn sign(
+            self,
+            pk: &common::PublicKey,
+            signing_key: &common::SecretKey,
+        ) -> Tx {
             Tx::new(
                 vec![],
                 Some(
                     TxType::Protocol(ProtocolTx {
-                        pk: keypair.public.clone(),
+                        pk: pk.clone(),
                         tx: self,
                     })
                     .try_to_vec()
                     .expect("Could not serialize ProtocolTx"),
                 ),
             )
-            .sign(keypair)
+            .sign(signing_key)
         }
 
         /// Create a new tx requesting a new DKG session keypair
         pub fn request_new_dkg_keypair<'a, F>(
             data: UpdateDkgSessionKey,
-            keypair: &Keypair,
+            signing_key: &common::SecretKey,
             wasm_dir: &'a Path,
             wasm_loader: F,
         ) -> Self
@@ -120,7 +123,7 @@ mod protocol_txs {
                             .expect("Serializing request should not fail"),
                     ),
                 )
-                .sign(keypair),
+                .sign(signing_key),
             )
         }
     }

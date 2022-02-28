@@ -53,7 +53,7 @@ pub mod encrypted_tx {
     impl EncryptedTx {
         /// Encrypt a message to give a new ciphertext
         pub fn encrypt(msg: &[u8], pubkey: EncryptionKey) -> Self {
-            let mut rng = rand_new::thread_rng();
+            let mut rng = rand::thread_rng();
             Self(encrypt(msg, pubkey.0, &mut rng))
         }
 

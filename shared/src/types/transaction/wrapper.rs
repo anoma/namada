@@ -14,9 +14,7 @@ pub mod wrapper_tx {
 
     use crate::proto::Tx;
     use crate::types::address::Address;
-    use crate::types::key::ed25519::{
-        verify_tx_sig, Keypair, PublicKey, Signature,
-    };
+    use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
@@ -165,7 +163,7 @@ pub mod wrapper_tx {
         /// The fee to be payed for including the tx
         pub fee: Fee,
         /// Used to determine an implicit account of the fee payer
-        pub pk: PublicKey,
+        pub pk: common::PublicKey,
         /// The epoch in which the tx is to be submitted. This determines
         /// which decryption key will be used
         pub epoch: Epoch,
@@ -185,7 +183,7 @@ pub mod wrapper_tx {
         /// transaction
         pub fn new(
             fee: Fee,
-            keypair: &Keypair,
+            keypair: &common::SecretKey,
             epoch: Epoch,
             gas_limit: GasLimit,
             tx: Tx,
@@ -194,7 +192,7 @@ pub mod wrapper_tx {
             let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
             Self {
                 fee,
-                pk: keypair.public.clone(),
+                pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
                 inner_tx,
@@ -237,8 +235,11 @@ pub mod wrapper_tx {
         }
 
         /// Sign the wrapper transaction and convert to a normal Tx type
-        pub fn sign(&self, keypair: &Keypair) -> Result<Tx, WrapperTxErr> {
-            if self.pk != keypair.public {
+        pub fn sign(
+            &self,
+            keypair: &common::SecretKey,
+        ) -> Result<Tx, WrapperTxErr> {
+            if self.pk != keypair.ref_to() {
                 return Err(WrapperTxErr::InvalidKeyPair);
             }
             Ok(Tx::new(
@@ -255,15 +256,16 @@ pub mod wrapper_tx {
         /// Validate the signature of a wrapper tx
         pub fn validate_sig(
             &self,
-            tx: &Tx,
-            sig: &Signature,
+            signed_data: [u8; 32],
+            sig: &common::Signature,
         ) -> Result<(), TxError> {
-            verify_tx_sig(&self.pk, tx, sig).map_err(|err| {
-                TxError::SigError(format!(
-                    "WrapperTx signature verification failed: {}",
-                    err
-                ))
-            })
+            common::SigScheme::verify_signature(&self.pk, &signed_data, sig)
+                .map_err(|err| {
+                    TxError::SigError(format!(
+                        "WrapperTx signature verification failed: {}",
+                        err
+                    ))
+                })
         }
     }
 
@@ -332,15 +334,15 @@ pub mod wrapper_tx {
     #[cfg(test)]
     mod test_wrapper_tx {
         use super::*;
+        use crate::proto::SignedTxData;
         use crate::types::address::xan;
-        use crate::types::key::ed25519::{verify_tx_sig, SignedTxData};
 
-        fn gen_keypair() -> Keypair {
+        fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
             use rand::thread_rng;
 
             let mut rng: ThreadRng = thread_rng();
-            Keypair::generate(&mut rng)
+            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
         }
 
         /// We test that when we feed in a Tx and then decrypt it again
@@ -468,7 +470,7 @@ pub mod wrapper_tx {
             tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
 
             // check that the signature is not valid
-            verify_tx_sig(&keypair.public, &tx, &signed_tx_data.sig)
+            tx.verify_sig(&keypair.ref_to(), &signed_tx_data.sig)
                 .expect_err("Test failed");
             // check that the try from method also fails
             let err = crate::types::transaction::process_tx(tx)
