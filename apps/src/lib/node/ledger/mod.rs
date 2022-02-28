@@ -377,7 +377,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         .expect("Must be able to start a thread for the shell");
 
     // Wait for interrupt signal or abort message
-    wait_for_abort(abort_recv).await;
+    let aborted = wait_for_abort(abort_recv).await;
 
     // Abort the ABCI service task
     abci.abort();
@@ -415,11 +415,14 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     };
     match res {
         Ok((tendermint_res, abci_res, _)) => {
-            if let Err(err) = tendermint_res {
-                tracing::error!("Tendermint error: {}", err);
-            }
-            if let Err(err) = abci_res {
-                tracing::error!("ABCI error: {}", err);
+            // we ignore errors on user-initiated shutdown
+            if aborted {
+                if let Err(err) = tendermint_res {
+                    tracing::error!("Tendermint error: {}", err);
+                }
+                if let Err(err) = abci_res {
+                    tracing::error!("ABCI error: {}", err);
+                }
             }
         }
         Err(err) => {
@@ -429,6 +432,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             }
         }
     }
+
     tracing::info!("Anoma ledger node has shut down.");
 
     if let Err(err) = shell_handler.join() {
@@ -487,10 +491,15 @@ impl Drop for Aborter {
     }
 }
 
+/// Function that blocks until either
+///   1. User sends a shutdown signal
+///   2. One of the child processes terminates, sending a message on `drop`
+/// Returns a boolean to indicate which scenario occurred.
+/// `true` means that the latter happened
 #[cfg(unix)]
 async fn wait_for_abort(
     mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
-) {
+) -> bool {
     use tokio::signal::unix::{signal, SignalKind};
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
     let mut sighup = signal(SignalKind::hangup()).unwrap();
@@ -526,14 +535,21 @@ async fn wait_for_abort(
             if let Some(who) = msg {
                  tracing::info!("{} has exited, shutting down...", who);
             }
+            return true;
         }
     };
+    false
 }
 
+/// Function that blocks until either
+///   1. User sends a shutdown signal
+///   2. One of the child processes terminates, sending a message on `drop`
+/// Returns a boolean to indicate which scenario occurred.
+/// `true` means that the latter happened
 #[cfg(windows)]
 async fn wait_for_abort(
     mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
-) {
+) -> bool {
     let mut sigbreak = tokio::signal::windows::ctrl_break().unwrap();
     let _ = tokio::select! {
         signal = tokio::signal::ctrl_c() => {
@@ -554,14 +570,21 @@ async fn wait_for_abort(
             if let Some(who) = msg {
                  tracing::info!("{} has exited, shutting down...", who);
             }
+            return true;
         }
     };
+    false
 }
 
+/// Function that blocks until either
+///   1. User sends a shutdown signal
+///   2. One of the child processes terminates, sending a message on `drop`
+/// Returns a boolean to indicate which scenario occurred.
+/// `true` means that the latter happened
 #[cfg(not(any(unix, windows)))]
 async fn wait_for_abort(
     mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
-) {
+) -> bool {
     let _ = tokio::select! {
         signal = tokio::signal::ctrl_c() => {
             match signal {
@@ -575,6 +598,8 @@ async fn wait_for_abort(
             if let Some(who) = msg {
                  tracing::info!("{} has exited, shutting down...", who);
             }
+            return true;
         }
     };
+    false
 }
