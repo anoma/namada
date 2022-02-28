@@ -21,8 +21,6 @@ use super::keys::StoredKeypair;
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
 
-pub type Alias = String;
-
 /// Special keys for a validator
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ValidatorKeys {

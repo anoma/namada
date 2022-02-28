@@ -15,7 +15,6 @@ mod queries;
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
-
 use std::str::FromStr;
 
 use anoma::ledger::gas::BlockGasMeter;

@@ -15,7 +15,7 @@ use thiserror::Error;
 
 use self::alias::Alias;
 pub use self::keys::{DecryptionError, StoredKeypair};
-use self::store::{Alias, Store};
+use self::store::Store;
 pub use self::store::{ValidatorData, ValidatorKeys};
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
