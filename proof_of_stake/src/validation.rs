@@ -304,6 +304,7 @@ pub struct NewValidator {
 
 /// Validate the given list of PoS data `changes`. Returns empty list, if all
 /// the changes are valid.
+#[must_use]
 pub fn validate<Address, TokenAmount, TokenChange, PublicKey>(
     params: &PosParams,
     changes: Vec<DataUpdate<Address, TokenAmount, TokenChange, PublicKey>>,

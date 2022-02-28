@@ -48,6 +48,7 @@ testing = [
   "rand",
   "rand_core",
   "tempfile",
+  "anoma_proof_of_stake/testing",
 ]
 wasm-runtime = [
   "loupe",
