@@ -574,8 +574,8 @@ mod tests {
     use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
 
     use super::*;
+    use crate::parameters::testing::arb_pos_params;
     use crate::types::tests::arb_epoch;
-    use crate::types::BasisPoints;
 
     prop_state_machine! {
         #[test]
@@ -1189,46 +1189,6 @@ mod tests {
             let offset = Offset::value(params);
             assert!(data.data.len() <= (offset + 1) as usize);
         }
-    }
-
-    fn arb_pos_params() -> impl Strategy<Value = PosParams> {
-        (
-            10..500_u64,
-            1..10_u64,
-            1..10_000_u64,
-            1..1_000_u64,
-            1..1_000_u64,
-            1..10_000_u64,
-            1..10_000_u64,
-        )
-            .prop_flat_map(
-                |(
-                    max_validator_slots,
-                    pipeline_len,
-                    votes_per_token,
-                    block_proposer_reward,
-                    block_vote_reward,
-                    duplicate_vote_slash_rate,
-                    light_client_attack_slash_rate,
-                )| {
-                    (pipeline_len + 1..pipeline_len + 10).prop_map(
-                        move |unbonding_len| PosParams {
-                            max_validator_slots,
-                            pipeline_len,
-                            unbonding_len,
-                            votes_per_token: BasisPoints::new(votes_per_token),
-                            block_proposer_reward,
-                            block_vote_reward,
-                            duplicate_vote_slash_rate: BasisPoints::new(
-                                duplicate_vote_slash_rate,
-                            ),
-                            light_client_attack_slash_rate: BasisPoints::new(
-                                light_client_attack_slash_rate,
-                            ),
-                        },
-                    )
-                },
-            )
     }
 
     fn arb_offset(
