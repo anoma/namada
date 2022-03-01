@@ -1,5 +1,6 @@
 //! Utilities around the DKG session keys
 
+use std::cmp::Ordering;
 use std::fmt::Display;
 use std::io::{Error, ErrorKind};
 use std::str::FromStr;
@@ -12,7 +13,6 @@ use crate::types::address::Address;
 use crate::types::key::ParsePublicKeyError;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::transaction::EllipticCurve;
-use std::cmp::Ordering;
 
 /// A keypair used in the DKG protocol
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -79,13 +79,21 @@ impl Eq for DkgPublicKey {}
 
 impl PartialOrd for DkgPublicKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.0.encryption_key.to_string().cmp(&other.0.encryption_key.to_string()))
+        Some(
+            self.0
+                .encryption_key
+                .to_string()
+                .cmp(&other.0.encryption_key.to_string()),
+        )
     }
 }
 
 impl Ord for DkgPublicKey {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.encryption_key.to_string().cmp(&other.0.encryption_key.to_string())
+        self.0
+            .encryption_key
+            .to_string()
+            .cmp(&other.0.encryption_key.to_string())
     }
 }
 
