@@ -336,6 +336,7 @@ where
 #[cfg(test)]
 mod test_finalize_block {
     use anoma::types::address::xan;
+    use anoma::types::key::RefTo;
     use anoma::types::storage::Epoch;
     use anoma::types::transaction::Fee;
     #[cfg(not(feature = "ABCI"))]
@@ -654,7 +655,7 @@ mod test_finalize_block {
                 amount: 0.into(),
                 token: xan(),
             },
-            pk: keypair.public,
+            pk: keypair.ref_to(),
             epoch: Epoch(0),
             gas_limit: 0.into(),
             inner_tx,
@@ -724,7 +725,7 @@ mod test_finalize_block {
                 amount: 0.into(),
                 token: xan(),
             },
-            pk: keypair.public,
+            pk: keypair.ref_to(),
             epoch: Epoch(0),
             gas_limit: 0.into(),
             inner_tx,

@@ -234,6 +234,7 @@ where
 mod test_process_proposal {
     use anoma::proto::SignedTxData;
     use anoma::types::address::xan;
+    use anoma::types::key::*;
     use anoma::types::storage::Epoch;
     use anoma::types::token::Amount;
     use anoma::types::transaction::encrypted::EncryptedTx;
@@ -637,7 +638,7 @@ mod test_process_proposal {
                 amount: 0.into(),
                 token: xan(),
             },
-            pk: keypair.public.clone(),
+            pk: keypair.ref_to(),
             epoch: Epoch(0),
             gas_limit: 0.into(),
             inner_tx,
