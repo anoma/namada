@@ -15,6 +15,7 @@ wasms += tx_mint_nft
 wasms += tx_unbond
 wasms += tx_update_vp
 wasms += tx_withdraw
+wasms += tx_ibc
 wasms += vp_testnet_faucet
 wasms += vp_token
 wasms += vp_user

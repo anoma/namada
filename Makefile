@@ -145,7 +145,7 @@ test-unit-abci-plus-plus:
 	$(cargo) test \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
-		--features "testing ABCI-plus-plus" && \
+		--features "testing ABCI-plus-plus ibc-mocks" && \
 	$(cargo) test \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
@@ -157,7 +157,7 @@ test-unit-abci-plus-plus:
 		--features "ABCI-plus-plus"
 
 test-unit:
-	$(cargo) test -- --skip e2e
+	$(cargo) test --no-default-features --features "ABCI ibc-mocks-abci" -- --skip e2e
 
 test-wasm:
 	make -C $(wasms) test

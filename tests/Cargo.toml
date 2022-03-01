@@ -17,7 +17,7 @@ ABCI = [
   "tendermint-stable",
   "tendermint-proto-abci",
   "anoma/ABCI",
-  "anoma/ibc-vp-abci",
+  "anoma/ibc-mocks-abci",
   "anoma_vm_env/ABCI",
 ]
 
@@ -27,7 +27,7 @@ ABCI-plus-plus = [
   "tendermint",
   "tendermint-proto",
   "anoma/ABCI-plus-plus",
-  "anoma/ibc-vp",
+  "anoma/ibc-mocks",
   "anoma_vm_env/ABCI-plus-plus",
 ]
 

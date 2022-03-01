@@ -9,7 +9,7 @@ version = "0.4.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["ABCI"]
+default = ["ABCI", "ibc-vp-abci"]
 # NOTE "dev" features that shouldn't be used in live networks are enabled by default for now
 dev = []
 ferveo-tpke = [
@@ -23,18 +23,24 @@ ferveo-tpke = [
 # for integration tests and test utilies
 ibc-vp = [
   "ibc",
-  "ibc-proto",
 ]
 ibc-vp-abci = [
   "ibc-abci",
-  "ibc-proto-abci",
+]
+ibc-mocks = [
+  "ibc/mocks",
+]
+ibc-mocks-abci = [
+  "ibc-abci/mocks",
 ]
 # for integration tests and test utilies
 ABCI = [
+  "ibc-proto-abci",
   "tendermint-stable",
   "tendermint-proto-abci",
 ]
 ABCI-plus-plus = [
+  "ibc-proto",
   "tendermint",
   "tendermint-proto",
 ]
@@ -75,8 +81,8 @@ ed25519-consensus = "1.2.0"
 hex = "0.4.3"
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", branch = "bat/workspace-cleanup"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_abcipp_v0.23.5", default-features = false, features = ["mocks"], optional = true}
-ibc-abci = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_tm_v0.23.5", default-features = false, features = ["mocks"], optional = true}
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_abcipp_v0.23.5", default-features = false, optional = true}
+ibc-abci = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_tm_v0.23.5", default-features = false, optional = true}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_abcipp_v0.23.5", default-features = false, optional = true}
 ibc-proto-abci = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_tm_v0.23.5", default-features = false, optional = true}
 ics23 = "0.6.7"

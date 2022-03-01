@@ -214,13 +214,12 @@ pub mod tx_update_vp {
 /// `key::ed25519::SignedTxData` as its input as declared in `ibc` crate.
 #[cfg(feature = "tx_ibc")]
 pub mod tx_ibc {
-    use anoma_vm_env::tx_prelude::*;
+    use anoma_tx_prelude::*;
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
-        let signed =
-            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-        Ibc.dispatch(&signed.data.unwrap())
+        let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        Ibc.dispatch(&signed.data.unwrap()).unwrap()
     }
 }
 

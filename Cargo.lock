@@ -2617,7 +2617,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.12.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_abcipp_v0.23.5#31e4ed3a1288af58c816087bbdbc31133b9323aa"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_abcipp_v0.23.5#7d811ab5567d027c11e8f5a19102cdeb93e2af11"
 dependencies = [
  "bytes 1.1.0",
  "derive_more",
@@ -2671,7 +2671,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.16.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_abcipp_v0.23.5#31e4ed3a1288af58c816087bbdbc31133b9323aa"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_abcipp_v0.23.5#7d811ab5567d027c11e8f5a19102cdeb93e2af11"
 dependencies = [
  "bytes 1.1.0",
  "prost 0.9.0",
