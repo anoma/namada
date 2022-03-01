@@ -162,7 +162,7 @@ impl Wallet {
     /// [`Wallet::save`] cannot be called after using this
     /// method as it involves a partial move
     pub fn take_validator_data(self) -> Option<ValidatorData> {
-        self.store.take_validator_data()
+        self.store.validator_data()
     }
 
     /// Find the stored key by an alias, a public key hash or a public key.

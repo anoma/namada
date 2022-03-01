@@ -334,7 +334,7 @@ impl Store {
     }
 
     /// Returns the validator data, if it exists
-    pub fn take_validator_data(self) -> Option<ValidatorData> {
+    pub fn validator_data(self) -> Option<ValidatorData> {
         self.validator_data
     }
 
@@ -464,4 +464,21 @@ const FILE_NAME: &str = "wallet.toml";
 /// Get the path to the wallet store.
 pub fn wallet_file(store_dir: impl AsRef<Path>) -> PathBuf {
     store_dir.as_ref().join(FILE_NAME)
+}
+
+#[cfg(all(test, feature = "dev"))]
+mod test_wallet {
+    use super::*;
+
+    #[test]
+    fn test_toml_roundtrip() {
+        let mut store = Store::new();
+        let validator_keys = Store::gen_validator_keys(None);
+        store.add_validator_data(
+            Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
+            validator_keys
+        );
+        let data = store.encode();
+        let _ = Store::decode(data).expect("Test failed");
+    }
 }
