@@ -680,7 +680,8 @@ mod test_utils {
     }
 
     impl TestShell {
-        /// Create a new shell
+        /// Returns a new shell paired with a broadcast receiver, which will
+        /// receives any protocol txs sent by the shell.
         pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
@@ -770,7 +771,9 @@ mod test_utils {
         }
     }
 
-    /// Start a new test shell and initialize it
+    /// Start a new test shell and initialize it. Returns the shell paired with
+    /// a broadcast receiver, which will receives any protocol txs sent by the
+    /// shell.
     pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>) {
         let (mut test, receiver) = TestShell::new();
         test.init_chain(RequestInitChain {
