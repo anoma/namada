@@ -19,11 +19,11 @@ mod tests {
 
     use std::panic;
 
-    #[cfg(not(feature = "ABCI"))]
-    use ::ibc::tx_msg::Msg;
+    use anoma::ibc::tx_msg::Msg;
     use anoma::ledger::ibc::handler::IbcActions;
     use anoma::ledger::ibc::vp::Error as IbcError;
     use anoma::proto::{SignedTxData, Tx};
+    use anoma::tendermint_proto::Protobuf;
     use anoma::types::key::*;
     use anoma::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use anoma::types::time::DateTimeUtc;
@@ -33,14 +33,8 @@ mod tests {
         BorshDeserialize, BorshSerialize, KeyValIterator,
     };
     use anoma_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
-    #[cfg(feature = "ABCI")]
-    use ibc_abci::tx_msg::Msg;
     use itertools::Itertools;
     use prost::Message;
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::Protobuf;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::Protobuf;
     use test_log::test;
 
     use super::ibc;

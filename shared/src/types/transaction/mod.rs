@@ -16,12 +16,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use decrypted::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-#[cfg(not(feature = "ABCI"))]
-use tendermint::abci::transaction;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::abci::transaction;
 pub use wrapper::*;
 
+use crate::tendermint::abci::transaction;
 use crate::types::address::Address;
 use crate::types::key::*;
 
