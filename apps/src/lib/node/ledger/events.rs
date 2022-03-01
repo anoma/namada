@@ -86,6 +86,7 @@ impl Event {
             _ => unreachable!(),
         };
         event["height"] = height.to_string();
+        event["log"] = "".to_string();
         event
     }
 

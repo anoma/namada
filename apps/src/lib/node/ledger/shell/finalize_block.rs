@@ -148,8 +148,7 @@ where
                     }
                     let mut event = Event::new_tx_event(&tx_type, height.0);
                     if let DecryptedTx::Undecryptable(_) = inner {
-                        event["info"] =
-                            "Transaction could not be decrypted. ".into();
+                        event["log"] = "Transaction could not be decrypted.".into();
                         event["code"] = ErrorCodes::Undecryptable.into();
                     }
                     event
@@ -213,7 +212,7 @@ where
                         tx_result["code"] = ErrorCodes::InvalidTx.into();
                     }
                     tx_result["gas_used"] = result.gas_used.to_string();
-                    tx_result["info"].push_str(&result.to_string());
+                    tx_result["info"] = &result.to_string();
                 }
                 Err(msg) => {
                     tracing::info!("Transaction failed with: {}", msg);
