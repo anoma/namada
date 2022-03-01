@@ -154,8 +154,6 @@ dependencies = [
  "futures 0.3.19",
  "git2",
  "hex",
- "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_abcipp_v0.23.5)",
- "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_tm_v0.23.5)",
  "itertools 0.10.3",
  "jsonpath_lib",
  "libc",

@@ -11,7 +11,15 @@ version = "0.4.0"
 [lib]
 crate-type = ["dylib"]
 
+[features]
+default = ["ABCI"]
+
+ABCI = [
+  "anoma/ABCI",
+  "anoma/ibc-vp-abci",
+]
+
 [dependencies]
-anoma = {path = "../../shared"}
+anoma = {path = "../../shared", default-features = false}
 anoma_macros = {path = "../../macros"}
 tokio = {version = "1.15.0", features = ["sync"]}
