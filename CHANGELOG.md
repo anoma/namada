@@ -1,5 +1,57 @@
 # CHANGELOG
 
+## Unreleased
+
+### BUG FIXES
+
+- Ledger: Temporarily downgrade back to wasmer v1.0.2 until
+  [the leak that is affecting Linux](https://github.com/anoma/anoma/issues/871) 
+  is found and fixed. ([#870](https://github.com/anoma/anoma/pull/870))
+- Dependency: Backport libp2p-noise patch that fixes a compilation
+  issue from <https://github.com/libp2p/rust-libp2p/pull/2264>
+  ([#908](https://github.com/anoma/anoma/issues/908))
+- Wasm: Re-add accidentaly removed `tx_ibc` WASM and `vm_env::ibc` module
+  ([#916](https://github.com/anoma/anoma/pull/916))
+
+### CI
+
+- Move cron pipeline script externally, fix cron scripts dependencies
+  ([#906](https://github.com/anoma/anoma/pull/906))
+- Fix cron scripts execution ([#912](https://github.com/anoma/anoma/pull/912))
+- Build docs without attempting to merge master
+  ([#924](https://github.com/anoma/anoma/pull/924))
+
+### FEATURES
+
+- Added transactions and vp to create and mint nfts.
+  ([#882](https://github.com/anoma/anoma/issues/882))
+
+### IMPROVEMENTS
+
+- Added a common signing schemes interface to ease additions/removals of signing
+  schemes to the ledger. ([#225](https://github.com/anoma/anoma/issues/225))
+- Canonicalize all wallet aliases to lowercase in the CLI.
+  ([#564](https://github.com/anoma/anoma/issues/564))
+- Ledger: Handle spurious errors on user initiated shutdown.
+  ([#716](https://github.com/anoma/anoma/issues/716))
+- Dependency: Replace ed22519-dalek with ed22519-consensus.
+  ([#753](https://github.com/anoma/anoma/issues/753))
+- Network config: Make the WASM checksums optional in network source, as it is 
+  filled in by `init-network` utils command.
+  ([#777](https://github.com/anoma/anoma/issues/777))
+- Network config: The WASM dir were moved inside chain directories.
+  ([#838](https://github.com/anoma/anoma/issues/838))
+- Ledger: added support for transactions to write temporary data that
+  can be read by any VP that is checking the validity of the transaction.
+  This is being used in IBC native VP for fungible token transfer.
+  ([#848](https://github.com/anoma/anoma/pull/848))
+- Ledger: Update tendermint-rs and ibc-rs
+  ([#863](https://github.com/anoma/anoma/issues/863))
+- Ledger: Sign transaction hash of bytes instead of the bytes themselves.
+  ([#886](https://github.com/anoma/anoma/issues/886))
+- Update the Rust toolchain to 1.58.1.
+  ([#902](https://github.com/anoma/anoma/pull/902))
+
 ## v0.4.0
 
 Anoma 0.4.0 is a scheduled minor release, released 31 January 2022.
