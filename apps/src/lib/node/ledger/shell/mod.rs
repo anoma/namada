@@ -771,7 +771,9 @@ mod test_utils {
         }
     }
 
-    /// Start a new test shell and initialize it
+    /// Start a new test shell and initialize it. Returns the shell paired with
+    /// a broadcast receiver, which will receives any protocol txs sent by the
+    /// shell.
     pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>) {
         let (mut test, receiver) = TestShell::new();
         test.init_chain(RequestInitChain {
