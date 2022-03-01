@@ -548,8 +548,7 @@ pub struct Genesis {
 impl Genesis {
     /// Sort all fields for deterministic encoding
     pub fn init(&mut self) {
-        self.validators
-            .sort_by(|val, other| val.account_key.cmp(&other.account_key));
+        self.validators.sort();
         self.token_accounts.sort();
         self.established_accounts.sort();
         self.implicit_accounts.sort();
