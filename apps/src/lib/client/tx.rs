@@ -1106,9 +1106,8 @@ impl TxResponse {
         let info =
             selector(&format!("$.events.['{}.info'][{}]", evt_key, index))
                 .unwrap();
-        let log =
-            selector(&format!("$.events.['{}.log'][{}]", evt_key, index))
-                .unwrap();
+        let log = selector(&format!("$.events.['{}.log'][{}]", evt_key, index))
+            .unwrap();
         let height =
             selector(&format!("$.events.['{}.height'][{}]", evt_key, index))
                 .unwrap();
