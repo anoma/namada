@@ -79,8 +79,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
     let tx = Tx::new(tx_code, data);
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, None).await;
-    let (ctx, initialized_accounts) = process_tx(ctx, &args.tx, tx).await;
+    let (ctx, initialized_accounts) = process_tx(ctx, &args.tx, tx, None).await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
@@ -135,8 +134,7 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.addr)).await;
-    process_tx(ctx, &args.tx, tx).await;
+    process_tx(ctx, &args.tx, tx, Some(&args.addr)).await;
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
@@ -161,8 +159,8 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.source)).await;
-    let (ctx, initialized_accounts) = process_tx(ctx, &args.tx, tx).await;
+    let (ctx, initialized_accounts) =
+        process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
@@ -269,8 +267,8 @@ pub async fn submit_init_validator(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &tx_args, Some(&source)).await;
-    let (mut ctx, initialized_accounts) = process_tx(ctx, &tx_args, tx).await;
+    let (mut ctx, initialized_accounts) =
+        process_tx(ctx, &tx_args, tx, Some(&source)).await;
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address, rewards_address_alias) =
             match &initialized_accounts[..] {
@@ -446,8 +444,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(&args.source)).await;
-    process_tx(ctx, &args.tx, tx).await;
+    process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
 }
 
 pub async fn submit_init_nft(ctx: Context, args: args::NftCreate) {
@@ -479,8 +476,7 @@ pub async fn submit_init_nft(ctx: Context, args: args::NftCreate) {
 
     let tx_code = ctx.read_wasm(TX_CREATE_NFT);
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, signer.as_ref()).await;
-    process_tx(ctx, &args.tx, tx).await;
+    process_tx(ctx, &args.tx, tx, signer.as_ref()).await;
 }
 
 pub async fn submit_mint_nft(ctx: Context, args: args::NftMint) {
@@ -517,8 +513,7 @@ pub async fn submit_mint_nft(ctx: Context, args: args::NftMint) {
 
     let tx_code = ctx.read_wasm(TX_MINT_NFT_TOKEN);
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, signer.as_ref()).await;
-    process_tx(ctx, &args.tx, tx).await;
+    process_tx(ctx, &args.tx, tx, signer.as_ref()).await;
 }
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
@@ -583,8 +578,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
-    process_tx(ctx, &args.tx, tx).await;
+    process_tx(ctx, &args.tx, tx, Some(default_signer)).await;
 }
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
@@ -652,8 +646,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
-    process_tx(ctx, &args.tx, tx).await;
+    process_tx(ctx, &args.tx, tx, Some(default_signer)).await;
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
@@ -721,8 +714,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    let (ctx, tx) = sign_tx(ctx, tx, &args.tx, Some(default_signer)).await;
-    process_tx(ctx, &args.tx, tx).await;
+    process_tx(ctx, &args.tx, tx, Some(default_signer)).await;
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -821,8 +813,10 @@ async fn sign_wrapper(
 async fn process_tx(
     ctx: Context,
     args: &args::Tx,
-    to_broadcast: TxBroadcastData,
+    tx: Tx,
+    default_signer: Option<&WalletAddress>,
 ) -> (Context, Vec<Address>) {
+    let (ctx, to_broadcast) = sign_tx(ctx, tx, args, default_signer).await;
     // NOTE: use this to print the request JSON body:
 
     // let request =

@@ -12,6 +12,7 @@ use crate::types::address::Address;
 use crate::types::key::ParsePublicKeyError;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::transaction::EllipticCurve;
+use std::cmp::Ordering;
 
 /// A keypair used in the DKG protocol
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -71,6 +72,20 @@ impl From<ferveo_common::PublicKey<EllipticCurve>> for DkgPublicKey {
 impl From<&DkgPublicKey> for ferveo_common::PublicKey<EllipticCurve> {
     fn from(pk: &DkgPublicKey) -> Self {
         pk.0
+    }
+}
+
+impl Eq for DkgPublicKey {}
+
+impl PartialOrd for DkgPublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.0.encryption_key.to_string().cmp(&other.0.encryption_key.to_string()))
+    }
+}
+
+impl Ord for DkgPublicKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.encryption_key.to_string().cmp(&other.0.encryption_key.to_string())
     }
 }
 

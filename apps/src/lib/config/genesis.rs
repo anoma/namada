@@ -555,7 +555,16 @@ impl Genesis {
     }
 }
 
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 /// Genesis validator definition
 pub struct Validator {
     /// Data that is used for PoS system initialization
