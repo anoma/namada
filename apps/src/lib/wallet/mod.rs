@@ -115,7 +115,7 @@ impl Wallet {
         (alias.into(), key)
     }
 
-    /// Store the validator address in the wallet. Generate keypair
+    /// Generate keypair
     /// for signing protocol txs and for the DKG (which will also be stored)
     /// A protocol keypair may be optionally provided, indicating that
     /// we should re-use a keypair already in the wallet
