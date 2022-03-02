@@ -47,8 +47,8 @@ pub fn main() -> Result<()> {
             let tx_signing_key = ctx.get_cached(&tx_signing_key);
             let tx_source_address = ctx.get(&tx_source_address);
 
+            let wasm_dir = ctx.wasm_dir();
             let config = ctx.config;
-            let wasm_dir = config.ledger.chain_dir().join(&config.wasm_dir);
             let mut mm_config = config.matchmaker;
             if matchmaker_path.is_some() {
                 mm_config.matchmaker_path = matchmaker_path;
