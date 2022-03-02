@@ -188,7 +188,7 @@ pub async fn join_network(
                 let mut config = Config::load(
                     &base_dir,
                     &chain_id,
-                    global_args.mode.clone(),
+                    global_args.mode.as_ref().unwrap().clone(),
                 );
                 config.wasm_dir = wasm_dir;
                 config.write(&base_dir, &chain_id, true).unwrap();
