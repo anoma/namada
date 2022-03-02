@@ -692,14 +692,14 @@ mod test_finalize_block {
                 .value
                 .as_str();
             assert_eq!(code, String::from(ErrorCodes::Undecryptable).as_str());
-            let info = event
+            let log = event
                 .attributes
                 .iter()
-                .find(|attr| attr.key.as_str() == "info")
+                .find(|attr| attr.key.as_str() == "log")
                 .expect("Test failed")
                 .value
                 .as_str();
-            assert!(info.contains("Transaction could not be decrypted."))
+            assert!(log.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
         assert!(shell.next_wrapper().is_none());
@@ -764,17 +764,17 @@ mod test_finalize_block {
                 String::from(ErrorCodes::Undecryptable)
             );
 
-            let info = String::from_utf8(
+            let log = String::from_utf8(
                 event
                     .attributes
                     .iter()
-                    .find(|attr| attr.key == "info".as_bytes())
+                    .find(|attr| attr.key == "log".as_bytes())
                     .expect("Test failed")
                     .value
                     .clone(),
             )
             .expect("Test failed");
-            assert!(info.contains("Transaction could not be decrypted."))
+            assert!(log.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
         assert!(shell.next_wrapper().is_none());
