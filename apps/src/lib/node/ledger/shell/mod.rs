@@ -104,6 +104,7 @@ pub enum ErrorCodes {
     WasmRuntimeError = 3,
     InvalidOrder = 4,
     ExtraTxs = 5,
+    Undecryptable = 6,
 }
 
 impl From<ErrorCodes> for u32 {

@@ -86,6 +86,7 @@ impl Event {
             _ => unreachable!(),
         };
         event["height"] = height.to_string();
+        event["log"] = "".to_string();
         event
     }
 
@@ -94,6 +95,10 @@ impl Event {
         for (key, value) in ibc_event.attributes.iter() {
             self[key] = value.clone();
         }
+    }
+
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.attributes.contains_key(key)
     }
 }
 

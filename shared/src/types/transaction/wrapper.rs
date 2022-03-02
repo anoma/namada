@@ -172,9 +172,9 @@ pub mod wrapper_tx {
         /// which decryption key will be used
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
-        gas_limit: GasLimit,
+        pub gas_limit: GasLimit,
         /// the encrypted payload
-        inner_tx: EncryptedTx,
+        pub inner_tx: EncryptedTx,
         /// sha-2 hash of the inner transaction acting as a commitment
         /// the contents of the encrypted payload
         pub tx_hash: Hash,

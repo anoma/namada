@@ -3,7 +3,8 @@
 /// txs that contain decrypted payloads or assertions of
 /// non-decryptability
 pub mod decrypted;
-mod encrypted;
+/// tools for encrypted data
+pub mod encrypted;
 /// txs to manage nfts
 pub mod nft;
 pub mod pos;

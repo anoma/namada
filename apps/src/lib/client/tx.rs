@@ -1020,6 +1020,7 @@ pub async fn submit_tx(
 #[derive(Debug, Serialize)]
 pub struct TxResponse {
     pub info: String,
+    pub log: String,
     pub height: String,
     pub hash: String,
     pub code: String,
@@ -1053,6 +1054,7 @@ fn parse(
             .remove(0);
 
     let info = event.take("info").unwrap();
+    let log = event.take("log").unwrap();
     let height = event.take("height").unwrap();
     let hash = event.take("hash").unwrap();
     let code = event.take("code").unwrap();
@@ -1064,6 +1066,7 @@ fn parse(
     };
     TxResponse {
         info,
+        log,
         height,
         hash,
         code,
@@ -1103,6 +1106,8 @@ impl TxResponse {
         let info =
             selector(&format!("$.events.['{}.info'][{}]", evt_key, index))
                 .unwrap();
+        let log = selector(&format!("$.events.['{}.log'][{}]", evt_key, index))
+            .unwrap();
         let height =
             selector(&format!("$.events.['{}.height'][{}]", evt_key, index))
                 .unwrap();
@@ -1136,6 +1141,7 @@ impl TxResponse {
         };
         TxResponse {
             info: serde_json::from_value(info[0].clone()).unwrap(),
+            log: serde_json::from_value(log[0].clone()).unwrap(),
             height: serde_json::from_value(height[0].clone()).unwrap(),
             hash: serde_json::from_value(hash).unwrap(),
             code: serde_json::from_value(code[0].clone()).unwrap(),
