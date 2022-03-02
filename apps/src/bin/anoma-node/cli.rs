@@ -9,8 +9,7 @@ pub fn main() -> Result<()> {
     match cmd {
         cmds::AnomaNode::Ledger(sub) => match sub {
             cmds::Ledger::Run(_) => {
-                let wasm_dir =
-                    ctx.config.ledger.chain_dir().join(&ctx.config.wasm_dir);
+                let wasm_dir = ctx.wasm_dir();
                 ledger::run(ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::Reset(_) => {
