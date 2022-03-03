@@ -112,6 +112,7 @@ pub async fn run(
     #[cfg(feature = "dev")]
     {
         let genesis = &crate::config::genesis::genesis();
+        let consensus_key = crate::wallet::defaults::validator_keypair();
         // write the validator key file if it didn't already exist
         if !has_validator_key {
             write_validator_key_async(
@@ -124,7 +125,7 @@ pub async fn run(
                     )
                     .pos_data
                     .address,
-                &crate::wallet::defaults::validator_keypair(),
+                &consensus_key,
             )
             .await;
         }
@@ -390,7 +391,9 @@ async fn write_tm_genesis(
         .expect("Couldn't deserialize the genesis file");
     genesis.chain_id =
         FromStr::from_str(chain_id.as_str()).expect("Invalid chain ID");
-    genesis.genesis_time = genesis_time.into();
+    genesis.genesis_time = genesis_time
+        .try_into()
+        .expect("Couldn't convert DateTimeUtc to Tendermint Time");
 
     let mut file = OpenOptions::new()
         .write(true)

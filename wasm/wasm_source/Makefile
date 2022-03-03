@@ -10,12 +10,15 @@ wasms += tx_init_account
 wasms += tx_init_validator
 wasms += tx_from_intent
 wasms += tx_transfer
+wasms += tx_init_nft
+wasms += tx_mint_nft
 wasms += tx_unbond
 wasms += tx_update_vp
 wasms += tx_withdraw
 wasms += vp_testnet_faucet
 wasms += vp_token
 wasms += vp_user
+wasms += vp_nft
 
 # Build all wasms
 all: $(wasms)
@@ -31,6 +34,9 @@ test:
 # `cargo clippy` all wasms
 clippy:
 	$(foreach wasm,$(wasms),make clippy_$(wasm) && ) true
+
+clippy-fix:
+	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
 fmt:
 	$(cargo) +$(nightly) fmt --all

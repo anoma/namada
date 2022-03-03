@@ -56,7 +56,7 @@ where
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
         match process_tx(tx) {
-            // This occurs if the wrapper tx signature is invalid
+            // This occurs if the wrapper / protocol tx signature is invalid
             Err(err) => TxResult {
                 code: ErrorCodes::InvalidSig.into(),
                 info: err.to_string(),
@@ -67,6 +67,12 @@ where
                     code: ErrorCodes::InvalidTx.into(),
                     info: "Transaction rejected: Non-encrypted transactions \
                            are not supported"
+                        .into(),
+                },
+                TxType::Protocol(_) => TxResult {
+                    code: ErrorCodes::InvalidTx.into(),
+                    info: "Protocol transactions are a fun new feature that \
+                           is coming soon to a blockchain near you. Patience."
                         .into(),
                 },
                 TxType::Decrypted(tx) => match self.next_wrapper() {
@@ -165,6 +171,12 @@ where
         };
         match process_tx(req_tx.clone()) {
             Ok(TxType::Wrapper(_)) => {}
+            Ok(TxType::Protocol(_)) => {
+                let tx_bytes = req.tx.clone();
+                let mut response = self.process_proposal(req);
+                response.tx = tx_bytes;
+                return response;
+            }
             Ok(_) => {
                 return shim::response::ProcessProposal {
                     result: shim::response::TxResult {
@@ -233,6 +245,7 @@ where
 mod test_process_proposal {
     use anoma::proto::SignedTxData;
     use anoma::types::address::xan;
+    use anoma::types::chain::ChainId;
     use anoma::types::storage::Epoch;
     use anoma::types::token::Amount;
     use anoma::types::transaction::{Fee, Hash};
@@ -254,7 +267,7 @@ mod test_process_proposal {
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -269,6 +282,7 @@ mod test_process_proposal {
             Epoch(0),
             0.into(),
             tx,
+            Default::default(),
         );
         let tx = Tx::new(
             vec![],
@@ -282,7 +296,7 @@ mod test_process_proposal {
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
-            String::from("Expected signed WrapperTx data")
+            String::from("Wrapper transactions must be signed")
         );
         #[cfg(feature = "ABCI")]
         {
@@ -294,7 +308,7 @@ mod test_process_proposal {
     /// Test that a wrapper tx with invalid signature is rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -310,6 +324,7 @@ mod test_process_proposal {
             Epoch(0),
             0.into(),
             tx,
+            Default::default(),
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -373,7 +388,7 @@ mod test_process_proposal {
     /// non-zero, [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_unknown_address() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
         let keypair = crate::wallet::defaults::keys().remove(0).1;
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -388,6 +403,7 @@ mod test_process_proposal {
             Epoch(0),
             0.into(),
             tx,
+            Default::default(),
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -413,7 +429,7 @@ mod test_process_proposal {
     /// [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_insufficient_balance_address() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
         shell.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -437,6 +453,7 @@ mod test_process_proposal {
             Epoch(0),
             0.into(),
             tx,
+            Default::default(),
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -465,7 +482,7 @@ mod test_process_proposal {
     /// validated, [`process_proposal`] rejects it
     #[test]
     fn test_decrypted_txs_out_of_order() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
         let mut txs = vec![];
         for i in 0..3 {
@@ -482,6 +499,7 @@ mod test_process_proposal {
                 Epoch(0),
                 0.into(),
                 tx.clone(),
+                Default::default(),
             );
             shell.enqueue_tx(wrapper);
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
@@ -512,7 +530,7 @@ mod test_process_proposal {
     /// is rejected by [`process_proposal`]
     #[test]
     fn test_incorrectly_labelled_as_undecryptable() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
 
         let tx = Tx::new(
@@ -528,6 +546,7 @@ mod test_process_proposal {
             Epoch(0),
             0.into(),
             tx,
+            Default::default(),
         );
         shell.enqueue_tx(wrapper.clone());
 
@@ -550,7 +569,7 @@ mod test_process_proposal {
     /// Test that undecryptable txs are accepted
     #[test]
     fn test_undecryptable() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
         shell.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -574,6 +593,7 @@ mod test_process_proposal {
             Epoch(0),
             0.into(),
             tx,
+            Default::default(),
         );
         wrapper.tx_hash = Hash([0; 32]);
 
@@ -615,7 +635,7 @@ mod test_process_proposal {
     /// [`process_proposal`] than expected, they are rejected
     #[test]
     fn test_too_many_decrypted_txs() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -636,7 +656,7 @@ mod test_process_proposal {
     /// Process Proposal should reject a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
-        let mut shell = TestShell::new();
+        let (mut shell, _) = TestShell::new();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),

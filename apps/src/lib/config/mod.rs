@@ -31,10 +31,18 @@ use thiserror::Error;
 
 use crate::cli;
 
+/// Base directory contains global config and chain directories.
 pub const DEFAULT_BASE_DIR: &str = ".anoma";
+/// Default WASM dir. Note that WASM dirs are nested in chain dirs.
 pub const DEFAULT_WASM_DIR: &str = "wasm";
+/// The WASM checksums file contains the hashes of built WASMs. It is inside the
+/// WASM dir.
+pub const DEFAULT_WASM_CHECKSUMS_FILE: &str = "checksums.json";
+/// Chain-specific Anoma configuration. Nested in chain dirs.
 pub const FILENAME: &str = "config.toml";
+/// Chain-specific Tendermint configuration. Nested in chain dirs.
 pub const TENDERMINT_DIR: &str = "tendermint";
+/// Chain-specific Anoma DB. Nested in chain dirs.
 pub const DB_DIR: &str = "db";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -63,17 +71,13 @@ impl TendermintMode {
     }
 }
 
-impl From<Option<String>> for TendermintMode {
-    fn from(opt: Option<String>) -> Self {
-        if let Some(mode) = opt {
-            match mode.as_str() {
-                "full" => TendermintMode::Full,
-                "validator" => TendermintMode::Validator,
-                "seed" => TendermintMode::Seed,
-                _ => panic!("Unrecognized mode"),
-            }
-        } else {
-            TendermintMode::Validator
+impl From<String> for TendermintMode {
+    fn from(mode: String) -> Self {
+        match mode.as_str() {
+            "full" => TendermintMode::Full,
+            "validator" => TendermintMode::Validator,
+            "seed" => TendermintMode::Seed,
+            _ => panic!("Unrecognized mode"),
         }
     }
 }
@@ -194,6 +198,11 @@ impl Ledger {
                 instrumentation_namespace: "anoman_tm".to_string(),
             },
         }
+    }
+
+    /// Get the chain directory path
+    pub fn chain_dir(&self) -> PathBuf {
+        self.shell.base_dir.join(self.chain_id.as_str())
     }
 
     /// Get the directory path to the DB

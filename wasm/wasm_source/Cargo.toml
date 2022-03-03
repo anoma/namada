@@ -13,13 +13,18 @@ crate-type = ["cdylib"]
 # Newly added wasms should also be added into the Makefile `$(wasms)` list.
 [features]
 tx_bond = []
+tx_create_nft = []
 tx_from_intent = []
 tx_init_account = []
 tx_init_validator = []
 tx_transfer = []
+tx_mint_nft = []
+tx_init_nft = []
+tx = []
 tx_unbond = []
 tx_update_vp = []
 tx_withdraw = []
+vp_nft = []
 vp_testnet_faucet = ["once_cell"]
 vp_token = []
 vp_user = ["once_cell", "rust_decimal"]
@@ -35,17 +40,18 @@ wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
+anoma = {path = "../../shared"}
 anoma_tests = {path = "../../tests"}
 proptest = "1.0.0"
 tracing = "0.1.29"
 tracing-subscriber = {version = "0.2.25", default-features = false, features = ["env-filter", "fmt"]}
 
 [patch.crates-io]
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.0"}
-tendermint-light-client = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.0"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.0"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.0"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.0"}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5"}
+tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5"}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5"}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5"}
+tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5"}
 # TODO temp patch for <https://github.com/near/borsh-rs/issues/82>, <https://github.com/near/borsh-rs/issues/84> and more tba.
 borsh = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-derive = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}

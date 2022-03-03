@@ -25,7 +25,7 @@ mod tests {
     use anoma::ledger::ibc::vp::Error as IbcError;
     use anoma::proto::{SignedTxData, Tx};
     use anoma::types::key::*;
-    use anoma::types::storage::{self, Key, KeySeg};
+    use anoma::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use anoma::types::time::DateTimeUtc;
     use anoma::types::token::{self, Amount};
     use anoma::types::{address, key};
@@ -513,7 +513,10 @@ mod tests {
             .expect("invalid client ID");
         // only insert a client type
         let client_type_key = ibc::client_type_key(&client_id).to_string();
-        tx_host_env::write(&client_type_key, msg.client_state.client_type());
+        tx_host_env::write(
+            &client_type_key,
+            msg.client_state.client_type().as_str().as_bytes(),
+        );
 
         // Check should fail due to no client state
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
@@ -552,6 +555,11 @@ mod tests {
         // Commit
         env.write_log.commit_tx();
         env.write_log.commit_block(&mut env.storage).unwrap();
+        // update the block height for the following client update
+        env.storage
+            .begin_block(BlockHash::default(), BlockHeight(1))
+            .unwrap();
+        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
 
         // Start an invalid transaction
         let msg = ibc::msg_update_client(client_id);
@@ -622,6 +630,11 @@ mod tests {
         // Commit
         env.write_log.commit_tx();
         env.write_log.commit_block(&mut env.storage).unwrap();
+        // update the block height for the following client update
+        env.storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
 
         // Start a transaction to upgrade the client
         let msg = ibc::msg_upgrade_client(client_id);

@@ -131,7 +131,7 @@ pub mod tx_withdraw {
 
 /// A tx for a token transfer crafted by matchmaker from intents.
 /// This tx uses `intent::IntentTransfers` wrapped inside
-/// `key::ed25519::SignedTxData` as its input as declared in `shared` crate.
+/// `SignedTxData` as its input as declared in `shared` crate.
 #[cfg(feature = "tx_from_intent")]
 pub mod tx_from_intent {
     use anoma_tx_prelude::*;
@@ -168,7 +168,7 @@ pub mod tx_from_intent {
 }
 
 /// A tx for token transfer.
-/// This tx uses `token::Transfer` wrapped inside `key::ed25519::SignedTxData`
+/// This tx uses `token::Transfer` wrapped inside `SignedTxData`
 /// as its input as declared in `shared` crate.
 #[cfg(feature = "tx_transfer")]
 pub mod tx_transfer {
@@ -191,7 +191,7 @@ pub mod tx_transfer {
 }
 
 /// A tx for updating an account's validity predicate.
-/// This tx wraps the validity predicate inside `key::ed25519::SignedTxData` as
+/// This tx wraps the validity predicate inside `SignedTxData` as
 /// its input as declared in `shared` crate.
 #[cfg(feature = "tx_update_vp")]
 pub mod tx_update_vp {
@@ -218,7 +218,8 @@ pub mod tx_ibc {
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
-        let signed = key::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        let signed =
+            key::ed25519::SignedTxData::try_from_slice(&tx_data[..]).unwrap();
         Ibc.dispatch(&signed.data.unwrap())
     }
 }
@@ -246,3 +247,43 @@ pub mod vp_token {
         token::vp(&addr, &keys_changed, &verifiers)
     }
 }
+
+/// A tx to create a new NFT.
+#[cfg(feature = "tx_init_nft")]
+pub mod tx_init_nft {
+    use anoma_vm_env::tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        let tx_data = transaction::nft::CreateNft::try_from_slice(
+            &signed.data.unwrap()[..],
+        )
+        .unwrap();
+        log_string("apply_tx called to create a new NFT");
+
+        nft::init_nft(tx_data);
+    }
+}
+
+/// A tx to mint new nft tokens.
+#[cfg(feature = "tx_mint_nft")]
+pub mod tx_mint_nft {
+    use anoma_vm_env::tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+        let tx_data = transaction::nft::MintNft::try_from_slice(
+            &signed.data.unwrap()[..],
+        )
+        .unwrap();
+        log_string("apply_tx called to mint a new NFT tokens");
+
+        nft::mint_tokens(tx_data);
+    }
+}
+
+/// A VP for a nft.
+#[cfg(feature = "vp_nft")]
+pub mod vp_nft;

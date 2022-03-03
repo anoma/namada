@@ -49,9 +49,7 @@ fn run_ledger() -> Result<()> {
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
         ledger.exp_string("Anoma ledger node started")?;
         if !cfg!(feature = "ABCI") {
-            ledger.exp_string(
-                "This node is a validator (NOT in the active validator set)",
-            )?;
+            ledger.exp_string("This node is a fullnode")?;
         } else {
             ledger.exp_string("This node is not a validator")?;
         }
@@ -208,7 +206,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--fee-token",
             XAN,
             "--ledger-address",
-            &validator_one_rpc
+            &validator_one_rpc,
         ],
         // 3. Submit a transaction to update an account's validity
         // predicate
@@ -225,7 +223,7 @@ fn ledger_txs_and_queries() -> Result<()> {
              "--fee-token",
              XAN,
             "--ledger-address",
-            &validator_one_rpc
+            &validator_one_rpc,
         ],
         // 4. Submit a custom tx
         vec![
@@ -256,7 +254,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--code-path",
             &vp_user,
             "--alias",
-            "test-account",
+            "Test-Account",
             "--fee-amount",
             "0",
             "--gas-limit",
@@ -264,7 +262,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--fee-token",
             XAN,
             "--ledger-address",
-            &validator_one_rpc
+            &validator_one_rpc,
         ],
     ];
 
@@ -462,6 +460,7 @@ fn pos_bonds() -> Result<()> {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 2,
                 min_duration: 1,
+                max_expected_time_per_block: 1,
             };
             let pos_params = PosParamsConfig {
                 pipeline_len: 1,
@@ -657,6 +656,7 @@ fn pos_init_validator() -> Result<()> {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 2,
                 min_duration: 1,
+                max_expected_time_per_block: 1,
             };
             let pos_params = PosParamsConfig {
                 pipeline_len,

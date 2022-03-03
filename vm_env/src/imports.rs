@@ -62,6 +62,7 @@ pub mod tx {
     use anoma::types::storage::{
         BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
     };
+    use anoma::types::time::Rfc3339String;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     #[derive(Debug)]
@@ -105,6 +106,26 @@ pub mod tx {
         let key = key.as_ref();
         unsafe {
             anoma_tx_write(
+                key.as_ptr() as _,
+                key.len() as _,
+                val.as_ref().as_ptr() as _,
+                val.as_ref().len() as _,
+            )
+        };
+    }
+
+    /// Write a temporary value to be encoded with Borsh at the given key to
+    /// storage.
+    pub fn write_temp<T: BorshSerialize>(key: impl AsRef<str>, val: T) {
+        let buf = val.try_to_vec().unwrap();
+        write_bytes_temp(key, buf);
+    }
+
+    /// Write a temporary value as bytes at the given key to storage.
+    pub fn write_bytes_temp(key: impl AsRef<str>, val: impl AsRef<[u8]>) {
+        let key = key.as_ref();
+        unsafe {
+            anoma_tx_write_temp(
                 key.as_ptr() as _,
                 key.len() as _,
                 val.as_ref().as_ptr() as _,
@@ -216,6 +237,18 @@ pub mod tx {
         BlockHeight(unsafe { anoma_tx_get_block_height() })
     }
 
+    /// Get time of the current block header as rfc 3339 string
+    pub fn get_block_time() -> Rfc3339String {
+        let read_result = unsafe { anoma_tx_get_block_time() };
+        let time_value =
+            super::read_from_buffer(read_result, anoma_tx_result_buffer)
+                .expect("The block time should exist");
+        Rfc3339String(
+            String::try_from_slice(&time_value[..])
+                .expect("The conversion shouldn't fail"),
+        )
+    }
+
     /// Get hash of the current block
     pub fn get_block_hash() -> BlockHash {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
@@ -265,6 +298,14 @@ pub mod tx {
             val_len: u64,
         );
 
+        // Write a temporary key/value
+        fn anoma_tx_write_temp(
+            key_ptr: u64,
+            key_len: u64,
+            val_ptr: u64,
+            val_len: u64,
+        );
+
         // Delete the given key and its value
         fn anoma_tx_delete(key_ptr: u64, key_len: u64);
 
@@ -299,6 +340,9 @@ pub mod tx {
 
         // Get the current block height
         fn anoma_tx_get_block_height() -> u64;
+
+        // Get the time of the current block header
+        fn anoma_tx_get_block_time() -> i64;
 
         // Get the current block hash
         fn anoma_tx_get_block_hash(result_ptr: u64);
@@ -364,6 +408,25 @@ pub mod vp {
         let key = key.as_ref();
         let read_result =
             unsafe { anoma_vp_read_post(key.as_ptr() as _, key.len() as _) };
+        super::read_from_buffer(read_result, anoma_vp_result_buffer)
+    }
+
+    /// Try to read a Borsh encoded variable-length value at the given key from
+    /// storage before transaction execution.
+    pub fn read_temp<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
+        let key = key.as_ref();
+        let read_result =
+            unsafe { anoma_vp_read_temp(key.as_ptr() as _, key.len() as _) };
+        super::read_from_buffer(read_result, anoma_vp_result_buffer)
+            .and_then(|t| T::try_from_slice(&t[..]).ok())
+    }
+
+    /// Try to read a variable-length value as bytes at the given key from
+    /// storage before transaction execution.
+    pub fn read_bytes_temp(key: impl AsRef<str>) -> Option<Vec<u8>> {
+        let key = key.as_ref();
+        let read_result =
+            unsafe { anoma_vp_read_temp(key.as_ptr() as _, key.len() as _) };
         super::read_from_buffer(read_result, anoma_vp_result_buffer)
     }
 
@@ -520,6 +583,13 @@ pub mod vp {
         // result buffer, because we cannot allocate a buffer for it before
         // we know its size.
         fn anoma_vp_read_post(key_ptr: u64, key_len: u64) -> i64;
+
+        // Read variable-length temporary state when we don't know the size
+        // up-front, returns the size of the value (can be 0), or -1 if
+        // the key is not present. If a value is found, it will be placed in the
+        // result buffer, because we cannot allocate a buffer for it before
+        // we know its size.
+        fn anoma_vp_read_temp(key_ptr: u64, key_len: u64) -> i64;
 
         // Read a value from result buffer.
         fn anoma_vp_result_buffer(result_ptr: u64);
