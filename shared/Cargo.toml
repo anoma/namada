@@ -75,12 +75,11 @@ ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
 ferveo-common = {git = "https://github.com/anoma/ferveo"}
 hex = "0.4.3"
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
-# TODO temp fork for borsh coding
-# Also, using the same version of tendermint-rs as we do here.
-ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/abcipp-v0.23.5", features = ["mocks"], optional = true}
-ibc-abci = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/rebase_v0.23.5", features = ["mocks"], optional = true}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/abcipp-v0.23.5", optional = true}
-ibc-proto-abci = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/rebase_v0.23.5", optional = true}
+# TODO using the same version of tendermint-rs as we do here.
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_abcipp_v0.23.5", default-features = false, features = ["mocks"], optional = true}
+ibc-abci = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_tm_v0.23.5", default-features = false, features = ["mocks"], optional = true}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_abcipp_v0.23.5", default-features = false, optional = true}
+ibc-proto-abci = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_tm_v0.23.5", default-features = false, optional = true}
 ics23 = "0.6.7"
 itertools = "0.10.0"
 parity-wasm = {version = "0.42.2", optional = true}
@@ -104,7 +103,7 @@ tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch =
 tendermint-proto-abci = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5", optional = true}
 tendermint-stable = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5", optional = true}
 thiserror = "1.0.30"
-tracing = "0.1.29"
+tracing = "0.1.30"
 wasmer = {version = "=1.0.2", optional = true}
 wasmer-cache = {version = "=1.0.2", optional = true}
 wasmer-compiler-cranelift = {version = "=1.0.2", optional = true}
@@ -129,7 +128,7 @@ byte-unit = "4.0.13"
 pretty_assertions = "0.7.2"
 proptest = "1.0.0"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
-tracing-subscriber = {version = "0.2.25", default-features = false, features = ["env-filter", "fmt"]}
+tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 
 [build-dependencies]
 tonic-build = "0.6.0"
