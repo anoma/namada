@@ -18,6 +18,8 @@ pub const HASH_LENGTH: usize = 32;
 pub enum Error {
     #[error("TEMPORARY error: {error}")]
     Temporary { error: String },
+    #[error("Failed trying to convert slice to a hash: {0}")]
+    ConversionFailed(std::array::TryFromSliceError),
 }
 
 /// Result for functions that may fail
@@ -59,8 +61,8 @@ impl TryFrom<&[u8]> for Hash {
                 ),
             });
         }
-        let mut hash = [0; 32];
-        hash.copy_from_slice(value);
+        let hash: [u8; 32] =
+            TryFrom::try_from(value).map_err(Error::ConversionFailed)?;
         Ok(Hash(hash))
     }
 }

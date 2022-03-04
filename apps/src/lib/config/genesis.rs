@@ -183,9 +183,11 @@ pub mod genesis_config {
         // Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
         pub max_expected_time_per_block: i64,
-        // Hashes of whitelisted vps array
+        // Hashes of whitelisted vps array. `None` value or an empty array
+        // disables whitelisting.
         pub vp_whitelist: Option<Vec<String>>,
-        // Hashes of whitelisted vps array
+        // Hashes of whitelisted txs array. `None` value or an empty array
+        // disables whitelisting.
         pub tx_whitelist: Option<Vec<String>>,
     }
 

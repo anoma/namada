@@ -2,10 +2,7 @@ use std::borrow::Borrow;
 use std::collections::HashSet;
 
 use anoma::ledger::gas::BlockGasMeter;
-use anoma::ledger::parameters::{
-    update_epoch_parameter, update_tx_whitelist_parameter,
-    update_vp_whitelist_parameter, EpochDuration,
-};
+use anoma::ledger::parameters::{self, EpochDuration};
 use anoma::ledger::storage::mockdb::MockDB;
 use anoma::ledger::storage::testing::TestStorage;
 use anoma::ledger::storage::write_log::WriteLog;
@@ -75,18 +72,18 @@ impl TestTxEnv {
         vp_whitelist: Option<Vec<String>>,
         tx_whitelist: Option<Vec<String>>,
     ) {
-        let _ = update_epoch_parameter(
+        let _ = parameters::update_epoch_parameter(
             &mut self.storage,
             &epoch_duration.unwrap_or(EpochDuration {
                 min_num_of_blocks: 1,
                 min_duration: DurationSecs(5),
             }),
         );
-        let _ = update_tx_whitelist_parameter(
+        let _ = parameters::update_tx_whitelist_parameter(
             &mut self.storage,
             tx_whitelist.unwrap_or_default(),
         );
-        let _ = update_vp_whitelist_parameter(
+        let _ = parameters::update_vp_whitelist_parameter(
             &mut self.storage,
             vp_whitelist.unwrap_or_default(),
         );

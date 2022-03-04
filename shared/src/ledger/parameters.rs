@@ -141,7 +141,7 @@ pub enum ReadError {
 
 // Read the all the parameters from storage. Returns the parameters and gas
 /// cost.
-pub fn read_parameters<DB, H>(
+pub fn read<DB, H>(
     storage: &Storage<DB, H>,
 ) -> std::result::Result<(Parameters, u64), ReadError>
 where
@@ -149,12 +149,8 @@ where
     H: storage::StorageHasher,
 {
     // read epoch
-    let epoch_key = epoch_storage_key();
-    let (value, gas_epoch) =
-        storage.read(&epoch_key).map_err(ReadError::StorageError)?;
-    let epoch_duration: EpochDuration =
-        decode(value.ok_or(ReadError::ParametersMissing)?)
-            .map_err(ReadError::StorageTypeError)?;
+    let (epoch_duration, gas_epoch) = read_epoch_parameter(storage)
+        .expect("Couldn't read epoch duration parameters");
 
     // read vp whitelist
     let vp_whitelist_key = vp_whitelist_storage_key();

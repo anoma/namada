@@ -129,7 +129,7 @@ name = "anoma_tx_prelude"
 version = "0.4.0"
 dependencies = [
  "anoma_vm_env",
- "sha2 0.10.2",
+ "sha2 0.10.1",
 ]
 
 [[package]]
@@ -2087,7 +2087,7 @@ checksum = "99c3bd8169c58782adad9290a9af5939994036b76187f7b4f0e6de91dbbfc0ec"
 dependencies = [
  "cfg-if 1.0.0",
  "cpufeatures",
- "digest 0.10.1",
+ "digest 0.10.3",
 ]
 
 [[package]]

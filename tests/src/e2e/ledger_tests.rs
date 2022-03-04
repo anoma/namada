@@ -463,8 +463,7 @@ fn pos_bonds() -> Result<()> {
                 min_num_of_blocks: 2,
                 min_duration: 1,
                 max_expected_time_per_block: 1,
-                vp_whitelist: Some(vec![]),
-                tx_whitelist: Some(vec![]),
+                ..genesis.parameters
             };
             let pos_params = PosParamsConfig {
                 pipeline_len: 1,
@@ -661,8 +660,7 @@ fn pos_init_validator() -> Result<()> {
                 min_num_of_blocks: 2,
                 min_duration: 1,
                 max_expected_time_per_block: 1,
-                vp_whitelist: Some(vec![]),
-                tx_whitelist: Some(vec![]),
+                ..genesis.parameters
             };
             let pos_params = PosParamsConfig {
                 pipeline_len,

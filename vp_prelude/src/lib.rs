@@ -20,7 +20,7 @@ pub fn is_tx_whitelisted() -> bool {
     let key = parameters::tx_whitelist_storage_key();
     let whitelist: Vec<String> = read_pre(&key.to_string()).unwrap_or_default();
     // if whitelist is empty, allow any transaction
-    whitelist.contains(&tx_hash.to_string()) || whitelist.is_empty()
+    whitelist.is_empty() || whitelist.contains(&tx_hash.to_string())
 }
 
 pub fn is_vp_whitelisted(vp_bytes: &[u8]) -> bool {
@@ -28,7 +28,7 @@ pub fn is_vp_whitelisted(vp_bytes: &[u8]) -> bool {
     let key = parameters::vp_whitelist_storage_key();
     let whitelist: Vec<String> = read_pre(&key.to_string()).unwrap_or_default();
     // if whitelist is empty, allow any transaction
-    whitelist.contains(&vp_hash.to_string()) || whitelist.is_empty()
+    whitelist.is_empty() || whitelist.contains(&vp_hash.to_string())
 }
 
 /// Log a string in a debug build. The message will be printed at the
