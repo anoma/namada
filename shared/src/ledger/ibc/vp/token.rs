@@ -4,24 +4,12 @@ use std::collections::HashSet;
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
-#[cfg(not(feature = "ABCI"))]
-use ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::PacketMsg;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::packet::Packet;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics26_routing::msgs::Ics26Envelope;
-#[cfg(feature = "ABCI")]
-use ibc_abci::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::PacketMsg;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::packet::Packet;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics26_routing::msgs::Ics26Envelope;
 use thiserror::Error;
 
+use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use crate::ibc::core::ics04_channel::msgs::PacketMsg;
+use crate::ibc::core::ics04_channel::packet::Packet;
+use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::types::address::{Address, Error as AddressError, InternalAddress};

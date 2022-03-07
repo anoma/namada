@@ -23,15 +23,12 @@ pub use encrypted::EncryptionKey;
 pub use protocol::UpdateDkgSessionKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-#[cfg(not(feature = "ABCI"))]
-use tendermint::abci::transaction;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::abci::transaction;
 pub use wrapper::*;
 
 use super::ibc::IbcEvent;
 use super::storage;
 use crate::ledger::gas::VpsGas;
+use crate::tendermint::abci::transaction;
 use crate::types::address::Address;
 use crate::types::key::*;
 

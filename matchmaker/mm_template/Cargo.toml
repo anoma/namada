@@ -14,7 +14,10 @@ crate-type = ["dylib"]
 [features]
 default = ["ABCI"]
 
-ABCI = ["anoma/ABCI"]
+ABCI = [
+  "anoma/ABCI",
+  "anoma/ibc-vp-abci",
+]
 
 [dependencies]
 anoma = {path = "../../shared", default-features = false}

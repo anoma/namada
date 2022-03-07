@@ -3,6 +3,48 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::str::FromStr;
 
+use anoma::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use anoma::ibc::core::ics02_client::client_consensus::ConsensusState;
+use anoma::ibc::core::ics02_client::client_state::{
+    AnyClientState, ClientState,
+};
+use anoma::ibc::core::ics02_client::header::Header;
+use anoma::ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
+use anoma::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
+use anoma::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
+use anoma::ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
+use anoma::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+use anoma::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+use anoma::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+use anoma::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
+use anoma::ibc::core::ics03_connection::version::Version as ConnVersion;
+use anoma::ibc::core::ics04_channel::channel::{
+    ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
+};
+use anoma::ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
+use anoma::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
+use anoma::ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
+use anoma::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+use anoma::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+use anoma::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
+use anoma::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+use anoma::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+use anoma::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
+use anoma::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+use anoma::ibc::core::ics04_channel::packet::{Packet, Sequence};
+use anoma::ibc::core::ics04_channel::Version as ChanVersion;
+use anoma::ibc::core::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortId,
+};
+use anoma::ibc::mock::client_state::{MockClientState, MockConsensusState};
+use anoma::ibc::mock::header::MockHeader;
+use anoma::ibc::proofs::{ConsensusProof, Proofs};
+use anoma::ibc::signer::Signer;
+use anoma::ibc::timestamp::Timestamp;
+use anoma::ibc::Height;
+use anoma::ibc_proto::cosmos::base::v1beta1::Coin;
+use anoma::ibc_proto::ibc::core::commitment::v1::MerkleProof;
+use anoma::ibc_proto::ics23::CommitmentProof;
 use anoma::ledger::gas::VpGasMeter;
 pub use anoma::ledger::ibc::handler::*;
 use anoma::ledger::ibc::init_genesis_storage;
@@ -19,6 +61,15 @@ use anoma::ledger::storage::mockdb::MockDB;
 use anoma::ledger::storage::testing::TestStorage;
 use anoma::ledger::storage::Sha256Hasher;
 use anoma::proto::Tx;
+use anoma::tendermint::account::Id as TmAccountId;
+use anoma::tendermint::block::header::{
+    Header as TmHeader, Version as TmVersion,
+};
+use anoma::tendermint::block::Height as TmHeight;
+use anoma::tendermint::chain::Id as TmChainId;
+use anoma::tendermint::hash::{AppHash, Hash as TmHash};
+use anoma::tendermint::time::Time as TmTime;
+use anoma::tendermint_proto::Protobuf;
 use anoma::types::address::{self, Address, InternalAddress};
 use anoma::types::ibc::data::FungibleTokenPacketData;
 use anoma::types::ibc::IbcEvent;
@@ -26,193 +77,7 @@ use anoma::types::storage::{BlockHeight, Epoch, Key};
 use anoma::types::time::Rfc3339String;
 use anoma::types::token::{self, Amount};
 use anoma::vm::{wasm, WasmCacheRwAccess};
-#[cfg(not(feature = "ABCI"))]
-use ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::client_consensus::ConsensusState;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::client_state::{AnyClientState, ClientState};
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::header::Header;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics03_connection::version::Version as ConnVersion;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::channel::State as ChanState;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::channel::{
-    ChannelEnd, Counterparty as ChanCounterparty, Order,
-};
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::packet::{Packet, Sequence};
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics04_channel::Version as ChanVersion;
-#[cfg(not(feature = "ABCI"))]
-use ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
-};
-#[cfg(not(feature = "ABCI"))]
-use ibc::mock::client_state::{MockClientState, MockConsensusState};
-#[cfg(not(feature = "ABCI"))]
-use ibc::mock::header::MockHeader;
-#[cfg(not(feature = "ABCI"))]
-use ibc::proofs::{ConsensusProof, Proofs};
-#[cfg(not(feature = "ABCI"))]
-use ibc::signer::Signer;
-#[cfg(not(feature = "ABCI"))]
-use ibc::timestamp::Timestamp;
-#[cfg(not(feature = "ABCI"))]
-use ibc::Height;
-#[cfg(feature = "ABCI")]
-use ibc_abci::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::client_consensus::ConsensusState;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::client_state::{AnyClientState, ClientState};
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::header::Header;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics03_connection::connection::Counterparty as ConnCounterparty;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics03_connection::version::Version as ConnVersion;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::channel::State as ChanState;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::channel::{
-    ChannelEnd, Counterparty as ChanCounterparty, Order,
-};
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::timeout::MsgTimeout;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::packet::{Packet, Sequence};
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics04_channel::Version as ChanVersion;
-#[cfg(feature = "ABCI")]
-use ibc_abci::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
-};
-#[cfg(feature = "ABCI")]
-use ibc_abci::mock::client_state::{MockClientState, MockConsensusState};
-#[cfg(feature = "ABCI")]
-use ibc_abci::mock::header::MockHeader;
-#[cfg(feature = "ABCI")]
-use ibc_abci::proofs::{ConsensusProof, Proofs};
-#[cfg(feature = "ABCI")]
-use ibc_abci::signer::Signer;
-#[cfg(feature = "ABCI")]
-use ibc_abci::timestamp::Timestamp;
-#[cfg(feature = "ABCI")]
-use ibc_abci::Height;
-#[cfg(not(feature = "ABCI"))]
-use ibc_proto::cosmos::base::v1beta1::Coin;
-#[cfg(not(feature = "ABCI"))]
-use ibc_proto::ibc::core::commitment::v1::MerkleProof;
-#[cfg(not(feature = "ABCI"))]
-use ibc_proto::ics23::CommitmentProof;
-#[cfg(feature = "ABCI")]
-use ibc_proto_abci::cosmos::base::v1beta1::Coin;
-#[cfg(feature = "ABCI")]
-use ibc_proto_abci::ibc::core::commitment::v1::MerkleProof;
-#[cfg(feature = "ABCI")]
-use ibc_proto_abci::ics23::CommitmentProof;
 use tempfile::TempDir;
-#[cfg(not(feature = "ABCI"))]
-use tendermint::account::Id as TmAccountId;
-#[cfg(not(feature = "ABCI"))]
-use tendermint::block::header::{Header as TmHeader, Version as TmVersion};
-#[cfg(not(feature = "ABCI"))]
-use tendermint::block::Height as TmHeight;
-#[cfg(not(feature = "ABCI"))]
-use tendermint::chain::Id as TmChainId;
-#[cfg(not(feature = "ABCI"))]
-use tendermint::hash::{AppHash, Hash as TmHash};
-#[cfg(not(feature = "ABCI"))]
-use tendermint::time::Time as TmTime;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::Protobuf;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::Protobuf;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::account::Id as TmAccountId;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::block::header::{
-    Header as TmHeader, Version as TmVersion,
-};
-#[cfg(feature = "ABCI")]
-use tendermint_stable::block::Height as TmHeight;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::chain::Id as TmChainId;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::hash::{AppHash, Hash as TmHash};
-#[cfg(feature = "ABCI")]
-use tendermint_stable::time::Time as TmTime;
 
 use crate::tx::*;
 
