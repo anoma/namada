@@ -1348,7 +1348,7 @@ where
                                 }
                                 None => {
                                     // Others must be the same as in pre
-                                    if !pre.active.contains(validator) {
+                                    if !pre.inactive.contains(validator) {
                                         errors.push(
                                             Error::InvalidInactiveValidator(
                                                 validator.clone(),
