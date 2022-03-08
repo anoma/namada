@@ -196,7 +196,9 @@ where
                             tx_result["code"] = ErrorCodes::Ok.into();
                         }
                         if let Some(ibc_event) = &result.ibc_event {
-                            tx_result.merge_ibc_event(ibc_event);
+                            // Add the IBC event besides the tx_result
+                            let event = Event::from(ibc_event.clone());
+                            response.events.push(event.into());
                         }
                         match serde_json::to_string(
                             &result.initialized_accounts,
