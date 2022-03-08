@@ -55,9 +55,7 @@ pub struct Network {
     pub chain_id: ChainId,
 }
 
-/// Offset the ports used in the network configuration by 1000 for ABCI++ to
-/// avoid shared resources
-pub const ABCI_PLUS_PLUS_PORT_OFFSET: u16 = 1000;
+/// Offset the ports used in the network configuration to avoid shared resources
 pub const ANOTHER_CHAIN_PORT_OFFSET: u16 = 1001;
 
 /// Add `num` validators to the genesis config. Note that called from inside

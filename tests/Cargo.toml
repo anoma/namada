@@ -17,12 +17,11 @@ namada_vm_env = {path = "../vm_env"}
 chrono = "0.4.19"
 concat-idents = "1.1.2"
 prost = "0.9.0"
+ibc-relayer = {git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false}
 serde_json = {version = "1.0.65"}
 sha2 = "0.9.3"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tempfile = "3.2.0"
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 tokio = {version = "1.8.2", features = ["full"]}

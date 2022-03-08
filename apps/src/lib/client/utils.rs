@@ -353,7 +353,7 @@ pub async fn join_network(
 const TENDERMINT_NODE_ID_LENGTH: usize = 20;
 
 /// Derive Tendermint node ID from public key
-fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
+pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
     let mut bytes = [0u8; TENDERMINT_NODE_ID_LENGTH];
 
     match pk {
