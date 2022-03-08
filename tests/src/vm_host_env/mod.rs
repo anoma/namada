@@ -497,7 +497,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // get and increment the connection counter
         let counter_key = ibc::client_counter_key();
         let counter = ibc::TestIbcActions
@@ -516,7 +517,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect_err("validation succeeded unexpectedly"),
             IbcError::ClientError(_),
         ));
@@ -531,7 +532,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
 
         // create a client with the message
         ibc::TestIbcActions
@@ -542,7 +544,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
 
@@ -566,7 +568,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // get and update the client without a header
         let client_id = msg.client_id.clone();
         // update the client with the same state
@@ -592,7 +595,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect_err("validation succeeded unexpectedly"),
             IbcError::ClientError(_),
         ));
@@ -607,7 +610,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // update the client with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -617,7 +621,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
 
@@ -638,7 +642,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // upgrade the client with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -648,7 +653,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -677,7 +682,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // get and increment the connection counter
         let counter_key = ibc::connection_counter_key();
         let counter = ibc::TestIbcActions
@@ -696,7 +702,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect_err("validation succeeded unexpectedly"),
             IbcError::ConnectionError(_),
         ));
@@ -711,7 +717,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // init a connection with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -721,7 +728,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
 
@@ -739,7 +746,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // open the connection with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -749,7 +757,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -775,7 +783,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // open try a connection with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -785,7 +794,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
 
@@ -804,7 +813,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // open the connection with the mssage
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -814,7 +824,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -846,7 +856,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // not bind a port
         // get and increment the channel counter
         let counter_key = ibc::channel_counter_key();
@@ -868,7 +879,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect_err("validation succeeded unexpectedly"),
             IbcError::ChannelError(_),
         ));
@@ -887,7 +898,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // bind a port
         ibc::TestIbcActions
             .bind_port(&port_id)
@@ -911,7 +923,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect_err("validation succeeded unexpectedly"),
             IbcError::ChannelError(_),
         ));
@@ -927,7 +939,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // init a channel with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -937,7 +950,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
 
@@ -953,7 +966,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // open the channle with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -963,7 +977,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -992,7 +1006,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // try open a channel with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1002,7 +1017,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
 
@@ -1019,7 +1034,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // open a channel with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1029,7 +1045,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -1060,7 +1076,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // close the channel with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1070,7 +1087,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -1101,7 +1118,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
 
         // close the channel with the message
         ibc::TestIbcActions
@@ -1112,7 +1130,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -1147,7 +1165,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1157,7 +1176,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was escrowed
@@ -1170,7 +1189,7 @@ mod tests {
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
         assert!(
             token_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("token validation failed unexpectedly")
         );
 
@@ -1189,7 +1208,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // ack the packet with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1199,7 +1219,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -1232,7 +1252,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1242,7 +1263,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was burned
@@ -1251,7 +1272,7 @@ mod tests {
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &burn);
         assert!(
             token_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("token validation failed unexpectedly")
         );
     }
@@ -1291,7 +1312,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // receive a packet with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1301,7 +1323,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was minted
@@ -1310,7 +1332,7 @@ mod tests {
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &mint);
         assert!(
             token_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("token validation failed unexpectedly")
         );
     }
@@ -1368,7 +1390,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // receive a packet with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1378,14 +1401,14 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was unescrowed
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
         assert!(
             token_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("token validation failed unexpectedly")
         );
     }
@@ -1420,7 +1443,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // send a packet with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1432,7 +1456,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
 
@@ -1451,7 +1475,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // ack the packet with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1463,7 +1488,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -1503,7 +1528,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
         // receive a packet with the message
         ibc::TestIbcActions
             .dispatch(&tx_data)
@@ -1515,7 +1541,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
     }
@@ -1567,7 +1593,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
 
         // close the channel with the message
         ibc::TestIbcActions
@@ -1578,7 +1605,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was refunded
@@ -1591,7 +1618,7 @@ mod tests {
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
         assert!(
             token_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("token validation failed unexpectedly")
         );
     }
@@ -1642,7 +1669,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-        };
+        }
+        .sign(&key::testing::keypair_1());
 
         // close the channel with the message
         ibc::TestIbcActions
@@ -1653,7 +1681,7 @@ mod tests {
         let (ibc_vp, _) = ibc::init_ibc_vp_from_tx(&env, &tx);
         assert!(
             ibc_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was refunded
@@ -1666,7 +1694,7 @@ mod tests {
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
         assert!(
             token_vp
-                .validate(&tx_data)
+                .validate(tx.data.as_ref().unwrap())
                 .expect("token validation failed unexpectedly")
         );
     }

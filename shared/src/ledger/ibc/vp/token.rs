@@ -12,6 +12,7 @@ use crate::ibc::core::ics04_channel::packet::Packet;
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::proto::SignedTxData;
 use crate::types::address::{Address, Error as AddressError, InternalAddress};
 use crate::types::ibc::data::{
     Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
@@ -43,6 +44,8 @@ pub enum Error {
     DecodingPacketData(serde_json::Error),
     #[error("Invalid token transfer error")]
     TokenTransfer(String),
+    #[error("IBC message is required as transaction data")]
+    NoTxData,
 }
 
 /// Result for IBC token VP
@@ -75,6 +78,10 @@ where
         keys_changed: &HashSet<Key>,
         _verifiers: &HashSet<Address>,
     ) -> Result<bool> {
+        let signed =
+            SignedTxData::try_from_slice(tx_data).map_err(Error::Decoding)?;
+        let tx_data = &signed.data.ok_or(Error::NoTxData)?;
+
         // Check the non-onwer balance updates
         let keys_changed: HashSet<Key> = keys_changed
             .iter()
