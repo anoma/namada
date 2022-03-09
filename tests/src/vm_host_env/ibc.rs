@@ -58,7 +58,6 @@ pub use anoma::ledger::ibc::storage::{
 use anoma::ledger::ibc::vp::{Ibc, IbcToken};
 use anoma::ledger::native_vp::{Ctx, NativeVp};
 use anoma::ledger::storage::mockdb::MockDB;
-use anoma::ledger::storage::testing::TestStorage;
 use anoma::ledger::storage::Sha256Hasher;
 use anoma::proto::Tx;
 use anoma::tendermint::account::Id as TmAccountId;
@@ -238,11 +237,13 @@ pub fn init_token_vp_from_tx<'a>(
     )
 }
 
-/// Initialize the test storage
-pub fn init_storage(storage: &mut TestStorage) -> (Address, Address) {
-    init_genesis_storage(storage);
-    // block header to check timeout timestamp
-    storage.set_header(tm_dummy_header()).unwrap();
+/// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
+pub fn init_storage() -> (Address, Address) {
+    tx_host_env::with(|env| {
+        init_genesis_storage(&mut env.storage);
+        // block header to check timeout timestamp
+        env.storage.set_header(tm_dummy_header()).unwrap();
+    });
 
     // initialize a token
     let code = std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");

@@ -12,7 +12,7 @@ use anoma::vm::wasm::{self, VpCache};
 use anoma::vm::{self, WasmCacheRwAccess};
 use tempfile::TempDir;
 
-use crate::tx::{init_tx_env, TestTxEnv};
+use crate::tx::{tx_host_env, TestTxEnv};
 
 /// This module combines the native host function implementations from
 /// `native_vp_host_env` with the functions exposed to the vp wasm
@@ -98,9 +98,10 @@ pub fn init_vp_env_from_tx(
     let vp_key = Key::validity_predicate(&addr);
     tx_env.storage.write(&vp_key, vec![]).unwrap();
 
-    init_tx_env(&mut tx_env);
+    tx_host_env::init_from(tx_env);
     apply_tx(&addr);
 
+    let tx_env = tx_host_env::take();
     let verifiers_from_tx = &tx_env.verifiers;
     let verifiers_changed_keys =
         tx_env.write_log.verifiers_changed_keys(verifiers_from_tx);
