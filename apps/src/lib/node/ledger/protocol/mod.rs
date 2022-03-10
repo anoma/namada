@@ -1,5 +1,5 @@
 //! The ledger's protocol
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::{fmt, panic};
 
 use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter, VpsGas};
@@ -55,7 +55,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Debug, Default)]
 pub struct TxResult {
     pub gas_used: u64,
-    pub changed_keys: HashSet<Key>,
+    pub changed_keys: BTreeSet<Key>,
     pub vps_result: VpsResult,
     pub initialized_accounts: Vec<Address>,
     pub ibc_event: Option<IbcEvent>,
@@ -157,7 +157,7 @@ fn execute_tx<D, H, CA>(
     write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
-) -> Result<HashSet<Address>>
+) -> Result<BTreeSet<Address>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -192,7 +192,7 @@ fn check_vps<D, H, CA>(
     storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
     write_log: &WriteLog,
-    verifiers_from_tx: &HashSet<Address>,
+    verifiers_from_tx: &BTreeSet<Address>,
     vp_wasm_cache: &mut VpCache<CA>,
 ) -> Result<VpsResult>
 where
@@ -203,7 +203,7 @@ where
     let verifiers = write_log.verifiers_changed_keys(verifiers_from_tx);
 
     // collect the VPs for the verifiers
-    let verifiers: Vec<(Address, HashSet<Key>, Vp)> = verifiers
+    let verifiers: Vec<(Address, BTreeSet<Key>, Vp)> = verifiers
         .iter()
         .filter(|(addr, _)| !matches!(addr, Address::Implicit(_)))
         .map(|(addr, keys)| {
@@ -250,7 +250,7 @@ where
 
 /// Execute verifiers' validity predicates
 fn execute_vps<D, H, CA>(
-    verifiers: Vec<(Address, HashSet<Key>, Vp)>,
+    verifiers: Vec<(Address, BTreeSet<Key>, Vp)>,
     tx: &Tx,
     storage: &Storage<D, H>,
     write_log: &WriteLog,
@@ -266,7 +266,7 @@ where
         .iter()
         .map(|(addr, _, _)| addr)
         .cloned()
-        .collect::<HashSet<_>>();
+        .collect::<BTreeSet<_>>();
 
     verifiers
         .par_iter()
