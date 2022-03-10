@@ -73,7 +73,7 @@ use anoma::tendermint_proto::Protobuf;
 use anoma::types::address::{self, Address, InternalAddress};
 use anoma::types::ibc::data::FungibleTokenPacketData;
 use anoma::types::ibc::IbcEvent;
-use anoma::types::storage::{BlockHeight, Epoch, Key};
+use anoma::types::storage::{BlockHeight, Key};
 use anoma::types::time::Rfc3339String;
 use anoma::types::token::{self, Amount};
 use anoma::vm::{wasm, WasmCacheRwAccess};
@@ -170,11 +170,8 @@ impl IbcActions for TestIbcActions {
         }
     }
 
-    fn get_height(&self) -> (Epoch, BlockHeight) {
-        (
-            tx_host_env::get_block_epoch(),
-            tx_host_env::get_block_height(),
-        )
+    fn get_height(&self) -> BlockHeight {
+        tx_host_env::get_block_height()
     }
 
     fn get_header_time(&self) -> Rfc3339String {
