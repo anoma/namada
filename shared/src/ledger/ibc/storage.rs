@@ -163,6 +163,20 @@ pub fn consensus_state_key(client_id: &ClientId, height: Height) -> Key {
         .expect("Creating a key for the consensus state shouldn't fail")
 }
 
+/// Returns a key prefix for the consensus state
+pub fn consensus_state_prefix(client_id: &ClientId) -> Key {
+    let path = Path::ClientConsensusState(ClientConsensusStatePath {
+        client_id: client_id.clone(),
+        epoch: 0,
+        height: 0,
+    });
+    let suffix = "/0-0".to_string();
+    let path = path.to_string();
+    let prefix = path.strip_suffix(&suffix).expect("The suffix should exist");
+    ibc_key(prefix)
+        .expect("Creating a key prefix of the consensus state shouldn't fail")
+}
+
 /// Returns a key for the connection end
 pub fn connection_key(conn_id: &ConnectionId) -> Key {
     let path = Path::Connections(ConnectionsPath(conn_id.clone()));
@@ -296,6 +310,30 @@ pub fn client_id(key: &Key) -> Result<ClientId> {
         }
         _ => Err(Error::InvalidKey(format!(
             "The key doesn't have a client ID: {}",
+            key
+        ))),
+    }
+}
+
+/// Returns the height from the given consensus state key
+/// `#IBC/clients/<client_id>/consensusState/0-<height>`
+pub fn consensus_height(key: &Key) -> Result<Height> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(_client_id),
+            DbKeySeg::StringSeg(module),
+            DbKeySeg::StringSeg(height),
+        ] if addr == &Address::Internal(InternalAddress::Ibc)
+            && prefix == "clients"
+            && module == "consensusStates" =>
+        {
+            Height::from_str(height)
+                .map_err(|e| Error::InvalidKey(e.to_string()))
+        }
+        _ => Err(Error::InvalidKey(format!(
+            "The key doesn't have a consensus height: {}",
             key
         ))),
     }
