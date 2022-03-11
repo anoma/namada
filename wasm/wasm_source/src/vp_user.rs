@@ -15,7 +15,6 @@
 use anoma_vp_prelude::intent::{
     Exchange, FungibleTokenIntent, IntentTransfers,
 };
-use anoma_vp_prelude::key::ed25519::{Signed, SignedTxData};
 use anoma_vp_prelude::*;
 use once_cell::unsync::Lazy;
 use rust_decimal::prelude::*;
@@ -66,7 +65,7 @@ fn validate_tx(
 
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
         Ok(signed_tx_data) => {
-            let pk = key::ed25519::get(&addr);
+            let pk = key::get(&addr);
             match pk {
                 Some(pk) => verify_tx_signature(&pk, &signed_tx_data.sig),
                 None => false,
@@ -143,8 +142,9 @@ fn validate_tx(
             KeyType::InvalidIntentSet(owner) => {
                 if owner == &addr {
                     let key = key.to_string();
-                    let pre: Vec<Vec<u8>> = read_pre(&key).unwrap_or_default();
-                    let post: Vec<Vec<u8>> =
+                    let pre: HashSet<key::common::Signature> =
+                        read_pre(&key).unwrap_or_default();
+                    let post: HashSet<key::common::Signature> =
                         read_post(&key).unwrap_or_default();
                     // A new invalid intent must have been added
                     pre.len() + 1 == post.len()
@@ -209,7 +209,11 @@ fn check_intent_transfers(
 fn try_decode_intent(
     addr: &Address,
     signed_tx_data: &SignedTxData,
-) -> Option<(Vec<u8>, Signed<Exchange>, Signed<FungibleTokenIntent>)> {
+) -> Option<(
+    Vec<u8>,
+    anoma_vp_prelude::Signed<Exchange>,
+    anoma_vp_prelude::Signed<FungibleTokenIntent>,
+)> {
     let raw_intent_transfers = signed_tx_data.data.as_ref().cloned()?;
     let mut tx_data =
         IntentTransfers::try_from_slice(&raw_intent_transfers[..]).ok()?;
@@ -231,12 +235,12 @@ fn try_decode_intent(
 
 fn check_intent(
     addr: &Address,
-    exchange: Signed<Exchange>,
-    intent: Signed<FungibleTokenIntent>,
+    exchange: anoma_vp_prelude::Signed<Exchange>,
+    intent: anoma_vp_prelude::Signed<FungibleTokenIntent>,
     raw_intent_transfers: Vec<u8>,
 ) -> bool {
     // verify signature
-    let pk = key::ed25519::get(addr);
+    let pk = key::get(addr);
     if let Some(pk) = pk {
         if intent.verify(&pk).is_err() {
             log_string("invalid sig");
@@ -339,6 +343,7 @@ mod tests {
     use anoma_tests::tx::{tx_host_env, TestTxEnv};
     use anoma_tests::vp::vp_host_env::storage::Key;
     use anoma_tests::vp::*;
+    use anoma_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
@@ -430,8 +435,8 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let vp_owner = address::testing::established_address_1();
-        let keypair = key::ed25519::testing::keypair_1();
-        let public_key = &keypair.public;
+        let keypair = key::testing::keypair_1();
+        let public_key = keypair.ref_to();
         let target = address::testing::established_address_2();
         let token = address::xan();
         let amount = token::Amount::from(10_098_123);
@@ -443,7 +448,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
 
-        tx_env.write_public_key(&vp_owner, public_key);
+        tx_env.write_public_key(&vp_owner, &public_key);
 
         // Initialize VP environment from a transaction
         let mut vp_env =
@@ -453,7 +458,7 @@ mod tests {
             });
 
         let tx = vp_env.tx.clone();
-        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let signed_tx = tx.sign(&keypair);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: HashSet<storage::Key> =
@@ -559,15 +564,15 @@ mod tests {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
 
-            let keypair = key::ed25519::testing::keypair_1();
-            let public_key = &keypair.public;
+            let keypair = key::testing::keypair_1();
+            let public_key = keypair.ref_to();
 
             // Spawn all the accounts in the storage key to be able to modify
             // their storage
             let storage_key_addresses = storage_key.find_addresses();
             tx_env.spawn_accounts(storage_key_addresses);
 
-            tx_env.write_public_key(&vp_owner, public_key);
+            tx_env.write_public_key(&vp_owner, &public_key);
 
             // Initialize VP environment from a transaction
             let mut vp_env =
@@ -581,7 +586,7 @@ mod tests {
                 });
 
             let tx = vp_env.tx.clone();
-            let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+            let signed_tx = tx.sign(&keypair);
             let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
             vp_env.tx = signed_tx;
             let keys_changed: HashSet<storage::Key> =
@@ -627,15 +632,15 @@ mod tests {
         tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
-        let keypair = key::ed25519::testing::keypair_1();
-        let public_key = &keypair.public;
+        let keypair = key::testing::keypair_1();
+        let public_key = keypair.ref_to();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, public_key);
+        tx_env.write_public_key(&vp_owner, &public_key);
 
         // Initialize VP environment from a transaction
         let mut vp_env =
@@ -645,7 +650,7 @@ mod tests {
             });
 
         let tx = vp_env.tx.clone();
-        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let signed_tx = tx.sign(&keypair);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: HashSet<storage::Key> =
@@ -662,15 +667,15 @@ mod tests {
         tx_env.init_parameters(None, Some(vec!["some_hash".to_string()]), None);
 
         let vp_owner = address::testing::established_address_1();
-        let keypair = key::ed25519::testing::keypair_1();
-        let public_key = &keypair.public;
+        let keypair = key::testing::keypair_1();
+        let public_key = keypair.ref_to();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, public_key);
+        tx_env.write_public_key(&vp_owner, &public_key);
 
         // Initialize VP environment from a transaction
         let mut vp_env =
@@ -680,7 +685,7 @@ mod tests {
             });
 
         let tx = vp_env.tx.clone();
-        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let signed_tx = tx.sign(&keypair);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: HashSet<storage::Key> =
@@ -696,8 +701,8 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let vp_owner = address::testing::established_address_1();
-        let keypair = key::ed25519::testing::keypair_1();
-        let public_key = &keypair.public;
+        let keypair = key::testing::keypair_1();
+        let public_key = keypair.ref_to();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
@@ -707,7 +712,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, public_key);
+        tx_env.write_public_key(&vp_owner, &public_key);
 
         // Initialize VP environment from a transaction
         let mut vp_env =
@@ -717,7 +722,7 @@ mod tests {
             });
 
         let tx = vp_env.tx.clone();
-        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let signed_tx = tx.sign(&keypair);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: HashSet<storage::Key> =
@@ -733,8 +738,8 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let vp_owner = address::testing::established_address_1();
-        let keypair = key::ed25519::testing::keypair_1();
-        let public_key = &keypair.public;
+        let keypair = key::testing::keypair_1();
+        let public_key = keypair.ref_to();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
@@ -748,7 +753,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, public_key);
+        tx_env.write_public_key(&vp_owner, &public_key);
 
         // Initialize VP environment from a transaction
         let mut vp_env =
@@ -758,7 +763,7 @@ mod tests {
             });
 
         let tx = vp_env.tx.clone();
-        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let signed_tx = tx.sign(&keypair);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: HashSet<storage::Key> =
@@ -773,8 +778,8 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let vp_owner = address::testing::established_address_1();
-        let keypair = key::ed25519::testing::keypair_1();
-        let public_key = &keypair.public;
+        let keypair = key::testing::keypair_1();
+        let public_key = keypair.ref_to();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
@@ -784,7 +789,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, public_key);
+        tx_env.write_public_key(&vp_owner, &public_key);
 
         // Initialize VP environment from a transaction
         let mut vp_env =
@@ -794,7 +799,7 @@ mod tests {
             });
 
         let tx = vp_env.tx.clone();
-        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let signed_tx = tx.sign(&keypair);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: HashSet<storage::Key> =
