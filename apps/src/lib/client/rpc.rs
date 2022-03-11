@@ -111,7 +111,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
-            match query_storage_value::<token::Amount>(client, key).await {
+            match query_storage_value::<token::Amount>(&client, &key).await {
                 Some(balance) => {
                     println!("{}: {}", currency_code, balance);
                 }
@@ -126,8 +126,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             for (token, currency_code) in tokens {
                 let key = token::balance_key(&token, &owner);
                 if let Some(balance) =
-                    query_storage_value::<token::Amount>(client.clone(), key)
-                        .await
+                    query_storage_value::<token::Amount>(&client, &key).await
                 {
                     println!("{}: {}", currency_code, balance);
                     found_any = true;
@@ -197,25 +196,23 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
 
-        let author =
-            query_storage_value::<Address>(client.clone(), author_key).await;
+        let author = query_storage_value::<Address>(client, &author_key).await;
         let start_epoch =
-            query_storage_value::<Epoch>(client.clone(), start_epoch_key).await;
+            query_storage_value::<Epoch>(client, &start_epoch_key).await;
         let end_epoch =
-            query_storage_value::<Epoch>(client.clone(), end_epoch_key).await;
+            query_storage_value::<Epoch>(client, &end_epoch_key).await;
 
         if details {
             let content_key = gov_storage::get_content_key(id);
             let grace_epoch_key = gov_storage::get_grace_epoch_key(id);
 
             let content = query_storage_value::<HashMap<String, String>>(
-                client.clone(),
-                content_key,
+                client,
+                &content_key,
             )
             .await;
             let grace_epoch =
-                query_storage_value::<Epoch>(client.clone(), grace_epoch_key)
-                    .await;
+                query_storage_value::<Epoch>(client, &grace_epoch_key).await;
 
             match (author, content, start_epoch, end_epoch, grace_epoch) {
                 (
@@ -252,12 +249,10 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         Some(id) => print_proposal(&client, id, true).await,
         None => {
             let last_proposal_id_key = gov_storage::get_counter_key();
-            let last_proposal_id = query_storage_value::<u64>(
-                client.clone(),
-                last_proposal_id_key,
-            )
-            .await
-            .unwrap();
+            let last_proposal_id =
+                query_storage_value::<u64>(&client, &last_proposal_id_key)
+                    .await
+                    .unwrap();
 
             for id in 0..last_proposal_id {
                 print_proposal(&client, id, false).await;
@@ -278,18 +273,16 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             let bond_id = pos::BondId { source, validator };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
-                query_storage_value::<pos::Bonds>(client.clone(), bond_key)
-                    .await;
+                query_storage_value::<pos::Bonds>(&client, &bond_key).await;
             // Find owner's unbonded delegations from the given
             // validator
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<pos::Unbonds>(client.clone(), unbond_key)
-                    .await;
+                query_storage_value::<pos::Unbonds>(&client, &unbond_key).await;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(client, slashes_key)
+                query_storage_value::<pos::Slashes>(&client, &slashes_key)
                     .await
                     .unwrap_or_default();
 
@@ -339,17 +332,15 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
-                query_storage_value::<pos::Bonds>(client.clone(), bond_key)
-                    .await;
+                query_storage_value::<pos::Bonds>(&client, &bond_key).await;
             // Find validator's unbonded self-bonds
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<pos::Unbonds>(client.clone(), unbond_key)
-                    .await;
+                query_storage_value::<pos::Unbonds>(&client, &unbond_key).await;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(client, slashes_key)
+                query_storage_value::<pos::Slashes>(&client, &slashes_key)
                     .await
                     .unwrap_or_default();
 
@@ -407,8 +398,8 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
                             let slashes = query_storage_value::<pos::Slashes>(
-                                client.clone(),
-                                slashes_key,
+                                &client,
+                                &slashes_key,
                             )
                             .await
                             .unwrap_or_default();
@@ -458,8 +449,8 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
                             let slashes = query_storage_value::<pos::Slashes>(
-                                client.clone(),
-                                slashes_key,
+                                &client,
+                                &slashes_key,
                             )
                             .await
                             .unwrap_or_default();
@@ -526,8 +517,8 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
                             let slashes = query_storage_value::<pos::Slashes>(
-                                client.clone(),
-                                slashes_key,
+                                &client,
+                                &slashes_key,
                             )
                             .await
                             .unwrap_or_default();
@@ -577,8 +568,8 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
                             let slashes = query_storage_value::<pos::Slashes>(
-                                client.clone(),
-                                slashes_key,
+                                &client,
+                                &slashes_key,
                             )
                             .await
                             .unwrap_or_default();
@@ -635,12 +626,10 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
 
     // Find the validator set
     let validator_set_key = pos::validator_set_key();
-    let validator_sets = query_storage_value::<pos::ValidatorSets>(
-        client.clone(),
-        validator_set_key,
-    )
-    .await
-    .expect("Validator set should always be set");
+    let validator_sets =
+        query_storage_value::<pos::ValidatorSets>(&client, &validator_set_key)
+            .await
+            .expect("Validator set should always be set");
     let validator_set = validator_sets
         .get(epoch)
         .expect("Validator set should be always set in the current epoch");
@@ -651,8 +640,8 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
             let voting_power_key = pos::validator_voting_power_key(&validator);
             let voting_powers =
                 query_storage_value::<pos::ValidatorVotingPowers>(
-                    client.clone(),
-                    voting_power_key,
+                    &client,
+                    &voting_power_key,
                 )
                 .await;
             match voting_powers.and_then(|data| data.get(epoch)) {
@@ -714,8 +703,8 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     }
     let total_voting_power_key = pos::total_voting_power_key();
     let total_voting_powers = query_storage_value::<pos::TotalVotingPowers>(
-        client,
-        total_voting_power_key,
+        &client,
+        &total_voting_power_key,
     )
     .await
     .expect("Total voting power should always be set");
@@ -733,11 +722,9 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
             let validator = ctx.get(&validator);
             // Find slashes for the given validator
             let slashes_key = pos::validator_slashes_key(&validator);
-            let slashes = query_storage_value::<pos::Slashes>(
-                client.clone(),
-                slashes_key,
-            )
-            .await;
+            let slashes =
+                query_storage_value::<pos::Slashes>(&client, &slashes_key)
+                    .await;
             match slashes {
                 Some(slashes) => {
                     let stdout = io::stdout();
@@ -817,7 +804,7 @@ pub async fn get_public_key(
 ) -> Option<common::PublicKey> {
     let client = HttpClient::new(ledger_address).unwrap();
     let key = pk_key(address);
-    query_storage_value(client, key).await
+    query_storage_value(&client, &key).await
 }
 
 /// Check if the given address is a known validator.
@@ -830,7 +817,7 @@ pub async fn is_validator(
     let key = pos::validator_state_key(address);
     // We do not need to decode it
     let state: Option<pos::ValidatorStates> =
-        query_storage_value(client, key).await;
+        query_storage_value(&client, &key).await;
     // If there is, then the address is a validator
     state.is_some()
 }
@@ -986,13 +973,13 @@ fn process_unbonds_query(
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
 pub async fn query_storage_value<T>(
-    client: HttpClient,
-    key: storage::Key,
+    client: &HttpClient,
+    key: &storage::Key,
 ) -> Option<T>
 where
     T: BorshDeserialize,
 {
-    let path = Path::Value(key);
+    let path = Path::Value(key.to_owned());
     let data = vec![];
     let response = client
         .abci_query(Some(path.into()), data, None, false)
