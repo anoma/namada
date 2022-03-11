@@ -14,7 +14,7 @@ const PROPOSAL_CODE: &str = "proposal_code";
 const MIN_PROPOSAL_FUND_KEY: &str = "min_fund";
 const MAX_PROPOSAL_CODE_SIZE_KEY: &str = "max_code_size";
 const MIN_PROPOSAL_PERIOD_KEY: &str = "min_period";
-const MAX_PROPOSAL_CONTENT_KEY: &str = "max_content";
+const MAX_PROPOSAL_CONTENT_SIZE_KEY: &str = "max_content";
 const MIN_GRACE_EPOCH_KEY: &str = "min_grace_epoch";
 const COUNTER_KEY: &str = "counter";
 
@@ -195,7 +195,7 @@ pub fn is_max_content_size_key(key: &Key) -> bool {
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(max_content_size_param),
         ] if addr == &ADDRESS
-            && max_content_size_param == MAX_PROPOSAL_CONTENT_KEY =>
+            && max_content_size_param == MAX_PROPOSAL_CONTENT_SIZE_KEY =>
         {
             true
         }
@@ -210,7 +210,7 @@ pub fn is_max_proposal_code_size_key(key: &Key) -> bool {
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(max_content_size_param),
         ] if addr == &ADDRESS
-            && max_content_size_param == MAX_PROPOSAL_CONTENT_KEY =>
+            && max_content_size_param == MAX_PROPOSAL_CONTENT_SIZE_KEY =>
         {
             true
         }
@@ -293,7 +293,7 @@ pub fn get_min_proposal_period_key() -> Key {
 /// Get maximum proposal content key
 pub fn get_max_proposal_content_key() -> Key {
     Key::from(ADDRESS.to_db_key())
-        .push(&MAX_PROPOSAL_CONTENT_KEY.to_owned())
+        .push(&MAX_PROPOSAL_CONTENT_SIZE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
