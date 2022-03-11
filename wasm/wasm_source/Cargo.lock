@@ -121,6 +121,7 @@ name = "anoma_tx_prelude"
 version = "0.4.0"
 dependencies = [
  "anoma_vm_env",
+ "sha2 0.10.2",
 ]
 
 [[package]]
@@ -130,6 +131,7 @@ dependencies = [
  "anoma",
  "anoma_macros",
  "borsh",
+ "hex",
 ]
 
 [[package]]
@@ -137,6 +139,7 @@ name = "anoma_vp_prelude"
 version = "0.4.0"
 dependencies = [
  "anoma_vm_env",
+ "sha2 0.10.2",
 ]
 
 [[package]]

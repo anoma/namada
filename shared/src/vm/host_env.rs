@@ -1593,6 +1593,28 @@ where
     vp_env::add_gas(gas_meter, gas)
 }
 
+/// Getting the transaction hash function exposed to the wasm VM VP environment.
+pub fn vp_get_tx_code_hash<MEM, DB, H, EVAL, CA>(
+    env: &VpEnv<MEM, DB, H, EVAL, CA>,
+    result_ptr: u64,
+) -> vp_env::Result<()>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    let tx = unsafe { env.ctx.tx.get() };
+    let hash = vp_env::get_tx_code_hash(gas_meter, tx)?;
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, hash.0)
+        .map_err(|e| vp_env::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_env::add_gas(gas_meter, gas)
+}
+
 /// Getting the block epoch function exposed to the wasm VM VP
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.

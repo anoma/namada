@@ -32,7 +32,7 @@ pub mod vp_prelude {
     // used in the VP input
     pub use std::collections::HashSet;
 
-    pub use anoma::ledger::pos as proof_of_stake;
+    pub use anoma::ledger::{parameters, pos as proof_of_stake};
     pub use anoma::proto::{Signed, SignedTxData};
     pub use anoma::types::address::Address;
     pub use anoma::types::*;
