@@ -108,6 +108,7 @@ dependencies = [
  "anoma_vm_env",
  "chrono",
  "concat-idents",
+ "derivative",
  "prost",
  "serde_json",
  "sha2 0.9.9",

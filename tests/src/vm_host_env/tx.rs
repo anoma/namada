@@ -14,6 +14,7 @@ use anoma::vm::prefix_iter::PrefixIterators;
 use anoma::vm::wasm::{self, TxCache, VpCache};
 use anoma::vm::{self, WasmCacheRwAccess};
 use anoma_vm_env::tx_prelude::BorshSerialize;
+use derivative::Derivative;
 use tempfile::TempDir;
 
 /// This module combines the native host function implementations from
@@ -27,7 +28,10 @@ pub mod tx_host_env {
 }
 
 /// Host environment structures required for transactions.
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct TestTxEnv {
+    #[derivative(Debug = "ignore")]
     pub storage: TestStorage,
     pub write_log: WriteLog,
     pub iterators: PrefixIterators<'static, MockDB>,
