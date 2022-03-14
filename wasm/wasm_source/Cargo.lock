@@ -150,7 +150,6 @@ dependencies = [
  "anoma",
  "anoma_tests",
  "anoma_tx_prelude",
- "anoma_vm_env",
  "anoma_vp_prelude",
  "borsh",
  "getrandom",

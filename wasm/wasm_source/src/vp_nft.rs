@@ -1,4 +1,3 @@
-use anoma_vm_env::vp_prelude::*;
 use anoma_vp_prelude::*;
 
 #[validity_predicate]

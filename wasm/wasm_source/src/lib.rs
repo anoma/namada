@@ -266,7 +266,7 @@ pub mod vp_token {
 /// A tx to create a new NFT.
 #[cfg(feature = "tx_init_nft")]
 pub mod tx_init_nft {
-    use anoma_vm_env::tx_prelude::*;
+    use anoma_tx_prelude::*;
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
@@ -284,7 +284,7 @@ pub mod tx_init_nft {
 /// A tx to mint new nft tokens.
 #[cfg(feature = "tx_mint_nft")]
 pub mod tx_mint_nft {
-    use anoma_vm_env::tx_prelude::*;
+    use anoma_tx_prelude::*;
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
