@@ -361,6 +361,10 @@ pub trait IbcActions {
         let mut connection =
             ConnectionEnd::decode_vec(&value).map_err(Error::Decoding)?;
         open_connection(&mut connection);
+        let mut counterparty = connection.counterparty().clone();
+        counterparty.connection_id =
+            Some(msg.counterparty_connection_id.clone());
+        connection.set_counterparty(counterparty);
         self.write_ibc_data(
             &conn_key,
             connection.encode_vec().expect("encoding shouldn't fail"),

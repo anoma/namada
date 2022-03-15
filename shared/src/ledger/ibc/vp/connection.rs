@@ -246,11 +246,20 @@ where
         }
 
         // counterpart connection ID check
-        if let Some(counterpart_conn_id) = conn.counterparty().connection_id() {
-            if *counterpart_conn_id != msg.counterparty_connection_id {
+        match conn.counterparty().connection_id() {
+            Some(counterpart_conn_id) => {
+                if *counterpart_conn_id != msg.counterparty_connection_id {
+                    return Err(Error::InvalidConnection(format!(
+                        "The counterpart connection ID mismatched: ID {}",
+                        counterpart_conn_id
+                    )));
+                }
+            }
+            None => {
                 return Err(Error::InvalidConnection(format!(
-                    "The counterpart connection ID mismatched: ID {}",
-                    counterpart_conn_id
+                    "The connection doesn't have the counterpart connection \
+                     ID: ID {}",
+                    conn_id
                 )));
             }
         }
