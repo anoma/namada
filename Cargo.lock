@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "anoma"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma_proof_of_stake",
  "ark-bls12-381",
@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_apps"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma",
  "ark-serialize",
@@ -222,7 +222,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_encoding_spec"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma",
  "borsh",
@@ -233,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_macros"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "quote",
  "syn",
@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_proof_of_stake"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "borsh",
  "proptest 1.0.0 (git+https://github.com/heliaxdev/proptest?branch=tomas/sm)",
@@ -250,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_tests"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma",
  "anoma_apps",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_tx_prelude"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma_vm_env",
  "sha2 0.10.2",
@@ -286,7 +286,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_vm_env"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma",
  "anoma_macros",
@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_vp_prelude"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma_vm_env",
  "sha2 0.10.2",
@@ -3984,7 +3984,7 @@ dependencies = [
 
 [[package]]
 name = "mm_template"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma",
  "anoma_macros",
@@ -3993,7 +3993,7 @@ dependencies = [
 
 [[package]]
 name = "mm_token_exch"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anoma",
  "anoma_macros",
