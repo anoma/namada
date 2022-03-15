@@ -1,3 +1,5 @@
+//! A VP for a nft.
+
 use anoma_vp_prelude::*;
 
 #[validity_predicate]
