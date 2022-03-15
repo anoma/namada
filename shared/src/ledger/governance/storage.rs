@@ -1,4 +1,5 @@
 use super::ADDRESS;
+use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 const PROPOSAL_PREFIX: &str = "proposal";
@@ -407,5 +408,16 @@ pub fn get_committing_proposals_key(id: u64, epoch: u64) -> Key {
         .push(&epoch.to_string())
         .expect("Cannot obtain a storage key")
         .push(&id.to_string())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get proposal code key
+pub fn get_vote_proposal_key(id: u64, address: Address) -> Key {
+    proposal_prefix()
+        .push(&id.to_string())
+        .expect("Cannot obtain a storage key")
+        .push(&PROPOSAL_VOTE.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&address)
         .expect("Cannot obtain a storage key")
 }
