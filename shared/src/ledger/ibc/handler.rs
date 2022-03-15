@@ -77,7 +77,7 @@ use crate::types::ibc::data::{
     PacketReceipt,
 };
 use crate::types::ibc::IbcEvent as AnomaIbcEvent;
-use crate::types::storage::{BlockHeight, Epoch, Key};
+use crate::types::storage::{BlockHeight, Key};
 use crate::types::time::Rfc3339String;
 use crate::types::token::{self, Amount};
 
@@ -143,7 +143,7 @@ pub trait IbcActions {
     );
 
     /// Get the current height of this chain
-    fn get_height(&self) -> (Epoch, BlockHeight);
+    fn get_height(&self) -> BlockHeight;
 
     /// Get the current time of the tendermint header of this chain
     fn get_header_time(&self) -> Rfc3339String;
@@ -742,8 +742,8 @@ pub trait IbcActions {
             time.encode_vec().expect("encoding shouldn't fail"),
         );
 
-        let (epoch, height) = self.get_height();
-        let height = Height::new(epoch.0, height.0);
+        // the revision number is always 0
+        let height = Height::new(0, self.get_height().0);
         let height_key = storage::client_update_height_key(client_id);
         // write the current height as u64
         self.write_ibc_data(
