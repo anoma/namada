@@ -874,6 +874,7 @@ mod test_utils {
             .db
             .write_block(BlockStateWrite {
                 merkle_tree_stores: stores,
+                header: None,
                 hash: &hash,
                 height: BlockHeight(1),
                 epoch: Epoch(0),
