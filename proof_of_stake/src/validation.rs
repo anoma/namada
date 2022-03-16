@@ -816,6 +816,8 @@ where
                                 .entry(address.clone())
                                 .or_default();
                             validator.has_voting_power = true;
+                            validator.voting_power =
+                                voting_power.try_into().unwrap_or_default();
                         }
                     }
                     (Some(_), None) => errors.push(
