@@ -452,6 +452,8 @@ pub trait IbcActions {
         })?;
         let mut channel =
             ChannelEnd::decode_vec(&value).map_err(Error::Decoding)?;
+        channel
+            .set_counterparty_channel_id(msg.counterparty_channel_id.clone());
         open_channel(&mut channel);
         self.write_ibc_data(
             &channel_key,
