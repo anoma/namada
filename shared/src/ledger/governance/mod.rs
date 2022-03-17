@@ -15,7 +15,7 @@ use super::pos as pos_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::types::address::{xan as m1t, Address, InternalAddress};
-use crate::types::storage::{DbKeySeg, Epoch, Key};
+use crate::types::storage::{Epoch, Key};
 use crate::types::token as token_storage;
 use crate::types::token::Amount;
 use crate::vm::WasmCacheAccess;
@@ -77,8 +77,7 @@ where
         };
 
         let result = keys_changed.iter().all(|key| {
-            println!("{}", key);
-            let proposal_id = get_id(key);
+            let proposal_id = gov_storage::get_id(key);
 
             let key_type: KeyType = key.into();
             match (key_type, proposal_id) {
@@ -97,7 +96,7 @@ where
                             .ok();
                     let pre_counter: Option<u64> =
                         read(&self.ctx, &counter_key, ReadType::PRE).ok();
-                    let voter = get_address(key);
+                    let voter = gov_storage::get_address(key);
 
                     match (
                         pre_counter,
@@ -113,25 +112,33 @@ where
                             Some(pre_voting_start_epoch),
                             Some(pre_voting_end_epoch),
                         ) => {
-                            pre_counter > proposal_id
-                                && current_epoch >= pre_voting_start_epoch
-                                && current_epoch <= pre_voting_end_epoch
-                                && is_delegator(
-                                    &self.ctx,
-                                    pre_voting_start_epoch,
-                                    verifiers,
-                                    &voter,
-                                )
-                                || (is_validator(
-                                    &self.ctx,
-                                    pre_voting_start_epoch,
-                                    verifiers,
-                                    &voter,
-                                ) && is_valid_validator_voting_period(
+                            let is_delegator = is_delegator(
+                                &self.ctx,
+                                pre_voting_start_epoch,
+                                verifiers,
+                                voter,
+                            );
+                            let is_validator = is_validator(
+                                &self.ctx,
+                                pre_voting_start_epoch,
+                                verifiers,
+                                voter,
+                            );
+                            let is_valid_validator_voting_period =
+                                is_valid_validator_voting_period(
                                     current_epoch,
                                     pre_voting_start_epoch,
                                     pre_voting_end_epoch,
-                                ))
+                                );
+                            println!("{}", is_delegator);
+                            println!("{}", is_validator);
+                            println!("{}", is_valid_validator_voting_period);
+                            pre_counter > proposal_id
+                                && current_epoch >= pre_voting_start_epoch
+                                && current_epoch <= pre_voting_end_epoch
+                                && (is_delegator
+                                    || (is_validator
+                                        && is_valid_validator_voting_period))
                         }
                         _ => false,
                     }
@@ -413,6 +420,32 @@ where
     }
 }
 
+fn read<T, DB, H, CA>(
+    context: &Ctx<DB, H, CA>,
+    key: &Key,
+    read_type: ReadType,
+) -> Result<T>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+    T: Clone + BorshDeserialize,
+{
+    let storage_result = match read_type {
+        ReadType::PRE => context.read_pre(key),
+        ReadType::POST => context.read_post(key),
+    };
+
+    match storage_result {
+        Ok(value) => match value {
+            Some(bytes) => T::try_from_slice(&bytes)
+                .map_err(Error::NativeVpDeserializationError),
+            None => Err(Error::NativeVpNonExistingKeyError(key.to_string())),
+        },
+        Err(err) => Err(Error::NativeVpError(err)),
+    }
+}
+
 fn is_valid_key_set<DB, H, CA>(
     context: &Ctx<DB, H, CA>,
     keys: &BTreeSet<Key>,
@@ -472,51 +505,72 @@ where
     (true, post_counter - pre_counter)
 }
 
-fn get_id(key: &Key) -> Option<u64> {
-    match key.get_at(2) {
-        Some(id) => match id {
-            DbKeySeg::AddressSeg(_) => None,
-            DbKeySeg::StringSeg(res) => res.parse::<u64>().ok(),
-        },
-        None => None,
-    }
-}
-
-fn get_address(key: &Key) -> Option<Address> {
-    match key.get_at(4) {
-        Some(addr) => match addr {
-            DbKeySeg::AddressSeg(res) => Some(res),
-            DbKeySeg::StringSeg(_) => None,
-        },
-        None => None,
-    }
-}
-
-fn read<T, DB, H, CA>(
+fn is_delegator<DB, H, CA>(
     context: &Ctx<DB, H, CA>,
-    key: &Key,
-    read_type: ReadType,
-) -> Result<T>
+    epoch: Epoch,
+    verifiers: &BTreeSet<Address>,
+    address: &Address,
+) -> bool
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
-    T: Clone + BorshDeserialize,
 {
-    let storage_result = match read_type {
-        ReadType::PRE => context.read_pre(key),
-        ReadType::POST => context.read_post(key),
-    };
+    let bonds_prefix_key = pos_storage::bonds_for_source_prefix(address);
+    let mut bonds_iter = context.iter_prefix(&bonds_prefix_key).unwrap();
+    loop {
+        let next = context.iter_pre_next(&mut bonds_iter).unwrap();
+        if let Some((_, data)) = next {
+            let epoched_bond =
+                pos_storage::Bonds::try_from_slice(&data[..]).unwrap();
+            if epoched_bond.get(epoch).is_some() && verifiers.contains(address)
+            {
+                return true;
+            }
+        } else {
+            break;
+        }
+    }
+    false
+}
 
-    match storage_result {
-        Ok(value) => match value {
-            Some(bytes) => T::try_from_slice(&bytes)
-                .map_err(Error::NativeVpDeserializationError),
-            None => Err(Error::NativeVpNonExistingKeyError(key.to_string())),
-        },
-        Err(err) => Err(Error::NativeVpError(err)),
+fn is_valid_validator_voting_period(
+    current_epoch: Epoch,
+    voting_start_epoch: Epoch,
+    voting_end_epoch: Epoch,
+) -> bool {
+    voting_start_epoch < voting_end_epoch
+        && current_epoch
+            <= voting_start_epoch
+                + ((voting_end_epoch - voting_start_epoch) * 2) / 3
+}
+
+fn is_validator<DB, H, CA>(
+    context: &Ctx<DB, H, CA>,
+    epoch: Epoch,
+    verifiers: &BTreeSet<Address>,
+    address: &Address,
+) -> bool
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    let validator_set_key = pos_storage::validator_set_key();
+    let pre_validator_set: pos_storage::ValidatorSets =
+        read(context, &validator_set_key, ReadType::PRE).unwrap();
+    let validator_set = pre_validator_set.get(epoch);
+
+    match validator_set {
+        Some(set) => {
+            set.active.iter().any(|weighted_validator| {
+                weighted_validator.address.eq(address)
+            }) && verifiers.contains(address)
+        }
+        None => false,
     }
 }
+
 #[allow(clippy::upper_case_acronyms)]
 enum KeyType {
     #[allow(clippy::upper_case_acronyms)]
