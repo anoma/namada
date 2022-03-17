@@ -698,7 +698,10 @@ where
                             ))
                         }
                         if deltas != TokenChange::default() {
-                            total_deltas.insert(address.clone(), deltas);
+                            let deltas_entry = total_deltas
+                                .entry(address.clone())
+                                .or_default();
+                            *deltas_entry += deltas;
                         }
                     }
                     (None, Some(post)) => {
@@ -767,7 +770,10 @@ where
                             ))
                         }
                         if deltas != TokenChange::default() {
-                            total_deltas.insert(address.clone(), deltas);
+                            let deltas_entry = total_deltas
+                                .entry(address.clone())
+                                .or_default();
+                            *deltas_entry += deltas;
                         }
                         let validator =
                             new_validators.entry(address.clone()).or_default();
@@ -953,7 +959,9 @@ where
                             acc + *delta
                         });
                     if total != TokenChange::default() {
-                        bond_delta.insert(id.validator, total);
+                        let bond_entry =
+                            bond_delta.entry(id.validator).or_default();
+                        *bond_entry += total;
                     }
                 }
                 // Bond may be created from newly bonded tokens only
@@ -1002,7 +1010,9 @@ where
                     if total_delta == TokenChange::default() {
                         errors.push(Error::EmptyBond(id.clone()))
                     }
-                    bond_delta.insert(id.validator, total_delta);
+                    let bond_entry =
+                        bond_delta.entry(id.validator).or_default();
+                    *bond_entry += total_delta;
                 }
                 // Bond may be deleted when all the tokens are unbonded
                 (Some(pre), None) => {
@@ -1028,7 +1038,9 @@ where
                             }
                         }
                     }
-                    bond_delta.insert(id.validator, total_delta);
+                    let bond_entry =
+                        bond_delta.entry(id.validator).or_default();
+                    *bond_entry += total_delta;
                 }
                 (None, None) => continue,
             },
@@ -1104,7 +1116,9 @@ where
                             acc + *delta
                         });
                     if total != TokenChange::default() {
-                        unbond_delta.insert(id.validator, total);
+                        let unbond_entry =
+                            unbond_delta.entry(id.validator).or_default();
+                        *unbond_entry += total;
                     }
                 }
                 // Unbond may be created from a bond
@@ -1139,7 +1153,9 @@ where
                             }
                         }
                     }
-                    unbond_delta.insert(id.validator, total_delta);
+                    let unbond_entry =
+                        unbond_delta.entry(id.validator).or_default();
+                    *unbond_entry += total_delta;
                 }
                 // Unbond may be deleted when all the tokens are withdrawn
                 (Some(pre), None) => {
@@ -1170,7 +1186,9 @@ where
                             }
                         }
                     }
-                    unbond_delta.insert(id.validator, total_delta);
+                    let unbond_entry =
+                        unbond_delta.entry(id.validator).or_default();
+                    *unbond_entry += total_delta;
                 }
                 (None, None) => continue,
             },
