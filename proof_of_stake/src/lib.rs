@@ -12,7 +12,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-mod btree_set;
+pub mod btree_set;
 pub mod epoched;
 pub mod parameters;
 pub mod types;
