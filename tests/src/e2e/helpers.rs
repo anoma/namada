@@ -5,6 +5,7 @@ use std::process::Command;
 use std::str::FromStr;
 use std::{env, time};
 
+use namada_apps::config::genesis::genesis_config;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use escargot::CargoBuild;
@@ -52,6 +53,25 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
     let config =
         Config::load(&base_dir, &test.net.chain_id, Some(tendermint_mode));
     config.ledger.tendermint.rpc_address.to_string()
+}
+
+/// Get the public key of the validator
+pub fn get_validator_pk(test: &Test, who: &Who) -> Option<common::PublicKey> {
+    let index = match who {
+        Who::NonValidator => return None,
+        Who::Validator(i) => i,
+    };
+    let file = format!("{}.toml", test.net.chain_id.as_str());
+    let path = test.test_dir.path().join(file);
+    let config = genesis_config::open_genesis_config(path).unwrap();
+    let pk = config
+        .validator
+        .get(&format!("validator-{}", index))
+        .unwrap()
+        .account_public_key
+        .as_ref()
+        .unwrap();
+    Some(pk.to_public_key().unwrap())
 }
 
 /// Find the address of an account by its alias from the wallet
