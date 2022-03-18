@@ -578,14 +578,12 @@ where
     ) -> Result<String> {
         let key = commitment_key(&key.0, &key.1, key.2);
         match self.ctx.read_pre(&key)? {
-            Some(value) => String::decode(&value[..])
-                .map_err(|e| {
-                    Error::InvalidPacketInfo(format!(
-                        "Decoding the prior commitment failed: {}",
-                        e
-                    ))
-                })
-                .map(|s| s.to_string()),
+            Some(value) => String::decode(&value[..]).map_err(|e| {
+                Error::InvalidPacketInfo(format!(
+                    "Decoding the prior commitment failed: {}",
+                    e
+                ))
+            }),
             None => Err(Error::InvalidPacketInfo(format!(
                 "The prior commitment doesn't exist: Key {}",
                 key
