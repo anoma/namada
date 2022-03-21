@@ -185,6 +185,7 @@ impl From<DbKeySeg> for Key {
         }
     }
 }
+
 impl FromStr for Key {
     type Err = Error;
 
@@ -192,6 +193,7 @@ impl FromStr for Key {
         Key::parse(s)
     }
 }
+
 impl Key {
     /// Parses string and returns a key
     pub fn parse(string: impl AsRef<str>) -> Result<Self> {

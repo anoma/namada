@@ -2024,7 +2024,7 @@ pub mod args {
     /// Query the raw bytes of given storage key
     #[derive(Clone, Debug)]
     pub struct QueryRawBytes {
-        /// Common query args
+        /// The storage key to query
         pub storage_key: storage::Key,
         /// Common query args
         pub query: Query,
