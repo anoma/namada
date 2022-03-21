@@ -1,9 +1,9 @@
 {
-    "mm_filter_token_exch.wasm": "mm_filter_token_exch.3a6615f1b7be71cf880217e82bf2e4edb5aa086ac77434ff48a689aae205d258.wasm",
-    "mm_token_exch.wasm": "mm_token_exch.8eeaa5eedde5fa4b0ac566844f9ee762394f953e61d60507db3634ce2d56cf2d.wasm",
+    "mm_filter_token_exch.wasm": "mm_filter_token_exch.d005e46dfb6a4e3760222864f357d7f459814af0508849ba6865bf4be6f81ef9.wasm",
+    "mm_token_exch.wasm": "mm_token_exch.70f8a0fc2cd29cb198c1e3fbe0119078237ce7b417be3eec4d82e420d831800d.wasm",
     "tx_bond.wasm": "tx_bond.4217bf34444f0bfc80b2ae912865b346eb69cba46ebcce90900a4c8c62b67adf.wasm",
     "tx_from_intent.wasm": "tx_from_intent.ff4cf7ce232e00f902272e591754d7a5b97d4c26e5eaeb5ff1343c6ee5e10211.wasm",
-    "tx_ibc.wasm": "tx_ibc.92aa0b5b6bb5926bf7a16355611997e7acad9c701326fbf764ca25d213f00edb.wasm",
+    "tx_ibc.wasm": "tx_ibc.4bada72adefc3e3bd6b3047a267c5e51ba688a67d4827c996ab6c36689ca0e9d.wasm",
     "tx_init_account.wasm": "tx_init_account.0593029e7da089e748cf40294cc201b17cec54b6fc6fb7860bbcd561aed7115c.wasm",
     "tx_init_nft.wasm": "tx_init_nft.a7016e211b1148cc298d4e8bc237450e9543f85f8932789638cd1648eb15f3f3.wasm",
     "tx_init_validator.wasm": "tx_init_validator.f6b661b1f3701074f42cea0c5ee025e9e3579539638102de05513a215c0f76ac.wasm",
