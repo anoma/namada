@@ -25,6 +25,7 @@
 //!   - `diffs`: diffs in account subspaces' key-vals
 //!     - `new/{dyn}`: value set in block height `h`
 //!     - `old/{dyn}`: value from predecessor block height
+//!   - `header`: block's header
 
 use std::cmp::Ordering;
 use std::path::Path;
