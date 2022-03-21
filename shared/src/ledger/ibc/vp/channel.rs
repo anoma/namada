@@ -2,6 +2,7 @@
 
 use core::time::Duration;
 
+use prost::Message;
 use sha2::Digest;
 use thiserror::Error;
 
@@ -594,16 +595,14 @@ where
     ) -> Result<String> {
         let key = commitment_key(&key.0, &key.1, key.2);
         match self.ctx.read_pre(&key)? {
-            Some(value) => std::str::from_utf8(&value[..])
-                .map_err(|e| {
-                    Error::InvalidPacketInfo(format!(
-                        "Decoding the prior packet info failed: {}",
-                        e
-                    ))
-                })
-                .map(|s| s.to_string()),
+            Some(value) => String::decode(&value[..]).map_err(|e| {
+                Error::InvalidPacketInfo(format!(
+                    "Decoding the prior commitment failed: {}",
+                    e
+                ))
+            }),
             None => Err(Error::InvalidPacketInfo(format!(
-                "The prior packet info doesn't exist: Key {}",
+                "The prior commitment doesn't exist: Key {}",
                 key
             ))),
         }
@@ -820,9 +819,8 @@ where
     ) -> Ics04Result<String> {
         let commitment_key = commitment_key(&key.0, &key.1, key.2);
         match self.ctx.read_post(&commitment_key) {
-            Ok(Some(value)) => std::str::from_utf8(&value)
-                .map_err(|_| Ics04Error::implementation_specific())
-                .map(|s| s.to_string()),
+            Ok(Some(value)) => String::decode(&value[..])
+                .map_err(|_| Ics04Error::implementation_specific()),
             Ok(None) => Err(Ics04Error::packet_commitment_not_found(key.2)),
             Err(_) => Err(Ics04Error::implementation_specific()),
         }

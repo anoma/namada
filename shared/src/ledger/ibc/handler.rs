@@ -2,6 +2,7 @@
 
 use std::str::FromStr;
 
+use prost::Message;
 use sha2::Digest;
 use thiserror::Error;
 
@@ -590,7 +591,11 @@ pub trait IbcActions {
             packet.sequence,
         );
         let commitment = commitment(&packet);
-        self.write_ibc_data(&commitment_key, commitment.as_bytes());
+        let mut commitment_bytes = vec![];
+        commitment
+            .encode(&mut commitment_bytes)
+            .expect("encoding shouldn't fail");
+        self.write_ibc_data(&commitment_key, commitment_bytes);
 
         let event = make_send_packet_event(packet).try_into().unwrap();
         self.emit_ibc_event(event);

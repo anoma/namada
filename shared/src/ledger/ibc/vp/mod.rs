@@ -1390,9 +1390,13 @@ mod tests {
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
         let commitment = hash(&packet);
+        let mut commitment_bytes = vec![];
+        commitment
+            .encode(&mut commitment_bytes)
+            .expect("encoding shouldn't fail");
         let key = commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
-            .write(&key, commitment.as_bytes().to_vec())
+            .write(&key, commitment_bytes)
             .expect("write failed");
         write_log.commit_tx();
 
@@ -1631,8 +1635,12 @@ mod tests {
             &packet.source_channel,
             sequence,
         );
+        let mut commitment_bytes = vec![];
+        commitment
+            .encode(&mut commitment_bytes)
+            .expect("encoding shouldn't fail");
         write_log
-            .write(&commitment_key, commitment.as_bytes().to_vec())
+            .write(&commitment_key, commitment_bytes)
             .expect("write failed");
         let event = make_send_packet_event(packet);
         write_log.set_ibc_event(event.try_into().unwrap());
