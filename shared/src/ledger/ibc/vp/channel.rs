@@ -379,6 +379,23 @@ where
         channel: &ChannelEnd,
         msg: &MsgChannelOpenAck,
     ) -> Result<()> {
+        match channel.counterparty().channel_id() {
+            Some(counterpart_channel_id) => {
+                if *counterpart_channel_id != msg.counterparty_channel_id {
+                    return Err(Error::InvalidChannel(format!(
+                        "The counterpart channel ID mismatched: ID {}",
+                        counterpart_channel_id
+                    )));
+                }
+            }
+            None => {
+                return Err(Error::InvalidChannel(format!(
+                    "The channel doesn't have the counterpart channel ID: ID \
+                     {}",
+                    port_channel_id
+                )));
+            }
+        }
         let expected_my_side = Counterparty::new(
             port_channel_id.port_id.clone(),
             Some(port_channel_id.channel_id.clone()),
