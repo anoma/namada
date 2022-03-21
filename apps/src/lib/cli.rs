@@ -1215,7 +1215,6 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    
     use anoma::types::address::Address;
     use anoma::types::chain::{ChainId, ChainIdPrefix};
     use anoma::types::intent::{DecimalWrapper, Exchange};
@@ -1231,7 +1230,6 @@ pub mod args {
     use tendermint_config::net::Address as TendermintAddress;
     #[cfg(feature = "ABCI")]
     use tendermint_config_abci::net::Address as TendermintAddress;
-    
     #[cfg(feature = "ABCI")]
     use tendermint_stable::Timeout;
 
