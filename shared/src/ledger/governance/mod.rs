@@ -69,7 +69,9 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        if !is_valid_key_set(&self.ctx, keys_changed) {
+        let (is_valid_keys_set, set_count) =
+            is_valid_key_set(&self.ctx, keys_changed);
+        if !is_valid_keys_set {
             return Ok(false);
         };
 
@@ -295,7 +297,7 @@ where
                         read(&self.ctx, &counter_key, ReadType::POST).ok();
                     match (pre_counter, post_counter) {
                         (Some(pre_counter), Some(post_counter)) => {
-                            pre_counter + 1 == post_counter
+                            pre_counter + set_count == post_counter
                         }
                         _ => false,
                     }
@@ -334,7 +336,8 @@ where
                     }
                 }
                 (KeyType::PARAMETER, _) => false,
-                (KeyType::UNKNOWN, _) => false,
+                (KeyType::UNKNOWN_GOVERNANCE, _) => false,
+                (KeyType::UNKNOWN, _) => true,
                 _ => false,
             }
         });
@@ -345,47 +348,53 @@ where
 fn is_valid_key_set<DB, H, CA>(
     context: &Ctx<DB, H, CA>,
     keys: &BTreeSet<Key>,
-) -> bool
+) -> (bool, u64)
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    if is_valid_proposal_init_key_set(context, keys) {
-        return true;
-    };
-    false
+    is_valid_proposal_init_key_set(context, keys)
 }
 
 fn is_valid_proposal_init_key_set<DB, H, CA>(
     context: &Ctx<DB, H, CA>,
     keys: &BTreeSet<Key>,
-) -> bool
+) -> (bool, u64)
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     let counter_key = gov_storage::get_counter_key();
-    let pre_counter: Option<u64> =
-        read(context, &counter_key, ReadType::PRE).ok();
-    if pre_counter.is_none() {
-        return false;
+    let pre_counter = match read(context, &counter_key, ReadType::PRE) {
+        Ok(v) => v,
+        Err(_) => return (false, 0),
+    };
+
+    let post_counter = match read(context, &counter_key, ReadType::POST) {
+        Ok(v) => v,
+        Err(_) => return (false, 0),
+    };
+
+    for counter in pre_counter..post_counter {
+        // Construct the set of expected keys
+        let mandatory_keys = BTreeSet::from([
+            counter_key.clone(),
+            gov_storage::get_content_key(counter),
+            gov_storage::get_author_key(counter),
+            gov_storage::get_funds_key(counter),
+            gov_storage::get_voting_start_epoch_key(counter),
+            gov_storage::get_voting_end_epoch_key(counter),
+        ]);
+
+        // Check that expected set is a subset the actual one
+        if !keys.is_superset(&mandatory_keys) {
+            return (false, 0);
+        }
     }
-    let counter = pre_counter.unwrap();
 
-    // Construct the set of expected keys
-    let mandatory_keys = BTreeSet::from([
-        counter_key,
-        gov_storage::get_content_key(counter),
-        gov_storage::get_author_key(counter),
-        gov_storage::get_funds_key(counter),
-        gov_storage::get_voting_start_epoch_key(counter),
-        gov_storage::get_voting_end_epoch_key(counter),
-    ]);
-
-    // Check that expected set is a subset the actual one
-    keys.is_superset(&mandatory_keys)
+    (true, post_counter - pre_counter)
 }
 
 fn get_id(key: &Key) -> Option<u64> {
@@ -452,6 +461,9 @@ enum KeyType {
     #[allow(clippy::upper_case_acronyms)]
     PARAMETER,
     #[allow(clippy::upper_case_acronyms)]
+    #[allow(non_camel_case_types)]
+    UNKNOWN_GOVERNANCE,
+    #[allow(clippy::upper_case_acronyms)]
     UNKNOWN,
 }
 
@@ -479,6 +491,8 @@ impl From<&Key> for KeyType {
             KeyType::PARAMETER
         } else if token_storage::is_balance_key(&m1t(), value).is_some() {
             KeyType::BALANCE
+        } else if gov_storage::is_governance_key(value) {
+            KeyType::UNKNOWN_GOVERNANCE
         } else {
             KeyType::UNKNOWN
         }

@@ -15,6 +15,7 @@ use anoma::ledger::pos::{
 use anoma::types::address::Address;
 use anoma::types::key::*;
 use anoma::types::storage::{Epoch, PrefixValue};
+use anoma::types::token::{balance_key, Amount};
 use anoma::types::{address, storage, token};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
@@ -191,16 +192,21 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
 
 /// Query Proposals
 pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
-    async fn print_proposal(client: &HttpClient, id: u64, details: bool) {
+    async fn print_proposal(
+        client: &HttpClient,
+        id: u64,
+        details: bool,
+    ) -> Option<()> {
         let author_key = gov_storage::get_author_key(id);
         let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
 
-        let author = query_storage_value::<Address>(client, &author_key).await;
+        let author =
+            query_storage_value::<Address>(client, &author_key).await?;
         let start_epoch =
-            query_storage_value::<Epoch>(client, &start_epoch_key).await;
+            query_storage_value::<Epoch>(client, &start_epoch_key).await?;
         let end_epoch =
-            query_storage_value::<Epoch>(client, &end_epoch_key).await;
+            query_storage_value::<Epoch>(client, &end_epoch_key).await?;
 
         if details {
             let content_key = gov_storage::get_content_key(id);
@@ -210,43 +216,36 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 client,
                 &content_key,
             )
-            .await;
+            .await?;
             let grace_epoch =
-                query_storage_value::<Epoch>(client, &grace_epoch_key).await;
+                query_storage_value::<Epoch>(client, &grace_epoch_key).await?;
 
-            match (author, content, start_epoch, end_epoch, grace_epoch) {
-                (
-                    Some(author),
-                    Some(content),
-                    Some(start_epoch),
-                    Some(end_epoch),
-                    Some(grace_epoch),
-                ) => {
-                    println!("Proposal: {}", id);
-                    println!("{:4}Author: {}", "", author);
-                    println!("{:4}Content:", "");
-                    for (key, value) in &content {
-                        println!("{:8}{}: {}", "", key, value);
-                    }
-                    println!("{:4}Start Epoch: {}", "", start_epoch);
-                    println!("{:4}End Epoch: {}", "", end_epoch);
-                    println!("{:4}Grace Epoch: {}", "", grace_epoch);
-                }
-                _ => eprintln!("No valid proposal was found with id {}", id),
+            println!("Proposal: {}", id);
+            println!("{:4}Author: {}", "", author);
+            println!("{:4}Content:", "");
+            for (key, value) in &content {
+                println!("{:8}{}: {}", "", key, value);
             }
-        } else if let (Some(author), Some(start_epoch), Some(end_epoch)) =
-            (author, start_epoch, end_epoch)
-        {
+            println!("{:4}Start Epoch: {}", "", start_epoch);
+            println!("{:4}End Epoch: {}", "", end_epoch);
+            println!("{:4}Grace Epoch: {}", "", grace_epoch);
+        } else {
             println!("Proposal: {}", id);
             println!("{:4}Author: {}", "", author);
             println!("{:4}Start Epoch: {}", "", start_epoch);
             println!("{:4}End Epoch: {}", "", end_epoch);
         }
+
+        Some(())
     }
 
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     match args.proposal_id {
-        Some(id) => print_proposal(&client, id, true).await,
+        Some(id) => {
+            if print_proposal(&client, id, true).await.is_none() {
+                eprintln!("No valid proposal was found with id {}", id)
+            }
+        }
         None => {
             let last_proposal_id_key = gov_storage::get_counter_key();
             let last_proposal_id =
@@ -255,10 +254,22 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                     .unwrap();
 
             for id in 0..last_proposal_id {
-                print_proposal(&client, id, false).await;
+                if print_proposal(&client, id, false).await.is_none() {
+                    eprintln!("No valid proposal was found with id {}", id)
+                };
             }
         }
     }
+}
+
+/// Query token amount of owner.
+pub async fn get_token_balance(
+    client: &HttpClient,
+    token: &Address,
+    owner: &Address,
+) -> Option<Amount> {
+    let balance_key = balance_key(token, owner);
+    query_storage_value(client, &balance_key).await
 }
 
 /// Query PoS bond(s)

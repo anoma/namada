@@ -565,21 +565,24 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             rpc::query_storage_value(&client, &min_proposal_funds_key)
                 .await
                 .unwrap();
-        if account_hash_enought_balance(
-            &client,
-            &proposal.author,
-            min_proposal_funds,
-        )
-        .await
-        {
-            let data = init_proposal_data
-                .try_to_vec()
-                .expect("Encoding proposal data shouldn't fail");
-            let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-            let tx = Tx::new(tx_code, Some(data));
-
-            process_tx(ctx, &args.tx, tx, Some(&signer)).await;
+        let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
+            .await
+            .unwrap_or_default();
+        if balance < min_proposal_funds {
+            eprintln!(
+                "Address {} doesn't have enough funds.",
+                &proposal.author
+            );
+            safe_exit(1);
         }
+
+        let data = init_proposal_data
+            .try_to_vec()
+            .expect("Encoding proposal data shouldn't fail");
+        let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
+        let tx = Tx::new(tx_code, Some(data));
+
+        process_tx(ctx, &args.tx, tx, Some(&signer)).await;
     }
 }
 
@@ -927,27 +930,6 @@ async fn process_tx(
                 );
                 safe_exit(1)
             }
-        }
-    }
-}
-
-async fn account_hash_enought_balance(
-    client: &HttpClient,
-    address: &Address,
-    min_amount: Amount,
-) -> bool {
-    let balance_key = token::balance_key(&m1t(), address);
-    match rpc::query_storage_value::<Amount>(client, &balance_key).await {
-        Some(amount) => {
-            if amount < min_amount {
-                eprintln!("Address {} doesn't have enough funds.", address);
-                safe_exit(1);
-            }
-            true
-        }
-        None => {
-            eprintln!("Can't find address {}.", address);
-            safe_exit(1);
         }
     }
 }

@@ -14,7 +14,7 @@ use super::args;
 use crate::cli::safe_exit;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
-use crate::config::{self, Config, TendermintMode};
+use crate::config::{self, Config};
 use crate::wallet::Wallet;
 use crate::wasm_loader;
 
@@ -56,7 +56,7 @@ impl Context {
         let mut config = Config::load(
             &global_args.base_dir,
             &global_config.default_chain_id,
-            global_args.mode.clone(),
+            global_args.mode.clone().unwrap(),
         );
 
         let chain_dir = global_args

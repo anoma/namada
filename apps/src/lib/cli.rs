@@ -1392,11 +1392,11 @@ pub mod args {
     const NODE: Arg<String> = arg("node");
     const NFT_ADDRESS: Arg<Address> = arg("nft-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
+    const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
-    const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
-    const OPTIONAL_PROPOSAL_ID: ArgOpt<u64> = arg_opt("proposal-id");
+    const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
@@ -1938,15 +1938,14 @@ pub mod args {
     impl Args for QueryProposal {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let proposal_id = OPTIONAL_PROPOSAL_ID.parse(matches);
+            let proposal_id = PROPOSAL_ID_OPT.parse(matches);
 
             Self { query, proposal_id }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>().arg(
-                OPTIONAL_PROPOSAL_ID.def().about("The proposal identifier."),
-            )
+            app.add_args::<Tx>()
+                .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
         }
     }
 

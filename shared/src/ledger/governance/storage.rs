@@ -18,6 +18,11 @@ const MAX_PROPOSAL_CONTENT_SIZE_KEY: &str = "max_content";
 const MIN_GRACE_EPOCH_KEY: &str = "min_grace_epoch";
 const COUNTER_KEY: &str = "counter";
 
+/// Check if key is inside governance address space
+pub fn is_governance_key(key: &Key) -> bool {
+    matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)
+}
+
 /// Check if a key is a vote key
 pub fn is_vote_key(key: &Key) -> bool {
     match &key.segments[..] {

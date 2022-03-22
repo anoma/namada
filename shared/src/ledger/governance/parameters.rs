@@ -20,7 +20,7 @@ use crate::types::token::Amount;
 pub struct GovParams {
     /// Minimum amount of locked funds
     pub min_proposal_fund: u64,
-    /// Maximum kilobyte length for proposal code
+    /// Maximum kibibyte length for proposal code
     pub max_proposal_code_size: u64,
     /// Minimum proposal voting period in epochs
     pub min_proposal_period: u64,
