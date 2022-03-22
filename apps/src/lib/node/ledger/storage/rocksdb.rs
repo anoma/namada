@@ -563,12 +563,88 @@ impl DB for RocksDB {
         }
     }
 
+    fn read_merkle_tree_stores(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<MerkleTreeStoresRead>> {
+        let mut merkle_tree_stores = MerkleTreeStoresRead::default();
+        let height_key = Key::from(height.to_db_key());
+        let tree_key = height_key
+            .push(&"tree".to_owned())
+            .map_err(Error::KeyError)?;
+        for st in StoreType::iter() {
+            let prefix_key =
+                tree_key.push(&st.to_string()).map_err(Error::KeyError)?;
+            let root_key = prefix_key
+                .push(&"root".to_owned())
+                .map_err(Error::KeyError)?;
+            let bytes = self
+                .0
+                .get(root_key.to_string())
+                .map_err(|e| Error::DBError(e.into_string()))?;
+            match bytes {
+                Some(b) => {
+                    let root = types::decode(b).map_err(Error::CodingError)?;
+                    merkle_tree_stores.set_root(st, root);
+                }
+                None => return Ok(None),
+            }
+
+            let store_key = prefix_key
+                .push(&"store".to_owned())
+                .map_err(Error::KeyError)?;
+            let bytes = self
+                .0
+                .get(store_key.to_string())
+                .map_err(|e| Error::DBError(e.into_string()))?;
+            match bytes {
+                Some(b) => {
+                    let store = types::decode(b).map_err(Error::CodingError)?;
+                    merkle_tree_stores.set_store(st, store);
+                }
+                None => return Ok(None),
+            }
+        }
+        Ok(Some(merkle_tree_stores))
+    }
+
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         let subspace_key =
             Key::parse("subspace").map_err(Error::KeyError)?.join(key);
         self.0
             .get(subspace_key.to_string())
             .map_err(|e| Error::DBError(e.into_string()))
+    }
+
+    fn read_subspace_val_with_height(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+    ) -> Result<Option<Vec<u8>>> {
+        if self.read_subspace_val(key)?.is_none() {
+            return Ok(None);
+        }
+
+        let mut height = height.0;
+        while height > 0 {
+            let key_prefix = Key::from(BlockHeight(height).to_db_key())
+                .push(&"diffs".to_owned())
+                .map_err(Error::KeyError)?;
+            let new_val_key = key_prefix
+                .push(&"new".to_owned())
+                .map_err(Error::KeyError)?
+                .join(key)
+                .to_string();
+            let val = self
+                .0
+                .get(new_val_key)
+                .map_err(|e| Error::DBError(e.into_string()))?;
+            match val {
+                Some(bytes) => return Ok(Some(bytes)),
+                None => height -= 1,
+            }
+        }
+        Ok(None)
     }
 
     fn write_subspace_val(
@@ -917,5 +993,44 @@ mod test {
             .read_last_block()
             .expect("Should be able to read last block")
             .expect("Block should have been written");
+    }
+
+    #[test]
+    fn test_read() {
+        let dir = tempdir().unwrap();
+        let mut db = open(dir.path(), None).unwrap();
+
+        let key = Key::parse("test").unwrap();
+
+        let mut batch = RocksDB::batch();
+        let last_height = BlockHeight(100);
+        db.batch_write_subspace_val(
+            &mut batch,
+            last_height,
+            &key,
+            vec![1_u8, 1, 1, 1],
+        )
+        .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        let mut batch = RocksDB::batch();
+        let last_height = BlockHeight(111);
+        db.batch_write_subspace_val(
+            &mut batch,
+            last_height,
+            &key,
+            vec![2_u8, 2, 2, 2],
+        )
+        .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        let prev_value = db
+            .read_subspace_val_with_height(&key, BlockHeight(100))
+            .expect("read should succeed");
+        assert_eq!(prev_value, Some(vec![1_u8, 1, 1, 1]));
+
+        let latest_value =
+            db.read_subspace_val(&key).expect("read should succeed");
+        assert_eq!(latest_value, Some(vec![2_u8, 2, 2, 2]));
     }
 }
