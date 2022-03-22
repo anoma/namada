@@ -27,10 +27,11 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, TallyResult,
 };
 use namada::types::key::*;
-use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
+use namada::types::storage::{BlockHeight, Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
 use tendermint::abci::Code;
+use tendermint::block::Height;
 use tendermint::merkle::proof::Proof;
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::error::Error as TError;
@@ -1322,7 +1323,8 @@ pub async fn query_storage_value<T>(
 where
     T: BorshDeserialize,
 {
-    let (value, _proof) = query_storage_value_bytes(client, key, false).await;
+    let (value, _proof) =
+        query_storage_value_bytes(client, key, None, false).await;
     match value {
         Some(v) => match T::try_from_slice(&v[..]) {
             Ok(value) => return Some(value),
@@ -1337,12 +1339,14 @@ where
 pub async fn query_storage_value_bytes(
     client: &HttpClient,
     key: &storage::Key,
+    height: Option<BlockHeight>,
     prove: bool,
 ) -> (Option<Vec<u8>>, Option<Proof>) {
     let path = Path::Value(key.to_owned());
     let data = vec![];
+    let height = height.map(|h| Height::try_from(h.0).unwrap());
     let response = client
-        .abci_query(Some(path.into()), data, None, prove)
+        .abci_query(Some(path.into()), data, height, prove)
         .await
         .unwrap();
     match response.code {
