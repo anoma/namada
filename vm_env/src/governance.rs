@@ -49,6 +49,13 @@ pub mod tx {
         let funds_key = storage::get_funds_key(proposal_id);
         tx::write(&funds_key.to_string(), min_proposal_funds);
 
+        // this key must always be written for each proposal
+        let committing_proposals_key = storage::get_committing_proposals_key(
+            proposal_id,
+            data.grace_epoch.0,
+        );
+        tx::write(&committing_proposals_key.to_string(), ());
+
         transfer(
             &data.author,
             &governance_address,

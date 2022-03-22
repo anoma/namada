@@ -169,9 +169,23 @@ where
                             Some(grace_epoch),
                             Some(end_epoch),
                         ) => {
-                            !has_pre_grace_epoch
-                                && end_epoch < grace_epoch
-                                && grace_epoch - end_epoch >= min_grace_epoch
+                            let committing_epoch_key =
+                                gov_storage::get_committing_proposals_key(
+                                    proposal_id,
+                                    grace_epoch,
+                                );
+                            let committing_epoch =
+                                self.ctx.has_key_post(&committing_epoch_key);
+                            match committing_epoch {
+                                Ok(committing_epoch_exists) => {
+                                    !has_pre_grace_epoch
+                                        && end_epoch < grace_epoch
+                                        && grace_epoch - end_epoch
+                                            >= min_grace_epoch
+                                        && committing_epoch_exists
+                                }
+                                _ => false,
+                            }
                         }
                         _ => false,
                     }
@@ -377,8 +391,14 @@ where
         Err(_) => return (false, 0),
     };
 
+    if post_counter < pre_counter {
+        return (false, 0);
+    }
+
     for counter in pre_counter..post_counter {
         // Construct the set of expected keys
+        // NOTE: we don't check the existance of committing_epoch because it's
+        // going to be checked later into the VP
         let mandatory_keys = BTreeSet::from([
             counter_key.clone(),
             gov_storage::get_content_key(counter),
@@ -386,6 +406,7 @@ where
             gov_storage::get_funds_key(counter),
             gov_storage::get_voting_start_epoch_key(counter),
             gov_storage::get_voting_end_epoch_key(counter),
+            gov_storage::get_grace_epoch_key(counter),
         ]);
 
         // Check that expected set is a subset the actual one

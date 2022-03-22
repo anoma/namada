@@ -1,4 +1,4 @@
-/// A tx to create a governance proposal.
+//! A tx to create a governance proposal.
 
 use anoma_tx_prelude::*;
 
