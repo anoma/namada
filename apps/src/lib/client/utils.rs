@@ -737,6 +737,7 @@ pub fn init_network(
             .p2p_address
             .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
     }
+    config.ledger.tendermint.p2p_addr_book_strict = !localhost;
     config.ledger.genesis_time = genesis.genesis_time.into();
     config.intent_gossiper.seed_peers = seed_peers;
     config
