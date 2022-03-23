@@ -244,6 +244,25 @@ pub fn is_min_grace_epoch_key(key: &Key) -> bool {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(epoch_prefix),
+            DbKeySeg::StringSeg(_epoch),
+            DbKeySeg::StringSeg(_id),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && epoch_prefix == PROPOSAL_COMMITTING_EPOCH =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Check if key is a commit proposal key
+pub fn is_commit_proposal_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(min_grace_epoch_param),
         ] if addr == &ADDRESS
             && min_grace_epoch_param == MIN_GRACE_EPOCH_KEY =>

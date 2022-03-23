@@ -76,6 +76,7 @@ where
         };
 
         let result = keys_changed.iter().all(|key| {
+            println!("{}", key);
             let proposal_id = get_id(key);
 
             let key_type: KeyType = key.into();
@@ -303,7 +304,7 @@ where
                         _ => false,
                     }
                 }
-                (KeyType::COUNTER, _) => {
+                (KeyType::COUNTER | KeyType::PROPOSAL_COMMIT, _) => {
                     let counter_key = gov_storage::get_counter_key();
                     let pre_counter: Option<u64> =
                         read(&self.ctx, &counter_key, ReadType::PRE).ok();
@@ -466,6 +467,9 @@ enum KeyType {
     PROPOSAL_CODE,
     #[allow(clippy::upper_case_acronyms)]
     #[allow(non_camel_case_types)]
+    PROPOSAL_COMMIT,
+    #[allow(clippy::upper_case_acronyms)]
+    #[allow(non_camel_case_types)]
     GRACE_EPOCH,
     #[allow(clippy::upper_case_acronyms)]
     #[allow(non_camel_case_types)]
@@ -500,6 +504,8 @@ impl From<&Key> for KeyType {
             KeyType::GRACE_EPOCH
         } else if gov_storage::is_start_epoch_key(value) {
             KeyType::START_EPOCH
+        } else if gov_storage::is_min_grace_epoch_key(value) {
+            KeyType::PROPOSAL_COMMIT
         } else if gov_storage::is_end_epoch_key(value) {
             KeyType::END_EPOCH
         } else if gov_storage::is_balance_key(value) {
