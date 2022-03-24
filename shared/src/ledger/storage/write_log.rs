@@ -349,64 +349,40 @@ impl WriteLog {
         Ok(())
     }
 
-    /// Get the storage keys that have been changed in the write log, grouped by
-    /// their verifiers, whose VPs will be triggered by the changes.
+    /// Get the verifiers set whose validity predicates should validate the
+    /// current transaction changes and the storage keys that have been
+    /// modified created, updated and deleted via the write log.
     ///
     /// Note that some storage keys may comprise of multiple addresses, in which
-    /// case every address will be the verifier of the key.
-    pub fn verifiers_changed_keys(
+    /// case every address will be included in the verifiers set.
+    pub fn verifiers_and_changed_keys(
         &self,
         verifiers_from_tx: &BTreeSet<Address>,
-    ) -> HashMap<Address, BTreeSet<Key>> {
-        let (changed_keys, initialized_accounts) = self.get_partitioned_keys();
-        let mut verifiers =
-            verifiers_from_tx
-                .iter()
-                .fold(HashMap::new(), |mut acc, addr| {
-                    let changed_keys: BTreeSet<Key> =
-                        changed_keys.iter().map(|&key| key.clone()).collect();
-                    acc.insert(addr.clone(), changed_keys);
-                    acc
-                });
+    ) -> (BTreeSet<Address>, BTreeSet<storage::Key>) {
+        let changed_keys: BTreeSet<storage::Key> = self.get_keys();
+        let initialized_accounts = self.get_initialized_accounts();
+        let mut verifiers = verifiers_from_tx.clone();
 
         // get changed keys grouped by the address
-        for key in changed_keys {
+        for key in changed_keys.iter() {
             for addr in &key.find_addresses() {
                 if verifiers_from_tx.contains(addr)
                     || initialized_accounts.contains(addr)
                 {
                     // We can skip this when the address has been added from the
-                    // Tx above, which associates with this address all the
-                    // changed storage keys, even if their address is not
-                    // included in the key.
+                    // Tx above.
                     // Also skip if it's an address of a newly initialized
                     // account, because anything can be written into an
                     // account's storage in the same tx in which it's
-                    // initialized.
+                    // initialized (there is no VP in the state prior to tx
+                    // execution).
                     continue;
                 }
                 // Add the address as a verifier
-                match verifiers.get_mut(addr) {
-                    Some(keys) => {
-                        keys.insert(key.clone());
-                    }
-                    None => {
-                        let keys: BTreeSet<Key> =
-                            vec![key.clone()].into_iter().collect();
-                        verifiers.insert(addr.clone(), keys);
-                    }
-                }
+                verifiers.insert(addr.clone());
             }
         }
-        // The new accounts should be validated by every verifier's VP
-        for initialized_account in initialized_accounts {
-            for (_verifier, keys) in verifiers.iter_mut() {
-                // The key for an initialized account points to its VP
-                let vp_key = Key::validity_predicate(initialized_account);
-                keys.insert(vp_key);
-            }
-        }
-        verifiers
+        (verifiers, changed_keys)
     }
 }
 
@@ -611,56 +587,47 @@ mod tests {
 
     proptest! {
         /// Test [`WriteLog::verifiers_changed_keys`] that:
-        /// 1. Every address from `verifiers_from_tx` is associated with all the
-        ///    changed storage keys.
-        /// 2. Every changed storage key is associated with all the addresses
-        ///    included in the key except for the addresses of newly
-        ///    initialized accounts.
+        /// 1. Every address from `verifiers_from_tx` is included in the
+        ///    verifiers set.
+        /// 2. Every address included in the changed storage keys is included in
+        ///    the verifiers set.
         /// 3. Addresses of newly initialized accounts are not verifiers, so
         ///    that anything can be written into an account's storage in the
         ///    same tx in which it's initialized.
-        /// 4. Every address is associated with all the newly initialized
-        ///    accounts keys to their validity predicates.
+        /// 4. The validity predicates of all the newly initialized accounts are
+        ///    included in the changed keys set.
         #[test]
         fn verifiers_changed_key_tx_all_key(
             (verifiers_from_tx, tx_write_log) in arb_verifiers_changed_key_tx_all_key(),
         ) {
             let write_log = WriteLog { tx_write_log, ..WriteLog::default() };
-            let all_keys = write_log.get_keys();
 
-            let verifiers_changed_keys = write_log.verifiers_changed_keys(&verifiers_from_tx);
+            let (verifiers, changed_keys) = write_log.verifiers_and_changed_keys(&verifiers_from_tx);
 
             println!("verifiers_from_tx {:#?}", verifiers_from_tx);
             for verifier_from_tx in verifiers_from_tx {
-                assert!(verifiers_changed_keys.contains_key(&verifier_from_tx));
-                let keys = verifiers_changed_keys.get(&verifier_from_tx).unwrap().clone();
                 // Test for 1.
-                assert_eq!(&keys, &all_keys);
+                assert!(verifiers.contains(&verifier_from_tx));
             }
 
             let (_changed_keys, initialized_accounts) = write_log.get_partitioned_keys();
-            for (_verifier_addr, keys) in verifiers_changed_keys.iter() {
-                for key in keys {
+            for key in changed_keys.iter() {
                     for addr_from_key in &key.find_addresses() {
                         if !initialized_accounts.contains(addr_from_key) {
-                            let keys = verifiers_changed_keys.get(addr_from_key).unwrap();
                             // Test for 2.
-                            assert!(keys.contains(key));
+                            assert!(verifiers.contains(addr_from_key));
                         }
                     }
-                }
             }
 
-            println!("verifiers_changed_keys {:#?}", verifiers_changed_keys);
+            println!("verifiers {:#?}", verifiers);
+            println!("changed_keys {:#?}", changed_keys);
             println!("initialized_accounts {:#?}", initialized_accounts);
             for initialized_account in initialized_accounts {
                 // Test for 3.
-                assert!(!verifiers_changed_keys.contains_key(initialized_account));
-                for (_verifier_addr, keys) in verifiers_changed_keys.iter() {
-                    // Test for 4.
-                    let vp_key = Key::validity_predicate(initialized_account);
-                    assert!(keys.contains(&vp_key));
-                }
+                assert!(!verifiers.contains(initialized_account));
+                // Test for 4.
+                let vp_key = storage::Key::validity_predicate(initialized_account);
             }
         }
     }
