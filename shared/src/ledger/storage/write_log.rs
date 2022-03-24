@@ -5,16 +5,17 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use thiserror::Error;
 
-use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::ledger;
+use crate::ledger::storage::{Storage, StorageHasher};
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::ibc::IbcEvent;
-use crate::types::storage::Key;
+use crate::types::storage;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error applying a write log: {0}")]
-    StorageError(storage::Error),
+    StorageError(ledger::storage::Error),
     #[error("Trying to update a temporary value")]
     UpdateTemporaryValue,
     #[error(
@@ -63,9 +64,9 @@ pub struct WriteLog {
     address_gen: Option<EstablishedAddressGen>,
     /// All the storage modification accepted by validity predicates are stored
     /// in block write-log, before being committed to the storage
-    block_write_log: HashMap<Key, StorageModification>,
+    block_write_log: HashMap<storage::Key, StorageModification>,
     /// The storage modifications for the current transaction
-    tx_write_log: HashMap<Key, StorageModification>,
+    tx_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC event for the current transaction
     ibc_event: Option<IbcEvent>,
 }
@@ -84,7 +85,10 @@ impl Default for WriteLog {
 impl WriteLog {
     /// Read a value at the given key and return the value and the gas cost,
     /// returns [`None`] if the key is not present in the write log
-    pub fn read(&self, key: &Key) -> (Option<&StorageModification>, u64) {
+    pub fn read(
+        &self,
+        key: &storage::Key,
+    ) -> (Option<&StorageModification>, u64) {
         // try to read from tx write log first
         match self.tx_write_log.get(key).or_else(|| {
             // if not found, then try to read from block write log
@@ -114,7 +118,11 @@ impl WriteLog {
     /// validity predicate of a new account that's not yet committed to storage.
     /// Fails with [`Error::UpdateTemporaryValue`] when attempting to update a
     /// temporary value.
-    pub fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(u64, i64)> {
+    pub fn write(
+        &mut self,
+        key: &storage::Key,
+        value: Vec<u8>,
+    ) -> Result<(u64, i64)> {
         let len = value.len();
         let gas = key.len() + len;
         let size_diff = match self
@@ -147,7 +155,7 @@ impl WriteLog {
     /// temporary value after deleting.
     pub fn write_temp(
         &mut self,
-        key: &Key,
+        key: &storage::Key,
         value: Vec<u8>,
     ) -> Result<(u64, i64)> {
         let len = value.len();
@@ -181,7 +189,7 @@ impl WriteLog {
     /// difference.
     /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
     /// not possible to delete.
-    pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
+    pub fn delete(&mut self, key: &storage::Key) -> Result<(u64, i64)> {
         if key.is_validity_predicate().is_some() {
             return Err(Error::DeleteVp);
         }
@@ -217,7 +225,7 @@ impl WriteLog {
             self.address_gen.get_or_insert(storage_address_gen.clone());
         let addr =
             address_gen.generate_address("TODO more randomness".as_bytes());
-        let key = Key::validity_predicate(&addr);
+        let key = storage::Key::validity_predicate(&addr);
         let gas = (key.len() + vp.len()) as _;
         self.tx_write_log
             .insert(key, StorageModification::InitAccount { vp });
@@ -237,7 +245,7 @@ impl WriteLog {
     /// Get the storage keys changed and accounts keys initialized in the
     /// current transaction. The account keys point to the validity predicates
     /// of the newly created accounts.
-    pub fn get_keys(&self) -> BTreeSet<Key> {
+    pub fn get_keys(&self) -> BTreeSet<storage::Key> {
         self.tx_write_log.keys().cloned().collect()
     }
 
@@ -246,7 +254,9 @@ impl WriteLog {
     /// (right). The first vector excludes keys of validity predicates of
     /// newly initialized accounts, but may include keys of other data
     /// written into newly initialized accounts.
-    pub fn get_partitioned_keys(&self) -> (BTreeSet<&Key>, HashSet<&Address>) {
+    pub fn get_partitioned_keys(
+        &self,
+    ) -> (BTreeSet<&storage::Key>, HashSet<&Address>) {
         use itertools::{Either, Itertools};
         self.tx_write_log.iter().partition_map(|(key, value)| {
             match (key.is_validity_predicate(), value) {
@@ -308,7 +318,9 @@ impl WriteLog {
         storage: &mut Storage<DB, H>,
     ) -> Result<()>
     where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        DB: 'static
+            + ledger::storage::DB
+            + for<'iter> ledger::storage::DBIter<'iter>,
         H: StorageHasher,
     {
         let mut batch = Storage::<DB, H>::batch();
@@ -392,12 +404,13 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::address;
+    use crate::types::{address, storage};
 
     #[test]
     fn test_crud_value() {
         let mut write_log = WriteLog::default();
-        let key = Key::parse("key").expect("cannot parse the key string");
+        let key =
+            storage::Key::parse("key").expect("cannot parse the key string");
 
         // read a non-existing key
         let (value, gas) = write_log.read(&key);
@@ -464,7 +477,7 @@ mod tests {
         // init
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, gas) = write_log.init_account(&address_gen, init_vp.clone());
-        let vp_key = Key::validity_predicate(&addr);
+        let vp_key = storage::Key::validity_predicate(&addr);
         assert_eq!(gas, (vp_key.len() + init_vp.len()) as u64);
 
         // read
@@ -488,7 +501,7 @@ mod tests {
 
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, _) = write_log.init_account(&address_gen, init_vp);
-        let vp_key = Key::validity_predicate(&addr);
+        let vp_key = storage::Key::validity_predicate(&addr);
 
         // update should fail
         let updated_vp = "updated".as_bytes().to_vec();
@@ -503,7 +516,7 @@ mod tests {
 
         let init_vp = "initialized".as_bytes().to_vec();
         let (addr, _) = write_log.init_account(&address_gen, init_vp);
-        let vp_key = Key::validity_predicate(&addr);
+        let vp_key = storage::Key::validity_predicate(&addr);
 
         // delete should fail
         let result = write_log.delete(&vp_key).unwrap_err();
@@ -514,7 +527,7 @@ mod tests {
     fn test_delete_vp_should_fail() {
         let mut write_log = WriteLog::default();
         let addr = address::testing::established_address_1();
-        let vp_key = Key::validity_predicate(&addr);
+        let vp_key = storage::Key::validity_predicate(&addr);
 
         // delete should fail
         let result = write_log.delete(&vp_key).unwrap_err();
@@ -528,10 +541,14 @@ mod tests {
         let mut write_log = WriteLog::default();
         let address_gen = EstablishedAddressGen::new("test");
 
-        let key1 = Key::parse("key1").expect("cannot parse the key string");
-        let key2 = Key::parse("key2").expect("cannot parse the key string");
-        let key3 = Key::parse("key3").expect("cannot parse the key string");
-        let key4 = Key::parse("key4").expect("cannot parse the key string");
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let key2 =
+            storage::Key::parse("key2").expect("cannot parse the key string");
+        let key3 =
+            storage::Key::parse("key3").expect("cannot parse the key string");
+        let key4 =
+            storage::Key::parse("key4").expect("cannot parse the key string");
 
         // initialize an account
         let vp1 = "vp1".as_bytes().to_vec();
@@ -580,7 +597,7 @@ mod tests {
             (verifiers_from_tx in testing::arb_verifiers_from_tx())
             (tx_write_log in testing::arb_tx_write_log(verifiers_from_tx.clone()),
                 verifiers_from_tx in Just(verifiers_from_tx))
-        -> (BTreeSet<Address>, HashMap<Key, StorageModification>) {
+        -> (BTreeSet<Address>, HashMap<storage::Key, StorageModification>) {
             (verifiers_from_tx, tx_write_log)
         }
     }
@@ -628,6 +645,7 @@ mod tests {
                 assert!(!verifiers.contains(initialized_account));
                 // Test for 4.
                 let vp_key = storage::Key::validity_predicate(initialized_account);
+                assert!(changed_keys.contains(&vp_key));
             }
         }
     }
@@ -643,11 +661,11 @@ pub mod testing {
     use crate::types::address::testing::arb_address;
     use crate::types::storage::testing::arb_key;
 
-    /// Generate an arbitrary tx write log of [`HashMap<Key,
+    /// Generate an arbitrary tx write log of [`HashMap<storage::Key,
     /// StorageModification>`].
     pub fn arb_tx_write_log(
         verifiers_from_tx: BTreeSet<Address>,
-    ) -> impl Strategy<Value = HashMap<Key, StorageModification>> + 'static
+    ) -> impl Strategy<Value = HashMap<storage::Key, StorageModification>> + 'static
     {
         arb_key().prop_flat_map(move |key| {
             // If the key is a validity predicate key and its owner is in the
