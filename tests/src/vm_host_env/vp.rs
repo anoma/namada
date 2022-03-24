@@ -73,14 +73,7 @@ impl TestVpEnv {
     }
 
     pub fn get_verifiers(&self) -> BTreeSet<Address> {
-        let mut verifiers: BTreeSet<Address> = self
-            .write_log
-            .verifiers_changed_keys(&BTreeSet::default())
-            .keys()
-            .cloned()
-            .collect();
-        verifiers.extend(self.verifiers.clone());
-        verifiers
+        self.write_log.verifiers_and_changed_keys(&self.verifiers).0
     }
 }
 
@@ -102,19 +95,16 @@ pub fn init_vp_env_from_tx(
     apply_tx(&addr);
 
     let verifiers_from_tx = &tx_env.verifiers;
-    let verifiers_changed_keys =
-        tx_env.write_log.verifiers_changed_keys(verifiers_from_tx);
-    let verifiers = verifiers_changed_keys.keys().cloned().collect();
-    let keys_changed = verifiers_changed_keys
-        .get(&addr)
-        .unwrap_or_else(|| {
-            panic!(
-                "The VP for the given address has not been triggered by the \
-                 transaction, {:#?}",
-                verifiers_changed_keys
-            )
-        })
-        .to_owned();
+    let (verifiers, keys_changed) = tx_env
+        .write_log
+        .verifiers_and_changed_keys(verifiers_from_tx);
+    verifiers.get(&addr).unwrap_or_else(|| {
+        panic!(
+            "The VP for the given address has not been triggered by the \
+             transaction. Changed keys: {:#?}",
+            keys_changed
+        )
+    });
 
     let mut vp_env = TestVpEnv {
         addr,

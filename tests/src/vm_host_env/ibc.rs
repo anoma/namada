@@ -184,12 +184,16 @@ pub fn init_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
 ) -> (TestIbcVp<'a>, TempDir) {
-    let keys_changed = tx_env
+    let (verifiers, keys_changed) = tx_env
         .write_log
-        .verifiers_changed_keys(&BTreeSet::new())
-        .get(&Address::Internal(InternalAddress::Ibc))
-        .cloned()
-        .expect("no IBC address");
+        .verifiers_and_changed_keys(&tx_env.verifiers);
+    let addr = Address::Internal(InternalAddress::Ibc);
+    if !verifiers.contains(&addr) {
+        panic!(
+            "IBC address {} isn't part of the tx verifiers set: {:#?}",
+            addr, verifiers
+        );
+    }
     let (vp_wasm_cache, vp_cache_dir) =
         wasm::compilation_cache::common::testing::cache();
 
@@ -211,12 +215,16 @@ pub fn init_token_vp_from_tx<'a>(
     tx: &'a Tx,
     addr: &Address,
 ) -> (TestIbcTokenVp<'a>, TempDir) {
-    let keys_changed = tx_env
+    let (verifiers, keys_changed) = tx_env
         .write_log
-        .verifiers_changed_keys(&BTreeSet::new())
-        .get(addr)
-        .cloned()
-        .expect("no token address");
+        .verifiers_and_changed_keys(&tx_env.verifiers);
+    if !verifiers.contains(addr) {
+        panic!(
+            "The given token address {} isn't part of the tx verifiers set: \
+             {:#?}",
+            addr, verifiers
+        );
+    }
     let (vp_wasm_cache, vp_cache_dir) =
         wasm::compilation_cache::common::testing::cache();
 
