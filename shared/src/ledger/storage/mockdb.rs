@@ -335,11 +335,11 @@ impl DB for MockDB {
 
     fn read_subspace_val_with_height(
         &self,
-        key: &Key,
+        _key: &Key,
         _height: BlockHeight,
     ) -> Result<Option<Vec<u8>>> {
-        // read the value at the latest height for the mock DB
-        self.read_subspace_val(key)
+        // Mock DB can read only the latest value for now
+        unimplemented!()
     }
 
     fn write_subspace_val(
