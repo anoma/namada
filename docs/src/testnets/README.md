@@ -2,6 +2,8 @@
 
 This section describes how to connect to the various testnets and to test selected features.
 
+Join the testnet: `anomac utils join-network --chain-id anoma-masp-0.3.51d2f83a8412b95`
+
 * Transparent to shielded payment: `anomac transfer --source Bertha --amount 50 --token BTC --payment-address 9cb63488b1d6ef25f069b6eb5bba2eee3dcf22bc10b2063a1fbcb91964341d75837bdce3e2fe3ec9c1e005`
 * Shielded to transparent payment: `anomac transfer --target Bertha --amount 45 --token BTC --spending-key AA`
 * View shielded balance using spending key: `anomac balance --spending-key AA`
