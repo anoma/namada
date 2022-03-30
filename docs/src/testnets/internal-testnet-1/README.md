@@ -8,8 +8,12 @@ Building from source with Mac M1 processors fails.
 :::
 
 ## Run MASP Testnet
+**NOTE** Check the [prerequisities](#prerequisites) before trying to start a node from binaries.
+
 - Download `masp-params.tar.gz` and `anoma-v0.5.0-49-g0184e64e0-Linux-x86_64.tar.gz` [from Google Drive](https://drive.google.com/drive/folders/1MM-HOkxDgcbgKbTn8E2xVHVKPhiKBI9C?usp=sharing) 
-- Extract masp params file `masp-params.tar.gz` into home dir as follow `~/.masp-params`
+- Extract masp params file `masp-params.tar.gz` 
+    - Linux: into home dir as follow `~/.masp-params`
+    - Mac OS: into `~/Library/Application Support/MASPParam`
 - Extract anoma file with prebuilt binaries `anoma-v0.5.0-49-g0184e64e0-Linux-x86_64.tar.gz`
 - Go to anoma folder `anoma-v0.5.0-49-g0184e64e0-Linux-x86_64`
 - Join chain-id `anoma-masp-0.3.51d2f83a8412b95` and start your node 
