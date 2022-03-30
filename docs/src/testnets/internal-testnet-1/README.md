@@ -8,25 +8,19 @@ Building from source with Mac M1 processors fails.
 :::
 
 ## Run MASP Testnet
-- [Download folder `week-12-anoma-masp` from Drive, extract it](ttps://drive.google.com/drive/folders/1MM-HOkxDgcbgKbTn8E2xVHVKPhiKBI9C?usp=sharing)
-- Extract anoma file with prebuilt binaries `anoma-v0.4.0-126-gf67795fc2-Linux-x86_64.tar.gz`
-- Go to anoma folder
-- Extract masp params file `masp-params.tar.gz` into anoma folder, outputs `.masp-params` folder
-- Extract config file `wasm.masp-testnet.1cdfad5c0d2fb5e63.tar.gz` into anoma folder, outputs `.anoma` config folder
-- Remove wasm folder from `.anoma/{chain-id}/wasm/`
-- Extract wasm file `wasm.masp-testnet.1cdfad5c0d2fb5e63.tar.gz` into `.anoma/{chain-id}/`
+- Download `masp-params.tar.gz` and `anoma-v0.5.0-49-g0184e64e0-Linux-x86_64.tar.gz` [from Google Drive](https://drive.google.com/drive/folders/1MM-HOkxDgcbgKbTn8E2xVHVKPhiKBI9C?usp=sharing) 
+- Extract masp params file `masp-params.tar.gz` into home dir as follow `~/.masp-params`
+- Extract anoma file with prebuilt binaries `anoma-v0.5.0-49-g0184e64e0-Linux-x86_64.tar.gz`
+- Go to anoma folder `anoma-v0.5.0-49-g0184e64e0-Linux-x86_64`
+- Join chain-id `anoma-masp-0.3.51d2f83a8412b95` and start your node 
 
 Executing the commands below should start a node:
 ```bash
-tar -xvf anoma-v0.4.0-135-g4856958f2d-Linux-x86_64.tar.gz
-cd anoma-v0.4.0-135-g4856958f2d-Linux-x86_64
-tar -xvf ../masp-params.tar.gz
-tar -xvf ../masp-testnet.1cdfad5c0d2fb5e63.tar.gz
-cp ../wasm.masp-testnet.1cdfad5c0d2fb5e63.tar.gz .anoma/masp-testnet.1cdfad5c0d2fb5e63/
-cd .anoma/masp-testnet.1cdfad5c0d2fb5e63
-rm -r wasm
-tar -xvf wasm.masp-testnet.1cdfad5c0d2fb5e63.tar.gz
-cd ../../
+cd ~ 
+tar -xvf masp-params.tar.gz
+tar -xvf anoma-v0.5.0-49-g0184e64e0-Linux-x86_64.tar.gz
+cd anoma-v0.5.0-49-g0184e64e0-Linux-x86_64
+./anomac utils join-network --chain-id anoma-masp-0.3.51d2f83a8412b95
 ./anoma ledger
 ```
 
