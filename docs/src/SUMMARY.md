@@ -10,8 +10,6 @@
     - [Interact with PoS](./user-guide/ledger/pos.md)
     - [Customize](./user-guide/ledger/customize.md)
   - [The Intent gossiper and Matchmaker](./user-guide/intent-gossiper-and-matchmaker.md)
-- [Testnets](./testnets//README.md)
-  - [Internal Testnet 1](./testnets/internal-testnet-1/README.md)
 - [Exploration](./explore/README.md)
   - [Design](./explore/design/README.md)
     - [Overview](./explore/design/overview.md)
