@@ -1,12 +1,7 @@
 # Internal Testnet 1
+*Last updated on **3/30/2022** by **Alexandre Roque***
 
-:::warning
-:warning: **Warning:** If you are building from source for masp-devnet, please checkout `0.4-masp` branch with `git checkout 0.4-masp` and then follow the [build from source](#From-Source) section below.
-
-Prebuilt binaries for Mac OS are not available on the release page.
-Building from source with Mac M1 processors fails.
-:::
-
+Current chain id `anoma-masp-0.3.51d2f83a8412b95` and branch `tomas/masp-wasm-build-fixes`
 ## Run MASP Testnet
 **NOTE** Check the [prerequisities](#prerequisites) before trying to start a node from binaries.
 
@@ -27,6 +22,16 @@ cd anoma-v0.5.0-49-g0184e64e0-Linux-x86_64
 ./anomac utils join-network --chain-id anoma-masp-0.3.51d2f83a8412b95
 ./anoma ledger
 ```
+
+## Try MASP commands
+* Transparent to shielded payment: `anomac transfer --source Bertha --amount 50 --token BTC --payment-address 9cb63488b1d6ef25f069b6eb5bba2eee3dcf22bc10b2063a1fbcb91964341d75837bdce3e2fe3ec9c1e005`
+* Shielded to transparent payment: `anomac transfer --target Bertha --amount 45 --token BTC --spending-key AA`
+* View shielded balance using spending key: `anomac balance --spending-key AA`
+* View shielded balance using viewing key: `anomac balance --viewing-key 628a9956322f3f7d20b19801d9b4a8f3cb4b8b756a26ef2477feb5264be7b808c920996f37a79433d08e27fefcda0b6736c296b1073734a4ee35d11368f2b52ef14d7c1749cc8119ecc8a894f696992453f2dd78ef1e9d74172b2a5ef7cc8c50`
+* Derive view key from spending key: `anomaw masp derive-view-key --spending-key AA`
+* Generate payment address from spending key: `anomaw masp gen-payment-addr --spending-key AA`
+* Generate payment address from viewing key: `anomaw masp gen-payment-addr --viewing-key 628a9956322f3f7d20b19801d9b4a8f3cb4b8b756a26ef2477feb5264be7b808c920996f37a79433d08e27fefcda0b6736c296b1073734a4ee35d11368f2b52ef14d7c1749cc8119ecc8a894f696992453f2dd78ef1e9d74172b2a5ef7cc8c50`
+* Shielded to shielded payment: `anomac transfer --spending-key AA --amount 5 --token BTC --payment-address 9cb63488b1d6ef25f069b6eb5bba2eee3dcf22bc10b2063a1fbcb91964341d75837bdce3e2fe3ec9c1e005 --signer Albert`
 
 ## Hardware Requirements
 
@@ -132,4 +137,28 @@ rustup target add wasm32-unknown-unknown
 Build the provided validity predicate, transaction and matchmaker wasm modules
 ```
 make build-wasm-scripts-docker
+```
+
+#### Node is not starting
+
+**No state could be found**
+If you get the following log, it means that tendermint is not installed properly on your machine. To solve this issue follow the [prerequisites](#prerequisites).
+```bash
+2022-03-30T07:21:09.212187Z  INFO anoma_apps::cli::context: Chain ID: anoma-masp-0.3.51d2f83a8412b95
+2022-03-30T07:21:09.213968Z  INFO anoma_apps::node::ledger: Available logical cores: 8
+2022-03-30T07:21:09.213989Z  INFO anoma_apps::node::ledger: Using 4 threads for Rayon.
+2022-03-30T07:21:09.213994Z  INFO anoma_apps::node::ledger: Using 4 threads for Tokio.
+2022-03-30T07:21:09.217867Z  INFO anoma_apps::node::ledger: VP WASM compilation cache size not configured, using 1/6 of available memory.
+2022-03-30T07:21:09.218908Z  INFO anoma_apps::node::ledger: Available memory: 15.18 GiB
+2022-03-30T07:21:09.218934Z  INFO anoma_apps::node::ledger: VP WASM compilation cache size: 2.53 GiB
+2022-03-30T07:21:09.218943Z  INFO anoma_apps::node::ledger: Tx WASM compilation cache size not configured, using 1/6 of available memory.
+2022-03-30T07:21:09.218947Z  INFO anoma_apps::node::ledger: Tx WASM compilation cache size: 2.53 GiB
+2022-03-30T07:21:09.218954Z  INFO anoma_apps::node::ledger: Block cache size not configured, using 1/3 of available memory.
+2022-03-30T07:21:09.218959Z  INFO anoma_apps::node::ledger: RocksDB block cache size: 5.06 GiB
+2022-03-30T07:21:09.218996Z  INFO anoma_apps::node::ledger::storage::rocksdb: Using 2 compactions threads for RocksDB.
+2022-03-30T07:21:09.219196Z  INFO anoma_apps::node::ledger: Tendermint node is no longer running.
+2022-03-30T07:21:09.232544Z  INFO anoma::ledger::storage: No state could be found
+2022-03-30T07:21:09.232709Z  INFO anoma_apps::node::ledger: Tendermint has exited, shutting down...
+2022-03-30T07:21:09.232794Z  INFO anoma_apps::node::ledger: Anoma ledger node started.
+2022-03-30T07:21:09.232849Z  INFO anoma_apps::node::ledger: Anoma ledger node has shut down.
 ```
