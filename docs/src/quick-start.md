@@ -7,7 +7,7 @@
 * Intel i3 or better will suffice.
 * Tendermint 0.34.x pre-installed 
 
-To install the correct version of Tendermint, download any of the pre-built binaries for versions 0.34.x [here](https://github.com/tendermint/tendermint/releases) and install it using the instructions on the [Tendermint guide](https://docs.tendermint.com/master/introduction/install.html}, or use a script on the Anoma repo 
+To install the correct version of Tendermint, download any of the pre-built binaries for versions 0.34.x [here](https://github.com/tendermint/tendermint/releases) and install it using the instructions on the [Tendermint guide](https://docs.tendermint.com/master/introduction/install.html), or use a script on the Anoma repo 
 `scripts/install/get_tendermint.sh` This is used by the `make install` command (if you’re installing from the source).
 
 At the moment we are not supporting windows.
