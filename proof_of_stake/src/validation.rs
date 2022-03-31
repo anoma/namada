@@ -1470,39 +1470,52 @@ where
         }
     }
 
-    // Check expected voting power changes
+    let mut prev_epoch = None;
+    // Check expected voting power changes at each epoch
     for (epoch, expected_voting_powers) in expected_voting_power_by_epoch {
         for (validator, expected_voting_power) in expected_voting_powers {
-            match voting_power_by_epoch.get(&epoch) {
-                Some(actual_voting_powers) => {
-                    match actual_voting_powers.get(&validator) {
-                        Some(actual_voting_power) => {
-                            if *actual_voting_power != expected_voting_power {
-                                errors.push(
-                                    Error::InvalidValidatorVotingPowerChange(
-                                        validator,
-                                        expected_voting_power,
-                                        Some(*actual_voting_power),
-                                    ),
-                                );
-                            }
-                        }
-                        None => errors.push(
-                            Error::InvalidValidatorVotingPowerChange(
-                                validator,
-                                expected_voting_power,
-                                None,
-                            ),
-                        ),
+            match voting_power_by_epoch
+                .get(&epoch)
+                .and_then(|voting_powers| voting_powers.get(&validator))
+            {
+                Some(actual_voting_power) => {
+                    if *actual_voting_power != expected_voting_power {
+                        errors.push(Error::InvalidValidatorVotingPowerChange(
+                            validator,
+                            expected_voting_power,
+                            Some(*actual_voting_power),
+                        ));
                     }
                 }
-                None => errors.push(Error::InvalidValidatorVotingPowerChange(
-                    validator,
-                    expected_voting_power,
-                    None,
-                )),
+                None => {
+                    // If there's no actual voting power change present in this
+                    // epoch, it might have been unbond that
+                    // didn't affect the voting power bundled
+                    // together with a bond with the same ID.
+                    if let Some(last_epoch) = prev_epoch.as_ref() {
+                        if let Some(actual_voting_power) =
+                            voting_power_by_epoch.get(last_epoch)
+                        {
+                            // This is the case when there's some voting power
+                            // change at the previous epoch that is equal to
+                            // the expected value, because then the voting power
+                            // at this epoch is the same.
+                            if actual_voting_power.get(&validator)
+                                == Some(&expected_voting_power)
+                            {
+                                continue;
+                            }
+                        }
+                    }
+                    errors.push(Error::InvalidValidatorVotingPowerChange(
+                        validator,
+                        expected_voting_power,
+                        None,
+                    ))
+                }
             }
         }
+        prev_epoch = Some(epoch);
     }
 
     // Check expected total voting power change
