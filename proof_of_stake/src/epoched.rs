@@ -402,10 +402,7 @@ where
 
     /// Find the delta value for the given epoch, if any. Returns `None` when
     /// the given epoch is lower than `self.last_update`.
-    pub(crate) fn get_delta_at_epoch(
-        &self,
-        epoch: impl Into<Epoch>,
-    ) -> Option<&Data> {
+    pub fn get_delta_at_epoch(&self, epoch: impl Into<Epoch>) -> Option<&Data> {
         let epoch = epoch.into();
         epoch.checked_sub(self.last_update).and_then(|index| {
             let index: usize = index.into();
