@@ -1,7 +1,9 @@
 # Internal Testnet 1
 *Last updated on **3/30/2022** by **Alexandre Roque***
 
-Current chain id `anoma-masp-0.3.51d2f83a8412b95` and branch `tomas/masp-wasm-build-fixes`
+Current chain id `anoma-masp-0.3.51d2f83a8412b95` and branch
+`internal/testnet-n1` (commit
+`0184e64e044366ec370d1431ddf4691b4bd3a5b4`)
 ## Run MASP Testnet
 **NOTE** Check the [prerequisities](#prerequisites) before trying to start a node from binaries.
 
