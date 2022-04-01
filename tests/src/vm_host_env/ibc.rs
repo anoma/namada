@@ -351,6 +351,7 @@ pub fn prepare_opened_channel(
     let msg = msg_channel_open_init(port_id.clone(), conn_id.clone());
     let mut channel = msg.channel;
     open_channel(&mut channel);
+    channel.ordering = Order::Unordered;
     let bytes = channel.encode_vec().expect("encoding failed");
     writes.insert(key, bytes);
 
