@@ -66,6 +66,16 @@ impl TestTxEnv {
         self.write_log.get_keys()
     }
 
+    pub fn get_verifiers(&self) -> BTreeSet<Address> {
+        let verifiers: BTreeSet<Address> = self
+            .write_log
+            .verifiers_changed_keys(&self.verifiers)
+            .keys()
+            .cloned()
+            .collect();
+        verifiers
+    }
+
     pub fn init_parameters(
         &mut self,
         epoch_duration: Option<EpochDuration>,
@@ -142,38 +152,6 @@ impl TestTxEnv {
     }
 }
 
-/// Initialize the host environment inside the [`tx_host_env`] module.
-#[allow(dead_code)]
-pub fn init_tx_env(
-    TestTxEnv {
-        storage,
-        write_log,
-        iterators,
-        verifiers,
-        gas_meter,
-        result_buffer,
-        vp_wasm_cache,
-        vp_cache_dir: _,
-        tx_wasm_cache,
-        tx_cache_dir: _,
-    }: &mut TestTxEnv,
-) {
-    tx_host_env::ENV.with(|env| {
-        *env.borrow_mut() = Some({
-            vm::host_env::testing::tx_env(
-                storage,
-                write_log,
-                iterators,
-                verifiers,
-                gas_meter,
-                result_buffer,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            )
-        })
-    });
-}
-
 /// This module allows to test code with tx host environment functions.
 /// It keeps a thread-local global `TxEnv`, which is passed to any of
 /// invoked host environment functions and so it must be initialized
@@ -181,17 +159,70 @@ pub fn init_tx_env(
 mod native_tx_host_env {
 
     use std::cell::RefCell;
+    use std::pin::Pin;
 
-    use anoma::ledger::storage::Sha256Hasher;
     use anoma::vm::host_env::*;
-    use anoma::vm::memory::testing::NativeMemory;
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
 
     use super::*;
 
     thread_local! {
-        pub static ENV: RefCell<Option<TxEnv<'static, NativeMemory, MockDB, Sha256Hasher, WasmCacheRwAccess>>> = RefCell::new(None);
+        /// A [`TestTxEnv`] that can be used for tx host env functions calls
+        /// that implements the WASM host environment in native environment.
+        pub static ENV: RefCell<Option<Pin<Box<TestTxEnv>>>> =
+            RefCell::new(None);
+    }
+
+    /// Initialize the tx host environment in [`ENV`]. This will be used in the
+    /// host env function calls via macro `native_host_fn!`.
+    pub fn init() {
+        ENV.with(|env| {
+            let test_env = TestTxEnv::default();
+            *env.borrow_mut() = Some(Box::pin(test_env));
+        });
+    }
+
+    /// Set the tx host environment in [`ENV`] from the given [`TestTxEnv`].
+    /// This will be used in the host env function calls via
+    /// macro `native_host_fn!`.
+    pub fn set(test_env: TestTxEnv) {
+        ENV.with(|env| {
+            *env.borrow_mut() = Some(Box::pin(test_env));
+        });
+    }
+
+    /// Mutably borrow the [`TestTxEnv`] from [`ENV`]. The [`ENV`] must be
+    /// initialized.
+    pub fn with<T>(f: impl Fn(&mut TestTxEnv) -> T) -> T {
+        ENV.with(|env| {
+            let mut env = env.borrow_mut();
+            let mut env = env
+                .as_mut()
+                .expect(
+                    "Did you forget to initialize the ENV? (e.g. call to \
+                     `tx_host_env::init()`)",
+                )
+                .as_mut();
+            f(&mut *env)
+        })
+    }
+
+    /// Take the [`TestTxEnv`] out of [`ENV`]. The [`ENV`] must be initialized.
+    pub fn take() -> TestTxEnv {
+        ENV.with(|env| {
+            let mut env = env.borrow_mut();
+            let env = env.take().expect(
+                "Did you forget to initialize the ENV? (e.g. call to \
+                 `tx_host_env::init()`)",
+            );
+            let env = Pin::into_inner(env);
+            *env
+        })
+    }
+
+    pub fn commit_tx_and_block() {
+        with(|env| env.commit_tx_and_block())
     }
 
     /// A helper macro to create implementations of the host environment
@@ -203,13 +234,33 @@ mod native_tx_host_env {
                 concat_idents!(extern_fn_name = anoma, _, $fn {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) {
-                        ENV.with(|env| {
-                            let env = env.borrow_mut();
-                            let env = env.as_ref().expect("Did you forget to initialize the ENV?");
+                        with(|TestTxEnv {
+                                storage,
+                                write_log,
+                                iterators,
+                                verifiers,
+                                gas_meter,
+                                result_buffer,
+                                vp_wasm_cache,
+                                vp_cache_dir: _,
+                                tx_wasm_cache,
+                                tx_cache_dir: _,
+                            }: &mut TestTxEnv| {
+
+                            let tx_env = vm::host_env::testing::tx_env(
+                                storage,
+                                write_log,
+                                iterators,
+                                verifiers,
+                                gas_meter,
+                                result_buffer,
+                                vp_wasm_cache,
+                                tx_wasm_cache,
+                            );
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &env, $($arg),* ).unwrap()
+                            $fn( &tx_env, $($arg),* ).unwrap()
                         })
                     }
                 });
@@ -220,13 +271,33 @@ mod native_tx_host_env {
                 concat_idents!(extern_fn_name = anoma, _, $fn {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
-                        ENV.with(|env| {
-                            let env = env.borrow_mut();
-                            let env = env.as_ref().expect("Did you forget to initialize the ENV?");
+                        with(|TestTxEnv {
+                                storage,
+                                write_log,
+                                iterators,
+                                verifiers,
+                                gas_meter,
+                                result_buffer,
+                                vp_wasm_cache,
+                                vp_cache_dir: _,
+                                tx_wasm_cache,
+                                tx_cache_dir: _,
+                            }: &mut TestTxEnv| {
+
+                            let tx_env = vm::host_env::testing::tx_env(
+                                storage,
+                                write_log,
+                                iterators,
+                                verifiers,
+                                gas_meter,
+                                result_buffer,
+                                vp_wasm_cache,
+                                tx_wasm_cache,
+                            );
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &env, $($arg),* ).unwrap()
+                            $fn( &tx_env, $($arg),* ).unwrap()
                         })
                     }
                 });
