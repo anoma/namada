@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::panic;
 
 use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use anoma::ledger::governance::GovernanceVp;
 use anoma::ledger::ibc::vp::{Ibc, IbcToken};
 use anoma::ledger::native_vp::{self, NativeVp};
 use anoma::ledger::parameters::{self, ParametersVp};
@@ -44,6 +45,8 @@ pub enum Error {
     ParametersNativeVpError(parameters::Error),
     #[error("IBC Token native VP: {0}")]
     IbcTokenNativeVpError(anoma::ledger::ibc::vp::IbcTokenError),
+    #[error("Governance native VP error: {0}")]
+    GovernanceNativeVpError(anoma::ledger::governance::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -327,6 +330,14 @@ where
                             Err(Error::AccessForbidden(
                                 (*internal_addr).clone(),
                             ))
+                        }
+                        InternalAddress::Governance => {
+                            let governance = GovernanceVp { ctx };
+                            let result = governance
+                                .validate_tx(tx_data, keys, &verifiers_addr)
+                                .map_err(Error::GovernanceNativeVpError);
+                            gas_meter = governance.ctx.gas_meter.into_inner();
+                            result
                         }
                         InternalAddress::IbcEscrow(_)
                         | InternalAddress::IbcBurn
