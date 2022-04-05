@@ -196,7 +196,7 @@ sudo apt-get install -y make git-core libssl-dev pkg-config libclang-12-dev
 Clone the source code from the [Github Anoma repo](https://github.com/anoma/anoma), then build and install anoma with the following commands:
 
 ```
-git clone https://github.com/anoma/anoma.git
+git clone https://github.com/anoma/anoma.git --single-branch --branch internal/testnet-n1
 cd anoma
 make install
 ```
