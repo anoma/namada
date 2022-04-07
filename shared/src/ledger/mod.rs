@@ -1,6 +1,7 @@
 //! The ledger modules
 
 pub mod gas;
+pub mod governance;
 pub mod ibc;
 pub mod native_vp;
 pub mod parameters;
