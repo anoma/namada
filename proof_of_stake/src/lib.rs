@@ -1825,7 +1825,7 @@ fn update_validator_set<Address, TokenChange>(
                         let popped =
                             validator_set.active.remove(&validator_pre);
                         debug_assert!(popped);
-                        validator_set.inactive.insert(validator_pre);
+                        validator_set.inactive.insert(validator_post);
                         if let Some(activate_max) = activate_max {
                             validator_set.active.insert(activate_max);
                         }
