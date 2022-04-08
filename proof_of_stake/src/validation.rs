@@ -1322,11 +1322,49 @@ where
                                         && !new_validators
                                             .contains_key(&validator.address)
                                     {
-                                        errors.push(
-                                            Error::InvalidActiveValidator(
-                                                validator.clone(),
-                                            ),
-                                        )
+                                        let mut is_valid = false;
+
+                                        // It's also possible that for this
+                                        // validator there has been no change in
+                                        // this epoch, but in an earlier epoch.
+                                        // We attempt to search for it below and
+                                        // if the voting power matches the
+                                        // stake, this is valid.
+                                        let mut search_epoch =
+                                            u64::from(epoch) - 1;
+                                        while search_epoch
+                                            >= current_epoch.into()
+                                        {
+                                            if let Some((
+                                                _take_pre,
+                                                last_total_stake,
+                                            )) = total_stake_by_epoch
+                                                .get(&search_epoch.into())
+                                                .and_then(|stakes| {
+                                                    stakes
+                                                        .get(&validator.address)
+                                                })
+                                            {
+                                                let voting_power =
+                                                    VotingPower::from_tokens(
+                                                        *last_total_stake,
+                                                        params,
+                                                    );
+                                                is_valid = validator
+                                                    .voting_power
+                                                    == voting_power;
+                                                break;
+                                            } else {
+                                                search_epoch -= 1;
+                                            }
+                                        }
+                                        if !is_valid {
+                                            errors.push(
+                                                Error::InvalidActiveValidator(
+                                                    validator.clone(),
+                                                ),
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1358,11 +1396,50 @@ where
                                         && !new_validators
                                             .contains_key(&validator.address)
                                     {
-                                        errors.push(
-                                            Error::InvalidInactiveValidator(
-                                                validator.clone(),
-                                            ),
-                                        )
+                                        let mut is_valid = false;
+
+                                        // It's also possible that for this
+                                        // validator there has been no change in
+                                        // this epoch, but in an earlier epoch.
+                                        // We attempt to search for it below and
+                                        // if the voting power matches the
+                                        // stake, this is valid.
+                                        let mut search_epoch =
+                                            u64::from(epoch) - 1;
+                                        while search_epoch
+                                            >= current_epoch.into()
+                                        {
+                                            if let Some((
+                                                _take_pre,
+                                                last_total_stake,
+                                            )) = total_stake_by_epoch
+                                                .get(&search_epoch.into())
+                                                .and_then(|stakes| {
+                                                    stakes
+                                                        .get(&validator.address)
+                                                })
+                                            {
+                                                let voting_power =
+                                                    VotingPower::from_tokens(
+                                                        *last_total_stake,
+                                                        params,
+                                                    );
+                                                is_valid = validator
+                                                    .voting_power
+                                                    == voting_power;
+                                                break;
+                                            } else {
+                                                search_epoch -= 1;
+                                            }
+                                        }
+
+                                        if !is_valid {
+                                            errors.push(
+                                                Error::InvalidInactiveValidator(
+                                                    validator.clone(),
+                                                ),
+                                            )
+                                        }
                                     }
                                 }
                             }
