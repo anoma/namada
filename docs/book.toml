@@ -9,7 +9,7 @@ src = "src"
 title = "Anoma - DOCS"
 
 [output.html]
-additional-css = ["assets/custom.css"]
+additional-css = ["assets/custom.css", "mdbook-admonish.css"]
 additional-js = ["assets/mermaid.min.js", "assets/mermaid-init.js"]
 mathjax-support = true
 
@@ -21,3 +21,6 @@ expand = true
 [preprocessor]
 [preprocessor.mermaid]
 command = "mdbook-mermaid"
+
+[preprocessor.admonish]
+command = "mdbook-admonish"
