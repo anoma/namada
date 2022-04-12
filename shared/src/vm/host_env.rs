@@ -988,7 +988,8 @@ where
     let key =
         Key::parse(key).map_err(vp_env::RuntimeError::StorageDataError)?;
     let storage = unsafe { env.ctx.storage.get() };
-    let value = vp_env::read_pre(gas_meter, storage, &key)?;
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let value = vp_env::read_pre(gas_meter, storage, write_log, &key)?;
     tracing::debug!(
         "vp_read_pre addr {}, key {}, value {:?}",
         unsafe { env.ctx.address.get() },
