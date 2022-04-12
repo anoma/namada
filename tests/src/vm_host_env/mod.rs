@@ -1087,7 +1087,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, true);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1131,7 +1131,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, true);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1176,7 +1176,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1268,7 +1268,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1323,7 +1323,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1385,7 +1385,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1465,7 +1465,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1548,7 +1548,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1603,7 +1603,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, true);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1681,7 +1681,7 @@ mod tests {
         let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
         writes.extend(conn_writes);
         let (port_id, channel_id, channel_writes) =
-            ibc::prepare_opened_channel(&conn_id);
+            ibc::prepare_opened_channel(&conn_id, true);
         writes.extend(channel_writes);
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {

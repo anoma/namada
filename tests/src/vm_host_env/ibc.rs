@@ -342,6 +342,7 @@ pub fn prepare_opened_connection(
 
 pub fn prepare_opened_channel(
     conn_id: &ConnectionId,
+    is_ordered: bool,
 ) -> (PortId, ChannelId, HashMap<Key, Vec<u8>>) {
     let mut writes = HashMap::new();
 
@@ -360,6 +361,9 @@ pub fn prepare_opened_channel(
     let msg = msg_channel_open_init(port_id.clone(), conn_id.clone());
     let mut channel = msg.channel;
     open_channel(&mut channel);
+    if !is_ordered {
+        channel.ordering = Order::Unordered;
+    }
     let bytes = channel.encode_vec().expect("encoding failed");
     writes.insert(key, bytes);
 
