@@ -13,6 +13,7 @@ use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use prost::bytes::Bytes;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
@@ -976,10 +977,10 @@ fn init_genesis_validator_aux(
     genesis_validator
 }
 
-async fn download_file(url: impl AsRef<str>) -> reqwest::Result<Vec<u8>> {
+async fn download_file(url: impl AsRef<str>) -> reqwest::Result<Bytes> {
     let url = url.as_ref();
     let response = reqwest::get(url).await?;
     response.error_for_status_ref()?;
     let contents = response.bytes().await?;
-    Ok(contents.to_vec())
+    Ok(contents)
 }
