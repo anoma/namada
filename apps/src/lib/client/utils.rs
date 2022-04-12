@@ -94,7 +94,13 @@ pub async fn join_network(
 
     // Read or download the release archive
     println!("Downloading config release from {} ...", release_url);
-    let release = download_file(release_url).await;
+    let release = match download_file(release_url).await {
+        Ok(contents) => contents,
+        Err(error) => {
+            eprintln!("Error downloading release: {}", error);
+            cli::safe_exit(1);
+        }
+    };
 
     // Decode and unpack the archive
     let mut decoder = GzDecoder::new(&release[..]);
@@ -970,22 +976,10 @@ fn init_genesis_validator_aux(
     genesis_validator
 }
 
-async fn download_file(url: impl AsRef<str>) -> Vec<u8> {
+async fn download_file(url: impl AsRef<str>) -> reqwest::Result<Vec<u8>> {
     let url = url.as_ref();
-    reqwest::get(url)
-        .await
-        .unwrap_or_else(|err| {
-            eprintln!("File not found at {}. Error: {}", url, err);
-            cli::safe_exit(1)
-        })
-        .bytes()
-        .await
-        .unwrap_or_else(|err| {
-            eprintln!(
-                "Failed to download file from {} with error: {}",
-                url, err
-            );
-            cli::safe_exit(1)
-        })
-        .to_vec()
+    let response = reqwest::get(url).await?;
+    response.error_for_status_ref()?;
+    let contents = response.bytes().await?;
+    Ok(contents.to_vec())
 }
