@@ -136,11 +136,14 @@ where
             // sink zone
             let target = Address::Internal(InternalAddress::IbcBurn);
             let target_key = token::balance_key(&token, &target);
+            let pre =
+                try_decode_token_amount(self.ctx.read_temp_pre(&target_key)?)?
+                    .unwrap_or_default();
             let post =
-                try_decode_token_amount(self.ctx.read_temp(&target_key)?)?
+                try_decode_token_amount(self.ctx.read_temp_post(&target_key)?)?
                     .unwrap_or_default();
             // the previous balance of the burn address should be zero
-            post.change()
+            post.change() - pre.change()
         } else {
             // source zone
             let target =
@@ -199,11 +202,14 @@ where
             // the sender is the source
             let source = Address::Internal(InternalAddress::IbcMint);
             let source_key = token::balance_key(&token, &source);
+            let pre =
+                try_decode_token_amount(self.ctx.read_temp_pre(&source_key)?)?
+                    .unwrap_or_else(Amount::max);
             let post =
-                try_decode_token_amount(self.ctx.read_temp(&source_key)?)?
-                    .unwrap_or_default();
+                try_decode_token_amount(self.ctx.read_temp_post(&source_key)?)?
+                    .unwrap_or_else(Amount::max);
             // the previous balance of the mint address should be the maximum
-            Amount::max().change() - post.change()
+            pre.change() - post.change()
         };
 
         if change == amount.change() {
@@ -235,11 +241,14 @@ where
             // sink zone: mint the token for the refund
             let source = Address::Internal(InternalAddress::IbcMint);
             let source_key = token::balance_key(&token, &source);
+            let pre =
+                try_decode_token_amount(self.ctx.read_temp_pre(&source_key)?)?
+                    .unwrap_or_else(Amount::max);
             let post =
-                try_decode_token_amount(self.ctx.read_temp(&source_key)?)?
-                    .unwrap_or_default();
+                try_decode_token_amount(self.ctx.read_temp_post(&source_key)?)?
+                    .unwrap_or_else(Amount::max);
             // the previous balance of the mint address should be the maximum
-            Amount::max().change() - post.change()
+            pre.change() - post.change()
         } else {
             // source zone: unescrow the token for the refund
             let source =

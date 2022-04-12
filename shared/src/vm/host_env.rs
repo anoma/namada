@@ -1057,12 +1057,12 @@ where
     })
 }
 
-/// Storage read temporary state (after tx execution) function exposed to the
+/// Storage read temporary state (before tx execution) function exposed to the
 /// wasm VM VP environment. It will try to read from only the write log.
 ///
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
-pub fn vp_read_temp<MEM, DB, H, EVAL, CA>(
+pub fn vp_read_temp_pre<MEM, DB, H, EVAL, CA>(
     env: &VpEnv<MEM, DB, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
@@ -1081,13 +1081,58 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_env::add_gas(gas_meter, gas)?;
 
-    tracing::debug!("vp_read_temp {}, key {}", key, key_ptr,);
+    tracing::debug!("vp_read_temp_pre {}, key {}", key, key_ptr);
 
     // try to read from the write log
     let key =
         Key::parse(key).map_err(vp_env::RuntimeError::StorageDataError)?;
     let write_log = unsafe { env.ctx.write_log.get() };
-    let value = vp_env::read_temp(gas_meter, write_log, &key)?;
+    let value = vp_env::read_temp_pre(gas_meter, write_log, &key)?;
+    Ok(match value {
+        Some(value) => {
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(vp_env::RuntimeError::NumConversionError)?;
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
+            result_buffer.replace(value);
+            len
+        }
+        None => HostEnvResult::Fail.to_i64(),
+    })
+}
+
+/// Storage read temporary state (after tx execution) function exposed to the
+/// wasm VM VP environment. It will try to read from only the write log.
+///
+/// Returns `-1` when the key is not present, or the length of the data when
+/// the key is present (the length may be `0`).
+pub fn vp_read_temp_post<MEM, DB, H, EVAL, CA>(
+    env: &VpEnv<MEM, DB, H, EVAL, CA>,
+    key_ptr: u64,
+    key_len: u64,
+) -> vp_env::Result<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    let (key, gas) = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .map_err(|e| vp_env::RuntimeError::MemoryError(Box::new(e)))?;
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_env::add_gas(gas_meter, gas)?;
+
+    tracing::debug!("vp_read_temp_post {}, key {}", key, key_ptr);
+
+    // try to read from the write log
+    let key =
+        Key::parse(key).map_err(vp_env::RuntimeError::StorageDataError)?;
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let value = vp_env::read_temp_post(gas_meter, write_log, &key)?;
     Ok(match value {
         Some(value) => {
             let len: i64 = value

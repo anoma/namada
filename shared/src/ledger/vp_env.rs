@@ -131,9 +131,28 @@ where
     }
 }
 
+/// Storage read temporary state (before tx execution). It will try to read from
+/// only the write log.
+pub fn read_temp_pre(
+    gas_meter: &mut VpGasMeter,
+    write_log: &WriteLog,
+    key: &Key,
+) -> Result<Option<Vec<u8>>> {
+    // Try to read from the write log first
+    let (log_val, gas) = write_log.read_pre(key);
+    add_gas(gas_meter, gas)?;
+    match log_val {
+        Some(&write_log::StorageModification::Temp { ref value }) => {
+            Ok(Some(value.clone()))
+        }
+        None => Ok(None),
+        _ => Err(RuntimeError::ReadPermanentValueError),
+    }
+}
+
 /// Storage read temporary state (after tx execution). It will try to read from
 /// only the write log.
-pub fn read_temp(
+pub fn read_temp_post(
     gas_meter: &mut VpGasMeter,
     write_log: &WriteLog,
     key: &Key,
@@ -145,6 +164,7 @@ pub fn read_temp(
         Some(&write_log::StorageModification::Temp { ref value }) => {
             Ok(Some(value.clone()))
         }
+        None => Ok(None),
         _ => Err(RuntimeError::ReadPermanentValueError),
     }
 }

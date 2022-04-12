@@ -131,10 +131,21 @@ where
         .map_err(Error::ContextError)
     }
 
+    /// Storage read temporary state (before tx execution). It will try to read
+    /// from only the write log.
+    pub fn read_temp_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
+        vp_env::read_temp_pre(
+            &mut *self.gas_meter.borrow_mut(),
+            self.write_log,
+            key,
+        )
+        .map_err(Error::ContextError)
+    }
+
     /// Storage read temporary state (after tx execution). It will try to read
     /// from only the write log.
-    pub fn read_temp(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        vp_env::read_temp(
+    pub fn read_temp_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
+        vp_env::read_temp_post(
             &mut *self.gas_meter.borrow_mut(),
             self.write_log,
             key,
