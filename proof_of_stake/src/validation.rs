@@ -822,6 +822,17 @@ where
                     if post.last_update() != current_epoch {
                         errors.push(Error::InvalidLastUpdate)
                     }
+                    let pre_offset: u64 =
+                        match current_epoch.checked_sub(pre.last_update()) {
+                            Some(offset) => offset.into(),
+                            None => {
+                                // If the last_update > current_epoch, the check
+                                // above must have failed with
+                                // `Error::InvalidLastUpdate`
+                                continue;
+                            }
+                        };
+
                     // Pre-bonds keyed by their `start_epoch`
                     let mut pre_bonds: HashMap<Epoch, TokenChange> =
                         HashMap::default();
@@ -829,10 +840,9 @@ where
                     // pre, not both pre and post to avoid rounding errors
                     let mut slashed_deltas: HashMap<Epoch, TokenChange> =
                         HashMap::default();
+
                     // Iter from the first epoch of `pre` to the last epoch of
                     // `post`
-                    let pre_offset: u64 =
-                        (current_epoch - pre.last_update()).into();
                     for epoch in Epoch::iter_range(
                         pre.last_update(),
                         pre_offset + pipeline_offset + 1,
@@ -1025,6 +1035,16 @@ where
                     if post.last_update() != current_epoch {
                         errors.push(Error::InvalidLastUpdate)
                     }
+                    let pre_offset: u64 =
+                        match current_epoch.checked_sub(pre.last_update()) {
+                            Some(offset) => offset.into(),
+                            None => {
+                                // If the last_update > current_epoch, the check
+                                // above must have failed with
+                                // `Error::InvalidLastUpdate`
+                                continue;
+                            }
+                        };
 
                     // We have to slash only the difference between post and
                     // pre, not both pre and post to avoid rounding errors
@@ -1034,8 +1054,6 @@ where
                     > = HashMap::default();
                     // Iter from the first epoch of `pre` to the last epoch of
                     // `post`
-                    let pre_offset: u64 =
-                        (current_epoch - pre.last_update()).into();
                     for epoch in Epoch::iter_range(
                         pre.last_update(),
                         pre_offset + unbonding_offset + 1,
