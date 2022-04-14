@@ -412,49 +412,22 @@ pub mod vp {
         super::read_from_buffer(read_result, anoma_vp_result_buffer)
     }
 
-    /// Try to read a temporary value as a Borsh encoded variable-length value
-    /// at the given key from write log before transaction execution.
-    pub fn read_temp_pre<T: BorshDeserialize>(
-        key: impl AsRef<str>,
-    ) -> Option<T> {
+    /// Try to read a Borsh encoded variable-length value at the given key from
+    /// storage before transaction execution.
+    pub fn read_temp<T: BorshDeserialize>(key: impl AsRef<str>) -> Option<T> {
         let key = key.as_ref();
-        let read_result = unsafe {
-            anoma_vp_read_temp_pre(key.as_ptr() as _, key.len() as _)
-        };
+        let read_result =
+            unsafe { anoma_vp_read_temp(key.as_ptr() as _, key.len() as _) };
         super::read_from_buffer(read_result, anoma_vp_result_buffer)
             .and_then(|t| T::try_from_slice(&t[..]).ok())
     }
 
-    /// Try to read a temporary value as a Borsh encoded variable-length value
-    /// at the given key from write log after transaction execution.
-    pub fn read_temp_post<T: BorshDeserialize>(
-        key: impl AsRef<str>,
-    ) -> Option<T> {
+    /// Try to read a variable-length value as bytes at the given key from
+    /// storage before transaction execution.
+    pub fn read_bytes_temp(key: impl AsRef<str>) -> Option<Vec<u8>> {
         let key = key.as_ref();
-        let read_result = unsafe {
-            anoma_vp_read_temp_post(key.as_ptr() as _, key.len() as _)
-        };
-        super::read_from_buffer(read_result, anoma_vp_result_buffer)
-            .and_then(|t| T::try_from_slice(&t[..]).ok())
-    }
-
-    /// Try to read a temporary variable-length value as bytes at the given key
-    /// from storage before transaction execution.
-    pub fn read_bytes_temp_pre(key: impl AsRef<str>) -> Option<Vec<u8>> {
-        let key = key.as_ref();
-        let read_result = unsafe {
-            anoma_vp_read_temp_pre(key.as_ptr() as _, key.len() as _)
-        };
-        super::read_from_buffer(read_result, anoma_vp_result_buffer)
-    }
-
-    /// Try to read a temporary variable-length value as bytes at the given key
-    /// from storage after transaction execution.
-    pub fn read_bytes_temp_post(key: impl AsRef<str>) -> Option<Vec<u8>> {
-        let key = key.as_ref();
-        let read_result = unsafe {
-            anoma_vp_read_temp_post(key.as_ptr() as _, key.len() as _)
-        };
+        let read_result =
+            unsafe { anoma_vp_read_temp(key.as_ptr() as _, key.len() as _) };
         super::read_from_buffer(read_result, anoma_vp_result_buffer)
     }
 
@@ -623,19 +596,12 @@ pub mod vp {
         // we know its size.
         fn anoma_vp_read_post(key_ptr: u64, key_len: u64) -> i64;
 
-        // Read variable-length prior temporary state when we don't know the
-        // size up-front, returns the size of the value (can be 0), or
-        // -1 if the key is not present. If a value is found, it will be
-        // placed in the result buffer, because we cannot allocate a
-        // buffer for it before we know its size.
-        fn anoma_vp_read_temp_pre(key_ptr: u64, key_len: u64) -> i64;
-
-        // Read variable-length posterior temporary state when we don't know the
-        // size up-front, returns the size of the value (can be 0), or
-        // -1 if the key is not present. If a value is found, it will be
-        // placed in the result buffer, because we cannot allocate a
-        // buffer for it before we know its size.
-        fn anoma_vp_read_temp_post(key_ptr: u64, key_len: u64) -> i64;
+        // Read variable-length temporary state when we don't know the size
+        // up-front, returns the size of the value (can be 0), or -1 if
+        // the key is not present. If a value is found, it will be placed in the
+        // result buffer, because we cannot allocate a buffer for it before
+        // we know its size.
+        fn anoma_vp_read_temp(key_ptr: u64, key_len: u64) -> i64;
 
         // Read a value from result buffer.
         fn anoma_vp_result_buffer(result_ptr: u64);

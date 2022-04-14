@@ -116,7 +116,10 @@ impl WriteLog {
     /// Read a value before the latest tx execution at the given key and return
     /// the value and the gas cost, returns [`None`] if the key is not present
     /// in the write log
-    pub fn read_pre(&self, key: &storage::Key) -> (Option<&StorageModification>, u64) {
+    pub fn read_pre(
+        &self,
+        key: &storage::Key,
+    ) -> (Option<&StorageModification>, u64) {
         // try to read from tx write log first
         match self.block_write_log.get(key) {
             Some(v) => {
@@ -323,6 +326,9 @@ impl WriteLog {
     /// accepted by all the triggered validity predicates. Starts a new
     /// transaction write log.
     pub fn commit_tx(&mut self) {
+        self.tx_write_log.retain(|_, v| {
+            !matches!(v, StorageModification::Temp { value: _ })
+        });
         let tx_write_log = std::mem::replace(
             &mut self.tx_write_log,
             HashMap::with_capacity(100),
@@ -349,11 +355,7 @@ impl WriteLog {
         H: StorageHasher,
     {
         let mut batch = Storage::<DB, H>::batch();
-        for (key, entry) in self
-            .block_write_log
-            .iter()
-            .filter(|(k, _)| k.is_updatable())
-        {
+        for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {
                     storage

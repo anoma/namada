@@ -31,19 +31,19 @@ pub mod vp {
                     let key = key.to_string();
                     let pre: Amount = match owner {
                         Address::Internal(InternalAddress::IbcMint) => {
-                            vp::read_temp_pre(&key).unwrap_or_else(Amount::max)
+                            Amount::max()
                         }
                         Address::Internal(InternalAddress::IbcBurn) => {
-                            vp::read_temp_pre(&key).unwrap_or_default()
+                            Amount::default()
                         }
                         _ => vp::read_pre(&key).unwrap_or_default(),
                     };
                     let post: Amount = match owner {
                         Address::Internal(InternalAddress::IbcMint) => {
-                            vp::read_temp_post(&key).unwrap_or_else(Amount::max)
+                            vp::read_temp(&key).unwrap_or_else(Amount::max)
                         }
                         Address::Internal(InternalAddress::IbcBurn) => {
-                            vp::read_temp_post(&key).unwrap_or_default()
+                            vp::read_temp(&key).unwrap_or_default()
                         }
                         _ => vp::read_post(&key).unwrap_or_default(),
                     };
