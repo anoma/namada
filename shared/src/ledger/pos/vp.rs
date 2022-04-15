@@ -34,7 +34,7 @@ use crate::ledger::pos::{
 use crate::ledger::storage::types::decode;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::{Key, KeySeg};
+use crate::types::storage::Key;
 use crate::types::{key, token};
 use crate::vm::WasmCacheAccess;
 
@@ -103,7 +103,6 @@ where
         use validation::DataUpdate::{self, *};
         use validation::ValidatorUpdate::*;
 
-        let addr = Address::Internal(Self::ADDR);
         let mut changes: Vec<DataUpdate<_, _, _, _>> = vec![];
         let current_epoch = self.ctx.get_block_epoch()?;
         for key in keys_changed {
@@ -217,7 +216,7 @@ where
             } else if let Some(owner) =
                 token::is_balance_key(&staking_token_address(), key)
             {
-                if owner != &addr {
+                if owner != &Address::Internal(Self::ADDR) {
                     continue;
                 }
                 let pre = self.ctx.read_pre(key)?.and_then(|bytes| {
@@ -275,13 +274,9 @@ where
                     TotalVotingPowers::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(TotalVotingPower(Data { pre, post }));
-            } else if key.segments.get(0) == Some(&addr.to_db_key()) {
-                // Unknown changes to this address space are disallowed
+            } else {
                 tracing::info!("PoS unrecognized key change {} rejected", key);
                 return Ok(false);
-            } else {
-                // Unknown changes anywhere else are permitted
-                return Ok(true);
             }
         }
 

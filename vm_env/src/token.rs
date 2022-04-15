@@ -6,7 +6,6 @@ use anoma::types::token;
 
 /// Vp imports and functions.
 pub mod vp {
-    use anoma::types::storage::KeySeg;
     pub use anoma::types::token::*;
 
     use super::*;
@@ -22,9 +21,8 @@ pub mod vp {
         let all_checked = keys_changed.iter().all(|key| {
             match token::is_balance_key(token, key) {
                 None => {
-                    // Unknown changes to this address space are disallowed, but
-                    // unknown changes anywhere else are permitted
-                    key.segments.get(0) != Some(&token.to_db_key())
+                    // deny any other keys
+                    false
                 }
                 Some(owner) => {
                     // accumulate the change

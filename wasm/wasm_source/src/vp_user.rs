@@ -15,7 +15,6 @@
 use anoma_vp_prelude::intent::{
     Exchange, FungibleTokenIntent, IntentTransfers,
 };
-use anoma_vp_prelude::storage::KeySeg;
 use anoma_vp_prelude::*;
 use once_cell::unsync::Lazy;
 use rust_decimal::prelude::*;
@@ -183,16 +182,7 @@ fn validate_tx(
                     return is_vp_whitelisted(&vp);
                 }
             }
-            KeyType::Unknown => {
-                if key.segments.get(0) == Some(&addr.to_db_key()) {
-                    // Unknown changes to this address space require a valid
-                    // signature
-                    *valid_sig
-                } else {
-                    // Unknown changes anywhere else are permitted
-                    true
-                }
-            }
+            KeyType::Unknown => *valid_sig,
         };
         if !is_valid {
             debug_log!("key {} modification failed vp", key);

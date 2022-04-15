@@ -67,7 +67,13 @@ impl TestTxEnv {
     }
 
     pub fn get_verifiers(&self) -> BTreeSet<Address> {
-        self.write_log.verifiers_and_changed_keys(&self.verifiers).0
+        let verifiers: BTreeSet<Address> = self
+            .write_log
+            .verifiers_changed_keys(&self.verifiers)
+            .keys()
+            .cloned()
+            .collect();
+        verifiers
     }
 
     pub fn init_parameters(
