@@ -1398,6 +1398,7 @@ mod tests {
         write_log
             .write(&key, commitment_bytes)
             .expect("write failed");
+        write_log.commit_tx();
 
         let tx_code = vec![];
         let mut tx_data = vec![];
@@ -1477,6 +1478,7 @@ mod tests {
         let key = ack_key(&get_port_id(), &get_channel_id(), sequence);
         let ack = PacketAck::default().encode_to_vec();
         write_log.write(&key, ack).expect("write failed");
+        write_log.commit_tx();
 
         let tx_code = vec![];
         let mut tx_data = vec![];
@@ -1561,6 +1563,7 @@ mod tests {
         increment_seq(&mut write_log, &seq_key, sequence);
         // delete the commitment
         write_log.delete(&commitment_key).expect("delete failed");
+        write_log.commit_tx();
 
         let tx_code = vec![];
         let mut tx_data = vec![];

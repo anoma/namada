@@ -113,31 +113,6 @@ impl WriteLog {
         }
     }
 
-    /// Read a value before the latest tx execution at the given key and return
-    /// the value and the gas cost, returns [`None`] if the key is not present
-    /// in the write log
-    pub fn read_pre(&self, key: &storage::Key) -> (Option<&StorageModification>, u64) {
-        // try to read from tx write log first
-        match self.block_write_log.get(key) {
-            Some(v) => {
-                let gas = match v {
-                    StorageModification::Write { ref value } => {
-                        key.len() + value.len()
-                    }
-                    StorageModification::Delete => key.len(),
-                    StorageModification::InitAccount { ref vp } => {
-                        key.len() + vp.len()
-                    }
-                    StorageModification::Temp { ref value } => {
-                        key.len() + value.len()
-                    }
-                };
-                (Some(v), gas as _)
-            }
-            None => (None, key.len() as _),
-        }
-    }
-
     /// Write a key and a value and return the gas cost and the size difference
     /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
     /// validity predicate of a new account that's not yet committed to storage.

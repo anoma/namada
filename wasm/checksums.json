@@ -1,7 +1,7 @@
 {
     "tx_bond.wasm": "tx_bond.0106081556ff589e06e0393ccd65dde6235ea4c874e1e83d72ec20abbf59b42f.wasm",
     "tx_from_intent.wasm": "tx_from_intent.d77a2ae4c18b8b72a09873e47094f9cedfcdb66058e9bec992ff291bfdd565e5.wasm",
-    "tx_ibc.wasm": "tx_ibc.43c959755c8609179341f4fc750b2757bb63a1f6020663dfaf9c1323d5a5890a.wasm",
+    "tx_ibc.wasm": "tx_ibc.5669b74730578693841110e42b6805bf39bb3c11163a31a559af41a7e0c779d5.wasm",
     "tx_init_account.wasm": "tx_init_account.a20dca22a92128cb2a1ce056872f1385bb1e063e6884f986a1d872c8adc93608.wasm",
     "tx_init_nft.wasm": "tx_init_nft.3e9bd272b0988d93401289685bb6eaa9782dfa63b4f09cef2d53d31152943718.wasm",
     "tx_init_proposal.wasm": "tx_init_proposal.c08191cc1ea320760ce23da2c7afcf15e538bebb4101b47c853e9af733e04d8e.wasm",
@@ -14,5 +14,5 @@
     "vp_nft.wasm": "vp_nft.048dc84e684a1683afba1a71b746f3f9ffe919ae3aa2dc82ea2ab37fa31b24ab.wasm",
     "vp_testnet_faucet.wasm": "vp_testnet_faucet.2b06675ffd37213295a186c38710ef1937da0a10ae0ed8dfc112cb733a48539e.wasm",
     "vp_token.wasm": "vp_token.cff5f38623f68bb579faba2ecf7e02ff1aef7f8d50ab7eec1202fe4295b0c0f2.wasm",
-    "vp_user.wasm": "vp_user.b82d5a01450bfe3ad4f6629997fa643bccfb385ca4e5544a64a7efda614f360a.wasm"
+    "vp_user.wasm": "vp_user.414d56faa7fd855e7cf232b8123b9f452260180b602b75c9e8e7a09cf9a6c1c8.wasm"
 }
