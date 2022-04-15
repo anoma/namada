@@ -179,14 +179,13 @@ mod native_vp_host_env {
         let (verifiers, keys_changed) = tx_env
             .write_log
             .verifiers_and_changed_keys(verifiers_from_tx);
-        if !verifiers
-            .contains(&addr) {
-                panic!(
-                    "The VP for the given address has not been triggered by \
-                     the transaction, {:#?}",
-                    keys_changed
-                );
-            }
+        if !verifiers.contains(&addr) {
+            panic!(
+                "The VP for the given address has not been triggered by the \
+                 transaction, {:#?}",
+                keys_changed
+            );
+        }
 
         let vp_env = TestVpEnv {
             addr,
