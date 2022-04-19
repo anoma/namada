@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -91,7 +91,6 @@ pub async fn join_network(
     let release_filename = format!("{}.tar.gz", chain_id);
     let release_url =
         format!("{}/{}/{}", RELEASE_PREFIX, chain_id, release_filename);
-    let cwd = env::current_dir().unwrap();
 
     // Read or download the release archive
     println!("Downloading config release from {} ...", release_url);
@@ -104,13 +103,12 @@ pub async fn join_network(
     };
 
     // Decode and unpack the archive
-    let mut decoder = GzDecoder::new(&release[..]);
-    let mut tar = String::new();
-    decoder.read_to_string(&mut tar).unwrap();
-    let mut archive = tar::Archive::new(tar.as_bytes());
+    let decoder = GzDecoder::new(&release[..]);
+    let mut archive = tar::Archive::new(decoder);
 
     // If the base-dir is non-default, unpack the archive into a temp dir inside
     // first.
+    let cwd = env::current_dir().unwrap();
     let (unpack_dir, non_default_dir) =
         if base_dir_full != cwd.join(config::DEFAULT_BASE_DIR) {
             (base_dir.clone(), true)
