@@ -1,7 +1,7 @@
 {
     "tx_bond.wasm": "tx_bond.0106081556ff589e06e0393ccd65dde6235ea4c874e1e83d72ec20abbf59b42f.wasm",
     "tx_from_intent.wasm": "tx_from_intent.d77a2ae4c18b8b72a09873e47094f9cedfcdb66058e9bec992ff291bfdd565e5.wasm",
-    "tx_ibc.wasm": "tx_ibc.5669b74730578693841110e42b6805bf39bb3c11163a31a559af41a7e0c779d5.wasm",
+    "tx_ibc.wasm": "tx_ibc.d2a235845cc2bd954170d19ca67b09a6a38baff1bdab9b648bdb2cd400be64d2.wasm",
     "tx_init_account.wasm": "tx_init_account.a20dca22a92128cb2a1ce056872f1385bb1e063e6884f986a1d872c8adc93608.wasm",
     "tx_init_nft.wasm": "tx_init_nft.3e9bd272b0988d93401289685bb6eaa9782dfa63b4f09cef2d53d31152943718.wasm",
     "tx_init_proposal.wasm": "tx_init_proposal.c08191cc1ea320760ce23da2c7afcf15e538bebb4101b47c853e9af733e04d8e.wasm",
