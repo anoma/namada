@@ -346,7 +346,7 @@ pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
 
 /// Read the password for encryption/decryption from the file/env/stdin. Panics
 /// if all options are empty/invalid.
-fn read_password(prompt_msg: &str) -> String {
+pub fn read_password(prompt_msg: &str) -> String {
     let pwd = match env::var("ANOMA_WALLET_PASSWORD_FILE") {
         Ok(path) => fs::read_to_string(path)
             .expect("Something went wrong reading the file"),
