@@ -322,6 +322,21 @@ impl Wallet {
             .map(Into::into)
     }
 
+    /// Extend this wallet from pre-genesis validator wallet.
+    pub fn extend_from_pre_genesis_validator(
+        &mut self,
+        validator_address: Address,
+        validator_alias: Alias,
+        other: pre_genesis::ValidatorWallet,
+    ) {
+        self.store.extend_from_pre_genesis_validator(
+            validator_address,
+            validator_alias,
+            other,
+        )
+    }
+}
+
 /// Read the password for encryption from the file/env/stdin with confirmation.
 pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
     let password = if unsafe_dont_encrypt {

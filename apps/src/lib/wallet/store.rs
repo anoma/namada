@@ -16,8 +16,9 @@ use file_lock::{FileLock, FileOptions};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::alias::Alias;
+use super::alias::{self, Alias};
 use super::keys::StoredKeypair;
+use super::pre_genesis;
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
 
@@ -372,6 +373,60 @@ impl Store {
         }
         self.addresses.insert(alias.clone(), address);
         Some(alias)
+    }
+
+    /// Extend this store from pre-genesis validator wallet.
+    pub fn extend_from_pre_genesis_validator(
+        &mut self,
+        validator_address: Address,
+        validator_alias: Alias,
+        other: pre_genesis::ValidatorWallet,
+    ) {
+        let account_key_alias = alias::validator_key(&validator_alias);
+        let rewards_key_alias = alias::validator_rewards_key(&validator_alias);
+        let consensus_key_alias =
+            alias::validator_consensus_key(&validator_alias);
+        let tendermint_node_key_alias =
+            alias::validator_tendermint_node_key(&validator_alias);
+
+        let keys = [
+            (account_key_alias.clone(), other.store.account_key),
+            (rewards_key_alias.clone(), other.store.rewards_key),
+            (consensus_key_alias.clone(), other.store.consensus_key),
+            (
+                tendermint_node_key_alias.clone(),
+                other.store.tendermint_node_key,
+            ),
+        ];
+        self.keys.extend(keys.into_iter());
+
+        let account_pk = other.account_key.ref_to();
+        let rewards_pk = other.rewards_key.ref_to();
+        let consensus_pk = other.consensus_key.ref_to();
+        let tendermint_node_pk = other.tendermint_node_key.ref_to();
+        let addresses = [
+            (account_key_alias.clone(), (&account_pk).into()),
+            (rewards_key_alias.clone(), (&rewards_pk).into()),
+            (consensus_key_alias.clone(), (&consensus_pk).into()),
+            (
+                tendermint_node_key_alias.clone(),
+                (&tendermint_node_pk).into(),
+            ),
+        ];
+        self.addresses.extend(addresses.into_iter());
+
+        let pkhs = [
+            ((&account_pk).into(), account_key_alias),
+            ((&rewards_pk).into(), rewards_key_alias),
+            ((&consensus_pk).into(), consensus_key_alias),
+            ((&tendermint_node_pk).into(), tendermint_node_key_alias),
+        ];
+        self.pkhs.extend(pkhs.into_iter());
+
+        self.validator_data = Some(ValidatorData {
+            address: validator_address,
+            keys: other.store.validator_keys,
+        });
     }
 
     fn decode(data: Vec<u8>) -> Result<Self, toml::de::Error> {
