@@ -103,25 +103,7 @@ impl Wallet {
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
     ) -> (String, Rc<common::SecretKey>) {
-        let password = if unsafe_dont_encrypt {
-            println!("Warning: The keypair will NOT be encrypted.");
-            None
-        } else {
-            Some(read_password("Enter your encryption password: "))
-        };
-        // Bis repetita for confirmation.
-        let pwd = if unsafe_dont_encrypt {
-            None
-        } else {
-            Some(read_password(
-                "To confirm, please enter the same encryption password once \
-                 more: ",
-            ))
-        };
-        if pwd != password {
-            eprintln!("Your two inputs do not match!");
-            cli::safe_exit(1)
-        }
+        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         let (alias, key) = self.store.gen_key(alias, password);
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
@@ -338,6 +320,28 @@ impl Wallet {
             .insert_keypair(alias.into(), keypair, pkh)
             .map(Into::into)
     }
+
+/// Read the password for encryption from the file/env/stdin with confirmation.
+pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
+    let password = if unsafe_dont_encrypt {
+        println!("Warning: The keypair will NOT be encrypted.");
+        None
+    } else {
+        Some(read_password("Enter your encryption password: "))
+    };
+    // Bis repetita for confirmation.
+    let to_confirm = if unsafe_dont_encrypt {
+        None
+    } else {
+        Some(read_password(
+            "To confirm, please enter the same encryption password once more: ",
+        ))
+    };
+    if to_confirm != password {
+        eprintln!("Your two inputs do not match!");
+        cli::safe_exit(1)
+    }
+    password
 }
 
 /// Read the password for encryption/decryption from the file/env/stdin. Panics
