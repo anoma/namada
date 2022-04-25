@@ -251,14 +251,6 @@ impl Store {
         &self.addresses
     }
 
-    fn generate_keypair() -> common::SecretKey {
-        use rand::rngs::OsRng;
-        let mut csprng = OsRng {};
-        ed25519::SigScheme::generate(&mut csprng)
-            .try_to_sk()
-            .unwrap()
-    }
-
     /// Generate a new keypair and insert it into the store with the provided
     /// alias. If none provided, the alias will be the public key hash.
     /// If no password is provided, the keypair will be stored raw without
@@ -269,10 +261,9 @@ impl Store {
         alias: Option<String>,
         password: Option<String>,
     ) -> (Alias, Rc<common::SecretKey>) {
-        let keypair = Self::generate_keypair();
-        let pkh: PublicKeyHash = PublicKeyHash::from(&keypair.ref_to());
-        let (keypair_to_store, raw_keypair) =
-            StoredKeypair::new(keypair, password);
+        let sk = gen_sk();
+        let pkh: PublicKeyHash = PublicKeyHash::from(&sk.ref_to());
+        let (keypair_to_store, raw_keypair) = StoredKeypair::new(sk, password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
         let alias: Alias = alias.unwrap_or_else(|| pkh.clone().into()).into();
         if self
@@ -296,8 +287,7 @@ impl Store {
     pub fn gen_validator_keys(
         protocol_keypair: Option<common::SecretKey>,
     ) -> ValidatorKeys {
-        let protocol_keypair =
-            protocol_keypair.unwrap_or_else(Self::generate_keypair);
+        let protocol_keypair = protocol_keypair.unwrap_or_else(gen_sk);
         let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
             &mut StdRng::from_entropy(),
         );
@@ -452,6 +442,15 @@ const FILE_NAME: &str = "wallet.toml";
 /// Get the path to the wallet store.
 pub fn wallet_file(store_dir: impl AsRef<Path>) -> PathBuf {
     store_dir.as_ref().join(FILE_NAME)
+}
+
+/// Generate a new secret key.
+pub fn gen_sk() -> common::SecretKey {
+    use rand::rngs::OsRng;
+    let mut csprng = OsRng {};
+    ed25519::SigScheme::generate(&mut csprng)
+        .try_to_sk()
+        .unwrap()
 }
 
 #[cfg(all(test, feature = "dev"))]
