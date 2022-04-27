@@ -518,20 +518,55 @@ impl AnomaCmd {
 
 impl Drop for AnomaCmd {
     fn drop(&mut self) {
-        // Clean up the process, if its still running
-        if let Ok(output) = self.session.exp_eof() {
-            let output = output.trim();
-            if !output.is_empty() {
-                println!(
-                    "\n\n{}: {}\n{}: {}",
-                    "Command".underline().yellow(),
+        // attempt to clean up the process
+        println!(
+            "{}: {}",
+            "Waiting for command to finish".underline().yellow(),
+            self.cmd_str,
+        );
+        if let Err(error) = self.session.process.exit() {
+            eprintln!(
+                "\n{}: {}\n{}: {}",
+                "Error waiting for command to finish".underline().red(),
+                self.cmd_str,
+                "Error".underline().red(),
+                error,
+            );
+            return;
+        };
+        println!(
+            "\n{}: {}",
+            "Command finished".underline().green(),
+            self.cmd_str,
+        );
+        let output = match self.session.exp_eof() {
+            Ok(output) => output,
+            Err(error) => {
+                eprintln!(
+                    "\n{}: {}\n{}: {}",
+                    "Error reading output for command".underline().red(),
                     self.cmd_str,
-                    "Unread output".underline().yellow(),
-                    output,
+                    "Error".underline().red(),
+                    error,
                 );
+                return;
             }
+        };
+        let output = output.trim();
+        if !output.is_empty() {
+            println!(
+                "\n{}: {}\n\n{}",
+                "Unread output for command".underline().yellow(),
+                self.cmd_str,
+                output
+            );
+        } else {
+            println!(
+                "\n{}: {}",
+                "No unread output for command".underline().green(),
+                self.cmd_str
+            );
         }
-        let _ = self.session.process.exit();
     }
 }
 
