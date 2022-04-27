@@ -189,11 +189,6 @@ where
         params: &PosParams,
     ) {
         let epoch = current_epoch.into();
-        debug_assert!(
-            epoch >= self.last_update,
-            "The current epoch must be greater than or equal to the last \
-             update"
-        );
         let offset = Offset::value(params) as usize;
         let last_update = self.last_update;
         let shift: usize =
@@ -250,7 +245,6 @@ where
         params: &PosParams,
     ) {
         let offset = offset.value(params) as usize;
-        debug_assert!(offset <= Offset::value(params) as usize);
         let epoch = current_epoch.into();
         self.update_data(epoch, params);
 
@@ -420,11 +414,6 @@ where
         params: &PosParams,
     ) {
         let epoch = current_epoch.into();
-        debug_assert!(
-            epoch >= self.last_update,
-            "The current epoch must be greater than or equal to the last \
-             update"
-        );
         let offset = Offset::value(params) as usize;
         let last_update = self.last_update;
         let shift: usize =
@@ -503,7 +492,6 @@ where
         params: &PosParams,
     ) {
         let offset = offset.value(params) as usize;
-        debug_assert!(offset <= Offset::value(params) as usize);
         let epoch = current_epoch.into();
         self.update_data(epoch, params);
 
@@ -527,7 +515,6 @@ where
         self.update_data(current_epoch, params);
         let offset =
             (u64::from(update_epoch) - u64::from(current_epoch)) as usize;
-        debug_assert!(offset <= Offset::value(params) as usize);
 
         self.data[offset] = self.data[offset].as_ref().map_or_else(
             || Some(value.clone()),
