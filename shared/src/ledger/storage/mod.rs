@@ -110,6 +110,8 @@ pub enum Error {
     DBError(String),
     #[error("Tendermint Protobuf error: {0}")]
     ProtobufCodingError(TmProtoError),
+    #[error("Merkle tree at the height {height} is not stored")]
+    NoMerkleTree { height: BlockHeight },
 }
 
 /// The block's state as stored in the database.
@@ -185,8 +187,21 @@ pub trait DB: std::fmt::Debug {
     /// Read the block header with the given height from the DB
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
 
+    /// Read the merkle tree stores with the given height
+    fn read_merkle_tree_stores(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<MerkleTreeStoresRead>>;
+
     /// Read the latest value for account subspace key from the DB
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>>;
+
+    /// Read the value for account subspace key at the given height from the DB
+    fn read_subspace_val_with_height(
+        &self,
+        key: &Key,
+        _height: BlockHeight,
+    ) -> Result<Option<Vec<u8>>>;
 
     /// Write the value with the given height and account subspace key to the
     /// DB. Returns the size difference from previous value, if any, or the
@@ -388,6 +403,26 @@ where
         }
     }
 
+    /// Returns a value from the specified subspace at the given height and the
+    /// gas cost
+    pub fn read_with_height(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+    ) -> Result<(Option<Vec<u8>>, u64)> {
+        if height >= self.get_block_height().0 {
+            self.read(key)
+        } else {
+            match self.db.read_subspace_val_with_height(key, height)? {
+                Some(v) => {
+                    let gas = key.len() + v.len();
+                    Ok((Some(v), gas as _))
+                }
+                None => Ok((None, key.len() as _)),
+            }
+        }
+    }
+
     /// Returns a prefix iterator and the gas cost
     pub fn iter_prefix(
         &self,
@@ -483,13 +518,34 @@ where
         &self,
         key: &Key,
         value: Vec<u8>,
+        height: BlockHeight,
     ) -> Result<Proof> {
-        Ok(self.block.tree.get_existence_proof(key, value)?)
+        if height >= self.get_block_height().0 {
+            Ok(self.block.tree.get_existence_proof(key, value)?)
+        } else {
+            match self.db.read_merkle_tree_stores(height)? {
+                Some(stores) => Ok(MerkleTree::<H>::new(stores)
+                    .get_existence_proof(key, value)?),
+                None => Err(Error::NoMerkleTree { height }),
+            }
+        }
     }
 
     /// Get the non-existence proof
-    pub fn get_non_existence_proof(&self, key: &Key) -> Result<Proof> {
-        Ok(self.block.tree.get_non_existence_proof(key)?)
+    pub fn get_non_existence_proof(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+    ) -> Result<Proof> {
+        if height >= self.get_block_height().0 {
+            Ok(self.block.tree.get_non_existence_proof(key)?)
+        } else {
+            match self.db.read_merkle_tree_stores(height)? {
+                Some(stores) => Ok(MerkleTree::<H>::new(stores)
+                    .get_non_existence_proof(key)?),
+                None => Err(Error::NoMerkleTree { height }),
+            }
+        }
     }
 
     /// Get the current (yet to be committed) block epoch

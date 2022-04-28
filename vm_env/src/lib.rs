@@ -16,7 +16,6 @@ pub mod proof_of_stake;
 pub mod token;
 
 pub mod tx_prelude {
-    pub use anoma::ledger::governance::storage;
     pub use anoma::proto::{Signed, SignedTxData};
     pub use anoma::types::address::Address;
     pub use anoma::types::*;

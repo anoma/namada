@@ -25,10 +25,6 @@ all:
 check:
 	$(foreach wasm,$(wasms),make check_$(wasm) && ) true
 
-# `cargo check` all wasms
-check:
-	$(foreach wasm,$(wasms),make check_$(wasm) && ) true
-
 # `cargo test` all wasms
 test:
 	$(foreach wasm,$(wasms),make test_$(wasm) && ) true
@@ -36,6 +32,9 @@ test:
 # `cargo clippy` all wasms
 clippy:
 	$(foreach wasm,$(wasms),make clippy_$(wasm) && ) true
+
+clippy-fix:
+	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
 fmt:
 	$(cargo) +$(nightly) fmt --all
@@ -59,6 +58,10 @@ $(patsubst %,test_%,$(wasms)): test_%:
 # `cargo watch` one of the wasms, e.g. `make watch_tx_no_op`
 $(patsubst %,watch_%,$(wasms)): watch_%:
 	$(cargo) watch --features $*
+
+# `cargo clippy` one of the wasms, e.g. `make clippy_tx_no_op`
+$(patsubst %,clippy_%,$(wasms)): clippy_%:
+	$(cargo) +$(nightly) clippy --all-targets --features $* -- -D warnings
 
 clean-wasm = rm ../$(wasm).wasm
 clean:

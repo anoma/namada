@@ -82,9 +82,9 @@ To try out shielded transfers, you will first need an ordinary
 transparent account with some token balance. Example commands for that:
 
 ```
-anomaw address gen --alias my-implicit
-anomac init-account --source my-implicit --public-key my-implicit --alias my-established
-anomac transfer --token btc --amount 1000 --source faucet --target my-established --signer my-established
+./anomaw address gen --alias my-implicit
+./anomac init-account --source my-implicit --public-key my-implicit --alias my-established
+./anomac transfer --token btc --amount 1000 --source faucet --target my-established --signer my-established
 ```
 
 The testnet tokens which the faucet can provide you are named `XAN`,
@@ -110,7 +110,7 @@ balance.
 To create a payment address from your spending key, use:
 
 ```
-anomaw masp gen-payment-addr --spending-key [your spending key]
+./anomaw masp gen-payment-addr --spending-key [your spending key]
 ```
 
 This will generate a different payment address each time you run it.
@@ -136,18 +136,18 @@ balances, and you may not want to use it just to view balances. For this
 purpose, you can derive the viewing key:
 
 ```
-anomaw masp derive-view-key --spending-key [your spending key]
-anomac balance --viewing-key [your viewing key]
+./anomaw masp derive-view-key --spending-key [your spending key]
+./anomac balance --viewing-key [your viewing key]
 ```
 
 The viewing key can also be used to generate payment addresses, with
-e.g. `anomaw masp gen-payment-addr --viewing-key [your viewing key]`.
+e.g. `./anomaw masp gen-payment-addr --viewing-key [your viewing key]`.
 
 Now that you have a shielded balance, it can either be transferred to a
 different shielded payment address (shielded to shielded):
 
 ```
-anomac transfer --spending-key [your spending key] --payment-address [someone's payment address] --token btc --amount 50 --signer my-established
+./anomac transfer --spending-key [your spending key] --payment-address [someone's payment address] --token btc --amount 50 --signer my-established
 ```
 
 or to a transparent account (shielded to transparent):

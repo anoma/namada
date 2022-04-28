@@ -152,6 +152,11 @@ impl VpGasMeter {
         }
         Ok(())
     }
+
+    /// Add the compiling cost proportionate to the code length
+    pub fn add_compiling_fee(&mut self, bytes_len: usize) -> Result<()> {
+        self.add(bytes_len as u64 * COMPILE_GAS_PER_BYTE)
+    }
 }
 
 impl VpsGas {
