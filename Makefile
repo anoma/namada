@@ -11,6 +11,7 @@ mm := libmm_token_exch
 
 # Path to the wasm source for the provided txs and VPs
 wasms := wasm/wasm_source
+wasms_for_tests := wasm_for_tests/wasm_source
 # Paths for all the wasm templates
 wasm_templates := wasm/tx_template wasm/vp_template
 
@@ -51,6 +52,7 @@ check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wa
 check:
 	$(cargo) check && \
 	make -C $(wasms) check && \
+	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
 check-abci-plus-plus:
@@ -63,6 +65,7 @@ clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)
 clippy:
 	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
+	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
 clippy-abci-plus-plus:

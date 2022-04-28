@@ -780,20 +780,21 @@ pub trait IbcActions {
 
     /// Get and increment the sequence
     fn get_and_inc_sequence(&self, key: &Key) -> Result<Sequence> {
-        if let Some(v) = self.read_ibc_data(key) {
-            let index: [u8; 8] = v.try_into().map_err(|_| {
-                Error::Sequence(format!(
-                    "The sequence index wasn't u64: Key {}",
-                    key
-                ))
-            })?;
-            let index: u64 = u64::from_be_bytes(index);
-            self.write_ibc_data(key, (index + 1).to_be_bytes());
-            Ok(index.into())
-        } else {
+        let index = match self.read_ibc_data(key) {
+            Some(v) => {
+                let index: [u8; 8] = v.try_into().map_err(|_| {
+                    Error::Sequence(format!(
+                        "The sequence index wasn't u64: Key {}",
+                        key
+                    ))
+                })?;
+                u64::from_be_bytes(index)
+            }
             // when the sequence has never been used, returns the initial value
-            Ok(1.into())
-        }
+            None => 1,
+        };
+        self.write_ibc_data(key, (index + 1).to_be_bytes());
+        Ok(index.into())
     }
 
     /// Bind a new port
