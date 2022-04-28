@@ -1,25 +1,22 @@
 # Internal Testnet 1
 
-##### Last updated on 04/07/2022 by Alexandre Roque
-
 >⚠️ the values below might change frequently.
->
->Latest values regarding the testnet that would be useful to have in your shell:
->
->```bash
->export ANOMA_TESTNET_CHAIN_ID='anoma-masp-0.3.51d2f83a8412b95'
->export ANOMA_TESTNET_BRANCH='internal/testnet-n1'
->export ANOMA_TESTNET_COMMIT='0184e64e044366ec370d1431ddf4691b4bd3a5b4'
->```
 
+Latest values regarding the testnet that would be useful to have in your shell:
+
+```bash
+export ANOMA_TESTNET_CHAIN_ID='anoma-masp-0.3.51d2f83a8412b95'
+export ANOMA_TESTNET_BRANCH='internal/testnet-n1'
+export ANOMA_TESTNET_COMMIT='0184e64e044366ec370d1431ddf4691b4bd3a5b4'
+```
 
 ## Installing Namada
 
-You can install Namada by following the instructions from the [Install User Guide](../../user-guide/install.md).
+You can install Namada by following the instructions from the [Install User Guide](../../user-guide/install.md). Note that the binaries should be built from `$ANOMA_TESTNET_BRANCH` rather than `master` or a release tag like `v0.5.0`.
 
 ## Setting up Namada
 
-At this point, depending on your installation choice, we will assume that you are either in `anoma` or `anoma-v0.5.0-{platform}` folder and that the binaries are available on path.
+At this point, depending on your installation choice, we will assume that the `anoma` binaries are available on path and built from the latest testnet branch.
 
 ### Join a network
 
