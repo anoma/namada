@@ -25,11 +25,11 @@ where
     /// of epoch changes and applies associated updates to validator sets,
     /// etc. as necessary.
     ///
-    /// Validate and apply decrypted transactions unless [`process_proposal`]
-    /// detected that they were not submitted in correct order or more
-    /// decrypted txs arrived than expected. In that case, all decrypted
-    /// transactions are not applied and must be included in the next
-    /// [`prepare_proposal`] call.
+    /// Validate and apply decrypted transactions unless
+    /// [`Shell::process_proposal`] detected that they were not submitted in
+    /// correct order or more decrypted txs arrived than expected. In that
+    /// case, all decrypted transactions are not applied and must be
+    /// included in the next `Shell::prepare_proposal` call.
     ///
     /// Incoming wrapper txs need no further validation. They
     /// are added to the block.
