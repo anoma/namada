@@ -164,10 +164,17 @@ where
                     }
                     event
                 }
-                TxType::Raw(_) | TxType::Protocol(_) => {
+                TxType::Raw(_) => {
                     tracing::error!(
                         "Internal logic error: FinalizeBlock received a \
                          TxType::Raw transaction"
+                    );
+                    continue;
+                }
+                TxType::Protocol(_) => {
+                    tracing::error!(
+                        "Internal logic error: FinalizeBlock received a \
+                         TxType::Protocol transaction"
                     );
                     continue;
                 }
