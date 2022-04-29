@@ -38,7 +38,7 @@ For each validator (in any state), the system also tracks total bonded tokens as
 #### Validator actions
 
 - *become validator*:
-  Any account that is not a validator already and that doesn't have any delegations may request to become a validator. It is required to provide a public consensus key and staking reward address. For the action applied in epoch `n`, the validator's state will be set to *candidate* for epoch `n + pipeline_length` and the consensus key is set for epoch `n + pipeline_length`.
+  Any account that is not a validator already and that doesn't have any delegations may request to become a validator. It is required to provide a public consensus key. For the action applied in epoch `n`, the validator's state will be set to *candidate* for epoch `n + pipeline_length` and the consensus key is set for epoch `n + pipeline_length`.
 - *deactivate*:
   Only a validator whose state at or before the `pipeline_length` offset is *candidate* account may *deactivate*. For this action applied in epoch `n`, the validator's account is set to become *inactive* in the epoch `n + pipeline_length`.
 - *reactivate*:
@@ -51,6 +51,8 @@ For each validator (in any state), the system also tracks total bonded tokens as
   Unbonded tokens may be withdrawn in or after the [unbond's epoch](#unbond).
 - *change consensus key*:
   Set the new consensus key. When applied in epoch `n`, the key is set for epoch `n + pipeline_length`.
+- *change commission rate*:
+  Set the new commission rate. When applied in epoch `n`, the new value will be set for epoch `n + pipeline_length`. The commission rate change must be within the `max_commission_rate_change` limit set by the validator.
 
 #### Active validator set
 
@@ -132,8 +134,6 @@ The default values that are relative to epoch duration assume that an epoch last
 - `pipeline_len`: Pipeline length in number of epochs, default `2` (see <https://github.com/cosmos/cosmos-sdk/blob/019444ae4328beaca32f2f8416ee5edbac2ef30b/docs/architecture/adr-039-epoched-staking.md#pipelining-the-epochs>)
 - `unboding_len`: Unbonding duration in number of epochs, default `6`
 - `votes_per_token`: Used in validators' voting power calculation, default 100‱ (1 voting power unit per 1000 tokens)
-- `block_proposer_reward`: Amount of tokens rewarded to a validator for proposing a block
-- `block_vote_reward`: Amount of tokens rewarded to each validator that voted on a block proposal
 - `duplicate_vote_slash_rate`: Portion of validator's stake that should be slashed on a duplicate vote
 - `light_client_attack_slash_rate`: Portion of validator's stake that should be slashed on a light client attack
 
