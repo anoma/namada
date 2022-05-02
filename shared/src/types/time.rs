@@ -6,6 +6,10 @@ use std::ops::{Add, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
+#[cfg(not(feature = "ABCI"))]
+use tendermint_proto::google::protobuf;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::google::protobuf;
 
 use crate::tendermint::time::Time;
 use crate::tendermint::Error as TendermintError;
@@ -105,6 +109,18 @@ impl DateTimeUtc {
     pub fn now() -> Self {
         Self(Utc::now())
     }
+
+    /// Returns an rfc3339 string or an error.
+    pub fn to_rfc3339(&self) -> Result<String, std::io::Error> {
+        Time::try_from(*self)
+            .map(|t| t.to_rfc3339())
+            .map_err(|err| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Could not parse timestamp because: {}", err),
+                )
+            })
+    }
 }
 
 impl Add<DurationSecs> for DateTimeUtc {
@@ -189,6 +205,17 @@ impl From<DateTimeUtc> for prost_types::Timestamp {
         let seconds = dt.0.timestamp();
         let nanos = dt.0.timestamp_subsec_nanos() as i32;
         prost_types::Timestamp { seconds, nanos }
+    }
+}
+
+impl TryFrom<protobuf::Timestamp> for DateTimeUtc {
+    type Error = prost_types::TimestampOutOfSystemRangeError;
+
+    fn try_from(timestamp: protobuf::Timestamp) -> Result<Self, Self::Error> {
+        Self::try_from(prost_types::Timestamp {
+            seconds: timestamp.seconds,
+            nanos: timestamp.nanos,
+        })
     }
 }
 

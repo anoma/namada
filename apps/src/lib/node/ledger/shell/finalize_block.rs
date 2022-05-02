@@ -9,9 +9,7 @@ use anoma::ledger::storage::types::encode;
 use anoma::ledger::treasury::ADDRESS as treasury_address;
 use anoma::types::address::{xan as m1t, Address};
 use anoma::types::governance::TallyResult;
-use anoma::types::storage::{BlockHash, Epoch};
-#[cfg(not(feature = "ABCI"))]
-use tendermint::block::Header;
+use anoma::types::storage::{BlockHash, Epoch, Header};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::Evidence;
 #[cfg(not(feature = "ABCI"))]
@@ -20,8 +18,6 @@ use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use tendermint_proto_abci::abci::Evidence;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::crypto::PublicKey as TendermintPublicKey;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::block::Header;
 
 use super::*;
 use crate::node::ledger::events::EventType;
@@ -237,8 +233,9 @@ where
                 tx
             } else {
                 tracing::error!(
-                    "Internal logic error: FinalizeBlock received a tx that \
-                     could not be deserialized to a Tx type"
+                    "FinalizeBlock received a tx that could not be \
+                     deserialized to a Tx type. This is likely a protocol \
+                     transaction."
                 );
                 continue;
             };
@@ -250,7 +247,7 @@ where
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
                 == ErrorCodes::InvalidSig
             {
-                let mut tx_result = match process_tx(tx.clone()) {
+                let mut tx_event = match process_tx(tx.clone()) {
                     Ok(tx @ TxType::Wrapper(_))
                     | Ok(tx @ TxType::Protocol(_)) => {
                         Event::new_tx_event(&tx, height.0)
@@ -271,11 +268,11 @@ where
                         }
                     },
                 };
-                tx_result["code"] = processed_tx.result.code.to_string();
-                tx_result["info"] =
+                tx_event["code"] = processed_tx.result.code.to_string();
+                tx_event["info"] =
                     format!("Tx rejected: {}", &processed_tx.result.info);
-                tx_result["gas_used"] = "0".into();
-                response.events.push(tx_result.into());
+                tx_event["gas_used"] = "0".into();
+                response.events.push(tx_event);
                 continue;
             }
 
@@ -296,12 +293,12 @@ where
                 != ErrorCodes::Ok
                 && !req.reject_all_decrypted
             {
-                let mut tx_result = Event::new_tx_event(&tx_type, height.0);
-                tx_result["code"] = processed_tx.result.code.to_string();
-                tx_result["info"] =
+                let mut tx_event = Event::new_tx_event(&tx_type, height.0);
+                tx_event["code"] = processed_tx.result.code.to_string();
+                tx_event["info"] =
                     format!("Tx rejected: {}", &processed_tx.result.info);
-                tx_result["gas_used"] = "0".into();
-                response.events.push(tx_result.into());
+                tx_event["gas_used"] = "0".into();
+                response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
                 if let TxType::Decrypted(_) = &tx_type {
@@ -310,7 +307,7 @@ where
                 continue;
             }
 
-            let mut tx_result = match &tx_type {
+            let mut tx_event = match &tx_type {
                 TxType::Wrapper(_wrapper) => {
                     if !cfg!(feature = "ABCI") {
                         self.storage.tx_queue.push(_wrapper.clone());
@@ -323,15 +320,15 @@ where
                     // of those. New encrypted txs may still
                     // be accepted.
                     if req.reject_all_decrypted {
-                        let mut tx_result =
+                        let mut tx_event =
                             Event::new_tx_event(&tx_type, height.0);
-                        tx_result["code"] = ErrorCodes::InvalidOrder.into();
-                        tx_result["info"] = "All decrypted txs rejected as \
-                                             they were not submitted in \
-                                             correct order"
+                        tx_event["code"] = ErrorCodes::InvalidOrder.into();
+                        tx_event["info"] = "All decrypted txs rejected as \
+                                            they were not submitted in \
+                                            correct order"
                             .into();
-                        tx_result["gas_used"] = "0".into();
-                        response.events.push(tx_result.into());
+                        tx_event["gas_used"] = "0".into();
+                        response.events.push(tx_event);
                         continue;
                     }
                     // We remove the corresponding wrapper tx from the queue
@@ -381,19 +378,19 @@ where
                             result
                         );
                         self.write_log.commit_tx();
-                        if !tx_result.contains_key("code") {
-                            tx_result["code"] = ErrorCodes::Ok.into();
+                        if !tx_event.contains_key("code") {
+                            tx_event["code"] = ErrorCodes::Ok.into();
                         }
                         if let Some(ibc_event) = &result.ibc_event {
-                            // Add the IBC event besides the tx_result
+                            // Add the IBC event besides the tx_event
                             let event = Event::from(ibc_event.clone());
-                            response.events.push(event.into());
+                            response.events.push(event);
                         }
                         match serde_json::to_string(
                             &result.initialized_accounts,
                         ) {
                             Ok(initialized_accounts) => {
-                                tx_result["initialized_accounts"] =
+                                tx_event["initialized_accounts"] =
                                     initialized_accounts;
                             }
                             Err(err) => {
@@ -411,23 +408,23 @@ where
                             result.vps_result.rejected_vps
                         );
                         self.write_log.drop_tx();
-                        tx_result["code"] = ErrorCodes::InvalidTx.into();
+                        tx_event["code"] = ErrorCodes::InvalidTx.into();
                     }
-                    tx_result["gas_used"] = result.gas_used.to_string();
-                    tx_result["info"] = result.to_string();
+                    tx_event["gas_used"] = result.gas_used.to_string();
+                    tx_event["info"] = result.to_string();
                 }
                 Err(msg) => {
                     tracing::info!("Transaction failed with: {}", msg);
                     self.write_log.drop_tx();
-                    tx_result["gas_used"] = self
+                    tx_event["gas_used"] = self
                         .gas_meter
                         .get_current_transaction_gas()
                         .to_string();
-                    tx_result["info"] = msg.to_string();
-                    tx_result["code"] = ErrorCodes::WasmRuntimeError.into();
+                    tx_event["info"] = msg.to_string();
+                    tx_event["code"] = ErrorCodes::WasmRuntimeError.into();
                 }
             }
-            response.events.push(tx_result.into());
+            response.events.push(tx_event);
         }
         self.reset_tx_queue_iter();
 
@@ -435,7 +432,7 @@ where
             self.update_epoch(&mut response);
         }
 
-        response.gas_used = self
+        let _ = self
             .gas_meter
             .finalize_transaction()
             .map_err(|_| Error::GasOverflow)?;
@@ -453,7 +450,7 @@ where
         hash: BlockHash,
         byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
-        let height = BlockHeight(header.height.into());
+        let height = self.storage.last_height + 1;
 
         self.gas_meter.reset();
 
@@ -472,11 +469,8 @@ where
             .header
             .as_ref()
             .expect("Header must have been set in prepare_proposal.");
-        let height = BlockHeight(header.height.into());
-        let time: DateTimeUtc = header
-            .time
-            .try_into()
-            .expect("Time conversion shouldn't failed");
+        let height = self.storage.last_height + 1;
+        let time = header.time;
         let new_epoch = self
             .storage
             .update_epoch(height, time)
@@ -680,18 +674,10 @@ mod test_finalize_block {
             .iter()
             .enumerate()
         {
-            assert_eq!(event.r#type, "applied");
-            let code = event
-                .attributes
-                .iter()
-                .find(|attr| attr.key == "code".as_bytes())
-                .expect("Test failed")
-                .value
-                .clone();
-            assert_eq!(
-                String::from_utf8(code).expect("Test failed"),
-                index.rem_euclid(2).to_string()
-            );
+            assert_eq!(event.event_type.to_string(), String::from("applied"));
+            let code =
+                event.attributes.get("code").expect("Test failed").clone();
+            assert_eq!(code, index.rem_euclid(2).to_string());
         }
     }
 
@@ -781,18 +767,10 @@ mod test_finalize_block {
             })
             .expect("Test failed")
         {
-            assert_eq!(event.r#type, "applied");
-            let code = event
-                .attributes
-                .iter()
-                .find(|attr| attr.key == "code".as_bytes())
-                .expect("Test failed")
-                .value
-                .clone();
-            assert_eq!(
-                String::from_utf8(code).expect("Test failed"),
-                String::from(ErrorCodes::InvalidTx)
-            );
+            assert_eq!(event.event_type.to_string(), String::from("applied"));
+            let code =
+                event.attributes.get("code").expect("Test failed").as_str();
+            assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
         }
         // check that the corresponding wrapper tx was removed from the queue
         assert!(shell.next_wrapper().is_none());
@@ -914,29 +892,12 @@ mod test_finalize_block {
             })
             .expect("Test failed")
         {
-            assert_eq!(event.r#type, "applied");
-            let code = event
-                .attributes
-                .iter()
-                .find(|attr| attr.key == "code".as_bytes())
-                .expect("Test failed")
-                .value
-                .clone();
-            assert_eq!(
-                String::from_utf8(code).expect("Test failed"),
-                String::from(ErrorCodes::Undecryptable)
-            );
+            assert_eq!(event.event_type.to_string(), String::from("applied"));
+            let code =
+                event.attributes.get("code").expect("Test failed").as_str();
+            assert_eq!(code, String::from(ErrorCodes::Undecryptable).as_str());
 
-            let log = String::from_utf8(
-                event
-                    .attributes
-                    .iter()
-                    .find(|attr| attr.key == "log".as_bytes())
-                    .expect("Test failed")
-                    .value
-                    .clone(),
-            )
-            .expect("Test failed");
+            let log = event.attributes.get("log").expect("Test failed").clone();
             assert!(log.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
@@ -1034,62 +995,29 @@ mod test_finalize_block {
         {
             if index < 2 {
                 // these should be accepted wrapper txs
-
-                #[cfg(not(feature = "ABCI"))]
-                {
-                    assert_eq!(event.r#type, "accepted");
-                    let code = event
-                        .attributes
-                        .iter()
-                        .find(|attr| attr.key.as_str() == "code")
-                        .expect("Test failed")
-                        .value
-                        .as_str();
-                    assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
-                }
-                #[cfg(feature = "ABCI")]
-                {
-                    assert_eq!(event.r#type, "applied");
-                    let code = event
-                        .attributes
-                        .iter()
-                        .find(|attr| attr.key == "code".as_bytes())
-                        .expect("Test failed")
-                        .value
-                        .clone();
+                if !cfg!(feature = "ABCI") {
                     assert_eq!(
-                        String::from_utf8(code).expect("Test failed"),
-                        String::from(ErrorCodes::Ok)
+                        event.event_type.to_string(),
+                        String::from("accepted")
+                    );
+                } else {
+                    assert_eq!(
+                        event.event_type.to_string(),
+                        String::from("applied")
                     );
                 }
+                let code =
+                    event.attributes.get("code").expect("Test failed").as_str();
+                assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
             } else {
                 // these should be accepted decrypted txs
-                assert_eq!(event.r#type, "applied");
-                #[cfg(not(feature = "ABCI"))]
-                {
-                    let code = event
-                        .attributes
-                        .iter()
-                        .find(|attr| attr.key.as_str() == "code")
-                        .expect("Test failed")
-                        .value
-                        .as_str();
-                    assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
-                }
-                #[cfg(feature = "ABCI")]
-                {
-                    let code = event
-                        .attributes
-                        .iter()
-                        .find(|attr| attr.key == "code".as_bytes())
-                        .expect("Test failed")
-                        .value
-                        .clone();
-                    assert_eq!(
-                        String::from_utf8(code).expect("Test failed"),
-                        String::from(ErrorCodes::Ok)
-                    );
-                }
+                assert_eq!(
+                    event.event_type.to_string(),
+                    String::from("applied")
+                );
+                let code =
+                    event.attributes.get("code").expect("Test failed").as_str();
+                assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
             }
         }
 

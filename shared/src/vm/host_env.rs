@@ -1555,11 +1555,10 @@ where
         .map_err(TxRuntimeError::StorageError)?;
     Ok(match header {
         Some(h) => {
-            let time = h
-                .time
-                .to_rfc3339()
-                .try_to_vec()
-                .map_err(TxRuntimeError::EncodingError)?;
+            let time =
+                h.time.to_rfc3339().map_err(TxRuntimeError::EncodingError)?;
+            let time =
+                time.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
             let len: i64 = time
                 .len()
                 .try_into()

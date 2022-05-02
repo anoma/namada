@@ -1,6 +1,5 @@
 use core::time::Duration;
 use std::collections::{BTreeSet, HashMap};
-use std::convert::TryFrom;
 use std::str::FromStr;
 
 use anoma::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
@@ -60,13 +59,6 @@ use anoma::ledger::native_vp::{Ctx, NativeVp};
 use anoma::ledger::storage::mockdb::MockDB;
 use anoma::ledger::storage::Sha256Hasher;
 use anoma::proto::Tx;
-use anoma::tendermint::account::Id as TmAccountId;
-use anoma::tendermint::block::header::{
-    Header as TmHeader, Version as TmVersion,
-};
-use anoma::tendermint::block::Height as TmHeight;
-use anoma::tendermint::chain::Id as TmChainId;
-use anoma::tendermint::hash::{AppHash, Hash as TmHash};
 use anoma::tendermint::time::Time as TmTime;
 use anoma::tendermint_proto::Protobuf;
 use anoma::types::address::{self, Address, InternalAddress};
@@ -268,26 +260,11 @@ pub fn init_storage() -> (Address, Address) {
     (token, account)
 }
 
-pub fn tm_dummy_header() -> TmHeader {
-    TmHeader {
-        version: TmVersion { block: 10, app: 0 },
-        chain_id: TmChainId::try_from("test_chain".to_owned())
-            .expect("Creating an TmChainId shouldn't fail"),
-        height: TmHeight::try_from(10_u64)
-            .expect("Creating a height shouldn't fail"),
-        time: TmTime::now(),
-        last_block_id: None,
-        last_commit_hash: None,
-        data_hash: None,
-        validators_hash: TmHash::None,
-        next_validators_hash: TmHash::None,
-        consensus_hash: TmHash::None,
-        app_hash: AppHash::try_from(vec![0])
-            .expect("Creating an AppHash shouldn't fail"),
-        last_results_hash: None,
-        evidence_hash: None,
-        proposer_address: TmAccountId::try_from(vec![0u8; 20])
-            .expect("Creating an AccountId shouldn't fail"),
+pub fn tm_dummy_header() -> anoma::types::storage::Header {
+    anoma::types::storage::Header {
+        hash: anoma::types::hash::Hash([0; 32]),
+        time: TmTime::now().try_into().unwrap(),
+        next_validators_hash: anoma::types::hash::Hash([0; 32]),
     }
 }
 

@@ -653,8 +653,9 @@ mod test_utils {
     use anoma::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use anoma::types::address::{xan, EstablishedAddressGen};
     use anoma::types::chain::ChainId;
+    use anoma::types::hash::Hash;
     use anoma::types::key::*;
-    use anoma::types::storage::{BlockHash, Epoch};
+    use anoma::types::storage::{BlockHash, Epoch, Header};
     use anoma::types::transaction::Fee;
     use tempfile::tempdir;
     #[cfg(not(feature = "ABCI"))]
@@ -668,18 +669,14 @@ mod test_utils {
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::google::protobuf::Timestamp;
     #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::abci::{Event as TmEvent, RequestInitChain};
+    use tendermint_proto_abci::abci::{RequestDeliverTx, RequestInitChain};
     #[cfg(feature = "ABCI")]
     use tendermint_proto_abci::google::protobuf::Timestamp;
-    #[cfg(feature = "ABCI")]
-    use tendermint_stable::block::{header::Version, Header};
-    #[cfg(feature = "ABCI")]
-    use tendermint_stable::{Hash, Time};
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
-        FinalizeBlock, ProcessProposal,
+        FinalizeBlock, ProcessProposal, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
 
@@ -761,14 +758,19 @@ mod test_utils {
         pub fn process_proposal(
             &mut self,
             req: ProcessProposal,
-        ) -> shim::response::ProcessProposal {
+        ) -> Vec<ProcessedTx> {
             #[cfg(not(feature = "ABCI"))]
             {
-                self.shell.process_proposal(req)
+                req.txs
+                    .iter()
+                    .map(|tx_bytes| self.process_single_tx(tx_bytes))
+                    .collect();
             }
             #[cfg(feature = "ABCI")]
             {
-                self.shell.process_and_decode_proposal(req)
+                vec![self.shell.process_and_decode_proposal(RequestDeliverTx {
+                    tx: req.tx,
+                })]
             }
         }
 
@@ -777,7 +779,7 @@ mod test_utils {
         pub fn finalize_block(
             &mut self,
             req: FinalizeBlock,
-        ) -> Result<Vec<TmEvent>> {
+        ) -> Result<Vec<Event>> {
             match self.shell.finalize_block(req) {
                 Ok(resp) => Ok(resp.events),
                 Err(err) => Err(err),
@@ -828,26 +830,9 @@ mod test_utils {
             FinalizeBlock {
                 hash: BlockHash([0u8; 32]),
                 header: Header {
-                    version: Version { block: 0, app: 0 },
-                    chain_id: String::from("test")
-                        .try_into()
-                        .expect("Should not fail"),
-                    height: 0u64.try_into().expect("Should not fail"),
-                    time: Time::now(),
-                    last_block_id: None,
-                    last_commit_hash: None,
-                    data_hash: None,
-                    validators_hash: Hash::None,
-                    next_validators_hash: Hash::None,
-                    consensus_hash: Hash::None,
-                    app_hash: Vec::<u8>::new()
-                        .try_into()
-                        .expect("Should not fail"),
-                    last_results_hash: None,
-                    evidence_hash: None,
-                    proposer_address: vec![0u8; 20]
-                        .try_into()
-                        .expect("Should not fail"),
+                    hash: Hash([0; 32]),
+                    time: DateTimeUtc::now(),
+                    next_validators_hash: Hash([0; 32]),
                 },
                 byzantine_validators: vec![],
                 txs: vec![],
