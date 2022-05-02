@@ -8,7 +8,7 @@ use super::super::handler::{
     make_open_try_connection_event,
 };
 use super::super::storage::{
-    connection_counter_key, connection_id, connection_key,
+    connection_counter_key, connection_id, connection_ids_key, connection_key,
     is_connection_counter_key, Error as IbcStorageError,
 };
 use super::{Ibc, StateChange};
@@ -100,6 +100,7 @@ where
         match self.get_connection_state_change(&conn_id)? {
             StateChange::Created => {
                 self.validate_created_connection(&conn_id, conn, tx_data)
+                // self.validate_connection_ids(&conn_id, conn)
             }
             StateChange::Updated => {
                 self.validate_updated_connection(&conn_id, conn, tx_data)
@@ -109,6 +110,78 @@ where
                 conn_id
             ))),
         }
+    }
+
+    /// Validates connection id list of the given connection end
+    /// The connection id list contains is comma separated
+    fn validate_connection_ids(
+        &self,
+        conn_id: &ConnectionId,
+        conn: ConnectionEnd,
+    ) -> Result<()> {
+        let conn_ids_key = connection_ids_key(conn.client_id());
+
+        // check that the connection id is not contained in the pre state list
+        // of existing connections
+        match self.ctx.read_pre(&conn_ids_key) {
+            Ok(Some(v)) => {
+                let conn_ids_list = String::from_utf8(v).map_err(|_| {
+                    Error::InvalidConnection(format!(
+                        "Decoding the connection list failed: client ID {}",
+                        conn.client_id()
+                    ))
+                })?;
+                if conn_ids_list
+                    .split(",")
+                    .collect::<Vec<&str>>()
+                    .contains(&conn_id.as_str())
+                {
+                    return Err(Error::InvalidConnection(format!(
+                        "The connection id already exists: client ID {} \
+                         connection ID {}",
+                        conn.client_id(),
+                        conn_id.to_string()
+                    )));
+                }
+                Ok(())
+            }
+            _ => Err(Error::InvalidConnection(format!(
+                "Unable to get the previous connection: ID {}",
+                conn_id
+            ))),
+        }?;
+
+        // check that the connection id is contained in the post state list of
+        // existing connections
+        match self.ctx.read_post(&conn_ids_key) {
+            Ok(Some(v)) => {
+                let conn_ids_list = String::from_utf8(v).map_err(|_| {
+                    Error::InvalidConnection(format!(
+                        "Decoding the connection list failed: client ID {}",
+                        conn.client_id()
+                    ))
+                })?;
+                if !conn_ids_list
+                    .split(",")
+                    .collect::<Vec<&str>>()
+                    .contains(&conn_id.as_str())
+                {
+                    return Err(Error::InvalidConnection(format!(
+                        "The connection id does not exist: client ID {} \
+                         connection ID {}",
+                        conn.client_id(),
+                        conn_id.to_string()
+                    )));
+                }
+                Ok(())
+            }
+            _ => Err(Error::InvalidConnection(format!(
+                "Unable to get the post connection: ID {}",
+                conn_id
+            ))),
+        }?;
+
+        Ok(())
     }
 
     fn get_connection_state_change(
