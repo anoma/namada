@@ -1,6 +1,7 @@
 //! Types for working with 32 bytes hashes.
 
 use std::fmt::{self, Display};
+use std::ops::Deref;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,14 @@ impl Display for Hash {
             write!(f, "{:02X}", byte)?;
         }
         Ok(())
+    }
+}
+
+impl Deref for Hash {
+    type Target = [u8; 32];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

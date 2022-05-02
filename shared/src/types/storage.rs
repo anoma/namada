@@ -13,6 +13,8 @@ use thiserror::Error;
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
 use crate::types::address::{self, Address, InternalAddress};
+use crate::types::hash::Hash;
+use crate::types::time::DateTimeUtc;
 use crate::types::token::BALANCE_STORAGE_KEY;
 
 #[allow(missing_docs)]
@@ -154,6 +156,25 @@ impl core::fmt::Debug for BlockHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hash = format!("{}", ByteBuf(&self.0));
         f.debug_tuple("BlockHash").field(&hash).finish()
+    }
+}
+
+/// The data from Tendermint header
+/// relevant for Anoma storage
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct Header {
+    /// Merkle root hash of block
+    pub hash: Hash,
+    /// Timestamp associated to block
+    pub time: DateTimeUtc,
+    /// Hash of the addresses of the next validator set
+    pub next_validators_hash: Hash,
+}
+
+impl Header {
+    /// The number of bytes when this header is encoded
+    pub fn encoded_len(&self) -> usize {
+        self.try_to_vec().map(|ser| ser.len()).unwrap_or(usize::MAX)
     }
 }
 

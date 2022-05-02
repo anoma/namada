@@ -334,11 +334,6 @@ mod tests {
     use crate::ibc_proto::cosmos::base::v1beta1::Coin;
     use prost::Message;
     use sha2::Digest;
-    use crate::tendermint::account::Id as TmAccountId;
-    use crate::tendermint::block::header::{Header as TmHeader, Version as TmVersion};
-    use crate::tendermint::block::Height as TmHeight;
-    use crate::tendermint::chain::Id as TmChainId;
-    use crate::tendermint::hash::{AppHash, Hash as TmHash};
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf;
 
@@ -431,26 +426,11 @@ mod tests {
         (storage, write_log)
     }
 
-    fn get_dummy_header() -> TmHeader {
-        TmHeader {
-            version: TmVersion { block: 10, app: 0 },
-            chain_id: TmChainId::try_from("test_chain".to_owned())
-                .expect("Creating an TmChainId shouldn't fail"),
-            height: TmHeight::try_from(10_u64)
-                .expect("Creating a height shouldn't fail"),
-            time: TmTime::now(),
-            last_block_id: None,
-            last_commit_hash: None,
-            data_hash: None,
-            validators_hash: TmHash::None,
-            next_validators_hash: TmHash::None,
-            consensus_hash: TmHash::None,
-            app_hash: AppHash::try_from(vec![0])
-                .expect("Creating an AppHash shouldn't fail"),
-            last_results_hash: None,
-            evidence_hash: None,
-            proposer_address: TmAccountId::try_from(vec![0u8; 20])
-                .expect("Creating an AccountId shouldn't fail"),
+    fn get_dummy_header() -> crate::types::storage::Header {
+        crate::types::storage::Header {
+            hash: crate::types::hash::Hash([0; 32]),
+            time: TmTime::now().try_into().unwrap(),
+            next_validators_hash: crate::types::hash::Hash([0; 32]),
         }
     }
 

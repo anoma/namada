@@ -12,14 +12,14 @@ use tendermint_proto_abci::abci::EventAttribute;
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Event {
     pub event_type: EventType,
     pub attributes: HashMap<String, String>,
 }
 
 /// The two types of custom events we currently use
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum EventType {
     // The transaction was accepted to be included in a block
     Accepted,
@@ -102,8 +102,15 @@ impl Event {
         event
     }
 
+    /// Check if the events keys contains a given string
     pub fn contains_key(&self, key: &str) -> bool {
         self.attributes.contains_key(key)
+    }
+
+    /// Get the value corresponding to a given key, if it exists.
+    /// Else return None.
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.attributes.get(key)
     }
 }
 
