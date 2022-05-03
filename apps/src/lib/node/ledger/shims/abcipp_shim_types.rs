@@ -9,15 +9,15 @@ pub mod shim {
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
-        RequestExtendVote, RequestFinalizeBlock, RequestFlush, RequestInfo,
-        RequestInitChain, RequestListSnapshots, RequestLoadSnapshotChunk,
-        RequestOfferSnapshot, RequestPrepareProposal, RequestProcessProposal,
-        RequestQuery, RequestVerifyVoteExtension, ResponseApplySnapshotChunk,
+        RequestExtendVote, RequestFlush, RequestInfo, RequestInitChain,
+        RequestListSnapshots, RequestLoadSnapshotChunk, RequestOfferSnapshot,
+        RequestPrepareProposal, RequestProcessProposal, RequestQuery,
+        RequestVerifyVoteExtension, ResponseApplySnapshotChunk,
         ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseExtendVote,
-        ResponseFinalizeBlock, ResponseFlush, ResponseInfo, ResponseInitChain,
-        ResponseListSnapshots, ResponseLoadSnapshotChunk,
-        ResponseOfferSnapshot, ResponsePrepareProposal,
-        ResponseProcessProposal, ResponseQuery, ResponseVerifyVoteExtension,
+        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
+        ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
+        ResponsePrepareProposal, ResponseProcessProposal, ResponseQuery,
+        ResponseVerifyVoteExtension,
     };
     #[cfg(feature = "ABCI")]
     use tendermint_proto_abci::abci::{
@@ -122,14 +122,6 @@ pub mod shim {
                 Req::PrepareProposal(inner) => {
                     Ok(Request::PrepareProposal(inner))
                 }
-                #[cfg(not(feature = "ABCI"))]
-                Req::ProcessProposal(inner) => {
-                    Ok(Request::ProcessProposal(inner))
-                }
-                #[cfg(feature = "ABCI")]
-                Req::DeliverTx(inner) => Ok(Request::DeliverTx(inner)),
-                #[cfg(not(feature = "ABCI"))]
-                Req::FinalizeBlock(inner) => Ok(Request::FinalizeBlock(inner)),
                 _ => Err(Error::ConvertReq(req)),
             }
         }
@@ -204,14 +196,6 @@ pub mod shim {
                 Response::VerifyVoteExtension(inner) => {
                     Ok(Resp::VerifyVoteExtension(inner))
                 }
-                #[cfg(not(feature = "ABCI"))]
-                Response::ProcessProposal(inner) => {
-                    Ok(Resp::ProcessProposal(inner))
-                }
-                #[cfg(not(feature = "ABCI"))]
-                Response::FinalizeBlock(inner) => {
-                    Ok(Resp::FinalizeBlock(inner))
-                }
                 _ => Err(Error::ConvertResp(resp)),
             }
         }
@@ -225,24 +209,13 @@ pub mod shim {
         use anoma::types::storage::{BlockHash, Header};
         use anoma::types::time::DateTimeUtc;
         #[cfg(not(feature = "ABCI"))]
-        use tendermint_proto::abci::RequestFinalizeBlock;
-        #[cfg(not(feature = "ABCI"))]
-        use tendermint_proto::abci::{Evidence, RequestBeginBlock};
+        use tendermint_proto::abci::{
+            Misbehavior as Evidence, RequestFinalizeBlock,
+        };
         #[cfg(feature = "ABCI")]
         use tendermint_proto_abci::abci::{Evidence, RequestBeginBlock};
 
         pub struct VerifyHeader;
-
-        #[derive(Clone)]
-        pub struct ProcessProposal {
-            pub tx: super::TxBytes,
-        }
-
-        impl From<super::TxBytes> for ProcessProposal {
-            fn from(tx: super::TxBytes) -> Self {
-                Self { tx }
-            }
-        }
 
         #[cfg(not(feature = "ABCI"))]
         pub struct RevertProposal;
@@ -259,8 +232,6 @@ pub mod shim {
             pub header: Header,
             pub byzantine_validators: Vec<Evidence>,
             pub txs: Vec<ProcessedTx>,
-            #[cfg(feature = "ABCI")]
-            pub reject_all_decrypted: bool,
         }
 
         #[cfg(not(feature = "ABCI"))]
@@ -270,7 +241,7 @@ pub mod shim {
                     hash: BlockHash::try_from(req.hash.as_slice()).unwrap(),
                     header: Header {
                         hash: Hash::try_from(req.hash.as_slice()).unwrap(),
-                        time: DateTimeUtc::try_from(req.time).unwrap(),
+                        time: DateTimeUtc::try_from(req.time.unwrap()).unwrap(),
                         next_validators_hash: Hash::try_from(
                             req.next_validators_hash.as_slice(),
                         )
@@ -300,7 +271,6 @@ pub mod shim {
                     },
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
-                    reject_all_decrypted: false,
                 }
             }
         }
@@ -308,9 +278,6 @@ pub mod shim {
 
     /// Custom types for response payloads
     pub mod response {
-        #[cfg(not(feature = "ABCI"))]
-        use std::convert::TryFrom;
-
         #[cfg(not(feature = "ABCI"))]
         use tendermint_proto::abci::{
             Event as TmEvent, ExecTxResult, ResponseFinalizeBlock,
@@ -322,8 +289,6 @@ pub mod shim {
         use tendermint_proto_abci::abci::ConsensusParams;
         #[cfg(feature = "ABCI")]
         use tendermint_proto_abci::abci::{Event as TmEvent, ValidatorUpdate};
-        #[cfg(not(feature = "ABCI"))]
-        use tower_abci::response;
         #[cfg(feature = "ABCI")]
         use tower_abci_old::response;
 
@@ -338,23 +303,11 @@ pub mod shim {
             pub info: String,
         }
 
-        impl<T> From<T> for TxResult
-        where
-            T: std::error::Error,
-        {
-            fn from(err: T) -> Self {
-                TxResult {
-                    code: 1,
-                    info: err.to_string(),
-                }
-            }
-        }
-
         #[cfg(not(feature = "ABCI"))]
         impl From<TxResult> for ExecTxResult {
             fn from(TxResult { code, info }: TxResult) -> Self {
                 ExecTxResult {
-                    code: code.into(),
+                    code,
                     info,
                     ..Default::default()
                 }
@@ -365,7 +318,7 @@ pub mod shim {
         impl From<&ExecTxResult> for TxResult {
             fn from(ExecTxResult { code, info, .. }: &ExecTxResult) -> Self {
                 TxResult {
-                    code: u32::try_from(code).unwrap(),
+                    code: *code,
                     info: info.clone(),
                 }
             }
@@ -391,9 +344,7 @@ pub mod shim {
                         .map(|event| ExecTxResult {
                             code: event
                                 .get("code")
-                                .map(|code| {
-                                    u32::from_str_radix(code, 10).unwrap()
-                                })
+                                .map(|code| code.parse::<u32>().unwrap())
                                 .unwrap_or_default(),
                             log: event
                                 .get("log")
@@ -405,9 +356,7 @@ pub mod shim {
                                 .unwrap_or_default(),
                             gas_used: event
                                 .get("gas_used")
-                                .map(|gas| {
-                                    i64::from_str_radix(gas, 10).unwrap()
-                                })
+                                .map(|gas| gas.parse::<i64>().unwrap())
                                 .unwrap_or_default(),
                             ..Default::default()
                         })

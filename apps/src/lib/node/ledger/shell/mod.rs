@@ -47,7 +47,8 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::{
-    self, Evidence, RequestPrepareProposal, ValidatorUpdate,
+    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
+    RequestPrepareProposal, ValidatorUpdate,
 };
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::public_key;
@@ -56,7 +57,7 @@ use tendermint_proto::types::ConsensusParams;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::ConsensusParams;
 #[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::{self, Evidence, ValidatorUpdate};
+use tendermint_proto_abci::abci::{Evidence, EvidenceType, ValidatorUpdate};
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::crypto::public_key;
 use thiserror::Error;
@@ -103,6 +104,15 @@ pub enum Error {
     Broadcaster(tokio::sync::mpsc::error::TryRecvError),
     #[error("Error executing proposal {0}: {1}")]
     BadProposal(u64, String),
+}
+
+impl From<Error> for TxResult {
+    fn from(err: Error) -> Self {
+        TxResult {
+            code: 1,
+            info: err.to_string(),
+        }
+    }
 }
 
 /// The different error codes that the ledger may
@@ -425,31 +435,30 @@ where
                         continue;
                     }
                 };
-                let slash_type =
-                    match abci::EvidenceType::from_i32(evidence.r#type) {
-                        Some(r#type) => match r#type {
-                            abci::EvidenceType::DuplicateVote => {
-                                pos::types::SlashType::DuplicateVote
-                            }
-                            abci::EvidenceType::LightClientAttack => {
-                                pos::types::SlashType::LightClientAttack
-                            }
-                            abci::EvidenceType::Unknown => {
-                                tracing::error!(
-                                    "Unknown evidence: {:#?}",
-                                    evidence
-                                );
-                                continue;
-                            }
-                        },
-                        None => {
+                let slash_type = match EvidenceType::from_i32(evidence.r#type) {
+                    Some(r#type) => match r#type {
+                        EvidenceType::DuplicateVote => {
+                            pos::types::SlashType::DuplicateVote
+                        }
+                        EvidenceType::LightClientAttack => {
+                            pos::types::SlashType::LightClientAttack
+                        }
+                        EvidenceType::Unknown => {
                             tracing::error!(
-                                "Unexpected evidence type {}",
-                                evidence.r#type
+                                "Unknown evidence: {:#?}",
+                                evidence
                             );
                             continue;
                         }
-                    };
+                    },
+                    None => {
+                        tracing::error!(
+                            "Unexpected evidence type {}",
+                            evidence.r#type
+                        );
+                        continue;
+                    }
+                };
                 let validator_raw_hash = match evidence.validator {
                     Some(validator) => {
                         match String::from_utf8(validator.address) {
@@ -647,6 +656,7 @@ where
 /// for the shell
 #[cfg(test)]
 mod test_utils {
+    use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
     use anoma::ledger::storage::mockdb::MockDB;
@@ -659,13 +669,7 @@ mod test_utils {
     use anoma::types::transaction::Fee;
     use tempfile::tempdir;
     #[cfg(not(feature = "ABCI"))]
-    use tendermint::block::{header::Version, Header};
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint::{Hash, Time};
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::abci::{
-        Event as TmEvent, RequestInitChain, ResponsePrepareProposal,
-    };
+    use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::google::protobuf::Timestamp;
     #[cfg(feature = "ABCI")]
@@ -676,9 +680,16 @@ mod test_utils {
 
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
-        FinalizeBlock, ProcessProposal, ProcessedTx,
+        FinalizeBlock, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
+
+    #[derive(Error, Debug)]
+    pub enum TestError {
+        #[error("Proposal rejected with tx results: {0:?}")]
+        #[allow(dead_code)]
+        RejectProposal(Vec<ProcessedTx>),
+    }
 
     /// Gets the absolute path to root directory
     pub fn top_level_directory() -> PathBuf {
@@ -708,6 +719,27 @@ mod test_utils {
     /// modifications for testing purposes
     pub(super) struct TestShell {
         pub shell: Shell<MockDB, Sha256Hasher>,
+    }
+
+    impl Deref for TestShell {
+        type Target = Shell<MockDB, Sha256Hasher>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.shell
+        }
+    }
+
+    impl DerefMut for TestShell {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.shell
+        }
+    }
+
+    #[derive(Clone)]
+    /// Helper for testing process proposal which has very different
+    /// input types depending on whether the ABCI++ feature is on or not.
+    pub struct ProcessProposal {
+        pub txs: Vec<Vec<u8>>,
     }
 
     impl TestShell {
@@ -744,33 +776,45 @@ mod test_utils {
                 .expect("Test shell failed to initialize");
         }
 
-        /// Forward the prepare proposal request and return the response
-        #[cfg(not(feature = "ABCI"))]
-        pub fn prepare_proposal(
-            &mut self,
-            req: RequestPrepareProposal,
-        ) -> ResponsePrepareProposal {
-            self.shell.prepare_proposal(req)
-        }
-
         /// Forward a ProcessProposal request and extract the relevant
         /// response data to return
         pub fn process_proposal(
             &mut self,
             req: ProcessProposal,
-        ) -> Vec<ProcessedTx> {
+        ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
             #[cfg(not(feature = "ABCI"))]
             {
-                req.txs
+                let resp =
+                    self.shell.process_proposal(RequestProcessProposal {
+                        txs: req.txs.clone(),
+                        ..Default::default()
+                    });
+                let results = resp
+                    .tx_results
                     .iter()
-                    .map(|tx_bytes| self.process_single_tx(tx_bytes))
+                    .zip(req.txs.into_iter())
+                    .map(|(res, tx_bytes)| ProcessedTx {
+                        result: res.into(),
+                        tx: tx_bytes,
+                    })
                     .collect();
+                if resp.status > 0 {
+                    Err(TestError::RejectProposal(results))
+                } else {
+                    Ok(results)
+                }
             }
             #[cfg(feature = "ABCI")]
             {
-                vec![self.shell.process_and_decode_proposal(RequestDeliverTx {
-                    tx: req.tx,
-                })]
+                Ok(req
+                    .txs
+                    .into_iter()
+                    .map(|tx_bytes| {
+                        self.process_and_decode_proposal(RequestDeliverTx {
+                            tx: tx_bytes,
+                        })
+                    })
+                    .collect())
             }
         }
 
@@ -792,18 +836,6 @@ mod test_utils {
         pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
             self.shell.storage.tx_queue.push(wrapper);
             self.shell.reset_tx_queue_iter();
-        }
-
-        #[cfg(not(feature = "ABCI"))]
-        /// Get the next wrapper tx to be decoded
-        pub fn next_wrapper(&mut self) -> Option<&WrapperTx> {
-            self.shell.next_wrapper()
-        }
-
-        #[cfg(feature = "ABCI")]
-        /// Get the next wrapper tx to be decoded
-        pub fn next_wrapper(&mut self) -> Option<WrapperTx> {
-            self.shell.next_wrapper()
         }
     }
 
@@ -836,7 +868,6 @@ mod test_utils {
                 },
                 byzantine_validators: vec![],
                 txs: vec![],
-                reject_all_decrypted: false,
             }
         }
     }

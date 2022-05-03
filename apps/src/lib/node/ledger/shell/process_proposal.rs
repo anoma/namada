@@ -4,6 +4,7 @@
 use tendermint_proto::abci::{
     ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
 };
+#[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::RequestDeliverTx;
 
 use super::*;
@@ -67,7 +68,7 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    fn process_single_tx(&mut self, tx_bytes: &[u8]) -> TxResult {
+    pub(crate) fn process_single_tx(&mut self, tx_bytes: &[u8]) -> TxResult {
         let tx = match Tx::try_from(tx_bytes) {
             Ok(tx) => tx,
             Err(_) => {
@@ -285,8 +286,11 @@ mod test_process_proposal {
     use tendermint_proto_abci::google::protobuf::Timestamp;
 
     use super::*;
-    use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessProposal;
+    use crate::node::ledger::shell::test_utils::{
+        gen_keypair, ProcessProposal, TestShell,
+    };
+    #[cfg(not(feature = "ABCI"))]
+    use crate::node::ledger::shell::test_utils::TestError;
 
     /// Test that if a wrapper tx is not signed, it is rejected
     /// by [`process_proposal`].
@@ -315,14 +319,19 @@ mod test_process_proposal {
         )
         .to_bytes();
         #[allow(clippy::redundant_clone)]
-        let request = ProcessProposal { tx: tx.clone() };
+        let request = ProcessProposal {
+            txs: vec![tx.clone()],
+        };
 
-        let response =
-            if let [resp] = shell.process_proposal(request).as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            };
+        let response = if let [resp] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
@@ -396,14 +405,17 @@ mod test_process_proposal {
             panic!("Test failed");
         };
         let request = ProcessProposal {
-            tx: new_tx.to_bytes(),
+            txs: vec![new_tx.to_bytes()],
         };
-        let response =
-            if let [response] = shell.process_proposal(request).as_slice() {
-                response.clone()
-            } else {
-                panic!("Test failed")
-            };
+        let response = if let [response] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            response.clone()
+        } else {
+            panic!("Test failed")
+        };
         let expected_error = "Signature verification failed: Invalid signature";
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert!(
@@ -443,14 +455,17 @@ mod test_process_proposal {
         .sign(&keypair)
         .expect("Test failed");
         let request = ProcessProposal {
-            tx: wrapper.to_bytes(),
+            txs: vec![wrapper.to_bytes()],
         };
-        let response =
-            if let [resp] = shell.process_proposal(request).as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            };
+        let response = if let [resp] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
             response.result.info,
@@ -499,15 +514,18 @@ mod test_process_proposal {
         .expect("Test failed");
 
         let request = ProcessProposal {
-            tx: wrapper.to_bytes(),
+            txs: vec![wrapper.to_bytes()],
         };
 
-        let response =
-            if let [resp] = shell.process_proposal(request).as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            };
+        let response = if let [resp] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
             response.result.info,
@@ -550,16 +568,34 @@ mod test_process_proposal {
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
         let req_1 = ProcessProposal {
-            tx: txs[0].to_bytes(),
+            txs: vec![txs[0].to_bytes()],
         };
-        let response_1 = shell.process_proposal(req_1);
+        let response_1 = if let [resp] = shell
+            .process_proposal(req_1)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
 
         let req_2 = ProcessProposal {
-            tx: txs[2].to_bytes(),
+            txs: vec![txs[2].to_bytes()],
         };
 
-        let response_2 = shell.process_proposal(req_2);
+        let response_2 = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(req_2)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response_2.result.code, u32::from(ErrorCodes::InvalidOrder));
         assert_eq!(
             response_2.result.info,
@@ -598,9 +634,19 @@ mod test_process_proposal {
         let tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
 
-        let request = ProcessProposal { tx: tx.to_bytes() };
+        let request = ProcessProposal {
+            txs: vec![tx.to_bytes()],
+        };
 
-        let response = shell.process_proposal(request);
+        let response = if let [resp] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
             response.result.info,
@@ -654,13 +700,18 @@ mod test_process_proposal {
             wrapper.sign(&keypair).expect("Test failed")
         };
 
-        let request = ProcessProposal { tx: tx.to_bytes() };
-        let response =
-            if let [resp] = shell.process_proposal(request).as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            };
+        let request = ProcessProposal {
+            txs: vec![tx.to_bytes()],
+        };
+        let response = if let [resp] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
         #[cfg(feature = "ABCI")]
         {
@@ -722,14 +773,17 @@ mod test_process_proposal {
             wrapper.sign(&keypair).expect("Test failed")
         };
         let request = ProcessProposal {
-            tx: signed.to_bytes(),
+            txs: vec![signed.to_bytes()],
         };
-        let response =
-            if let [resp] = shell.process_proposal(request).as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            };
+        let response = if let [resp] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
         #[cfg(feature = "ABCI")]
         {
@@ -764,8 +818,20 @@ mod test_process_proposal {
 
         let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx)));
 
-        let request = ProcessProposal { tx: tx.to_bytes() };
-        let response = shell.process_proposal(request);
+        let request = ProcessProposal {
+            txs: vec![tx.to_bytes()],
+        };
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::ExtraTxs));
         assert_eq!(
             response.result.info,
@@ -783,13 +849,18 @@ mod test_process_proposal {
             Some("transaction data".as_bytes().to_owned()),
         );
         let tx = Tx::from(TxType::Raw(tx));
-        let request = ProcessProposal { tx: tx.to_bytes() };
-        let response =
-            if let [resp] = shell.process_proposal(request).as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            };
+        let request = ProcessProposal {
+            txs: vec![tx.to_bytes()],
+        };
+        let response = if let [resp] = shell
+            .process_proposal(request)
+            .expect("Test failed")
+            .as_slice()
+        {
+            resp.clone()
+        } else {
+            panic!("Test failed")
+        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
             response.result.info,

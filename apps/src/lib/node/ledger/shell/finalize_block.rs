@@ -11,7 +11,7 @@ use anoma::types::address::{xan as m1t, Address};
 use anoma::types::governance::TallyResult;
 use anoma::types::storage::{BlockHash, Epoch, Header};
 #[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::Evidence;
+use tendermint_proto::abci::Misbehavior as Evidence;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 #[cfg(feature = "ABCI")]
@@ -241,9 +241,7 @@ where
             };
             let tx_length = processed_tx.tx.len();
             // If [`process_proposal`] rejected a Tx due to invalid signature,
-            // emit an event here and move on to next tx. If we are
-            // rejecting all decrypted txs because they were
-            // submitted in an incorrect order, we do that later.
+            // emit an event here and move on to next tx.
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
                 == ErrorCodes::InvalidSig
             {
@@ -287,11 +285,8 @@ where
             };
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
-            // If we are rejecting all decrypted txs because they were submitted
-            // in an incorrect order, we do that later.
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
                 != ErrorCodes::Ok
-                && !req.reject_all_decrypted
             {
                 let mut tx_event = Event::new_tx_event(&tx_type, height.0);
                 tx_event["code"] = processed_tx.result.code.to_string();
@@ -315,22 +310,6 @@ where
                     Event::new_tx_event(&tx_type, height.0)
                 }
                 TxType::Decrypted(inner) => {
-                    // If [`process_proposal`] detected that decrypted txs were
-                    // submitted out of order, we apply none
-                    // of those. New encrypted txs may still
-                    // be accepted.
-                    if req.reject_all_decrypted {
-                        let mut tx_event =
-                            Event::new_tx_event(&tx_type, height.0);
-                        tx_event["code"] = ErrorCodes::InvalidOrder.into();
-                        tx_event["info"] = "All decrypted txs rejected as \
-                                            they were not submitted in \
-                                            correct order"
-                            .into();
-                        tx_event["gas_used"] = "0".into();
-                        response.events.push(tx_event);
-                        continue;
-                    }
                     // We remove the corresponding wrapper tx from the queue
                     if !cfg!(feature = "ABCI") {
                         self.storage.tx_queue.pop();
@@ -593,21 +572,14 @@ mod test_finalize_block {
         for (index, event) in shell
             .finalize_block(FinalizeBlock {
                 txs: processed_txs.clone(),
-                reject_all_decrypted: false,
                 ..Default::default()
             })
             .expect("Test failed")
             .iter()
             .enumerate()
         {
-            assert_eq!(event.r#type, "accepted");
-            let code = event
-                .attributes
-                .iter()
-                .find(|attr| attr.key.as_str() == "code")
-                .expect("Test failed")
-                .value
-                .as_str();
+            assert_eq!(event.event_type.to_string(), String::from("accepted"));
+            let code = event.attributes.get("code").expect("Test failed");
             assert_eq!(code, &index.rem_euclid(2).to_string());
         }
         // verify that the queue of wrapper txs to be processed is correct
@@ -667,7 +639,6 @@ mod test_finalize_block {
         for (index, event) in shell
             .finalize_block(FinalizeBlock {
                 txs: processed_txs.clone(),
-                reject_all_decrypted: false,
                 ..Default::default()
             })
             .expect("Test failed")
@@ -720,20 +691,13 @@ mod test_finalize_block {
         for event in shell
             .finalize_block(FinalizeBlock {
                 txs: vec![processed_tx],
-                reject_all_decrypted: false,
                 ..Default::default()
             })
             .expect("Test failed")
         {
-            assert_eq!(event.r#type, "applied");
-            let code = event
-                .attributes
-                .iter()
-                .find(|attr| attr.key.as_str() == "code")
-                .expect("Test failed")
-                .value
-                .as_str();
-            assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+            assert_eq!(event.event_type.to_string(), String::from("applied"));
+            let code = event.attributes.get("code").expect("Test failed");
+            assert_eq!(code, &String::from(ErrorCodes::InvalidTx));
         }
         // check that the corresponding wrapper tx was removed from the queue
         assert!(shell.next_wrapper().is_none());
@@ -762,7 +726,6 @@ mod test_finalize_block {
         for event in shell
             .finalize_block(FinalizeBlock {
                 txs: vec![processed_tx],
-                reject_all_decrypted: false,
                 ..Default::default()
             })
             .expect("Test failed")
@@ -819,27 +782,14 @@ mod test_finalize_block {
         for event in shell
             .finalize_block(FinalizeBlock {
                 txs: vec![processed_tx],
-                reject_all_decrypted: false,
                 ..Default::default()
             })
             .expect("Test failed")
         {
-            assert_eq!(event.r#type, "applied");
-            let code = event
-                .attributes
-                .iter()
-                .find(|attr| attr.key.as_str() == "code")
-                .expect("Test failed")
-                .value
-                .as_str();
-            assert_eq!(code, String::from(ErrorCodes::Undecryptable).as_str());
-            let log = event
-                .attributes
-                .iter()
-                .find(|attr| attr.key.as_str() == "log")
-                .expect("Test failed")
-                .value
-                .as_str();
+            assert_eq!(event.event_type.to_string(), String::from("applied"));
+            let code = event.attributes.get("code").expect("Test failed");
+            assert_eq!(code, &String::from(ErrorCodes::Undecryptable));
+            let log = event.attributes.get("log").expect("Test failed");
             assert!(log.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
@@ -887,7 +837,6 @@ mod test_finalize_block {
         for event in shell
             .finalize_block(FinalizeBlock {
                 txs: vec![processed_tx],
-                reject_all_decrypted: false,
                 ..Default::default()
             })
             .expect("Test failed")
@@ -986,7 +935,6 @@ mod test_finalize_block {
         for (index, event) in shell
             .finalize_block(FinalizeBlock {
                 txs: processed_txs,
-                reject_all_decrypted: false,
                 ..Default::default()
             })
             .expect("Test failed")
@@ -1037,164 +985,5 @@ mod test_finalize_block {
             }
             assert_eq!(counter, 2);
         }
-    }
-
-    #[cfg(not(feature = "ABCI"))]
-    /// Tests that if the decrypted txs are submitted out of
-    /// order then
-    ///  1. They are still enqueued in order
-    ///  2. New wrapper txs are enqueued in correct order
-    #[test]
-    fn test_decrypted_txs_out_of_order() {
-        let (mut shell, _) = setup();
-        let keypair = gen_keypair();
-        let mut processed_txs = vec![];
-        let mut valid_txs = vec![];
-        // create a wrapper tx to be included in block proposal
-        let raw_tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(String::from("transaction data").as_bytes().to_owned()),
-        );
-        let wrapper_tx = WrapperTx::new(
-            Fee {
-                amount: 0.into(),
-                token: xan(),
-            },
-            &keypair,
-            Epoch(0),
-            0.into(),
-            raw_tx,
-            Default::default(),
-        );
-        let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
-        valid_txs.push(wrapper_tx);
-        processed_txs.push(ProcessedTx {
-            tx: wrapper.to_bytes(),
-            result: TxResult {
-                code: ErrorCodes::Ok.into(),
-                info: "".into(),
-            },
-        });
-        // Create two decrypted txs to be part of block proposal.
-        // We give them an error code of two to indicate that order
-        // was not respected (although actually it was, but the job
-        // of detecting this lies with process_proposal so at this stage
-        // we can just lie to finalize_block to get the desired behavior)
-        for i in 0..2 {
-            let raw_tx = Tx::new(
-                "wasm_code".as_bytes().to_owned(),
-                Some(format!("transaction data: {}", i).as_bytes().to_owned()),
-            );
-            let wrapper = WrapperTx::new(
-                Fee {
-                    amount: 0.into(),
-                    token: xan(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                raw_tx.clone(),
-                Default::default(),
-            );
-            // add the corresponding wrapper tx to the queue
-            shell.enqueue_tx(wrapper.clone());
-            valid_txs.push(wrapper);
-            processed_txs.push(ProcessedTx {
-                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
-                    .to_bytes(),
-                result: TxResult {
-                    code: ErrorCodes::InvalidOrder.into(),
-                    info: "".into(),
-                },
-            })
-        }
-        // We tell [`finalize_block`] that the decrypted txs are out of
-        // order although in fact they are not. This should not affect
-        // the expected behavior
-        // We check that the correct events are created.
-        for (index, event) in shell
-            .finalize_block(FinalizeBlock {
-                txs: processed_txs.clone(),
-                reject_all_decrypted: true,
-                ..Default::default()
-            })
-            .expect("Test failed")
-            .iter()
-            .enumerate()
-        {
-            if index == 0 {
-                // the wrapper tx should be accepted
-                assert_eq!(event.r#type, "accepted");
-                #[cfg(not(feature = "ABCI"))]
-                {
-                    let code = event
-                        .attributes
-                        .iter()
-                        .find(|attr| attr.key.as_str() == "code")
-                        .expect("Test failed")
-                        .value
-                        .as_str();
-                    assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
-                }
-                #[cfg(feature = "ABCI")]
-                {
-                    let code = event
-                        .attributes
-                        .iter()
-                        .find(|attr| attr.key == "code".as_bytes())
-                        .expect("Test failed")
-                        .value
-                        .clone();
-                    assert_eq!(
-                        String::from_utf8(code).expect("Test failed"),
-                        String::from(ErrorCodes::Ok)
-                    );
-                }
-            } else {
-                // both decrypted txs should be rejected
-                assert_eq!(event.r#type, "applied");
-                #[cfg(not(feature = "ABCI"))]
-                {
-                    let code = event
-                        .attributes
-                        .iter()
-                        .find(|attr| attr.key.as_str() == "code")
-                        .expect("Test failed")
-                        .value
-                        .as_str();
-                    assert_eq!(
-                        code,
-                        String::from(ErrorCodes::InvalidOrder).as_str()
-                    );
-                }
-                #[cfg(feature = "ABCI")]
-                {
-                    let code = event
-                        .attributes
-                        .iter()
-                        .find(|attr| attr.key == "code".as_bytes())
-                        .expect("Test failed")
-                        .value
-                        .clone();
-                    assert_eq!(
-                        String::from_utf8(code).expect("Test failed"),
-                        String::from(ErrorCodes::InvalidOrder)
-                    );
-                }
-            }
-        }
-        // the wrapper tx should appear at the end of the queue
-        valid_txs.rotate_left(1);
-        // check that the queue has 3 wrappers in correct order
-        let mut counter = 0;
-        let mut txs = valid_txs.iter();
-        while let Some(wrapper) = shell.next_wrapper() {
-            assert_eq!(
-                wrapper.tx_hash,
-                txs.next().expect("Test failed").tx_hash
-            );
-            counter += 1;
-        }
-        assert_eq!(counter, 3);
     }
 }
