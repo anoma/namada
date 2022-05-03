@@ -683,8 +683,20 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 .await;
 
                 // Optimize by quering if a vote from a validator
-                // is equal to ours. If so, we can avoid voting
-                if !args.tx.force {
+                // is equal to ours. If so, we can avoid voting, but ONLY if we
+                // are  voting in the last third of the voting
+                // window, otherwise there's  the risk of the
+                // validator changing his vote and, effectively, invalidating
+                // the delgator's vote
+                if !args.tx.force
+                    && is_safe_voting_window(
+                        args.tx.ledger_address.clone(),
+                        &client,
+                        proposal_id,
+                        epoch,
+                    )
+                    .await
+                {
                     delegation_addresses = filter_delegations(
                         &client,
                         delegation_addresses,
@@ -712,6 +724,38 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             None => {
                 eprintln!("Proposal start epoch is not in the storage.")
             }
+        }
+    }
+}
+
+/// Check if current epoch is in the last third of the voting period of the
+/// proposal. This ensures that it is safe to optimize the vote writing to
+/// storage.
+async fn is_safe_voting_window(
+    ledger_address: TendermintAddress,
+    client: &HttpClient,
+    proposal_id: u64,
+    proposal_start_epoch: Epoch,
+) -> bool {
+    let current_epoch = rpc::query_epoch(args::Query { ledger_address }).await;
+
+    let proposal_end_epoch_key =
+        gov_storage::get_voting_end_epoch_key(proposal_id);
+    let proposal_end_epoch =
+        rpc::query_storage_value::<Epoch>(client, &proposal_end_epoch_key)
+            .await;
+
+    match proposal_end_epoch {
+        Some(proposal_end_epoch) => {
+            !anoma::ledger::governance::vp::is_valid_validator_voting_period(
+                current_epoch,
+                proposal_start_epoch,
+                proposal_end_epoch,
+            )
+        }
+        None => {
+            eprintln!("Proposal end epoch is not in the storage.");
+            safe_exit(1)
         }
     }
 }
