@@ -15,11 +15,11 @@ use tower_abci::{BoxError, Request as Req, Response as Resp};
 use tower_abci_old::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
+use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
+#[cfg(not(feature = "ABCI"))]
+use super::abcipp_shim_types::shim::response::TxResult;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
-use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
-    FinalizeBlock, ProcessedTx,
-};
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -60,6 +60,7 @@ impl AbcippShim {
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
                 ),
+                #[cfg(feature = "ABCI")]
                 begin_block_request: None,
                 processed_txs: vec![],
                 shell_recv,
@@ -99,7 +100,7 @@ impl AbcippShim {
                 Req::FinalizeBlock(block) => {
                     let mut txs = vec![];
                     std::mem::swap(&mut txs, &mut self.processed_txs);
-                    let mut finalize_req = block.into();
+                    let mut finalize_req: FinalizeBlock = block.into();
                     finalize_req.txs = txs;
                     self.service
                         .call(Request::FinalizeBlock(finalize_req))
@@ -136,18 +137,8 @@ impl AbcippShim {
                 Req::EndBlock(_) => {
                     let mut txs = vec![];
                     std::mem::swap(&mut txs, &mut self.processed_txs);
-                    // If the wrapper txs were not properly submitted, reject
-                    // all txs
-                    let out_of_order =
-                        txs.iter().any(|tx| tx.result.code > 3u32);
-                    if out_of_order {
-                        // The wrapper txs will need to be decrypted again
-                        // and included in the proposed block after the current
-                        self.service.reset_tx_queue_iter();
-                    }
                     let mut end_block_request: FinalizeBlock =
                         self.begin_block_request.take().unwrap().into();
-                    end_block_request.reject_all_decrypted = out_of_order;
                     end_block_request.txs = txs;
                     self.service
                         .call(Request::FinalizeBlock(end_block_request))

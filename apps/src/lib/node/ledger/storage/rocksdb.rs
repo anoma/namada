@@ -45,8 +45,6 @@ use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
 };
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::Protobuf;
 
 use crate::config::utils::num_of_threads;
 

@@ -2,6 +2,7 @@
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
+    use tendermint_proto::abci::TxRecord;
 
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -35,16 +36,22 @@ mod prepare_block {
                 // TODO: Craft the Ethereum state update tx
                 // filter in half of the new txs from Tendermint, only keeping
                 // wrappers
-                let number_of_new_txs = 1 + req.block_data.len() / 2;
-                let mut txs: Vec<TxBytes> = req
-                    .block_data
+                let number_of_new_txs = 1 + req.txs.len() / 2;
+                let mut txs: Vec<TxRecord> = req
+                    .txs
                     .into_iter()
-                    .take(number_of_new_txs)
-                    .filter(|tx_bytes| {
-                        if let Ok(tx) = Tx::try_from(tx_bytes.as_slice()) {
-                            matches!(process_tx(tx), Ok(TxType::Wrapper(_)))
+                    .enumerate()
+                    .map(|(ix, tx_bytes)| {
+                        if let Ok(Ok(TxType::Wrapper(_))) =
+                            Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                        {
+                            if ix < number_of_new_txs {
+                                record::keep(tx_bytes)
+                            } else {
+                                record::remove(tx_bytes)
+                            }
                         } else {
-                            false
+                            record::remove(tx_bytes)
                         }
                     })
                     .collect();
@@ -61,6 +68,7 @@ mod prepare_block {
                         })
                         .to_bytes()
                     })
+                    .map(record::add)
                     .collect();
 
                 txs.append(&mut decrypted_txs);
@@ -68,7 +76,34 @@ mod prepare_block {
             } else {
                 vec![]
             };
-            response::PrepareProposal { block_data: txs }
+
+            response::PrepareProposal {
+                tx_records: txs,
+                ..Default::default()
+            }
+        }
+    }
+
+    /// Functions for creating the appropriate TxRecord given the
+    /// numeric code
+    pub(super) mod record {
+        use super::*;
+
+        /// Keep this transaction in the proposal
+        pub fn keep(tx: TxBytes) -> TxRecord {
+            TxRecord { action: 1, tx }
+        }
+
+        /// A transaction added to the proposal not provided by
+        /// Tendermint from the mempool
+        pub fn add(tx: TxBytes) -> TxRecord {
+            TxRecord { action: 2, tx }
+        }
+
+        /// Remove this transaction from the set provided
+        /// by Tendermint from the mempool
+        pub fn remove(tx: TxBytes) -> TxRecord {
+            TxRecord { action: 3, tx }
         }
     }
 
@@ -92,10 +127,14 @@ mod prepare_block {
                 Some("transaction_data".as_bytes().to_owned()),
             );
             let req = RequestPrepareProposal {
-                block_data: vec![tx.to_bytes()],
-                block_data_size: 0,
+                txs: vec![tx.to_bytes()],
+                max_tx_bytes: 0,
+                ..Default::default()
             };
-            assert_eq!(shell.prepare_proposal(req).block_data.len(), 0);
+            assert_eq!(
+                shell.prepare_proposal(req).tx_records,
+                vec![record::remove(tx.to_bytes())]
+            );
         }
 
         /// Test that if an error is encountered while
@@ -130,10 +169,14 @@ mod prepare_block {
             )
             .to_bytes();
             let req = RequestPrepareProposal {
-                block_data: vec![wrapper],
-                block_data_size: 0,
+                txs: vec![wrapper.clone()],
+                max_tx_bytes: 0,
+                ..Default::default()
             };
-            assert_eq!(shell.prepare_proposal(req).block_data.len(), 0);
+            assert_eq!(
+                shell.prepare_proposal(req).tx_records,
+                vec![record::remove(wrapper)]
+            );
         }
 
         /// Test that the decrypted txs are included
@@ -147,8 +190,9 @@ mod prepare_block {
             let mut expected_decrypted = vec![];
 
             let mut req = RequestPrepareProposal {
-                block_data: vec![],
-                block_data_size: 0,
+                txs: vec![],
+                max_tx_bytes: 0,
+                ..Default::default()
             };
             // create a request with two new wrappers from mempool and
             // two wrappers from the previous block to be decrypted
@@ -177,7 +221,7 @@ mod prepare_block {
                 let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
                 shell.enqueue_tx(wrapper_tx);
                 expected_wrapper.push(wrapper.clone());
-                req.block_data.push(wrapper.to_bytes());
+                req.txs.push(wrapper.to_bytes());
             }
             // we extract the inner data from the txs for testing
             // equality since otherwise changes in timestamps would
@@ -190,14 +234,25 @@ mod prepare_block {
 
             let received: Vec<Vec<u8>> = shell
                 .prepare_proposal(req)
-                .block_data
+                .tx_records
                 .iter()
-                .map(|tx_bytes| {
-                    Tx::try_from(tx_bytes.as_slice())
-                        .expect("Test failed")
-                        .data
-                        .expect("Test failed")
-                })
+                .filter_map(
+                    |TxRecord {
+                         tx: tx_bytes,
+                         action,
+                     }| {
+                        if *action == 2 || *action == 1 {
+                            Some(
+                                Tx::try_from(tx_bytes.as_slice())
+                                    .expect("Test failed")
+                                    .data
+                                    .expect("Test failed"),
+                            )
+                        } else {
+                            None
+                        }
+                    },
+                )
                 .collect();
             // check that the order of the txs is correct
             assert_eq!(received, expected_txs);
@@ -205,5 +260,6 @@ mod prepare_block {
     }
 }
 
+#[allow(unused_imports)]
 #[cfg(not(feature = "ABCI"))]
 pub use prepare_block::*;

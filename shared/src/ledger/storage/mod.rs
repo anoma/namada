@@ -10,8 +10,6 @@ use core::fmt::Debug;
 
 #[cfg(not(feature = "ABCI"))]
 use tendermint::merkle::proof::Proof;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::Protobuf;
 #[cfg(feature = "ABCI")]
 use tendermint_stable::merkle::proof::Proof;
 use thiserror::Error;
