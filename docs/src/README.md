@@ -10,10 +10,6 @@ Welcome to Anoma's docs!
 - [Anoma's Whitepaper](https://anoma.network/papers/whitepaper.pdf)
 - [Anoma's Vision paper](https://anoma.network/papers/vision-paper.pdf)
 
-### Anoma's current testnet: Feigenbaum
-
-Feigenbaum is the name of Anoma's first public testnet. Find `feigenbaum` on [Github](https://github.com/anoma/anoma/releases).
-
 > ⚠️ Here lay dragons: this codebase is still experimental, try at your own risk!
 
 ## About the documentation
@@ -22,6 +18,8 @@ The two main sections of this book are:
 
 - [Exploration](./explore): documents the process of exploring the design and implementation space for Anoma
 - [Specifications](./specs): implementation independent technical specifications
+
+The Anoma user guide and networks documentation can be found at <https://docs.anoma.net>.
 
 ### The source
 
