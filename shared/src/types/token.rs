@@ -357,4 +357,19 @@ mod tests {
                 assert_eq!(amount, identity);
         }
     }
+
+    #[test]
+    fn test_token_display() {
+        let max = Amount::from(u64::MAX);
+        assert_eq!("18446744073709.551615", max.to_string());
+
+        let whole = Amount::from(u64::MAX / SCALE * SCALE);
+        assert_eq!("18446744073709", whole.to_string());
+
+        let trailing_zeroes = Amount::from(123000);
+        assert_eq!("0.123", trailing_zeroes.to_string());
+
+        let zero = Amount::from(0);
+        assert_eq!("0", zero.to_string());
+    }
 }
