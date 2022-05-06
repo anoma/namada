@@ -1,6 +1,8 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 #[cfg(not(feature = "ABCI"))]
+use tendermint_proto::abci::response_process_proposal::ProposalStatus;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::{
     ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
 };
@@ -41,9 +43,9 @@ where
 
         ResponseProcessProposal {
             status: if tx_results.iter().any(|res| res.code > 3) {
-                1
+                ProposalStatus::Reject as i32
             } else {
-                0
+                ProposalStatus::Accept as i32
             },
             tx_results,
             ..Default::default()
@@ -286,11 +288,11 @@ mod test_process_proposal {
     use tendermint_proto_abci::google::protobuf::Timestamp;
 
     use super::*;
+    #[cfg(not(feature = "ABCI"))]
+    use crate::node::ledger::shell::test_utils::TestError;
     use crate::node::ledger::shell::test_utils::{
         gen_keypair, ProcessProposal, TestShell,
     };
-    #[cfg(not(feature = "ABCI"))]
-    use crate::node::ledger::shell::test_utils::TestError;
 
     /// Test that if a wrapper tx is not signed, it is rejected
     /// by [`process_proposal`].

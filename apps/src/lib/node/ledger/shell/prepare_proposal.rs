@@ -87,23 +87,34 @@ mod prepare_block {
     /// Functions for creating the appropriate TxRecord given the
     /// numeric code
     pub(super) mod record {
+        use tendermint_proto::abci::tx_record::TxAction;
+
         use super::*;
 
         /// Keep this transaction in the proposal
         pub fn keep(tx: TxBytes) -> TxRecord {
-            TxRecord { action: 1, tx }
+            TxRecord {
+                action: TxAction::Unmodified as i32,
+                tx,
+            }
         }
 
         /// A transaction added to the proposal not provided by
         /// Tendermint from the mempool
         pub fn add(tx: TxBytes) -> TxRecord {
-            TxRecord { action: 2, tx }
+            TxRecord {
+                action: TxAction::Added as i32,
+                tx,
+            }
         }
 
         /// Remove this transaction from the set provided
         /// by Tendermint from the mempool
         pub fn remove(tx: TxBytes) -> TxRecord {
-            TxRecord { action: 3, tx }
+            TxRecord {
+                action: TxAction::Removed as i32,
+                tx,
+            }
         }
     }
 
@@ -112,6 +123,7 @@ mod prepare_block {
         use anoma::types::address::xan;
         use anoma::types::storage::Epoch;
         use anoma::types::transaction::Fee;
+        use tendermint_proto::abci::tx_record::TxAction;
 
         use super::*;
         use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
@@ -241,7 +253,9 @@ mod prepare_block {
                          tx: tx_bytes,
                          action,
                      }| {
-                        if *action == 2 || *action == 1 {
+                        if *action == (TxAction::Unmodified as i32)
+                            || *action == (TxAction::Added as i32)
+                        {
                             Some(
                                 Tx::try_from(tx_bytes.as_slice())
                                     .expect("Test failed")
