@@ -201,6 +201,19 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     let tendermint_path = from_env_or_default()?;
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
     // reset all the Tendermint state, if any
+    #[cfg(not(feature = "ABCI"))]
+    std::process::Command::new(tendermint_path)
+        .args(&[
+            "reset",
+            "unsafe-all",
+            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
+            // "--log-level=\"*debug\"",
+            "--home",
+            &tendermint_dir,
+        ])
+        .output()
+        .expect("Failed to reset tendermint node's data");
+    #[cfg(feature = "ABCI")]
     std::process::Command::new(tendermint_path)
         .args(&[
             "unsafe-reset-all",
@@ -330,13 +343,14 @@ async fn update_tendermint_config(
     config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
     config.p2p.pex = tendermint_config.p2p_pex;
     config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
-    config.p2p.addr_book_strict = tendermint_config.p2p_addr_book_strict;
+    #[cfg(feature = "ABCI")]
+    {
+        config.p2p.addr_book_strict = tendermint_config.p2p_addr_book_strict;
+    }
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
     config.consensus.create_empty_blocks = true; // !cfg!(feature = "dev");
-    config.consensus.timeout_commit =
-        tendermint_config.consensus_timeout_commit;
 
     // We set this to true as we don't want any invalid tx be re-applied. This
     // also implies that it's not possible for an invalid tx to become valid

@@ -51,6 +51,8 @@ use tendermint_proto::abci::{
     RequestPrepareProposal, ValidatorUpdate,
 };
 #[cfg(not(feature = "ABCI"))]
+use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::public_key;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::ConsensusParams;
@@ -530,7 +532,9 @@ where
         &self,
         _req: request::VerifyVoteExtension,
     ) -> response::VerifyVoteExtension {
-        Default::default()
+        response::VerifyVoteExtension {
+            status: VerifyStatus::Accept as i32,
+        }
     }
 
     /// Commit a block. Persist the application state and return the Merkle root
@@ -798,7 +802,7 @@ mod test_utils {
                         tx: tx_bytes,
                     })
                     .collect();
-                if resp.status > 0 {
+                if resp.status != 1 {
                     Err(TestError::RejectProposal(results))
                 } else {
                     Ok(results)

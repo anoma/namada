@@ -333,6 +333,9 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         tracing::info!("Tendermint node is no longer running.");
 
         drop(aborter);
+        if res.is_err() {
+            tracing::error!("{:?}", &res);
+        }
         res
     });
 
