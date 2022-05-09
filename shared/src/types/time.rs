@@ -111,15 +111,8 @@ impl DateTimeUtc {
     }
 
     /// Returns an rfc3339 string or an error.
-    pub fn to_rfc3339(&self) -> Result<String, std::io::Error> {
-        Time::try_from(*self)
-            .map(|t| t.to_rfc3339())
-            .map_err(|err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("Could not parse timestamp because: {}", err),
-                )
-            })
+    pub fn to_rfc3339(&self) -> String {
+        chrono::DateTime::to_rfc3339(&self.0)
     }
 }
 

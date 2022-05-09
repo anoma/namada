@@ -130,8 +130,14 @@ pub async fn run(
             .await;
         }
     }
-
-    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
+    #[cfg(not(feature = "ABCI"))]
+    {
+        write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
+    }
+    #[cfg(feature = "ABCI")]
+    {
+        write_tm_genesis(&home_dir, chain_id, genesis_time).await;
+    }
 
     update_tendermint_config(&home_dir, config).await?;
 
@@ -351,6 +357,11 @@ async fn update_tendermint_config(
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
     config.consensus.create_empty_blocks = true; // !cfg!(feature = "dev");
+    #[cfg(feature = "ABCI")]
+    {
+        config.consensus.timeout_commit =
+            tendermint_config.consensus_timeout_commit;
+    }
 
     // We set this to true as we don't want any invalid tx be re-applied. This
     // also implies that it's not possible for an invalid tx to become valid
@@ -389,6 +400,8 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
+    #[cfg(not(feature = "ABCI"))]
+    config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -409,6 +422,10 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
+    #[cfg(not(feature = "ABCI"))]
+    {
+        genesis.consensus_params.timeout.commit = config.consensus_timeout_commit.into()
+    }
 
     let mut file = OpenOptions::new()
         .write(true)

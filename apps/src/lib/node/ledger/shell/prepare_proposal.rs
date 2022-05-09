@@ -40,16 +40,12 @@ mod prepare_block {
                 let mut txs: Vec<TxRecord> = req
                     .txs
                     .into_iter()
-                    .enumerate()
-                    .map(|(ix, tx_bytes)| {
+                    .take(number_of_new_txs)
+                    .map(|tx_bytes| {
                         if let Ok(Ok(TxType::Wrapper(_))) =
                             Tx::try_from(tx_bytes.as_slice()).map(process_tx)
                         {
-                            if ix < number_of_new_txs {
-                                record::keep(tx_bytes)
-                            } else {
-                                record::remove(tx_bytes)
-                            }
+                            record::keep(tx_bytes)
                         } else {
                             record::remove(tx_bytes)
                         }

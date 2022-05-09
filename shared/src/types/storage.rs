@@ -98,6 +98,12 @@ impl From<BlockHeight> for u64 {
 )]
 pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 
+impl From<Hash> for BlockHash {
+    fn from(hash: Hash) -> Self {
+        BlockHash(hash.0)
+    }
+}
+
 impl TryFrom<i64> for BlockHeight {
     type Error = String;
 
@@ -133,6 +139,7 @@ impl TryFrom<&[u8]> for BlockHash {
         Ok(BlockHash(hash))
     }
 }
+
 impl TryFrom<Vec<u8>> for BlockHash {
     type Error = self::Error;
 
@@ -151,6 +158,7 @@ impl TryFrom<Vec<u8>> for BlockHash {
         Ok(BlockHash(hash))
     }
 }
+
 impl core::fmt::Debug for BlockHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hash = format!("{}", ByteBuf(&self.0));
@@ -173,7 +181,7 @@ pub struct Header {
 impl Header {
     /// The number of bytes when this header is encoded
     pub fn encoded_len(&self) -> usize {
-        self.try_to_vec().map(|ser| ser.len()).unwrap_or(usize::MAX)
+        self.try_to_vec().map(|ser| ser.len()).unwrap()
     }
 }
 
