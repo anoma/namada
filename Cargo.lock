@@ -6282,7 +6282,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#be219db044b64bd86b2161bd84279c7ceb768c20"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#bffe9971a1eca01b46884fdc92a03631d7f8979b"
 dependencies = [
  "async-trait",
  "bytes 1.1.0",
@@ -6338,7 +6338,7 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#be219db044b64bd86b2161bd84279c7ceb768c20"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#bffe9971a1eca01b46884fdc92a03631d7f8979b"
 dependencies = [
  "flex-error",
  "serde 1.0.137",
@@ -6364,7 +6364,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#be219db044b64bd86b2161bd84279c7ceb768c20"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#bffe9971a1eca01b46884fdc92a03631d7f8979b"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -6390,7 +6390,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#be219db044b64bd86b2161bd84279c7ceb768c20"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#bffe9971a1eca01b46884fdc92a03631d7f8979b"
 dependencies = [
  "bytes 1.1.0",
  "flex-error",
@@ -6424,7 +6424,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#be219db044b64bd86b2161bd84279c7ceb768c20"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#bffe9971a1eca01b46884fdc92a03631d7f8979b"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -6490,7 +6490,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#be219db044b64bd86b2161bd84279c7ceb768c20"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abcipp-rebase-master#bffe9971a1eca01b46884fdc92a03631d7f8979b"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",

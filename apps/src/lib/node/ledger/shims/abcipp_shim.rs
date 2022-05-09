@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use anoma::types::hash::Hash;
+use anoma::types::transaction::hash_tx;
+use anoma::types::storage::BlockHash;
 use futures::future::FutureExt;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::RequestBeginBlock;
@@ -20,6 +23,7 @@ use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::response::TxResult;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
+
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -67,6 +71,16 @@ impl AbcippShim {
             },
             AbciService { shell_send },
         )
+    }
+
+    /// Get the hash of the txs in the block
+    pub fn get_hash(&self) -> Hash {
+        let bytes: Vec<u8> = self.processed_txs
+            .iter()
+            .map(|processed| processed.tx.clone())
+            .flatten()
+            .collect();
+        hash_tx(bytes.as_slice())
     }
 
     /// Run the shell's blocking loop that receives messages from the
@@ -139,6 +153,9 @@ impl AbcippShim {
                     std::mem::swap(&mut txs, &mut self.processed_txs);
                     let mut end_block_request: FinalizeBlock =
                         self.begin_block_request.take().unwrap().into();
+                    let hash = self.get_hash();
+                    end_block_request.hash = BlockHash::from(hash.clone());
+                    end_block_request.header.hash = hash;
                     end_block_request.txs = txs;
                     self.service
                         .call(Request::FinalizeBlock(end_block_request))

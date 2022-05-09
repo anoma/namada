@@ -258,10 +258,9 @@ pub mod shim {
             fn from(req: RequestBeginBlock) -> FinalizeBlock {
                 let header = req.header.unwrap();
                 FinalizeBlock {
-                    hash: BlockHash::try_from(req.hash.as_slice()).unwrap(),
+                    hash: BlockHash::default(),
                     header: Header {
-                        hash: Hash::try_from(header.app_hash.as_slice())
-                            .unwrap(),
+                        hash: Hash::default(),
                         time: DateTimeUtc::try_from(header.time.unwrap())
                             .unwrap(),
                         next_validators_hash: Hash::try_from(
