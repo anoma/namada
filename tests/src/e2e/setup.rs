@@ -518,20 +518,55 @@ impl AnomaCmd {
 
 impl Drop for AnomaCmd {
     fn drop(&mut self) {
-        // Clean up the process, if its still running
-        if let Ok(output) = self.session.exp_eof() {
-            let output = output.trim();
-            if !output.is_empty() {
-                println!(
-                    "\n\n{}: {}\n{}: {}",
-                    "Command".underline().yellow(),
+        // attempt to clean up the process
+        println!(
+            "{}: {}",
+            "Waiting for command to finish".underline().yellow(),
+            self.cmd_str,
+        );
+        if let Err(error) = self.session.process.exit() {
+            eprintln!(
+                "\n{}: {}\n{}: {}",
+                "Error waiting for command to finish".underline().red(),
+                self.cmd_str,
+                "Error".underline().red(),
+                error,
+            );
+            return;
+        };
+        println!(
+            "\n{}: {}",
+            "Command finished".underline().green(),
+            self.cmd_str,
+        );
+        let output = match self.session.exp_eof() {
+            Ok(output) => output,
+            Err(error) => {
+                eprintln!(
+                    "\n{}: {}\n{}: {}",
+                    "Error reading output for command".underline().red(),
                     self.cmd_str,
-                    "Unread output".underline().yellow(),
-                    output,
+                    "Error".underline().red(),
+                    error,
                 );
+                return;
             }
+        };
+        let output = output.trim();
+        if !output.is_empty() {
+            println!(
+                "\n{}: {}\n\n{}",
+                "Unread output for command".underline().yellow(),
+                self.cmd_str,
+                output
+            );
+        } else {
+            println!(
+                "\n{}: {}",
+                "No unread output for command".underline().green(),
+                self.cmd_str
+            );
         }
-        let _ = self.session.process.exit();
     }
 }
 
@@ -563,7 +598,7 @@ where
         Ok(val) => val.to_ascii_lowercase() != "false",
         _ => false,
     };
-    let cmd = if !cfg!(feature = "ABCI") {
+    let build_cmd = if !cfg!(feature = "ABCI") {
         CargoBuild::new()
             .package(APPS_PACKAGE)
             .manifest_path(manifest_path)
@@ -583,14 +618,29 @@ where
             .env("ANOMA_DEV", "false")
             .bin(bin_name)
     };
-    let cmd = if run_debug {
-        cmd
+    let build_cmd = if run_debug {
+        build_cmd
     } else {
         // Use the same build settings as `make build-release`
-        cmd.release()
+        build_cmd.release()
     };
-    let mut cmd = cmd.run().unwrap().command();
-    cmd.env("ANOMA_LOG", "anoma=debug")
+    let now = time::Instant::now();
+    // ideally we would print the compile command here, but escargot doesn't
+    // implement Display or Debug for CargoBuild
+    println!(
+        "\n{}: {}",
+        "`cargo build` starting".underline().bright_blue(),
+        bin_name
+    );
+    let mut run_cmd = build_cmd.run().unwrap().command();
+    println!(
+        "\n{}: {}ms",
+        "`cargo build` finished after".underline().bright_blue(),
+        now.elapsed().as_millis()
+    );
+
+    run_cmd
+        .env("ANOMA_LOG", "anoma=debug")
         .current_dir(working_dir)
         .args(&[
             "--base-dir",
@@ -599,11 +649,11 @@ where
             mode,
         ])
         .args(args);
-    let cmd_str = format!("{:?}", cmd);
+    let cmd_str = format!("{:?}", run_cmd);
 
     let timeout_ms = timeout_sec.map(|sec| sec * 1_000);
     println!("{}: {}", "Running".underline().green(), cmd_str);
-    let mut session = spawn_command(cmd, timeout_ms).map_err(|e| {
+    let mut session = spawn_command(run_cmd, timeout_ms).map_err(|e| {
         eyre!(
             "\n\n{}: {}\n{}: {}\n{}: {}",
             "Failed to run".underline().red(),
