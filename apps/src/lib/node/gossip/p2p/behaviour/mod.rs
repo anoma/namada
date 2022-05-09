@@ -261,7 +261,7 @@ impl Behaviour {
     }
 
     /// Tries to decoded the arbitrary data in an intent then call
-    /// [handle_intent]. fails if the data does not contains an intent
+    /// [Self::handle_intent]. fails if the data does not contains an intent
     fn handle_raw_intent(
         &mut self,
         data: impl AsRef<[u8]>,

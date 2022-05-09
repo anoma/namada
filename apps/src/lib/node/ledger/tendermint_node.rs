@@ -92,7 +92,7 @@ pub async fn run(
     };
 
     // init and run a tendermint node child process
-    let output = if !cfg!(featuer = "ABCI") {
+    let output = if !cfg!(feature = "ABCI") {
         Command::new(&tendermint_path)
             .args(&["init", &mode, "--home", &home_dir_string])
             .output()
