@@ -163,8 +163,9 @@ where
                 Ok(result) => {
                     if result.is_accepted() {
                         tracing::info!(
-                            "all VPs accepted apply_tx storage modification \
-                             {:#?}",
+                            "all VPs accepted transaction {} storage \
+                             modification {:#?}",
+                            tx_event["hash"],
                             result
                         );
                         self.write_log.commit_tx();
@@ -193,8 +194,9 @@ where
                         }
                     } else {
                         tracing::info!(
-                            "some VPs rejected apply_tx storage modification \
-                             {:#?}",
+                            "some VPs rejected transaction {} storage \
+                             modification {:#?}",
+                            tx_event["hash"],
                             result.vps_result.rejected_vps
                         );
                         self.write_log.drop_tx();
@@ -204,7 +206,11 @@ where
                     tx_event["info"] = result.to_string();
                 }
                 Err(msg) => {
-                    tracing::info!("Transaction failed with: {}", msg);
+                    tracing::info!(
+                        "Transaction {} failed with: {}",
+                        tx_event["hash"],
+                        msg
+                    );
                     self.write_log.drop_tx();
                     tx_event["gas_used"] = self
                         .gas_meter

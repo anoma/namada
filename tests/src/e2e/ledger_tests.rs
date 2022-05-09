@@ -409,7 +409,7 @@ fn invalid_transactions() -> Result<()> {
     client.exp_string(r#""code": "1"#)?;
 
     client.assert_success();
-    ledger.exp_string("some VPs rejected apply_tx storage modification")?;
+    ledger.exp_string("some VPs rejected transaction")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
