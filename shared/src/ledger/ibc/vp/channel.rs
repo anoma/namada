@@ -2,7 +2,6 @@
 
 use core::time::Duration;
 
-use prost::Message;
 use sha2::Digest;
 use thiserror::Error;
 
@@ -27,6 +26,9 @@ use crate::ibc::core::ics03_connection::context::ConnectionReader;
 use crate::ibc::core::ics03_connection::error::Error as Ics03Error;
 use crate::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty, State,
+};
+use crate::ibc::core::ics04_channel::commitment::{
+    AcknowledgementCommitment, PacketCommitment,
 };
 use crate::ibc::core::ics04_channel::context::ChannelReader;
 use crate::ibc::core::ics04_channel::error::Error as Ics04Error;
@@ -54,7 +56,7 @@ use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::tendermint::Time;
 use crate::tendermint_proto::Protobuf;
 use crate::types::ibc::data::{
-    Error as IbcDataError, IbcMessage, PacketAck, PacketReceipt,
+    Error as IbcDataError, IbcMessage, PacketReceipt,
 };
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -618,15 +620,10 @@ where
     pub(super) fn get_packet_commitment_pre(
         &self,
         key: &(PortId, ChannelId, Sequence),
-    ) -> Result<String> {
+    ) -> Result<PacketCommitment> {
         let key = commitment_key(&key.0, &key.1, key.2);
         match self.ctx.read_pre(&key)? {
-            Some(value) => String::decode(&value[..]).map_err(|e| {
-                Error::InvalidPacketInfo(format!(
-                    "Decoding the prior commitment failed: {}",
-                    e
-                ))
-            }),
+            Some(value) => Ok(value.into()),
             None => Err(Error::InvalidPacketInfo(format!(
                 "The prior commitment doesn't exist: Key {}",
                 key
@@ -843,11 +840,10 @@ where
     fn get_packet_commitment(
         &self,
         key: &(PortId, ChannelId, Sequence),
-    ) -> Ics04Result<String> {
+    ) -> Ics04Result<PacketCommitment> {
         let commitment_key = commitment_key(&key.0, &key.1, key.2);
         match self.ctx.read_post(&commitment_key) {
-            Ok(Some(value)) => String::decode(&value[..])
-                .map_err(|_| Ics04Error::implementation_specific()),
+            Ok(Some(value)) => Ok(value.into()),
             Ok(None) => Err(Ics04Error::packet_commitment_not_found(key.2)),
             Err(_) => Err(Ics04Error::implementation_specific()),
         }
@@ -865,22 +861,20 @@ where
         }
     }
 
-    // TODO should return Vec<u8> or Acknowledgment. fix in ibc-rs?
     fn get_packet_acknowledgement(
         &self,
         key: &(PortId, ChannelId, Sequence),
-    ) -> Ics04Result<String> {
+    ) -> Ics04Result<AcknowledgementCommitment> {
         let ack_key = ack_key(&key.0, &key.1, key.2);
         match self.ctx.read_post(&ack_key) {
-            Ok(Some(_)) => Ok(PacketAck::default().to_string()),
+            Ok(Some(value)) => Ok(value.into()),
             Ok(None) => Err(Ics04Error::packet_commitment_not_found(key.2)),
             Err(_) => Err(Ics04Error::implementation_specific()),
         }
     }
 
-    fn hash(&self, value: String) -> String {
-        let r = sha2::Sha256::digest(value.as_bytes());
-        format!("{:x}", r)
+    fn hash(&self, value: Vec<u8>) -> Vec<u8> {
+        sha2::Sha256::digest(&value).to_vec()
     }
 
     fn host_height(&self) -> Height {
