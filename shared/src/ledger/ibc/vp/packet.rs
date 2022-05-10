@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 use super::super::handler::{
-    make_send_packet_event, make_timeout_event, packet_from_message,
+    self, make_send_packet_event, make_timeout_event, packet_from_message,
 };
 use super::super::storage::{
     port_channel_sequence_id, Error as IbcStorageError,
@@ -13,6 +13,7 @@ use crate::ibc::core::ics02_client::height::Height;
 use crate::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty, Order, State,
 };
+use crate::ibc::core::ics04_channel::commitment::PacketCommitment;
 use crate::ibc::core::ics04_channel::context::ChannelReader;
 use crate::ibc::core::ics04_channel::error::Error as Ics04Error;
 use crate::ibc::core::ics04_channel::handler::verify::{
@@ -434,13 +435,9 @@ where
     fn validate_packet_commitment(
         &self,
         packet: &Packet,
-        commitment: String,
+        commitment: PacketCommitment,
     ) -> Result<()> {
-        let input = format!(
-            "{:?},{:?},{:?}",
-            packet.timeout_timestamp, packet.timeout_height, packet.data,
-        );
-        if commitment == self.hash(input) {
+        if commitment == handler::commitment(packet) {
             Ok(())
         } else {
             Err(Error::InvalidPacket(

@@ -964,6 +964,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "getrandom"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4eb1a864a501629691edf6c15a593b7a51eebaa1e8468e9ddc623de7c9b58ec6"
+dependencies = [
+ "cfg-if 1.0.0",
+ "libc",
+ "wasi 0.11.0+wasi-snapshot-preview1",
+]
+
+[[package]]
 name = "gimli"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1064,73 +1075,43 @@ dependencies = [
 ]
 
 [[package]]
-name = "http"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31f4c6746584866f0feabcc69893c5b51beef3831656a968ed7ae254cdc4fd03"
+name = "ibc"
+version = "0.14.0"
+source = "git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d#9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d"
 dependencies = [
  "bytes",
- "fnv",
- "itoa",
-]
-
-[[package]]
-name = "http-body"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ff4f84919677303da5f147645dbea6b1881f368d03ac84e1dc09031ebd7b2c6"
-dependencies = [
- "bytes",
- "http",
- "pin-project-lite",
-]
-
-[[package]]
-name = "httparse"
-version = "1.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9100414882e15fb7feccb4897e5f0ff0ff1ca7d1a86a23208ada4d7a18e6c6c4"
-
-[[package]]
-name = "httpdate"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
-
-[[package]]
-name = "hyper"
-version = "0.14.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b26ae0a80afebe130861d90abf98e3814a4f28a4c6ffeb5ab8ebb2be311e0ef2"
-dependencies = [
- "bytes",
- "futures-channel",
- "futures-core",
- "futures-util",
- "h2",
- "http",
- "http-body",
- "httparse",
- "httpdate",
- "itoa",
- "pin-project-lite",
- "socket2",
- "tokio",
- "tower-service",
+ "derive_more",
+ "flex-error",
+ "ibc-proto",
+ "ics23",
+ "num-traits",
+ "prost",
+ "prost-types",
+ "safe-regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "sha2 0.10.2",
+ "subtle-encoding",
+ "tendermint",
+ "tendermint-light-client-verifier",
+ "tendermint-proto",
+ "tendermint-testgen",
+ "time 0.3.9",
  "tracing",
- "want",
 ]
 
 [[package]]
-name = "hyper-timeout"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
+name = "ibc-proto"
+version = "0.17.1"
+source = "git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d#9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d"
 dependencies = [
- "hyper",
- "pin-project-lite",
- "tokio",
- "tokio-io-timeout",
+ "base64",
+ "bytes",
+ "prost",
+ "prost-types",
+ "serde",
+ "tendermint-proto",
 ]
 
 [[package]]
@@ -1266,7 +1247,7 @@ dependencies = [
 [[package]]
 name = "libsecp256k1"
 version = "0.7.0"
-source = "git+https://github.com/brentstone/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
+source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "arrayref",
  "base64",
@@ -1282,7 +1263,7 @@ dependencies = [
 [[package]]
 name = "libsecp256k1-core"
 version = "0.3.0"
-source = "git+https://github.com/brentstone/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
+source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "crunchy",
  "digest 0.9.0",
@@ -1292,7 +1273,7 @@ dependencies = [
 [[package]]
 name = "libsecp256k1-gen-ecmult"
 version = "0.3.0"
-source = "git+https://github.com/brentstone/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
+source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "libsecp256k1-core",
 ]
@@ -1300,7 +1281,7 @@ dependencies = [
 [[package]]
 name = "libsecp256k1-gen-genmult"
 version = "0.3.0"
-source = "git+https://github.com/brentstone/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
+source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "libsecp256k1-core",
 ]
@@ -1413,7 +1394,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
@@ -1462,7 +1443,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "quote",
  "syn",
@@ -1470,7 +1451,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "proptest",
@@ -1479,7 +1460,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -1497,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",
@@ -1505,7 +1486,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "hex",
@@ -1515,7 +1496,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",
@@ -1523,7 +1504,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm_for_tests"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "getrandom",
@@ -1532,15 +1513,6 @@ dependencies = [
  "namada_vm_env",
  "namada_vp_prelude",
  "wee_alloc",
-]
-
-[[package]]
-name = "ntapi"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28774a7fd2fbb4f0babd8237ce554b73af68021b5f695a3cebd6c59bac0980f"
-dependencies = [
- "winapi",
 ]
 
 [[package]]
@@ -2621,7 +2593,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6db9e6914ab8b1ae1c260a4ae7a49b6c5611b40328a735b21862567685e73255"
 dependencies = [
  "libc",
- "wasi",
+ "wasi 0.10.0+wasi-snapshot-preview1",
  "winapi",
 ]
 
@@ -2827,6 +2799,12 @@ name = "wasi"
 version = "0.10.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
+
+[[package]]
+name = "wasi"
+version = "0.11.0+wasi-snapshot-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "wasm-bindgen"
