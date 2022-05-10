@@ -2,7 +2,6 @@
 
 use std::str::FromStr;
 
-use prost::Message;
 use sha2::Digest;
 use thiserror::Error;
 
@@ -41,6 +40,7 @@ use crate::ibc::core::ics03_connection::version::Version as ConnVersion;
 use crate::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
+use crate::ibc::core::ics04_channel::commitment::PacketCommitment;
 use crate::ibc::core::ics04_channel::events::{
     AcknowledgePacket, CloseConfirm as ChanCloseConfirm,
     CloseInit as ChanCloseInit, OpenAck as ChanOpenAck,
@@ -624,11 +624,7 @@ pub trait IbcActions {
             packet.sequence,
         );
         let commitment = commitment(&packet);
-        let mut commitment_bytes = vec![];
-        commitment
-            .encode(&mut commitment_bytes)
-            .expect("encoding shouldn't fail");
-        self.write_ibc_data(&commitment_key, commitment_bytes);
+        self.write_ibc_data(&commitment_key, commitment.into_vec());
 
         let event = make_send_packet_event(packet).try_into().unwrap();
         self.emit_ibc_event(event);
@@ -658,7 +654,8 @@ pub trait IbcActions {
             msg.packet.sequence,
         );
         let ack = PacketAck::default().encode_to_vec();
-        self.write_ibc_data(&ack_key, ack.clone());
+        let ack_commitment = sha2::Sha256::digest(&ack).to_vec();
+        self.write_ibc_data(&ack_key, ack_commitment);
 
         // increment the next sequence receive
         let port_channel_id = port_channel_id(
@@ -1143,13 +1140,19 @@ pub fn packet_from_message(
 }
 
 /// Returns a commitment from the given packet
-pub fn commitment(packet: &Packet) -> String {
-    let input = format!(
-        "{:?},{:?},{:?}",
-        packet.timeout_timestamp, packet.timeout_height, packet.data,
-    );
-    let r = sha2::Sha256::digest(input.as_bytes());
-    format!("{:x}", r)
+pub fn commitment(packet: &Packet) -> PacketCommitment {
+    let mut input = packet
+        .timeout_timestamp
+        .nanoseconds()
+        .to_be_bytes()
+        .to_vec();
+    let revision_number = packet.timeout_height.revision_number.to_be_bytes();
+    input.append(&mut revision_number.to_vec());
+    let revision_height = packet.timeout_height.revision_height.to_be_bytes();
+    input.append(&mut revision_height.to_vec());
+    let data = sha2::Sha256::digest(&packet.data);
+    input.append(&mut data.to_vec());
+    sha2::Sha256::digest(&input).to_vec().into()
 }
 
 /// Returns a counterparty of a connection

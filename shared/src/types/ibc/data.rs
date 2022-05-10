@@ -333,8 +333,8 @@ pub struct PacketAck(pub Acknowledgement);
 impl PacketAck {
     /// Encode the ack
     pub fn encode_to_vec(&self) -> Vec<u8> {
-        // TODO encode as ibc-go
-        self.to_string().as_bytes().to_vec()
+        serde_json::to_vec(&self.0)
+            .expect("Encoding acknowledgement shouldn't fail")
     }
 }
 
@@ -349,7 +349,7 @@ impl Default for PacketAck {
 // for the string to be used by the current reader
 impl Display for PacketAck {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "ack")
+        write!(f, "{}", serde_json::to_string(&self.0).unwrap())
     }
 }
 

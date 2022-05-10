@@ -1178,7 +1178,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
-<<<<<<< HEAD
 name = "namada"
 version = "0.7.0"
 dependencies = [
@@ -1288,8 +1287,6 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> b507a141 (update ibc-rs to v0.14.0)
 name = "num-bigint"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

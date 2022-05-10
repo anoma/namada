@@ -344,13 +344,12 @@ mod tests {
     use crate::ibc::Height;
     use crate::ibc_proto::cosmos::base::v1beta1::Coin;
     use prost::Message;
-    use sha2::Digest;
-    use crate::tendermint_proto::Protobuf;
     use crate::tendermint::time::Time as TmTime;
+    use crate::tendermint_proto::Protobuf;
 
     use super::get_dummy_header;
     use super::super::handler::{
-        commitment_prefix, init_connection, make_create_client_event,
+        self, commitment_prefix, init_connection, make_create_client_event,
         make_open_ack_channel_event, make_open_ack_connection_event,
         make_open_confirm_channel_event, make_open_confirm_connection_event,
         make_open_init_channel_event, make_open_init_connection_event,
@@ -530,15 +529,6 @@ mod tests {
         write_log
             .write(key, seq_num.to_be_bytes().to_vec())
             .expect("write failed");
-    }
-
-    fn hash(packet: &Packet) -> String {
-        let input = format!(
-            "{:?},{:?},{:?}",
-            packet.timeout_timestamp, packet.timeout_height, packet.data,
-        );
-        let r = sha2::Sha256::digest(input.as_bytes());
-        format!("{:x}", r)
     }
 
     #[test]
@@ -1383,14 +1373,10 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = hash(&packet);
-        let mut commitment_bytes = vec![];
-        commitment
-            .encode(&mut commitment_bytes)
-            .expect("encoding shouldn't fail");
+        let commitment = handler::commitment(&packet);
         let key = commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
-            .write(&key, commitment_bytes)
+            .write(&key, commitment.into_vec())
             .expect("write failed");
 
         let tx_code = vec![];
@@ -1529,11 +1515,11 @@ mod tests {
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
         // insert a commitment
-        let commitment = hash(&packet);
+        let commitment = handler::commitment(&packet);
         let commitment_key =
             commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
-            .write(&commitment_key, commitment.as_bytes().to_vec())
+            .write(&commitment_key, commitment.into_vec())
             .expect("write failed");
         write_log.commit_tx();
         write_log.commit_block(&mut storage).expect("commit failed");
@@ -1620,18 +1606,14 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = hash(&packet);
+        let commitment = handler::commitment(&packet);
         let commitment_key = commitment_key(
             &packet.source_port,
             &packet.source_channel,
             sequence,
         );
-        let mut commitment_bytes = vec![];
-        commitment
-            .encode(&mut commitment_bytes)
-            .expect("encoding shouldn't fail");
         write_log
-            .write(&commitment_key, commitment_bytes)
+            .write(&commitment_key, commitment.into_vec())
             .expect("write failed");
         let event = make_send_packet_event(packet);
         write_log.set_ibc_event(event.try_into().unwrap());
