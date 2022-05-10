@@ -1,24 +1,24 @@
 # Testnet Launch Procedure
 
-## Desiderata
+## Desiderata
 
 - Simple process for deploying new software versions to testnets
 - Avoid debugging software on testnets (operationally expensive)
 - Integrated _as much as possible_ into a regular engineering workflow
 - Coordinating deployment with testnet operators
-    - Clear communication of latest version & how to operate
+  - Clear communication of latest version & how to operate
 - Written process (preflight checklist) to minimise chances of error
 
 ## Flavours of testnets
 
 - Internal testnet (Heliax-only)
-    - e.g. namada-internal-testnet-1
+  - e.g. namada-internal-testnet-1
 - Private (close-quarters) testnet (invite-only)
-    - Private invite-only channel on Discord
-    - Select group of participants (validators)
+  - Private invite-only channel on Discord
+  - Select group of participants (validators)
 - Public testnet
-    - Anyone can join, everything is public
-    - Still coordinated on Discord
+  - Anyone can join, everything is public
+  - Still coordinated on Discord
 
 ## Current process
 
