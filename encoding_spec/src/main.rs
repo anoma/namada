@@ -10,6 +10,11 @@
 //! Rebuild on changes with:
 //! `cargo watch -x "run --bin anoma_encoding_spec" -i docs`
 
+#![doc(html_favicon_url = "https://dev.anoma.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.anoma.net/master/rustdoc-logo.png")]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+
 use std::collections::HashSet;
 use std::io::Write;
 
