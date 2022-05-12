@@ -6,7 +6,9 @@ use anoma::ledger::governance::storage as gov_storage;
 use anoma::ledger::pos::{BondId, Bonds, Unbonds};
 use anoma::proto::Tx;
 use anoma::types::address::{xan as m1t, Address};
-use anoma::types::governance::{OfflineProposal, OfflineVote, Proposal};
+use anoma::types::governance::{
+    OfflineProposal, OfflineVote, Proposal, ProposalVote,
+};
 use anoma::types::key::*;
 use anoma::types::nft::{self, Nft, NftToken};
 use anoma::types::storage::Epoch;
@@ -670,10 +672,40 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             &proposal_start_epoch_key,
         )
         .await;
+
         match proposal_start_epoch {
             Some(epoch) => {
-                let delegation_addresses =
-                    rpc::get_all_validators(&client, epoch).await;
+                let mut delegation_addresses = rpc::get_delegators_delegation(
+                    &client,
+                    &voter_address,
+                    epoch,
+                )
+                .await;
+
+                // Optimize by quering if a vote from a validator
+                // is equal to ours. If so, we can avoid voting, but ONLY if we
+                // are  voting in the last third of the voting
+                // window, otherwise there's  the risk of the
+                // validator changing his vote and, effectively, invalidating
+                // the delgator's vote
+                if !args.tx.force
+                    && is_safe_voting_window(
+                        args.tx.ledger_address.clone(),
+                        &client,
+                        proposal_id,
+                        epoch,
+                    )
+                    .await
+                {
+                    delegation_addresses = filter_delegations(
+                        &client,
+                        delegation_addresses,
+                        proposal_id,
+                        &args.vote,
+                    )
+                    .await;
+                }
+
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: args.vote,
@@ -694,6 +726,71 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             }
         }
     }
+}
+
+/// Check if current epoch is in the last third of the voting period of the
+/// proposal. This ensures that it is safe to optimize the vote writing to
+/// storage.
+async fn is_safe_voting_window(
+    ledger_address: TendermintAddress,
+    client: &HttpClient,
+    proposal_id: u64,
+    proposal_start_epoch: Epoch,
+) -> bool {
+    let current_epoch = rpc::query_epoch(args::Query { ledger_address }).await;
+
+    let proposal_end_epoch_key =
+        gov_storage::get_voting_end_epoch_key(proposal_id);
+    let proposal_end_epoch =
+        rpc::query_storage_value::<Epoch>(client, &proposal_end_epoch_key)
+            .await;
+
+    match proposal_end_epoch {
+        Some(proposal_end_epoch) => {
+            !anoma::ledger::governance::vp::is_valid_validator_voting_period(
+                current_epoch,
+                proposal_start_epoch,
+                proposal_end_epoch,
+            )
+        }
+        None => {
+            eprintln!("Proposal end epoch is not in the storage.");
+            safe_exit(1)
+        }
+    }
+}
+
+/// Removes validators whose vote corresponds to that of the delegator (needless
+/// vote)
+async fn filter_delegations(
+    client: &HttpClient,
+    mut delegation_addresses: Vec<Address>,
+    proposal_id: u64,
+    delegator_vote: &ProposalVote,
+) -> Vec<Address> {
+    let mut remove_indexes: Vec<usize> = vec![];
+
+    for (index, validator_address) in delegation_addresses.iter().enumerate() {
+        let vote_key = gov_storage::get_vote_proposal_key(
+            proposal_id,
+            validator_address.to_owned(),
+            validator_address.to_owned(),
+        );
+
+        if let Some(validator_vote) =
+            rpc::query_storage_value::<ProposalVote>(client, &vote_key).await
+        {
+            if &validator_vote == delegator_vote {
+                remove_indexes.push(index);
+            }
+        }
+    }
+
+    for index in remove_indexes {
+        delegation_addresses.swap_remove(index);
+    }
+
+    delegation_addresses
 }
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
