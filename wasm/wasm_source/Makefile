@@ -51,7 +51,7 @@ fmt-check:
 # Linker flag "-s" for stripping (https://github.com/rust-lang/cargo/issues/3483#issuecomment-431209957)
 $(wasms): %:
 	RUSTFLAGS='-C link-arg=-s' $(cargo) build --release --target wasm32-unknown-unknown --features $@ && \
-	cp "./target/wasm32-unknown-unknown/release/namada_wasm.wasm" ../$@.wasm
+	cp "../target/wasm32-unknown-unknown/release/namada_wasm.wasm" ../$@.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_transfer`
 $(patsubst %,check_%,$(wasms)): check_%:
