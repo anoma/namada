@@ -63,7 +63,7 @@ use namada::ledger::storage::Sha256Hasher;
 use namada::proto::Tx;
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
-use namada::types::ibc::data::FungibleTokenPacketData;
+use namada::types::ibc::data::{FungibleTokenPacketData, PacketAck};
 use namada::types::ibc::IbcEvent;
 use namada::types::storage::{BlockHash, BlockHeight, Key};
 use namada::types::time::Rfc3339String;
@@ -610,7 +610,7 @@ pub fn msg_packet_recv(packet: Packet) -> MsgRecvPacket {
 pub fn msg_packet_ack(packet: Packet) -> MsgAcknowledgement {
     MsgAcknowledgement {
         packet,
-        acknowledgement: vec![0].into(),
+        acknowledgement: PacketAck::result_success().encode_to_vec().into(),
         proofs: dummy_proofs(),
         signer: Signer::new("test"),
     }
@@ -627,7 +627,7 @@ pub fn received_packet(
     let timeout_timestamp =
         (Timestamp::now() + Duration::from_secs(100)).unwrap();
     let data = FungibleTokenPacketData {
-        denomination: token,
+        denom: token,
         amount: 100u64.to_string(),
         sender: address::testing::gen_established_address().to_string(),
         receiver: receiver.to_string(),
