@@ -24,6 +24,7 @@ mod tests {
 
     use namada::ledger::pos::PosParams;
     use namada::proto::Tx;
+    use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -82,7 +83,8 @@ mod tests {
             staking_reward_key,
         }];
 
-        init_pos(&genesis_validators[..], &pos_params);
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
         tx_host_env::with(|tx_env| {
             if let Some(source) = &bond.source {
                 tx_env.spawn_accounts([source]);
