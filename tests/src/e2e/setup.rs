@@ -534,8 +534,9 @@ impl AnomaCmd {
         } else {
             let unread = String::from_utf8(found.before().to_vec())
                 .map_err(|e| eyre!(format!("{}", e)))?;
-            let matched = String::from_utf8(found.first().to_vec())
-                .map_err(|e| eyre!(format!("{}", e)))?;
+            let matched =
+                String::from_utf8(found.matches().next().unwrap().to_vec())
+                    .map_err(|e| eyre!(format!("{}", e)))?;
             Ok((unread, matched))
         }
     }
