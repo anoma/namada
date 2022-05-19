@@ -1,5 +1,5 @@
 //! storage helpers
-use super::ADDRESS;
+use super::vp::ADDRESS;
 use crate::types::storage::{Key, KeySeg};
 
 const QUEUE_STORAGE_KEY: &str = "queue";
