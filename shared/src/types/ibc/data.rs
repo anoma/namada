@@ -3,7 +3,6 @@ use std::convert::TryFrom;
 use std::fmt::{self, Display, Formatter};
 
 use prost::Message;
-use prost_types::Any;
 use thiserror::Error;
 
 use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
@@ -32,6 +31,7 @@ use crate::ibc::core::ics04_channel::packet::Receipt;
 use crate::ibc::core::ics26_routing::error::Error as Ics26Error;
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::downcast;
+use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::ibc::core::channel::v1::acknowledgement::Response;
 use crate::ibc_proto::ibc::core::channel::v1::Acknowledgement;
 
