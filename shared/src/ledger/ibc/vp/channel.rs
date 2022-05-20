@@ -37,11 +37,14 @@ use crate::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConf
 use crate::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
 use crate::ibc::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
 use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
-use crate::ibc::core::ics05_port::capabilities::Capability;
+use crate::ibc::core::ics05_port::capabilities::{
+    Capability, ChannelCapability,
+};
 use crate::ibc::core::ics05_port::context::PortReader;
 use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
+use crate::ibc::core::ics26_routing::context::ModuleId;
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::proofs::Proofs;
 use crate::ibc::timestamp::Timestamp;
@@ -134,7 +137,7 @@ where
         let channel = self
             .channel_end(&(
                 port_channel_id.port_id.clone(),
-                port_channel_id.channel_id.clone(),
+                port_channel_id.channel_id,
             ))
             .map_err(|_| {
                 Error::InvalidChannel(format!(
@@ -236,6 +239,13 @@ where
         tx_data: &[u8],
     ) -> Result<()> {
         let prev_channel = self.channel_end_pre(port_channel_id)?;
+        let conn_id = channel.connection_hops().get(0).ok_or_else(|| {
+            Error::InvalidChannel(format!(
+                "No connection for the channel: Port/Channel {}",
+                port_channel_id,
+            ))
+        })?;
+        let counterparty = channel.counterparty();
         match channel.state() {
             State::Open => match prev_channel.state() {
                 State::Init => {
@@ -246,7 +256,11 @@ where
                         channel,
                         &msg,
                     )?;
-                    let event = make_open_ack_channel_event(&msg);
+                    let event = make_open_ack_channel_event(
+                        &msg,
+                        conn_id,
+                        counterparty,
+                    );
                     self.check_emitted_event(event)
                         .map_err(|e| Error::IbcEvent(e.to_string()))
                 }
@@ -258,7 +272,11 @@ where
                         channel,
                         &msg,
                     )?;
-                    let event = make_open_confirm_channel_event(&msg);
+                    let event = make_open_confirm_channel_event(
+                        &msg,
+                        conn_id,
+                        counterparty,
+                    );
                     self.check_emitted_event(event)
                         .map_err(|e| Error::IbcEvent(e.to_string()))
                 }
@@ -301,7 +319,11 @@ where
                     Ics26Envelope::Ics4ChannelMsg(
                         ChannelMsg::ChannelCloseInit(msg),
                     ) => {
-                        let event = make_close_init_channel_event(&msg);
+                        let event = make_close_init_channel_event(
+                            &msg,
+                            conn_id,
+                            counterparty,
+                        );
                         self.check_emitted_event(event)
                             .map_err(|e| Error::IbcEvent(e.to_string()))
                     }
@@ -313,7 +335,11 @@ where
                             channel,
                             &msg,
                         )?;
-                        let event = make_close_confirm_channel_event(&msg);
+                        let event = make_close_confirm_channel_event(
+                            &msg,
+                            conn_id,
+                            counterparty,
+                        );
                         self.check_emitted_event(event)
                             .map_err(|e| Error::IbcEvent(e.to_string()))
                     }
@@ -399,7 +425,7 @@ where
         }
         let expected_my_side = Counterparty::new(
             port_channel_id.port_id.clone(),
-            Some(port_channel_id.channel_id.clone()),
+            Some(port_channel_id.channel_id),
         );
         self.verify_proofs(
             msg.proofs.height(),
@@ -418,7 +444,7 @@ where
     ) -> Result<()> {
         let expected_my_side = Counterparty::new(
             port_channel_id.port_id.clone(),
-            Some(port_channel_id.channel_id.clone()),
+            Some(port_channel_id.channel_id),
         );
         self.verify_proofs(
             msg.proofs.height(),
@@ -437,7 +463,7 @@ where
     ) -> Result<()> {
         let expected_my_side = Counterparty::new(
             port_channel_id.port_id.clone(),
-            Some(port_channel_id.channel_id.clone()),
+            Some(port_channel_id.channel_id),
         );
         self.verify_proofs(
             msg.proofs.height(),
@@ -668,7 +694,7 @@ where
     ) -> Ics04Result<ChannelEnd> {
         let port_channel_id = PortChannelId {
             port_id: port_channel_id.0.clone(),
-            channel_id: port_channel_id.1.clone(),
+            channel_id: port_channel_id.1,
         };
         let key = channel_key(&port_channel_id);
         match self.ctx.read_post(&key) {
@@ -751,12 +777,13 @@ where
     fn authenticated_capability(
         &self,
         port_id: &PortId,
-    ) -> Ics04Result<Capability> {
-        let (_, cap) = self
+    ) -> Ics04Result<ChannelCapability> {
+        let (_, port_cap) = self
             .lookup_module_by_port(port_id)
             .map_err(|_| Ics04Error::no_port_capability(port_id.clone()))?;
-        if self.authenticate(port_id.clone(), &cap) {
-            Ok(cap)
+        if self.authenticate(port_id.clone(), &port_cap) {
+            let cap: Capability = port_cap.into();
+            Ok(cap.into())
         } else {
             Err(Ics04Error::invalid_port_capability())
         }
@@ -768,7 +795,7 @@ where
     ) -> Ics04Result<Sequence> {
         let port_channel_id = PortChannelId {
             port_id: port_channel_id.0.clone(),
-            channel_id: port_channel_id.1.clone(),
+            channel_id: port_channel_id.1,
         };
         let key = next_sequence_send_key(&port_channel_id);
         self.get_sequence(&key).map_err(|_| {
@@ -785,7 +812,7 @@ where
     ) -> Ics04Result<Sequence> {
         let port_channel_id = PortChannelId {
             port_id: port_channel_id.0.clone(),
-            channel_id: port_channel_id.1.clone(),
+            channel_id: port_channel_id.1,
         };
         let key = next_sequence_recv_key(&port_channel_id);
         self.get_sequence(&key).map_err(|_| {
@@ -802,7 +829,7 @@ where
     ) -> Ics04Result<Sequence> {
         let port_channel_id = PortChannelId {
             port_id: port_channel_id.0.clone(),
-            channel_id: port_channel_id.1.clone(),
+            channel_id: port_channel_id.1,
         };
         let key = next_sequence_ack_key(&port_channel_id);
         self.get_sequence(&key).map_err(|_| {
@@ -928,6 +955,18 @@ where
             }
             Err(_) => Duration::default(),
         }
+    }
+
+    fn lookup_module_by_channel(
+        &self,
+        _channel_id: &ChannelId,
+        port_id: &PortId,
+    ) -> Ics04Result<(ModuleId, ChannelCapability)> {
+        let (module_id, port_cap) = self
+            .lookup_module_by_port(port_id)
+            .map_err(Ics04Error::ics05_port)?;
+        let cap: Capability = port_cap.into();
+        Ok((module_id, cap.into()))
     }
 }
 

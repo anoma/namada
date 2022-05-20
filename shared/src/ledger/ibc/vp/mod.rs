@@ -454,7 +454,7 @@ mod tests {
     }
 
     fn get_channel_id() -> ChannelId {
-        ChannelId::from_str("test_channel").unwrap()
+        ChannelId::from_str("channel-42").unwrap()
     }
 
     fn get_connection(conn_state: ConnState) -> ConnectionEnd {
@@ -494,9 +494,8 @@ mod tests {
     fn get_channel_counterparty() -> ChanCounterparty {
         let counterpart_port_id = PortId::from_str("counterpart_test_port")
             .expect("Creating a port ID failed");
-        let counterpart_channel_id =
-            ChannelId::from_str("counterpart_test_channel")
-                .expect("Creating a channel ID failed");
+        let counterpart_channel_id = ChannelId::from_str("channel-0")
+            .expect("Creating a channel ID failed");
         ChanCounterparty::new(counterpart_port_id, Some(counterpart_channel_id))
     }
 
@@ -696,7 +695,7 @@ mod tests {
         let msg = MsgConnectionOpenInit {
             client_id: get_client_id(),
             counterparty: get_conn_counterparty(),
-            version: ConnVersion::default(),
+            version: None,
             delay_period: Duration::new(100, 0),
             signer: Signer::new("account0"),
         };
@@ -745,7 +744,7 @@ mod tests {
         let msg = MsgConnectionOpenInit {
             client_id: get_client_id(),
             counterparty: get_conn_counterparty(),
-            version: ConnVersion::default(),
+            version: None,
             delay_period: Duration::new(100, 0),
             signer: Signer::new("account0"),
         };
@@ -1154,10 +1153,9 @@ mod tests {
         let msg = MsgChannelOpenAck {
             port_id: get_port_id(),
             channel_id: get_channel_id(),
-            counterparty_channel_id: get_channel_counterparty()
+            counterparty_channel_id: *get_channel_counterparty()
                 .channel_id()
-                .unwrap()
-                .clone(),
+                .unwrap(),
             counterparty_version: ChanVersion::ics20(),
             proofs,
             signer: Signer::new("account0"),
@@ -1166,8 +1164,13 @@ mod tests {
         // update the channel to Open
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
+        let conn_id = channel
+            .connection_hops()
+            .get(0)
+            .expect("connection should exist");
+        let counterparty = channel.counterparty();
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_ack_channel_event(&msg);
+        let event = make_open_ack_channel_event(&msg, conn_id, counterparty);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
@@ -1240,7 +1243,14 @@ mod tests {
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_confirm_channel_event(&msg);
+
+        let conn_id = channel
+            .connection_hops()
+            .get(0)
+            .expect("connection should exist");
+        let counterparty = channel.counterparty();
+        let event =
+            make_open_confirm_channel_event(&msg, conn_id, counterparty);
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
@@ -1436,7 +1446,7 @@ mod tests {
         let packet = Packet {
             sequence,
             source_port: counterparty.port_id().clone(),
-            source_channel: counterparty.channel_id().unwrap().clone(),
+            source_channel: *counterparty.channel_id().unwrap(),
             destination_port: get_port_id(),
             destination_channel: get_channel_id(),
             data: vec![0],
@@ -1502,7 +1512,7 @@ mod tests {
             source_port: get_port_id(),
             source_channel: get_channel_id(),
             destination_port: counterparty.port_id().clone(),
-            destination_channel: counterparty.channel_id().unwrap().clone(),
+            destination_channel: *counterparty.channel_id().unwrap(),
             data: vec![0],
             timeout_height: Height::new(0, 100),
             timeout_timestamp,
@@ -1536,7 +1546,7 @@ mod tests {
                 .unwrap();
         let msg = MsgAcknowledgement {
             packet,
-            acknowledgement: ack,
+            acknowledgement: ack.into(),
             proofs,
             signer: Signer::new("account0"),
         };
@@ -1675,7 +1685,7 @@ mod tests {
         let packet = Packet {
             sequence: Sequence::from(1),
             source_port: counterparty.port_id().clone(),
-            source_channel: counterparty.channel_id().unwrap().clone(),
+            source_channel: *counterparty.channel_id().unwrap(),
             destination_port: get_port_id(),
             destination_channel: get_channel_id(),
             data: vec![0],
