@@ -4,9 +4,12 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[cfg(feature = "ABCI")]
 use anoma::types::hash::Hash;
-use anoma::types::transaction::hash_tx;
+#[cfg(feature = "ABCI")]
 use anoma::types::storage::BlockHash;
+#[cfg(feature = "ABCI")]
+use anoma::types::transaction::hash_tx;
 use futures::future::FutureExt;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::RequestBeginBlock;
@@ -23,7 +26,6 @@ use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::response::TxResult;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
-
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -73,9 +75,11 @@ impl AbcippShim {
         )
     }
 
+    #[cfg(feature = "ABCI")]
     /// Get the hash of the txs in the block
     pub fn get_hash(&self) -> Hash {
-        let bytes: Vec<u8> = self.processed_txs
+        let bytes: Vec<u8> = self
+            .processed_txs
             .iter()
             .map(|processed| processed.tx.clone())
             .flatten()

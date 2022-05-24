@@ -383,6 +383,16 @@ async fn update_tendermint_config(
     config.instrumentation.namespace =
         tendermint_config.instrumentation_namespace;
 
+    // setup the events log
+    #[cfg(not(feature = "ABCI"))]
+    {
+        // keep events for one minute
+        config.rpc.event_log_window_size =
+            std::time::Duration::from_secs(59).into();
+        // we do not limit the size of the events log
+        config.rpc.event_log_max_items = 0;
+    }
+
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
@@ -400,8 +410,7 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    #[cfg(not(feature = "ABCI"))]
-    config: &config::Tendermint,
+    #[cfg(not(feature = "ABCI"))] config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -424,7 +433,8 @@ async fn write_tm_genesis(
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
     #[cfg(not(feature = "ABCI"))]
     {
-        genesis.consensus_params.timeout.commit = config.consensus_timeout_commit.into()
+        genesis.consensus_params.timeout.commit =
+            config.consensus_timeout_commit.into()
     }
 
     let mut file = OpenOptions::new()

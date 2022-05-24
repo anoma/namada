@@ -576,11 +576,9 @@ where
             Some(h) => Ok(TmConsensusState {
                 root: CommitmentRoot::from_bytes(h.hash.as_slice()),
                 timestamp: h.time.try_into().unwrap(),
-                next_validators_hash: h
-                    .next_validators_hash
-                    .to_vec()
-                    .try_into()
-                    .unwrap(),
+                next_validators_hash: tendermint::Hash::Sha256(
+                    *h.next_validators_hash,
+                ),
             }
             .wrap_any()),
             None => Err(Ics02Error::missing_raw_header()),

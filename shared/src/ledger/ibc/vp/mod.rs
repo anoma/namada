@@ -288,6 +288,17 @@ impl From<sequence::Error> for Error {
     }
 }
 
+/// A dummy header used for testing
+#[cfg(any(feature = "test", feature = "testing"))]
+pub fn get_dummy_header() -> crate::types::storage::Header {
+    use crate::tendermint::time::Time as TmTime;
+    crate::types::storage::Header {
+        hash: crate::types::hash::Hash([0; 32]),
+        time: TmTime::now().try_into().unwrap(),
+        next_validators_hash: crate::types::hash::Hash([0; 32]),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::time::Duration;
@@ -334,9 +345,9 @@ mod tests {
     use crate::ibc_proto::cosmos::base::v1beta1::Coin;
     use prost::Message;
     use sha2::Digest;
-    use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf;
 
+    use super::get_dummy_header;
     use super::super::handler::{
         commitment_prefix, init_connection, make_create_client_event,
         make_open_ack_channel_event, make_open_ack_connection_event,
@@ -424,14 +435,6 @@ mod tests {
         write_log.commit_tx();
 
         (storage, write_log)
-    }
-
-    fn get_dummy_header() -> crate::types::storage::Header {
-        crate::types::storage::Header {
-            hash: crate::types::hash::Hash([0; 32]),
-            time: TmTime::now().try_into().unwrap(),
-            next_validators_hash: crate::types::hash::Hash([0; 32]),
-        }
     }
 
     fn get_connection_id() -> ConnectionId {
