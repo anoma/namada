@@ -1,11 +1,45 @@
 //! Anoma client CLI.
 
+use anoma::types::token::Amount;
 use anoma_apps::cli;
 use anoma_apps::cli::cmds::*;
 use anoma_apps::client::{gossip, rpc, tx, utils};
 use color_eyre::eyre::Result;
 
 pub async fn main() -> Result<()> {
+    use std::str::FromStr;
+    let global_args = crate::cli::cli::args::Global {
+        chain_id: None,
+        base_dir: std::path::PathBuf::from_str(".anoma").unwrap(),
+        wasm_dir: None,
+        mode: Some(anoma_apps::config::TendermintMode::Full),
+    };
+    let ctx = anoma_apps::cli::Context::new(global_args);
+    let args = anoma_apps::cli::args::TxTransfer {
+        tx: anoma_apps::cli::args::Tx {
+            dry_run: false,
+            force: false,
+            broadcast_only: false,
+            ledger_address: tendermint_config::net::Address::Tcp {
+                peer_id: None,
+                host: "127.0.0.1".into(),
+                port: 26657,
+            },
+            initialized_account_alias: None,
+            fee_amount: Default::default(),
+            fee_token: anoma_apps::cli::context::WalletAddress::new(
+                "XAN".into(),
+            ),
+            gas_limit: 0.into(),
+            signing_key: None,
+            signer: None,
+        },
+        source: anoma_apps::cli::context::WalletAddress::new("Bertha".into()),
+        target: anoma_apps::cli::context::WalletAddress::new("Albert".into()),
+        token: anoma_apps::cli::context::WalletAddress::new("XAN".into()),
+        amount: Amount::from(10100000),
+    };
+    tx::submit_transfer(ctx, args).await;
     match cli::anoma_client_cli() {
         cli::AnomaClient::WithContext(cmd_box) => {
             let (cmd, ctx) = *cmd_box;
@@ -16,6 +50,7 @@ pub async fn main() -> Result<()> {
                     tx::submit_custom(ctx, args).await;
                 }
                 Sub::TxTransfer(TxTransfer(args)) => {
+                    println!("{:?}", args);
                     tx::submit_transfer(ctx, args).await;
                 }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {

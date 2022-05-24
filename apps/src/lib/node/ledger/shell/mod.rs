@@ -47,12 +47,12 @@ use borsh::BorshSerialize;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 #[cfg(not(feature = "ABCI"))]
+use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType,
     RequestPrepareProposal, ValidatorUpdate,
 };
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::public_key;
 #[cfg(not(feature = "ABCI"))]

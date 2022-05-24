@@ -54,12 +54,13 @@ pub use anoma::ledger::ibc::storage::{
     consensus_state_key, next_sequence_ack_key, next_sequence_recv_key,
     next_sequence_send_key, port_key, receipt_key,
 };
-use anoma::ledger::ibc::vp::{Ibc, IbcToken};
+use anoma::ledger::ibc::vp::{
+    get_dummy_header as tm_dummy_header, Ibc, IbcToken,
+};
 use anoma::ledger::native_vp::{Ctx, NativeVp};
 use anoma::ledger::storage::mockdb::MockDB;
 use anoma::ledger::storage::Sha256Hasher;
 use anoma::proto::Tx;
-use anoma::tendermint::time::Time as TmTime;
 use anoma::tendermint_proto::Protobuf;
 use anoma::types::address::{self, Address, InternalAddress};
 use anoma::types::ibc::data::FungibleTokenPacketData;
@@ -258,14 +259,6 @@ pub fn init_storage() -> (Address, Address) {
     let init_bal = Amount::from(1_000_000_000u64);
     tx_host_env::write(key.to_string(), init_bal);
     (token, account)
-}
-
-pub fn tm_dummy_header() -> anoma::types::storage::Header {
-    anoma::types::storage::Header {
-        hash: anoma::types::hash::Hash([0; 32]),
-        time: TmTime::now().try_into().unwrap(),
-        next_validators_hash: anoma::types::hash::Hash([0; 32]),
-    }
 }
 
 pub fn prepare_client() -> (ClientId, AnyClientState, HashMap<Key, Vec<u8>>) {

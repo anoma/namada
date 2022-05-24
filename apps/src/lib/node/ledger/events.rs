@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
@@ -9,6 +10,7 @@ use borsh::BorshSerialize;
 use tendermint_proto::abci::EventAttribute;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::EventAttribute;
+use thiserror::Error;
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
@@ -195,31 +197,52 @@ impl Attributes {
     }
 }
 
-impl From<&serde_json::Value> for Attributes {
-    fn from(json: &serde_json::Value) -> Self {
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Json missing `attributes` field")]
+    MissingAttributes,
+    #[error("Attributes missing key: {0}")]
+    MissingKey(String),
+    #[error("Attributes missing value: {0}")]
+    MissingValue(String),
+}
+
+impl TryFrom<&serde_json::Value> for Attributes {
+    type Error = Error;
+
+    fn try_from(json: &serde_json::Value) -> Result<Self, Self::Error> {
         let mut attributes = HashMap::new();
         let attrs: Vec<serde_json::Value> = serde_json::from_value(
             json.get("attributes")
-                .expect("Tendermint event missing attributes")
+                .ok_or(Error::MissingAttributes)?
                 .clone(),
         )
         .unwrap();
+
         for attr in attrs {
             attributes.insert(
                 serde_json::from_value(
                     attr.get("key")
-                        .expect("Attributes JSON missing key")
+                        .ok_or_else(|| {
+                            Error::MissingKey(
+                                serde_json::to_string(&attr).unwrap(),
+                            )
+                        })?
                         .clone(),
                 )
                 .unwrap(),
                 serde_json::from_value(
                     attr.get("value")
-                        .expect("Attributes JSON missing value")
+                        .ok_or_else(|| {
+                            Error::MissingValue(
+                                serde_json::to_string(&attr).unwrap(),
+                            )
+                        })?
                         .clone(),
                 )
                 .unwrap(),
             );
         }
-        Attributes(attributes)
+        Ok(Attributes(attributes))
     }
 }
