@@ -9,7 +9,7 @@ use std::iter::Iterator;
 
 use anoma::ledger::governance::parameters::GovParams;
 use anoma::ledger::governance::storage as gov_storage;
-use anoma::ledger::governance::utils::{Votes, VotePower};
+use anoma::ledger::governance::utils::Votes;
 use anoma::ledger::parameters::{storage as param_storage, EpochDuration};
 use anoma::ledger::pos::types::{
     Epoch as PosEpoch, VotingPower, WeightedValidator,
@@ -20,7 +20,7 @@ use anoma::ledger::pos::{
 use anoma::ledger::treasury::storage as treasury_storage;
 use anoma::types::address::Address;
 use anoma::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, TallyResult,
+    OfflineProposal, OfflineVote, ProposalVote, TallyResult, VotePower, ProposalResult,
 };
 use anoma::types::key::*;
 use anoma::types::storage::{Epoch, PrefixValue};
@@ -1671,7 +1671,7 @@ pub async fn compute_tally(
     client: &HttpClient,
     epoch: Epoch,
     votes: Votes,
-) -> TallyResult {
+) -> ProposalResult {
     let validators = get_all_validators(client, epoch).await;
     let total_stacked_tokens =
         get_total_staked_tokes(client, epoch, &validators).await;
@@ -1702,9 +1702,19 @@ pub async fn compute_tally(
     }
 
     if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
-        TallyResult::Passed
+        return ProposalResult{
+            result: TallyResult::Passed,
+            total_voting_power: total_stacked_tokens,
+            total_yay_power: total_yay_stacked_tokens,
+            total_nay_power: 0,
+        }
     } else {
-        TallyResult::Rejected
+        return ProposalResult{
+            result: TallyResult::Rejected,
+            total_voting_power: total_stacked_tokens,
+            total_yay_power: total_yay_stacked_tokens,
+            total_nay_power: 0,
+        }
     }
 }
 

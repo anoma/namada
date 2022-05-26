@@ -15,6 +15,8 @@ use super::key::SigScheme;
 use super::storage::Epoch;
 use super::transaction::governance::InitProposalData;
 
+pub type VotePower = u128;
+
 #[derive(
     Debug,
     Clone,
@@ -83,7 +85,28 @@ pub enum TallyResult {
     Unknown,
 }
 
-impl fmt::Display for TallyResult {
+/// The result with votes of a proposal
+pub struct ProposalResult {
+    pub result: TallyResult,
+    pub total_voting_power: VotePower,
+    pub total_yay_power: VotePower,
+    pub total_nay_power: VotePower,
+}
+
+impl Display for ProposalResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} with {} yay votes over {} ({:.2}%)",
+            self.result,
+            self.total_yay_power,
+            self.total_voting_power,
+            (self.total_yay_power / self.total_voting_power) * 100
+        )
+    }
+}
+
+impl Display for TallyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TallyResult::Passed => write!(f, "passed"),
