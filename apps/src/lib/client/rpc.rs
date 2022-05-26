@@ -13,11 +13,12 @@ use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use itertools::Itertools;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::governance::utils::Votes;
+use namada::ledger::governance::utils::{Votes, VotePower};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{
     Epoch as PosEpoch, VotingPower, WeightedValidator,
 };
+use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
@@ -414,7 +415,7 @@ pub async fn query_proposal_result(
                     }
                 };
             } else {
-                eprintln!("Either id or offline should be used as arguments.");
+                eprintln!("Either --proposal-id or --data-path should be provided as arguments.");
                 cli::safe_exit(1)
             }
         }
@@ -427,45 +428,8 @@ pub async fn query_protocol_parameters(
 ) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
-    println!("Goveranance parameters");
-    let key = gov_storage::get_max_proposal_code_size_key();
-    let max_proposal_code_size = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. proposal code size: {}",
-        "", max_proposal_code_size
-    );
-
-    let key = gov_storage::get_max_proposal_content_key();
-    let max_proposal_content = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. proposal content size: {}",
-        "", max_proposal_content
-    );
-
-    let key = gov_storage::get_min_proposal_fund_key();
-    let min_proposal_fund = query_storage_value::<Amount>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!("{:4}Min. proposal funds: {}", "", min_proposal_fund);
-
-    let key = gov_storage::get_min_proposal_grace_epoch_key();
-    let min_proposal_grace_epoch = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Min. proposal grace epoch: {}",
-        "", min_proposal_grace_epoch
-    );
-
-    let key = gov_storage::get_min_proposal_period_key();
-    let min_proposal_period = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!("{:4}Min. proposal period: {}", "", min_proposal_period);
+    let gov_parameters = get_governance_parameters(&client).await;
+    println!("Governance Parameters\n {:4}", gov_parameters);
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_storage_key();
@@ -1558,9 +1522,9 @@ pub async fn get_proposal_votes(
         query_storage_prefix::<ProposalVote>(client.clone(), vote_prefix_key)
             .await;
 
-    let mut yay_validators: HashMap<Address, Amount> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, Amount> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, Amount> = HashMap::new();
+    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, VotePower> = HashMap::new();
+    let mut nay_delegators: HashMap<Address, VotePower> = HashMap::new();
 
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
@@ -1570,7 +1534,7 @@ pub async fn get_proposal_votes(
             if vote.is_yay() && validators.contains(&voter_address) {
                 let amount =
                     get_validator_stake(client, epoch, &voter_address).await;
-                yay_validators.insert(voter_address, amount);
+                yay_validators.insert(voter_address, VotePower::from(amount));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
@@ -1587,9 +1551,9 @@ pub async fn get_proposal_votes(
                 .await;
                 if let Some(amount) = delegator_token_amount {
                     if vote.is_yay() {
-                        yay_delegators.insert(voter_address, amount);
+                        yay_delegators.insert(voter_address, VotePower::from(amount));
                     } else {
-                        nay_delegators.insert(voter_address, amount);
+                        nay_delegators.insert(voter_address, VotePower::from(amount));
                     }
                 }
             }
@@ -1612,9 +1576,9 @@ pub async fn get_proposal_offline_votes(
 
     let proposal_hash = proposal.compute_hash();
 
-    let mut yay_validators: HashMap<Address, Amount> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, Amount> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, Amount> = HashMap::new();
+    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, VotePower> = HashMap::new();
+    let mut nay_delegators: HashMap<Address, VotePower> = HashMap::new();
 
     for path in files {
         let file = File::open(&path).expect("Proposal file must exist.");
@@ -1641,7 +1605,7 @@ pub async fn get_proposal_offline_votes(
                 &proposal_vote.address,
             )
             .await;
-            yay_validators.insert(proposal_vote.address, amount);
+            yay_validators.insert(proposal_vote.address, VotePower::from(amount));
         } else if is_delegator_at(
             client,
             &proposal_vote.address,
@@ -1669,9 +1633,9 @@ pub async fn get_proposal_offline_votes(
                             "Delegation key should contain validator address.",
                         );
                     if proposal_vote.vote.is_yay() {
-                        yay_delegators.insert(validator_address, amount);
+                        yay_delegators.insert(validator_address, VotePower::from(amount));
                     } else {
-                        nay_delegators.insert(validator_address, amount);
+                        nay_delegators.insert(validator_address, VotePower::from(amount));
                     }
                 }
             }
@@ -1701,7 +1665,7 @@ pub async fn compute_tally(
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = Amount::from(0);
+    let mut total_yay_stacked_tokens = VotePower::from(0 as u64);
     for (_, amount) in yay_validators.clone().into_iter() {
         total_yay_stacked_tokens += amount;
     }
@@ -1788,8 +1752,8 @@ pub async fn get_total_staked_tokes(
     client: &HttpClient,
     epoch: Epoch,
     validators: &[Address],
-) -> token::Amount {
-    let mut total = Amount::from(0);
+) -> VotePower {
+    let mut total = VotePower::from(0 as u64);
 
     for validator in validators {
         total += get_validator_stake(client, epoch, validator).await;
@@ -1801,7 +1765,7 @@ async fn get_validator_stake(
     client: &HttpClient,
     epoch: Epoch,
     validator: &Address,
-) -> token::Amount {
+) -> VotePower {
     let total_voting_power_key = pos::validator_total_deltas_key(validator);
     let total_voting_power = query_storage_value::<pos::ValidatorTotalDeltas>(
         client,
@@ -1811,9 +1775,12 @@ async fn get_validator_stake(
     .expect("Total deltas should be defined");
     let epoched_total_voting_power = total_voting_power.get(epoch);
     if let Some(epoched_total_voting_power) = epoched_total_voting_power {
-        token::Amount::from_change(epoched_total_voting_power)
+        match VotePower::try_from(epoched_total_voting_power) {
+            Ok(voting_power) => voting_power,
+            Err(_) => VotePower::from(0 as u64),
+        }
     } else {
-        token::Amount::from(0)
+        VotePower::from(0 as u64)
     }
 }
 
@@ -1835,4 +1802,40 @@ pub async fn get_delegators_delegation(
         }
     }
     delegation_addresses
+}
+
+pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
+    let key = gov_storage::get_max_proposal_code_size_key();
+    let max_proposal_code_size = query_storage_value::<u64>(&client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_max_proposal_content_key();
+    let max_proposal_content_size = query_storage_value::<u64>(&client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_fund_key();
+    let min_proposal_fund = query_storage_value::<Amount>(&client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_grace_epoch_key();
+    let min_proposal_grace_epochs = query_storage_value::<u64>(&client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_period_key();
+    let min_proposal_period = query_storage_value::<u64>(&client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    return GovParams {
+        min_proposal_fund: u64::from(min_proposal_fund),
+        max_proposal_code_size: u64::from(max_proposal_code_size),
+        min_proposal_period: u64::from(min_proposal_period),
+        max_proposal_content_size: u64::from(max_proposal_content_size),
+        min_proposal_grace_epochs: u64::from(min_proposal_grace_epochs),
+    }
+
 }

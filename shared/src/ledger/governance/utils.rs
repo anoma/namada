@@ -15,15 +15,17 @@ use crate::types::governance::{ProposalVote, TallyResult};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
 
+pub type VotePower = u128;
+
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
 pub struct Votes {
     /// Map from validators who votes yay to their total stake amount
-    pub yay_validators: HashMap<Address, token::Amount>,
+    pub yay_validators: HashMap<Address, VotePower>,
     /// Map from delegation who votes yay to their bond amount
-    pub yay_delegators: HashMap<Address, token::Amount>,
+    pub yay_delegators: HashMap<Address, VotePower>,
     /// Map from delegation who votes nay to their bond amount
-    pub nay_delegators: HashMap<Address, token::Amount>,
+    pub nay_delegators: HashMap<Address, VotePower>,
 }
 
 /// Proposal errors
@@ -93,7 +95,7 @@ where
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = token::Amount::from(0);
+    let mut total_yay_stacked_tokens = VotePower::from(0 as u64);
     for (_, amount) in yay_validators.clone().into_iter() {
         total_yay_stacked_tokens += amount;
     }
@@ -110,7 +112,7 @@ where
         if yay_validators.contains_key(&validator_address) {
             total_yay_stacked_tokens -= amount;
         }
-    }
+    } 
 
     if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
         TallyResult::Passed
@@ -205,9 +207,9 @@ where
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
     let (vote_iter, _) = storage.iter_prefix(&vote_prefix_key);
 
-    let mut yay_validators: HashMap<Address, token::Amount> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, token::Amount> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, token::Amount> = HashMap::new();
+    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, VotePower> = HashMap::new();
+    let mut nay_delegators: HashMap<Address, VotePower> = HashMap::new();
 
     for (key, vote_bytes, _) in vote_iter {
         let vote_key = Key::from_str(key.as_str()).ok();
@@ -236,12 +238,12 @@ where
                                         if vote.is_yay() {
                                             yay_delegators.insert(
                                                 address.clone(),
-                                                amount,
+                                                VotePower::from(amount),
                                             );
                                         } else {
                                             nay_delegators.insert(
                                                 address.clone(),
-                                                amount,
+                                                VotePower::from(amount),
                                             );
                                         }
                                     }
@@ -300,14 +302,14 @@ fn get_total_stacked_tokens<D, H>(
     storage: &Storage<D, H>,
     epoch: Epoch,
     validators: &[Address],
-) -> token::Amount
+) -> VotePower
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
     return validators
         .iter()
-        .fold(token::Amount::from(0), |acc, validator| {
+        .fold(VotePower::from(0 as u64), |acc, validator| {
             acc + get_validator_stake(storage, epoch, validator)
         });
 }
@@ -316,7 +318,7 @@ fn get_validator_stake<D, H>(
     storage: &Storage<D, H>,
     epoch: Epoch,
     validator: &Address,
-) -> token::Amount
+) -> VotePower
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -331,9 +333,12 @@ where
         if let Some(total_delta) = total_delta {
             let epoched_total_delta = total_delta.get(epoch);
             if let Some(epoched_total_delta) = epoched_total_delta {
-                return token::Amount::from_change(epoched_total_delta);
+                match VotePower::try_from(epoched_total_delta) {
+                    Ok(voting_power) => return voting_power,
+                    Err(_) => return VotePower::from(0 as u64),
+                }
             }
         }
     }
-    token::Amount::from(0)
+    VotePower::from(0 as u64)
 }

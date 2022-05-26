@@ -10,6 +10,7 @@ mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
+mod governance;
 
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
