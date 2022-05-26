@@ -6,12 +6,12 @@
 //! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
+mod governance;
 mod init_chain;
 #[cfg(not(feature = "ABCI"))]
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
-mod governance;
 
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};

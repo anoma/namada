@@ -93,7 +93,7 @@ where
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = VotePower::from(0 as u64);
+    let mut total_yay_stacked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
         total_yay_stacked_tokens += amount;
     }
@@ -110,7 +110,7 @@ where
         if yay_validators.contains_key(&validator_address) {
             total_yay_stacked_tokens -= amount;
         }
-    } 
+    }
 
     if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
         TallyResult::Passed
@@ -307,7 +307,7 @@ where
 {
     return validators
         .iter()
-        .fold(VotePower::from(0 as u64), |acc, validator| {
+        .fold(VotePower::from(0_u64), |acc, validator| {
             acc + get_validator_stake(storage, epoch, validator)
         });
 }
@@ -333,10 +333,10 @@ where
             if let Some(epoched_total_delta) = epoched_total_delta {
                 match VotePower::try_from(epoched_total_delta) {
                     Ok(voting_power) => return voting_power,
-                    Err(_) => return VotePower::from(0 as u64),
+                    Err(_) => return VotePower::from(0_u64),
                 }
             }
         }
     }
-    VotePower::from(0 as u64)
+    VotePower::from(0_u64)
 }

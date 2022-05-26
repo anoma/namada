@@ -15,6 +15,7 @@ use super::key::SigScheme;
 use super::storage::Epoch;
 use super::transaction::governance::InitProposalData;
 
+/// Type alias for vote power
 pub type VotePower = u128;
 
 #[derive(
@@ -87,9 +88,13 @@ pub enum TallyResult {
 
 /// The result with votes of a proposal
 pub struct ProposalResult {
+    /// The result of a proposal
     pub result: TallyResult,
+    /// The total voting power during the proposal tally
     pub total_voting_power: VotePower,
+    /// The total voting power from yay votes
     pub total_yay_power: VotePower,
+    /// The total voting power from nay votes (unused at the moment)
     pub total_nay_power: VotePower,
 }
 
