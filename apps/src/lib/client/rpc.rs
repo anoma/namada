@@ -416,7 +416,10 @@ pub async fn query_proposal_result(
                     }
                 };
             } else {
-                eprintln!("Either --proposal-id or --data-path should be provided as arguments.");
+                eprintln!(
+                    "Either --proposal-id or --data-path should be provided \
+                     as arguments."
+                );
                 cli::safe_exit(1)
             }
         }
@@ -1552,9 +1555,11 @@ pub async fn get_proposal_votes(
                 .await;
                 if let Some(amount) = delegator_token_amount {
                     if vote.is_yay() {
-                        yay_delegators.insert(voter_address, VotePower::from(amount));
+                        yay_delegators
+                            .insert(voter_address, VotePower::from(amount));
                     } else {
-                        nay_delegators.insert(voter_address, VotePower::from(amount));
+                        nay_delegators
+                            .insert(voter_address, VotePower::from(amount));
                     }
                 }
             }
@@ -1606,7 +1611,8 @@ pub async fn get_proposal_offline_votes(
                 &proposal_vote.address,
             )
             .await;
-            yay_validators.insert(proposal_vote.address, VotePower::from(amount));
+            yay_validators
+                .insert(proposal_vote.address, VotePower::from(amount));
         } else if is_delegator_at(
             client,
             &proposal_vote.address,
@@ -1634,9 +1640,11 @@ pub async fn get_proposal_offline_votes(
                             "Delegation key should contain validator address.",
                         );
                     if proposal_vote.vote.is_yay() {
-                        yay_delegators.insert(validator_address, VotePower::from(amount));
+                        yay_delegators
+                            .insert(validator_address, VotePower::from(amount));
                     } else {
-                        nay_delegators.insert(validator_address, VotePower::from(amount));
+                        nay_delegators
+                            .insert(validator_address, VotePower::from(amount));
                     }
                 }
             }
@@ -1666,7 +1674,7 @@ pub async fn compute_tally(
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = VotePower::from(0 as u64);
+    let mut total_yay_stacked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
         total_yay_stacked_tokens += amount;
     }
@@ -1686,19 +1694,19 @@ pub async fn compute_tally(
     }
 
     if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
-        return ProposalResult{
+        return ProposalResult {
             result: TallyResult::Passed,
             total_voting_power: total_stacked_tokens,
             total_yay_power: total_yay_stacked_tokens,
             total_nay_power: 0,
-        }
+        };
     } else {
-        return ProposalResult{
+        return ProposalResult {
             result: TallyResult::Rejected,
             total_voting_power: total_stacked_tokens,
             total_yay_power: total_yay_stacked_tokens,
             total_nay_power: 0,
-        }
+        };
     }
 }
 
@@ -1764,7 +1772,7 @@ pub async fn get_total_staked_tokes(
     epoch: Epoch,
     validators: &[Address],
 ) -> VotePower {
-    let mut total = VotePower::from(0 as u64);
+    let mut total = VotePower::from(0_u64);
 
     for validator in validators {
         total += get_validator_stake(client, epoch, validator).await;
@@ -1788,10 +1796,10 @@ async fn get_validator_stake(
     if let Some(epoched_total_voting_power) = epoched_total_voting_power {
         match VotePower::try_from(epoched_total_voting_power) {
             Ok(voting_power) => voting_power,
-            Err(_) => VotePower::from(0 as u64),
+            Err(_) => VotePower::from(0_u64),
         }
     } else {
-        VotePower::from(0 as u64)
+        VotePower::from(0_u64)
     }
 }
 
@@ -1847,6 +1855,5 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
         min_proposal_period: u64::from(min_proposal_period),
         max_proposal_content_size: u64::from(max_proposal_content_size),
         min_proposal_grace_epochs: u64::from(min_proposal_grace_epochs),
-    }
-
+    };
 }

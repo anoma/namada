@@ -541,7 +541,9 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     })
     .await;
 
-    if proposal.voting_start_epoch <= current_epoch || proposal.voting_start_epoch.0 % 3 == 0 {
+    if proposal.voting_start_epoch <= current_epoch
+        || proposal.voting_start_epoch.0 % 3 == 0
+    {
         eprintln!(
             "Invalid proposal start epoch: {} must be greater than current \
              epoch {} and a multiple of 3",
@@ -550,11 +552,13 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         safe_exit(1)
     } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
         || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            < goverance_parameters.min_proposal_period || proposal.voting_end_epoch.0 % 3 == 0
+            < goverance_parameters.min_proposal_period
+        || proposal.voting_end_epoch.0 % 3 == 0
     {
         eprintln!(
             "Invalid proposal end epoch: difference between proposal start \
-             and end epoch must be at least {} and end epoch must be a multiple of 3",
+             and end epoch must be at least {} and end epoch must be a \
+             multiple of 3",
             goverance_parameters.min_proposal_period
         );
         safe_exit(1)
@@ -603,7 +607,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
             .await
             .unwrap_or_default();
-        if balance < token::Amount::from(goverance_parameters.min_proposal_fund) {
+        if balance < token::Amount::from(goverance_parameters.min_proposal_fund)
+        {
             eprintln!(
                 "Address {} doesn't have enough funds.",
                 &proposal.author
