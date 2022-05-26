@@ -13,7 +13,8 @@ use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use itertools::Itertools;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::governance::utils::{Votes, VotePower};
+use namada::ledger::governance::utils::Votes;
+use namada::types::governance::VotePower;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{
     Epoch as PosEpoch, VotingPower, WeightedValidator,
@@ -25,7 +26,7 @@ use namada::ledger::pos::{
 use namada::ledger::treasury::storage as treasury_storage;
 use namada::types::address::Address;
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, TallyResult,
+    OfflineProposal, OfflineVote, ProposalVote, TallyResult, ProposalResult,
 };
 use namada::types::key::*;
 use namada::types::storage::{Epoch, PrefixValue};
@@ -1654,7 +1655,7 @@ pub async fn compute_tally(
     client: &HttpClient,
     epoch: Epoch,
     votes: Votes,
-) -> TallyResult {
+) -> ProposalResult {
     let validators = get_all_validators(client, epoch).await;
     let total_stacked_tokens =
         get_total_staked_tokes(client, epoch, &validators).await;
@@ -1685,9 +1686,19 @@ pub async fn compute_tally(
     }
 
     if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
-        TallyResult::Passed
+        return ProposalResult{
+            result: TallyResult::Passed,
+            total_voting_power: total_stacked_tokens,
+            total_yay_power: total_yay_stacked_tokens,
+            total_nay_power: 0,
+        }
     } else {
-        TallyResult::Rejected
+        return ProposalResult{
+            result: TallyResult::Rejected,
+            total_voting_power: total_stacked_tokens,
+            total_yay_power: total_yay_stacked_tokens,
+            total_nay_power: 0,
+        }
     }
 }
 

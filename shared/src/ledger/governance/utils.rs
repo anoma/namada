@@ -11,11 +11,9 @@ use crate::ledger::pos;
 use crate::ledger::pos::{BondId, Bonds, ValidatorSets, ValidatorTotalDeltas};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::types::address::Address;
-use crate::types::governance::{ProposalVote, TallyResult};
+use crate::types::governance::{ProposalVote, TallyResult, VotePower};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
-
-pub type VotePower = u128;
 
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
