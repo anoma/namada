@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::storage as gov_storage;
@@ -28,6 +30,22 @@ pub struct GovParams {
     pub max_proposal_content_size: u64,
     /// Minimum epochs between end and grace epochs
     pub min_proposal_grace_epochs: u64,
+}
+
+impl Display for GovParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Min. proposal fund: {}\nMax. proposal code size: {}\nMin. \
+             proposal period: {}\nMax. proposal content size: {}\nMin. \
+             proposal grace epochs: {}",
+            self.min_proposal_fund,
+            self.max_proposal_code_size,
+            self.min_proposal_period,
+            self.max_proposal_content_size,
+            self.min_proposal_grace_epochs
+        )
+    }
 }
 
 impl Default for GovParams {
