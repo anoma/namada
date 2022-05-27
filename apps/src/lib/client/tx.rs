@@ -541,7 +541,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     })
     .await;
 
-    if proposal.voting_start_epoch >= current_epoch
+    if proposal.voting_start_epoch <= current_epoch
         || proposal.voting_start_epoch.0 % 3 == 0
     {
         eprintln!(
