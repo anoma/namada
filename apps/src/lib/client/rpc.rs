@@ -1824,35 +1824,35 @@ pub async fn get_delegators_delegation(
 
 pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
     let key = gov_storage::get_max_proposal_code_size_key();
-    let max_proposal_code_size = query_storage_value::<u64>(&client, &key)
+    let max_proposal_code_size = query_storage_value::<u64>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_max_proposal_content_key();
-    let max_proposal_content_size = query_storage_value::<u64>(&client, &key)
+    let max_proposal_content_size = query_storage_value::<u64>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_min_proposal_fund_key();
-    let min_proposal_fund = query_storage_value::<Amount>(&client, &key)
+    let min_proposal_fund = query_storage_value::<Amount>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_min_proposal_grace_epoch_key();
-    let min_proposal_grace_epochs = query_storage_value::<u64>(&client, &key)
+    let min_proposal_grace_epochs = query_storage_value::<u64>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_min_proposal_period_key();
-    let min_proposal_period = query_storage_value::<u64>(&client, &key)
+    let min_proposal_period = query_storage_value::<u64>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     GovParams {
         min_proposal_fund: u64::from(min_proposal_fund),
-        max_proposal_code_size: u64::from(max_proposal_code_size),
-        min_proposal_period: u64::from(min_proposal_period),
-        max_proposal_content_size: u64::from(max_proposal_content_size),
-        min_proposal_grace_epochs: u64::from(min_proposal_grace_epochs),
+        max_proposal_code_size,
+        min_proposal_period,
+        max_proposal_content_size,
+        min_proposal_grace_epochs,
     }
 }
