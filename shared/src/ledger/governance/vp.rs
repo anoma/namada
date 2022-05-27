@@ -87,21 +87,23 @@ where
     let author = read(ctx, &author_key, ReadType::POST).ok();
     let has_pre_author = ctx.has_key_pre(&author_key).ok();
     match (has_pre_author, author) {
-        (Some(has_pre_author), Some(author)) => {
-            match author {
-                Address::Established(_) => {
-                    let address_exist_key = Key::validity_predicate(&author);
-                    let address_exist = ctx.has_key_post(&address_exist_key).ok();
-                    if let Some(address_exist) = address_exist {
-                        !has_pre_author && verifiers.contains(&author) && address_exist
-                    } else {
-                        false
-                    }
-                },
-                Address::Implicit(_) => !has_pre_author && verifiers.contains(&author),
-                Address::Internal(_) => return false,
+        (Some(has_pre_author), Some(author)) => match author {
+            Address::Established(_) => {
+                let address_exist_key = Key::validity_predicate(&author);
+                let address_exist = ctx.has_key_post(&address_exist_key).ok();
+                if let Some(address_exist) = address_exist {
+                    !has_pre_author
+                        && verifiers.contains(&author)
+                        && address_exist
+                } else {
+                    false
+                }
             }
-        }
+            Address::Implicit(_) => {
+                !has_pre_author && verifiers.contains(&author)
+            }
+            Address::Internal(_) => return false,
+        },
         _ => false,
     }
 }
