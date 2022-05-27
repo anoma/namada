@@ -700,7 +700,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     } else {
         let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
         let current_epoch =
-            rpc::query_epoch(args::Query { ledger_address }).await;
+            rpc::query_epoch(args::Query { ledger_address: args.tx.ledger_address.clone() }).await;
 
         let voter_address = ctx.get(signer);
         let proposal_id = args.proposal_id.unwrap();
@@ -717,7 +717,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 if current_epoch < epoch {
                     eprintln!(
                         "Current epoch {} is not greater than proposal start \
-                         epoch ",
+                         epoch {}",
                         current_epoch, epoch
                     );
                     safe_exit(1)
