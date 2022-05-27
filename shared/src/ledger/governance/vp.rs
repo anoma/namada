@@ -102,7 +102,7 @@ where
             Address::Implicit(_) => {
                 !has_pre_author && verifiers.contains(&author)
             }
-            Address::Internal(_) => return false,
+            Address::Internal(_) => false,
         },
         _ => false,
     }
