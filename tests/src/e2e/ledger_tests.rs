@@ -1174,7 +1174,10 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string("Transaction is invalid.")?;
+    client.exp_string(
+        "Invalid proposal end epoch: difference between proposal start and \
+         end epoch must be at least 3 and end epoch must be a multiple of 3",
+    )?;
     client.assert_success();
 
     // 7. Check invalid proposal was not accepted
