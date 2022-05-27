@@ -1402,8 +1402,8 @@ fn proposal_offline() -> Result<()> {
             },
             "author": albert,
             "voting_start_epoch": 3,
-            "voting_end_epoch": 6,
-            "grace_epoch": 6
+            "voting_end_epoch": 9,
+            "grace_epoch": 18
         }
     );
     generate_proposal_json(
