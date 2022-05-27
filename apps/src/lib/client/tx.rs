@@ -541,13 +541,15 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     })
     .await;
 
-    if proposal.voting_start_epoch <= current_epoch
+    if proposal.voting_start_epoch >= current_epoch
         || proposal.voting_start_epoch.0 % 3 == 0
     {
         eprintln!(
             "Invalid proposal start epoch: {} must be greater than current \
-             epoch {} and a multiple of 3",
-            proposal.voting_start_epoch, current_epoch
+             epoch {} and a multiple of {}",
+            proposal.voting_start_epoch,
+            current_epoch,
+            goverance_parameters.min_proposal_period
         );
         safe_exit(1)
     } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
@@ -558,7 +560,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         eprintln!(
             "Invalid proposal end epoch: difference between proposal start \
              and end epoch must be at least {} and end epoch must be a \
-             multiple of 3",
+             multiple of {}",
+            goverance_parameters.min_proposal_period,
             goverance_parameters.min_proposal_period
         );
         safe_exit(1)

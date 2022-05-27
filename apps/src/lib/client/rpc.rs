@@ -1538,7 +1538,7 @@ pub async fn get_proposal_votes(
             if vote.is_yay() && validators.contains(&voter_address) {
                 let amount =
                     get_validator_stake(client, epoch, &voter_address).await;
-                yay_validators.insert(voter_address, VotePower::from(amount));
+                yay_validators.insert(voter_address, amount);
             } else if !validators.contains(&voter_address) {
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
@@ -1611,8 +1611,7 @@ pub async fn get_proposal_offline_votes(
                 &proposal_vote.address,
             )
             .await;
-            yay_validators
-                .insert(proposal_vote.address, VotePower::from(amount));
+            yay_validators.insert(proposal_vote.address, amount);
         } else if is_delegator_at(
             client,
             &proposal_vote.address,
@@ -1694,19 +1693,19 @@ pub async fn compute_tally(
     }
 
     if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
-        return ProposalResult {
+        ProposalResult {
             result: TallyResult::Passed,
             total_voting_power: total_stacked_tokens,
             total_yay_power: total_yay_stacked_tokens,
             total_nay_power: 0,
-        };
+        }
     } else {
-        return ProposalResult {
+        ProposalResult {
             result: TallyResult::Rejected,
             total_voting_power: total_stacked_tokens,
             total_yay_power: total_yay_stacked_tokens,
             total_nay_power: 0,
-        };
+        }
     }
 }
 
@@ -1849,11 +1848,11 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
         .await
         .expect("Parameter should be definied.");
 
-    return GovParams {
+    GovParams {
         min_proposal_fund: u64::from(min_proposal_fund),
         max_proposal_code_size: u64::from(max_proposal_code_size),
         min_proposal_period: u64::from(min_proposal_period),
         max_proposal_content_size: u64::from(max_proposal_content_size),
         min_proposal_grace_epochs: u64::from(min_proposal_grace_epochs),
-    };
+    }
 }
