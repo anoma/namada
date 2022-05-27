@@ -542,10 +542,17 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     .await;
 
     if proposal.voting_start_epoch <= current_epoch
-        || proposal.voting_start_epoch.0 % goverance_parameters.min_proposal_period != 0
+        || proposal.voting_start_epoch.0
+            % goverance_parameters.min_proposal_period
+            != 0
     {
         println!("{}", proposal.voting_start_epoch <= current_epoch);
-        println!("{}", proposal.voting_start_epoch.0 % goverance_parameters.min_proposal_period == 0);
+        println!(
+            "{}",
+            proposal.voting_start_epoch.0
+                % goverance_parameters.min_proposal_period
+                == 0
+        );
         eprintln!(
             "Invalid proposal start epoch: {} must be greater than current \
              epoch {} and a multiple of {}",
@@ -692,6 +699,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         }
     } else {
         let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        let current_epoch =
+            rpc::query_epoch(args::Query { ledger_address }).await;
 
         let voter_address = ctx.get(signer);
         let proposal_id = args.proposal_id.unwrap();
@@ -705,6 +714,14 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
 
         match proposal_start_epoch {
             Some(epoch) => {
+                if current_epoch < epoch {
+                    eprintln!(
+                        "Current epoch {} is not greater than proposal start \
+                         epoch ",
+                        current_epoch, epoch
+                    );
+                    safe_exit(1)
+                }
                 let mut delegation_addresses = rpc::get_delegators_delegation(
                     &client,
                     &voter_address,
@@ -752,7 +769,12 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 process_tx(ctx, &args.tx, tx, Some(signer)).await;
             }
             None => {
-                eprintln!("Proposal start epoch is not in the storage.")
+                eprintln!(
+                    "Proposal start epoch is for proposal id {} is not \
+                     definied.",
+                    proposal_id
+                );
+                safe_exit(1)
             }
         }
     }
