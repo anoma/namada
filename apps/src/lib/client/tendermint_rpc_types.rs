@@ -2,10 +2,31 @@ use anoma::proto::Tx;
 use anoma::types::address::Address;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
+use thiserror::Error;
 
 use crate::cli::safe_exit;
 #[cfg(not(feature = "ABCI"))]
 use crate::node::ledger::events::Attributes;
+
+/// Errors from interacting with Tendermint's jsonrpc endpoint
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Invalid address given to JSON RPC client: {0}")]
+    Address(String),
+    #[error("Error in sending JSON RPC request to Tendermint: {0}")]
+    Send(curl::Error),
+    #[cfg(not(feature = "ABCI"))]
+    #[error("Received an error response from Tendermint: {0:?}")]
+    Rpc(tendermint_rpc::response_error::ResponseError),
+    #[error("Received malformed JSON response from Tendermint")]
+    MalformedJson,
+    #[error("Received an empty response from Tendermint")]
+    EmptyResponse,
+    #[error("Could not deserialize JSON response: {0}")]
+    Deserialize(serde_json::Error),
+    #[error("Could not find event for the given hash: {0}")]
+    NotFound(String),
+}
 
 /// Data needed for broadcasting a tx and
 /// monitoring its progress on chain
@@ -13,6 +34,7 @@ use crate::node::ledger::events::Attributes;
 /// Txs may be either a dry run or else
 /// they should be encrypted and included
 /// in a wrapper.
+#[derive(Clone)]
 pub enum TxBroadcastData {
     DryRun(Tx),
     Wrapper {
@@ -119,7 +141,6 @@ mod params {
 
     use serde::ser::SerializeTuple;
     use serde::{Deserialize, Serializer};
-    use serde_json::value::RawValue;
     use tendermint_rpc::query::Query;
 
     use super::*;
@@ -157,7 +178,7 @@ mod params {
     /// Struct to help serialize [`EventParams`]
     #[derive(Serialize)]
     struct Filter {
-        filter: String,
+        query: String,
     }
 
     impl Serialize for EventParams {
@@ -167,7 +188,7 @@ mod params {
         {
             let mut ser = serializer.serialize_tuple(5)?;
             ser.serialize_element(&Filter {
-                filter: self.filter.to_string(),
+                query: self.filter.to_string(),
             })?;
             ser.serialize_element(&self.max_results)?;
             ser.serialize_element(self.after.0.as_str())?;
@@ -191,24 +212,6 @@ mod params {
                 before: Default::default(),
                 wait_time,
             }
-        }
-
-        /// Convert this into a list of raw json values to give to the
-        /// JSON RPC client.
-        pub fn to_params(&self) -> [Box<RawValue>; 5] {
-            [
-                RawValue::from_string(format!(
-                    "{{\"filter\": \"{}\"}}",
-                    self.filter.to_string()
-                ))
-                .unwrap(),
-                RawValue::from_string(self.max_results.to_string()).unwrap(),
-                RawValue::from_string(format!("\"{}\"", self.after.0)).unwrap(),
-                RawValue::from_string(format!("\"{}\"", self.before.0))
-                    .unwrap(),
-                RawValue::from_string(self.wait_time.as_nanos().to_string())
-                    .unwrap(),
-            ]
         }
     }
 
@@ -238,7 +241,6 @@ mod params {
         #[allow(dead_code)]
         pub cursor: Cursor,
         /// The event type
-        #[allow(dead_code)]
         pub event: String,
         /// The raw event value
         pub data: EventData,
@@ -259,12 +261,27 @@ mod params {
     /// Returns none if the event is not found.
     #[cfg(not(feature = "ABCI"))]
     pub fn parse(reply: EventReply, tx_hash: &str) -> Option<TxResponse> {
-        println!("{}", serde_json::to_string_pretty(&reply).unwrap());
-        let mut event = if let Some(event) =
-            reply.items.iter().find_map(|event| {
-                if let Some(attrs) =
-                    Attributes::try_from(&event.data.value).ok()
-                {
+        let mut event = reply
+            .items
+            .iter()
+            .filter_map(|event| {
+                if event.event == *"NewBlockHeader" {
+                    let events: Option<Vec<serde_json::Value>> =
+                        event.data.value.get("result_finalize_block").map(
+                            |res| match res.get("events") {
+                                Some(v) => serde_json::from_value(v.clone())
+                                    .unwrap_or_default(),
+                                None => vec![],
+                            },
+                        );
+                    events
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .find_map(|attr| {
+                if let Ok(attrs) = Attributes::try_from(&attr) {
                     match attrs.get("hash") {
                         Some(hash) if hash == tx_hash => Some(attrs),
                         _ => None,
@@ -272,11 +289,7 @@ mod params {
                 } else {
                     None
                 }
-            }) {
-            event
-        } else {
-            return None;
-        };
+            })?;
 
         let info = event.take("info").unwrap();
         let log = event.take("log").unwrap();
@@ -312,7 +325,7 @@ mod params {
         #[test]
         fn test_serialize_event_params() {
             let params = EventParams {
-                filter: Query::from(EventType::NewBlock),
+                filter: Query::from(EventType::NewBlockHeader),
                 max_results: 5,
                 after: Cursor("16CCC798FB5F4670-0123".into()),
                 before: Default::default(),
@@ -320,26 +333,8 @@ mod params {
             };
             assert_eq!(
                 serde_json::to_string(&params).expect("Test failed"),
-                r#"[{"filter":"tm.event = 'NewBlock'"},5,"16CCC798FB5F4670-0123","",59000000000]"#
+                r#"[{"query":"tm.event = 'NewBlockHeader'"},5,"16CCC798FB5F4670-0123","",59000000000]"#
             )
-        }
-
-        /// Test that [`EventParams`] are parsed into a params array correctly
-        #[test]
-        fn test_to_params() {
-            let params = EventParams {
-                filter: Query::from(EventType::NewBlock),
-                max_results: 5,
-                after: Cursor("16CCC798FB5F4670-0123".into()),
-                before: Default::default(),
-                wait_time: Duration::from_secs(59),
-            };
-            let args = params.to_params();
-            assert_eq!(args[0].get(), r#"{"filter": "tm.event = 'NewBlock'"}"#);
-            assert_eq!(args[1].get(), "5");
-            assert_eq!(args[2].get(), "\"16CCC798FB5F4670-0123\"");
-            assert_eq!(args[3].get(), "\"\"");
-            assert_eq!(args[4].get(), "59000000000");
         }
     }
 }

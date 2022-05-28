@@ -1012,6 +1012,8 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     for task in tasks.into_iter() {
         task.join().unwrap()?;
     }
+    // Wait to commit a block
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     Ok(())
 }

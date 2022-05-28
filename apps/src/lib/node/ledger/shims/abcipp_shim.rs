@@ -81,8 +81,7 @@ impl AbcippShim {
         let bytes: Vec<u8> = self
             .processed_txs
             .iter()
-            .map(|processed| processed.tx.clone())
-            .flatten()
+            .flat_map(|processed| processed.tx.clone())
             .collect();
         hash_tx(bytes.as_slice())
     }
