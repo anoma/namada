@@ -346,6 +346,7 @@ mod tests {
     use prost::Message;
     use sha2::Digest;
     use crate::tendermint_proto::Protobuf;
+    use crate::tendermint::time::Time as TmTime;
 
     use super::get_dummy_header;
     use super::super::handler::{

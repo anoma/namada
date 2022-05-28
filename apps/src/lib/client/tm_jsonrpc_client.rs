@@ -1,33 +1,41 @@
 #[cfg(not(feature = "ABCI"))]
 mod tm_jsonrpc {
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::convert::TryFrom;
+    use std::fmt::{Display, Formatter};
     use std::ops::{Deref, DerefMut};
 
     use curl::easy::{Easy2, Handler, WriteError};
     use serde::{Deserialize, Serialize};
+    use tendermint_config::net::Address as TendermintAddress;
     use tendermint_rpc::query::Query;
-    use thiserror::Error;
 
     use crate::client::tendermint_rpc_types::{
-        parse, Cursor, EventParams, EventReply, TxResponse,
+        parse, Error, EventParams, EventReply, TxResponse,
     };
 
-    const JSONRPC_PORT: u16 = 26657;
+    pub struct JsonRpcAddress<'a> {
+        host: &'a str,
+        port: u16,
+    }
 
-    #[derive(Error, Debug)]
-    pub enum Error {
-        #[error("Error in sending JSON RPC request to Tendermint: {0}")]
-        SendError(curl::Error),
-        #[error("Received an error response from Tendermint: {0:?}")]
-        RpcError(tendermint_rpc::response_error::ResponseError),
-        #[error("Received malformed JSON response from Tendermint")]
-        MalformedJson,
-        #[error("Received an empty response from Tendermint")]
-        EmptyResponse,
-        #[error("Could not deserialize JSON response: {0}")]
-        DeserializeError(serde_json::Error),
-        #[error("Could not find event for the given hash: {0}")]
-        NotFound(String),
+    impl<'a> TryFrom<&'a TendermintAddress> for JsonRpcAddress<'a> {
+        type Error = Error;
+
+        fn try_from(value: &'a TendermintAddress) -> Result<Self, Self::Error> {
+            match value {
+                TendermintAddress::Tcp { host, port, .. } => Ok(Self {
+                    host: host.as_str(),
+                    port: *port,
+                }),
+                _ => Err(Error::Address(value.to_string())),
+            }
+        }
+    }
+
+    impl<'a> Display for JsonRpcAddress<'a> {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}:{}", self.host, self.port)
+        }
     }
 
     /// The body of a json rpc request
@@ -68,7 +76,7 @@ mod tm_jsonrpc {
         /// Convert the response into a result type
         pub fn into_result(self) -> Result<EventReply, Error> {
             if let Some(e) = self.error {
-                Err(Error::RpcError(e))
+                Err(Error::Rpc(e))
             } else if let Some(result) = self.result {
                 Ok(result)
             } else {
@@ -96,8 +104,6 @@ mod tm_jsonrpc {
         url: &'a str,
         /// The request body
         request: Request,
-        /// The latest event returned; used for paging through the event log
-        newest: Cursor,
         /// The hash of the tx whose corresponding event is being searched for.
         hash: &'a str,
     }
@@ -123,7 +129,6 @@ mod tm_jsonrpc {
                 inner: Easy2::new(Collector::default()),
                 url,
                 request,
-                newest: Default::default(),
                 hash,
             };
             client.reset();
@@ -131,50 +136,39 @@ mod tm_jsonrpc {
         }
 
         /// Send a request to Tendermint
-        /// This pages through the event log 20 events at a time
-        /// until either
-        ///   1. The event is found and thus returned
-        ///   2. The end of the log is reached
+        ///
+        /// Takes the 10 newest block header events and searches for
+        /// the relevant event among them.
         pub fn send(&mut self) -> Result<TxResponse, Error> {
-            loop {
-                // prepare the client to send another request
-                // self.reset();
-                // send off the request
-                self.perform().map_err(Error::SendError)?;
-                // deserialize response
-                let response: Response = serde_json::from_slice(self.get_ref().0.as_slice())
-                        .map_err(Error::DeserializeError)?;
-                let response = response.into_result()?;
-
-                // reached the end of the logs, break out.
-                if self.newest == response.newest {
-                    return Err(Error::NotFound(self.hash.to_string()));
-                }
-
-                // update the newest cursor seen
-                //self.newest = response.newest.clone();
-
-                // search for the event in the response and return
-                // it if found. Else request the next chunk of results
-                if let Some(result) = parse(response, self.hash) {
-                    return Ok(result);
+            // send off the request
+            // this loop is here because if commit timeouts
+            // become too long, sometimes we get back empty responses.
+            for _ in 0..10 {
+                if self.perform().is_ok() {
+                    break;
                 }
             }
+
+            // deserialize response
+            let response: Response =
+                serde_json::from_slice(self.get_ref().0.as_slice())
+                    .map_err(Error::Deserialize)?;
+            let response = response.into_result()?;
+            // search for the event in the response and return
+            // it if found. Else request the next chunk of results
+            parse(response, self.hash)
+                .ok_or_else(|| Error::NotFound(self.hash.to_string()))
         }
 
-        /// Reset the client so that it can send it's request again.
-        /// Used if the event being searched for is not found yet.
+        /// Reset the client
         fn reset(&mut self) {
             self.inner.reset();
-            let url = self.url.clone();
+            let url = self.url;
             self.url(url).unwrap();
             self.post(true).unwrap();
 
-            // look only at events after the newest seen
-            self.request.params.after = self.newest.clone();
             // craft the body of the request
             let request_body = serde_json::to_string(&self.request).unwrap();
-            println!("{}", &request_body);
             self.post_field_size(request_body.as_bytes().len() as u64)
                 .unwrap();
             // update the request and serialize to bytes
@@ -188,23 +182,18 @@ mod tm_jsonrpc {
     /// query the Tendermint's jsonrpc endpoint for the events
     /// log. Returns the appropriate event if found in the log.
     pub async fn fetch_event(
+        address: &str,
         filter: Query,
         tx_hash: &str,
     ) -> Result<TxResponse, Error> {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        let url = SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            JSONRPC_PORT,
-        )
-        .to_string();
         // craft the body of the request
         let request = Request::from(EventParams::new(
             filter,
-            50,
+            10,
             std::time::Duration::from_secs(60),
         ));
         // construct a curl client
-        let mut client = Client::new(&url, request, tx_hash);
+        let mut client = Client::new(address, request, tx_hash);
         // perform the request
         client.send()
     }

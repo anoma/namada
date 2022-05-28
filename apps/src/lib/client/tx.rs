@@ -40,12 +40,14 @@ use super::signing::sign_tx;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::find_keypair;
+#[cfg(not(feature = "ABCI"))]
+use crate::client::tendermint_rpc_types::Error;
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::client::tendermint_websocket_client::{
     Error as WsError, TendermintWebsocketClient, WebSocketAddress,
 };
 #[cfg(not(feature = "ABCI"))]
-use crate::client::tm_jsonrpc_client::{fetch_event, Error};
+use crate::client::tm_jsonrpc_client::{fetch_event, JsonRpcAddress};
 use crate::node::ledger::tendermint_node;
 
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -959,11 +961,12 @@ pub async fn submit_tx(
         } => (tx, wrapper_hash, decrypted_hash),
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
+    let url = JsonRpcAddress::try_from(&address)?.to_string();
 
     // the filters for finding the relevant events
-    let wrapper_query = Query::from(EventType::NewBlock)
+    let wrapper_query = Query::from(EventType::NewBlockHeader)
         .and_eq("accepted.hash", wrapper_hash.as_str());
-    let tx_query = Query::from(EventType::NewBlock)
+    let tx_query = Query::from(EventType::NewBlockHeader)
         .and_eq("applied.hash", decrypted_hash.as_ref().unwrap().as_str());
 
     // broadcast the tx
@@ -973,7 +976,8 @@ pub async fn submit_tx(
     }
 
     // get the event for the wrapper tx
-    let response = fetch_event(wrapper_query, wrapper_hash.as_str()).await?;
+    let response =
+        fetch_event(&url, wrapper_query, wrapper_hash.as_str()).await?;
     println!(
         "Transaction accepted with result: {}",
         serde_json::to_string_pretty(&response).unwrap()
@@ -982,9 +986,13 @@ pub async fn submit_tx(
     // The transaction is now on chain. We wait for it to be decrypted
     // and applied
     if response.code == 0.to_string() {
-        let response =
-            fetch_event(tx_query, decrypted_hash.as_ref().unwrap().as_str())
-                .await?;
+        // get the event for the inner tx
+        let response = fetch_event(
+            &url,
+            tx_query,
+            decrypted_hash.as_ref().unwrap().as_str(),
+        )
+        .await?;
         println!(
             "Transaction applied with result: {}",
             serde_json::to_string_pretty(&response).unwrap()
@@ -1007,7 +1015,7 @@ pub async fn submit_tx(
 pub async fn submit_tx(
     address: TendermintAddress,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, Error> {
+) -> Result<TxResponse, WsError> {
     let (_, wrapper_hash, _decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,

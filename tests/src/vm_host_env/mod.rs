@@ -21,7 +21,9 @@ mod tests {
 
     use anoma::ibc::tx_msg::Msg;
     use anoma::ledger::ibc::handler::IbcActions;
-    use anoma::ledger::ibc::vp::Error as IbcError;
+    use anoma::ledger::ibc::vp::{
+        get_dummy_header as tm_dummy_header, Error as IbcError,
+    };
     use anoma::proto::{SignedTxData, Tx};
     use anoma::tendermint_proto::Protobuf;
     use anoma::types::key::*;
@@ -556,7 +558,7 @@ mod tests {
         env.storage
             .begin_block(BlockHash::default(), BlockHeight(2))
             .unwrap();
-        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
+        env.storage.set_header(tm_dummy_header()).unwrap();
 
         // Start an invalid transaction
         tx_host_env::set(env);
@@ -636,7 +638,7 @@ mod tests {
         env.storage
             .begin_block(BlockHash::default(), BlockHeight(3))
             .unwrap();
-        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
+        env.storage.set_header(tm_dummy_header()).unwrap();
 
         // Start a transaction to upgrade the client
         tx_host_env::set(env);
@@ -745,7 +747,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // set a block header again
-        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
+        env.storage.set_header(tm_dummy_header()).unwrap();
 
         // Start the next transaction for ConnectionOpenAck
         tx_host_env::set(env);
@@ -815,7 +817,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // set a block header again
-        env.storage.set_header(ibc::tm_dummy_header()).unwrap();
+        env.storage.set_header(tm_dummy_header()).unwrap();
 
         // Start the next transaction for ConnectionOpenConfirm
         tx_host_env::set(env);

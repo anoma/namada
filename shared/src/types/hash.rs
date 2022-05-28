@@ -7,8 +7,12 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 #[cfg(not(feature = "ABCI"))]
 use tendermint::abci::transaction;
+#[cfg(not(feature = "ABCI"))]
+use tendermint::Hash as TmHash;
 #[cfg(feature = "ABCI")]
 use tendermint_stable::abci::transaction;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::Hash as TmHash;
 use thiserror::Error;
 
 /// The length of the transaction hash string
@@ -81,5 +85,11 @@ impl TryFrom<&[u8]> for Hash {
 impl From<Hash> for transaction::Hash {
     fn from(hash: Hash) -> Self {
         Self::new(hash.0)
+    }
+}
+
+impl From<Hash> for TmHash {
+    fn from(hash: Hash) -> Self {
+        TmHash::Sha256(hash.0)
     }
 }
