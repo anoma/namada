@@ -453,7 +453,6 @@ impl AnomaCmd {
     }
 
     /// Assert that the process exited with failure
-    #[allow(dead_code)]
     pub fn assert_failure(&self) {
         let status = self.session.wait().unwrap();
         assert_ne!(WaitStatus::Exited(self.session.pid(), 0), status);
