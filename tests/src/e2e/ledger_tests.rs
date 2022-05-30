@@ -1079,7 +1079,6 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 3. Query the proposal
-
     let proposal_query_args = vec![
         "query-proposal",
         "--proposal-id",
@@ -1161,6 +1160,7 @@ fn proposal_submission() -> Result<()> {
             "grace_epoch": 10009,
         }
     );
+
     generate_proposal_json(
         invalid_proposal_json_path.clone(),
         invalid_proposal_json,
@@ -1178,7 +1178,7 @@ fn proposal_submission() -> Result<()> {
         "Invalid proposal end epoch: difference between proposal start and \
          end epoch must be at least 3 and end epoch must be a multiple of 3",
     )?;
-    client.assert_success();
+    client.assert_failure();
 
     // 7. Check invalid proposal was not accepted
     let proposal_query_args = vec![
@@ -1337,7 +1337,7 @@ fn proposal_submission() -> Result<()> {
 
     let mut client =
         run!(test, Bin::Client, query_protocol_parameters, Some(30))?;
-    client.exp_regex(".*Min. proposal grace epoch: 9.*")?;
+    client.exp_regex(".*Min. proposal grace epochs: 9.*")?;
     client.assert_success();
 
     Ok(())
