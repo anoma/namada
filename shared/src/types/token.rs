@@ -2,7 +2,7 @@
 
 use std::convert::TryFrom;
 use std::fmt::Display;
-use std::ops::{Add, AddAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -71,6 +71,17 @@ impl Amount {
     pub fn max() -> Self {
         Self { micro: u64::MAX }
     }
+
+    /// Create amount from Change
+    ///
+    /// # Panics
+    ///
+    /// Panics if the change is negative or overflows `u64`.
+    pub fn from_change(change: Change) -> Self {
+        Self {
+            micro: change as u64,
+        }
+    }
 }
 
 impl serde::Serialize for Amount {
@@ -137,6 +148,15 @@ impl Add for Amount {
     }
 }
 
+impl Mul<Amount> for u64 {
+    type Output = Amount;
+
+    fn mul(mut self, rhs: Amount) -> Self::Output {
+        self *= rhs.micro;
+        Self::Output::from(self)
+    }
+}
+
 impl AddAssign for Amount {
     fn add_assign(&mut self, rhs: Self) {
         self.micro += rhs.micro
@@ -196,9 +216,11 @@ impl FromStr for Amount {
 
 impl Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let decimal =
-            rust_decimal::Decimal::new(self.micro as i64, MAX_DECIMAL_PLACES)
-                .normalize();
+        let decimal = rust_decimal::Decimal::from_i128_with_scale(
+            self.micro as i128,
+            MAX_DECIMAL_PLACES,
+        )
+        .normalize();
         write!(f, "{}", decimal)
     }
 }
@@ -354,5 +376,20 @@ mod tests {
                 let identity = Amount::from(float);
                 assert_eq!(amount, identity);
         }
+    }
+
+    #[test]
+    fn test_token_display() {
+        let max = Amount::from(u64::MAX);
+        assert_eq!("18446744073709.551615", max.to_string());
+
+        let whole = Amount::from(u64::MAX / SCALE * SCALE);
+        assert_eq!("18446744073709", whole.to_string());
+
+        let trailing_zeroes = Amount::from(123000);
+        assert_eq!("0.123", trailing_zeroes.to_string());
+
+        let zero = Amount::from(0);
+        assert_eq!("0", zero.to_string());
     }
 }

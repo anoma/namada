@@ -7,6 +7,7 @@ use std::path::Path;
 use anoma::ledger::governance::parameters::GovParams;
 use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::{GenesisValidator, PosParams};
+use anoma::ledger::treasury::parameters::TreasuryParams;
 use anoma::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use anoma::types::chain::ChainId;
@@ -29,6 +30,7 @@ pub mod genesis_config {
     use anoma::ledger::parameters::{EpochDuration, Parameters};
     use anoma::ledger::pos::types::BasisPoints;
     use anoma::ledger::pos::{GenesisValidator, PosParams};
+    use anoma::ledger::treasury::parameters::TreasuryParams;
     use anoma::types::address::Address;
     use anoma::types::key::dkg_session_keys::DkgPublicKey;
     use anoma::types::key::*;
@@ -112,13 +114,15 @@ pub mod genesis_config {
         // PoS parameters
         pub pos_params: PosParamsConfig,
         // Governance parameters
-        pub gov_params: GovernanceParamasConfig,
+        pub gov_params: GovernanceParamsConfig,
+        // Treasury parameters
+        pub treasury_params: TreasuryParamasConfig,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct GovernanceParamasConfig {
+    pub struct GovernanceParamsConfig {
         // Min funds to stake to submit a proposal
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_fund: u64,
@@ -133,7 +137,14 @@ pub mod genesis_config {
         pub max_proposal_content_size: u64,
         // Minimum number of epoch between end and grace epoch
         // XXX: u64 doesn't work with toml-rs!
-        pub min_grace_epoch: u64,
+        pub min_proposal_grace_epochs: u64,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct TreasuryParamasConfig {
+        // Maximum funds that can be moved from treasury in a single transfer
+        // XXX: u64 doesn't work with toml-rs!
+        pub max_proposal_fund_transfer: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -517,11 +528,19 @@ pub mod genesis_config {
         };
 
         let gov_params = GovParams {
-            min_proposal_fund: 500,
-            max_proposal_code_size: 300,
-            min_proposal_period: 3,
-            max_proposal_content_size: 10_000,
-            min_proposal_grace_epochs: 6,
+            min_proposal_fund: config.gov_params.min_proposal_fund,
+            max_proposal_code_size: config.gov_params.max_proposal_code_size,
+            min_proposal_period: config.gov_params.min_proposal_period,
+            max_proposal_content_size: config
+                .gov_params
+                .max_proposal_content_size,
+            min_proposal_grace_epochs: config
+                .gov_params
+                .min_proposal_grace_epochs,
+        };
+
+        let treasury_params = TreasuryParams {
+            max_proposal_fund_transfer: 10_000,
         };
 
         let pos_params = PosParams {
@@ -550,6 +569,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            treasury_params,
         };
         genesis.init();
         genesis
@@ -584,6 +604,7 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
+    pub treasury_params: TreasuryParams,
 }
 
 impl Genesis {
@@ -736,7 +757,7 @@ pub fn genesis() -> Genesis {
     let parameters = Parameters {
         epoch_duration: EpochDuration {
             min_num_of_blocks: 10,
-            min_duration: anoma::types::time::Duration::minutes(1).into(),
+            min_duration: anoma::types::time::Duration::seconds(60).into(),
         },
         max_expected_time_per_block: anoma::types::time::DurationSecs(30),
         vp_whitelist: vec![],
@@ -819,6 +840,7 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
+        treasury_params: TreasuryParams::default(),
     }
 }
 

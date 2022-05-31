@@ -92,7 +92,7 @@ pub async fn run(
     };
 
     // init and run a tendermint node child process
-    let output = if !cfg!(featuer = "ABCI") {
+    let output = if !cfg!(feature = "ABCI") {
         Command::new(&tendermint_path)
             .args(&["init", &mode, "--home", &home_dir_string])
             .output()
@@ -349,6 +349,10 @@ async fn update_tendermint_config(
     config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
     config.p2p.pex = tendermint_config.p2p_pex;
     config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
+    #[cfg(feature = "ABCI")]
+    {
+        config.p2p.addr_book_strict = tendermint_config.p2p_addr_book_strict;
+    }
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes

@@ -192,6 +192,8 @@ pub mod cmds {
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
                 .subcommand(QueryProposal::def().display_order(3))
+                .subcommand(QueryProposalResult::def().display_order(3))
+                .subcommand(QueryProtocolParameters::def().display_order(3))
                 // Intents
                 .subcommand(Intent::def().display_order(4))
                 .subcommand(SubscribeTopic::def().display_order(4))
@@ -225,6 +227,10 @@ pub mod cmds {
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
             let query_proposal = Self::parse_with_ctx(matches, QueryProposal);
+            let query_proposal_result =
+                Self::parse_with_ctx(matches, QueryProposalResult);
+            let query_protocol_parameters =
+                Self::parse_with_ctx(matches, QueryProtocolParameters);
             let intent = Self::parse_with_ctx(matches, Intent);
             let subscribe_topic = Self::parse_with_ctx(matches, SubscribeTopic);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
@@ -248,6 +254,8 @@ pub mod cmds {
                 .or(query_result)
                 .or(query_raw_bytes)
                 .or(query_proposal)
+                .or(query_proposal_result)
+                .or(query_protocol_parameters)
                 .or(intent)
                 .or(subscribe_topic)
                 .or(utils)
@@ -306,6 +314,8 @@ pub mod cmds {
         QuerySlashes(QuerySlashes),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
+        QueryProposalResult(QueryProposalResult),
+        QueryProtocolParameters(QueryProtocolParameters),
         // Gossip cmds
         Intent(Intent),
         SubscribeTopic(SubscribeTopic),
@@ -791,8 +801,54 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("List all proposals yet to be tallied.")
+                .about("Query proposals.")
                 .add_args::<args::QueryProposal>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryProposalResult(pub args::QueryProposalResult);
+
+    impl SubCmd for QueryProposalResult {
+        const CMD: &'static str = "query-proposal-result";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryProposalResult(args::QueryProposalResult::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query proposals result.")
+                .add_args::<args::QueryProposalResult>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryProtocolParameters(pub args::QueryProtocolParameters);
+
+    impl SubCmd for QueryProtocolParameters {
+        const CMD: &'static str = "query-protocol-parameters";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryProtocolParameters(args::QueryProtocolParameters::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query protocol parameters.")
+                .add_args::<args::QueryProtocolParameters>()
         }
     }
 
@@ -1867,10 +1923,10 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx,
         /// Proposal id
-        pub proposal_id: u64,
+        pub proposal_id: Option<u64>,
         /// The vote
         pub vote: ProposalVote,
-        /// Flag if proposal should be run offline
+        /// Flag if proposal vote should be run offline
         pub offline: bool,
         /// The proposal file path
         pub proposal_data: Option<PathBuf>,
@@ -1879,7 +1935,7 @@ pub mod args {
     impl Args for VoteProposal {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let proposal_id = PROPOSAL_ID.parse(matches);
+            let proposal_id = PROPOSAL_ID_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
@@ -1896,7 +1952,7 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx>()
                 .arg(
-                    PROPOSAL_ID
+                    PROPOSAL_ID_OPT
                         .def()
                         .about("The proposal identifier.")
                         .conflicts_with_all(&[
@@ -1946,6 +2002,75 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx>()
                 .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryProposalResult {
+        /// Common query args
+        pub query: Query,
+        /// Proposal id
+        pub proposal_id: Option<u64>,
+        /// Flag if proposal result should be run on offline data
+        pub offline: bool,
+        /// The folder containing the proposal and votes
+        pub proposal_folder: Option<PathBuf>,
+    }
+
+    impl Args for QueryProposalResult {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let proposal_id = PROPOSAL_ID_OPT.parse(matches);
+            let offline = PROPOSAL_OFFLINE.parse(matches);
+            let proposal_folder = DATA_PATH_OPT.parse(matches);
+
+            Self {
+                query,
+                proposal_id,
+                offline,
+                proposal_folder,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
+                .arg(
+                    PROPOSAL_OFFLINE
+                        .def()
+                        .about(
+                            "Flag if the proposal result should run on \
+                             offline data.",
+                        )
+                        .conflicts_with(PROPOSAL_ID.name),
+                )
+                .arg(
+                    DATA_PATH_OPT
+                        .def()
+                        .about(
+                            "The path to the folder containing the proposal \
+                             json and votes",
+                        )
+                        .conflicts_with(PROPOSAL_ID.name),
+                )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryProtocolParameters {
+        /// Common query args
+        pub query: Query,
+    }
+
+    impl Args for QueryProtocolParameters {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+
+            Self { query }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
         }
     }
 
