@@ -2,8 +2,8 @@
 //!
 //! Any changes applied before [`Shell::finalize_block`] might have to be
 //! reverted, so any changes applied in the methods `Shell::prepare_proposal`
-//! (ABCI++), [`Shell::process_and_decode_proposal`] must be also reverted (unless we can
-//! simply overwrite them in the next block).
+//! (ABCI++), [`Shell::process_and_decode_proposal`] must be also reverted
+//! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
 mod init_chain;
