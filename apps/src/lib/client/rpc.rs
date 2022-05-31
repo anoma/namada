@@ -349,7 +349,14 @@ pub async fn query_proposal_result(
                                             if entry.file_name().eq(&"proposal")
                                             {
                                                 is_proposal_present = true
-                                            } else {
+                                            } else if entry
+                                                .file_name()
+                                                .to_string_lossy()
+                                                .starts_with("proposal-vote-")
+                                            {
+                                                // Folder may contain other
+                                                // files than just the proposal
+                                                // and the votes
                                                 files.insert(entry.path());
                                             }
                                         }
@@ -371,8 +378,8 @@ pub async fn query_proposal_result(
 
                         if !is_proposal_present {
                             eprintln!(
-                                "The folder must contain a the offline \
-                                 proposal in a file named proposal"
+                                "The folder must contain the offline proposal \
+                                 in a file named \"proposal\""
                             );
                             cli::safe_exit(1)
                         }

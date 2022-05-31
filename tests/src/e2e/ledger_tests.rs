@@ -9,8 +9,6 @@
 //! To keep the temporary files created by a test, use env var
 //! `ANOMA_E2E_KEEP_TEMP=true`.
 
-use std::fs::{self, OpenOptions};
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -24,7 +22,6 @@ use namada_apps::config::genesis::genesis_config::{
 use serde_json::json;
 use setup::constants::*;
 
-use super::setup::working_dir;
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
@@ -1034,8 +1031,7 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 2. Submit valid proposal
-    let valid_proposal_json_path =
-        test.test_dir.path().join("valid_proposal.json");
+    let test_dir = tempfile::tempdir_in(test.base_dir.path()).unwrap();
     let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
 
     let albert = find_address(&test, ALBERT)?;
@@ -1059,18 +1055,18 @@ fn proposal_submission() -> Result<()> {
             "proposal_code_path": proposal_code.to_str().unwrap()
         }
     );
-
-    generate_proposal_json(
-        valid_proposal_json_path.clone(),
-        valid_proposal_json,
-    );
+    let proposal_file =
+        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
+    serde_json::to_writer(&proposal_file, &valid_proposal_json).unwrap();
+    let proposal_path = proposal_file.path();
+    let proposal_ref = proposal_path.to_string_lossy();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        valid_proposal_json_path.to_str().unwrap(),
+        &proposal_ref,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -1123,8 +1119,6 @@ fn proposal_submission() -> Result<()> {
 
     // 6. Submit an invalid proposal
     // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
-    let invalid_proposal_json_path =
-        test.test_dir.path().join("invalid_proposal.json");
     let albert = find_address(&test, ALBERT)?;
     let invalid_proposal_json = json!(
         {
@@ -1160,16 +1154,17 @@ fn proposal_submission() -> Result<()> {
             "grace_epoch": 10009,
         }
     );
-
-    generate_proposal_json(
-        invalid_proposal_json_path.clone(),
-        invalid_proposal_json,
-    );
+    let invalid_proposal_file =
+        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
+    serde_json::to_writer(&invalid_proposal_file, &invalid_proposal_json)
+        .unwrap();
+    let invalid_proposal_path = invalid_proposal_file.path();
+    let invalid_proposal_ref = invalid_proposal_path.to_string_lossy();
 
     let submit_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        invalid_proposal_json_path.to_str().unwrap(),
+        &invalid_proposal_ref,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -1384,8 +1379,8 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     // 2. Create an offline proposal
-    let valid_proposal_json_path =
-        test.test_dir.path().join("valid_proposal.json");
+    let test_dir = tempfile::tempdir_in(test.base_dir.path()).unwrap();
+
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json = json!(
         {
@@ -1406,17 +1401,18 @@ fn proposal_offline() -> Result<()> {
             "grace_epoch": 18
         }
     );
-    generate_proposal_json(
-        valid_proposal_json_path.clone(),
-        valid_proposal_json,
-    );
+    let proposal_file =
+        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
+    serde_json::to_writer(&proposal_file, &valid_proposal_json).unwrap();
+    let proposal_path = proposal_file.path();
+    let proposal_ref = proposal_path.to_string_lossy();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let offline_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        valid_proposal_json_path.to_str().unwrap(),
+        &proposal_ref,
         "--offline",
         "--ledger-address",
         &validator_one_rpc,
@@ -1433,7 +1429,7 @@ fn proposal_offline() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    let proposal_path = working_dir().join("proposal");
+    let proposal_path = test_dir.path().join("proposal");
     let proposal_ref = proposal_path.to_string_lossy();
     let submit_proposal_vote = vec![
         "vote-proposal",
@@ -1453,31 +1449,17 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     let expected_file_name = format!("proposal-vote-{}", albert);
-    let expected_path_vote = working_dir().join(&expected_file_name);
+    let expected_path_vote = test_dir.path().join(&expected_file_name);
     assert!(expected_path_vote.exists());
 
-    let expected_path_proposal = working_dir().join("proposal");
+    let expected_path_proposal = test_dir.path().join("proposal");
     assert!(expected_path_proposal.exists());
 
     // 4. Compute offline tally
-    let proposal_data_folder = working_dir().join("proposal-test-data");
-    fs::create_dir_all(&proposal_data_folder)
-        .expect("Should create a new folder.");
-    fs::copy(
-        expected_path_proposal,
-        &proposal_data_folder.join("proposal"),
-    )
-    .expect("Should copy proposal file.");
-    fs::copy(
-        expected_path_vote,
-        &proposal_data_folder.join(&expected_file_name),
-    )
-    .expect("Should copy proposal vote file.");
-
     let tally_offline = vec![
         "query-proposal-result",
         "--data-path",
-        proposal_data_folder.to_str().unwrap(),
+        test_dir.path().to_str().unwrap(),
         "--offline",
         "--ledger-address",
         &validator_one_rpc,
@@ -1488,19 +1470,6 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     Ok(())
-}
-
-fn generate_proposal_json(
-    proposal_path: PathBuf,
-    proposal_content: serde_json::Value,
-) {
-    let intent_writer = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(proposal_path)
-        .unwrap();
-    serde_json::to_writer(intent_writer, &proposal_content).unwrap();
 }
 
 /// In this test we:

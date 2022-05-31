@@ -596,11 +596,18 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         .await;
         let offline_proposal =
             OfflineProposal::new(proposal, signer, &signing_key);
-        let proposal_filename = "proposal".to_string();
+        let proposal_filename = args
+            .proposal_data
+            .parent()
+            .expect("No parent found")
+            .join("proposal");
         let out = File::create(&proposal_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_proposal) {
             Ok(_) => {
-                println!("Proposal created: {}.", proposal_filename);
+                println!(
+                    "Proposal created: {}.",
+                    proposal_filename.to_string_lossy()
+                );
             }
             Err(e) => {
                 eprintln!("Error while creating proposal file: {}.", e);
@@ -685,12 +692,17 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             &signing_key,
         );
 
-        let proposal_vote_filename =
-            format!("proposal-vote-{}", &signer.to_string());
+        let proposal_vote_filename = proposal_file_path
+            .parent()
+            .expect("No parent found")
+            .join(format!("proposal-vote-{}", &signer.to_string()));
         let out = File::create(&proposal_vote_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_vote) {
             Ok(_) => {
-                println!("Proposal vote created: {}.", proposal_vote_filename);
+                println!(
+                    "Proposal vote created: {}.",
+                    proposal_vote_filename.to_string_lossy()
+                );
             }
             Err(e) => {
                 eprintln!("Error while creating proposal vote file: {}.", e);
