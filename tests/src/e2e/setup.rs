@@ -477,7 +477,7 @@ impl AnomaCmd {
                     }
                     Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 }
-                cmd.session.stream_mut().read_available().unwrap();
+                cmd.session.is_matched(Eof).unwrap();
             }
         });
         AnomaBgCmd {
