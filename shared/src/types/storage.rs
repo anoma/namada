@@ -181,7 +181,7 @@ pub struct Header {
 impl Header {
     /// The number of bytes when this header is encoded
     pub fn encoded_len(&self) -> usize {
-        self.try_to_vec().map(|ser| ser.len()).unwrap()
+        self.try_to_vec().unwrap().len()
     }
 }
 
