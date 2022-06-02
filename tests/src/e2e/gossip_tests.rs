@@ -323,7 +323,7 @@ fn match_intents() -> Result<()> {
     ))?;
 
     // check that the all VPs accept the transaction
-    ledger.exp_string("all VPs accepted transaction")?;
+    ledger.exp_string("all VPs accepted apply_tx storage modification")?;
 
     Ok(())
 }
