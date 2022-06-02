@@ -54,6 +54,9 @@ use crate::client::tendermint_websocket_client::{
 use crate::client::tm_jsonrpc_client::{fetch_event, JsonRpcAddress};
 use crate::node::ledger::tendermint_node;
 
+#[cfg(not(feature = "ABCI"))]
+const ACCEPTED_QUERY_KEY: &str = "accepted.hash";
+const APPLIED_QUERY_KEY: &str = "applied.hash";
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
@@ -1162,15 +1165,17 @@ pub async fn submit_tx(
             wrapper_hash,
             decrypted_hash,
         } => (tx, wrapper_hash, decrypted_hash),
-        _ => panic!("Cannot broadcast a dry-run transaction"),
+        TxBroadcastData::DryRun(_) => {
+            panic!("Cannot broadcast a dry-run transaction")
+        }
     };
     let url = JsonRpcAddress::try_from(&address)?.to_string();
 
     // the filters for finding the relevant events
     let wrapper_query = Query::from(EventType::NewBlockHeader)
-        .and_eq("accepted.hash", wrapper_hash.as_str());
+        .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
     let tx_query = Query::from(EventType::NewBlockHeader)
-        .and_eq("applied.hash", decrypted_hash.as_ref().unwrap().as_str());
+        .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_ref().unwrap().as_str());
 
     // broadcast the tx
     if let Err(err) = broadcast_tx(address, &to_broadcast).await {
@@ -1202,6 +1207,10 @@ pub async fn submit_tx(
         );
         Ok(response)
     } else {
+        tracing::warn!(
+            "Received an error from the associated wrapper tx: {}",
+            response.code
+        );
         Ok(response)
     }
 }
@@ -1234,10 +1243,10 @@ pub async fn submit_tx(
 
     // It is better to subscribe to the transaction before it is broadcast
     //
-    // Note that the `applied.hash` key comes from a custom event
+    // Note that the `APPLIED_QUERY_KEY` key comes from a custom event
     // created by the shell
     let query = Query::from(EventType::NewBlock)
-        .and_eq("applied.hash", wrapper_hash.as_str());
+        .and_eq(APPLIED_QUERY_KEY, wrapper_hash.as_str());
     wrapper_tx_subscription.subscribe(query)?;
 
     // Broadcast the supplied transaction

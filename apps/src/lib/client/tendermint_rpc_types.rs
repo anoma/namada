@@ -13,8 +13,8 @@ use crate::node::ledger::events::Attributes;
 pub enum Error {
     #[error("Invalid address given to JSON RPC client: {0}")]
     Address(String),
-    #[error("Error in sending JSON RPC request to Tendermint: {0}")]
-    Send(curl::Error),
+    #[error("Error in sending JSON RPC request to Tendermint")]
+    Send,
     #[cfg(not(feature = "ABCI"))]
     #[error("Received an error response from Tendermint: {0:?}")]
     Rpc(tendermint_rpc::response_error::ResponseError),
