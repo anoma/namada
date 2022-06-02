@@ -446,7 +446,6 @@ where
             .header
             .as_ref()
             .expect("Header must have been set in prepare_proposal.");
-        let height = self.storage.last_height + 1;
         let time = header.time;
         let new_epoch = self
             .storage
