@@ -13,11 +13,20 @@ use tendermint_proto::abci::EventAttribute;
 use tendermint_proto_abci::abci::EventAttribute;
 use thiserror::Error;
 
+/// Indicates if an event is emitted do to
+/// an individual Tx or the nature of a finalized block
+#[derive(Clone, Debug)]
+pub enum EventLevel {
+    Block,
+    Tx,
+}
+
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
 #[derive(Clone, Debug)]
 pub struct Event {
     pub event_type: EventType,
+    pub level: EventLevel,
     pub attributes: HashMap<String, String>,
 }
 
@@ -68,6 +77,7 @@ impl Event {
             TxType::Wrapper(wrapper) => {
                 let mut event = Event {
                     event_type: EventType::Accepted,
+                    level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
                 event["hash"] = if !cfg!(feature = "ABCI") {
@@ -85,6 +95,7 @@ impl Event {
             TxType::Decrypted(decrypted) => {
                 let mut event = Event {
                     event_type: EventType::Applied,
+                    level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
                 event["hash"] = decrypted.hash_commitment().to_string();
@@ -93,6 +104,7 @@ impl Event {
             tx @ TxType::Protocol(_) => {
                 let mut event = Event {
                     event_type: EventType::Applied,
+                    level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
                 event["hash"] = hash_tx(
@@ -142,6 +154,7 @@ impl From<IbcEvent> for Event {
     fn from(ibc_event: IbcEvent) -> Self {
         Self {
             event_type: EventType::Ibc(ibc_event.event_type),
+            level: EventLevel::Tx,
             attributes: ibc_event.attributes,
         }
     }
@@ -151,6 +164,7 @@ impl From<ProposalEvent> for Event {
     fn from(proposal_event: ProposalEvent) -> Self {
         Self {
             event_type: EventType::Proposal,
+            level: EventLevel::Block,
             attributes: proposal_event.attributes,
         }
     }
