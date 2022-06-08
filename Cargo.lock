@@ -73,6 +73,247 @@ dependencies = [
 ]
 
 [[package]]
+name = "anoma"
+version = "0.6.1"
+dependencies = [
+ "anoma_proof_of_stake",
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-serialize",
+ "assert_matches",
+ "bech32",
+ "borsh",
+ "byte-unit",
+ "chrono",
+ "clru",
+ "derivative",
+ "ed25519-consensus",
+ "ferveo",
+ "ferveo-common",
+ "group-threshold-cryptography",
+ "hex",
+ "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_tm_v0.23.5)",
+ "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc)",
+ "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_tm_v0.23.5)",
+ "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc)",
+ "ics23",
+ "itertools 0.10.3",
+ "loupe",
+ "parity-wasm",
+ "pretty_assertions",
+ "proptest",
+ "prost 0.9.0",
+ "prost-types 0.9.0",
+ "pwasm-utils",
+ "rand 0.8.5",
+ "rand_core 0.6.3",
+ "rust_decimal",
+ "serde 1.0.137",
+ "serde_json",
+ "sha2 0.9.9",
+ "sparse-merkle-tree",
+ "tempfile",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "test-log",
+ "thiserror",
+ "tonic-build",
+ "tracing 0.1.35",
+ "tracing-subscriber 0.3.11",
+ "wasmer",
+ "wasmer-cache",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-dylib",
+ "wasmer-engine-universal",
+ "wasmer-vm",
+ "wasmparser 0.83.0",
+]
+
+[[package]]
+name = "anoma_apps"
+version = "0.6.1"
+dependencies = [
+ "anoma",
+ "ark-serialize",
+ "ark-std",
+ "async-std",
+ "async-trait",
+ "base64 0.13.0",
+ "bech32",
+ "bimap",
+ "bit-set",
+ "blake2b-rs",
+ "borsh",
+ "byte-unit",
+ "byteorder",
+ "cargo-watch",
+ "clap 3.0.0-beta.2",
+ "color-eyre",
+ "config",
+ "curl",
+ "derivative",
+ "directories",
+ "ed25519-consensus",
+ "eyre",
+ "ferveo",
+ "ferveo-common",
+ "file-lock",
+ "flate2",
+ "futures 0.3.21",
+ "git2",
+ "hex",
+ "itertools 0.10.3",
+ "jsonpath_lib",
+ "libc",
+ "libloading",
+ "libp2p",
+ "message-io",
+ "num-derive",
+ "num-traits 0.2.15",
+ "num_cpus",
+ "once_cell",
+ "orion",
+ "pathdiff",
+ "proptest",
+ "prost 0.9.0",
+ "prost-types 0.9.0",
+ "rand 0.8.5",
+ "rand_core 0.6.3",
+ "rayon",
+ "regex",
+ "reqwest",
+ "rlimit",
+ "rocksdb",
+ "rpassword",
+ "serde 1.0.137",
+ "serde_bytes",
+ "serde_json",
+ "serde_regex",
+ "sha2 0.9.9",
+ "signal-hook",
+ "sparse-merkle-tree",
+ "sysinfo",
+ "tar",
+ "tempfile",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "tendermint-config 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint-config 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "tendermint-rpc 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint-rpc 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "test-log",
+ "thiserror",
+ "tokio",
+ "tokio-test",
+ "toml",
+ "tonic",
+ "tonic-build",
+ "tower",
+ "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?branch=yuji/rebase_v0.23.5_tracing)",
+ "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?rev=f6463388fc319b6e210503b43b3aecf6faf6b200)",
+ "tracing 0.1.35",
+ "tracing-log",
+ "tracing-subscriber 0.3.11",
+ "websocket",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "anoma_encoding_spec"
+version = "0.6.1"
+dependencies = [
+ "anoma",
+ "borsh",
+ "itertools 0.10.3",
+ "lazy_static 1.4.0",
+ "madato",
+]
+
+[[package]]
+name = "anoma_macros"
+version = "0.6.1"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "anoma_proof_of_stake"
+version = "0.6.1"
+dependencies = [
+ "borsh",
+ "proptest",
+ "thiserror",
+]
+
+[[package]]
+name = "anoma_tests"
+version = "0.6.1"
+dependencies = [
+ "anoma",
+ "anoma_apps",
+ "anoma_vm_env",
+ "assert_cmd",
+ "borsh",
+ "chrono",
+ "color-eyre",
+ "concat-idents",
+ "derivative",
+ "escargot",
+ "expectrl",
+ "eyre",
+ "file-serve",
+ "fs_extra",
+ "hex",
+ "itertools 0.10.3",
+ "libp2p",
+ "pretty_assertions",
+ "proptest",
+ "prost 0.9.0",
+ "serde_json",
+ "sha2 0.9.9",
+ "tempfile",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.5)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/abcipp-v0.23.5)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "test-log",
+ "toml",
+ "tracing 0.1.35",
+ "tracing-subscriber 0.3.11",
+]
+
+[[package]]
+name = "anoma_tx_prelude"
+version = "0.6.1"
+dependencies = [
+ "anoma_vm_env",
+ "sha2 0.10.2",
+]
+
+[[package]]
+name = "anoma_vm_env"
+version = "0.6.1"
+dependencies = [
+ "anoma",
+ "anoma_macros",
+ "borsh",
+ "hex",
+]
+
+[[package]]
+name = "anoma_vp_prelude"
+version = "0.6.1"
+dependencies = [
+ "anoma_vm_env",
+ "sha2 0.10.2",
+]
+
+[[package]]
 name = "ansi_term"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -555,6 +796,15 @@ name = "bech32"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf9ff0bbfd639f15c74af777d81383cf53efb7c93613f6cab67c6c11e05bbf8b"
+
+[[package]]
+name = "bimap"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0455254eb5c6964c4545d8bac815e1a1be4f3afe0ae695ea539c12d728d44b"
+dependencies = [
+ "serde 1.0.137",
+]
 
 [[package]]
 name = "bincode"
