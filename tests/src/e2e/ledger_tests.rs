@@ -124,7 +124,7 @@ fn test_node_connectivity() -> Result<()> {
     client.assert_success();
 
     // 3. Check that all the nodes processed the tx with the same result
-    let expected_result = "all VPs accepted apply_tx storage modification";
+    let expected_result = "all VPs accepted transaction";
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;
     non_validator.exp_string(expected_result)?;
@@ -485,7 +485,7 @@ fn invalid_transactions() -> Result<()> {
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();
-    ledger.exp_string("some VPs rejected apply_tx storage modification")?;
+    ledger.exp_string("some VPs rejected transaction")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -961,7 +961,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
-    let _bg_ledger = ledger.background();
+    let bg_ledger = ledger.background();
 
     let validator_one_rpc = Arc::new(get_actor_rpc(&test, &Who::Validator(0)));
 
@@ -1012,6 +1012,9 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     for task in tasks.into_iter() {
         task.join().unwrap()?;
     }
+    // Wait to commit a block
+    let mut ledger = bg_ledger.foreground();
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     Ok(())
 }
@@ -1888,7 +1891,7 @@ fn test_genesis_validators() -> Result<()> {
     client.assert_success();
 
     // 3. Check that all the nodes processed the tx with the same result
-    let expected_result = "all VPs accepted apply_tx storage modification";
+    let expected_result = "all VPs accepted transaction";
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;
     non_validator.exp_string(expected_result)?;
