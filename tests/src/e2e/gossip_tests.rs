@@ -32,6 +32,7 @@ use crate::{run, run_as};
 /// 1. Check that a gossip node can start and stop cleanly
 /// 2. Check that two peers connected to the same seed node discover each other
 #[test]
+#[ignore] // this is not currently being developed, run with `cargo test -- --ignored`
 fn run_gossip() -> Result<()> {
     let test =
         setup::network(|genesis| setup::add_validators(2, genesis), None)?;
@@ -97,6 +98,7 @@ fn run_gossip() -> Result<()> {
 /// and sends them to the matchmaker. The matchmaker should be able to match
 /// them into a transfer transaction and submit it to the ledger.
 #[test]
+#[ignore] // this is not currently being developed, run with `cargo test -- --ignored`
 fn match_intents() -> Result<()> {
     let test = setup::single_node_net()?;
 
