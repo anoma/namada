@@ -232,8 +232,6 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 println!("{:4}Status: on-going", "");
             } else {
                 let votes = get_proposal_votes(client, start_epoch, id).await;
-                println!("{:?}", votes.yay_delegators);
-                println!("{:?}", votes.yay_validators);
                 let proposal_result =
                     compute_tally(client, start_epoch, votes).await;
                 println!("{:4}Status: done", "");
