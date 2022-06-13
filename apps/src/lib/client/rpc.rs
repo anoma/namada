@@ -232,6 +232,8 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 println!("{:4}Status: on-going", "");
             } else {
                 let votes = get_proposal_votes(client, start_epoch, id).await;
+                println!("{:?}", votes.yay_delegators);
+                println!("{:?}", votes.yay_validators);
                 let proposal_result =
                     compute_tally(client, start_epoch, votes).await;
                 println!("{:4}Status: done", "");
@@ -1534,8 +1536,8 @@ pub async fn get_proposal_votes(
             .await;
 
     let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, VotePower> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
 
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
@@ -1562,11 +1564,25 @@ pub async fn get_proposal_votes(
                 .await;
                 if let Some(amount) = delegator_token_amount {
                     if vote.is_yay() {
-                        yay_delegators
-                            .insert(voter_address, VotePower::from(amount));
+                        match yay_delegators.get_mut(&voter_address) {
+                            Some(map) => {
+                                map.insert(validator_address, VotePower::from(amount));
+                            },
+                            None => {
+                                let delegations_map: HashMap<Address, VotePower> = HashMap::from([(validator_address, VotePower::from(amount))]);
+                                yay_delegators.insert(voter_address, delegations_map);
+                            }
+                        }
                     } else {
-                        nay_delegators
-                            .insert(voter_address, VotePower::from(amount));
+                        match nay_delegators.get_mut(&voter_address) {
+                            Some(map) => {
+                                map.insert(validator_address, VotePower::from(amount));
+                            },
+                            None => {
+                                let delegations_map: HashMap<Address, VotePower> = HashMap::from([(validator_address, VotePower::from(amount))]);
+                                nay_delegators.insert(voter_address, delegations_map);
+                            }
+                        }
                     }
                 }
             }
@@ -1590,8 +1606,8 @@ pub async fn get_proposal_offline_votes(
     let proposal_hash = proposal.compute_hash();
 
     let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, VotePower> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
 
     for path in files {
         let file = File::open(&path).expect("Proposal file must exist.");
@@ -1646,11 +1662,25 @@ pub async fn get_proposal_offline_votes(
                             "Delegation key should contain validator address.",
                         );
                     if proposal_vote.vote.is_yay() {
-                        yay_delegators
-                            .insert(validator_address, VotePower::from(amount));
+                        match yay_delegators.get_mut(&proposal_vote.address) {
+                            Some(map) => {
+                                map.insert(validator_address, VotePower::from(amount));
+                            },
+                            None => {
+                                let delegations_map: HashMap<Address, VotePower> = HashMap::from([(validator_address, VotePower::from(amount))]);
+                                yay_delegators.insert(proposal_vote.address.clone(), delegations_map);
+                            }
+                        }
                     } else {
-                        nay_delegators
-                            .insert(validator_address, VotePower::from(amount));
+                        match nay_delegators.get_mut(&proposal_vote.address) {
+                            Some(map) => {
+                                map.insert(validator_address, VotePower::from(amount));
+                            },
+                            None => {
+                                let delegations_map: HashMap<Address, VotePower> = HashMap::from([(validator_address, VotePower::from(amount))]);
+                                nay_delegators.insert(proposal_vote.address.clone(), delegations_map);
+                            }
+                        }
                     }
                 }
             }
@@ -1686,20 +1716,24 @@ pub async fn compute_tally(
     }
 
     // YAY: Add delegator amount whose validator didn't vote / voted nay
-    for (validator_address, amount) in yay_delegators.into_iter() {
-        if !yay_validators.contains_key(&validator_address) {
-            total_yay_stacked_tokens += amount;
+    for (_, vote_map) in yay_delegators.iter() {
+        for (validator_address, vote_power) in vote_map.into_iter() {
+            if !yay_validators.contains_key(&validator_address) {
+                total_yay_stacked_tokens += vote_power;
+            }
         }
     }
 
     // NAY: Remove delegator amount whose validator validator vote yay
-    for (validator_address, amount) in nay_delegators.into_iter() {
-        if yay_validators.contains_key(&validator_address) {
-            total_yay_stacked_tokens -= amount;
+    for (_, vote_map) in nay_delegators.iter() {
+        for (validator_address, vote_power) in vote_map.into_iter() {
+            if yay_validators.contains_key(&validator_address) {
+                total_yay_stacked_tokens -= vote_power;
+            }
         }
     }
 
-    if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
+    if total_yay_stacked_tokens >= (total_stacked_tokens / 3) * 2 {
         ProposalResult {
             result: TallyResult::Passed,
             total_voting_power: total_stacked_tokens,

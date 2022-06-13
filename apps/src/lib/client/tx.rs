@@ -767,6 +767,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     .await;
                 }
 
+                println!("{:?}", delegation_addresses);
+
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: args.vote,

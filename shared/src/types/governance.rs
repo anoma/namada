@@ -13,6 +13,7 @@ use super::hash::Hash;
 use super::key::common::{self, Signature};
 use super::key::SigScheme;
 use super::storage::Epoch;
+use super::token::SCALE;
 use super::transaction::governance::InitProposalData;
 
 /// Type alias for vote power
@@ -104,8 +105,8 @@ impl Display for ProposalResult {
             f,
             "{} with {} yay votes over {} ({:.2}%)",
             self.result,
-            self.total_yay_power,
-            self.total_voting_power,
+            self.total_yay_power / SCALE as u128,
+            self.total_voting_power / SCALE as u128,
             (self.total_yay_power / self.total_voting_power) * 100
         )
     }
