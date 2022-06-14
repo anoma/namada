@@ -991,7 +991,19 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 13. Check governance address funds are 0
 #[test]
 fn proposal_submission() -> Result<()> {
-    let test = setup::network(|genesis| genesis, None)?;
+    let test = setup::network(|genesis| {
+        let parameters = ParametersConfig {
+            min_num_of_blocks: 1,
+            min_duration: 1,
+            max_expected_time_per_block: 1,
+            ..genesis.parameters
+        };
+
+        GenesisConfig {
+            parameters,
+            ..genesis
+        }
+    }, None)?;
 
     let anomac_help = vec!["--help"];
 
@@ -1049,9 +1061,9 @@ fn proposal_submission() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 6,
-            "voting_end_epoch": 18,
-            "grace_epoch": 24,
+            "voting_start_epoch": 12,
+            "voting_end_epoch": 24,
+            "grace_epoch": 30,
             "proposal_code_path": proposal_code.to_str().unwrap()
         }
     );
@@ -1205,7 +1217,7 @@ fn proposal_submission() -> Result<()> {
 
     // 9. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 7 {
+    while epoch.0 <= 13 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
@@ -1270,7 +1282,7 @@ fn proposal_submission() -> Result<()> {
 
     // 11. Query the proposal and check the result
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 19 {
+    while epoch.0 <= 25 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
@@ -1289,7 +1301,7 @@ fn proposal_submission() -> Result<()> {
 
     // 12. Wait proposal grace and check proposal author funds
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 < 26 {
+    while epoch.0 < 31 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
@@ -1424,7 +1436,7 @@ fn proposal_offline() -> Result<()> {
 
     // 3. Generate an offline yay vote
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 5 {
+    while epoch.0 <= 2 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
