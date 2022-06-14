@@ -23,6 +23,7 @@ mod tests {
     use itertools::Itertools;
     use namada::ibc::tx_msg::Msg;
     use namada::ledger::ibc::handler::IbcActions;
+    use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::ibc::vp::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
@@ -1215,11 +1216,14 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was escrowed
-        let escrow = address::Address::Internal(
-            address::InternalAddress::ibc_escrow_address(
-                msg.source_port.to_string(),
-                msg.source_channel.to_string(),
-            ),
+        let key_prefix = ibc_storage::ibc_token_prefix(
+            &msg.source_port,
+            &msg.source_channel,
+            &token,
+        );
+        let escrow = token::multitoken_balance_key(
+            &key_prefix,
+            &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
         assert!(
@@ -1281,8 +1285,13 @@ mod tests {
 
         // Start a transaction to send a packet
         // Set this chain is the sink zone
-        let token = format!("{}/{}/{}", port_id, channel_id, token);
-        let msg = ibc::msg_transfer(port_id, channel_id, token, &sender);
+        let prefixed_token = format!("{}/{}/{}", port_id, channel_id, token);
+        let msg = ibc::msg_transfer(
+            port_id.clone(),
+            channel_id,
+            prefixed_token,
+            &sender,
+        );
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
@@ -1305,8 +1314,12 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was burned
-        let burn =
-            address::Address::Internal(address::InternalAddress::IbcBurn);
+        let key_prefix =
+            ibc_storage::ibc_token_prefix(&port_id, &channel_id, &token);
+        let burn = token::multitoken_balance_key(
+            &key_prefix,
+            &address::Address::Internal(address::InternalAddress::IbcBurn),
+        );
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &burn);
         assert!(
             token_vp
@@ -1367,8 +1380,16 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was minted
-        let mint =
-            address::Address::Internal(address::InternalAddress::IbcMint);
+        let counterparty = ibc::dummy_channel_counterparty();
+        let key_prefix = ibc_storage::ibc_token_prefix(
+            counterparty.port_id(),
+            counterparty.channel_id().unwrap(),
+            &token,
+        );
+        let mint = token::multitoken_balance_key(
+            &key_prefix,
+            &address::Address::Internal(address::InternalAddress::IbcMint),
+        );
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &mint);
         assert!(
             token_vp
@@ -1397,16 +1418,18 @@ mod tests {
         });
         // escrow in advance
         let counterparty = ibc::dummy_channel_counterparty();
-        let escrow = address::Address::Internal(
-            address::InternalAddress::ibc_escrow_address(
-                port_id.to_string(),
-                channel_id.to_string(),
-            ),
+        let key_prefix = ibc_storage::ibc_token_prefix(
+            counterparty.port_id(),
+            counterparty.channel_id().unwrap(),
+            &token,
         );
-        let key = token::balance_key(&token, &escrow);
+        let escrow = token::multitoken_balance_key(
+            &key_prefix,
+            &address::Address::Internal(address::InternalAddress::IbcEscrow),
+        );
         let val = Amount::from(1_000_000_000u64).try_to_vec().unwrap();
         tx_host_env::with(|env| {
-            env.storage.write(&key, &val).expect("write error");
+            env.storage.write(&escrow, &val).expect("write error");
         });
 
         // Set this chain as the source zone
@@ -1659,11 +1682,14 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was refunded
-        let escrow = address::Address::Internal(
-            address::InternalAddress::ibc_escrow_address(
-                packet.source_port.to_string(),
-                packet.source_channel.to_string(),
-            ),
+        let key_prefix = ibc_storage::ibc_token_prefix(
+            &packet.source_port,
+            &packet.source_channel,
+            &token,
+        );
+        let escrow = token::multitoken_balance_key(
+            &key_prefix,
+            &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
         assert!(
@@ -1736,11 +1762,14 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was refunded
-        let escrow = address::Address::Internal(
-            address::InternalAddress::ibc_escrow_address(
-                packet.source_port.to_string(),
-                packet.source_channel.to_string(),
-            ),
+        let key_prefix = ibc_storage::ibc_token_prefix(
+            &packet.source_port,
+            &packet.source_channel,
+            &token,
+        );
+        let escrow = token::multitoken_balance_key(
+            &key_prefix,
+            &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
         let (token_vp, _) = ibc::init_token_vp_from_tx(&env, &tx, &escrow);
         assert!(

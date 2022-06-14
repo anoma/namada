@@ -2,6 +2,7 @@
 
 use std::str::FromStr;
 
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::ibc::core::ics02_client::height::Height;
@@ -16,7 +17,7 @@ use crate::ibc::core::ics24_host::path::{
     SeqAcksPath, SeqRecvsPath, SeqSendsPath,
 };
 use crate::ibc::core::ics24_host::Path;
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::{Address, InternalAddress, HASH_LEN};
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 
 const CLIENTS_COUNTER: &str = "clients/counter";
@@ -481,4 +482,21 @@ pub fn capability(key: &Key) -> Result<Capability> {
             key
         ))),
     }
+}
+
+/// Returns the account key of the received token over IBC
+pub fn ibc_token_prefix(
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    token: &Address,
+) -> Key {
+    let mut hasher = Sha256::new();
+    let s = format!("{}/{}/{}", port_id, channel_id, token);
+    hasher.update(&s);
+    let hash = format!("{:.width$x}", hasher.finalize(), width = HASH_LEN);
+
+    let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
+    Key::from(token.to_db_key())
+        .push(&ibc_token.to_db_key())
+        .expect("Cannot obtain a storage key")
 }
