@@ -560,7 +560,9 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             current_epoch,
             goverance_parameters.min_proposal_period
         );
-        safe_exit(1)
+        if !args.tx.force {
+            safe_exit(1)
+        }
     } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
         || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
             < goverance_parameters.min_proposal_period
@@ -573,7 +575,9 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             goverance_parameters.min_proposal_period,
             goverance_parameters.min_proposal_period
         );
-        safe_exit(1)
+        if !args.tx.force {
+            safe_exit(1)
+        }
     } else if proposal.grace_epoch <= proposal.voting_end_epoch
         || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
             < goverance_parameters.min_proposal_grace_epochs
@@ -583,7 +587,9 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
              and end epoch must be at least {}",
             goverance_parameters.min_proposal_grace_epochs
         );
-        safe_exit(1)
+        if !args.tx.force {
+            safe_exit(1)
+        }
     }
 
     if args.offline {
@@ -734,7 +740,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                          epoch {}",
                         current_epoch, epoch
                     );
-                    safe_exit(1)
+
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
                 }
                 let mut delegation_addresses = rpc::get_delegators_delegation(
                     &client,
@@ -786,11 +795,13 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             }
             None => {
                 eprintln!(
-                    "Proposal start epoch is for proposal id {} is not \
+                    "Proposal start epoch for proposal id {} is not \
                      definied.",
                     proposal_id
                 );
-                safe_exit(1)
+                if !args.tx.force {
+                    safe_exit(1)
+                }
             }
         }
     }
