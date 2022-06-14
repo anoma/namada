@@ -53,16 +53,18 @@ mod internal {
         "ano::Proof of Stake                          ";
     pub const POS_SLASH_POOL: &str =
         "ano::Proof of Stake Slash Pool               ";
-    pub const IBC: &str = 
-        "ano::Inter-Blockchain Communication          ";
     pub const PARAMETERS: &str =
         "ano::Protocol Parameters                     ";
     pub const GOVERNANCE: &str =
         "ano::Governance                              ";
     pub const TREASURY: &str =
         "ano::Treasury                                ";
+    pub const IBC: &str =
+        "ibc::Inter-Blockchain Communication          ";
+    pub const IBC_ESCROW: &str =
+        "ibc::IBC Escrow Address                      ";
     pub const IBC_BURN: &str =
-        "ano::IBC Burn Address                        ";
+        "ibc::IBC Burn Address                        ";
     pub const IBC_MINT: &str =
         "ano::IBC Mint Address                        ";
     pub const ETH_BRIDGE: &str =
@@ -75,6 +77,8 @@ const PREFIX_ESTABLISHED: &str = "est";
 const PREFIX_IMPLICIT: &str = "imp";
 /// Fixed-length address strings prefix for internal addresses.
 const PREFIX_INTERNAL: &str = "ano";
+/// Fixed-length address strings prefix for IBC addresses.
+const PREFIX_IBC: &str = "ibc";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -178,7 +182,6 @@ impl Address {
                     InternalAddress::PosSlashPool => {
                         internal::POS_SLASH_POOL.to_string()
                     }
-                    InternalAddress::Ibc => internal::IBC.to_string(),
                     InternalAddress::Parameters => {
                         internal::PARAMETERS.to_string()
                     }
@@ -186,8 +189,12 @@ impl Address {
                         internal::GOVERNANCE.to_string()
                     }
                     InternalAddress::Treasury => internal::TREASURY.to_string(),
-                    InternalAddress::IbcEscrow(hash) => {
-                        format!("{}::{}", PREFIX_INTERNAL, hash)
+                    InternalAddress::Ibc => internal::IBC.to_string(),
+                    InternalAddress::IbcToken(hash) => {
+                        format!("{}::{}", PREFIX_IBC, hash)
+                    }
+                    InternalAddress::IbcEscrow => {
+                        internal::IBC_ESCROW.to_string()
                     }
                     InternalAddress::IbcBurn => internal::IBC_BURN.to_string(),
                     InternalAddress::IbcMint => internal::IBC_MINT.to_string(),
@@ -230,23 +237,32 @@ impl Address {
                     .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
                 Ok(Address::Implicit(ImplicitAddress(pkh)))
             }
-            Some((PREFIX_INTERNAL, raw)) => match string {
+            Some((PREFIX_INTERNAL, _)) => match string {
                 internal::POS => Ok(Address::Internal(InternalAddress::PoS)),
                 internal::POS_SLASH_POOL => {
                     Ok(Address::Internal(InternalAddress::PosSlashPool))
                 }
-                internal::IBC => Ok(Address::Internal(InternalAddress::Ibc)),
                 internal::PARAMETERS => {
                     Ok(Address::Internal(InternalAddress::Parameters))
-                }
-                internal::IBC_BURN => {
-                    Ok(Address::Internal(InternalAddress::IbcBurn))
                 }
                 internal::GOVERNANCE => {
                     Ok(Address::Internal(InternalAddress::Governance))
                 }
                 internal::TREASURY => {
                     Ok(Address::Internal(InternalAddress::Treasury))
+                }
+                _ => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "Invalid internal address",
+                )),
+            },
+            Some((PREFIX_IBC, raw)) => match string {
+                internal::IBC => Ok(Address::Internal(InternalAddress::Ibc)),
+                internal::IBC_ESCROW => {
+                    Ok(Address::Internal(InternalAddress::IbcEscrow))
+                }
+                internal::IBC_BURN => {
+                    Ok(Address::Internal(InternalAddress::IbcBurn))
                 }
                 internal::IBC_MINT => {
                     Ok(Address::Internal(InternalAddress::IbcMint))
@@ -255,11 +271,11 @@ impl Address {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }
                 _ if raw.len() == HASH_LEN => Ok(Address::Internal(
-                    InternalAddress::IbcEscrow(raw.to_string()),
+                    InternalAddress::IbcToken(raw.to_string()),
                 )),
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
-                    "Invalid internal address",
+                    "Invalid IBC internal address",
                 )),
             },
             _ => Err(Error::new(
@@ -435,12 +451,14 @@ pub enum InternalAddress {
     PoS,
     /// Proof-of-stake slash pool contains slashed tokens
     PosSlashPool,
-    /// Inter-blockchain communication
-    Ibc,
     /// Protocol parameters
     Parameters,
+    /// Inter-blockchain communication
+    Ibc,
+    /// IBC-related token
+    IbcToken(String),
     /// Escrow for IBC token transfer
-    IbcEscrow(String),
+    IbcEscrow,
     /// Burn tokens with IBC token transfer
     IbcBurn,
     /// Mint tokens from this address with IBC token transfer
@@ -455,12 +473,16 @@ pub enum InternalAddress {
 
 impl InternalAddress {
     /// Get an escrow address from the port ID and channel ID
-    pub fn ibc_escrow_address(port_id: String, channel_id: String) -> Self {
+    pub fn ibc_token_address(
+        port_id: String,
+        channel_id: String,
+        token: &Address,
+    ) -> Self {
         let mut hasher = Sha256::new();
-        let s = format!("{}/{}", port_id, channel_id);
+        let s = format!("{}/{}/{}", port_id, channel_id, token);
         hasher.update(&s);
-        let hash = format!("{:.width$X}", hasher.finalize(), width = HASH_LEN);
-        InternalAddress::IbcEscrow(hash)
+        let hash = format!("{:.width$x}", hasher.finalize(), width = HASH_LEN);
+        InternalAddress::IbcToken(hash)
     }
 }
 
@@ -472,11 +494,12 @@ impl Display for InternalAddress {
             match self {
                 Self::PoS => "PoS".to_string(),
                 Self::PosSlashPool => "PosSlashPool".to_string(),
-                Self::Ibc => "IBC".to_string(),
                 Self::Parameters => "Parameters".to_string(),
                 Self::Governance => "Governance".to_string(),
                 Self::Treasury => "Treasury".to_string(),
-                Self::IbcEscrow(hash) => format!("IbcEscrow: {}", hash),
+                Self::Ibc => "IBC".to_string(),
+                Self::IbcToken(hash) => format!("IbcToken: {}", hash),
+                Self::IbcEscrow => "IbcEscrow".to_string(),
                 Self::IbcBurn => "IbcBurn".to_string(),
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
@@ -710,11 +733,12 @@ pub mod testing {
         match InternalAddress::PoS {
             InternalAddress::PoS => {}
             InternalAddress::PosSlashPool => {}
-            InternalAddress::Ibc => {}
             InternalAddress::Governance => {}
             InternalAddress::Treasury => {}
             InternalAddress::Parameters => {}
-            InternalAddress::IbcEscrow(_) => {}
+            InternalAddress::Ibc => {}
+            InternalAddress::IbcToken(_) => {}
+            InternalAddress::IbcEscrow => {}
             InternalAddress::IbcBurn => {}
             InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {} /* Add new addresses in the
@@ -723,10 +747,12 @@ pub mod testing {
         prop_oneof![
             Just(InternalAddress::PoS),
             Just(InternalAddress::PosSlashPool),
-            Just(InternalAddress::Ibc),
             Just(InternalAddress::Parameters),
-            arb_port_channel_id()
-                .prop_map(|(p, c)| InternalAddress::ibc_escrow_address(p, c)),
+            Just(InternalAddress::Ibc),
+            arb_port_channel_id().prop_map(|(p, c)| {
+                InternalAddress::ibc_token_address(p, c, &xan())
+            }),
+            Just(InternalAddress::IbcEscrow),
             Just(InternalAddress::IbcBurn),
             Just(InternalAddress::IbcMint),
             Just(InternalAddress::Governance),

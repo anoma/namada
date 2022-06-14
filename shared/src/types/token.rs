@@ -9,7 +9,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::types::address::{Address, Error as AddressError, InternalAddress};
+use crate::types::address::{Address, Error as AddressError};
 use crate::types::ibc::data::FungibleTokenPacketData;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -250,6 +250,15 @@ pub fn balance_prefix(token_addr: &Address) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Obtain a storage key for user's multitoken balance.
+pub fn multitoken_balance_key(prefix: &Key, owner: &Address) -> Key {
+    prefix
+        .push(&BALANCE_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&owner.to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Check if the given storage key is balance key for the given token. If it is,
 /// returns the owner.
 pub fn is_balance_key<'a>(
@@ -279,20 +288,45 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
     }
 }
 
-/// Check if the given storage key is non-owner's balance key. If it is, returns
-/// the address.
-pub fn is_non_owner_balance_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(_),
-            DbKeySeg::StringSeg(key),
-            DbKeySeg::AddressSeg(owner),
-        ] if key == BALANCE_STORAGE_KEY => match owner {
-            Address::Internal(InternalAddress::IbcEscrow(_))
-            | Address::Internal(InternalAddress::IbcBurn)
-            | Address::Internal(InternalAddress::IbcMint) => Some(owner),
-            _ => None,
-        },
+/// Check if the given storage key is multitoken balance key for the given
+/// token. If it is, returns the owner.
+pub fn is_multitoken_balance_key<'a>(
+    token_addr: &Address,
+    key: &'a Key,
+) -> Option<&'a Address> {
+    match key.segments.first() {
+        Some(DbKeySeg::AddressSeg(addr)) if addr == token_addr => {}
+        _ => return None,
+    }
+    let len = key.segments.len();
+    match key.segments.get(len - 2) {
+        Some(DbKeySeg::StringSeg(balance))
+            if balance == BALANCE_STORAGE_KEY => {}
+        _ => return None,
+    }
+    match key.segments.last() {
+        Some(DbKeySeg::AddressSeg(owner)) => Some(owner),
+        _ => None,
+    }
+}
+
+/// Check if the given storage key is multitoken balance key for unspecified
+/// token. If it is, returns the owner.
+pub fn is_any_multitoken_balance_key(key: &Key) -> Option<&Address> {
+    match key.segments.first() {
+        Some(DbKeySeg::AddressSeg(_)) => {}
+        _ => return None,
+    }
+    let len = key.segments.len();
+    match key.segments.get(len - 2) {
+        Some(DbKeySeg::StringSeg(balance))
+            if balance == BALANCE_STORAGE_KEY =>
+        {
+            match key.segments.last() {
+                Some(DbKeySeg::AddressSeg(owner)) => Some(owner),
+                _ => None,
+            }
+        }
         _ => None,
     }
 }

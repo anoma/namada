@@ -128,37 +128,49 @@ impl IbcActions for TestIbcActions {
         tx_host_env::emit_ibc_event(&event)
     }
 
-    fn transfer_token(
-        &self,
-        src: &Address,
-        dest: &Address,
-        token: &Address,
-        amount: Amount,
-    ) {
-        let src_key = token::balance_key(token, src);
-        let dest_key = token::balance_key(token, dest);
-        let src_bal: Option<Amount> = tx_host_env::read(&src_key.to_string());
-        let mut src_bal = src_bal.unwrap_or_else(|| match src {
-            Address::Internal(InternalAddress::IbcMint) => Amount::max(),
-            _ => unreachable!(),
-        });
+    fn transfer_token(&self, src: &Key, dest: &Key, amount: Amount) {
+        let src_owner = token::is_any_multitoken_balance_key(src);
+        let src_bal: Option<Amount> = match src_owner {
+            Some(Address::Internal(InternalAddress::IbcMint)) => {
+                Some(Amount::max())
+            }
+            Some(Address::Internal(InternalAddress::IbcBurn)) => {
+                unreachable!()
+            }
+            Some(_) => tx_host_env::read(&src.to_string()),
+            None => {
+                // the key is not multitoken key
+                match token::is_any_token_balance_key(src) {
+                    Some(_) => tx_host_env::read(src.to_string()),
+                    None => unreachable!(),
+                }
+            }
+        };
+        let mut src_bal = src_bal.unwrap();
         src_bal.spend(&amount);
-        let mut dest_bal: Amount =
-            tx_host_env::read(&dest_key.to_string()).unwrap_or_default();
+        let dest_owner = token::is_any_multitoken_balance_key(dest);
+        let mut dest_bal: Amount = match dest_owner {
+            Some(Address::Internal(InternalAddress::IbcMint)) => unreachable!(),
+            Some(_) => tx_host_env::read(dest.to_string()).unwrap_or_default(),
+            None => match token::is_any_token_balance_key(dest) {
+                Some(_) => {
+                    tx_host_env::read(dest.to_string()).unwrap_or_default()
+                }
+                None => unreachable!(),
+            },
+        };
         dest_bal.receive(&amount);
-        match src {
-            Address::Internal(InternalAddress::IbcMint) => {
-                tx_host_env::write_temp(&src_key.to_string(), src_bal)
+        match src_owner {
+            Some(Address::Internal(InternalAddress::IbcMint)) => {
+                tx_host_env::write_temp(&src.to_string(), src_bal)
             }
-            Address::Internal(InternalAddress::IbcBurn) => unreachable!(),
-            _ => tx_host_env::write(&src_key.to_string(), src_bal),
+            _ => tx_host_env::write(&src.to_string(), src_bal),
         }
-        match dest {
-            Address::Internal(InternalAddress::IbcMint) => unreachable!(),
-            Address::Internal(InternalAddress::IbcBurn) => {
-                tx_host_env::write_temp(&dest_key.to_string(), dest_bal)
+        match dest_owner {
+            Some(Address::Internal(InternalAddress::IbcBurn)) => {
+                tx_host_env::write_temp(&dest.to_string(), dest_bal)
             }
-            _ => tx_host_env::write(&dest_key.to_string(), dest_bal),
+            _ => tx_host_env::write(&dest.to_string(), dest_bal),
         }
     }
 
@@ -205,16 +217,16 @@ pub fn init_ibc_vp_from_tx<'a>(
 pub fn init_token_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
-    addr: &Address,
+    target: &Key,
 ) -> (TestIbcTokenVp<'a>, TempDir) {
-    let (verifiers, keys_changed) = tx_env
+    let (_, keys_changed) = tx_env
         .write_log
         .verifiers_and_changed_keys(&tx_env.verifiers);
-    if !verifiers.contains(addr) {
+    if !keys_changed.contains(target) {
         panic!(
-            "The given token address {} isn't part of the tx verifiers set: \
+            "The given target address {} isn't part of the tx verifiers set: \
              {:#?}",
-            addr, verifiers
+            target, keys_changed,
         );
     }
     let (vp_wasm_cache, vp_cache_dir) =

@@ -10,6 +10,7 @@ use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::Msg
 use crate::ibc::core::ics04_channel::msgs::PacketMsg;
 use crate::ibc::core::ics04_channel::packet::Packet;
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
+use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;
@@ -18,9 +19,7 @@ use crate::types::ibc::data::{
     Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
 };
 use crate::types::storage::Key;
-use crate::types::token::{
-    self, is_non_owner_balance_key, Amount, AmountParseError,
-};
+use crate::types::token::{self, Amount, AmountParseError};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -70,7 +69,7 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = InternalAddress::IbcBurn;
+    const ADDR: InternalAddress = InternalAddress::IbcEscrow;
 
     fn validate_tx(
         &self,
@@ -82,14 +81,21 @@ where
             SignedTxData::try_from_slice(tx_data).map_err(Error::Decoding)?;
         let tx_data = &signed.data.ok_or(Error::NoTxData)?;
 
-        // Check the non-onwer balance updates
+        // Check the special IBC account updates
         let keys_changed: HashSet<Key> = keys_changed
             .iter()
-            .filter(|k| is_non_owner_balance_key(k).is_some())
+            .filter(|k| {
+                matches!(
+                    token::is_any_multitoken_balance_key(k),
+                    Some(Address::Internal(InternalAddress::IbcEscrow))
+                        | Some(Address::Internal(InternalAddress::IbcBurn))
+                        | Some(Address::Internal(InternalAddress::IbcMint))
+                )
+            })
             .cloned()
             .collect();
         if keys_changed.len() != 1 {
-            // a transaction can update at most 1 non-owner balance for now
+            // a transaction can update at most 1 special IBC account for now
             return Err(Error::TokenTransfer(
                 "Invalid transfer for multiple non-owner balances".to_owned(),
             ));
@@ -134,10 +140,17 @@ where
             msg.source_port.clone(),
             msg.source_channel.clone()
         );
+        let key_prefix = ibc_storage::ibc_token_prefix(
+            &msg.source_port,
+            &msg.source_channel,
+            &token,
+        );
         let change = if data.denom.starts_with(&prefix) {
             // sink zone
-            let target = Address::Internal(InternalAddress::IbcBurn);
-            let target_key = token::balance_key(&token, &target);
+            let target_key = token::multitoken_balance_key(
+                &key_prefix,
+                &Address::Internal(InternalAddress::IbcBurn),
+            );
             let post =
                 try_decode_token_amount(self.ctx.read_temp(&target_key)?)?
                     .unwrap_or_default();
@@ -145,12 +158,10 @@ where
             post.change()
         } else {
             // source zone
-            let target =
-                Address::Internal(InternalAddress::ibc_escrow_address(
-                    msg.source_port.to_string(),
-                    msg.source_channel.to_string(),
-                ));
-            let target_key = token::balance_key(&token, &target);
+            let target_key = token::multitoken_balance_key(
+                &key_prefix,
+                &Address::Internal(InternalAddress::IbcEscrow),
+            );
             let pre = try_decode_token_amount(self.ctx.read_pre(&target_key)?)?
                 .unwrap_or_default();
             let post =
@@ -182,14 +193,17 @@ where
             packet.source_port.clone(),
             packet.source_channel.clone()
         );
+        let key_prefix = ibc_storage::ibc_token_prefix(
+            &packet.source_port,
+            &packet.source_channel,
+            &token,
+        );
         let change = if data.denom.starts_with(&prefix) {
             // this chain is the source
-            let source =
-                Address::Internal(InternalAddress::ibc_escrow_address(
-                    packet.destination_port.to_string(),
-                    packet.destination_channel.to_string(),
-                ));
-            let source_key = token::balance_key(&token, &source);
+            let source_key = token::multitoken_balance_key(
+                &key_prefix,
+                &Address::Internal(InternalAddress::IbcEscrow),
+            );
             let pre = try_decode_token_amount(self.ctx.read_pre(&source_key)?)?
                 .unwrap_or_default();
             let post =
@@ -198,8 +212,10 @@ where
             pre.change() - post.change()
         } else {
             // the sender is the source
-            let source = Address::Internal(InternalAddress::IbcMint);
-            let source_key = token::balance_key(&token, &source);
+            let source_key = token::multitoken_balance_key(
+                &key_prefix,
+                &Address::Internal(InternalAddress::IbcMint),
+            );
             let post =
                 try_decode_token_amount(self.ctx.read_temp(&source_key)?)?
                     .unwrap_or_default();
@@ -231,10 +247,17 @@ where
             packet.source_port.clone(),
             packet.source_channel.clone()
         );
+        let key_prefix = ibc_storage::ibc_token_prefix(
+            &packet.source_port,
+            &packet.source_channel,
+            &token,
+        );
         let change = if data.denom.starts_with(&prefix) {
             // sink zone: mint the token for the refund
-            let source = Address::Internal(InternalAddress::IbcMint);
-            let source_key = token::balance_key(&token, &source);
+            let source_key = token::multitoken_balance_key(
+                &key_prefix,
+                &Address::Internal(InternalAddress::IbcMint),
+            );
             let post =
                 try_decode_token_amount(self.ctx.read_temp(&source_key)?)?
                     .unwrap_or_default();
@@ -242,12 +265,10 @@ where
             Amount::max().change() - post.change()
         } else {
             // source zone: unescrow the token for the refund
-            let source =
-                Address::Internal(InternalAddress::ibc_escrow_address(
-                    packet.source_port.to_string(),
-                    packet.source_channel.to_string(),
-                ));
-            let source_key = token::balance_key(&token, &source);
+            let source_key = token::multitoken_balance_key(
+                &key_prefix,
+                &Address::Internal(InternalAddress::IbcEscrow),
+            );
             let pre = try_decode_token_amount(self.ctx.read_pre(&source_key)?)?
                 .unwrap_or_default();
             let post =
