@@ -1599,6 +1599,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_tx_prelude"
+version = "0.7.1"
+dependencies = [
+ "namada_vm_env",
+ "sha2 0.10.2",
+]
+
+[[package]]
 name = "namada_vm_env"
 version = "0.7.1"
 dependencies = [
@@ -1614,6 +1622,24 @@ version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",
+]
+
+[[package]]
+name = "namada_wasm"
+version = "0.7.1"
+dependencies = [
+ "borsh",
+ "getrandom",
+ "namada",
+ "namada_tests",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
+ "once_cell",
+ "proptest",
+ "rust_decimal",
+ "tracing",
+ "tracing-subscriber",
+ "wee_alloc",
 ]
 
 [[package]]
@@ -2979,6 +3005,17 @@ name = "try-lock"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
+
+[[package]]
+name = "tx_template"
+version = "0.7.1"
+dependencies = [
+ "borsh",
+ "getrandom",
+ "namada_tests",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
 
 [[package]]
 name = "typenum"
