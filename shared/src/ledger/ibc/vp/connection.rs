@@ -99,8 +99,8 @@ where
 
         match self.get_connection_state_change(&conn_id)? {
             StateChange::Created => {
-                self.validate_created_connection(&conn_id, conn, tx_data)
-                // self.validate_connection_ids(&conn_id, conn)
+                self.validate_created_connection(&conn_id, &conn, tx_data)?;
+                self.validate_connection_ids(&conn_id, &conn)
             }
             StateChange::Updated => {
                 self.validate_updated_connection(&conn_id, conn, tx_data)
@@ -113,11 +113,11 @@ where
     }
 
     /// Validates connection id list of the given connection end
-    /// The connection id list contains is comma separated
+    /// The connection id list is comma separated
     fn validate_connection_ids(
         &self,
         conn_id: &ConnectionId,
-        conn: ConnectionEnd,
+        conn: &ConnectionEnd,
     ) -> Result<()> {
         let conn_ids_key = connection_ids_key(conn.client_id());
 
@@ -196,7 +196,7 @@ where
     fn validate_created_connection(
         &self,
         conn_id: &ConnectionId,
-        conn: ConnectionEnd,
+        conn: &ConnectionEnd,
         tx_data: &[u8],
     ) -> Result<()> {
         match conn.state() {
@@ -275,7 +275,7 @@ where
 
     fn verify_connection_try_proof(
         &self,
-        conn: ConnectionEnd,
+        conn: &ConnectionEnd,
         msg: &MsgConnectionOpenTry,
     ) -> Result<()> {
         let client_id = conn.client_id().clone();
