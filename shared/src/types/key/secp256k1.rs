@@ -270,18 +270,12 @@ impl super::Signature for Signature {
     }
 }
 
-// Would ideally like Serialize, Deserialize to be implemented in libsecp256k1, may try to do so and merge
-// upstream in the future.
-
 impl Serialize for Signature {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> 
     where
         S: Serializer,
     {
         let arr = self.0.serialize();
-        // TODO: implement the line below, currently cannot support [u8; 64]
-        // serde::Serialize::serialize(&arr, serializer)
-
         let mut seq = serializer.serialize_tuple(arr.len())?;
         for elem in &arr[..] {
             seq.serialize_element(elem)?;
