@@ -35,7 +35,7 @@ impl super::PublicKey for PublicKey {
             #[allow(clippy::bind_instead_of_map)]
             super::common::PublicKey::try_from_pk(pk).and_then(|x| match x {
                 super::common::PublicKey::Ed25519(epk) => Ok(epk),
-                // _ => Err(ParsePublicKeyError::MismatchedScheme),
+                _ => Err(ParsePublicKeyError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
             Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
@@ -139,7 +139,7 @@ impl super::SecretKey for SecretKey {
             #[allow(clippy::bind_instead_of_map)]
             super::common::SecretKey::try_from_sk(pk).and_then(|x| match x {
                 super::common::SecretKey::Ed25519(epk) => Ok(epk),
-                // _ => Err(ParseSecretKeyError::MismatchedScheme),
+                _ => Err(ParseSecretKeyError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
             Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
@@ -242,7 +242,7 @@ impl super::Signature for Signature {
             #[allow(clippy::bind_instead_of_map)]
             super::common::Signature::try_from_sig(pk).and_then(|x| match x {
                 super::common::Signature::Ed25519(epk) => Ok(epk),
-                // _ => Err(ParseSignatureError::MismatchedScheme),
+                _ => Err(ParseSignatureError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
             Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
