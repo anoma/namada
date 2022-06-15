@@ -96,6 +96,11 @@ pub fn is_client_counter_key(key: &Key) -> bool {
     *key == client_counter_key()
 }
 
+/// Check if the given key is a key of the client's connection id list
+pub fn is_connection_ids_key(key: &Key, client_id: &ClientId) -> bool {
+    *key == connection_ids_key(client_id)
+}
+
 /// Check if the given key is a key of the connection counter
 pub fn is_connection_counter_key(key: &Key) -> bool {
     *key == connection_counter_key()
