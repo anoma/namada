@@ -375,7 +375,7 @@ mod tests {
     use super::super::storage::{
         ack_key, capability_key, channel_key, client_state_key,
         client_type_key, client_update_height_key, client_update_timestamp_key,
-        commitment_key, connection_key, consensus_state_key,
+        commitment_key, connection_key, connection_ids_key, consensus_state_key,
         next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
         port_key, receipt_key,
     };
@@ -695,10 +695,11 @@ mod tests {
     fn test_init_connection() {
         let (mut storage, mut write_log) = insert_init_states();
         write_log.commit_block(&mut storage).expect("commit failed");
+        let client_id = get_client_id();
 
         // prepare a message
         let msg = MsgConnectionOpenInit {
-            client_id: get_client_id(),
+            client_id: client_id.clone(),
             counterparty: get_conn_counterparty(),
             version: None,
             delay_period: Duration::new(100, 0),
@@ -711,6 +712,10 @@ mod tests {
         let conn = init_connection(&msg);
         let bytes = conn.encode_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
+        let conn_ids_key = connection_ids_key(&client_id);
+        write_log
+            .write(&conn_ids_key, conn_id.to_string().as_bytes().to_vec())
+            .expect("write failed");
         let event = make_open_init_connection_event(&conn_id, &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
@@ -788,6 +793,12 @@ mod tests {
     #[test]
     fn test_try_connection() {
         let (mut storage, mut write_log) = insert_init_states();
+        let client_id = get_client_id();
+        let conn_ids_key = connection_ids_key(&client_id);
+        write_log
+            .write(&conn_ids_key, "42".to_string().as_bytes().to_vec())
+            .expect("write failed");
+        write_log.commit_tx();
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // prepare data
@@ -814,7 +825,7 @@ mod tests {
         .unwrap();
         let msg = MsgConnectionOpenTry {
             previous_connection_id: None,
-            client_id: get_client_id(),
+            client_id: client_id.clone(),
             client_state: Some(client_state),
             counterparty: get_conn_counterparty(),
             counterparty_versions: vec![ConnVersion::default()],
@@ -831,6 +842,21 @@ mod tests {
         write_log.write(&conn_key, bytes).expect("write failed");
         let event = make_open_try_connection_event(&conn_id, &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
+        let (old_conn_ids, _) =
+            storage.read(&conn_ids_key).expect("read failed");
+        write_log
+            .write(
+                &conn_ids_key,
+                format!(
+                    "{},{}",
+                    String::from_utf8(old_conn_ids.unwrap())
+                        .expect("decoding failed"),
+                    conn_id.as_str()
+                )
+                .as_bytes()
+                .to_vec(),
+            )
+            .expect("write failed");
 
         let tx_code = vec![];
         let mut tx_data = vec![];
