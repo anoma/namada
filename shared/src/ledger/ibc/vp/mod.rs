@@ -15,7 +15,10 @@ use borsh::BorshDeserialize;
 use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
-use super::storage::{client_id, ibc_prefix, is_client_counter_key, IbcPrefix};
+use super::storage::{
+    client_id, ibc_prefix, is_client_counter_key, is_connection_ids_key,
+    IbcPrefix,
+};
 use crate::ibc::core::ics02_client::context::ClientReader;
 use crate::ibc::events::IbcEvent;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
@@ -112,11 +115,13 @@ where
                         } else {
                             let client_id = client_id(key)
                                 .map_err(|e| Error::KeyError(e.to_string()))?;
-                            if !clients.insert(client_id.clone()) {
-                                // this client has been checked
-                                continue;
+                            if !is_connection_ids_key(key, &client_id) {
+                                if !clients.insert(client_id.clone()) {
+                                    // this client has been checked
+                                    continue;
+                                }
+                                self.validate_client(&client_id, tx_data)?
                             }
-                            self.validate_client(&client_id, tx_data)?
                         }
                     }
                     IbcPrefix::Connection => {

@@ -145,6 +145,7 @@ where
                 }
                 Ok(())
             }
+            Ok(None) => Ok(()),
             _ => Err(Error::InvalidConnection(format!(
                 "Unable to get the previous connection: ID {}",
                 conn_id
