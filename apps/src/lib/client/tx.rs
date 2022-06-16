@@ -415,7 +415,14 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         }
     }
     // Check source balance
-    let balance_key = token::balance_key(&token, &source);
+    let balance_key = match args.source_sub_prefix {
+        Some(sub_prefix) => {
+            let sub_prefix = Key::parse(sub_prefix).unwrap();
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            token::multitoken_balance_key(&prefix, &source)
+        }
+        None => token::balance_key(&token, &source),
+    };
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {

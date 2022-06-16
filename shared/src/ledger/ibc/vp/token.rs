@@ -87,9 +87,15 @@ where
             .filter(|k| {
                 matches!(
                     token::is_any_multitoken_balance_key(k),
-                    Some(Address::Internal(InternalAddress::IbcEscrow))
-                        | Some(Address::Internal(InternalAddress::IbcBurn))
-                        | Some(Address::Internal(InternalAddress::IbcMint))
+                    Some((_, Address::Internal(InternalAddress::IbcEscrow)))
+                        | Some((
+                            _,
+                            Address::Internal(InternalAddress::IbcBurn)
+                        ))
+                        | Some((
+                            _,
+                            Address::Internal(InternalAddress::IbcMint)
+                        ))
                 )
             })
             .cloned()

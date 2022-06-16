@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
 
-use async_std::fs::{self};
+use async_std::fs;
 use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
@@ -27,7 +27,7 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, TallyResult,
 };
 use namada::types::key::*;
-use namada::types::storage::{Epoch, PrefixValue};
+use namada::types::storage::{Epoch, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
 use tendermint::abci::Code;
@@ -101,7 +101,15 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
         (Some(token), Some(owner)) => {
             let token = ctx.get(&token);
             let owner = ctx.get(&owner);
-            let key = token::balance_key(&token, &owner);
+            let key = match args.sub_prefix {
+                Some(sub_prefix) => {
+                    let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
+                    let prefix =
+                        token::multitoken_balance_prefix(&token, &sub_prefix);
+                    token::multitoken_balance_key(&prefix, &owner)
+                }
+                None => token::balance_key(&token, &owner),
+            };
             let currency_code = tokens
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
@@ -119,12 +127,47 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             let owner = ctx.get(&owner);
             let mut found_any = false;
             for (token, currency_code) in tokens {
-                let key = token::balance_key(&token, &owner);
-                if let Some(balance) =
-                    query_storage_value::<token::Amount>(&client, &key).await
-                {
-                    println!("{}: {}", currency_code, balance);
-                    found_any = true;
+                let prefix = token.to_db_key().into();
+                let balances = query_storage_prefix::<token::Amount>(
+                    client.clone(),
+                    prefix,
+                )
+                .await;
+                match balances {
+                    Some(balances) => {
+                        let stdout = io::stdout();
+                        let mut w = stdout.lock();
+                        for (key, balance) in balances {
+                            match token::is_any_multitoken_balance_key(&key) {
+                                Some((sub_prefix, o)) if *o == owner => {
+                                    writeln!(
+                                        w,
+                                        "{} with {}: {}",
+                                        currency_code, sub_prefix, balance
+                                    )
+                                    .unwrap();
+                                    found_any = true;
+                                }
+                                Some(_) => {}
+                                None => {
+                                    if let Some(o) =
+                                        token::is_any_token_balance_key(&key)
+                                    {
+                                        if *o == owner {
+                                            writeln!(
+                                                w,
+                                                "{}: {}",
+                                                currency_code, balance
+                                            )
+                                            .unwrap();
+                                            found_any = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None => {}
                 }
             }
             if !found_any {
@@ -133,9 +176,9 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
         }
         (Some(token), None) => {
             let token = ctx.get(&token);
-            let key = token::balance_prefix(&token);
+            let prefix = token.to_db_key().into();
             let balances =
-                query_storage_prefix::<token::Amount>(client, key).await;
+                query_storage_prefix::<token::Amount>(client, prefix).await;
             match balances {
                 Some(balances) => {
                     let currency_code = tokens
@@ -144,12 +187,30 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
                         .unwrap_or_else(|| Cow::Owned(token.to_string()));
                     let stdout = io::stdout();
                     let mut w = stdout.lock();
-                    writeln!(w, "Token {}:", currency_code).unwrap();
+                    writeln!(w, "Token {}", currency_code).unwrap();
                     for (key, balance) in balances {
-                        let owner =
-                            token::is_any_token_balance_key(&key).unwrap();
-                        writeln!(w, "  {}, owned by {}", balance, owner)
-                            .unwrap();
+                        match token::is_any_multitoken_balance_key(&key) {
+                            Some((sub_prefix, owner)) => {
+                                writeln!(
+                                    w,
+                                    " with {}:  {}, owned by {}",
+                                    sub_prefix, balance, owner
+                                )
+                                .unwrap();
+                            }
+                            None => {
+                                if let Some(owner) =
+                                    token::is_any_token_balance_key(&key)
+                                {
+                                    writeln!(
+                                        w,
+                                        ":  {}, owned by {}",
+                                        balance, owner
+                                    )
+                                    .unwrap();
+                                }
+                            }
+                        }
                     }
                 }
                 None => {
@@ -167,12 +228,30 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
                         .await;
                 match balances {
                     Some(balances) => {
-                        writeln!(w, "Token {}:", currency_code).unwrap();
+                        writeln!(w, "Token {}", currency_code).unwrap();
                         for (key, balance) in balances {
-                            let owner =
-                                token::is_any_token_balance_key(&key).unwrap();
-                            writeln!(w, "  {}, owned by {}", balance, owner)
-                                .unwrap();
+                            match token::is_any_multitoken_balance_key(&key) {
+                                Some((sub_prefix, owner)) => {
+                                    writeln!(
+                                        w,
+                                        " with {}:  {}, owned by {}",
+                                        sub_prefix, balance, owner
+                                    )
+                                    .unwrap();
+                                }
+                                None => {
+                                    if let Some(owner) =
+                                        token::is_any_token_balance_key(&key)
+                                    {
+                                        writeln!(
+                                            w,
+                                            ":  {}, owned by {}",
+                                            balance, owner
+                                        )
+                                        .unwrap()
+                                    }
+                                }
+                            }
                         }
                     }
                     None => {
