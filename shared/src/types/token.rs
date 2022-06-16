@@ -250,6 +250,14 @@ pub fn balance_prefix(token_addr: &Address) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Obtain a storage key prefix for multitoken balances.
+pub fn multitoken_balance_prefix(
+    token_addr: &Address,
+    sub_prefix: &Key,
+) -> Key {
+    Key::from(token_addr.to_db_key()).join(sub_prefix)
+}
+
 /// Obtain a storage key for user's multitoken balance.
 pub fn multitoken_balance_key(prefix: &Key, owner: &Address) -> Key {
     prefix
@@ -289,41 +297,54 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
 }
 
 /// Check if the given storage key is multitoken balance key for the given
-/// token. If it is, returns the owner.
+/// token. If it is, returns the sub prefix and the owner.
 pub fn is_multitoken_balance_key<'a>(
     token_addr: &Address,
     key: &'a Key,
-) -> Option<&'a Address> {
+) -> Option<(Key, &'a Address)> {
     match key.segments.first() {
         Some(DbKeySeg::AddressSeg(addr)) if addr == token_addr => {}
         _ => return None,
     }
     let len = key.segments.len();
-    match key.segments.get(len - 2) {
+    match key.get_at(len - 2) {
         Some(DbKeySeg::StringSeg(balance))
             if balance == BALANCE_STORAGE_KEY => {}
         _ => return None,
     }
     match key.segments.last() {
-        Some(DbKeySeg::AddressSeg(owner)) => Some(owner),
+        Some(DbKeySeg::AddressSeg(owner)) => {
+            let sub_prefix = Key {
+                segments: key.segments[1..(len - 2)].to_vec(),
+            };
+            Some((sub_prefix, owner))
+        }
         _ => None,
     }
 }
 
 /// Check if the given storage key is multitoken balance key for unspecified
-/// token. If it is, returns the owner.
-pub fn is_any_multitoken_balance_key(key: &Key) -> Option<&Address> {
+/// token. If it is, returns the sub prefix and the owner.
+pub fn is_any_multitoken_balance_key(key: &Key) -> Option<(Key, &Address)> {
     match key.segments.first() {
         Some(DbKeySeg::AddressSeg(_)) => {}
         _ => return None,
     }
     let len = key.segments.len();
-    match key.segments.get(len - 2) {
+    if len <= 3 {
+        return None;
+    }
+    match key.get_at(len - 2) {
         Some(DbKeySeg::StringSeg(balance))
             if balance == BALANCE_STORAGE_KEY =>
         {
             match key.segments.last() {
-                Some(DbKeySeg::AddressSeg(owner)) => Some(owner),
+                Some(DbKeySeg::AddressSeg(owner)) => {
+                    let sub_prefix = Key {
+                        segments: key.segments[1..(len - 2)].to_vec(),
+                    };
+                    Some((sub_prefix, owner))
+                }
                 _ => None,
             }
         }

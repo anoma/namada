@@ -129,7 +129,8 @@ impl IbcActions for TestIbcActions {
     }
 
     fn transfer_token(&self, src: &Key, dest: &Key, amount: Amount) {
-        let src_owner = token::is_any_multitoken_balance_key(src);
+        let src_owner =
+            token::is_any_multitoken_balance_key(src).map(|(_, o)| o);
         let src_bal: Option<Amount> = match src_owner {
             Some(Address::Internal(InternalAddress::IbcMint)) => {
                 Some(Amount::max())
@@ -148,7 +149,8 @@ impl IbcActions for TestIbcActions {
         };
         let mut src_bal = src_bal.unwrap();
         src_bal.spend(&amount);
-        let dest_owner = token::is_any_multitoken_balance_key(dest);
+        let dest_owner =
+            token::is_any_multitoken_balance_key(dest).map(|(_, o)| o);
         let mut dest_bal: Amount = match dest_owner {
             Some(Address::Internal(InternalAddress::IbcMint)) => unreachable!(),
             Some(_) => tx_host_env::read(dest.to_string()).unwrap_or_default(),

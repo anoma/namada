@@ -21,8 +21,10 @@ pub mod vp {
         let mut change: Change = 0;
         let all_checked = keys_changed.iter().all(|key| {
             let owner: Option<&Address> =
-                token::is_multitoken_balance_key(token, key)
-                    .or_else(|| token::is_balance_key(token, key));
+                match token::is_multitoken_balance_key(token, key) {
+                    Some((_, o)) => Some(o),
+                    None => token::is_balance_key(token, key),
+                };
             match owner {
                 None => {
                     // Unknown changes to this address space are disallowed, but
@@ -99,7 +101,7 @@ pub mod tx {
 
     /// A token transfer with storage keys that can be used in a transaction.
     pub fn multitoken_transfer(src_key: &Key, dest_key: &Key, amount: Amount) {
-        let src_owner = is_any_multitoken_balance_key(src_key);
+        let src_owner = is_any_multitoken_balance_key(src_key).map(|(_, o)| o);
         let src_bal: Option<Amount> = match src_owner {
             Some(Address::Internal(InternalAddress::IbcMint)) => {
                 Some(Amount::max())
@@ -128,7 +130,8 @@ pub mod tx {
             unreachable!()
         });
         src_bal.spend(&amount);
-        let dest_owner = is_any_multitoken_balance_key(dest_key);
+        let dest_owner =
+            is_any_multitoken_balance_key(dest_key).map(|(_, o)| o);
         let mut dest_bal: Amount = match dest_owner {
             Some(Address::Internal(InternalAddress::IbcMint)) => {
                 tx::log_string("invalid transfer to the mint address");
