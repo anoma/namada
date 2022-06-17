@@ -193,7 +193,11 @@ pub async fn submit_init_validator(
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
-            .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
+            .gen_key(
+                SchemeType::Ed25519Consensus,
+                Some(validator_key_alias.clone()),
+                unsafe_dont_encrypt,
+            )
             .1
             .ref_to()
     });
@@ -202,7 +206,11 @@ pub async fn submit_init_validator(
         ctx.get_opt_cached(&consensus_key).unwrap_or_else(|| {
             println!("Generating consensus key...");
             ctx.wallet
-                .gen_key(Some(consensus_key_alias.clone()), unsafe_dont_encrypt)
+                .gen_key(
+                    SchemeType::Ed25519Consensus,
+                    Some(consensus_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
                 .1
         });
 
@@ -210,7 +218,11 @@ pub async fn submit_init_validator(
         ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
             println!("Generating staking reward account key...");
             ctx.wallet
-                .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
+                .gen_key(
+                    SchemeType::Ed25519Consensus,
+                    Some(rewards_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
                 .1
                 .ref_to()
         });
