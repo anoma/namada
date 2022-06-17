@@ -2,9 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use anoma::types::key::{common, SchemeType};
 use ark_serialize::{Read, Write};
 use file_lock::{FileLock, FileOptions};
+use namada::types::key::{common, SchemeType};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -148,8 +148,7 @@ impl ValidatorWallet {
         let (rewards_key, rewards_sk) = gen_key_to_store(scheme, &password);
         let (tendermint_node_key, tendermint_node_sk) =
             gen_key_to_store(scheme, &password);
-        let validator_keys =
-            store::Store::gen_validator_keys(None, SchemeType::Common);
+        let validator_keys = store::Store::gen_validator_keys(None, scheme);
         let store = ValidatorStore {
             account_key,
             consensus_key,

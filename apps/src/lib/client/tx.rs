@@ -179,7 +179,7 @@ pub async fn submit_init_validator(
         println!("Generating validator account key...");
         ctx.wallet
             .gen_key(
-                scheme,
+                SchemeType::Ed25519Consensus,
                 Some(validator_key_alias.clone()),
                 unsafe_dont_encrypt,
             )
@@ -192,7 +192,7 @@ pub async fn submit_init_validator(
             println!("Generating consensus key...");
             ctx.wallet
                 .gen_key(
-                    scheme,
+                    SchemeType::Ed25519Consensus,
                     Some(consensus_key_alias.clone()),
                     unsafe_dont_encrypt,
                 )
@@ -204,7 +204,7 @@ pub async fn submit_init_validator(
             println!("Generating staking reward account key...");
             ctx.wallet
                 .gen_key(
-                    scheme,
+                    SchemeType::Ed25519Consensus,
                     Some(rewards_key_alias.clone()),
                     unsafe_dont_encrypt,
                 )
