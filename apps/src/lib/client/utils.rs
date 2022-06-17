@@ -341,7 +341,7 @@ pub async fn join_network(
                         ..
                     } = peer
                     {
-                        node_id != *peer_id
+                        node_id.as_ref().unwrap() != peer_id
                     } else {
                         true
                     }
@@ -359,7 +359,11 @@ pub async fn join_network(
 const TENDERMINT_NODE_ID_LENGTH: usize = 20;
 
 /// Derive Tendermint node ID from public key
-fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
+fn id_from_pk(
+    pk: &common::PublicKey,
+) -> Result<TendermintNodeId, ParsePublicKeyError> {
+    let pk_bytes = pk.try_to_vec();
+    let digest = Sha256::digest(pk_bytes.unwrap().as_slice());
     let mut bytes = [0u8; TENDERMINT_NODE_ID_LENGTH];
     let pk_bytes = match pk {
         common::PublicKey::Ed25519(_pk) => _pk.try_to_vec().unwrap(),
@@ -367,7 +371,7 @@ fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
     };
     let digest = Sha256::digest(pk_bytes.as_slice());
     bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
-    TendermintNodeId::new(bytes)
+    Ok(TendermintNodeId::new(bytes))
 }
 
 /// Initialize a new test network from the given configuration.
@@ -465,7 +469,7 @@ pub fn init_network(
         });
 
         // Derive the node ID from the node key
-        let node_id: TendermintNodeId = id_from_pk(&node_pk);
+        let node_id: TendermintNodeId = id_from_pk(&node_pk).unwrap();
 
         // Build the list of persistent peers from the validators' node IDs
         let peer = TendermintAddress::from_str(&format!(
@@ -1169,20 +1173,15 @@ fn write_tendermint_node_key(
     node_sk: common::SecretKey,
 ) -> common::PublicKey {
     let node_pk: common::PublicKey = node_sk.ref_to();
+    // Convert and write the keypair into Tendermint
+    // node_key.json file
+    let node_keypair =
+        [node_sk.try_to_vec().unwrap(), node_pk.try_to_vec().unwrap()].concat();
 
-    // Convert and write the keypair into Tendermint node_key.json file.
-    // Tendermint requires concatenating the private-public keys for ed25519
-    // but does not for secp256k1.
-    let (node_keypair, key_str) = match node_sk {
-        common::SecretKey::Ed25519(_) => {
-            ([node_sk.try_to_vec().unwrap(), node_pk.try_to_vec().unwrap()].concat(),
-            "Ed25519")
-        },
-        common::SecretKey::Secp256k1(_) => {
-            (node_sk.try_to_vec().unwrap(), "Secp256k1")
-        },
+    let key_str = match node_sk {
+        common::SecretKey::Ed25519(_) => "Ed25519",
+        common::SecretKey::Secp256k1(_) => "Secp256k1",
     };
-
     let tm_node_keypair_json = json!({
         "priv_key": {
             "type": format!("tendermint/PrivKey{}",key_str),
