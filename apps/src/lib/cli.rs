@@ -9,7 +9,7 @@
 pub mod context;
 mod utils;
 
-use clap::{crate_authors, AppSettings, ArgMatches};
+use clap::{crate_authors, AppSettings, ArgMatches, ArgGroup};
 pub use utils::safe_exit;
 use utils::*;
 
@@ -1377,7 +1377,7 @@ pub mod args {
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
-    use super::ArgMatches;
+    use super::{ArgMatches,ArgGroup};
     use crate::config;
     use crate::config::TendermintMode;
 
@@ -2865,6 +2865,14 @@ pub mod args {
                 ALIAS
                     .def()
                     .about("An alias associated with the address."),
+            )
+            .arg(ADDRESS
+                .def()
+                .about("The actual address <edit this statement eventually>")
+            )
+            .group(ArgGroup::new("find")
+                .args(&["alias", "address"])
+                .required(true)
             )
         }
     }
