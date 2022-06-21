@@ -1121,6 +1121,13 @@ pub async fn broadcast_tx(
         None,
     )?;
 
+    #[cfg(not(feature = "ABCI"))]
+    let response = wrapper_tx_subscription
+        .broadcast_tx(tx.to_bytes().into())
+        .await
+        .map_err(|err| WsError::Response(format!("{:?}", err)))?;
+
+    #[cfg(feature = "ABCI")]
     let response = wrapper_tx_subscription
         .broadcast_tx_sync(tx.to_bytes().into())
         .await
@@ -1141,7 +1148,7 @@ pub async fn broadcast_tx(
         println!("Transaction hash: {:?}", wrapper_tx_hash);
         Ok(response)
     } else {
-        Err(WsError::Response(response.log.to_string()))
+        Err(WsError::Response(serde_json::to_string(&response).unwrap()))
     }
 }
 
