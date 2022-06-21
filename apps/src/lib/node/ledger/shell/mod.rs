@@ -571,7 +571,7 @@ where
     ) -> response::CheckTx {
         let mut response = response::CheckTx::default();
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
-            Ok(_) => { },
+            Ok(_) => {}
             Err(_) => {
                 response.code = 1;
             }
