@@ -2852,12 +2852,14 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct AddressFind {
         pub alias: String,
+        pub address: Address,
     }
 
     impl Args for AddressFind {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
-            Self { alias }
+            let address = RAW_ADDRESS.parse(matches);
+            Self { alias, address }
         }
 
         fn def(app: App) -> App {
@@ -2866,11 +2868,11 @@ pub mod args {
                     .def()
                     .about("An alias associated with the address."),
             )
-            .arg(ADDRESS
+            .arg(RAW_ADDRESS
                 .def()
-                .about("The actual address <edit this statement eventually>")
+                .about("The bech32m encoded address string.")
             )
-            .group(ArgGroup::new("find")
+            .group(ArgGroup::new("find_flags")
                 .args(&["alias", "address"])
                 .required(true)
             )
@@ -3097,6 +3099,7 @@ pub fn anoma_client_cli() -> AnomaClient {
 
 pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {
     let app = anoma_wallet_app();
+    println!("created app from anoma_wallet_app()");
     cmds::AnomaWallet::parse_or_print_help(app)
 }
 
@@ -3128,10 +3131,12 @@ fn anoma_client_app() -> App {
 }
 
 fn anoma_wallet_app() -> App {
+    println!("Inside anoma wallet");
     let app = App::new(APP_NAME)
         .version(anoma_version())
         .author(crate_authors!("\n"))
         .about("Anoma wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
+    println!("Set up wallet app, now adding subcommands");
     cmds::AnomaWallet::add_sub(args::Global::def(app))
 }

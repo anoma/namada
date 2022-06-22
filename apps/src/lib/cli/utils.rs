@@ -17,8 +17,16 @@ pub trait Cmd: Sized {
     fn parse(matches: &ArgMatches) -> Option<Self>;
 
     fn parse_or_print_help(app: App) -> (Self, Context) {
+        println!("Inside parse_or_print_help(app)");
         let mut app = Self::add_sub(app);
+        println!("Added subs again");
+
+        println!("{:?}",app);
+        
+        dbg!(app.clone().get_matches());
+
         let matches = app.clone().get_matches();
+        println!("Parse or print help");
         match Self::parse(&matches) {
             Some(cmd) => {
                 let global_args = args::Global::parse(&matches);
@@ -170,6 +178,7 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn parse(&self, matches: &ArgMatches) -> T {
+        println!("I'm parsing!");
         parse_opt(matches, self.name).unwrap()
     }
 }
