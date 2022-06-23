@@ -73,7 +73,9 @@ clippy-abci-plus-plus:
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
 		--features "std testing ABCI-plus-plus" && \
-	$(cargo) +$(nightly) clippy --all-targets --manifest-path ./proof_of_stake/Cargo.toml && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./proof_of_stake/Cargo.toml \
+		--features "testing" && \
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
@@ -99,7 +101,7 @@ install: tendermint
 	find "target/release/" -type f \
 		\( -name "$(mm).dll" -o -name "$(mm).dylib" -o -name "$(mm).so" \) \
 		-exec install -d {} ${HOME}/.cargo/lib/ \; && \
-	ANOMA_DEV=false $(cargo) install --path ./apps
+	ANOMA_DEV=false $(cargo) install --path ./apps --locked
 
 tendermint:
 	./scripts/install/get_tendermint.sh
@@ -144,7 +146,8 @@ test-unit-abci-plus-plus:
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
 		--features "testing std ABCI-plus-plus" && \
-	$(cargo) test --manifest-path ./proof_of_stake/Cargo.toml && \
+	$(cargo) test --manifest-path ./proof_of_stake/Cargo.toml \
+		--features "testing" && \
 	$(cargo) test \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
