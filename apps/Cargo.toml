@@ -146,7 +146,7 @@ tower-abci-old = {package = "tower-abci", git = "https://github.com/heliaxdev/to
 tracing = "0.1.30"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", features = ["env-filter"]}
-web30 = "0.18.10"
+web30 = "0.19.1"
 websocket = "0.26.2"
 winapi = "0.3.9"
 

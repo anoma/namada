@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::fmt::Debug;
 use std::str::FromStr;
 
 use anoma::types::address::Address;
@@ -7,8 +8,16 @@ use ethabi::param_type::ParamType;
 use ethabi::token::Token;
 use ethabi::{decode, encode, Uint};
 use num256::Uint256;
+use thiserror::Error;
+use itertools::Either;
 
-use super::{Error, Result};
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Could not decode Ethereum event: {0}")]
+    Decode(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
@@ -47,42 +56,14 @@ pub mod signatures {
     }
 }
 
-/// Representation of address on Ethereum
-#[derive(Clone, Debug, PartialEq)]
-pub struct EthAddress(pub [u8; 20]);
-
-/// A Keccak hash
-#[derive(Clone, Debug, PartialEq)]
-pub struct KeccakHash(pub [u8; 32]);
-
-/// An Ethereum event to be processed by the Anoma ledger
-pub enum EthereumEvent {
-    TransfersToNamada(Vec<TransferToNamada>),
-    TransfersToErc(Vec<TransferToErc>),
-    ValidatorSetUpdate {
-        nonce: Uint,
-        bridge_validator_hash: KeccakHash,
-        governance_validator_hash: KeccakHash,
-    },
-    NewContract {
-        name: String,
-        address: EthAddress,
-    },
-    UpgradedContract {
-        name: String,
-        address: EthAddress,
-    },
-    UpdateBridgeWhitelist {
-        nonce: Uint,
-        whitelist: Vec<TokenWhitelist>,
-    },
-}
-
 /// An event waiting for a certain number of confirmations
 /// before being sent to the ledger
 pub struct PendingEvent {
+    /// number of confirmations to consider this event finalized
     confirmations: Uint256,
+    /// the block height from which this event originated
     block_height: Uint256,
+    /// the event itself
     pub event: EthereumEvent,
 }
 
@@ -101,17 +82,19 @@ impl PendingEvent {
     ) -> Result<Self> {
         match signature {
             signatures::TRANSFER_TO_NAMADA_SIG => {
-                RawTransfersToNamada::decode(data).map(|txs| PendingEvent {
+                RawTransfersToNamada::decode(data, TargetAddressType::Native)
+                    .map(|txs| PendingEvent {
                     confirmations: txs.confirmations.into(),
                     block_height,
-                    event: EthereumEvent::TransfersToNamada(txs.transfers),
+                    event: EthereumEvent::TransfersToNamada(txs.transfers.unwrap_left()),
                 })
             }
             signatures::TRANSFER_TO_ERC_SIG => {
-                RawTransfersToNamada::decode(data).map(|txs| PendingEvent {
+                RawTransfersToNamada::decode(data, TargetAddressType::Erc20)
+                    .map(|txs| PendingEvent {
                     confirmations: txs.confirmations.into(),
                     block_height,
-                    event: EthereumEvent::TransfersToErc(txs.transfers),
+                    event: EthereumEvent::TransfersToErc(txs.transfers.unwrap_right()),
                 })
             }
             signatures::VALIDATOR_SET_UPDATE_SIG => {
@@ -121,7 +104,7 @@ impl PendingEvent {
                          bridge_validator_hash,
                          governance_validator_hash,
                      }| PendingEvent {
-                        confirmations: super::MIN_CONFIRMATIONS.into(),
+                        confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
                         block_height,
                         event: EthereumEvent::ValidatorSetUpdate {
                             nonce,
@@ -133,22 +116,22 @@ impl PendingEvent {
             }
             signatures::NEW_CONTRACT_SIG => RawChangedContract::decode(data)
                 .map(|RawChangedContract { name, address }| PendingEvent {
-                    confirmations: super::MIN_CONFIRMATIONS.into(),
+                    confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
                     block_height,
                     event: EthereumEvent::NewContract { name, address },
                 }),
             signatures::UPGRADED_CONTRACT_SIG => RawChangedContract::decode(
                 data,
             )
-            .map(|RawChangedContract { name, address }| PendingEvent {
-                confirmations: super::MIN_CONFIRMATIONS.into(),
-                block_height,
-                event: EthereumEvent::UpgradedContract { name, address },
-            }),
+                .map(|RawChangedContract { name, address }| PendingEvent {
+                    confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
+                    block_height,
+                    event: EthereumEvent::UpgradedContract { name, address },
+                }),
             signatures::UPDATE_BRIDGE_WHITELIST_SIG => {
                 UpdateBridgeWhitelist::decode(data).map(
                     |UpdateBridgeWhitelist { nonce, whitelist }| PendingEvent {
-                        confirmations: super::MIN_CONFIRMATIONS.into(),
+                        confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
                         block_height,
                         event: EthereumEvent::UpdateBridgeWhitelist {
                             nonce,
@@ -164,18 +147,139 @@ impl PendingEvent {
     /// Check if the minimum number of confirmations has been
     /// reached at the input block height.
     pub fn is_confirmed(&self, height: &Uint256) -> bool {
-        &self.confirmations >= height - &self.block_height
+        self.confirmations >= height.clone() - self.block_height.clone()
     }
+}
+
+/// Representation of address on Ethereum
+#[derive(Clone, Debug, PartialEq)]
+pub struct EthAddress(pub [u8; 20]);
+
+/// A Keccak hash
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeccakHash(pub [u8; 32]);
+
+/// An Ethereum event to be processed by the Anoma ledger
+#[derive(Debug)]
+pub enum EthereumEvent {
+    /// Event transferring batches of ether from Ethereum to wrapped ETH on Anoma
+    TransfersToNamada(Vec<TransferToNamada>),
+    /// Event transferring a batch of ERC20 tokens from Ethereum to a wrapped
+    /// version on Anoma
+    TransfersToErc(Vec<TransferToErc>),
+    /// Event indication that the validator set has been updated
+    /// in the governance contract
+    ValidatorSetUpdate {
+        /// Monotonically increasing nonce
+        nonce: Uint,
+        /// Hash of the validators in the bridge contract
+        bridge_validator_hash: KeccakHash,
+        /// Hash of the validators in the governance contract
+        governance_validator_hash: KeccakHash,
+    },
+    /// Event indication that a new smart contract has been
+    /// deployed
+    NewContract {
+        /// Name of the contract
+        name: String,
+        /// Address of the contract on Ethereum
+        address: EthAddress,
+    },
+    /// Event indicating that a smart contract has been updated
+    UpgradedContract {
+        /// Name of the contract
+        name: String,
+        /// Address of the contract on Ethereum
+        address: EthAddress,
+    },
+    /// Event indication a new Ethereum based token has been whitelisted for
+    /// transfer across the bridge
+    UpdateBridgeWhitelist {
+        /// Monotonically increasing nonce
+        nonce: Uint,
+        /// Tokens to be allowed to be transferred across the bridge
+        whitelist: Vec<TokenWhitelist>,
+    },
+}
+
+/// An event transferring some kind of value from Ethereum to Anoma
+#[derive(Debug)]
+pub struct RawTransferToNamada<T: TargetAddress> {
+    /// Quantity of ether in the transfer
+    pub amount: Amount,
+    /// Address paying the ether
+    pub source: EthAddress,
+    /// The address receiving wrapped assets on Anoma
+    pub target: T,
+}
+
+/// Type alias for transferring ether to wrapped ETH
+pub type TransferToNamada = RawTransferToNamada<Address>;
+/// Type alias for transferring ERC20 to wrapped version on Anoma
+pub type TransferToErc = RawTransferToNamada<EthAddress>;
+
+/// struct for whitelisting a token from Ethereum.
+/// Includes the address of issuing contract and
+/// a cap on the max amount of this token allowed to be
+/// held by the bridge.
+#[derive(Debug)]
+pub struct TokenWhitelist {
+    /// Address of Ethereum smart contract issuing token
+    pub token: EthAddress,
+    /// Maximum amount of token allowed on the bridge
+    pub cap: Amount,
+}
+
+/// A batch of [`RawTransferToNamada`] from an Ethereum event
+struct RawTransfersToNamada {
+    /// A list of transfers
+    pub transfers: Either<Vec<TransferToNamada>, Vec<TransferToErc>>,
+    /// A monotonically increasing nonce
+    pub nonce: Uint,
+    /// The number of confirmations needed to consider this batch
+    /// finalized
+    pub confirmations: u32,
+}
+
+/// Event emitted with the validator set changes
+struct ValidatorSetUpdate {
+    /// A monotonically increasing nonce
+    nonce: Uint,
+    /// Hash of the validators in the bridge contract
+    bridge_validator_hash: KeccakHash,
+    /// Hash of the validators in the governance contract
+    governance_validator_hash: KeccakHash,
+}
+
+/// Event indicating a new smart contract has been
+/// deployed or upgraded on Ethereum
+struct RawChangedContract {
+    /// Name of the contract
+    name: String,
+    /// Address of the contract on Ethereum
+    address: EthAddress,
+}
+
+
+/// Event for whitelisting new tokens and their
+/// rate limits
+struct UpdateBridgeWhitelist {
+    /// A monotonically increasing nonce
+    nonce: Uint,
+    /// Tokens to be allowed to be transferred across the bridge
+    whitelist: Vec<TokenWhitelist>,
 }
 
 /// Type of address to transfer to on Anoma
 enum TargetAddressType {
+    /// Output of the bridge will be wrapped ETH
     Native,
+    /// Output of the bridge will be a wrapped ERC20 token
     Erc20,
 }
 
 /// Trait for determining target address type
-trait TargetAddress {
+trait TargetAddress: Debug {
     fn address_type() -> TargetAddressType;
     fn into_token(&self) -> Token;
 }
@@ -184,6 +288,7 @@ impl TargetAddress for Address {
     fn address_type() -> TargetAddressType {
         TargetAddressType::Native
     }
+
     fn into_token(&self) -> Token {
         Token::String(self.encode())
     }
@@ -198,57 +303,11 @@ impl TargetAddress for EthAddress {
     }
 }
 
-/// An event transferring some kind of value from Ethereum to Anoma
-pub struct RawTransferToNamada<T: TargetAddress> {
-    amount: Amount,
-    source: EthAddress,
-    target: T,
-}
-
-/// A batch of RawTransferToNamadas from an Ethereum event
-pub struct RawTransfersToNamada<T: TargetAddress> {
-    transfers: Vec<RawTransferToNamada<T>>,
-    nonce: Uint,
-    confirmations: u32,
-}
-
-/// Type aliases
-pub type TransferToNamada = RawTransferToNamada<Address>;
-pub type TransferToErc = RawTransferToNamada<EthAddress>;
-
-/// Event emitted with the validator set changes
-struct ValidatorSetUpdate {
-    nonce: Uint,
-    bridge_validator_hash: KeccakHash,
-    governance_validator_hash: KeccakHash,
-}
-
-/// Event indicating a new smart contract has been
-/// deployed or upgraded on Ethereum
-struct RawChangedContract {
-    name: String,
-    address: EthAddress,
-}
-
-/// struct for whitelisting a token from Ethereum.
-/// Includes the address of issuing contract and
-/// a cap on the max amount of this token allowed to be
-/// held by the bridge.
-pub struct TokenWhitelist {
-    token: EthAddress,
-    cap: Amount,
-}
-
-/// Event for whitelisting new tokens and their
-/// rate limits
-struct UpdateBridgeWhitelist {
-    nonce: Uint,
-    whitelist: Vec<TokenWhitelist>,
-}
-
-impl<T: TargetAddress> RawTransfersToNamada<T> {
-    fn decode(data: &[u8]) -> Result<Self> {
-        let name = match T::address_type() {
+impl RawTransfersToNamada {
+    /// Parse ABI serialized data from an Ethereum event into
+    /// an instance of [`RawTransfersToNamada`]
+    fn decode(data: &[u8], address_type: TargetAddressType) -> Result<Self> {
+        let name = match address_type {
             TargetAddressType::Native => "TransferToNamada",
             TargetAddressType::Erc20 => "TransferToErc",
         };
@@ -257,7 +316,7 @@ impl<T: TargetAddress> RawTransfersToNamada<T> {
             &[
                 ParamType::Uint(256),
                 ParamType::Array(Box::new(ParamType::Address)),
-                match T::address_type() {
+                match address_type {
                     TargetAddressType::Native => {
                         ParamType::Array(Box::new(ParamType::String))
                     }
@@ -280,58 +339,101 @@ impl<T: TargetAddress> RawTransfersToNamada<T> {
         })?;
 
         let sources = sources.parse_eth_address_array()?;
-        let targets: Vec<T> = match T::address_type() {
-            TargetAddressType::Native => targets.parse_address_array()?,
-            TargetAddressType::Erc20 => targets.parse_eth_address_array()?,
+        let targets: Either<Vec<Address>, Vec<EthAddress>> = match address_type {
+            TargetAddressType::Native => Either::Left(targets.parse_address_array()?),
+            TargetAddressType::Erc20 => Either::Right(targets.parse_eth_address_array()?),
         };
         let amounts = amounts.parse_amount_array()?;
         if sources.len() != amounts.len() {
             Err(Error::Decode(
                 "Number of source addresses is different from number of \
-                 transfer amounts"
+             transfer amounts"
                     .into(),
             ))
-        } else if targets.len() != sources.len() {
+        } else if targets.as_ref().either(| l| l.len(), | r| r.len()) != sources.len() {
             Err(Error::Decode(
                 "Number of source addresses is different from number of \
-                 target addresses"
+             target addresses"
                     .into(),
             ))
         } else {
-            Ok(RawTransfersToNamada {
-                transfers: sources
-                    .into_iter()
-                    .zip(targets.into_iter())
-                    .zip(amounts.into_iter())
-                    .map(|((source, target), amount)| RawTransferToNamada {
-                        source,
-                        target,
-                        amount,
-                    })
-                    .collect(),
+            let transfers = match targets {
+                Either::Left(targets) => Either::Left(
+                    sources
+                        .into_iter()
+                        .zip(targets.into_iter())
+                        .zip(amounts.into_iter())
+                        .map(|((source, target), amount)| RawTransferToNamada {
+                            source,
+                            target,
+                            amount,
+                        })
+                        .collect()
+                ),
+                Either::Right(targets) => Either::Right(
+                    sources
+                        .into_iter()
+                        .zip(targets.into_iter())
+                        .zip(amounts.into_iter())
+                        .map(|((source, target), amount)| RawTransferToNamada {
+                            source,
+                            target,
+                            amount,
+                        })
+                        .collect()
+                )
+            };
+            Ok(Self {
+                transfers,
                 nonce: nonce.parse_uint256()?,
                 confirmations: confs.parse_u32()?,
             })
         }
     }
 
+    /// Serialize an instance [`RawTransfersToNamada`] using Ethereum's
+    /// ABI serialization scheme.
     fn encode(self) -> Vec<u8> {
-        let Self {
+        let RawTransfersToNamada {
             transfers,
             nonce,
             confirmations,
         } = self;
+        let (amounts, sources, targets) = match transfers {
+            Either::Left(transfers) => {
+                let amounts: Vec<Token> = transfers
+                    .iter()
+                    .map(|RawTransferToNamada { amount, .. }| {
+                        Token::Uint(u64::from(*amount).into())
+                    })
+                    .collect();
+                let (sources, targets): (Vec<Token>, Vec<Token>) = transfers
+                    .into_iter()
+                    .map(|RawTransferToNamada { source, target, .. }| {
+                        (Token::Address(source.0.into()), target.into_token())
+                    })
+                    .unzip();
+                (amounts, sources, targets)
+            }
+            Either::Right(transfers) => {
+                let amounts: Vec<Token> = transfers
+                    .iter()
+                    .map(|RawTransferToNamada { amount, .. }| {
+                        Token::Uint(u64::from(*amount).into())
+                    })
+                    .collect();
+                let (sources, targets): (Vec<Token>, Vec<Token>) = transfers
+                    .into_iter()
+                    .map(|RawTransferToNamada { source, target, .. }| {
+                        (Token::Address(source.0.into()), target.into_token())
+                    })
+                    .unzip();
+                (amounts, sources, targets)
+            }
+        };
 
-        let amounts: Vec<Token> = transfers.iter()
-            .map(|RawTransferToNamada{amount, ..}| Token::Uint(u64::from(*amount).into()))
-            .collect();
-        let (sources, targets): (Vec<Token>, Vec<Token>) = transfers.into_iter()
-                .map(|RawTransferToNamada{source, target, ..}|
-                    (Token::Address(source.0.into()), target.into_token())
-                )
-            .unzip();
         encode(&[
-            Token::Uint(nonce),
+            Token::Uint(nonce.into()),
             Token::Array(sources),
             Token::Array(targets),
             Token::Array(amounts),
@@ -341,6 +443,8 @@ impl<T: TargetAddress> RawTransfersToNamada<T> {
 }
 
 impl ValidatorSetUpdate {
+    /// Parse ABI serialized data from an Ethereum event into
+    /// an instance of [`ValidatorSetUpdate`]
     fn decode(data: &[u8]) -> Result<Self> {
         let [nonce, bridge_validator_hash, goverance_validator_hash]: [Token;
             3] = decode(
@@ -351,14 +455,14 @@ impl ValidatorSetUpdate {
             ],
             data,
         )
-        .map_err(|err| Error::Decode(format!("{:?}", err)))?
-        .try_into()
-        .map_err(|_| {
-            Error::Decode(
-                "ValidatorSetUpdate signature should contain three types"
-                    .into(),
-            )
-        })?;
+            .map_err(|err| Error::Decode(format!("{:?}", err)))?
+            .try_into()
+            .map_err(|_| {
+                Error::Decode(
+                    "ValidatorSetUpdate signature should contain three types"
+                        .into(),
+                )
+            })?;
 
         Ok(Self {
             nonce: nonce.parse_uint256()?,
@@ -368,6 +472,8 @@ impl ValidatorSetUpdate {
         })
     }
 
+    /// Serialize an instance [`ValidatorSetUpdate`] using Ethereum's
+    /// ABI serialization scheme.
     fn encode(self) -> Vec<u8> {
         let ValidatorSetUpdate {
             nonce,
@@ -384,6 +490,8 @@ impl ValidatorSetUpdate {
 }
 
 impl RawChangedContract {
+    /// Parse ABI serialized data from an Ethereum event into
+    /// an instance of [`RawChangedContract`]
     fn decode(data: &[u8]) -> Result<Self> {
         let [name, address]: [Token; 2] =
             decode(&[ParamType::String, ParamType::Address], data)
@@ -402,16 +510,17 @@ impl RawChangedContract {
         })
     }
 
+    /// Serialize an instance [`RawChangedContract`] using Ethereum's
+    /// ABI serialization scheme.
     fn encode(self) -> Vec<u8> {
-        let RawChangedContract {
-            name,
-            address,
-        } = self;
+        let RawChangedContract { name, address } = self;
         encode(&[Token::String(name), Token::Address(address.0.into())])
     }
 }
 
 impl UpdateBridgeWhitelist {
+    /// Parse ABI serialized data from an Ethereum event into
+    /// an instance of [`UpdateBridgeWhitelist`]
     fn decode(data: &[u8]) -> Result<Self> {
         let [nonce, tokens, caps]: [Token; 3] = decode(
             &[
@@ -421,14 +530,14 @@ impl UpdateBridgeWhitelist {
             ],
             data,
         )
-        .map_err(|err| Error::Decode(format!("{:?}", err)))?
-        .try_into()
-        .map_err(|_| {
-            Error::Decode(
-                "UpdatedBridgeWhitelist signature should contain three types"
-                    .into(),
-            )
-        })?;
+            .map_err(|err| Error::Decode(format!("{:?}", err)))?
+            .try_into()
+            .map_err(|_| {
+                Error::Decode(
+                    "UpdatedBridgeWhitelist signature should contain three types"
+                        .into(),
+                )
+            })?;
 
         let tokens = tokens.parse_eth_address_array()?;
         let caps = caps.parse_amount_array()?;
@@ -450,16 +559,19 @@ impl UpdateBridgeWhitelist {
         }
     }
 
+    /// Serialize an instance [`UpdateBridgeWhitelist`] using Ethereum's
+    /// ABI serialization scheme.
     fn encode(self) -> Vec<u8> {
-        let UpdateBridgeWhitelist {
-            nonce,
-            whitelist,
-        } = self;
+        let UpdateBridgeWhitelist { nonce, whitelist } = self;
 
-        let (tokens, caps): (Vec<Token>, Vec<Token>) = whitelist.into_iter()
-            .map(| TokenWhitelist{token, cap} |
-                (Token::Address(token.0.into()), Token::Uint(u64::from(cap).into()))
-            )
+        let (tokens, caps): (Vec<Token>, Vec<Token>) = whitelist
+            .into_iter()
+            .map(|TokenWhitelist { token, cap }| {
+                (
+                    Token::Address(token.0.into()),
+                    Token::Uint(u64::from(cap).into()),
+                )
+            })
             .unzip();
         encode(&[Token::Uint(nonce), Token::Array(tokens), Token::Array(caps)])
     }
@@ -563,7 +675,7 @@ impl Parse for Token {
 
     fn parse_keccak(self) -> Result<KeccakHash> {
         if let Token::FixedBytes(bytes) = self {
-            let bytes = bytes.try_into().map_err(Error::Decode(
+            let bytes = bytes.try_into().map_err(|_| Error::Decode(
                 "Expect 32 bytes for a Keccak hash".into(),
             ))?;
             Ok(KeccakHash(bytes))
@@ -665,8 +777,9 @@ mod test_events {
         assert_eq!(
             decode(
                 &[ParamType::Address],
-                encode(&[Token::Address(erc.0.into())]).as_slice())
-            .expect("Test failed"),
+                encode(&[Token::Address(erc.0.into())]).as_slice()
+            )
+                .expect("Test failed"),
             erc
         )
     }

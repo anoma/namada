@@ -255,7 +255,7 @@ where
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        ethereum_recv: UnboundedReceiver<EthereumEvent>,
+        eth_receiver: Option<UnboundedReceiver<EthereumEvent>>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -306,7 +306,7 @@ where
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
-                            ethereum_recv,
+                            ethereum_recv: eth_receiver.unwrap(),
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -325,7 +325,7 @@ where
                             },
                         },
                         broadcast_sender,
-                        ethereum_recv,
+                        ethereum_recv: eth_receiver.unwrap(),
                     }
                 }
             }
@@ -564,7 +564,6 @@ where
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
-        let mut response = response::Commit::default();
         // commit changes from the write-log to storage
         self.write_log
             .commit_block(&mut self.storage)
@@ -583,8 +582,7 @@ where
             root,
             self.storage.last_height,
         );
-        response.data = root.0;
-        response
+        response::Commit::default()
     }
 
     /// Validate a transaction request. On success, the transaction will
@@ -597,10 +595,9 @@ where
     ) -> response::CheckTx {
         let mut response = response::CheckTx::default();
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
-            Ok(_) => response.log = String::from("Mempool validation passed"),
-            Err(msg) => {
+            Ok(_) => {}
+            Err(_) => {
                 response.code = 1;
-                response.log = msg.to_string();
             }
         }
         response

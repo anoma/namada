@@ -26,19 +26,20 @@ pub mod mock_eth_fullnode {
 #[cfg(not(feature = "eth-fullnode"))]
 pub mod mock_web3_client {
     use std::fmt::Debug;
+
     use num256::Uint256;
-    use tokio::sync::mpsc::{channel, Sender, Receiver};
+    use tokio::sync::mpsc::{channel, Receiver, Sender};
     use web30::types::Log;
 
-    use super::{Error, Result};
     use super::events::signatures::*;
+    use super::{Error, Result};
 
     /// Commands we can send to the mock client
     pub enum TestCmd {
         Normal,
         Unresponsive,
         NewHeight(Uint256),
-        NewEvent(MockEventType, Vec<u8>)
+        NewEvent(MockEventType, Vec<u8>),
     }
 
     /// The type of events supported
@@ -60,7 +61,7 @@ pub mod mock_web3_client {
         cmd_channel: Receiver<TestCmd>,
         active: bool,
         latest_block_height: Uint256,
-        events: Vec<(MockEventType, Vec<u8>)>
+        events: Vec<(MockEventType, Vec<u8>)>,
     }
 
     impl Web3 {
@@ -76,7 +77,7 @@ pub mod mock_web3_client {
                     active: true,
                     latest_block_height: Default::default(),
                     events: vec![],
-                }
+                },
             )
         }
 
@@ -86,7 +87,9 @@ pub mod mock_web3_client {
                 match cmd {
                     TestCmd::Normal => self.active = true,
                     TestCmd::Unresponsive => self.active = false,
-                    TestCmd::NewHeight(height) => self.latest_block_height = height,
+                    TestCmd::NewHeight(height) => {
+                        self.latest_block_height = height
+                    }
                     TestCmd::NewEvent(ty, data) => self.events.push((ty, data)),
                 }
             }
@@ -122,15 +125,17 @@ pub mod mock_web3_client {
                     VALIDATOR_SET_UPDATE_SIG => MockEventType::ValSetUpdate,
                     NEW_CONTRACT_SIG => MockEventType::NewContract,
                     UPGRADED_CONTRACT_SIG => MockEventType::UpgradedContract,
-                    UPDATE_BRIDGE_WHITELIST_SIG => MockEventType::BridgeWhitelist,
-                    _ => return Ok(vec![])
+                    UPDATE_BRIDGE_WHITELIST_SIG => {
+                        MockEventType::BridgeWhitelist
+                    }
+                    _ => return Ok(vec![]),
                 };
                 let mut logs = vec![];
                 let mut events = vec![];
                 std::mem::swap(&mut self.events, &mut events);
                 for (event_ty, data) in events.into_iter() {
                     if &event_ty == &ty {
-                        logs.push(Log{
+                        logs.push(Log {
                             data: data.into(),
                             ..Default::default()
                         });
@@ -145,4 +150,3 @@ pub mod mock_web3_client {
         }
     }
 }
-

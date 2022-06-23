@@ -16,6 +16,7 @@ use std::str::FromStr;
 use anoma::ledger::governance::storage as gov_storage;
 use anoma::types::storage::Key;
 use byte_unit::Byte;
+use ethereum_node::{EthereumNode, events::EthereumEvent};
 use futures::future::TryFutureExt;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -23,6 +24,7 @@ use sysinfo::{RefreshKind, System, SystemExt};
 use tendermint_proto::abci::CheckTxType;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::CheckTxType;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tower::ServiceBuilder;
 #[cfg(not(feature = "ABCI"))]
 use tower_abci::{response, split, Server};
@@ -37,6 +39,7 @@ use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
 use crate::{config, wasm_loader};
+
 
 /// Env. var to set a number of Tokio RT worker threads
 const ENV_VAR_TOKIO_THREADS: &str = "ANOMA_TOKIO_THREADS";
@@ -184,6 +187,36 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
         .thread_name(|i| format!("ledger-rayon-worker-{}", i))
         .build_global()
         .unwrap();
+    let (ethereum_node, oracle, eth_receiver) = if matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
+        // boot up the ethereum node process and wait for it to finish syncing
+        let (eth_sender, eth_receiver) = unbounded_channel();
+        let (ethereum_node, abort_sender) = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(EthereumNode::new(&config.ethereum_url()))
+            .expect("Unable to start the Ethereum fullnode");
+        // Start the oracle process to relay data from the ethereum fullnode to the ledger.
+        // Unfortunately requires a single threaded runtime, so we do this here.
+        let url = config.ethereum_url();
+        let oracle = std::thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .thread_name("ethereum-relayer-tokio-worker")
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(
+                    ethereum_node::oracle::run_oracle(
+                        &url,
+                        eth_sender,
+                        abort_sender,
+                    )
+                )
+        });
+        (Some(ethereum_node), Some(oracle), Some(eth_receiver))
+    } else {
+        (None, None, None)
+    };
 
     // Start tokio runtime with the `run_aux` function
     tokio::runtime::Builder::new_multi_thread()
@@ -193,7 +226,9 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(run_aux(config, wasm_dir));
+        .block_on(run_aux(config, wasm_dir, ethereum_node, eth_receiver));
+    // join up the oracle thread.
+    let _ = oracle.map(|handle| handle.join());
 }
 
 /// Resets the tendermint_node state and removes database files
@@ -205,7 +240,14 @@ pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
 /// ABCI, server for talking to the tendermint node, and a broadcaster so that
 /// the ledger may submit txs to the chain. All must be alive for correct
 /// functioning.
-async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
+///
+/// TODO: Update this docstring
+async fn run_aux(
+    config: config::Ledger,
+    wasm_dir: PathBuf,
+    ethereum_node: Option<EthereumNode>,
+    eth_receiver: Option<UnboundedReceiver<EthereumEvent>>,
+) {
     // Prefetch needed wasm artifacts
     wasm_loader::pre_fetch_wasm(&wasm_dir).await;
 
@@ -290,7 +332,6 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         rocksdb::Cache::new_lru_cache(block_cache_size_bytes as usize).unwrap();
 
     let tendermint_dir = config.tendermint_dir();
-    let ethereum_url = config.ethereum_url();
     let ledger_address = config.shell.ledger_address.to_string();
     let rpc_address = config.tendermint.rpc_address.to_string();
     let chain_id = config.chain_id.clone();
@@ -304,10 +345,6 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // Channel for signalling shut down from the shell or from Tendermint
     let (abort_send, abort_recv) =
         tokio::sync::mpsc::unbounded_channel::<&'static str>();
-    // Channels for the Ethereum relayer to send new Ethereum block headers
-    // and smart contract logs to the ledger
-    let (eth_relayer_sender, mut eth_relayer_receiver) =
-        tokio::sync::mpsc::unbounded_channel();
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service
     let (broadcaster_sender, broadcaster_receiver) =
@@ -331,8 +368,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             };
 
             let res = ethereum_node::run(
-                &ethereum_url,
-                eth_relayer_sender,
+                ethereum_node.unwrap(),
                 eth_abort_recv,
             )
             .map_err(Error::Ethereum)
@@ -342,8 +378,6 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             drop(aborter);
             res
         });
-        // wait for the Ethereum fullnode to finish syncing.
-        eth_relayer_receiver.recv().await.unwrap();
 
         // Shutdown ethereum_node via a message to ensure that the child process
         // is properly cleaned-up.
@@ -422,7 +456,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         config,
         wasm_dir,
         broadcaster_sender,
-        eth_relayer_receiver,
+        eth_receiver,
         &db_cache,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
