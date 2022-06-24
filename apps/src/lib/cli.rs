@@ -480,7 +480,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
-        Find(AddressFind),
+        Find(AddressOrAliasFind),
         List(AddressList),
         Add(AddressAdd),
     }
@@ -506,7 +506,7 @@ pub mod cmds {
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(AddressGen::def())
-                .subcommand(AddressFind::def())
+                .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
         }
@@ -538,21 +538,21 @@ pub mod cmds {
 
     /// Find an address by its alias
     #[derive(Clone, Debug)]
-    pub struct AddressFind(pub args::AddressFind);
+    pub struct AddressOrAliasFind(pub args::AddressOrAliasFind);
 
-    impl SubCmd for AddressFind {
+    impl SubCmd for AddressOrAliasFind {
         const CMD: &'static str = "find";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| AddressFind(args::AddressFind::parse(matches)))
+                .map(|matches| AddressOrAliasFind(args::AddressOrAliasFind::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Find an address by its alias.")
-                .add_args::<args::AddressFind>()
+                .add_args::<args::AddressOrAliasFind>()
         }
     }
 
@@ -1459,6 +1459,7 @@ pub mod args {
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
+    const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
@@ -2856,30 +2857,30 @@ pub mod args {
 
     /// Wallet address lookup arguments
     #[derive(Clone, Debug)]
-    pub struct AddressFind {
-        pub alias: String,
-        pub address: Address,
+    pub struct AddressOrAliasFind {
+        pub alias: Option<String>,
+        pub address: Option<Address>,
     }
 
-    impl Args for AddressFind {
+    impl Args for AddressOrAliasFind {
         fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
-            let address = RAW_ADDRESS.parse(matches);
-            Self { alias, address }
+            let alias = ALIAS_OPT.parse(matches);
+            let address = RAW_ADDRESS_OPT.parse(matches);
+            Self { alias , address }
         }
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS
+                ALIAS_OPT
                     .def()
                     .about("An alias associated with the address."),
             )
-            .arg(RAW_ADDRESS
+            .arg(RAW_ADDRESS_OPT
                 .def()
                 .about("The bech32m encoded address string.")
             )
             .group(ArgGroup::new("find_flags")
-                .args(&["alias", "address"])
+                .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
                 .required(true)
             )
         }
@@ -3105,7 +3106,6 @@ pub fn anoma_client_cli() -> AnomaClient {
 
 pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {
     let app = anoma_wallet_app();
-    println!("created app from anoma_wallet_app()");
     cmds::AnomaWallet::parse_or_print_help(app)
 }
 
@@ -3137,12 +3137,10 @@ fn anoma_client_app() -> App {
 }
 
 fn anoma_wallet_app() -> App {
-    println!("Inside anoma wallet");
     let app = App::new(APP_NAME)
         .version(anoma_version())
         .author(crate_authors!("\n"))
         .about("Anoma wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    println!("Set up wallet app, now adding subcommands");
     cmds::AnomaWallet::add_sub(args::Global::def(app))
 }
