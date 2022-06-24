@@ -13,6 +13,11 @@ mod tm_jsonrpc {
         parse, Error, EventParams, EventReply, TxResponse,
     };
 
+    /// Maximum number of times we try to send a curl request
+    const MAX_SEND_ATTEMPTS: u8 = 10;
+    /// Number of events we request from the events log
+    const NUM_EVENTS: u64 = 10;
+
     pub struct JsonRpcAddress<'a> {
         host: &'a str,
         port: u16,
@@ -131,7 +136,7 @@ mod tm_jsonrpc {
                 request,
                 hash,
             };
-            client.reset();
+            client.initialize();
             client
         }
 
@@ -143,10 +148,16 @@ mod tm_jsonrpc {
             // send off the request
             // this loop is here because if commit timeouts
             // become too long, sometimes we get back empty responses.
-            for _ in 0..10 {
-                if self.perform().is_ok() {
-                    break;
+            for attempt in 0..MAX_SEND_ATTEMPTS {
+                match self.perform() {
+                    Ok(()) => break,
+                    Err(err) => {
+                        tracing::debug!(?attempt, response = ?err, "attempting request")
+                    }
                 }
+            }
+            if self.get_ref().0.is_empty() {
+                return Err(Error::Send);
             }
 
             // deserialize response
@@ -160,8 +171,8 @@ mod tm_jsonrpc {
                 .ok_or_else(|| Error::NotFound(self.hash.to_string()))
         }
 
-        /// Reset the client
-        fn reset(&mut self) {
+        /// Initialize the curl client from the fields of `Client`
+        fn initialize(&mut self) {
             self.inner.reset();
             let url = self.url;
             self.url(url).unwrap();
@@ -189,7 +200,7 @@ mod tm_jsonrpc {
         // craft the body of the request
         let request = Request::from(EventParams::new(
             filter,
-            10,
+            NUM_EVENTS,
             std::time::Duration::from_secs(60),
         ));
         // construct a curl client

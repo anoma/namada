@@ -12,10 +12,9 @@ use thiserror::Error;
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
-use crate::types::address::{self, Address, InternalAddress};
+use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
-use crate::types::token::BALANCE_STORAGE_KEY;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -182,7 +181,7 @@ pub struct Header {
 impl Header {
     /// The number of bytes when this header is encoded
     pub fn encoded_len(&self) -> usize {
-        self.try_to_vec().map(|ser| ser.len()).unwrap()
+        self.try_to_vec().unwrap().len()
     }
 }
 
@@ -294,17 +293,6 @@ impl Key {
             }
             _ => None,
         }
-    }
-
-    /// Check if the given key can be updated
-    pub fn is_updatable(&self) -> bool {
-        !matches!(&self.segments[..], [
-            DbKeySeg::AddressSeg(_),
-            DbKeySeg::StringSeg(key),
-            DbKeySeg::AddressSeg(Address::Internal(
-                InternalAddress::IbcBurn | InternalAddress::IbcMint)),
-        ] if key == BALANCE_STORAGE_KEY
-        )
     }
 
     /// Returns a key from the given DB key path that has the height and

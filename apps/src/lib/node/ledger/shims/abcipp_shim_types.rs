@@ -292,6 +292,8 @@ pub mod shim {
         use tower_abci_old::response;
 
         use crate::node::ledger::events::Event;
+        #[cfg(not(feature = "ABCI"))]
+        use crate::node::ledger::events::EventLevel;
 
         #[derive(Debug, Default)]
         pub struct VerifyHeader;
@@ -340,6 +342,7 @@ pub mod shim {
                     tx_results: resp
                         .events
                         .iter()
+                        .filter(|event| matches!(event.level, EventLevel::Tx))
                         .map(|event| ExecTxResult {
                             code: event
                                 .get("code")
