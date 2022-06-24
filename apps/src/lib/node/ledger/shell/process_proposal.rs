@@ -1,5 +1,6 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
+use anoma::types::transaction::protocol::ProtocolTxType;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
 #[cfg(not(feature = "ABCI"))]
@@ -98,11 +99,16 @@ where
                            are not supported"
                         .into(),
                 },
-                TxType::Protocol(_) => TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "Protocol transactions are a fun new feature that \
-                           is coming soon to a blockchain near you. Patience."
-                        .into(),
+                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                    ProtocolTxType::EthereumEvents(_) => TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process Proposal accepted this transaction"
+                            .into(),
+                    },
+                    _ => TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: "Unsupported protocol transaction type".into(),
+                    },
                 },
                 TxType::Decrypted(tx) => match self.next_wrapper() {
                     Some(wrapper) => {
