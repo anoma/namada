@@ -47,7 +47,11 @@ impl Drop for Oracle {
 
 impl Oracle {
     /// Initialize a new [`Oracle`]
-    pub fn new(url: &str, sender: UnboundedSender<EthereumEvent>, abort: Sender<()>) -> Self {
+    pub fn new(
+        url: &str,
+        sender: UnboundedSender<EthereumEvent>,
+        abort: Sender<()>,
+    ) -> Self {
         Self {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
             sender,
@@ -60,7 +64,8 @@ impl Oracle {
     /// successfully. If false is returned, the receiver
     /// has hung up.
     fn send(&self, events: Vec<EthereumEvent>) -> bool {
-        events.into_iter()
+        events
+            .into_iter()
             .map(|event| self.sender.send(event))
             .all(|res| res.is_ok())
     }
@@ -72,12 +77,16 @@ impl Oracle {
     }
 }
 
-pub async fn run_oracle(url: &str, sender: UnboundedSender<EthereumEvent>, abort_sender: Sender<()>) {
+pub async fn run_oracle(
+    url: &str,
+    sender: UnboundedSender<EthereumEvent>,
+    abort_sender: Sender<()>,
+) {
     let oracle = Oracle::new(url, sender, abort_sender);
     // Initialize our local state. This includes
     // the latest block height seen and a queue of events
     // awaiting a certain number of confirmations
-    let mut latest_block: Uint256 = Default::default();
+    let mut latest_block;
     let mut pending: Vec<PendingEvent> = Vec::new();
     loop {
         // update the latest block height
@@ -87,10 +96,10 @@ pub async fn run_oracle(url: &str, sender: UnboundedSender<EthereumEvent>, abort
             }
             if !oracle.connected() {
                 tracing::info!(
-                    "Ethereum oracle could not send events to the ledger; \
-                    the receiver has hung up. Shutting down"
+                    "Ethereum oracle could not send events to the ledger; the \
+                     receiver has hung up. Shutting down"
                 );
-                return
+                return;
             }
         };
 
@@ -98,50 +107,51 @@ pub async fn run_oracle(url: &str, sender: UnboundedSender<EthereumEvent>, abort
         // check for events with at least `[MIN_CONFIRMATIONS]` confirmations.
         for sig in signatures::SIGNATURES {
             let addr = match signatures::SigType::from(sig) {
-                signatures::SigType::Bridge => {
-                    MINT_CONTRACT.0.clone().into()
-                }
+                signatures::SigType::Bridge => MINT_CONTRACT.0.clone().into(),
                 signatures::SigType::Governance => {
                     GOVERNANCE_CONTRACT.0.clone().into()
                 }
             };
             // fetch the events for matching the given signature
             let mut events = loop {
-                if let Ok(pending) = oracle.check_for_events(
-                    block_to_check.clone(),
-                    Some(block_to_check.clone()),
-                    vec![addr],
-                    vec![sig],
-                )
-                .await
-                .map(|logs| {
-                    logs.into_iter()
-                        .filter_map(|log| {
-                            PendingEvent::decode(
-                                sig,
-                                block_to_check.clone(),
-                                log.data.0.as_slice(),
-                            ).ok()
-                        })
-                        .collect::<Vec<PendingEvent>>()
-                }) {
+                if let Ok(pending) = oracle
+                    .check_for_events(
+                        block_to_check.clone(),
+                        Some(block_to_check.clone()),
+                        vec![addr],
+                        vec![sig],
+                    )
+                    .await
+                    .map(|logs| {
+                        logs.into_iter()
+                            .filter_map(|log| {
+                                PendingEvent::decode(
+                                    sig,
+                                    block_to_check.clone(),
+                                    log.data.0.as_slice(),
+                                )
+                                .ok()
+                            })
+                            .collect::<Vec<PendingEvent>>()
+                    })
+                {
                     break pending;
                 }
                 if !oracle.connected() {
                     tracing::info!(
                         "Ethereum oracle could not send events to the ledger; \
-                        the receiver has hung up. Shutting down"
+                         the receiver has hung up. Shutting down"
                     );
-                    return
+                    return;
                 }
             };
             pending.append(&mut events);
             if !oracle.send(process_queue(&latest_block, &mut pending)) {
                 tracing::info!(
-                    "Ethereum oracle could not send events to the ledger; \
-                     the receiver has hung up. Shutting down"
+                    "Ethereum oracle could not send events to the ledger; the \
+                     receiver has hung up. Shutting down"
                 );
-                return
+                return;
             }
         }
     }
@@ -154,13 +164,12 @@ fn process_queue(
     latest_block: &Uint256,
     pending: &mut Vec<PendingEvent>,
 ) -> Vec<EthereumEvent> {
-    let mut pending_tmp: Vec<PendingEvent> =
-        Vec::with_capacity(pending.len());
+    let mut pending_tmp: Vec<PendingEvent> = Vec::with_capacity(pending.len());
     std::mem::swap(&mut pending_tmp, pending);
     let mut confirmed = vec![];
     for item in pending_tmp.into_iter() {
         if item.is_confirmed(latest_block) {
-           confirmed.push(item.event);
+            confirmed.push(item.event);
         } else {
             pending.push(item);
         }

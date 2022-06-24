@@ -20,8 +20,8 @@ use tower_abci::{BoxError, Request as Req, Response as Resp};
 #[cfg(feature = "ABCI")]
 use tower_abci_old::{BoxError, Request as Req, Response as Resp};
 
-use super::super::Shell;
 use super::super::ethereum_node::events::EthereumEvent;
+use super::super::Shell;
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 #[cfg(not(feature = "ABCI"))]
 use super::abcipp_shim_types::shim::response::TxResult;

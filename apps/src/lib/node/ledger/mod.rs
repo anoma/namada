@@ -16,7 +16,8 @@ use std::str::FromStr;
 use anoma::ledger::governance::storage as gov_storage;
 use anoma::types::storage::Key;
 use byte_unit::Byte;
-use ethereum_node::{EthereumNode, events::EthereumEvent};
+use ethereum_node::events::EthereumEvent;
+use ethereum_node::EthereumNode;
 use futures::future::TryFutureExt;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -39,7 +40,6 @@ use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
 use crate::{config, wasm_loader};
-
 
 /// Env. var to set a number of Tokio RT worker threads
 const ENV_VAR_TOKIO_THREADS: &str = "ANOMA_TOKIO_THREADS";
@@ -187,17 +187,22 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
         .thread_name(|i| format!("ledger-rayon-worker-{}", i))
         .build_global()
         .unwrap();
-    let (ethereum_node, oracle, eth_receiver) = if matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
+    let (ethereum_node, oracle, eth_receiver) = if matches!(
+        config.tendermint.tendermint_mode,
+        TendermintMode::Validator
+    ) {
         // boot up the ethereum node process and wait for it to finish syncing
         let (eth_sender, eth_receiver) = unbounded_channel();
-        let (ethereum_node, abort_sender) = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(EthereumNode::new(&config.ethereum_url()))
-            .expect("Unable to start the Ethereum fullnode");
-        // Start the oracle process to relay data from the ethereum fullnode to the ledger.
-        // Unfortunately requires a single threaded runtime, so we do this here.
+        let (ethereum_node, abort_sender) =
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(EthereumNode::new(&config.ethereum_url()))
+                .expect("Unable to start the Ethereum fullnode");
+        // Start the oracle process to relay data from the ethereum fullnode to
+        // the ledger. Unfortunately requires a single threaded runtime,
+        // so we do this here.
         let url = config.ethereum_url();
         let oracle = std::thread::spawn(move || {
             tokio::runtime::Builder::new_current_thread()
@@ -205,13 +210,11 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(
-                    ethereum_node::oracle::run_oracle(
-                        &url,
-                        eth_sender,
-                        abort_sender,
-                    )
-                )
+                .block_on(ethereum_node::oracle::run_oracle(
+                    &url,
+                    eth_sender,
+                    abort_sender,
+                ))
         });
         (Some(ethereum_node), Some(oracle), Some(eth_receiver))
     } else {
@@ -367,12 +370,10 @@ async fn run_aux(
                 who: "Ethereum",
             };
 
-            let res = ethereum_node::run(
-                ethereum_node.unwrap(),
-                eth_abort_recv,
-            )
-            .map_err(Error::Ethereum)
-            .await;
+            let res =
+                ethereum_node::run(ethereum_node.unwrap(), eth_abort_recv)
+                    .map_err(Error::Ethereum)
+                    .await;
             tracing::info!("Ethereum fullnode is no longer running.");
 
             drop(aborter);

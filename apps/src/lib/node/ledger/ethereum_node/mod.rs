@@ -1,11 +1,11 @@
-pub mod oracle;
 pub mod events;
+pub mod oracle;
 mod test_tools;
 
 use std::ffi::OsString;
 
 use thiserror::Error;
-use tokio::sync::oneshot::{Sender, Receiver};
+use tokio::sync::oneshot::{Receiver, Sender};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -14,13 +14,13 @@ pub enum Error {
     #[error("{0}")]
     Runtime(String),
     #[error(
-    "The receiver of the Ethereum relayer messages unexpectedly dropped"
+        "The receiver of the Ethereum relayer messages unexpectedly dropped"
     )]
     RelayerReceiverDropped,
     #[error("The Ethereum Oracle process unexpectedly stopped")]
     Oracle,
     #[error(
-    "Could not read Ethereum network to connect to from env var: {0:?}"
+        "Could not read Ethereum network to connect to from env var: {0:?}"
     )]
     EthereumNetwork(OsString),
     #[error("Could not decode Ethereum event: {0}")]
@@ -28,7 +28,6 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-
 
 /// Run the Ethereum fullnode. If it stops or an abort
 /// signal is sent, this processes is halted.
@@ -62,7 +61,8 @@ pub async fn run(
 /// Tools for running a geth fullnode process
 pub mod eth_fullnode {
     use tokio::process::{Child, Command};
-    use tokio::sync::oneshot::{channel, Sender, Receiver, error::TryRecvError};
+    use tokio::sync::oneshot::error::TryRecvError;
+    use tokio::sync::oneshot::{channel, Receiver, Sender};
     use web30::client::Web3;
 
     use super::{Error, Result};
@@ -127,10 +127,7 @@ pub mod eth_fullnode {
 
             // it takes a brief amount of time to open up the websocket on
             // geth's end
-            let client = Web3::new(
-                url,
-                std::time::Duration::from_secs(5),
-            );
+            let client = Web3::new(url, std::time::Duration::from_secs(5));
 
             loop {
                 match client.eth_syncing().await {
@@ -164,17 +161,17 @@ pub mod eth_fullnode {
                 match self.process.try_wait() {
                     Ok(Some(status)) => {
                         return if status.success() {
-                             Ok(())
+                            Ok(())
                         } else {
-                             Err(Error::Runtime(status.to_string()))
+                            Err(Error::Runtime(status.to_string()))
                         };
                     }
-                    Ok(None) => {},
+                    Ok(None) => {}
                     Err(err) => return Err(Error::Runtime(err.to_string())),
                 }
                 match self.abort_recv.try_recv() {
                     Ok(()) => return Ok(()),
-                    Err(TryRecvError::Empty) => {},
+                    Err(TryRecvError::Empty) => {}
                     Err(TryRecvError::Closed) => return Err(Error::Oracle),
                 }
             }
