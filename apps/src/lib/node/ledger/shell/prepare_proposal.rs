@@ -33,7 +33,6 @@ mod prepare_block {
                 // TODO: This should not be hardcoded
                 let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-                // TODO: Craft the Ethereum state update tx
                 // filter in half of the new txs from Tendermint, only keeping
                 // wrappers
                 let number_of_new_txs = 1 + req.txs.len() / 2;
