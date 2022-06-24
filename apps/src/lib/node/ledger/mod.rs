@@ -359,11 +359,10 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
                     sender: abort_send_for_broadcaster,
                     who: "Broadcaster",
                 };
-                let res = broadcaster.run(bc_abort_recv).await;
+                broadcaster.run(bc_abort_recv).await;
                 tracing::info!("Broadcaster is no longer running.");
 
                 drop(aborter);
-                res
             }),
             bc_abort_send,
         ))
@@ -535,7 +534,7 @@ async fn wait_for_abort(
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
     let mut sighup = signal(SignalKind::hangup()).unwrap();
     let mut sigpipe = signal(SignalKind::pipe()).unwrap();
-    let _ = tokio::select! {
+    tokio::select! {
         signal = tokio::signal::ctrl_c() => {
             match signal {
                 Ok(()) => tracing::info!("Received interrupt signal, exiting..."),

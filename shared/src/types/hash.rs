@@ -70,6 +70,14 @@ impl AsRef<[u8]> for Hash {
     }
 }
 
+impl Deref for Hash {
+    type Target = [u8; 32];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl TryFrom<&[u8]> for Hash {
     type Error = self::Error;
 
@@ -106,5 +114,11 @@ impl Hash {
     pub fn sha256(data: impl AsRef<[u8]>) -> Self {
         let digest = Sha256::digest(data.as_ref());
         Self(*digest.as_ref())
+    }
+}
+
+impl From<Hash> for TmHash {
+    fn from(hash: Hash) -> Self {
+        TmHash::Sha256(hash.0)
     }
 }
