@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "anoma_wasm_for_tests"
 resolver = "2"
-version = "0.5.0"
+version = "0.6.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -16,6 +16,7 @@ tx_memory_limit = []
 tx_mint_tokens = []
 tx_no_op = []
 tx_read_storage_key = []
+tx_write_storage_key = []
 vp_always_false = []
 vp_always_true = []
 vp_eval = []
