@@ -112,7 +112,7 @@ pub fn network(
     // Open the source genesis file
     let genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
-    );
+    )?;
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
