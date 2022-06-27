@@ -60,6 +60,22 @@ pub struct Signed<T: BorshSerialize + BorshDeserialize> {
     pub sig: common::Signature,
 }
 
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+pub struct MultiSigned<T: BorshSerialize + BorshDeserialize> {
+    /// Arbitrary data to be signed
+    pub data: T,
+    /// The signature of the data
+    pub sigs: Vec<common::Signature>,
+}
+
 impl<T> PartialEq for Signed<T>
 where
     T: BorshSerialize + BorshDeserialize + PartialEq,
