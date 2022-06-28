@@ -233,13 +233,6 @@ impl super::Signature for Signature {
                 )
                 .map_err(ParseSignatureError::InvalidEncoding)?,
             ))
-        } else if SIG::TYPE == secp256k1::Signature::TYPE {
-            Ok(Self::Secp256k1(
-                secp256k1::Signature::try_from_slice(
-                    sig.try_to_vec().unwrap().as_slice(),
-                )
-                .map_err(ParseSignatureError::InvalidEncoding)?,
-            ))
         } else {
             Err(ParseSignatureError::MismatchedScheme)
         }
