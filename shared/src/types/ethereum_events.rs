@@ -8,6 +8,12 @@ use crate::proto::MultiSigned;
 use crate::types::address::Address;
 use crate::types::token::Amount;
 
+/// Each event has a nonce set by the Ethereum smart contract that emitted it.
+#[derive(
+    Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
+pub struct EthereumEventNonce(u64);
+
 /// An Ethereum event to be processed by the Anoma ledger
 #[derive(
     Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
@@ -15,7 +21,7 @@ use crate::types::token::Amount;
 pub enum EthereumEvent {
     /// Event transferring batches of ether from Ethereum to wrapped ETH on
     /// Anoma
-    TransfersToNamada(Vec<TransferToNamada>),
+    TransfersToNamada(Vec<TransferToNamada>, EthereumEventNonce),
 }
 
 impl EthereumEvent {
@@ -73,16 +79,17 @@ mod tests {
 
     #[test]
     fn test_ethereum_event_hash() {
-        let event = EthereumEvent::TransfersToNamada(vec![]);
+        let nonce = EthereumEventNonce(123);
+        let event = EthereumEvent::TransfersToNamada(vec![], nonce);
 
         let hash = event.hash().unwrap();
 
         assert_eq!(
             hash,
             [
-                136, 85, 80, 138, 173, 225, 110, 197, 115, 210, 30, 106, 72,
-                93, 253, 10, 118, 36, 8, 92, 26, 20, 181, 236, 221, 100, 133,
-                222, 12, 104, 57, 164
+                94, 227, 170, 45, 164, 208, 161, 180, 203, 148, 96, 173, 90,
+                30, 102, 44, 30, 187, 124, 90, 117, 204, 19, 188, 7, 104, 19,
+                46, 13, 62, 203, 243
             ]
         );
     }
