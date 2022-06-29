@@ -19,6 +19,7 @@ pub enum EthereumEvent {
 }
 
 impl EthereumEvent {
+    /// SHA256 of the Borsh serialization of the [`EthereumEvent`]
     fn hash(&self) -> Result<[u8; 32], std::io::Error> {
         let bytes = self.try_to_vec()?;
         let mut hasher = Sha256::new();
