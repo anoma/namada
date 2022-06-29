@@ -156,6 +156,7 @@ pub async fn submit_init_validator(
     args::TxInitValidator {
         tx: tx_args,
         source,
+        scheme,
         account_key,
         consensus_key,
         rewards_account_key,
@@ -178,7 +179,7 @@ pub async fn submit_init_validator(
         println!("Generating validator account key...");
         ctx.wallet
             .gen_key(
-                SchemeType::Ed25519,
+                scheme,
                 Some(validator_key_alias.clone()),
                 unsafe_dont_encrypt,
             )
@@ -191,7 +192,7 @@ pub async fn submit_init_validator(
             println!("Generating consensus key...");
             ctx.wallet
                 .gen_key(
-                    SchemeType::Ed25519,
+                    scheme,
                     Some(consensus_key_alias.clone()),
                     unsafe_dont_encrypt,
                 )
@@ -203,7 +204,7 @@ pub async fn submit_init_validator(
             println!("Generating staking reward account key...");
             ctx.wallet
                 .gen_key(
-                    SchemeType::Ed25519,
+                    scheme,
                     Some(rewards_key_alias.clone()),
                     unsafe_dont_encrypt,
                 )

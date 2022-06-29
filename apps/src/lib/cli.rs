@@ -1690,6 +1690,7 @@ pub mod args {
     pub struct TxInitValidator {
         pub tx: Tx,
         pub source: WalletAddress,
+        pub scheme: SchemeType,
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
         pub rewards_account_key: Option<WalletPublicKey>,
@@ -1703,6 +1704,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
+            let scheme = SCHEME.parse(matches);
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let rewards_account_key = REWARDS_KEY.parse(matches);
@@ -1713,6 +1715,7 @@ pub mod args {
             Self {
                 tx,
                 source,
+                scheme,
                 account_key,
                 consensus_key,
                 rewards_account_key,
@@ -1727,6 +1730,10 @@ pub mod args {
             app.add_args::<Tx>()
                 .arg(SOURCE.def().about(
                     "The source account's address that signs the transaction.",
+                ))
+                .arg(SCHEME.def().about(
+                    "The key scheme/type used for the validator keys. Currently \
+                    supports ed25519 and secp256k1."
                 ))
                 .arg(VALIDATOR_ACCOUNT_KEY.def().about(
                     "A public key for the validator account. A new one will \
