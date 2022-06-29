@@ -2,6 +2,7 @@
 use std::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use sha2::{Digest, Sha256};
 
 use crate::proto::MultiSigned;
 use crate::types::address::Address;
@@ -15,6 +16,16 @@ pub enum EthereumEvent {
     /// Event transferring batches of ether from Ethereum to wrapped ETH on
     /// Anoma
     TransfersToNamada(Vec<TransferToNamada>),
+}
+
+impl EthereumEvent {
+    fn hash(&self) -> Result<[u8; 32], std::io::Error> {
+        let bytes = self.try_to_vec()?;
+        let mut hasher = Sha256::new();
+        hasher.update(&bytes);
+        let hash: [u8; 32] = hasher.finalize().into();
+        Ok(hash)
+    }
 }
 
 /// Representation of address on Ethereum
@@ -53,4 +64,25 @@ pub struct MultiSignedEthEvent {
     pub signers: Vec<(Address, u64)>,
     /// Events as signed by validators
     pub event: MultiSigned<EthereumEvent>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ethereum_event_hash() {
+        let event = EthereumEvent::TransfersToNamada(vec![]);
+
+        let hash = event.hash().unwrap();
+
+        assert_eq!(
+            hash,
+            [
+                136, 85, 80, 138, 173, 225, 110, 197, 115, 210, 30, 106, 72,
+                93, 253, 10, 118, 36, 8, 92, 26, 20, 181, 236, 221, 100, 133,
+                222, 12, 104, 57, 164
+            ]
+        );
+    }
 }
