@@ -3062,8 +3062,8 @@ pub mod args {
                      use this for keys used in a live network.",
                 ))
                 .arg(SCHEME.def().about(
-                    "The key scheme/type used for the validator keys. Currently \
-                    supports ed25519 and secp256k1."
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
                 ))
         }
     }
