@@ -8,7 +8,9 @@ use crate::types::address::Address;
 use crate::types::token::Amount;
 
 /// An Ethereum event to be processed by the Anoma ledger
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub enum EthereumEvent {
     /// Event transferring batches of ether from Ethereum to wrapped ETH on
     /// Anoma
@@ -17,12 +19,14 @@ pub enum EthereumEvent {
 
 /// Representation of address on Ethereum
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct EthAddress(pub [u8; 20]);
 
 /// An event transferring some kind of value from Ethereum to Anoma
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct TransferToNamada {
     /// Quantity of ether in the transfer
     pub amount: Amount,
@@ -33,7 +37,9 @@ pub struct TransferToNamada {
 }
 
 /// Represents Ethereum assets on the Ethereum blockchain
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub enum EthereumAsset {
     /// Native ETH
     Eth,
