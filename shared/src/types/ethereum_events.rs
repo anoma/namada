@@ -60,12 +60,19 @@ pub enum EthereumAsset {
     ERC20(EthAddress),
 }
 
+/// A fraction of the total voting power. This should always be a reduced
+/// fraction that is between zero and one inclusive.
+#[derive(
+    Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
+struct FractionalVotingPower(fraction::Fraction);
+
 /// This is created by the block proposer based on the Ethereum events included
 /// in the vote extensions of the previous Tendermint round
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct MultiSignedEthEvent {
     /// Address and voting power of the signing validators
-    pub signers: Vec<(Address, u64)>,
+    pub signers: Vec<(Address, FractionalVotingPower)>,
     /// Events as signed by validators
     pub event: MultiSigned<EthereumEvent>,
 }
