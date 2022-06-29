@@ -41,8 +41,6 @@ pub struct TransferToNamada {
     Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub enum EthereumAsset {
-    /// Native ETH
-    Eth,
     /// An ERC20 token and the address of its contract
     ERC20(EthAddress),
 }
