@@ -77,7 +77,15 @@ mod protocol_txs {
         DKG(DkgMessage),
         /// Tx requesting a new DKG session keypair
         NewDkgKeypair(Tx),
-        /// Ethereum events contained in vote extensions
+        /// Contains Ethereum events as voted to be included by validators in
+        /// the previous Tendermint round. For any Ethereum events a validator
+        /// sees, the validator should continuously vote to include that event
+        /// in storage, until it's marked in storage that they have in
+        /// fact seen it.
+        ///
+        /// This transaction should only ever be sent by the block proposer,
+        /// who should inject it directly during the `PrepareProposal` phase of
+        /// ABCI++ rather than broadcasting it via Tendermint.
         EthereumEvents(Vec<MultiSignedEthEvent>),
     }
 
