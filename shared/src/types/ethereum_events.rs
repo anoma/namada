@@ -65,7 +65,13 @@ pub enum EthereumAsset {
 #[derive(
     Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
-struct FractionalVotingPower(fraction::Fraction);
+pub struct FractionalVotingPower(u64, u64);
+
+impl From<FractionalVotingPower> for fraction::Fraction {
+    fn from(fvp: FractionalVotingPower) -> Self {
+        fraction::Fraction::new(fvp.0, fvp.1)
+    }
+}
 
 /// This is created by the block proposer based on the Ethereum events included
 /// in the vote extensions of the previous Tendermint round
