@@ -2,10 +2,10 @@
 use std::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use sha2::{Digest, Sha256};
 
 use crate::proto::MultiSigned;
 use crate::types::address::Address;
+use crate::types::hash::Hash;
 use crate::types::token::Amount;
 
 /// Each event has a nonce set by the Ethereum smart contract that emitted it.
@@ -25,13 +25,10 @@ pub enum EthereumEvent {
 }
 
 impl EthereumEvent {
-    /// SHA256 of the Borsh serialization of the [`EthereumEvent`]
-    fn hash(&self) -> Result<[u8; 32], std::io::Error> {
+    /// SHA256 of the Borsh serialization of the [`EthereumEvent`].
+    fn hash(&self) -> Result<Hash, std::io::Error> {
         let bytes = self.try_to_vec()?;
-        let mut hasher = Sha256::new();
-        hasher.update(&bytes);
-        let hash: [u8; 32] = hasher.finalize().into();
-        Ok(hash)
+        Ok(Hash::sha256(&bytes))
     }
 }
 
@@ -86,11 +83,11 @@ mod tests {
 
         assert_eq!(
             hash,
-            [
+            Hash([
                 94, 227, 170, 45, 164, 208, 161, 180, 203, 148, 96, 173, 90,
                 30, 102, 44, 30, 187, 124, 90, 117, 204, 19, 188, 7, 104, 19,
                 46, 13, 62, 203, 243
-            ]
+            ])
         );
     }
 }
