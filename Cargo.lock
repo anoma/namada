@@ -170,6 +170,7 @@ dependencies = [
  "libp2p",
  "message-io",
  "num-derive",
+ "num-rational",
  "num-traits 0.2.15",
  "num_cpus",
  "once_cell",
