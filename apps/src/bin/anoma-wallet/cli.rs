@@ -194,24 +194,29 @@ fn address_list(ctx: Context) {
 fn address_or_alias_find(ctx: Context, args: args::AddressOrAliasFind) {
     let wallet = ctx.wallet;
     if args.address.is_some() && args.alias.is_some() {
-        println!("This should not be happening, as clap should emit its own error message.");
+        println!(
+            "This should not be happening, as clap should emit its own error \
+             message."
+        );
     } else if args.alias.is_some() {
-        if let Some(address) = wallet.find_address(&args.alias.as_ref().unwrap()) {
+        if let Some(address) =
+            wallet.find_address(&args.alias.as_ref().unwrap())
+        {
             println!("Found address {}", address.to_pretty_string());
         } else {
             println!(
-                "No address with alias {} found. Use the command `address list` \
-                 to see all the known addresses.",
+                "No address with alias {} found. Use the command `address \
+                 list` to see all the known addresses.",
                 args.alias.unwrap().to_lowercase()
             );
         }
     } else if args.address.is_some() {
-        if let Some(alias) = wallet.find_alias(&args.address.as_ref().unwrap()) {
-            println!("Found alias {}", alias.to_string());
+        if let Some(alias) = wallet.find_alias(args.address.as_ref().unwrap()) {
+            println!("Found alias {}", alias);
         } else {
             println!(
-                "No alias with address {} found. Use the command `address list` \
-                 to see all the known addresses.",
+                "No alias with address {} found. Use the command `address \
+                 list` to see all the known addresses.",
                 args.address.unwrap()
             );
         }

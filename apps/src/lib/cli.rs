@@ -9,7 +9,7 @@
 pub mod context;
 mod utils;
 
-use clap::{crate_authors, AppSettings, ArgMatches, ArgGroup};
+use clap::{crate_authors, AppSettings, ArgGroup, ArgMatches};
 pub use utils::safe_exit;
 use utils::*;
 
@@ -544,9 +544,9 @@ pub mod cmds {
         const CMD: &'static str = "find";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| AddressOrAliasFind(args::AddressOrAliasFind::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressOrAliasFind(args::AddressOrAliasFind::parse(matches))
+            })
         }
 
         fn def() -> App {
@@ -1377,7 +1377,7 @@ pub mod args {
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
-    use super::{ArgMatches,ArgGroup};
+    use super::{ArgGroup, ArgMatches};
     use crate::config;
     use crate::config::TendermintMode;
 
@@ -2860,7 +2860,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS_OPT.parse(matches);
             let address = RAW_ADDRESS_OPT.parse(matches);
-            Self { alias , address }
+            Self { alias, address }
         }
 
         fn def(app: App) -> App {
@@ -2869,13 +2869,15 @@ pub mod args {
                     .def()
                     .about("An alias associated with the address."),
             )
-            .arg(RAW_ADDRESS_OPT
-                .def()
-                .about("The bech32m encoded address string.")
+            .arg(
+                RAW_ADDRESS_OPT
+                    .def()
+                    .about("The bech32m encoded address string."),
             )
-            .group(ArgGroup::new("find_flags")
-                .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
-                .required(true)
+            .group(
+                ArgGroup::new("find_flags")
+                    .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
+                    .required(true),
             )
         }
     }
