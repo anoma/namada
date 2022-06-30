@@ -11,6 +11,8 @@ use std::{env, fs};
 
 use anoma::types::address::Address;
 use anoma::types::key::*;
+use bimap::BiHashMap;
+use serde::{Deserialize, Serialize};
 pub use store::wallet_file;
 use thiserror::Error;
 
@@ -308,9 +310,10 @@ impl Wallet {
         &mut self,
         alias: impl AsRef<str>,
         address: Address,
+        addresstype: AddressType,
     ) -> Option<String> {
         self.store
-            .insert_address(alias.into(), address)
+            .insert_address(alias.into(), address, addresstype)
             .map(Into::into)
     }
 
@@ -382,4 +385,14 @@ pub fn read_password(prompt_msg: &str) -> String {
         cli::safe_exit(1)
     }
     pwd
+}
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct AddressBook {
+    pub tokens: BiHashMap<Alias, Address>,
+    pub other: BiHashMap<Alias, Address>,
+}
+#[derive(Debug)]
+pub enum AddressType {
+    Token,
+    Other,
 }

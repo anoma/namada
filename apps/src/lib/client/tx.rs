@@ -57,6 +57,8 @@ use crate::node::ledger::tendermint_node;
 #[cfg(not(feature = "ABCI"))]
 const ACCEPTED_QUERY_KEY: &str = "accepted.hash";
 const APPLIED_QUERY_KEY: &str = "applied.hash";
+use crate::wallet::AddressType;
+
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
@@ -310,6 +312,7 @@ pub async fn submit_init_validator(
                     if let Some(new_alias) = ctx.wallet.add_address(
                         validator_address_alias.clone(),
                         validator_address.clone(),
+                        AddressType::Other,
                     ) {
                         println!(
                             "Added alias {} for address {}.",
@@ -322,6 +325,7 @@ pub async fn submit_init_validator(
                     if let Some(new_alias) = ctx.wallet.add_address(
                         rewards_address_alias.clone(),
                         rewards_address.clone(),
+                        AddressType::Other,
                     ) {
                         println!(
                             "Added alias {} for address {}.",
@@ -1081,7 +1085,14 @@ async fn save_initialized_accounts(
                 }
             };
             let alias = alias.into_owned();
-            let added = wallet.add_address(alias.clone(), address.clone());
+
+            // TODO: Double check it is ok to assume all addresses added through
+            // here will be of type other
+            let added = wallet.add_address(
+                alias.clone(),
+                address.clone(),
+                AddressType::Other,
+            );
             match added {
                 Some(new_alias) if new_alias != encoded => {
                     println!(

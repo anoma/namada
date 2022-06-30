@@ -22,6 +22,7 @@ use super::keys::StoredKeypair;
 use super::pre_genesis;
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
+use crate::wallet::{AddressBook, AddressType};
 
 /// Special keys for a validator
 #[derive(Serialize, Deserialize, Debug)]
@@ -61,26 +62,23 @@ pub struct Store {
     /// Special keys if the wallet belongs to a validator
     pub(crate) validator_data: Option<ValidatorData>,
 }
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
-pub struct AddressBook {
-    pub tokens: BiHashMap<Alias, Address>,
-    pub other: BiHashMap<Alias, Address>,
-}
 
-impl AddressBook{
+impl AddressBook {
     fn extend(&mut self, otherbook: &AddressBook) {
         self.tokens.extend(otherbook.tokens.clone().into_iter());
         self.other.extend(otherbook.other.clone().into_iter());
     }
-    
-    fn get_by_alias(&self, alias: &Alias) -> Option<&Address> {
-        self.tokens.get_by_left(alias).or_else(|| self.other.get_by_left(alias))
 
+    fn get_by_alias(&self, alias: &Alias) -> Option<&Address> {
+        self.tokens
+            .get_by_left(alias)
+            .or_else(|| self.other.get_by_left(alias))
     }
 
     fn get_by_address(&self, address: &Address) -> Option<&Alias> {
-        self.tokens.get_by_right(address).or_else(|| self.other.get_by_right(address))
-
+        self.tokens
+            .get_by_right(address)
+            .or_else(|| self.other.get_by_right(address))
     }
 
     fn all(&self) -> BiHashMap<Alias, Address> {
@@ -89,14 +87,13 @@ impl AddressBook{
         all
     }
 
-    fn contains_alias(&self, alias: &Alias) -> bool{
+    fn contains_alias(&self, alias: &Alias) -> bool {
         self.tokens.contains_left(alias) || self.other.contains_left(alias)
     }
 
-    fn contains_address(&self, address: &Address) -> bool{
-        self.tokens.contains_right(address) || self.other.contains_right(address)
-    }
-
+    // fn contains_address(&self, address: &Address) -> bool{
+    //     self.tokens.contains_right(address) ||
+    // self.other.contains_right(address) }
 }
 
 #[derive(Error, Debug)]
@@ -130,17 +127,14 @@ impl Store {
             );
             store.pkhs.insert(pkh, alias);
         }
-        store
-            .addresses
-            .extend(&super::defaults::addressbook());
+        store.addresses.extend(&super::defaults::addressbook());
         store
     }
 
     /// Add addresses from a genesis configuration.
     pub fn add_genesis_addresses(&mut self, genesis: GenesisConfig) {
-        self.addresses.extend(
-            &super::defaults::addresses_from_genesis(genesis)
-        );
+        self.addresses
+            .extend(&super::defaults::addresses_from_genesis(genesis));
     }
 
     /// Save the wallet store to a file.
@@ -317,7 +311,13 @@ impl Store {
             eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1);
         }
-        if self.insert_address(alias.clone(), address).is_none() {
+
+        // TODO: Double check this but im pretty sure only other is created here
+        // when gen key?
+        if self
+            .insert_address(alias.clone(), address, AddressType::Other)
+            .is_none()
+        {
             eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1);
         }
@@ -398,6 +398,7 @@ impl Store {
         &mut self,
         alias: Alias,
         address: Address,
+        addresstype: AddressType,
     ) -> Option<Alias> {
         if alias.is_empty() {
             println!(
@@ -409,13 +410,24 @@ impl Store {
             match show_overwrite_confirmation(&alias, "an address") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
-                    return self.insert_address(new_alias, address);
+                    return self.insert_address(
+                        new_alias,
+                        address,
+                        addresstype,
+                    );
                 }
                 ConfirmationResponse::Skip => return None,
             }
         }
-        //TODO: NEED TO ADD FUNCTIONALITY FOR TOKENS, atm all addresses get added to other type
-        self.addresses.other.insert(alias.clone(), address);
+        match addresstype {
+            AddressType::Token => {
+                self.addresses.tokens.insert(alias.clone(), address)
+            }
+            AddressType::Other => {
+                self.addresses.other.insert(alias.clone(), address)
+            }
+        };
+
         Some(alias)
     }
 

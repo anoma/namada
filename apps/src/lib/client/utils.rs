@@ -38,7 +38,7 @@ use crate::config::{
 };
 use crate::node::gossip;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{pre_genesis, Wallet};
+use crate::wallet::{pre_genesis, AddressType, Wallet};
 use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
@@ -608,8 +608,12 @@ pub fn init_network(
             Some(genesis_config::HexString(dkg_pk.to_string()));
 
         // Write keypairs to wallet
-        wallet.add_address(name.clone(), address);
-        wallet.add_address(format!("{}-reward", &name), reward_address);
+        wallet.add_address(name.clone(), address, AddressType::Other);
+        wallet.add_address(
+            format!("{}-reward", &name),
+            reward_address,
+            AddressType::Other,
+        );
 
         // Check if there's a matchmaker configured for this validator node
         match (
@@ -706,7 +710,7 @@ pub fn init_network(
             if config.address.is_none() {
                 let address = address::gen_established_address("token");
                 config.address = Some(address.to_string());
-                wallet.add_address(name.clone(), address);
+                wallet.add_address(name.clone(), address, AddressType::Token);
             }
             if config.vp.is_none() {
                 config.vp = Some("vp_token".to_string());
@@ -1006,7 +1010,7 @@ fn init_established_account(
     if config.address.is_none() {
         let address = address::gen_established_address("established");
         config.address = Some(address.to_string());
-        wallet.add_address(&name, address);
+        wallet.add_address(&name, address, AddressType::Other);
     }
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
