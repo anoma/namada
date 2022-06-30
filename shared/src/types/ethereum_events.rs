@@ -18,10 +18,22 @@ pub struct Nonce(u64);
 #[derive(
     Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
-pub enum EthereumEvent {
-    /// Event transferring batches of ether from Ethereum to wrapped ETH on
-    /// Anoma
-    TransfersToNamada(Vec<TransferToNamada>, Nonce),
+pub enum RawEvent {
+    /// Event transferring batches of Ethereum assets from Ethereum to wrapped
+    /// assets on Anoma
+    TransfersToNamada(Vec<TransferToNamada>),
+}
+
+/// An Ethereum event emitted by an Ethereum bridge smart contract.
+#[derive(
+    Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
+pub struct EthereumEvent {
+    /// The Ethereum event.
+    pub event: RawEvent,
+    /// All events must be emitted with a nonce so that otherwise identical
+    /// events will be unique.
+    pub nonce: Nonce,
 }
 
 impl EthereumEvent {
@@ -90,7 +102,8 @@ mod tests {
     #[test]
     fn test_ethereum_event_hash() {
         let nonce = Nonce(123);
-        let event = EthereumEvent::TransfersToNamada(vec![], nonce);
+        let event = RawEvent::TransfersToNamada(vec![]);
+        let event = EthereumEvent { nonce, event };
 
         let hash = event.hash().unwrap();
 
