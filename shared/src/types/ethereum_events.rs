@@ -12,7 +12,7 @@ use crate::types::token::Amount;
 #[derive(
     Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
-pub struct EthereumEventNonce(u64);
+pub struct Nonce(u64);
 
 /// An Ethereum event to be processed by the Anoma ledger
 #[derive(
@@ -21,7 +21,7 @@ pub struct EthereumEventNonce(u64);
 pub enum EthereumEvent {
     /// Event transferring batches of ether from Ethereum to wrapped ETH on
     /// Anoma
-    TransfersToNamada(Vec<TransferToNamada>, EthereumEventNonce),
+    TransfersToNamada(Vec<TransferToNamada>, Nonce),
 }
 
 impl EthereumEvent {
@@ -89,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_ethereum_event_hash() {
-        let nonce = EthereumEventNonce(123);
+        let nonce = Nonce(123);
         let event = EthereumEvent::TransfersToNamada(vec![], nonce);
 
         let hash = event.hash().unwrap();
