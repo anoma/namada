@@ -2,6 +2,7 @@
 use std::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use fraction::Fraction;
 
 use crate::proto::MultiSigned;
 use crate::types::address::Address;
@@ -74,14 +75,75 @@ pub enum EthereumAsset {
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
-#[derive(
-    Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
-pub struct FractionalVotingPower(u64, u64);
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct FractionalVotingPower(Fraction);
 
-impl From<FractionalVotingPower> for fraction::Fraction {
-    fn from(fvp: FractionalVotingPower) -> Self {
-        fraction::Fraction::new(fvp.0, fvp.1)
+impl TryFrom<&FractionalVotingPower> for (u64, u64) {
+    type Error = std::io::Error;
+
+    fn try_from(power: &FractionalVotingPower) -> Result<Self, Self::Error> {
+        let numerator = power
+            .0
+            .numer()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Could not serialize FractionalVotingPower, missing \
+                     numerator",
+                )
+            })?
+            .to_owned();
+        let denominator = power
+            .0
+            .denom()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Could not serialize FractionalVotingPower, missing \
+                     numerator",
+                )
+            })?
+            .to_owned();
+        Ok((numerator, denominator))
+    }
+}
+
+impl BorshSerialize for FractionalVotingPower {
+    fn serialize<W: ark_serialize::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        let (numer, denom): (u64, u64) =
+            TryFrom::<&FractionalVotingPower>::try_from(&self)?;
+        (numer, denom).serialize(writer)
+    }
+}
+
+impl BorshDeserialize for FractionalVotingPower {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        let (numer, denom): (u64, u64) = BorshDeserialize::deserialize(buf)?;
+        Ok(FractionalVotingPower(Fraction::new(numer, denom)))
+    }
+}
+
+impl BorshSchema for FractionalVotingPower {
+    fn add_definitions_recursively(
+        definitions: &mut std::collections::HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                u64::declaration(),
+                u64::declaration()
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "FractionalVotingPower".into()
     }
 }
 
