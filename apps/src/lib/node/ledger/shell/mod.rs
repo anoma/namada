@@ -32,6 +32,7 @@ use anoma::ledger::storage::{
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::chain::ChainId;
+use anoma::types::ethereum_events::EthereumEvent;
 use anoma::types::key::*;
 use anoma::types::storage::{BlockHeight, Key};
 use anoma::types::time::{DateTimeUtc, TimeZone, Utc};
@@ -71,7 +72,6 @@ use tower_abci_old::{request, response};
 
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
-use crate::node::ledger::ethereum_node::events::EthereumEvent;
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -768,11 +768,14 @@ mod test_utils {
     }
 
     impl TestShell {
-        /// Returns a new shell paired with a broadcast receiver, which will
-        /// receives any protocol txs sent by the shell.
-        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>) {
+        /// Returns a new shell with
+        ///    - A broadcast receiver, which will receive
+        ///      any protocol txs sent by the shell.
+        ///    - A sender that can send Ethereum events into the ledger,
+        ///      mocking the Ethereum fullnode process
+        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>, UnboundedSender<EthereumEvent>) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-            let (_eth_sender, eth_receiver) =
+            let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::unbounded_channel();
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -787,13 +790,14 @@ mod test_utils {
                         ),
                         top_level_directory().join("wasm"),
                         sender,
-                        eth_receiver,
+                        Some(eth_receiver),
                         None,
                         vp_wasm_compilation_cache,
                         tx_wasm_compilation_cache,
                     ),
                 },
                 receiver,
+                eth_sender
             )
         }
 
@@ -870,8 +874,8 @@ mod test_utils {
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>) {
-        let (mut test, receiver) = TestShell::new();
+    pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>, UnboundedSender<EthereumEvent>) {
+        let (mut test, receiver, eth_receiver) = TestShell::new();
         test.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -880,7 +884,7 @@ mod test_utils {
             chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
-        (test, receiver)
+        (test, receiver, eth_receiver)
     }
 
     /// This is just to be used in testing. It is not
@@ -918,7 +922,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender.clone(),
-            receiver,
+            Some(receiver),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
@@ -977,7 +981,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender,
-            receiver,
+            Some(receiver),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,

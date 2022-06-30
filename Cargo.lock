@@ -253,6 +253,7 @@ dependencies = [
  "byteorder",
  "cargo-watch",
  "clap 3.0.0-beta.2",
+ "clarity",
  "color-eyre",
  "config",
  "curl",

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use anoma::types::ethereum_events::EthereumEvent;
 #[cfg(feature = "ABCI")]
 use anoma::types::hash::Hash;
 #[cfg(feature = "ABCI")]
@@ -20,7 +21,6 @@ use tower_abci::{BoxError, Request as Req, Response as Resp};
 #[cfg(feature = "ABCI")]
 use tower_abci_old::{BoxError, Request as Req, Response as Resp};
 
-use super::super::ethereum_node::events::EthereumEvent;
 use super::super::Shell;
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 #[cfg(not(feature = "ABCI"))]

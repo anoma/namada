@@ -1,6 +1,11 @@
 pub mod events;
 pub mod oracle;
-mod test_tools;
+#[cfg(feature = "eth-fullnode")]
+pub use oracle::{Oracle, run_oracle};
+pub mod test_tools;
+#[cfg(not(feature="eth-fullnode"))]
+pub use test_tools::mock_oracle::{Oracle, run_oracle};
+
 
 use std::ffi::OsString;
 
@@ -85,7 +90,7 @@ pub mod eth_fullnode {
         match std::env::var("ETHEREUM_NETWORK") {
             Ok(path) => {
                 tracing::info!("Connecting to Ethereum network: {}", &path);
-                Ok(Some(path))
+                Ok(Some(format!("--{}", path)))
             }
             Err(std::env::VarError::NotPresent) => {
                 tracing::info!("Connecting to Ethereum mainnet");
@@ -108,15 +113,10 @@ pub mod eth_fullnode {
             // the geth fullnode process
             let network = get_eth_network()?;
             let args = match &network {
-                Some(network) => vec![
-                    "--syncmode",
-                    "snap",
-                    network.as_str(),
-                    "--ws",
-                    "--ws.api",
-                    "eth",
-                ],
-                None => vec!["--syncmode", "snap", "--ws", "--ws.api", "eth"],
+                Some(network) => {
+                    vec!["--syncmode", "snap", network.as_str(), "--http"]
+                }
+                None => vec!["--syncmode", "snap", "--http"],
             };
             let ethereum_node = Command::new("geth")
                 .args(&args)
@@ -130,18 +130,14 @@ pub mod eth_fullnode {
             let client = Web3::new(url, std::time::Duration::from_secs(5));
 
             loop {
-                match client.eth_syncing().await {
-                    Ok(true) => {}
-                    Ok(false) => {
-                        tracing::info!("Finished syncing");
-                        break;
-                    }
-                    Err(err) => {
-                        tracing::error!(
-                            "Encountered an error while syncing: {}",
-                            err
-                        );
-                    }
+                if let Ok(false) = client.eth_syncing().await {
+                    tracing::info!("Finished syncing");
+                    break;
+                }
+                if let Err(e) = client.eth_syncing().await {
+                    // This is very noisy and usually not interesting.
+                    // Still can be very useful
+                    tracing::debug!("Error trying to connect to Geth: {:?}", e);
                 }
             }
 

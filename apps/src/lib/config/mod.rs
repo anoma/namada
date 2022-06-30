@@ -45,7 +45,7 @@ pub const TENDERMINT_DIR: &str = "tendermint";
 /// Chain-specific Anoma DB. Nested in chain dirs.
 pub const DB_DIR: &str = "db";
 /// Websocket address for Ethereum fullnode RPC
-pub const ETHEREUM_URL: &str = "ws://127.0.0.1:8546";
+pub const ETHEREUM_URL: &str = "http://127.0.0.1:8545";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {

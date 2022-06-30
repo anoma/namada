@@ -1,11 +1,16 @@
 use std::ops::Deref;
 
+use anoma::types::ethereum_events::{EthAddress, EthereumEvent};
+use clarity::Address;
 use num256::Uint256;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot::Sender;
+#[cfg(not(test))]
 use web30::client::Web3;
+#[cfg(test)]
+use super::test_tools::mock_web3_client::Web3;
 
-use super::events::{signatures, EthAddress, EthereumEvent, PendingEvent};
+use super::events::{signatures, PendingEvent};
 
 /// Minimum number of confirmations needed to trust an Ethereum branch
 pub(crate) const MIN_CONFIRMATIONS: u64 = 50;
@@ -17,7 +22,7 @@ const GOVERNANCE_CONTRACT: EthAddress = EthAddress([1; 20]);
 /// A client that can talk to geth and parse
 /// and relay events relevant to Anoma to the
 /// ledger process
-pub(crate) struct Oracle {
+pub struct Oracle {
     /// The client that talks to the Ethereum fullnode
     client: Web3,
     /// A channel for sending processed and confirmed
@@ -67,7 +72,7 @@ impl Oracle {
         events
             .into_iter()
             .map(|event| self.sender.send(event))
-            .all(|res| res.is_ok())
+            .all(|res| res.is_ok()) && !self.sender.is_closed()
     }
 
     /// Check if the receiver in the ledger has hung up.
@@ -77,12 +82,24 @@ impl Oracle {
     }
 }
 
+/// Set up an Oracle and run the process where the Oracle
+/// processes and forwards Ethereum events to the ledger
 pub async fn run_oracle(
     url: &str,
     sender: UnboundedSender<EthereumEvent>,
     abort_sender: Sender<()>,
 ) {
     let oracle = Oracle::new(url, sender, abort_sender);
+    run_oracle_aux(oracle).await;
+}
+
+/// Given an oracle, watch for new Ethereum events, processing
+/// them into Anoma native types.
+///
+/// It also checks that once the specified number of confirmations
+/// is reached, an event is forwarded to the ledger process
+async fn run_oracle_aux(oracle: Oracle) {
+
     // Initialize our local state. This includes
     // the latest block height seen and a queue of events
     // awaiting a certain number of confirmations
@@ -102,14 +119,24 @@ pub async fn run_oracle(
                 return;
             }
         };
-
+        // No blocks in existence yet with enough confirmations
+        if Uint256::from(MIN_CONFIRMATIONS) > latest_block {
+            if !oracle.connected() {
+                tracing::info!(
+                    "Ethereum oracle could not send events to the ledger; the \
+                     receiver has hung up. Shutting down"
+                );
+                return;
+            }
+            continue;
+        }
         let block_to_check = latest_block.clone() - MIN_CONFIRMATIONS.into();
         // check for events with at least `[MIN_CONFIRMATIONS]` confirmations.
         for sig in signatures::SIGNATURES {
-            let addr = match signatures::SigType::from(sig) {
-                signatures::SigType::Bridge => MINT_CONTRACT.0.clone().into(),
+            let addr: Address = match signatures::SigType::from(sig) {
+                signatures::SigType::Bridge => MINT_CONTRACT.0.into(),
                 signatures::SigType::Governance => {
-                    GOVERNANCE_CONTRACT.0.clone().into()
+                    GOVERNANCE_CONTRACT.0.into()
                 }
             };
             // fetch the events for matching the given signature
@@ -175,4 +202,289 @@ fn process_queue(
         }
     }
     confirmed
+}
+
+
+#[cfg(test)]
+mod test_oracle {
+    use tokio::sync::oneshot::{Receiver, channel};
+
+    use super::*;
+    use super::super::test_tools::mock_web3_client::{TestCmd, Web3};
+    use crate::node::ledger::ethereum_node::events::{ChangedContract, RawTransfersToEthereum};
+    use crate::node::ledger::ethereum_node::test_tools::mock_web3_client::MockEventType;
+    use anoma::types::ethereum_events::TransferToEthereum;
+
+    /// The data returned from setting up a test
+    struct TestPackage {
+        oracle: Oracle,
+        admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
+        eth_recv: tokio::sync::mpsc::UnboundedReceiver<EthereumEvent>,
+        abort_recv: Receiver<()>,
+    }
+
+    /// Set up an oracle with a mock web3 client that we can contr
+    fn setup() -> TestPackage {
+        let (admin_channel, client) = Web3::setup();
+        let (eth_sender, eth_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (abort, abort_recv) = channel();
+        TestPackage {
+            oracle: Oracle {
+                client,
+                sender: eth_sender,
+                abort: Some(abort),
+            },
+            admin_channel,
+            eth_recv: eth_receiver,
+            abort_recv,
+        }
+    }
+
+    /// Test that if the oracle shuts down, it
+    /// sends a message to the fullnode to stop
+    #[test]
+    fn test_abort_send() {
+        let TestPackage {
+            oracle,
+            mut abort_recv,
+            ..
+        } = setup();
+        drop(oracle);
+        assert!(abort_recv.try_recv().is_ok())
+    }
+
+    /// Test that if the fullnode stops, the oracle
+    /// shuts down, even if the web3 client is unresponsive
+    #[test]
+    fn test_shutdown() {
+        let TestPackage {
+            oracle,
+            eth_recv,
+            admin_channel,
+            ..
+        } = setup();
+        let oracle = std::thread::spawn(move || {
+            tokio_test::block_on(run_oracle_aux(oracle));
+        });
+        admin_channel.send(TestCmd::Unresponsive).expect("Test failed");
+        drop(eth_recv);
+        oracle.join().expect("Test failed");
+    }
+
+    /// Test that if no logs are received from the web3
+    /// client, no events are sent out
+    #[test]
+    fn test_no_logs_no_op() {
+        let TestPackage {
+            oracle,
+            mut eth_recv,
+            admin_channel,
+            ..
+        } = setup();
+        let oracle = std::thread::spawn(move || {
+            tokio_test::block_on(run_oracle_aux(oracle));
+        });
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(100u32)))
+            .expect("Test failed");
+        let mut time = std::time::Duration::from_secs(1);
+        while time > std::time::Duration::from_millis(10) {
+            assert!(eth_recv.try_recv().is_err());
+            time -= std::time::Duration::from_millis(10);
+        }
+        drop(eth_recv);
+        oracle.join().expect("Test failed");
+    }
+
+    /// Test that if a new block height doesn't increase,
+    /// no events are sent out even if there are
+    /// some in the logs.
+    #[test]
+    fn test_cant_get_new_height() {
+        let TestPackage {
+            oracle,
+            mut eth_recv,
+            admin_channel,
+            ..
+        } = setup();
+        let oracle = std::thread::spawn(move || {
+            tokio_test::block_on(run_oracle_aux(oracle));
+        });
+        // Increase height above [`MIN_CONFIRMATIONS`]
+        admin_channel.send(
+            TestCmd::NewHeight(50u32.into())
+        ).expect("Test failed");
+
+        let new_event = ChangedContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20])
+        }.encode();
+        admin_channel.send(
+            TestCmd::NewEvent{
+                event_type:MockEventType::NewContract,
+                data:new_event,
+                height: 51,
+            }
+        ).expect("Test failed");
+        // since height is not updating, we should not receive events
+        let mut time = std::time::Duration::from_secs(1);
+        while time > std::time::Duration::from_millis(10) {
+            assert!(eth_recv.try_recv().is_err());
+            time -= std::time::Duration::from_millis(10);
+        }
+        drop(eth_recv);
+        oracle.join().expect("Test failed");
+    }
+
+    /// Test that the oracle waits until new logs
+    /// are received before sending them on.
+    #[test]
+    fn test_wait_on_new_logs() {
+        let TestPackage {
+            oracle,
+            mut eth_recv,
+            admin_channel,
+            ..
+        } = setup();
+        let oracle = std::thread::spawn(move || {
+            tokio_test::block_on(run_oracle_aux(oracle));
+        });
+        // Increase height above [`MIN_CONFIRMATIONS`]
+        admin_channel.send(
+            TestCmd::NewHeight(50u32.into())
+        ).expect("Test failed");
+
+        let new_event = ChangedContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20])
+        }.encode();
+        admin_channel.send(
+            TestCmd::NewEvent{
+                event_type: MockEventType::NewContract,
+                data: new_event,
+                height: 100,
+            }
+        ).expect("Test failed");
+
+        // we should not receive events even though the height is large
+        // enough
+        admin_channel.send(TestCmd::Unresponsive).expect("Test failed");
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(101u32)))
+            .expect("Test failed");
+
+        let mut time = std::time::Duration::from_secs(1);
+        while time > std::time::Duration::from_millis(10) {
+            assert!(eth_recv.try_recv().is_err());
+            time -= std::time::Duration::from_millis(10);
+        }
+        // check that when web3 becomes responsive, oracle sends event
+        admin_channel.send(TestCmd::Normal).expect("Test failed");
+        let event = eth_recv.blocking_recv()
+            .expect("Test failed");
+        if let EthereumEvent::NewContract {name, address} = event {
+            assert_eq!(name.as_str(), "Test");
+            assert_eq!(address.0, [0; 20]);
+        } else {
+            panic!("Test failed");
+        }
+        drop(eth_recv);
+        oracle.join().expect("Test failed");
+    }
+
+    /// Test that events are only sent when they
+    /// reach the required number of confirmations
+    #[test]
+    fn test_finality_gadget() {
+        let TestPackage {
+            oracle,
+            mut eth_recv,
+            admin_channel,
+            ..
+        } = setup();
+        let oracle = std::thread::spawn(move || {
+            tokio_test::block_on(run_oracle_aux(oracle));
+        });
+        // Increase height above [`MIN_CONFIRMATIONS`]
+        admin_channel.send(
+            TestCmd::NewHeight(50u32.into())
+        ).expect("Test failed");
+
+        // confirmed after 50 blocks
+        let first_event = ChangedContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20])
+        }.encode();
+
+        // confirmed after 75 blocks
+        let second_event = RawTransfersToEthereum {
+            transfers: vec![TransferToEthereum {
+                amount: Default::default(),
+                asset: EthAddress([0; 20]),
+                receiver: EthAddress([1; 20]),
+            }],
+            nonce: 1.into(),
+            confirmations: 75,
+        }.encode();
+
+        // send in the events to the logs
+        admin_channel.send(
+            TestCmd::NewEvent {
+                event_type: MockEventType::TransferToEthereum,
+                data: second_event,
+                height: 125,
+            }
+        ).expect("Test failed");
+        admin_channel.send(
+            TestCmd::NewEvent{
+                event_type: MockEventType::NewContract,
+                data: first_event,
+                height: 100,
+            }
+        ).expect("Test failed");
+
+        // increase block height so first event is confirmed but second is not.
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(102u32)))
+            .expect("Test failed");
+        // check the correct event is received
+        let event = eth_recv.blocking_recv().expect("Test failed");
+        if let EthereumEvent::NewContract {name, address} = event {
+            assert_eq!(name.as_str(), "Test");
+            assert_eq!(address, EthAddress([0; 20]));
+        } else {
+            panic!("Test failed, {:?}", event);
+        }
+
+        // check no other events are received
+        let mut time = std::time::Duration::from_secs(1);
+        while time > std::time::Duration::from_millis(10) {
+            assert!(eth_recv.try_recv().is_err());
+            time -= std::time::Duration::from_millis(10);
+        }
+
+        // increase block height so second event is confirmed
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(130u32)))
+            .expect("Test failed");
+        // check correct event is received
+        let event = eth_recv.blocking_recv().expect("Test failed");
+        if let EthereumEvent::TransfersToEthereum(mut transfers) = event {
+            assert_eq!(transfers.len(), 1);
+            let transfer = transfers.remove(0);
+            assert_eq!(
+                transfer,
+                TransferToEthereum {
+                    amount: Default::default(),
+                    asset: EthAddress([0; 20]),
+                    receiver: EthAddress([1; 20]),
+                }
+            );
+        } else {
+            panic!("Test failed");
+        }
+
+        drop(eth_recv);
+        oracle.join().expect("Test failed");
+    }
 }

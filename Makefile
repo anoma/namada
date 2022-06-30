@@ -72,7 +72,7 @@ clippy-abci-plus-plus:
 	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
-		--features "std testing ABCI-plus-plus" && \
+		--features "std testing ABCI-plus-plus eth-fullnode" && \
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./proof_of_stake/Cargo.toml \
 		--features "testing" && \
