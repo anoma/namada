@@ -123,14 +123,20 @@ impl PendingEvent {
                 RawTransfersToNamada::decode(data).map(|txs| PendingEvent {
                     confirmations: txs.confirmations.into(),
                     block_height,
-                    event: EthereumEvent::TransfersToNamada(txs.transfers),
+                    event: EthereumEvent::TransfersToNamada {
+                        nonce: txs.nonce,
+                        transfers: txs.transfers,
+                    },
                 })
             }
             signatures::TRANSFER_TO_ETHEREUM_SIG => {
                 RawTransfersToEthereum::decode(data).map(|txs| PendingEvent {
                     confirmations: txs.confirmations.into(),
                     block_height,
-                    event: EthereumEvent::TransfersToEthereum(txs.transfers),
+                    event: EthereumEvent::TransfersToEthereum {
+                        nonce: txs.nonce,
+                        transfers: txs.transfers,
+                    },
                 })
             }
             signatures::VALIDATOR_SET_UPDATE_SIG => {

@@ -475,7 +475,8 @@ mod test_oracle {
             .expect("Test failed");
         // check correct event is received
         let event = eth_recv.blocking_recv().expect("Test failed");
-        if let EthereumEvent::TransfersToEthereum(mut transfers) = event {
+        if let EthereumEvent::TransfersToEthereum { mut transfers, .. } = event
+        {
             assert_eq!(transfers.len(), 1);
             let transfer = transfers.remove(0);
             assert_eq!(

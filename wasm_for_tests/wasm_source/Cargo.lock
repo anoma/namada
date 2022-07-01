@@ -51,6 +51,7 @@ dependencies = [
  "derivative",
  "ed25519-consensus",
  "ethabi",
+ "eyre",
  "ferveo-common",
  "hex",
  "ibc",
@@ -58,6 +59,7 @@ dependencies = [
  "ics23",
  "itertools",
  "loupe",
+ "num-rational",
  "parity-wasm",
  "proptest",
  "prost",
@@ -946,9 +948,9 @@ dependencies = [
 
 [[package]]
 name = "eyre"
-version = "0.6.7"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9289ed2c0440a6536e65119725cf91fc2c6b5e513bfd2e36e1134d7cca6ca12f"
+checksum = "4c2b6b5a29c02cdc822728b7d7b8ae1bab3e3b05d44522770ddd49722eeac7eb"
 dependencies = [
  "indenter",
  "once_cell",
@@ -1646,6 +1648,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2cc698a63b549a70bc047073d2949cce27cd1c7b0a4a862d08a8031bc2801db"
 dependencies = [
  "autocfg",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
+dependencies = [
+ "autocfg",
+ "num-bigint",
+ "num-integer",
  "num-traits",
 ]
 
