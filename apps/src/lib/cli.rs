@@ -1649,8 +1649,16 @@ pub mod args {
                 ))
                 .arg(TARGET.def().about("The target account address."))
                 .arg(TOKEN.def().about("The transfer token."))
-                .arg(SOURCE_SUB_PREFIX.def().about("The source token's sub prefix."))
-                .arg(TARGET_SUB_PREFIX.def().about("The target token's sub prefix."))
+                .arg(
+                    SOURCE_SUB_PREFIX
+                        .def()
+                        .about("The source token's sub prefix."),
+                )
+                .arg(
+                    TARGET_SUB_PREFIX
+                        .def()
+                        .about("The target token's sub prefix."),
+                )
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
         }
     }
