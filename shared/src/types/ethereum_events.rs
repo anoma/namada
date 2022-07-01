@@ -9,7 +9,7 @@ use crate::types::token::Amount;
 
 /// Anoma native type to replace the ethabi::Uint type
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct Uint(pub [u64; 4]);
 
@@ -33,13 +33,13 @@ impl From<u64> for Uint {
 
 /// Representation of address on Ethereum
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct EthAddress(pub [u8; 20]);
 
 /// A Keccak hash
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct KeccakHash(pub [u8; 32]);
 
@@ -121,7 +121,7 @@ impl EthereumEvent {
 
 /// An event transferring some kind of value from Ethereum to Anoma
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct TransferToNamada {
     /// Quantity of the ERC20 token in the transfer
@@ -134,7 +134,7 @@ pub struct TransferToNamada {
 
 /// An event transferring some kind of value from Ethereum to Anoma
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct TransferToEthereum {
     /// Quantity of wrapped Asset in the transfer
@@ -150,7 +150,7 @@ pub struct TransferToEthereum {
 /// a cap on the max amount of this token allowed to be
 /// held by the bridge.
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 #[allow(dead_code)]
 pub struct TokenWhitelist {
