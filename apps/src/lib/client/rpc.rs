@@ -1534,8 +1534,10 @@ pub async fn get_proposal_votes(
             .await;
 
     let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
 
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
@@ -1564,21 +1566,41 @@ pub async fn get_proposal_votes(
                     if vote.is_yay() {
                         match yay_delegators.get_mut(&voter_address) {
                             Some(map) => {
-                                map.insert(validator_address, VotePower::from(amount));
-                            },
+                                map.insert(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                );
+                            }
                             None => {
-                                let delegations_map: HashMap<Address, VotePower> = HashMap::from([(validator_address, VotePower::from(amount))]);
-                                yay_delegators.insert(voter_address, delegations_map);
+                                let delegations_map: HashMap<
+                                    Address,
+                                    VotePower,
+                                > = HashMap::from([(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                )]);
+                                yay_delegators
+                                    .insert(voter_address, delegations_map);
                             }
                         }
                     } else {
                         match nay_delegators.get_mut(&voter_address) {
                             Some(map) => {
-                                map.insert(validator_address, VotePower::from(amount));
-                            },
+                                map.insert(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                );
+                            }
                             None => {
-                                let delegations_map: HashMap<Address, VotePower> = HashMap::from([(validator_address, VotePower::from(amount))]);
-                                nay_delegators.insert(voter_address, delegations_map);
+                                let delegations_map: HashMap<
+                                    Address,
+                                    VotePower,
+                                > = HashMap::from([(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                )]);
+                                nay_delegators
+                                    .insert(voter_address, delegations_map);
                             }
                         }
                     }
@@ -1604,8 +1626,10 @@ pub async fn get_proposal_offline_votes(
     let proposal_hash = proposal.compute_hash();
 
     let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
 
     for path in files {
         let file = File::open(&path).expect("Proposal file must exist.");
@@ -1662,21 +1686,45 @@ pub async fn get_proposal_offline_votes(
                     if proposal_vote.vote.is_yay() {
                         match yay_delegators.get_mut(&proposal_vote.address) {
                             Some(map) => {
-                                map.insert(validator_address, VotePower::from(amount));
-                            },
+                                map.insert(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                );
+                            }
                             None => {
-                                let delegations_map: HashMap<Address, VotePower> = HashMap::from([(validator_address, VotePower::from(amount))]);
-                                yay_delegators.insert(proposal_vote.address.clone(), delegations_map);
+                                let delegations_map: HashMap<
+                                    Address,
+                                    VotePower,
+                                > = HashMap::from([(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                )]);
+                                yay_delegators.insert(
+                                    proposal_vote.address.clone(),
+                                    delegations_map,
+                                );
                             }
                         }
                     } else {
                         match nay_delegators.get_mut(&proposal_vote.address) {
                             Some(map) => {
-                                map.insert(validator_address, VotePower::from(amount));
-                            },
+                                map.insert(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                );
+                            }
                             None => {
-                                let delegations_map: HashMap<Address, VotePower> = HashMap::from([(validator_address, VotePower::from(amount))]);
-                                nay_delegators.insert(proposal_vote.address.clone(), delegations_map);
+                                let delegations_map: HashMap<
+                                    Address,
+                                    VotePower,
+                                > = HashMap::from([(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                )]);
+                                nay_delegators.insert(
+                                    proposal_vote.address.clone(),
+                                    delegations_map,
+                                );
                             }
                         }
                     }
@@ -1715,8 +1763,8 @@ pub async fn compute_tally(
 
     // YAY: Add delegator amount whose validator didn't vote / voted nay
     for (_, vote_map) in yay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.into_iter() {
-            if !yay_validators.contains_key(&validator_address) {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if !yay_validators.contains_key(validator_address) {
                 total_yay_stacked_tokens += vote_power;
             }
         }
@@ -1724,8 +1772,8 @@ pub async fn compute_tally(
 
     // NAY: Remove delegator amount whose validator validator vote yay
     for (_, vote_map) in nay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.into_iter() {
-            if yay_validators.contains_key(&validator_address) {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if yay_validators.contains_key(validator_address) {
                 total_yay_stacked_tokens -= vote_power;
             }
         }

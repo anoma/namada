@@ -115,7 +115,7 @@ where
                                             true,
                                         )
                                         .into();
-                                    response.events.push(proposal_event.into());
+                                    response.events.push(proposal_event);
                                     proposals_result.passed.push(id);
 
                                     proposal_author
@@ -130,7 +130,7 @@ where
                                             false,
                                         )
                                         .into();
-                                    response.events.push(proposal_event.into());
+                                    response.events.push(proposal_event);
                                     proposals_result.rejected.push(id);
 
                                     treasury_address
@@ -146,7 +146,7 @@ where
                                     false,
                                 )
                                 .into();
-                                response.events.push(proposal_event.into());
+                                response.events.push(proposal_event);
                                 proposals_result.rejected.push(id);
 
                                 treasury_address
@@ -162,7 +162,7 @@ where
                             false,
                         )
                         .into();
-                        response.events.push(proposal_event.into());
+                        response.events.push(proposal_event);
                         proposals_result.passed.push(id);
 
                         proposal_author
@@ -178,7 +178,7 @@ where
                     false,
                 )
                 .into();
-                response.events.push(proposal_event.into());
+                response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
 
                 treasury_address

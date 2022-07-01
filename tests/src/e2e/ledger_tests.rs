@@ -991,19 +991,22 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 13. Check governance address funds are 0
 #[test]
 fn proposal_submission() -> Result<()> {
-    let test = setup::network(|genesis| {
-        let parameters = ParametersConfig {
-            min_num_of_blocks: 1,
-            min_duration: 1,
-            max_expected_time_per_block: 1,
-            ..genesis.parameters
-        };
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                min_num_of_blocks: 1,
+                min_duration: 1,
+                max_expected_time_per_block: 1,
+                ..genesis.parameters
+            };
 
-        GenesisConfig {
-            parameters,
-            ..genesis
-        }
-    }, None)?;
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
 
     let anomac_help = vec!["--help"];
 

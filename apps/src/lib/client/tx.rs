@@ -795,8 +795,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             }
             None => {
                 eprintln!(
-                    "Proposal start epoch for proposal id {} is not \
-                     definied.",
+                    "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );
                 if !args.tx.force {

@@ -98,11 +98,10 @@ where
         total_yay_stacked_tokens += amount;
     }
 
-
     // YAY: Add delegator amount whose validator didn't vote / voted nay
     for (_, vote_map) in yay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.into_iter() {
-            if !yay_validators.contains_key(&validator_address) {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if !yay_validators.contains_key(validator_address) {
                 total_yay_stacked_tokens += vote_power;
             }
         }
@@ -110,8 +109,8 @@ where
 
     // NAY: Remove delegator amount whose validator validator vote yay
     for (_, vote_map) in nay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.into_iter() {
-            if yay_validators.contains_key(&validator_address) {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if yay_validators.contains_key(validator_address) {
                 total_yay_stacked_tokens -= vote_power;
             }
         }
@@ -210,9 +209,11 @@ where
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
     let (vote_iter, _) = storage.iter_prefix(&vote_prefix_key);
 
-    let mut yay_validators= HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> = HashMap::new();
+    let mut yay_validators = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
 
     for (key, vote_bytes, _) in vote_iter {
         let vote_key = Key::from_str(key.as_str()).ok();
@@ -223,9 +224,13 @@ where
                 match voter_address {
                     Some(voter_address) => {
                         if vote.is_yay() && validators.contains(voter_address) {
-                            let amount =
-                                get_validator_stake(storage, epoch, voter_address);
-                            yay_validators.insert(voter_address.clone(), amount);
+                            let amount = get_validator_stake(
+                                storage,
+                                epoch,
+                                voter_address,
+                            );
+                            yay_validators
+                                .insert(voter_address.clone(), amount);
                         } else if !validators.contains(voter_address) {
                             let validator_address =
                                 gov_storage::get_vote_delegation_address(&key);
@@ -239,23 +244,55 @@ where
                                     );
                                     if let Some(amount) = amount {
                                         if vote.is_yay() {
-                                            match yay_delegators.get_mut(&voter_address) {
+                                            match yay_delegators
+                                                .get_mut(voter_address)
+                                            {
                                                 Some(map) => {
-                                                    map.insert(validator_address.clone(), VotePower::from(amount));
-                                                },
+                                                    map.insert(
+                                                        validator_address
+                                                            .clone(),
+                                                        VotePower::from(amount),
+                                                    );
+                                                }
                                                 None => {
-                                                    let delegations_map = HashMap::from([(validator_address.clone(), VotePower::from(amount))]);
-                                                    yay_delegators.insert(voter_address.clone(), delegations_map);
+                                                    let delegations_map =
+                                                        HashMap::from([(
+                                                            validator_address
+                                                                .clone(),
+                                                            VotePower::from(
+                                                                amount,
+                                                            ),
+                                                        )]);
+                                                    yay_delegators.insert(
+                                                        voter_address.clone(),
+                                                        delegations_map,
+                                                    );
                                                 }
                                             }
                                         } else {
-                                            match nay_delegators.get_mut(&voter_address.clone()) {
+                                            match nay_delegators
+                                                .get_mut(&voter_address.clone())
+                                            {
                                                 Some(map) => {
-                                                    map.insert(validator_address.clone(), VotePower::from(amount));
-                                                },
+                                                    map.insert(
+                                                        validator_address
+                                                            .clone(),
+                                                        VotePower::from(amount),
+                                                    );
+                                                }
                                                 None => {
-                                                    let delegations_map = HashMap::from([(validator_address.clone(), VotePower::from(amount))]);
-                                                    nay_delegators.insert(voter_address.clone(), delegations_map);
+                                                    let delegations_map =
+                                                        HashMap::from([(
+                                                            validator_address
+                                                                .clone(),
+                                                            VotePower::from(
+                                                                amount,
+                                                            ),
+                                                        )]);
+                                                    nay_delegators.insert(
+                                                        voter_address.clone(),
+                                                        delegations_map,
+                                                    );
                                                 }
                                             }
                                         }
