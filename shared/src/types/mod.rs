@@ -2,8 +2,8 @@
 
 pub mod address;
 pub mod chain;
-pub mod ethereum_events;
 pub mod dylib;
+pub mod ethereum_events;
 pub mod governance;
 pub mod hash;
 pub mod ibc;

@@ -4,15 +4,15 @@ use std::str::FromStr;
 
 use anoma::types::address::Address;
 use anoma::types::ethereum_events::{
-    EthAddress, EthereumEvent, KeccakHash, TokenWhitelist,
-    TransferToEthereum, TransferToNamada, Uint,
+    EthAddress, EthereumEvent, KeccakHash, TokenWhitelist, TransferToEthereum,
+    TransferToNamada, Uint,
 };
 use anoma::types::token::Amount;
-use ethabi::param_type::ParamType;
-use ethabi::token::Token;
 use ethabi::decode;
 #[cfg(test)]
 use ethabi::encode;
+use ethabi::param_type::ParamType;
+use ethabi::token::Token;
 use num256::Uint256;
 use thiserror::Error;
 
@@ -54,7 +54,9 @@ pub mod signatures {
     impl From<&str> for SigType {
         fn from(sig: &str) -> Self {
             match sig {
-                TRANSFER_TO_NAMADA_SIG | TRANSFER_TO_ETHEREUM_SIG => SigType::Bridge,
+                TRANSFER_TO_NAMADA_SIG | TRANSFER_TO_ETHEREUM_SIG => {
+                    SigType::Bridge
+                }
                 _ => SigType::Governance,
             }
         }
@@ -73,6 +75,7 @@ pub(super) struct PendingEvent {
 }
 
 /// Event emitted with the validator set changes
+#[derive(Clone, Debug, PartialEq)]
 pub struct ValidatorSetUpdate {
     /// A monotonically increasing nonce
     nonce: Uint,
@@ -84,22 +87,23 @@ pub struct ValidatorSetUpdate {
 
 /// Event indicating a new smart contract has been
 /// deployed or upgraded on Ethereum
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct ChangedContract {
     /// Name of the contract
     pub(super) name: String,
     /// Address of the contract on Ethereum
-    pub (super) address: EthAddress,
+    pub(super) address: EthAddress,
 }
 
 /// Event for whitelisting new tokens and their
 /// rate limits
+#[derive(Clone, Debug, PartialEq)]
 struct UpdateBridgeWhitelist {
     /// A monotonically increasing nonce
     nonce: Uint,
     /// Tokens to be allowed to be transferred across the bridge
     whitelist: Vec<TokenWhitelist>,
 }
-
 
 impl PendingEvent {
     /// Decodes bytes into an [`EthereumEvent`] based on the signature.
@@ -116,24 +120,18 @@ impl PendingEvent {
     ) -> Result<Self> {
         match signature {
             signatures::TRANSFER_TO_NAMADA_SIG => {
-                RawTransfersToNamada::decode(data)
-                    .map(|txs| PendingEvent {
-                        confirmations: txs.confirmations.into(),
-                        block_height,
-                        event: EthereumEvent::TransfersToNamada(
-                            txs.transfers,
-                        ),
-                    })
+                RawTransfersToNamada::decode(data).map(|txs| PendingEvent {
+                    confirmations: txs.confirmations.into(),
+                    block_height,
+                    event: EthereumEvent::TransfersToNamada(txs.transfers),
+                })
             }
             signatures::TRANSFER_TO_ETHEREUM_SIG => {
-                RawTransfersToEthereum::decode(data)
-                    .map(|txs| PendingEvent {
-                        confirmations: txs.confirmations.into(),
-                        block_height,
-                        event: EthereumEvent::TransfersToEthereum(
-                            txs.transfers,
-                        ),
-                    })
+                RawTransfersToEthereum::decode(data).map(|txs| PendingEvent {
+                    confirmations: txs.confirmations.into(),
+                    block_height,
+                    event: EthereumEvent::TransfersToEthereum(txs.transfers),
+                })
             }
             signatures::VALIDATOR_SET_UPDATE_SIG => {
                 ValidatorSetUpdate::decode(data).map(
@@ -152,20 +150,19 @@ impl PendingEvent {
                     },
                 )
             }
-            signatures::NEW_CONTRACT_SIG => ChangedContract::decode(data)
-                .map(|ChangedContract { name, address }| PendingEvent {
+            signatures::NEW_CONTRACT_SIG => ChangedContract::decode(data).map(
+                |ChangedContract { name, address }| PendingEvent {
                     confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
                     block_height,
                     event: EthereumEvent::NewContract { name, address },
+                },
+            ),
+            signatures::UPGRADED_CONTRACT_SIG => ChangedContract::decode(data)
+                .map(|ChangedContract { name, address }| PendingEvent {
+                    confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
+                    block_height,
+                    event: EthereumEvent::UpgradedContract { name, address },
                 }),
-            signatures::UPGRADED_CONTRACT_SIG => ChangedContract::decode(
-                data,
-            )
-            .map(|ChangedContract { name, address }| PendingEvent {
-                confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
-                block_height,
-                event: EthereumEvent::UpgradedContract { name, address },
-            }),
             signatures::UPDATE_BRIDGE_WHITELIST_SIG => {
                 UpdateBridgeWhitelist::decode(data).map(
                     |UpdateBridgeWhitelist { nonce, whitelist }| PendingEvent {
@@ -190,6 +187,7 @@ impl PendingEvent {
 }
 
 /// A batch of [`TransferToNamada`] from an Ethereum event
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct RawTransfersToNamada {
     /// A list of transfers
     pub transfers: Vec<TransferToNamada>,
@@ -202,6 +200,7 @@ pub(super) struct RawTransfersToNamada {
 }
 
 /// A batch of [`TransferToNamada`] from an Ethereum event
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct RawTransfersToEthereum {
     /// A list of transfers
     pub transfers: Vec<TransferToEthereum>,
@@ -217,7 +216,6 @@ impl RawTransfersToNamada {
     /// Parse ABI serialized data from an Ethereum event into
     /// an instance of [`RawTransfersToNamada`]
     fn decode(data: &[u8]) -> Result<Self> {
-
         let [nonce, assets, receivers, amounts, confs]: [Token; 5] = decode(
             &[
                 ParamType::Uint(256),
@@ -232,7 +230,8 @@ impl RawTransfersToNamada {
         .try_into()
         .map_err(|_| {
             Error::Decode(
-                "TransferToNamada signature should contain five types".to_string(),
+                "TransferToNamada signature should contain five types"
+                    .to_string(),
             )
         })?;
 
@@ -253,7 +252,7 @@ impl RawTransfersToNamada {
             ))
         } else {
             Ok(Self {
-                transfers:  assets
+                transfers: assets
                     .into_iter()
                     .zip(receivers.into_iter())
                     .zip(amounts.into_iter())
@@ -286,9 +285,16 @@ impl RawTransfersToNamada {
             .collect();
         let (assets, receivers): (Vec<Token>, Vec<Token>) = transfers
             .into_iter()
-            .map(|TransferToNamada { asset, receiver, .. }| {
-                (Token::Address(asset.0.into()), Token::String(receiver.to_string()))
-            })
+            .map(
+                |TransferToNamada {
+                     asset, receiver, ..
+                 }| {
+                    (
+                        Token::Address(asset.0.into()),
+                        Token::String(receiver.to_string()),
+                    )
+                },
+            )
             .unzip();
 
         encode(&[
@@ -319,7 +325,7 @@ impl RawTransfersToEthereum {
         .try_into()
         .map_err(|_| {
             Error::Decode(
-                "TransferToERC signature should contain five types".to_string()
+                "TransferToERC signature should contain five types".to_string(),
             )
         })?;
 
@@ -340,7 +346,7 @@ impl RawTransfersToEthereum {
             ))
         } else {
             Ok(Self {
-                transfers:  assets
+                transfers: assets
                     .into_iter()
                     .zip(receivers.into_iter())
                     .zip(amounts.into_iter())
@@ -373,9 +379,16 @@ impl RawTransfersToEthereum {
             .collect();
         let (assets, receivers): (Vec<Token>, Vec<Token>) = transfers
             .into_iter()
-            .map(|TransferToEthereum { asset, receiver, .. }| {
-                (Token::Address(asset.0.into()), Token::Address(receiver.0.into()))
-            })
+            .map(
+                |TransferToEthereum {
+                     asset, receiver, ..
+                 }| {
+                    (
+                        Token::Address(asset.0.into()),
+                        Token::Address(receiver.0.into()),
+                    )
+                },
+            )
             .unzip();
 
         encode(&[
@@ -522,7 +535,11 @@ impl UpdateBridgeWhitelist {
                 )
             })
             .unzip();
-        encode(&[Token::Uint(nonce.into()), Token::Array(tokens), Token::Array(caps)])
+        encode(&[
+            Token::Uint(nonce.into()),
+            Token::Array(tokens),
+            Token::Array(caps),
+        ])
     }
 }
 
@@ -723,13 +740,152 @@ mod test_events {
         let string = String::from("test");
         let keccak = KeccakHash([2; 32]);
 
-        assert_eq!(
-            decode(
-                &[ParamType::Address],
-                encode(&[Token::Address(erc.0.into())]).as_slice()
-            )
-            .expect("Test failed"),
-            vec![Token::Address(erc.0.into())]
+        let [token]: [Token; 1] = decode(
+            &[ParamType::Address],
+            encode(&[Token::Address(erc.0.into())]).as_slice(),
         )
+        .expect("Test failed")
+        .try_into()
+        .expect("Test failed");
+        assert_eq!(token.parse_eth_address().expect("Test failed"), erc);
+
+        let [token]: [Token; 1] = decode(
+            &[ParamType::String],
+            encode(&[Token::String(address.to_string())]).as_slice(),
+        )
+        .expect("Test failed")
+        .try_into()
+        .expect("Test failed");
+        assert_eq!(token.parse_address().expect("Test failed"), address);
+
+        let [token]: [Token; 1] = decode(
+            &[ParamType::Uint(64)],
+            encode(&[Token::Uint(u64::from(amount).into())]).as_slice(),
+        )
+        .expect("Test failed")
+        .try_into()
+        .expect("Test failed");
+        assert_eq!(token.parse_amount().expect("Test failed"), amount);
+
+        let [token]: [Token; 1] = decode(
+            &[ParamType::Uint(32)],
+            encode(&[Token::Uint(confs.into())]).as_slice(),
+        )
+        .expect("Test failed")
+        .try_into()
+        .expect("Test failed");
+        assert_eq!(token.parse_u32().expect("Test failed"), confs);
+
+        let [token]: [Token; 1] = decode(
+            &[ParamType::Uint(256)],
+            encode(&[Token::Uint(uint.clone().into())]).as_slice(),
+        )
+        .expect("Test failed")
+        .try_into()
+        .expect("Test failed");
+        assert_eq!(token.parse_uint256().expect("Test failed"), uint);
+
+        let [token]: [Token; 1] = decode(
+            &[ParamType::Bool],
+            encode(&[Token::Bool(boolean)]).as_slice(),
+        )
+        .expect("Test failed")
+        .try_into()
+        .expect("Test failed");
+        assert_eq!(token.parse_bool().expect("Test failed"), boolean);
+
+        let [token]: [Token; 1] = decode(
+            &[ParamType::String],
+            encode(&[Token::String(string.clone())]).as_slice(),
+        )
+        .expect("Test failed")
+        .try_into()
+        .expect("Test failed");
+        assert_eq!(token.parse_string().expect("Test failed"), string);
+
+        let [token]: [Token; 1] = decode(
+            &[ParamType::FixedBytes(32)],
+            encode(&[Token::FixedBytes(keccak.0.to_vec())]).as_slice(),
+        )
+        .expect("Test failed")
+        .try_into()
+        .expect("Test failed");
+        assert_eq!(token.parse_keccak().expect("Test failed"), keccak);
+    }
+
+    /// Test that serialization and deserialization of
+    /// complex composite types is a no-op
+    #[test]
+    fn test_complex_round_trips() {
+        let address = Address::from_str("atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90")
+            .expect("Test failed");
+        let nam_transfers = RawTransfersToNamada {
+            transfers: vec![
+                TransferToNamada {
+                    amount: Default::default(),
+                    asset: EthAddress([0; 20]),
+                    receiver: address,
+                };
+                2
+            ],
+            nonce: Uint::from(1),
+            confirmations: 0,
+        };
+        let eth_transfers = RawTransfersToEthereum {
+            transfers: vec![
+                TransferToEthereum {
+                    amount: Default::default(),
+                    asset: EthAddress([1; 20]),
+                    receiver: EthAddress([2; 20])
+                };
+                2
+            ],
+            nonce: Uint::from(1),
+            confirmations: 0,
+        };
+        let update = ValidatorSetUpdate {
+            nonce: Uint::from(1),
+            bridge_validator_hash: KeccakHash([1; 32]),
+            governance_validator_hash: KeccakHash([2; 32]),
+        };
+        let changed = ChangedContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20]),
+        };
+        let whitelist = UpdateBridgeWhitelist {
+            nonce: Uint::from(1),
+            whitelist: vec![
+                TokenWhitelist {
+                    token: EthAddress([0; 20]),
+                    cap: Amount::from(1000),
+                };
+                2
+            ],
+        };
+        assert_eq!(
+            RawTransfersToNamada::decode(&nam_transfers.clone().encode())
+                .expect("Test failed"),
+            nam_transfers
+        );
+        assert_eq!(
+            RawTransfersToEthereum::decode(&eth_transfers.clone().encode())
+                .expect("Test failed"),
+            eth_transfers
+        );
+        assert_eq!(
+            ValidatorSetUpdate::decode(&update.clone().encode())
+                .expect("Test failed"),
+            update
+        );
+        assert_eq!(
+            ChangedContract::decode(&changed.clone().encode())
+                .expect("Test failed"),
+            changed
+        );
+        assert_eq!(
+            UpdateBridgeWhitelist::decode(&whitelist.clone().encode())
+                .expect("Test failed"),
+            whitelist
+        );
     }
 }

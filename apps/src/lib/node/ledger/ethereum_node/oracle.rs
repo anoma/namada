@@ -7,10 +7,10 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot::Sender;
 #[cfg(not(test))]
 use web30::client::Web3;
-#[cfg(test)]
-use super::test_tools::mock_web3_client::Web3;
 
 use super::events::{signatures, PendingEvent};
+#[cfg(test)]
+use super::test_tools::mock_web3_client::Web3;
 
 /// Minimum number of confirmations needed to trust an Ethereum branch
 pub(crate) const MIN_CONFIRMATIONS: u64 = 50;
@@ -72,7 +72,8 @@ impl Oracle {
         events
             .into_iter()
             .map(|event| self.sender.send(event))
-            .all(|res| res.is_ok()) && !self.sender.is_closed()
+            .all(|res| res.is_ok())
+            && !self.sender.is_closed()
     }
 
     /// Check if the receiver in the ledger has hung up.
@@ -99,7 +100,6 @@ pub async fn run_oracle(
 /// It also checks that once the specified number of confirmations
 /// is reached, an event is forwarded to the ledger process
 async fn run_oracle_aux(oracle: Oracle) {
-
     // Initialize our local state. This includes
     // the latest block height seen and a queue of events
     // awaiting a certain number of confirmations
@@ -135,9 +135,7 @@ async fn run_oracle_aux(oracle: Oracle) {
         for sig in signatures::SIGNATURES {
             let addr: Address = match signatures::SigType::from(sig) {
                 signatures::SigType::Bridge => MINT_CONTRACT.0.into(),
-                signatures::SigType::Governance => {
-                    GOVERNANCE_CONTRACT.0.into()
-                }
+                signatures::SigType::Governance => GOVERNANCE_CONTRACT.0.into(),
             };
             // fetch the events for matching the given signature
             let mut events = loop {
@@ -204,16 +202,17 @@ fn process_queue(
     confirmed
 }
 
-
 #[cfg(test)]
 mod test_oracle {
-    use tokio::sync::oneshot::{Receiver, channel};
-
-    use super::*;
-    use super::super::test_tools::mock_web3_client::{TestCmd, Web3};
-    use crate::node::ledger::ethereum_node::events::{ChangedContract, RawTransfersToEthereum};
-    use crate::node::ledger::ethereum_node::test_tools::mock_web3_client::MockEventType;
     use anoma::types::ethereum_events::TransferToEthereum;
+    use tokio::sync::oneshot::{channel, Receiver};
+
+    use super::super::test_tools::mock_web3_client::{TestCmd, Web3};
+    use super::*;
+    use crate::node::ledger::ethereum_node::events::{
+        ChangedContract, RawTransfersToEthereum,
+    };
+    use crate::node::ledger::ethereum_node::test_tools::mock_web3_client::MockEventType;
 
     /// The data returned from setting up a test
     struct TestPackage {
@@ -266,7 +265,9 @@ mod test_oracle {
         let oracle = std::thread::spawn(move || {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
-        admin_channel.send(TestCmd::Unresponsive).expect("Test failed");
+        admin_channel
+            .send(TestCmd::Unresponsive)
+            .expect("Test failed");
         drop(eth_recv);
         oracle.join().expect("Test failed");
     }
@@ -311,21 +312,22 @@ mod test_oracle {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
         // Increase height above [`MIN_CONFIRMATIONS`]
-        admin_channel.send(
-            TestCmd::NewHeight(50u32.into())
-        ).expect("Test failed");
+        admin_channel
+            .send(TestCmd::NewHeight(50u32.into()))
+            .expect("Test failed");
 
         let new_event = ChangedContract {
             name: "Test".to_string(),
-            address: EthAddress([0; 20])
-        }.encode();
-        admin_channel.send(
-            TestCmd::NewEvent{
-                event_type:MockEventType::NewContract,
-                data:new_event,
+            address: EthAddress([0; 20]),
+        }
+        .encode();
+        admin_channel
+            .send(TestCmd::NewEvent {
+                event_type: MockEventType::NewContract,
+                data: new_event,
                 height: 51,
-            }
-        ).expect("Test failed");
+            })
+            .expect("Test failed");
         // since height is not updating, we should not receive events
         let mut time = std::time::Duration::from_secs(1);
         while time > std::time::Duration::from_millis(10) {
@@ -350,25 +352,28 @@ mod test_oracle {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
         // Increase height above [`MIN_CONFIRMATIONS`]
-        admin_channel.send(
-            TestCmd::NewHeight(50u32.into())
-        ).expect("Test failed");
+        admin_channel
+            .send(TestCmd::NewHeight(50u32.into()))
+            .expect("Test failed");
 
         let new_event = ChangedContract {
             name: "Test".to_string(),
-            address: EthAddress([0; 20])
-        }.encode();
-        admin_channel.send(
-            TestCmd::NewEvent{
+            address: EthAddress([0; 20]),
+        }
+        .encode();
+        admin_channel
+            .send(TestCmd::NewEvent {
                 event_type: MockEventType::NewContract,
                 data: new_event,
                 height: 100,
-            }
-        ).expect("Test failed");
+            })
+            .expect("Test failed");
 
         // we should not receive events even though the height is large
         // enough
-        admin_channel.send(TestCmd::Unresponsive).expect("Test failed");
+        admin_channel
+            .send(TestCmd::Unresponsive)
+            .expect("Test failed");
         admin_channel
             .send(TestCmd::NewHeight(Uint256::from(101u32)))
             .expect("Test failed");
@@ -380,9 +385,8 @@ mod test_oracle {
         }
         // check that when web3 becomes responsive, oracle sends event
         admin_channel.send(TestCmd::Normal).expect("Test failed");
-        let event = eth_recv.blocking_recv()
-            .expect("Test failed");
-        if let EthereumEvent::NewContract {name, address} = event {
+        let event = eth_recv.blocking_recv().expect("Test failed");
+        if let EthereumEvent::NewContract { name, address } = event {
             assert_eq!(name.as_str(), "Test");
             assert_eq!(address.0, [0; 20]);
         } else {
@@ -406,15 +410,16 @@ mod test_oracle {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
         // Increase height above [`MIN_CONFIRMATIONS`]
-        admin_channel.send(
-            TestCmd::NewHeight(50u32.into())
-        ).expect("Test failed");
+        admin_channel
+            .send(TestCmd::NewHeight(50u32.into()))
+            .expect("Test failed");
 
         // confirmed after 50 blocks
         let first_event = ChangedContract {
             name: "Test".to_string(),
-            address: EthAddress([0; 20])
-        }.encode();
+            address: EthAddress([0; 20]),
+        }
+        .encode();
 
         // confirmed after 75 blocks
         let second_event = RawTransfersToEthereum {
@@ -425,23 +430,24 @@ mod test_oracle {
             }],
             nonce: 1.into(),
             confirmations: 75,
-        }.encode();
+        }
+        .encode();
 
         // send in the events to the logs
-        admin_channel.send(
-            TestCmd::NewEvent {
+        admin_channel
+            .send(TestCmd::NewEvent {
                 event_type: MockEventType::TransferToEthereum,
                 data: second_event,
                 height: 125,
-            }
-        ).expect("Test failed");
-        admin_channel.send(
-            TestCmd::NewEvent{
+            })
+            .expect("Test failed");
+        admin_channel
+            .send(TestCmd::NewEvent {
                 event_type: MockEventType::NewContract,
                 data: first_event,
                 height: 100,
-            }
-        ).expect("Test failed");
+            })
+            .expect("Test failed");
 
         // increase block height so first event is confirmed but second is not.
         admin_channel
@@ -449,7 +455,7 @@ mod test_oracle {
             .expect("Test failed");
         // check the correct event is received
         let event = eth_recv.blocking_recv().expect("Test failed");
-        if let EthereumEvent::NewContract {name, address} = event {
+        if let EthereumEvent::NewContract { name, address } = event {
             assert_eq!(name.as_str(), "Test");
             assert_eq!(address, EthAddress([0; 20]));
         } else {

@@ -1,14 +1,12 @@
 pub mod events;
 pub mod oracle;
 #[cfg(feature = "eth-fullnode")]
-pub use oracle::{Oracle, run_oracle};
+pub use oracle::{run_oracle, Oracle};
 pub mod test_tools;
-#[cfg(not(feature="eth-fullnode"))]
-pub use test_tools::mock_oracle::{Oracle, run_oracle};
-
-
 use std::ffi::OsString;
 
+#[cfg(not(feature = "eth-fullnode"))]
+pub use test_tools::mock_oracle::{run_oracle, Oracle};
 use thiserror::Error;
 use tokio::sync::oneshot::{Receiver, Sender};
 

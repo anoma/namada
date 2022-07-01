@@ -83,7 +83,7 @@ clippy-abci-plus-plus:
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
-		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" && \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus anoma_apps/eth-fullnode" && \
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
 		--manifest-path ./vm_env/Cargo.toml \
@@ -145,7 +145,7 @@ test-unit-abci-plus-plus:
 	$(cargo) test \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
-		--features "testing std ABCI-plus-plus" && \
+		--features "testing std ABCI-plus-plus eth-fullnode" && \
 	$(cargo) test --manifest-path ./proof_of_stake/Cargo.toml \
 		--features "testing" && \
 	$(cargo) test \
@@ -155,7 +155,7 @@ test-unit-abci-plus-plus:
 	$(cargo) test \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
-		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus anoma_apps/eth-fullnode" \
 		-- --skip e2e && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \

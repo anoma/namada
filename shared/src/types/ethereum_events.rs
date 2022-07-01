@@ -1,13 +1,15 @@
 //! Types representing data intended for Anoma via Ethereum events
 
-use borsh::{BorshDeserialize, BorshSerialize, BorshSchema};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::Uint as ethUint;
 
 use crate::types::address::Address;
 use crate::types::token::Amount;
 
 /// Anoma native type to replace the ethabi::Uint type
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct Uint(pub [u64; 4]);
 
 impl From<ethUint> for Uint {
@@ -29,11 +31,15 @@ impl From<u64> for Uint {
 }
 
 /// Representation of address on Ethereum
-#[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct EthAddress(pub [u8; 20]);
 
 /// A Keccak hash
-#[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct KeccakHash(pub [u8; 32]);
 
 /// An Ethereum event to be processed by the Anoma ledger
@@ -90,7 +96,9 @@ pub enum EthereumEvent {
 }
 
 /// An event transferring some kind of value from Ethereum to Anoma
-#[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct TransferToNamada {
     /// Quantity of the ERC20 token in the transfer
     pub amount: Amount,
@@ -101,7 +109,9 @@ pub struct TransferToNamada {
 }
 
 /// An event transferring some kind of value from Ethereum to Anoma
-#[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct TransferToEthereum {
     /// Quantity of wrapped Asset in the transfer
     pub amount: Amount,
@@ -111,12 +121,13 @@ pub struct TransferToEthereum {
     pub receiver: EthAddress,
 }
 
-
 /// struct for whitelisting a token from Ethereum.
 /// Includes the address of issuing contract and
 /// a cap on the max amount of this token allowed to be
 /// held by the bridge.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 #[allow(dead_code)]
 pub struct TokenWhitelist {
     /// Address of Ethereum smart contract issuing token

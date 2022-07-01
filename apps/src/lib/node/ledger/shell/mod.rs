@@ -769,11 +769,15 @@ mod test_utils {
 
     impl TestShell {
         /// Returns a new shell with
-        ///    - A broadcast receiver, which will receive
-        ///      any protocol txs sent by the shell.
-        ///    - A sender that can send Ethereum events into the ledger,
-        ///      mocking the Ethereum fullnode process
-        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>, UnboundedSender<EthereumEvent>) {
+        ///    - A broadcast receiver, which will receive any protocol txs sent
+        ///      by the shell.
+        ///    - A sender that can send Ethereum events into the ledger, mocking
+        ///      the Ethereum fullnode process
+        pub fn new() -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            UnboundedSender<EthereumEvent>,
+        ) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::unbounded_channel();
@@ -797,7 +801,7 @@ mod test_utils {
                     ),
                 },
                 receiver,
-                eth_sender
+                eth_sender,
             )
         }
 
@@ -874,7 +878,11 @@ mod test_utils {
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>, UnboundedSender<EthereumEvent>) {
+    pub(super) fn setup() -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        UnboundedSender<EthereumEvent>,
+    ) {
         let (mut test, receiver, eth_receiver) = TestShell::new();
         test.init_chain(RequestInitChain {
             time: Some(Timestamp {

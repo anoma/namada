@@ -353,12 +353,8 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         });
 
         let oracle = local.spawn_local(async move {
-            ethereum_node::run_oracle(
-                &ethereum_url,
-                eth_sender,
-                abort_sender,
-            )
-            .await
+            ethereum_node::run_oracle(&ethereum_url, eth_sender, abort_sender)
+                .await
         });
 
         // Shutdown ethereum_node via a message to ensure that the child process
