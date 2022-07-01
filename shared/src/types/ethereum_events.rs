@@ -2,6 +2,7 @@
 use std::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use eyre::{eyre, Result};
 use num_rational::Ratio;
 
 use crate::proto::MultiSigned;
@@ -77,6 +78,23 @@ pub enum EthereumAsset {
 /// fraction that is between zero and one inclusive.
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug)]
 pub struct FractionalVotingPower(Ratio<u64>);
+
+impl FractionalVotingPower {
+    /// Create a new FractionalVotingPower. It must be between zero and one
+    /// inclusive.
+    pub fn new(numer: u64, denom: u64) -> Result<Self> {
+        if denom == 0 {
+            return Err(eyre!("denominator can't be zero"));
+        }
+        let ratio: Ratio<u64> = (numer, denom).into();
+        if ratio > 1.into() {
+            return Err(eyre!(
+                "fractional voting power cannot be greater than one"
+            ));
+        }
+        Ok(Self(ratio))
+    }
+}
 
 impl From<&FractionalVotingPower> for (u64, u64) {
     fn from(ratio: &FractionalVotingPower) -> Self {
@@ -166,28 +184,31 @@ mod tests {
     }
 
     #[test]
-    fn test_fractional_voting_power() {
-        // this test is exercising the underlying library we use for fractions
-        // we want to make sure operators work as expected with our
-        // FractionalVotingPower type itself
+    fn test_fractional_voting_power_ord_eq() {
+        // though this test is ultimately just exercising the underlying library
+        // we use for fractions, we want to make sure operators work as
+        // expected with our FractionalVotingPower type itself
         assert!(
-            FractionalVotingPower((2, 3).into())
-                > FractionalVotingPower((1, 4).into())
+            FractionalVotingPower::new(2, 3).unwrap()
+                > FractionalVotingPower::new(1, 4).unwrap()
         );
         assert!(
-            FractionalVotingPower((1, 3).into())
-                > FractionalVotingPower((1, 4).into())
+            FractionalVotingPower::new(1, 3).unwrap()
+                > FractionalVotingPower::new(1, 4).unwrap()
         );
         assert!(
-            FractionalVotingPower((1, 3).into())
-                == FractionalVotingPower((2, 6).into())
+            FractionalVotingPower::new(1, 3).unwrap()
+                == FractionalVotingPower::new(2, 6).unwrap()
         );
     }
 
     #[test]
-    #[should_panic]
-    fn test_fractional_voting_power_panics() {
-        FractionalVotingPower((0, 0).into());
-        FractionalVotingPower((1, 0).into());
+    fn test_fractional_voting_power_valid_fractions() {
+        assert!(FractionalVotingPower::new(0, 0).is_err());
+        assert!(FractionalVotingPower::new(1, 0).is_err());
+        assert!(FractionalVotingPower::new(0, 1).is_ok());
+        assert!(FractionalVotingPower::new(1, 1).is_ok());
+        assert!(FractionalVotingPower::new(1, 2).is_ok());
+        assert!(FractionalVotingPower::new(3, 2).is_err());
     }
 }

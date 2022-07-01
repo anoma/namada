@@ -88,6 +88,7 @@ dependencies = [
  "clru",
  "derivative",
  "ed25519-consensus",
+ "eyre",
  "ferveo",
  "ferveo-common",
  "group-threshold-cryptography",
