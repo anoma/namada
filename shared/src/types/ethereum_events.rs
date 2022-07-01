@@ -2,7 +2,7 @@
 use std::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use fraction::Fraction;
+use num_rational::Ratio;
 
 use crate::proto::MultiSigned;
 use crate::types::address::Address;
@@ -76,35 +76,11 @@ pub enum EthereumAsset {
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct FractionalVotingPower(Fraction);
+pub struct FractionalVotingPower(Ratio<u64>);
 
-impl TryFrom<&FractionalVotingPower> for (u64, u64) {
-    type Error = std::io::Error;
-
-    fn try_from(power: &FractionalVotingPower) -> Result<Self, Self::Error> {
-        let numerator = power
-            .0
-            .numer()
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Could not serialize FractionalVotingPower, missing \
-                     numerator",
-                )
-            })?
-            .to_owned();
-        let denominator = power
-            .0
-            .denom()
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Could not serialize FractionalVotingPower, missing \
-                     numerator",
-                )
-            })?
-            .to_owned();
-        Ok((numerator, denominator))
+impl From<&FractionalVotingPower> for (u64, u64) {
+    fn from(ratio: &FractionalVotingPower) -> Self {
+        (ratio.0.numer().to_owned(), ratio.0.denom().to_owned())
     }
 }
 
@@ -114,7 +90,17 @@ impl BorshSerialize for FractionalVotingPower {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let (numer, denom): (u64, u64) =
-            TryFrom::<&FractionalVotingPower>::try_from(&self)?;
+            TryFrom::<&FractionalVotingPower>::try_from(&self).map_err(
+                |err| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Could not serialize {:?} to Borsh: {:?}",
+                            self, err
+                        ),
+                    )
+                },
+            )?;
         (numer, denom).serialize(writer)
     }
 }
@@ -122,7 +108,7 @@ impl BorshSerialize for FractionalVotingPower {
 impl BorshDeserialize for FractionalVotingPower {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         let (numer, denom): (u64, u64) = BorshDeserialize::deserialize(buf)?;
-        Ok(FractionalVotingPower(Fraction::new(numer, denom)))
+        Ok(FractionalVotingPower(Ratio::<u64>::new(numer, denom)))
     }
 }
 

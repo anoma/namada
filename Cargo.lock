@@ -90,7 +90,6 @@ dependencies = [
  "ed25519-consensus",
  "ferveo",
  "ferveo-common",
- "fraction",
  "group-threshold-cryptography",
  "hex",
  "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abcipp-rebase-master)",
@@ -100,6 +99,7 @@ dependencies = [
  "ics23",
  "itertools 0.10.3",
  "loupe",
+ "num-rational",
  "parity-wasm",
  "pretty_assertions",
  "proptest",
@@ -2206,16 +2206,6 @@ checksum = "5fc25a87fa4fd2094bffb06925852034d90a17f0d1e05197d4956d3555752191"
 dependencies = [
  "matches",
  "percent-encoding 2.1.0",
-]
-
-[[package]]
-name = "fraction"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4c42ca58f4e486c530d93c7f74ab469293b20d7f86b478ca9d702a2f95fed61"
-dependencies = [
- "lazy_static 1.4.0",
- "num",
 ]
 
 [[package]]
