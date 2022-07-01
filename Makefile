@@ -22,13 +22,13 @@ build:
 	$(cargo) build
 
 build-abci-plus-plus:
-	$(cargo) build --no-default-features --features "ABCI-plus-plus"
+	$(cargo) build --no-default-features --features "ABCI-plus-plus eth-fullnode"
 
 build-test:
 	$(cargo) build --tests
 
 build-test-abci-plus-plus:
-	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus"
+	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus eth-fullnode"
 
 build-release:
 	ANOMA_DEV=false $(cargo) build --release --package anoma_apps
@@ -63,7 +63,7 @@ clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --a
 clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --no-default-features --features "ABCI-plus-plus" -- -D warnings
 
 clippy:
-	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets --features eth-fullnode -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
@@ -164,7 +164,7 @@ test-unit-abci-plus-plus:
 
 test-unit:
 	$(cargo) test --no-default-features \
-		--features "wasm-runtime ABCI ibc-mocks-abci" \
+		--features "wasm-runtime ABCI ibc-mocks-abci eth-fullnode" \
 		-- --skip e2e
 
 test-wasm:

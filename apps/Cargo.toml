@@ -39,7 +39,7 @@ name = "anomaw"
 path = "src/bin/anoma-wallet/main.rs"
 
 [features]
-default = ["std", "ABCI", "eth-fullnode"]
+default = ["std", "ABCI"]
 dev = ["anoma/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
