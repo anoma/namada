@@ -75,7 +75,7 @@ pub enum EthereumAsset {
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug)]
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl From<&FractionalVotingPower> for (u64, u64) {
@@ -163,5 +163,31 @@ mod tests {
                 46, 13, 62, 203, 243
             ])
         );
+    }
+
+    #[test]
+    fn test_fractional_voting_power() {
+        // this test is exercising the underlying library we use for fractions
+        // we want to make sure operators work as expected with our
+        // FractionalVotingPower type itself
+        assert!(
+            FractionalVotingPower((2, 3).into())
+                > FractionalVotingPower((1, 4).into())
+        );
+        assert!(
+            FractionalVotingPower((1, 3).into())
+                > FractionalVotingPower((1, 4).into())
+        );
+        assert!(
+            FractionalVotingPower((1, 3).into())
+                == FractionalVotingPower((2, 6).into())
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fractional_voting_power_panics() {
+        FractionalVotingPower((0, 0).into());
+        FractionalVotingPower((1, 0).into());
     }
 }
