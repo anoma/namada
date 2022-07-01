@@ -170,7 +170,6 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn parse(&self, matches: &ArgMatches) -> T {
-        println!("I'm parsing!");
         parse_opt(matches, self.name).unwrap()
     }
 }
