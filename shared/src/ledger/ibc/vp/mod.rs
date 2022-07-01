@@ -344,14 +344,8 @@ mod tests {
     use crate::ibc::Height;
     use crate::ibc_proto::cosmos::base::v1beta1::Coin;
     use prost::Message;
-    use crate::tendermint::account::Id as TmAccountId;
-    use crate::tendermint::block::header::{Header as TmHeader, Version as TmVersion};
-    use crate::tendermint::block::Height as TmHeight;
-    use crate::tendermint::chain::Id as TmChainId;
-    use crate::tendermint::hash::{AppHash, Hash as TmHash};
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf;
-    use crate::tendermint::time::Time as TmTime;
 
     use super::get_dummy_header;
     use super::super::handler::{
