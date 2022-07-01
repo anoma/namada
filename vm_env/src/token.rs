@@ -78,10 +78,25 @@ pub mod tx {
         src: &Address,
         dest: &Address,
         token: &Address,
+        sub_prefix: Option<Key>,
         amount: Amount,
     ) {
-        let src_key = token::balance_key(token, src);
-        let dest_key = token::balance_key(token, dest);
+        let src_key = match sub_prefix {
+            Some(sub_preifx) => {
+                let prefix =
+                    token::multitoken_balance_prefix(token, &sub_preifx);
+                token::multitoken_balance_key(&prefix, src)
+            }
+            None => token::balance_key(token, src),
+        };
+        let dest_key = match sub_prefix {
+            Some(sub_preifx) => {
+                let prefix =
+                    token::multitoken_balance_prefix(token, &sub_preifx);
+                token::multitoken_balance_key(&prefix, dest)
+            }
+            None => token::balance_key(token, dest),
+        };
         let src_bal: Option<Amount> = tx::read(&src_key.to_string());
         match src_bal {
             None => {

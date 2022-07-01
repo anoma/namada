@@ -412,7 +412,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(&source, address, &token, amount);
+            tx_host_env::token::transfer(
+                &source, address, &token, None, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();
@@ -445,7 +447,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(address, &target, &token, amount);
+            tx_host_env::token::transfer(
+                address, &target, &token, None, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();
@@ -482,7 +486,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(address, &target, &token, amount);
+            tx_host_env::token::transfer(
+                address, &target, &token, None, None, amount,
+            );
         });
 
         let mut vp_env = vp_host_env::take();
@@ -520,7 +526,9 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             tx_host_env::insert_verifier(address);
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(&source, &target, &token, amount);
+            tx_host_env::token::transfer(
+                &source, &target, &token, None, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();

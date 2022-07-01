@@ -11,7 +11,7 @@ use anoma::types::governance::{
 };
 use anoma::types::key::*;
 use anoma::types::nft::{self, Nft, NftToken};
-use anoma::types::storage::{Key, Epoch};
+use anoma::types::storage::{Epoch, Key};
 use anoma::types::token::Amount;
 use anoma::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -403,13 +403,16 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         }
     }
     // Check source balance
-    let balance_key = match args.source_sub_prefix {
+    let (source_sub_prefix, balance_key) = match args.source_sub_prefix {
         Some(sub_prefix) => {
             let sub_prefix = Key::parse(sub_prefix).unwrap();
             let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
-            token::multitoken_balance_key(&prefix, &source)
+            (
+                Some(sub_prefix),
+                token::multitoken_balance_key(&prefix, &source),
+            )
         }
-        None => token::balance_key(&token, &source),
+        None => (None, token::balance_key(&token, &source)),
     };
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
@@ -437,11 +440,15 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
             }
         }
     }
+    let target_sub_prefix =
+        args.target_sub_prefix.map(|p| Key::parse(p).unwrap());
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let transfer = token::Transfer {
         source,
         target,
         token,
+        source_sub_prefix,
+        target_sub_prefix,
         amount: args.amount,
     };
     tracing::debug!("Transfer data {:?}", transfer);
