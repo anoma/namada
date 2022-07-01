@@ -74,8 +74,10 @@ chrono = "0.4.19"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
+eyre = "0.6.8"
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
 ferveo-common = {git = "https://github.com/anoma/ferveo"}
+num-rational = "0.4.1"
 hex = "0.4.3"
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
 # TODO using the same version of tendermint-rs as we do here.
