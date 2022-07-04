@@ -231,6 +231,8 @@ impl From<Amount> for Change {
 
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
+/// Key segment for a multitoken
+pub const MULTITOKEN_STORAGE_KEY: &str = "multitoken";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {

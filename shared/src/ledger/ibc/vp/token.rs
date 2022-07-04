@@ -102,7 +102,7 @@ where
             .collect();
         if keys_changed.is_empty() {
             // no account is checked by this VP
-            return Ok(true)
+            return Ok(true);
         } else if keys_changed.len() > 1 {
             // a transaction can update at most 1 special IBC account for now
             return Err(Error::TokenTransfer(

@@ -140,6 +140,8 @@ pub mod main {
             source: _,
             target,
             token,
+            source_sub_prefix: _,
+            target_sub_prefix: _,
             amount,
         } = transfer;
         let target_key = token::balance_key(&token, &target);

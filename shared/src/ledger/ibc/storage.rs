@@ -19,6 +19,7 @@ use crate::ibc::core::ics24_host::path::{
 use crate::ibc::core::ics24_host::Path;
 use crate::types::address::{Address, InternalAddress, HASH_LEN};
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
+use crate::types::token::MULTITOKEN_STORAGE_KEY;
 
 const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
@@ -497,6 +498,8 @@ pub fn ibc_token_prefix(
 
     let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
     Key::from(token.to_db_key())
+        .push(&MULTITOKEN_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
         .push(&ibc_token.to_db_key())
         .expect("Cannot obtain a storage key")
 }
