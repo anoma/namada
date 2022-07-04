@@ -6,10 +6,9 @@ pub mod mock_eth_fullnode {
     use super::super::Result;
 
     pub struct EthereumNode {
+        #[allow(dead_code)]
         receiver: Receiver<()>,
     }
-
-    pub struct AbortSender;
 
     impl EthereumNode {
         pub async fn new(_: &str) -> Result<(EthereumNode, Sender<()>)> {
@@ -31,8 +30,6 @@ pub mod mock_oracle {
     use anoma::types::ethereum_events::EthereumEvent;
     use tokio::sync::mpsc::UnboundedSender;
     use tokio::sync::oneshot::Sender;
-
-    pub struct Oracle;
 
     pub async fn run_oracle(
         _: &str,
