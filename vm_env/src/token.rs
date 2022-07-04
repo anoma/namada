@@ -78,10 +78,11 @@ pub mod tx {
         src: &Address,
         dest: &Address,
         token: &Address,
-        sub_prefix: Option<Key>,
+        src_sub_prefix: Option<Key>,
+        dest_sub_prefix: Option<Key>,
         amount: Amount,
     ) {
-        let src_key = match sub_prefix {
+        let src_key = match src_sub_prefix {
             Some(sub_preifx) => {
                 let prefix =
                     token::multitoken_balance_prefix(token, &sub_preifx);
@@ -89,7 +90,7 @@ pub mod tx {
             }
             None => token::balance_key(token, src),
         };
-        let dest_key = match sub_prefix {
+        let dest_key = match dest_sub_prefix {
             Some(sub_preifx) => {
                 let prefix =
                     token::multitoken_balance_prefix(token, &sub_preifx);

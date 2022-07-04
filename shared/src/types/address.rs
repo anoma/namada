@@ -59,6 +59,8 @@ mod internal {
         "ano::Governance                              ";
     pub const TREASURY: &str =
         "ano::Treasury                                ";
+    pub const ETH_BRIDGE: &str =
+        "ano::ETH Bridge Address                      ";
     pub const IBC: &str =
         "ibc::Inter-Blockchain Communication          ";
     pub const IBC_ESCROW: &str =
@@ -66,9 +68,7 @@ mod internal {
     pub const IBC_BURN: &str =
         "ibc::IBC Burn Address                        ";
     pub const IBC_MINT: &str =
-        "ano::IBC Mint Address                        ";
-    pub const ETH_BRIDGE: &str =
-        "ano::ETH Bridge Address                      ";
+        "ibc::IBC Mint Address                        ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -251,6 +251,9 @@ impl Address {
                 internal::TREASURY => {
                     Ok(Address::Internal(InternalAddress::Treasury))
                 }
+                internal::ETH_BRIDGE => {
+                    Ok(Address::Internal(InternalAddress::EthBridge))
+                }
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
@@ -266,9 +269,6 @@ impl Address {
                 }
                 internal::IBC_MINT => {
                     Ok(Address::Internal(InternalAddress::IbcMint))
-                }
-                internal::ETH_BRIDGE => {
-                    Ok(Address::Internal(InternalAddress::EthBridge))
                 }
                 _ if raw.len() == HASH_LEN => Ok(Address::Internal(
                     InternalAddress::IbcToken(raw.to_string()),
