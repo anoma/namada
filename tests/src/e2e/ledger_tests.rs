@@ -1562,7 +1562,7 @@ fn test_genesis_validators() -> Result<()> {
             }
     };
 
-    // 1. Setup 2 genesis validators
+    // 1. Setup 2 genesis validators, one with ed25519 keys (0) and one with secp256k1 keys (1)
     let validator_0_alias = "validator-0";
     let validator_1_alias = "validator-1";
 
@@ -1574,6 +1574,7 @@ fn test_genesis_validators() -> Result<()> {
             "--unsafe-dont-encrypt",
             "--alias",
             validator_0_alias,
+            "--scheme ed25519",
             "--net-address",
             &format!("127.0.0.1:{}", get_first_port(0)),
         ],
@@ -1610,6 +1611,7 @@ fn test_genesis_validators() -> Result<()> {
             "--unsafe-dont-encrypt",
             "--alias",
             validator_1_alias,
+            "--scheme secp256k1",
             "--net-address",
             &format!("127.0.0.1:{}", get_first_port(1)),
         ],
