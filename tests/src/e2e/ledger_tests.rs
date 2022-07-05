@@ -1540,7 +1540,8 @@ fn test_genesis_validators() -> Result<()> {
     // the given index
     let get_first_port = |ix: u8| net_address_port_0 + 6 * (ix as u16 + 1);
 
-    // 1. Setup 2 genesis validators, one with ed25519 keys (0) and one with secp256k1 keys (1)
+    // 1. Setup 2 genesis validators, one with ed25519 keys (0) and one with
+    // secp256k1 keys (1)
     let validator_0_alias = "validator-0";
     let validator_1_alias = "validator-1";
 
