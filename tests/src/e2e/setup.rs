@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
 use std::fmt::Display;
+use std::io::Stdout;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,7 +16,9 @@ use assert_cmd::assert::OutputAssertExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use escargot::CargoBuild;
+use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
+use expectrl::stream::log::LoggedStream;
 use expectrl::{Eof, WaitStatus};
 use eyre::eyre;
 use itertools::Itertools;
@@ -403,7 +406,7 @@ pub fn working_dir() -> PathBuf {
 
 /// A command under test
 pub struct AnomaCmd {
-    pub session: Session,
+    pub session: Session<UnixProcess, LoggedStream<PtyStream, Stdout>>,
     pub cmd_str: String,
 }
 
@@ -706,6 +709,7 @@ where
         )
     })?;
     session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
+    let session = session.with_log(std::io::stdout()).unwrap();
 
     let mut cmd_process = AnomaCmd { session, cmd_str };
     if let Bin::Node = &bin {
