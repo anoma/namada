@@ -11,9 +11,9 @@ This is an implementation of the Anoma protocol in Rust.
 
 ## 📓 Docs
 
-- [user docs](https://docs.anoma.net/): built from [anoma/docs mdBook](https://github.com/anoma/docs)
-- [dev docs](https://dev.anoma.net/master/): built from [docs mdBook](./docs/) in this repo
-- [rustdoc](https://dev.anoma.net/master/rustdoc/anoma/): built from the source
+- user docs: built from [docs mdBook](./documentation/docs/)
+- dev docs: built from [dev mdBook](./documentation/dev/)
+- specifications: built from [spec mdBook](./documentation/spec/)
 
 ## Warning
 
