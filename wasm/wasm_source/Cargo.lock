@@ -39,7 +39,7 @@ dependencies = [
 
 [[package]]
 name = "anoma"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anoma_proof_of_stake",
  "ark-bls12-381",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_macros"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "quote",
  "syn",
@@ -97,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_proof_of_stake"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "borsh",
  "proptest",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_tests"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anoma",
  "anoma_vm_env",
@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_tx_prelude"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anoma_vm_env",
  "sha2 0.10.2",
@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_vm_env"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anoma",
  "anoma_macros",
@@ -142,7 +142,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_vp_prelude"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anoma_vm_env",
  "sha2 0.10.2",
@@ -150,7 +150,7 @@ dependencies = [
 
 [[package]]
 name = "anoma_wasm"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anoma",
  "anoma_tests",
