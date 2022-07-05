@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::fmt::Display;
-use std::io::Stdout;
+use std::fs::{File, OpenOptions};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -22,6 +22,7 @@ use expectrl::stream::log::LoggedStream;
 use expectrl::{Eof, WaitStatus};
 use eyre::eyre;
 use itertools::Itertools;
+use rand::Rng;
 use tempfile::{tempdir, TempDir};
 
 /// For `color_eyre::install`, which fails if called more than once in the same
@@ -406,13 +407,19 @@ pub fn working_dir() -> PathBuf {
 
 /// A command under test
 pub struct AnomaCmd {
-    pub session: Session<UnixProcess, LoggedStream<PtyStream, Stdout>>,
+    pub session: Session<UnixProcess, LoggedStream<PtyStream, File>>,
     pub cmd_str: String,
+    pub log_path: PathBuf,
 }
 
 impl Display for AnomaCmd {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.cmd_str)
+        write!(
+            f,
+            "{}\n(logs at: {})",
+            self.cmd_str,
+            self.log_path.to_string_lossy()
+        )
     }
 }
 
@@ -570,7 +577,7 @@ impl Drop for AnomaCmd {
         // attempt to clean up the process
         println!(
             "{}: {}",
-            "Sending Ctrl+C to command".underline().yellow(),
+            "> Sending Ctrl+C to command".underline().yellow(),
             self.cmd_str,
         );
         let _result = self.send_control('c');
@@ -578,7 +585,7 @@ impl Drop for AnomaCmd {
             Err(error) => {
                 eprintln!(
                     "\n{}: {}\n{}: {}",
-                    "Error ensuring command is finished".underline().red(),
+                    "> Error ensuring command is finished".underline().red(),
                     self.cmd_str,
                     "Error".underline().red(),
                     error,
@@ -587,21 +594,21 @@ impl Drop for AnomaCmd {
             Ok(output) => {
                 println!(
                     "\n{}: {}",
-                    "Command finished".underline().green(),
+                    "> Command finished".underline().green(),
                     self.cmd_str,
                 );
                 let output = output.trim();
                 if !output.is_empty() {
                     println!(
                         "\n{}: {}\n\n{}",
-                        "Unread output for command".underline().yellow(),
+                        "> Unread output for command".underline().yellow(),
                         self.cmd_str,
                         output
                     );
                 } else {
                     println!(
                         "\n{}: {}",
-                        "No unread output for command".underline().green(),
+                        "> No unread output for command".underline().green(),
                         self.cmd_str
                     );
                 }
@@ -696,7 +703,6 @@ where
     let cmd_str =
         format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
 
-    println!("{}: {}", "Running".underline().green(), cmd_str);
     let mut session = Session::spawn(run_cmd).map_err(|e| {
         eyre!(
             "\n\n{}: {}\n{}: {}\n{}: {}",
@@ -709,9 +715,27 @@ where
         )
     })?;
     session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
-    let session = session.with_log(std::io::stdout()).unwrap();
 
-    let mut cmd_process = AnomaCmd { session, cmd_str };
+    let log_path = {
+        let mut rng = rand::thread_rng();
+        let log_dir = base_dir.as_ref().join("logs");
+        fs::create_dir_all(&log_dir)?;
+        log_dir.join(&format!("{}-{}.log", bin_name, rng.gen::<u64>()))
+    };
+    let logger = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)?;
+
+    let session = session.with_log(logger).unwrap();
+    let mut cmd_process = AnomaCmd {
+        session,
+        cmd_str,
+        log_path,
+    };
+
+    println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
+
     if let Bin::Node = &bin {
         // When running a node command, we need to wait a bit before checking
         // status
