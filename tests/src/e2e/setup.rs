@@ -703,7 +703,7 @@ where
     let cmd_str =
         format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
 
-    let mut session = Session::spawn(run_cmd).map_err(|e| {
+    let session = Session::spawn(run_cmd).map_err(|e| {
         eyre!(
             "\n\n{}: {}\n{}: {}\n{}: {}",
             "Failed to run".underline().red(),
@@ -714,7 +714,6 @@ where
             e
         )
     })?;
-    session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
 
     let log_path = {
         let mut rng = rand::thread_rng();
@@ -726,8 +725,10 @@ where
         .write(true)
         .create_new(true)
         .open(&log_path)?;
+    let mut session = session.with_log(logger).unwrap();
 
-    let session = session.with_log(logger).unwrap();
+    session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
+
     let mut cmd_process = AnomaCmd {
         session,
         cmd_str,
