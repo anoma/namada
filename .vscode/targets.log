@@ -1,0 +1,731 @@
+make all --print-data-base --no-builtin-variables --no-builtin-rules --question
+# GNU Make 3.81
+# Copyright (C) 2006  Free Software Foundation, Inc.
+# This is free software; see the source for copying conditions.
+# There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE.
+
+# This program built for i386-apple-darwin11.3.0
+ 
+make: *** No rule to make target `all'.  Stop.
+
+
+# Make data base, printed on Tue Jul  5 16:40:57 2022
+
+# Variables
+
+# makefile (from `Makefile', line 186)
+fmt-check-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml -- --check
+# automatic
+<D = $(patsubst %/,%,$(dir $<))
+# automatic
+?F = $(notdir $?)
+# makefile (from `Makefile', line 19)
+ 
+audit-ignores = RUSTSEC-2021-0076
+# environment
+VSCODE_LOG_NATIVE = false
+# environment
+NVM_INC = /Users/alexandreroque/.nvm/versions/node/v15.14.0/include/node
+# automatic
+?D = $(patsubst %/,%,$(dir $?))
+# automatic
+@D = $(patsubst %/,%,$(dir $@))
+# automatic
+@F = $(notdir $@)
+# makefile
+CURDIR := /Users/alexandreroque/github/namada
+# makefile
+SHELL = /bin/sh
+# makefile (from `Makefile', line 51)
+check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
+# environment
+VSCODE_NLS_CONFIG = {"locale":"en-gb","availableLanguages":{},"_languagePackSupport":true}
+# environment
+_ = /usr/bin/make
+# makefile (from `Makefile', line 10)
+mm := libmm_token_exch
+# makefile (from `Makefile', line 4)
+rustup :=  rustup
+# makefile (from `Makefile', line 1)
+MAKEFILE_LIST :=  Makefile
+# environment
+VSCODE_VERBOSE_LOGGING = true
+# environment
+__CFBundleIdentifier = com.microsoft.VSCode
+# environment
+INFOPATH = /opt/homebrew/share/info:
+# environment
+VSCODE_IPC_HOOK_EXTHOST = /var/folders/7s/gyb64k510938c8q1y1d_38lw0000gn/T/vscode-ipc-90eb0d14-35c3-413e-b432-3b447fc692d0.sock
+# environment
+VSCODE_CWD = /
+# environment
+PATH = /Users/alexandreroque/.nvm/versions/node/v15.14.0/bin:/Library/Frameworks/Python.framework/Versions/3.10/bin:/Users/alexandreroque/.cargo/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/opt/openssl/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+# environment
+LSCOLORS = ExFxBxDxCxegedabagacad
+# environment
+NVM_BIN = /Users/alexandreroque/.nvm/versions/node/v15.14.0/bin
+# makefile (from `Makefile', line 63)
+clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --no-default-features --features "ABCI-plus-plus" -- -D warnings
+# environment
+VSCODE_LOG_STACK = false
+# environment
+ELECTRON_RUN_AS_NODE = 1
+# default
+.FEATURES := target-specific order-only second-expansion else-if archives jobserver check-symlink
+# environment
+SSH_AUTH_SOCK = /private/tmp/com.apple.launchd.VFu9VseRLz/Listeners
+# automatic
+%F = $(notdir $%)
+# environment
+VSCODE_PIPE_LOGGING = true
+# makefile (from `Makefile', line 180)
+fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
+# environment
+PWD = /Users/alexandreroque/github/namada
+# environment
+HOMEBREW_CELLAR = /opt/homebrew/Cellar
+# environment
+ORIGINAL_XDG_CURRENT_DESKTOP = undefined
+# makefile (from `Makefile', line 16)
+wasm_templates := wasm/tx_template wasm/vp_template
+# environment
+MANPATH = /Users/alexandreroque/.nvm/versions/node/v15.14.0/share/man:/opt/homebrew/share/man:
+# environment
+VSCODE_AMD_ENTRYPOINT = vs/workbench/api/node/extensionHostProcess
+# environment
+HOME = /Users/alexandreroque
+# makefile (from `Makefile', line 6)
+debug-cargo :=  RUST_BACKTRACE=1 RUST_LOG=anoma=debug cargo
+# default
+MAKEFILEPATH = $(shell /usr/bin/xcode-select -print-path 2>/dev/null || echo /Developer)/Makefiles
+# environment
+VSCODE_CODE_CACHE_PATH = /Users/alexandreroque/Library/Application Support/Code/CachedData/30d9c6cd9483b2cc586687151bcbcd635f373630
+# environment
+LOGNAME = alexandreroque
+# environment
+APPLICATION_INSIGHTS_NO_DIAGNOSTIC_CHANNEL = 1
+# environment
+NVM_CD_FLAGS = 
+# environment
+VSCODE_HANDLES_UNCAUGHT_ERRORS = true
+# automatic
+^D = $(patsubst %/,%,$(dir $^))
+# environment
+XPC_FLAGS = 0x0
+# default
+MAKE = $(MAKE_COMMAND)
+# default
+MAKECMDGOALS := all
+# environment
+SHLVL = 2
+# makefile (from `Makefile', line 5)
+debug-env := RUST_BACKTRACE=1 RUST_LOG=anoma=debug
+# default
+MAKE_VERSION := 3.81
+# environment
+USER = alexandreroque
+# makefile
+.DEFAULT_GOAL := build
+# makefile (from `Makefile', line 8)
+ 
+nightly := nightly-2022-05-20
+# makefile (from `Makefile', line 1)
+package = anoma
+# automatic
+%D = $(patsubst %/,%,$(dir $%))
+# default
+MAKE_COMMAND := /Library/Developer/CommandLineTools/usr/bin/make
+# default
+.VARIABLES := 
+# environment
+TMPDIR = /var/folders/7s/gyb64k510938c8q1y1d_38lw0000gn/T/
+# automatic
+*F = $(notdir $*)
+# environment
+VSCODE_IPC_HOOK = /Users/alexandreroque/Library/Application Support/Code/1.68.1-main.sock
+# makefile (from `Makefile', line 173)
+test-wasm-template = $(cargo) test --manifest-path $(wasm)/Cargo.toml
+# makefile
+MAKEFLAGS = Rrqp
+# environment
+MFLAGS = -Rrqp
+# automatic
+*D = $(patsubst %/,%,$(dir $*))
+# environment
+NVM_DIR = /Users/alexandreroque/.nvm
+# environment
+XPC_SERVICE_NAME = application.com.microsoft.VSCode.8383971.8383977
+# environment
+HOMEBREW_PREFIX = /opt/homebrew
+# automatic
++D = $(patsubst %/,%,$(dir $+))
+# automatic
++F = $(notdir $+)
+# environment
+HOMEBREW_REPOSITORY = /opt/homebrew
+# environment
+__CF_USER_TEXT_ENCODING = 0x1F5:0x0:0x0
+# environment
+COMMAND_MODE = unix2003
+# default
+MAKEFILES := 
+# automatic
+<F = $(notdir $<)
+# environment
+LC_ALL = C
+# automatic
+^F = $(notdir $^)
+# default
+SUFFIXES := 
+# makefile (from `Makefile', line 14)
+wasms_for_tests := wasm_for_tests/wasm_source
+# default
+.INCLUDE_DIRS = /usr/local/include
+# makefile (from `Makefile', line 3)
+cargo :=  cargo
+# makefile (from `Makefile', line 61)
+clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
+# environment
+MAKELEVEL := 0
+# makefile (from `Makefile', line 13)
+wasms := wasm/wasm_source
+# environment
+CLICOLOR = 1
+# environment
+LANG = C
+# environment
+VSCODE_PID = 2794
+# variable set hash-table stats:
+# Load=90/1024=9%, Rehash=0, Collisions=3/122=2%
+
+# Pattern-specific Variable Values
+
+# No pattern-specific variable values.
+
+# Directories
+
+# . (device 16777231, inode 8913012): 43 files, no impossibilities.
+
+# 43 files, no impossibilities in 1 directories.
+
+# Implicit Rules
+
+# No implicit rules.
+
+# Files
+
+build-release:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 34):
+	ANOMA_DEV=false $(cargo) build --release --package anoma_apps
+	
+
+test-e2e-abci-plus-plus:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 138):
+	RUST_BACKTRACE=1 $(cargo) test e2e \
+	--manifest-path ./tests/Cargo.toml \
+	--no-default-features \
+	--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+	-- --test-threads=1
+	
+
+reset-ledger-abci-plus-plus:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 126):
+	# runs the node
+	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger reset
+	
+
+# Not a target:
+all:
+#  Command-line target.
+#  Implicit rule search has been done.
+#  File does not exist.
+#  File has not been updated.
+# variable set hash-table stats:
+# Load=0/32=0%, Rehash=0, Collisions=0/0=0%
+
+.PHONY: build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker build-wasm-scripts clean-wasm-scripts dev-deps test-miri
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+run-ledger-abci-plus-plus:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 114):
+	# runs the node
+	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger run
+	
+
+tendermint:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 107):
+	./scripts/install/get_tendermint.sh
+	
+
+test-debug:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 178):
+	$(debug-cargo) test -- --nocapture
+	
+
+test-miri:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 240):
+	$(cargo) +$(nightly) miri setup
+	$(cargo) +$(nightly) clean
+	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
+	
+
+publish-wasm:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 231):
+	aws s3 sync wasm s3://heliax-anoma-wasm-v1 --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*"
+	
+
+# Not a target:
+.SUFFIXES:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+build-test:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 28):
+	$(cargo) build --tests
+	
+
+ 
+# Not a target:
+Makefile:
+#  Implicit rule search has been done.
+#  Last modified 2022-07-05 16:20:42
+#  File has been updated.
+#  Successfully updated.
+# variable set hash-table stats:
+# Load=0/32=0%, Rehash=0, Collisions=0/0=0%
+
+check-abci-plus-plus:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 59):
+	$(cargo) check --no-default-features --features "ABCI-plus-plus"
+	
+
+test: test-unit test-e2e test-wasm
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+
+clippy:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 66):
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	make -C $(wasms) clippy && \
+	make -C $(wasms_for_tests) clippy && \
+	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+	
+
+build-release-docker: build-release-image-docker
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 46):
+	docker run --rm -v ${PWD}:/var/build anoma-build make build-release
+	
+
+build-wasm-image-docker:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 208):
+	docker build -t anoma-wasm - < docker/anoma-wasm/Dockerfile
+	
+
+build:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 22):
+	$(cargo) build
+	
+
+dev-deps:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 234):
+	$(rustup) toolchain install $(nightly)
+	$(rustup) target add wasm32-unknown-unknown
+	$(rustup) component add rustfmt clippy miri --toolchain $(nightly)
+	$(cargo) install cargo-watch unclog
+	
+
+test-unit:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 166):
+	$(cargo) test --no-default-features \
+	--features "wasm-runtime ABCI ibc-mocks-abci" \
+	-- --skip e2e
+	
+
+build-wasm-scripts:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 215):
+	make -C $(wasms)
+	make opt-wasm
+	make checksum-wasm
+	
+
+build-release-image-docker:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 43):
+	docker build -t anoma-build - < docker/anoma-build/Dockerfile
+	
+
+clippy-fix:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 96):
+	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
+	
+
+watch:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 193):
+	$(cargo) watch
+	
+
+test-wasm-templates:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 175):
+	$(foreach wasm,$(wasm_templates),$(test-wasm-template) && ) true
+	
+
+check-release:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 37):
+	ANOMA_DEV=false $(cargo) check --release --package anoma_apps
+	
+
+opt-wasm:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 225):
+	@for file in $(shell ls wasm/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
+	
+
+# Not a target:
+.DEFAULT:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+audit:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 130):
+	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
+	
+
+package: build-release
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 40):
+	scripts/make-package.sh
+	
+
+run-gossip:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 118):
+	# runs the node gossip node
+	$(cargo) run --bin anoman -- gossip run
+	
+
+test-e2e:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 135):
+	RUST_BACKTRACE=1 $(cargo) test e2e -- --test-threads=1
+	
+
+build-test-abci-plus-plus:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 31):
+	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus"
+	
+
+clean:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 196):
+	$(cargo) clean
+	
+
+build-wasm-scripts-docker: build-wasm-image-docker
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+ 
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 211):
+	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make build-wasm-scripts
+	
+
+clean-wasm-scripts:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 228):
+	make -C $(wasms) clean
+	
+
+reset-ledger:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 122):
+	# runs the node
+	$(cargo) run --bin anoman -- ledger reset
+	
+
+clippy-abci-plus-plus:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 72):
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
+	--manifest-path ./apps/Cargo.toml \
+	--no-default-features \
+	--features "std testing ABCI-plus-plus" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+	--manifest-path ./proof_of_stake/Cargo.toml \
+	--features "testing" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+	--manifest-path ./shared/Cargo.toml \
+	--no-default-features \
+	--features "testing wasm-runtime ABCI-plus-plus ibc-mocks" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+	--manifest-path ./tests/Cargo.toml \
+	--no-default-features \
+	--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" && \
+	$(cargo) +$(nightly) clippy \
+	--all-targets \
+	--manifest-path ./vm_env/Cargo.toml \
+	--no-default-features \
+	--features "ABCI-plus-plus" && \
+	make -C $(wasms) clippy && \
+	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+	
+
+run-ledger:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 110):
+	# runs the node
+	$(cargo) run --bin anoman -- ledger run
+	
+
+build-abci-plus-plus:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 25):
+	$(cargo) build --no-default-features --features "ABCI-plus-plus"
+	
+
+test-unit-abci-plus-plus:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 145):
+	$(cargo) test \
+	--manifest-path ./apps/Cargo.toml \
+	--no-default-features \
+	--features "testing std ABCI-plus-plus" && \
+	$(cargo) test --manifest-path ./proof_of_stake/Cargo.toml \
+	--features "testing" && \
+	$(cargo) test \
+	--manifest-path ./shared/Cargo.toml \
+	--no-default-features \
+	--features "testing wasm-runtime ABCI-plus-plus ibc-mocks" && \
+	$(cargo) test \
+	--manifest-path ./tests/Cargo.toml \
+	--no-default-features \
+	--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+	-- --skip e2e && \
+	$(cargo) test \
+	--manifest-path ./vm_env/Cargo.toml \
+	--no-default-features \
+	--features "ABCI-plus-plus"
+	
+
+fmt:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 182):
+	$(cargo) +$(nightly) fmt --all && \
+	make -C $(wasms) fmt && \
+	$(foreach wasm,$(wasm_templates),$(fmt-wasm) && ) true
+	
+
+check:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 53):
+	$(cargo) check && \
+	make -C $(wasms) check && \
+	make -C $(wasms_for_tests) check && \
+	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
+	
+
+build-doc:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 199):
+	$(cargo) doc --no-deps
+	$(cargo) run --bin anoma_encoding_spec
+	make -C docs build
+	
+
+test-wasm:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 171):
+	make -C $(wasms) test
+	
+
+checksum-wasm:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 221):
+	python3 wasm/checksums.py
+	
+
+fmt-check:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 188):
+	$(cargo) +$(nightly) fmt --all -- --check && \
+	make -C $(wasms) fmt-check && \
+	$(foreach wasm,$(wasm_templates),$(fmt-check-wasm) && ) true
+	
+
+package-docker: build-release-image-docker
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 49):
+	docker run --rm -v ${PWD}:/var/build anoma-build make package
+	
+
+doc:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 204):
+	# build and opens the docs in browser
+	$(cargo) doc --open
+	
+
+install: tendermint
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 99):
+	$(cargo) build --release \
+	--manifest-path matchmaker/mm_token_exch/Cargo.toml && \
+	find "target/release/" -type f \
+	\( -name "$(mm).dll" -o -name "$(mm).dylib" -o -name "$(mm).so" \) \
+	-exec install -d {} ${HOME}/.cargo/lib/ \; && \
+	ANOMA_DEV=false $(cargo) install --path ./apps --locked
+	
+
+# files hash-table stats:
+# Load=51/1024=5%, Rehash=0, Collisions=1/91=1%
+# VPATH Search Paths
+
+# No `vpath' search paths.
+
+# No general (`VPATH' variable) search path.
+
+ 
+# # of strings in strcache: 1
+# # of strcache buffers: 1
+# strcache size: total = 4096 / max = 4096 / min = 4096 / avg = 4096
+# strcache free: total = 4087 / max = 4087 / min = 4087 / avg = 4087
+
+# Finished Make data base on Tue Jul  5 16:40:57 2022
+
+ 
