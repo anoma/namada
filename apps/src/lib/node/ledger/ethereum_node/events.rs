@@ -376,7 +376,7 @@ pub mod eth_events {
         /// Serialize an instance [`RawTransfersToNamada`] using Ethereum's
         /// ABI serialization scheme.
         #[cfg(test)]
-        pub(super) fn encode(self) -> Vec<u8> {
+        pub fn encode(self) -> Vec<u8> {
             let RawTransfersToEthereum {
                 transfers,
                 nonce,

@@ -432,7 +432,7 @@ pub mod oracle_process {
                 nonce: 1.into(),
                 confirmations: 75,
             }
-                .encode();
+            .encode();
 
             // send in the events to the logs
             admin_channel
