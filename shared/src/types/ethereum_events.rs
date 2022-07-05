@@ -132,7 +132,7 @@ pub struct TransferToNamada {
     pub receiver: Address,
 }
 
-/// An event transferring some kind of value from Ethereum to Anoma
+/// An event transferring some kind of value from Anoma to Ethereum
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
