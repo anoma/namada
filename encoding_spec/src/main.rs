@@ -31,7 +31,8 @@ use lazy_static::lazy_static;
 use madato::types::TableRow;
 
 /// This generator will write output into this `docs` file.
-const OUTPUT_PATH: &str = "docs/src/specs/encoding/generated-borsh-spec.md";
+const OUTPUT_PATH: &str =
+    "documentation/docs/src/specs/encoding/generated-borsh-spec.md";
 
 lazy_static! {
     /// Borsh types may be used by declarations. These are displayed differently in the [`md_fmt_type`].
