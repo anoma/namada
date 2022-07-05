@@ -10,7 +10,6 @@ pub mod oracle_process {
     #[cfg(not(test))]
     use web30::client::Web3;
 
-    use super::MIN_CONFIRMATIONS;
     use super::super::events::{signatures, PendingEvent};
     #[cfg(test)]
     use super::super::test_tools::mock_web3_client::Web3;
@@ -210,12 +209,11 @@ pub mod oracle_process {
         use anoma::types::ethereum_events::TransferToEthereum;
         use tokio::sync::oneshot::{channel, Receiver};
 
-        use super::super::test_tools::mock_web3_client::{TestCmd, Web3};
         use super::*;
         use crate::node::ledger::ethereum_node::events::{
             ChangedContract, RawTransfersToEthereum,
         };
-        use crate::node::ledger::ethereum_node::test_tools::mock_web3_client::MockEventType;
+        use crate::node::ledger::ethereum_node::test_tools::mock_web3_client::{MockEventType, TestCmd, Web3};
 
         /// The data returned from setting up a test
         struct TestPackage {
@@ -323,7 +321,7 @@ pub mod oracle_process {
                 name: "Test".to_string(),
                 address: EthAddress([0; 20]),
             }
-                .encode();
+            .encode();
             admin_channel
                 .send(TestCmd::NewEvent {
                     event_type: MockEventType::NewContract,

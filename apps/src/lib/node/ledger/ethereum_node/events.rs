@@ -1,3 +1,42 @@
+#[cfg(any(test, feature = "eth-fullnode"))]
+pub mod signatures {
+    pub const TRANSFER_TO_NAMADA_SIG: &str =
+        "TransferToNamada(uint256,address[],string[],uint256[],uint32)";
+    pub const TRANSFER_TO_ETHEREUM_SIG: &str =
+        "TransferToErc(uint256,address[],address[],uint256[],uint32)";
+    pub const VALIDATOR_SET_UPDATE_SIG: &str =
+        "ValidatorSetUpdate(uint256,bytes32,bytes32)";
+    pub const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
+    pub const UPGRADED_CONTRACT_SIG: &str = "UpgradedContract(string,address)";
+    pub const UPDATE_BRIDGE_WHITELIST_SIG: &str =
+        "UpdateBridgeWhiteList(uint256,address[],uint256[])";
+    pub const SIGNATURES: [&str; 6] = [
+        TRANSFER_TO_NAMADA_SIG,
+        TRANSFER_TO_ETHEREUM_SIG,
+        VALIDATOR_SET_UPDATE_SIG,
+        NEW_CONTRACT_SIG,
+        UPGRADED_CONTRACT_SIG,
+        UPDATE_BRIDGE_WHITELIST_SIG,
+    ];
+
+    /// Used to determine which smart contract address
+    /// a signature belongs to
+    pub enum SigType {
+        Bridge,
+        Governance,
+    }
+
+    impl From<&str> for SigType {
+        fn from(sig: &str) -> Self {
+            match sig {
+                TRANSFER_TO_NAMADA_SIG | TRANSFER_TO_ETHEREUM_SIG => {
+                    SigType::Bridge
+                }
+                _ => SigType::Governance,
+            }
+        }
+    }
+}
 
 #[cfg(feature = "eth-fullnode")]
 pub mod eth_events {
@@ -19,6 +58,8 @@ pub mod eth_events {
     use num256::Uint256;
     use thiserror::Error;
 
+    pub use super::signatures;
+
     #[derive(Error, Debug)]
     pub enum Error {
         #[error("Could not decode Ethereum event: {0}")]
@@ -27,48 +68,9 @@ pub mod eth_events {
 
     pub type Result<T> = std::result::Result<T, Error>;
 
-    pub mod signatures {
-        pub const TRANSFER_TO_NAMADA_SIG: &str =
-            "TransferToNamada(uint256,address[],string[],uint256[],uint32)";
-        pub const TRANSFER_TO_ETHEREUM_SIG: &str =
-            "TransferToErc(uint256,address[],address[],uint256[],uint32)";
-        pub const VALIDATOR_SET_UPDATE_SIG: &str =
-            "ValidatorSetUpdate(uint256,bytes32,bytes32)";
-        pub const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
-        pub const UPGRADED_CONTRACT_SIG: &str = "UpgradedContract(string,address)";
-        pub const UPDATE_BRIDGE_WHITELIST_SIG: &str =
-            "UpdateBridgeWhiteList(uint256,address[],uint256[])";
-        pub const SIGNATURES: [&str; 6] = [
-            TRANSFER_TO_NAMADA_SIG,
-            TRANSFER_TO_ETHEREUM_SIG,
-            VALIDATOR_SET_UPDATE_SIG,
-            NEW_CONTRACT_SIG,
-            UPGRADED_CONTRACT_SIG,
-            UPDATE_BRIDGE_WHITELIST_SIG,
-        ];
-
-        /// Used to determine which smart contract address
-        /// a signature belongs to
-        pub enum SigType {
-            Bridge,
-            Governance,
-        }
-
-        impl From<&str> for SigType {
-            fn from(sig: &str) -> Self {
-                match sig {
-                    TRANSFER_TO_NAMADA_SIG | TRANSFER_TO_ETHEREUM_SIG => {
-                        SigType::Bridge
-                    }
-                    _ => SigType::Governance,
-                }
-            }
-        }
-    }
-
     /// An event waiting for a certain number of confirmations
     /// before being sent to the ledger
-    pub(super) struct PendingEvent {
+    pub( in super::super) struct PendingEvent {
         /// number of confirmations to consider this event finalized
         confirmations: Uint256,
         /// the block height from which this event originated
@@ -91,11 +93,11 @@ pub mod eth_events {
     /// Event indicating a new smart contract has been
     /// deployed or upgraded on Ethereum
     #[derive(Clone, Debug, PartialEq)]
-    pub(super) struct ChangedContract {
+    pub(in super::super) struct ChangedContract {
         /// Name of the contract
-        pub(super) name: String,
+        pub name: String,
         /// Address of the contract on Ethereum
-        pub(super) address: EthAddress,
+        pub address: EthAddress,
     }
 
     /// Event for whitelisting new tokens and their
@@ -149,7 +151,7 @@ pub mod eth_events {
                              bridge_validator_hash,
                              governance_validator_hash,
                          }| PendingEvent {
-                            confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
+                            confirmations: super::super::oracle::MIN_CONFIRMATIONS.into(),
                             block_height,
                             event: EthereumEvent::ValidatorSetUpdate {
                                 nonce,
@@ -161,21 +163,21 @@ pub mod eth_events {
                 }
                 signatures::NEW_CONTRACT_SIG => ChangedContract::decode(data).map(
                     |ChangedContract { name, address }| PendingEvent {
-                        confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
+                        confirmations: super::super::oracle::MIN_CONFIRMATIONS.into(),
                         block_height,
                         event: EthereumEvent::NewContract { name, address },
                     },
                 ),
                 signatures::UPGRADED_CONTRACT_SIG => ChangedContract::decode(data)
                     .map(|ChangedContract { name, address }| PendingEvent {
-                        confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
+                        confirmations: super::super::oracle::MIN_CONFIRMATIONS.into(),
                         block_height,
                         event: EthereumEvent::UpgradedContract { name, address },
                     }),
                 signatures::UPDATE_BRIDGE_WHITELIST_SIG => {
                     UpdateBridgeWhitelist::decode(data).map(
                         |UpdateBridgeWhitelist { nonce, whitelist }| PendingEvent {
-                            confirmations: super::oracle::MIN_CONFIRMATIONS.into(),
+                            confirmations: super::super::oracle::MIN_CONFIRMATIONS.into(),
                             block_height,
                             event: EthereumEvent::UpdateBridgeWhitelist {
                                 nonce,
@@ -210,7 +212,7 @@ pub mod eth_events {
 
     /// A batch of [`TransferToNamada`] from an Ethereum event
     #[derive(Clone, Debug, PartialEq)]
-    pub(super) struct RawTransfersToEthereum {
+    pub(in super::super) struct RawTransfersToEthereum {
         /// A list of transfers
         pub transfers: Vec<TransferToEthereum>,
         /// A monotonically increasing nonce
@@ -482,7 +484,7 @@ pub mod eth_events {
         /// Serialize an instance [`ChangedContract`] using Ethereum's
         /// ABI serialization scheme.
         #[cfg(test)]
-        pub(super) fn encode(self) -> Vec<u8> {
+        pub fn encode(self) -> Vec<u8> {
             let ChangedContract { name, address } = self;
             encode(&[Token::String(name), Token::Address(address.0.into())])
         }
