@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -406,6 +407,12 @@ pub struct AnomaCmd {
     pub cmd_str: String,
 }
 
+impl Display for AnomaCmd {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.cmd_str)
+    }
+}
+
 /// A command under test running on a background thread
 pub struct AnomaBgCmd {
     join_handle: std::thread::JoinHandle<AnomaCmd>,
@@ -466,15 +473,18 @@ impl AnomaCmd {
     /// Wrapper over the inner `PtySession`'s functions with custom error
     /// reporting.
     pub fn exp_string(&mut self, needle: &str) -> Result<String> {
-        let found = self
-            .session
-            .expect_eager(needle)
-            .map_err(|e| eyre!(format!("{}\n Needle: {}", e, needle)))?;
+        let found = self.session.expect_eager(needle).map_err(|e| {
+            eyre!("{}\nCommand: {}\n Needle: {}", e, self, needle)
+        })?;
         if found.is_empty() {
-            Err(eyre!(format!("Expected needle not found: {}", needle)))
+            Err(eyre!(
+                "Expected needle not found\nCommand: {}\n Needle: {}",
+                self,
+                needle
+            ))
         } else {
             String::from_utf8(found.before().to_vec())
-                .map_err(|e| eyre!(format!("{}", e)))
+                .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
         }
     }
 
@@ -489,15 +499,19 @@ impl AnomaCmd {
         let found = self
             .session
             .expect_eager(expectrl::Regex(regex))
-            .map_err(|e| eyre!(format!("{}", e)))?;
+            .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
         if found.is_empty() {
-            Err(eyre!(format!("Expected regex not found: {}", regex)))
+            Err(eyre!(
+                "Expected regex not found: {}\nCommand: {}",
+                regex,
+                self
+            ))
         } else {
             let unread = String::from_utf8(found.before().to_vec())
-                .map_err(|e| eyre!(format!("{}", e)))?;
+                .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
             let matched =
                 String::from_utf8(found.matches().next().unwrap().to_vec())
-                    .map_err(|e| eyre!(format!("{}", e)))?;
+                    .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
             Ok((unread, matched))
         }
     }
@@ -509,13 +523,15 @@ impl AnomaCmd {
     /// reporting.
     #[allow(dead_code)]
     pub fn exp_eof(&mut self) -> Result<String> {
-        let found =
-            self.session.expect_eager(Eof).map_err(|e| eyre!("{}", e))?;
+        let found = self
+            .session
+            .expect_eager(Eof)
+            .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
         if found.is_empty() {
-            Err(eyre!("Expected EOF"))
+            Err(eyre!("Expected EOF\nCommand: {}", self))
         } else {
             String::from_utf8(found.before().to_vec())
-                .map_err(|e| eyre!(format!("{}", e)))
+                .map_err(|e| eyre!(format!("Error: {}\nCommand: {}", e, self)))
         }
     }
 
@@ -530,7 +546,7 @@ impl AnomaCmd {
     pub fn send_control(&mut self, c: char) -> Result<()> {
         self.session
             .send_control(c)
-            .map_err(|e| eyre!(format!("{}", e)))
+            .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
     }
 
     /// send line to repl (and flush output) and then, if echo_on=true wait for
@@ -542,7 +558,7 @@ impl AnomaCmd {
     pub fn send_line(&mut self, line: &str) -> Result<()> {
         self.session
             .send_line(line)
-            .map_err(|e| eyre!(format!("{}", e)))
+            .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
     }
 }
 
