@@ -169,7 +169,7 @@ test-unit:
 		-- --skip e2e -- -Z unstable-options --report-time
 
 test-wasm:
-	make -C $(wasms) test -- -Z unstable-options --report-time
+	make -C $(wasms) test
 
 test-wasm-template = $(cargo) test --manifest-path $(wasm)/Cargo.toml -- -Z unstable-options --report-time
 test-wasm-templates:
