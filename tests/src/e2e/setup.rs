@@ -697,7 +697,6 @@ where
             "--mode",
             mode,
         ])
-        .stderr(std::process::Stdio::inherit())
         .args(args);
     let args: String =
         run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
