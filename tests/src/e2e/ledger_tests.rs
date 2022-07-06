@@ -470,7 +470,7 @@ fn invalid_transactions() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(60))?;
     if !cfg!(feature = "ABCI") {
         client.exp_string("Transaction accepted")?;
     }
