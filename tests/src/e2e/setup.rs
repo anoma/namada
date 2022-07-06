@@ -417,7 +417,7 @@ impl Display for AnomaCmd {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}\n(logs at: {})",
+            "{}\nLogs: {}",
             self.cmd_str,
             self.log_path.to_string_lossy()
         )
