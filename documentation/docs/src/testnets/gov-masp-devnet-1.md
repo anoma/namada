@@ -10,8 +10,8 @@ This devnet contains the following new features:
 Latest values regarding the testnet that would be useful to have in your shell:
 
 ```shell
-export ANOMA_CHAIN_ID='anoma-gov-masp.3f1b25f2ee35b2e'
-export ANOMA_COMMIT='f1afdffd5e43ad4bb448db7bf5bc1e23464350f7'
+export NAMADA_CHAIN_ID='anoma-gov-masp.3f1b25f2ee35b2e'
+export NAMADA_COMMIT='f1afdffd5e43ad4bb448db7bf5bc1e23464350f7'
 ```
 
-You can install Namada by following the instructions from the [Install User Guide](../user-guide/install.md). Note that the binaries should be built from `$ANOMA_COMMIT` rather than `master` or a release tag like `v0.5.0`.
+You can install Namada by following the instructions from the [Install User Guide](../user-guide/install.md). Note that the binaries should be built from `$NAMADA_COMMIT` rather than `master` or a release tag like `v0.5.0`.

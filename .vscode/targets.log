@@ -10,7 +10,7 @@ make all --print-data-base --no-builtin-variables --no-builtin-rules --question
 make: *** No rule to make target `all'.  Stop.
 
 
-# Make data base, printed on Tue Jul  5 16:40:57 2022
+# Make data base, printed on Wed Jul  6 10:33:10 2022
 
 # Variables
 
@@ -21,11 +21,11 @@ fmt-check-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml -- 
 # automatic
 ?F = $(notdir $?)
 # makefile (from `Makefile', line 19)
- 
 audit-ignores = RUSTSEC-2021-0076
 # environment
 VSCODE_LOG_NATIVE = false
 # environment
+ 
 NVM_INC = /Users/alexandreroque/.nvm/versions/node/v15.14.0/include/node
 # automatic
 ?D = $(patsubst %/,%,$(dir $?))
@@ -56,7 +56,7 @@ __CFBundleIdentifier = com.microsoft.VSCode
 # environment
 INFOPATH = /opt/homebrew/share/info:
 # environment
-VSCODE_IPC_HOOK_EXTHOST = /var/folders/7s/gyb64k510938c8q1y1d_38lw0000gn/T/vscode-ipc-90eb0d14-35c3-413e-b432-3b447fc692d0.sock
+VSCODE_IPC_HOOK_EXTHOST = /var/folders/7s/gyb64k510938c8q1y1d_38lw0000gn/T/vscode-ipc-02188609-e91b-4f84-9d64-b1eb98d4b2fe.sock
 # environment
 VSCODE_CWD = /
 # environment
@@ -128,7 +128,6 @@ USER = alexandreroque
 # makefile
 .DEFAULT_GOAL := build
 # makefile (from `Makefile', line 8)
- 
 nightly := nightly-2022-05-20
 # makefile (from `Makefile', line 1)
 package = anoma
@@ -179,6 +178,7 @@ LC_ALL = C
 # default
 SUFFIXES := 
 # makefile (from `Makefile', line 14)
+ 
 wasms_for_tests := wasm_for_tests/wasm_source
 # default
 .INCLUDE_DIRS = /usr/local/include
@@ -195,7 +195,7 @@ CLICOLOR = 1
 # environment
 LANG = C
 # environment
-VSCODE_PID = 2794
+VSCODE_PID = 17863
 # variable set hash-table stats:
 # Load=90/1024=9%, Rehash=0, Collisions=3/122=2%
 
@@ -205,9 +205,9 @@ VSCODE_PID = 2794
 
 # Directories
 
-# . (device 16777231, inode 8913012): 43 files, no impossibilities.
+# . (device 16777231, inode 8913012): 44 files, no impossibilities.
 
-# 43 files, no impossibilities in 1 directories.
+# 44 files, no impossibilities in 1 directories.
 
 # Implicit Rules
 
@@ -318,7 +318,6 @@ build-test:
 	$(cargo) build --tests
 	
 
- 
 # Not a target:
 Makefile:
 #  Implicit rule search has been done.
@@ -395,6 +394,7 @@ test-unit:
 #  Implicit rule search has not been done.
 #  Modification time never checked.
 #  File has not been updated.
+ 
 #  commands to execute (from `Makefile', line 166):
 	$(cargo) test --no-default-features \
 	--features "wasm-runtime ABCI ibc-mocks-abci" \
@@ -521,7 +521,6 @@ clean:
 build-wasm-scripts-docker: build-wasm-image-docker
 #  Phony target (prerequisite of .PHONY).
 #  Implicit rule search has not been done.
- 
 #  File does not exist.
 #  File has not been updated.
 #  commands to execute (from `Makefile', line 211):
@@ -594,6 +593,7 @@ build-abci-plus-plus:
 	$(cargo) build --no-default-features --features "ABCI-plus-plus"
 	
 
+ 
 test-unit-abci-plus-plus:
 #  Implicit rule search has not been done.
 #  Modification time never checked.
@@ -720,12 +720,11 @@ install: tendermint
 
 # No general (`VPATH' variable) search path.
 
- 
 # # of strings in strcache: 1
 # # of strcache buffers: 1
 # strcache size: total = 4096 / max = 4096 / min = 4096 / avg = 4096
 # strcache free: total = 4087 / max = 4087 / min = 4087 / avg = 4087
 
-# Finished Make data base on Tue Jul  5 16:40:57 2022
+# Finished Make data base on Wed Jul  6 10:33:10 2022
 
  

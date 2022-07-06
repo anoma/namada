@@ -1,8 +1,8 @@
 # Getting started
 
-This guide assumes that the Anoma binaries are [installed](./install.md) and available on path. These are:
+This guide assumes that the Namada binaries are [installed](./install.md) and available on path. These are:
 
-- `anoma`: The main binary that can be used to interact with all the components of Anoma
+- `anoma`: The main binary that can be used to interact with all the components of Namada
 - `anoman`: The ledger and intent gossiper node
 - `anomac`: The client
 - `anomaw`: The wallet

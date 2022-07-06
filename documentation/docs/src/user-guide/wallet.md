@@ -1,12 +1,12 @@
-# The Anoma Wallet
+# The Namada Wallet
 
-The Anoma wallet allows you to store and use addresses and keys by their alias.
+The Namada wallet allows you to store and use addresses and keys by their alias.
 
 The wallet's state is stored under `.anoma/{chain_id}/wallet.toml` (with the default `--base-dir`), which will be created for you if it doesn't already exist when you run any command that accesses the wallet. A newly created wallet will be pre-loaded with some default addresses.
 
 For the ledger and intent gossip commands that use keys and addresses, you can enter their aliases as as defined in the wallet (case-sensitive).
 
-By default, keys are stored encrypted (unless the `--unsafe-dont-encrypt` flag is used). Currently, the Anoma client can load the password via:
+By default, keys are stored encrypted (unless the `--unsafe-dont-encrypt` flag is used). Currently, the Namada client can load the password via:
 
 - file, by exporting an ENV variable called `ANOMA_WALLET_PASSWORD_FILE` with value containing the path to a file containing the password.
 - env variable, by exporting a ENV variable called `ANOMA_WALLET_PASSWORD` with value of the actual password.
@@ -38,7 +38,7 @@ Note that this will also save an implicit address derived from this public key u
 
 ## 📇 Addresses
 
-All accounts in the Anoma ledger have a unique address, exactly one validity predicate and optionally any additional data in its dynamic storage sub-space.
+All accounts in the Namada ledger have a unique address, exactly one validity predicate and optionally any additional data in its dynamic storage sub-space.
 
 There are currently 3 types of account addresses:
 

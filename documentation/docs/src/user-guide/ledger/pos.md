@@ -1,6 +1,6 @@
 # 🔏 Interacting with the Proof-of-Stake system
 
-The Anoma Proof of Stake system uses the XAN token as the staking token. It features delegation to any number of validators and customizable validator validity predicates.
+The Namada Proof of Stake system uses the XAN token as the staking token. It features delegation to any number of validators and customizable validator validity predicates.
 
 The PoS system is implemented as an account with a validity predicate that governs the rules of the system. You can find its address in your wallet:
 

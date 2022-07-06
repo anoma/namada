@@ -44,9 +44,9 @@ sudo apt-get install -y make git-core libssl-dev pkg-config libclang-12-dev buil
 xcode-select --install
 ```
 
-Now, that you have all dependencies installed you can clone the source code from the [Anoma repository](https://github.com/anoma/anoma) and build it with:
+Now, that you have all dependencies installed you can clone the source code from the [Namada repository](https://github.com/anoma/namada) and build it with:
 
->⚠️ During internal and private testnets, checkout the latest testnet branch using `$ANOMA_TESTNET_BRANCH`.
+>⚠️ During internal and private testnets, checkout the latest testnet branch using `$NAMADA_TESTNET_BRANCH`.
 
 ```shell
 git clone https://github.com/anoma/anoma.git
@@ -56,14 +56,14 @@ make install
 
 ### From Binaries
 
->⚠️ During internal and private testnets, prebuilt binaries might not be available under our [Github releases page](https://github.com/anoma/anoma/releases).
+>⚠️ During internal and private testnets, prebuilt binaries might not be available under our [Github releases page](https://github.com/anoma/namada/releases).
 >We recommend you [build from source](#from-source) from the appropriate branch or commit.
 
 If you'd like to install Namada from binaries you will have to install some dependencies first: [Tendermint](https://docs.tendermint.com/master/introduction/install.html) `0.34.x` and GLIBC `v2.29` or higher.
 
 Let's install Tendermint.
 
-You can either follow the instructions on the [Tendermint guide](https://docs.tendermint.com/master/introduction/install.html) or download the `get_tendermint.sh` script from the [Anoma repository](https://github.com/anoma/anoma/blob/master/scripts/install/get_tendermint.sh) and execute it (will ask you for `root` access):
+You can either follow the instructions on the [Tendermint guide](https://docs.tendermint.com/master/introduction/install.html) or download the `get_tendermint.sh` script from the [Namada repository](https://github.com/anoma/namada/blob/master/scripts/install/get_tendermint.sh) and execute it (will ask you for `root` access):
 
 ```shell
 curl -LO https://raw.githubusercontent.com/anoma/anoma/master/scripts/install/get_tendermint.sh
@@ -79,14 +79,16 @@ Finally, you should have GLIBC `v2.29` or higher.
 
 **Ubuntu 18.04**: glibc has `v2.27` by default which is lower than the required version to run Namada. We recommend to directly [install from source](#from-source) or upgrade to Ubuntu 19.04, instead of updating glibc to the required version, since the latter way can be a messy and tedious task. In case, updating glibc would interest you this [website](http://www.linuxfromscratch.org/lfs/view/9.0-systemd/chapter05/glibc.html) gives you the steps to build the package from source.
 
-Now, that you have all dependencies installed you can download the latest binary release from our [releases page](https://github.com/anoma/anoma/releases) by choosing the appropriate architecture.
+Now, that you have all dependencies installed you can download the latest binary release from our [releases page](https://github.com/anoma/namada/releases) by choosing the appropriate architecture.
 
 >⚠️ Prebuilt binaries might not be available for a specific release or architecture, in this case you have to [build from source](#from-source).
 
+[fixme]: <> (update docker config as soon as Anoma is transferred fully to Namada)
 ## From Docker
 
 Go to [heliaxdev dockerhub account](https://hub.docker.com/r/heliaxdev/anoma) and pull the image.
 
+[fixme]: <> (update nix or remove it if it's not needed anymore)
 ## From Nix
 
 If you have [Nix](https://nixos.org/), you can get Anoma easily as a flake. For

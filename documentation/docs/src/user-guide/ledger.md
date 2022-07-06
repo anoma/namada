@@ -1,6 +1,6 @@
-# The Anoma Ledger
+# The Namada Ledger
 
-To start a local Anoma ledger node, run:
+To start a local Namada ledger node, run:
 
 ```shell
 anoma ledger
@@ -49,7 +49,7 @@ By default, this command will use the prebuilt user validity predicate (from the
 
 ## 💸 Token transactions and queries
 
-In Anoma, tokens are implemented as accounts with a token validity predicate. It checks that its total supply is preserved in any transaction that uses this token. Your wallet will be pre-loaded with some token addresses that are initialized in the genesis block.
+In Namada, tokens are implemented as accounts with a token validity predicate. It checks that its total supply is preserved in any transaction that uses this token. Your wallet will be pre-loaded with some token addresses that are initialized in the genesis block.
 
 You can see the tokens addresses known by the client when you query all tokens balances:
 
@@ -57,7 +57,7 @@ You can see the tokens addresses known by the client when you query all tokens b
 anoma client balance
 ```
 
-XAN is Anoma's native token. To obtain some tokens in a testnet, there is a special "faucet" account that allows anyone to withdraw up to 1000 of any token for a single transaction. You can find the address of this account in your wallet. To get some tokens from the faucet account:
+XAN is Namada's native token. To obtain some tokens in a testnet, there is a special "faucet" account that allows anyone to withdraw up to 1000 of any token for a single transaction. You can find the address of this account in your wallet. To get some tokens from the faucet account:
 
 ```shell
 anoma client transfer \

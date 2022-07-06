@@ -26,7 +26,7 @@ After generating your keys, the command will print something like this:
 Pre-genesis TOML written to .anoma/pre-genesis/1337-validator/validator.toml
 ```
 
-This file is the public configuration of your validator. You can safely share this file with the network's organizer, who is responsible for setting up and publishing the finalized genesis file and Anoma configuration for the chain.
+This file is the public configuration of your validator. You can safely share this file with the network's organizer, who is responsible for setting up and publishing the finalized genesis file and Namada configuration for the chain.
 
 Note that the wallet containing your private keys will also be written into this directory.
 

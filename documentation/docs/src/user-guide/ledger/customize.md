@@ -4,9 +4,9 @@ On this page, we'll cover how to tailor your account(s) to your use-case with cu
 
 We currently only support Rust for custom validity predicates and transactions via WASM, but expect many more options to be available in the future!
 
-## 👩🏽‍🏫 Anoma accounts primer
+## 👩🏽‍🏫 Namada accounts primer
 
-Instead of the common smart contract design, in Anoma, all the accounts follow the same basic principles. Each account has exactly one validity predicate. Any transaction that attempts to make some storage modifications will trigger validity predicates of each account whose storage has been modified by it. Validity predicates are stateless functions that decide if an account accepts the transaction.
+Instead of the common smart contract design, in Namada, all the accounts follow the same basic principles. Each account has exactly one validity predicate. Any transaction that attempts to make some storage modifications will trigger validity predicates of each account whose storage has been modified by it. Validity predicates are stateless functions that decide if an account accepts the transaction.
 
 Every account also has its dedicated key-value storage. The ledger encodes agnostic, it allows you to use the encoding of your preference for the storage values. Internally and for the pre-built validity predicates and transactions, we use [Borsh](https://github.com/near/borsh-rs), which allows you to simply derive the encoding from your data types. The storage keys are `/` separated path segments, where the first segment is always the address of the account to which the storage key belongs. In storage keys, addresses use a reserved prefix `#`.
 
@@ -24,7 +24,7 @@ Any transaction can attempt to make changes to the storage of any account(s). On
 
 This approach allows multiparty transactions to be applied atomically, without any a priority coordination. It also gives accounts complete and fine-grained control over how they can be used in transactions in themselves and in relation to other accounts.
 
-In fact, most of the functionality in the Anoma ledger is being built leveraging the simplicity and flexibility of this account system, from a simple fungible token to more complex accounts that integrate the Inter-blockchain Communication protocol and the Proof of Stake system.
+In fact, most of the functionality in the Namada ledger is being built leveraging the simplicity and flexibility of this account system, from a simple fungible token to more complex accounts that integrate the Inter-blockchain Communication protocol and the Proof of Stake system.
 
 ## ☑ Validity predicates
 
