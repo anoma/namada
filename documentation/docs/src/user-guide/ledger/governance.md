@@ -1,6 +1,6 @@
 # Introduction to governance
 
-The anoma governance mechanism gives users the possibility to upgrade the protocol dynamically.
+The Namada governance mechanism gives users the possibility to upgrade the protocol dynamically.
 There are two different mechanism to create a proposal:
 
 - On-chain: Proposal is voted on and tallied on-chain. This can optionally include proposal code to be executed if the proposal is accepted.

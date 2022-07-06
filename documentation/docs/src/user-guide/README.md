@@ -1,5 +1,5 @@
 # User Guide
 
-Welcome to Anoma user guide!
+Welcome to Namada user guide!
 
-This guide is intended to help you find how to install, operate and interact with the Anoma ledger node, the client and the wallet.
+This guide is intended to help you find how to install, operate and interact with the Namada ledger node, the client and the wallet.

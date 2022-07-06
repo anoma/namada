@@ -5,14 +5,14 @@
 Latest values regarding the testnet that would be useful to have in your shell:
 
 ```shell
-export ANOMA_TESTNET_CHAIN_ID='anoma-masp-0.3.51d2f83a8412b95'
-export ANOMA_TESTNET_BRANCH='internal/testnet-n1'
-export ANOMA_TESTNET_COMMIT='0184e64e044366ec370d1431ddf4691b4bd3a5b4'
+export NAMADA_TESTNET_CHAIN_ID='anoma-masp-0.3.51d2f83a8412b95'
+export NAMADA_TESTNET_BRANCH='internal/testnet-n1'
+export NAMADA_TESTNET_COMMIT='0184e64e044366ec370d1431ddf4691b4bd3a5b4'
 ```
 
 ## Installing Namada
 
-You can install Namada by following the instructions from the [Install User Guide](../user-guide/install.md). Note that the binaries should be built from `$ANOMA_TESTNET_BRANCH` rather than `master` or a release tag like `v0.5.0`.
+You can install Namada by following the instructions from the [Install User Guide](../user-guide/install.md). Note that the binaries should be built from `$NAMADA_TESTNET_BRANCH` rather than `master` or a release tag like `v0.5.0`.
 
 ## Setting up Namada
 
@@ -23,7 +23,7 @@ At this point, depending on your installation choice, we will assume that the `a
 To join the current testnet, you need to download the configuration files. This can be done easily with:
 
 ```shell
-anomac utils join-network --chain-id $ANOMA_TESTNET_CHAIN_ID
+anomac utils join-network --chain-id $NAMADA_TESTNET_CHAIN_ID
 ```
 
 It should output something like this where the chain id might differ:
