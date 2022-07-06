@@ -533,7 +533,7 @@ pub fn init_network(
             let alias = format!("{}-consensus-key", name);
             println!("Generating validator {} consensus key...", name);
             let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Common,
+                SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
             );
@@ -556,7 +556,7 @@ pub fn init_network(
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
             let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Common,
+                SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
             );
@@ -574,7 +574,7 @@ pub fn init_network(
                 name
             );
             let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Common,
+                SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
             );
@@ -589,7 +589,7 @@ pub fn init_network(
             let alias = format!("{}-protocol-key", name);
             println!("Generating validator {} protocol signing key...", name);
             let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Common,
+                SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
             );
@@ -748,7 +748,7 @@ pub fn init_network(
                     name
                 );
                 let (_alias, keypair) = wallet.gen_key(
-                    SchemeType::Common,
+                    SchemeType::Ed25519,
                     Some(name.clone()),
                     unsafe_dont_encrypt,
                 );
@@ -1040,7 +1040,7 @@ fn init_established_account(
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
         let (_alias, keypair) = wallet.gen_key(
-            SchemeType::Common,
+            SchemeType::Ed25519,
             Some(format!("{}-key", name.as_ref())),
             unsafe_dont_encrypt,
         );
