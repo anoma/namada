@@ -531,7 +531,7 @@ mod test_finalize_block {
     /// not appear in the queue of txs to be decrypted
     #[test]
     fn test_process_proposal_rejected_wrapper_tx() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_wrappers = vec![];
@@ -605,7 +605,7 @@ mod test_finalize_block {
     /// check that the correct event is returned.
     #[test]
     fn test_process_proposal_rejected_wrapper_tx() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         // create some wrapper txs
@@ -662,7 +662,7 @@ mod test_finalize_block {
     /// proposal
     #[test]
     fn test_process_proposal_rejected_decrypted_tx() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _) = setup();
         let keypair = gen_keypair();
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -711,7 +711,7 @@ mod test_finalize_block {
     /// check that the correct event is returned.
     #[test]
     fn test_process_proposal_rejected_decrypted_tx() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _) = setup();
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some(String::from("transaction data").as_bytes().to_owned()),
@@ -747,7 +747,7 @@ mod test_finalize_block {
     /// but the tx result contains the appropriate error code.
     #[test]
     fn test_undecryptable_returns_error_code() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _) = setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
@@ -804,7 +804,7 @@ mod test_finalize_block {
     /// but the tx result contains the appropriate error code.
     #[test]
     fn test_undecryptable_returns_error_code() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _) = setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
@@ -861,7 +861,7 @@ mod test_finalize_block {
     /// decrypted txs are de-queued.
     #[test]
     fn test_mixed_txs_queued_in_correct_order() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];

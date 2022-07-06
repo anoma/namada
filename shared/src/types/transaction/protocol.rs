@@ -33,7 +33,7 @@ mod protocol_txs {
 
     use super::*;
     use crate::proto::Tx;
-    use crate::types::ethereum_events::MultiSignedEthEvent;
+    use crate::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
 

@@ -1637,6 +1637,7 @@ pub async fn get_proposal_offline_votes(
         let file = File::open(&path).expect("Proposal file must exist.");
         let proposal_vote: OfflineVote = serde_json::from_reader(file)
             .expect("JSON was not well-formatted for offline vote.");
+
         let key = pk_key(&proposal_vote.address);
         let public_key = query_storage_value(client, &key)
             .await

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use anoma::types::ethereum_events::EthereumEvent;
 #[cfg(feature = "ABCI")]
 use anoma::types::hash::Hash;
 #[cfg(feature = "ABCI")]
@@ -13,7 +14,7 @@ use anoma::types::transaction::hash_tx;
 use futures::future::FutureExt;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::RequestBeginBlock;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tower::Service;
 #[cfg(not(feature = "ABCI"))]
 use tower_abci::{BoxError, Request as Req, Response as Resp};
@@ -49,6 +50,7 @@ impl AbcippShim {
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        eth_receiver: Option<UnboundedReceiver<EthereumEvent>>,
         db_cache: &rocksdb::Cache,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -62,6 +64,7 @@ impl AbcippShim {
                     config,
                     wasm_dir,
                     broadcast_sender,
+                    eth_receiver,
                     Some(db_cache),
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
