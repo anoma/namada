@@ -1582,7 +1582,7 @@ pub async fn get_proposal_votes(
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
             let voter_address = gov_storage::get_voter_address(&key)
-                .expect("Vote key should contains the voting address.")
+                .expect("Vote key should contain the voting address.")
                 .clone();
             if vote.is_yay() && validators.contains(&voter_address) {
                 let amount =
@@ -1592,7 +1592,7 @@ pub async fn get_proposal_votes(
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
                         .expect(
-                            "Vote key should contains the delegation address.",
+                            "Vote key should contain the delegation address.",
                         )
                         .clone();
                 let delegator_token_amount = get_bond_amount_at(

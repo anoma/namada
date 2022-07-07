@@ -56,16 +56,16 @@ impl Display for Hash {
     }
 }
 
-impl AsRef<[u8]> for Hash {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
 impl Deref for Hash {
     type Target = [u8; 32];
 
     fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<[u8]> for Hash {
+    fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }
@@ -95,16 +95,16 @@ impl From<Hash> for transaction::Hash {
     }
 }
 
+impl From<Hash> for TmHash {
+    fn from(hash: Hash) -> Self {
+        TmHash::Sha256(hash.0)
+    }
+}
+
 impl Hash {
     /// Compute sha256 of some bytes
     pub fn sha256(data: impl AsRef<[u8]>) -> Self {
         let digest = Sha256::digest(data.as_ref());
         Self(*digest.as_ref())
-    }
-}
-
-impl From<Hash> for TmHash {
-    fn from(hash: Hash) -> Self {
-        TmHash::Sha256(hash.0)
     }
 }

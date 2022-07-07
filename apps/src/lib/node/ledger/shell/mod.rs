@@ -32,6 +32,7 @@ use anoma::ledger::storage::{
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::chain::ChainId;
+use anoma::types::ethereum_events::EthereumEvent;
 use anoma::types::key::*;
 use anoma::types::storage::{BlockHeight, Key};
 use anoma::types::time::{DateTimeUtc, TimeZone, Utc};
@@ -63,7 +64,7 @@ use tendermint_proto_abci::abci::{Evidence, EvidenceType, ValidatorUpdate};
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::crypto::public_key;
 use thiserror::Error;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 #[cfg(not(feature = "ABCI"))]
 use tower_abci::{request, response};
 #[cfg(feature = "ABCI")]
@@ -76,7 +77,7 @@ use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
 #[allow(unused_imports)]
-use crate::wallet::ValidatorData;
+use crate::wallet::{ValidatorData, ValidatorKeys};
 use crate::{config, wallet};
 
 fn key_to_tendermint<PK: PublicKey>(
@@ -100,6 +101,8 @@ pub enum Error {
     GasOverflow,
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
+    #[error("{0}")]
+    Ethereum(super::ethereum_node::Error),
     #[error("Server error: {0}")]
     TowerServer(String),
     #[error("{0}")]
@@ -164,6 +167,7 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        ethereum_recv: UnboundedReceiver<EthereumEvent>,
     },
     Full,
     Seed,
@@ -175,6 +179,23 @@ impl ShellMode {
     pub fn get_validator_address(&self) -> Option<&address::Address> {
         match &self {
             ShellMode::Validator { data, .. } => Some(&data.address),
+            _ => None,
+        }
+    }
+
+    pub fn get_protocol_key(&self) -> Option<&common::SecretKey> {
+        match &self {
+            ShellMode::Validator {
+                data:
+                    ValidatorData {
+                        keys:
+                            ValidatorKeys {
+                                protocol_keypair, ..
+                            },
+                        ..
+                    },
+                ..
+            } => Some(protocol_keypair),
             _ => None,
         }
     }
@@ -234,6 +255,7 @@ where
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        eth_receiver: Option<UnboundedReceiver<EthereumEvent>>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -284,6 +306,7 @@ where
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
+                            ethereum_recv: eth_receiver.unwrap(),
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -302,6 +325,7 @@ where
                             },
                         },
                         broadcast_sender,
+                        ethereum_recv: eth_receiver.unwrap(),
                     }
                 }
             }
@@ -747,10 +771,19 @@ mod test_utils {
     }
 
     impl TestShell {
-        /// Returns a new shell paired with a broadcast receiver, which will
-        /// receives any protocol txs sent by the shell.
-        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>) {
+        /// Returns a new shell with
+        ///    - A broadcast receiver, which will receive any protocol txs sent
+        ///      by the shell.
+        ///    - A sender that can send Ethereum events into the ledger, mocking
+        ///      the Ethereum fullnode process
+        pub fn new() -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            UnboundedSender<EthereumEvent>,
+        ) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (eth_sender, eth_receiver) =
+                tokio::sync::mpsc::unbounded_channel();
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -764,12 +797,14 @@ mod test_utils {
                         ),
                         top_level_directory().join("wasm"),
                         sender,
+                        Some(eth_receiver),
                         None,
                         vp_wasm_compilation_cache,
                         tx_wasm_compilation_cache,
                     ),
                 },
                 receiver,
+                eth_sender,
             )
         }
 
@@ -846,8 +881,12 @@ mod test_utils {
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>) {
-        let (mut test, receiver) = TestShell::new();
+    pub(super) fn setup() -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        UnboundedSender<EthereumEvent>,
+    ) {
+        let (mut test, receiver, eth_receiver) = TestShell::new();
         test.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -856,7 +895,7 @@ mod test_utils {
             chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
-        (test, receiver)
+        (test, receiver, eth_receiver)
     }
 
     /// This is just to be used in testing. It is not
@@ -883,6 +922,7 @@ mod test_utils {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
+        let (_, receiver) = tokio::sync::mpsc::unbounded_channel();
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
@@ -893,6 +933,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender.clone(),
+            Some(receiver),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
@@ -941,7 +982,7 @@ mod test_utils {
 
         // Drop the shell
         std::mem::drop(shell);
-
+        let (_, receiver) = tokio::sync::mpsc::unbounded_channel();
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
@@ -951,6 +992,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender,
+            Some(receiver),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,

@@ -22,13 +22,13 @@ build:
 	$(cargo) build
 
 build-abci-plus-plus:
-	$(cargo) build --no-default-features --features "ABCI-plus-plus"
+	$(cargo) build --no-default-features --features "ABCI-plus-plus eth-fullnode"
 
 build-test:
 	$(cargo) build --tests
 
 build-test-abci-plus-plus:
-	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus"
+	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus eth-fullnode"
 
 build-release:
 	ANOMA_DEV=false $(cargo) build --release --package anoma_apps
@@ -63,7 +63,7 @@ clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --a
 clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --no-default-features --features "ABCI-plus-plus" -- -D warnings
 
 clippy:
-	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets --features eth-fullnode -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
@@ -72,7 +72,7 @@ clippy-abci-plus-plus:
 	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
-		--features "std testing ABCI-plus-plus" && \
+		--features "std testing ABCI-plus-plus eth-fullnode" && \
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./proof_of_stake/Cargo.toml \
 		--features "testing" && \
@@ -83,7 +83,7 @@ clippy-abci-plus-plus:
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
-		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" && \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus anoma_apps/eth-fullnode" && \
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
 		--manifest-path ./vm_env/Cargo.toml \
@@ -145,7 +145,7 @@ test-unit-abci-plus-plus:
 	$(cargo) test \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
-		--features "testing std ABCI-plus-plus" && \
+		--features "testing std ABCI-plus-plus eth-fullnode" && \
 	$(cargo) test --manifest-path ./proof_of_stake/Cargo.toml \
 		--features "testing" && \
 	$(cargo) test \
@@ -155,7 +155,7 @@ test-unit-abci-plus-plus:
 	$(cargo) test \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
-		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus anoma_apps/eth-fullnode" \
 		-- --skip e2e && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \
@@ -164,7 +164,7 @@ test-unit-abci-plus-plus:
 
 test-unit:
 	$(cargo) test --no-default-features \
-		--features "wasm-runtime ABCI ibc-mocks-abci" \
+		--features "wasm-runtime ABCI ibc-mocks-abci eth-fullnode" \
 		-- --skip e2e
 
 test-wasm:
