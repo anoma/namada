@@ -22,6 +22,8 @@ use anoma::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+mod transactions;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
@@ -120,10 +122,15 @@ where
             })
         }
         TxType::Protocol(ProtocolTx {
-            tx: ProtocolTxType::EthereumEvents(_),
+            tx: ProtocolTxType::EthereumEvents(events),
             ..
         }) => {
             tracing::debug!("Ethereum events received");
+            let _eth_msgs =
+                transactions::ethereum_events::calculate_eth_msgs_state(events);
+            // TODO: calculate mints/transfers
+            // TODO: apply transaction to storage
+            // TODO: return TxResult
             let gas_used = block_gas_meter
                 .finalize_transaction()
                 .map_err(Error::GasError)?;

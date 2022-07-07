@@ -1,0 +1,8 @@
+version: "3.9"
+services:
+  ledger:
+    build: .
+    platform: linux/amd64
+    ports:
+      - '127.0.0.1:8123:8123'
+      - '127.0.0.1:26657:26657'
