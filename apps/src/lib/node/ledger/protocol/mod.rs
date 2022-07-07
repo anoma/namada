@@ -22,6 +22,8 @@ use anoma::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+mod transactions;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
@@ -124,6 +126,10 @@ where
             ..
         }) => {
             tracing::debug!("Ethereum events received");
+            // TODO: calculate new EthMsgs from events
+            let _mints = transactions::ethereum_events::calculate_mints(vec![]);
+            // TODO: apply transaction to storage
+            // TODO: return TxResult
             let gas_used = block_gas_meter
                 .finalize_transaction()
                 .map_err(Error::GasError)?;

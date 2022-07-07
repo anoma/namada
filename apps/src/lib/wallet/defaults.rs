@@ -3,7 +3,6 @@
 use anoma::ledger::{eth_bridge, governance, pos};
 use anoma::types::address::Address;
 use anoma::types::key::*;
-#[cfg(feature = "dev")]
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
@@ -71,7 +70,6 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
     addresses
 }
 
-#[cfg(feature = "dev")]
 mod dev {
     use anoma::ledger::{governance, pos};
     use anoma::types::address::{self, Address};
