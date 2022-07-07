@@ -115,9 +115,9 @@ pub mod oracle_process {
                 }
                 if !oracle.connected() {
                     tracing::info!(
-                    "Ethereum oracle could not send events to the ledger; the \
-                     receiver has hung up. Shutting down"
-                );
+                        "Ethereum oracle could not send events to the ledger; \
+                         the receiver has hung up. Shutting down"
+                    );
                     return;
                 }
             };
@@ -125,19 +125,23 @@ pub mod oracle_process {
             if Uint256::from(MIN_CONFIRMATIONS) > latest_block {
                 if !oracle.connected() {
                     tracing::info!(
-                    "Ethereum oracle could not send events to the ledger; the \
-                     receiver has hung up. Shutting down"
-                );
+                        "Ethereum oracle could not send events to the ledger; \
+                         the receiver has hung up. Shutting down"
+                    );
                     return;
                 }
                 continue;
             }
-            let block_to_check = latest_block.clone() - MIN_CONFIRMATIONS.into();
-            // check for events with at least `[MIN_CONFIRMATIONS]` confirmations.
+            let block_to_check =
+                latest_block.clone() - MIN_CONFIRMATIONS.into();
+            // check for events with at least `[MIN_CONFIRMATIONS]`
+            // confirmations.
             for sig in signatures::SIGNATURES {
                 let addr: Address = match signatures::SigType::from(sig) {
                     signatures::SigType::Bridge => MINT_CONTRACT.0.into(),
-                    signatures::SigType::Governance => GOVERNANCE_CONTRACT.0.into(),
+                    signatures::SigType::Governance => {
+                        GOVERNANCE_CONTRACT.0.into()
+                    }
                 };
                 // fetch the events for matching the given signature
                 let mut events = loop {
@@ -157,7 +161,7 @@ pub mod oracle_process {
                                         block_to_check.clone(),
                                         log.data.0.as_slice(),
                                     )
-                                        .ok()
+                                    .ok()
                                 })
                                 .collect::<Vec<PendingEvent>>()
                         })
@@ -166,18 +170,18 @@ pub mod oracle_process {
                     }
                     if !oracle.connected() {
                         tracing::info!(
-                        "Ethereum oracle could not send events to the ledger; \
-                         the receiver has hung up. Shutting down"
-                    );
+                            "Ethereum oracle could not send events to the \
+                             ledger; the receiver has hung up. Shutting down"
+                        );
                         return;
                     }
                 };
                 pending.append(&mut events);
                 if !oracle.send(process_queue(&latest_block, &mut pending)) {
                     tracing::info!(
-                    "Ethereum oracle could not send events to the ledger; the \
-                     receiver has hung up. Shutting down"
-                );
+                        "Ethereum oracle could not send events to the ledger; \
+                         the receiver has hung up. Shutting down"
+                    );
                     return;
                 }
             }
@@ -191,7 +195,8 @@ pub mod oracle_process {
         latest_block: &Uint256,
         pending: &mut Vec<PendingEvent>,
     ) -> Vec<EthereumEvent> {
-        let mut pending_tmp: Vec<PendingEvent> = Vec::with_capacity(pending.len());
+        let mut pending_tmp: Vec<PendingEvent> =
+            Vec::with_capacity(pending.len());
         std::mem::swap(&mut pending_tmp, pending);
         let mut confirmed = vec![];
         for item in pending_tmp.into_iter() {
@@ -226,7 +231,8 @@ pub mod oracle_process {
         /// Set up an oracle with a mock web3 client that we can contr
         fn setup() -> TestPackage {
             let (admin_channel, client) = Web3::setup();
-            let (eth_sender, eth_receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (eth_sender, eth_receiver) =
+                tokio::sync::mpsc::unbounded_channel();
             let (abort, abort_recv) = channel();
             TestPackage {
                 oracle: Oracle {
@@ -361,7 +367,7 @@ pub mod oracle_process {
                 name: "Test".to_string(),
                 address: EthAddress([0; 20]),
             }
-                .encode();
+            .encode();
             admin_channel
                 .send(TestCmd::NewEvent {
                     event_type: MockEventType::NewContract,
@@ -420,7 +426,7 @@ pub mod oracle_process {
                 name: "Test".to_string(),
                 address: EthAddress([0; 20]),
             }
-                .encode();
+            .encode();
 
             // confirmed after 75 blocks
             let second_event = RawTransfersToEthereum {
@@ -450,7 +456,8 @@ pub mod oracle_process {
                 })
                 .expect("Test failed");
 
-            // increase block height so first event is confirmed but second is not.
+            // increase block height so first event is confirmed but second is
+            // not.
             admin_channel
                 .send(TestCmd::NewHeight(Uint256::from(102u32)))
                 .expect("Test failed");
@@ -476,7 +483,9 @@ pub mod oracle_process {
                 .expect("Test failed");
             // check correct event is received
             let event = eth_recv.blocking_recv().expect("Test failed");
-            if let EthereumEvent::TransfersToEthereum { mut transfers, .. } = event
+            if let EthereumEvent::TransfersToEthereum {
+                mut transfers, ..
+            } = event
             {
                 assert_eq!(transfers.len(), 1);
                 let transfer = transfers.remove(0);

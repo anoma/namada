@@ -46,8 +46,8 @@ pub mod eth_events {
 
     use anoma::types::address::Address;
     use anoma::types::ethereum_events::{
-        EthAddress, EthereumEvent, KeccakHash, TokenWhitelist, TransferToEthereum,
-        TransferToNamada, Uint,
+        EthAddress, EthereumEvent, KeccakHash, TokenWhitelist,
+        TransferToEthereum, TransferToNamada, Uint,
     };
     use anoma::types::token::Amount;
     use ethabi::decode;
@@ -70,7 +70,7 @@ pub mod eth_events {
 
     /// An event waiting for a certain number of confirmations
     /// before being sent to the ledger
-    pub( in super::super) struct PendingEvent {
+    pub(in super::super) struct PendingEvent {
         /// number of confirmations to consider this event finalized
         confirmations: Uint256,
         /// the block height from which this event originated
@@ -135,13 +135,15 @@ pub mod eth_events {
                     })
                 }
                 signatures::TRANSFER_TO_ETHEREUM_SIG => {
-                    RawTransfersToEthereum::decode(data).map(|txs| PendingEvent {
-                        confirmations: txs.confirmations.into(),
-                        block_height,
-                        event: EthereumEvent::TransfersToEthereum {
-                            nonce: txs.nonce,
-                            transfers: txs.transfers,
-                        },
+                    RawTransfersToEthereum::decode(data).map(|txs| {
+                        PendingEvent {
+                            confirmations: txs.confirmations.into(),
+                            block_height,
+                            event: EthereumEvent::TransfersToEthereum {
+                                nonce: txs.nonce,
+                                transfers: txs.transfers,
+                            },
+                        }
                     })
                 }
                 signatures::VALIDATOR_SET_UPDATE_SIG => {
@@ -151,7 +153,8 @@ pub mod eth_events {
                              bridge_validator_hash,
                              governance_validator_hash,
                          }| PendingEvent {
-                            confirmations: super::super::oracle::MIN_CONFIRMATIONS.into(),
+                            confirmations:
+                                super::super::oracle::MIN_CONFIRMATIONS.into(),
                             block_height,
                             event: EthereumEvent::ValidatorSetUpdate {
                                 nonce,
@@ -161,28 +164,35 @@ pub mod eth_events {
                         },
                     )
                 }
-                signatures::NEW_CONTRACT_SIG => ChangedContract::decode(data).map(
-                    |ChangedContract { name, address }| PendingEvent {
-                        confirmations: super::super::oracle::MIN_CONFIRMATIONS.into(),
+                signatures::NEW_CONTRACT_SIG => ChangedContract::decode(data)
+                    .map(|ChangedContract { name, address }| PendingEvent {
+                        confirmations: super::super::oracle::MIN_CONFIRMATIONS
+                            .into(),
                         block_height,
                         event: EthereumEvent::NewContract { name, address },
-                    },
-                ),
-                signatures::UPGRADED_CONTRACT_SIG => ChangedContract::decode(data)
-                    .map(|ChangedContract { name, address }| PendingEvent {
-                        confirmations: super::super::oracle::MIN_CONFIRMATIONS.into(),
-                        block_height,
-                        event: EthereumEvent::UpgradedContract { name, address },
                     }),
+                signatures::UPGRADED_CONTRACT_SIG => ChangedContract::decode(
+                    data,
+                )
+                .map(|ChangedContract { name, address }| PendingEvent {
+                    confirmations: super::super::oracle::MIN_CONFIRMATIONS
+                        .into(),
+                    block_height,
+                    event: EthereumEvent::UpgradedContract { name, address },
+                }),
                 signatures::UPDATE_BRIDGE_WHITELIST_SIG => {
                     UpdateBridgeWhitelist::decode(data).map(
-                        |UpdateBridgeWhitelist { nonce, whitelist }| PendingEvent {
-                            confirmations: super::super::oracle::MIN_CONFIRMATIONS.into(),
-                            block_height,
-                            event: EthereumEvent::UpdateBridgeWhitelist {
-                                nonce,
-                                whitelist,
-                            },
+                        |UpdateBridgeWhitelist { nonce, whitelist }| {
+                            PendingEvent {
+                                confirmations:
+                                    super::super::oracle::MIN_CONFIRMATIONS
+                                        .into(),
+                                block_height,
+                                event: EthereumEvent::UpdateBridgeWhitelist {
+                                    nonce,
+                                    whitelist,
+                                },
+                            }
                         },
                     )
                 }
@@ -227,16 +237,17 @@ pub mod eth_events {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToNamada`]
         fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, assets, receivers, amounts, confs]: [Token; 5] = decode(
-                &[
-                    ParamType::Uint(256),
-                    ParamType::Array(Box::new(ParamType::Address)),
-                    ParamType::Array(Box::new(ParamType::String)),
-                    ParamType::Array(Box::new(ParamType::Uint(256))),
-                    ParamType::Uint(32),
-                ],
-                data,
-            )
+            let [nonce, assets, receivers, amounts, confs]: [Token; 5] =
+                decode(
+                    &[
+                        ParamType::Uint(256),
+                        ParamType::Array(Box::new(ParamType::Address)),
+                        ParamType::Array(Box::new(ParamType::String)),
+                        ParamType::Array(Box::new(ParamType::Uint(256))),
+                        ParamType::Uint(32),
+                    ],
+                    data,
+                )
                 .map_err(|err| Error::Decode(format!("{:?}", err)))?
                 .try_into()
                 .map_err(|_| {
@@ -252,13 +263,13 @@ pub mod eth_events {
             if assets.len() != amounts.len() {
                 Err(Error::Decode(
                     "Number of source addresses is different from number of \
-                 transfer amounts"
+                     transfer amounts"
                         .into(),
                 ))
             } else if receivers.len() != assets.len() {
                 Err(Error::Decode(
                     "Number of source addresses is different from number of \
-                 target addresses"
+                     target addresses"
                         .into(),
                 ))
             } else {
@@ -322,21 +333,23 @@ pub mod eth_events {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToEthereum`]
         fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, assets, receivers, amounts, confs]: [Token; 5] = decode(
-                &[
-                    ParamType::Uint(256),
-                    ParamType::Array(Box::new(ParamType::Address)),
-                    ParamType::Array(Box::new(ParamType::Address)),
-                    ParamType::Array(Box::new(ParamType::Uint(256))),
-                    ParamType::Uint(32),
-                ],
-                data,
-            )
+            let [nonce, assets, receivers, amounts, confs]: [Token; 5] =
+                decode(
+                    &[
+                        ParamType::Uint(256),
+                        ParamType::Array(Box::new(ParamType::Address)),
+                        ParamType::Array(Box::new(ParamType::Address)),
+                        ParamType::Array(Box::new(ParamType::Uint(256))),
+                        ParamType::Uint(32),
+                    ],
+                    data,
+                )
                 .map_err(|err| Error::Decode(format!("{:?}", err)))?
                 .try_into()
                 .map_err(|_| {
                     Error::Decode(
-                        "TransferToERC signature should contain five types".to_string(),
+                        "TransferToERC signature should contain five types"
+                            .to_string(),
                     )
                 })?;
 
@@ -346,13 +359,13 @@ pub mod eth_events {
             if assets.len() != amounts.len() {
                 Err(Error::Decode(
                     "Number of source addresses is different from number of \
-                 transfer amounts"
+                     transfer amounts"
                         .into(),
                 ))
             } else if receivers.len() != assets.len() {
                 Err(Error::Decode(
                     "Number of source addresses is different from number of \
-                 target addresses"
+                     target addresses"
                         .into(),
                 ))
             } else {
@@ -502,21 +515,22 @@ pub mod eth_events {
                 ],
                 data,
             )
-                .map_err(|err| Error::Decode(format!("{:?}", err)))?
-                .try_into()
-                .map_err(|_| {
-                    Error::Decode(
-                        "UpdatedBridgeWhitelist signature should contain three types"
-                            .into(),
-                    )
-                })?;
+            .map_err(|err| Error::Decode(format!("{:?}", err)))?
+            .try_into()
+            .map_err(|_| {
+                Error::Decode(
+                    "UpdatedBridgeWhitelist signature should contain three \
+                     types"
+                        .into(),
+                )
+            })?;
 
             let tokens = tokens.parse_eth_address_array()?;
             let caps = caps.parse_amount_array()?;
             if tokens.len() != caps.len() {
                 Err(Error::Decode(
-                    "UpdatedBridgeWhitelist received different number of token \
-                 address and token caps"
+                    "UpdatedBridgeWhitelist received different number of \
+                     token address and token caps"
                         .into(),
                 ))
             } else {
@@ -755,72 +769,72 @@ pub mod eth_events {
                 &[ParamType::Address],
                 encode(&[Token::Address(erc.0.into())]).as_slice(),
             )
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
             assert_eq!(token.parse_eth_address().expect("Test failed"), erc);
 
             let [token]: [Token; 1] = decode(
                 &[ParamType::String],
                 encode(&[Token::String(address.to_string())]).as_slice(),
             )
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
             assert_eq!(token.parse_address().expect("Test failed"), address);
 
             let [token]: [Token; 1] = decode(
                 &[ParamType::Uint(64)],
                 encode(&[Token::Uint(u64::from(amount).into())]).as_slice(),
             )
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
             assert_eq!(token.parse_amount().expect("Test failed"), amount);
 
             let [token]: [Token; 1] = decode(
                 &[ParamType::Uint(32)],
                 encode(&[Token::Uint(confs.into())]).as_slice(),
             )
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
             assert_eq!(token.parse_u32().expect("Test failed"), confs);
 
             let [token]: [Token; 1] = decode(
                 &[ParamType::Uint(256)],
                 encode(&[Token::Uint(uint.clone().into())]).as_slice(),
             )
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
             assert_eq!(token.parse_uint256().expect("Test failed"), uint);
 
             let [token]: [Token; 1] = decode(
                 &[ParamType::Bool],
                 encode(&[Token::Bool(boolean)]).as_slice(),
             )
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
             assert_eq!(token.parse_bool().expect("Test failed"), boolean);
 
             let [token]: [Token; 1] = decode(
                 &[ParamType::String],
                 encode(&[Token::String(string.clone())]).as_slice(),
             )
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
             assert_eq!(token.parse_string().expect("Test failed"), string);
 
             let [token]: [Token; 1] = decode(
                 &[ParamType::FixedBytes(32)],
                 encode(&[Token::FixedBytes(keccak.0.to_vec())]).as_slice(),
             )
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
             assert_eq!(token.parse_keccak().expect("Test failed"), keccak);
         }
 
