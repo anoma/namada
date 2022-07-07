@@ -1,6 +1,6 @@
 use anoma::types::address::Address;
 use anoma::types::ethereum_events::{
-    EthereumAsset, EthereumEvent, TransferToNamada,
+    EthAddress, EthereumEvent, TransferToNamada,
 };
 use anoma::types::token::Amount;
 
@@ -10,7 +10,7 @@ pub struct EthMsg;
 pub struct EventHash;
 
 pub struct Mint {
-    asset: EthereumAsset,
+    asset: EthAddress,
     receiver: Address,
     amount: Amount,
     event_hash: EventHash,
@@ -31,7 +31,7 @@ pub(crate) fn calculate_mints(msgs: Vec<EthMsg>) -> Vec<Mint> {
 pub(crate) fn construct_mints(event: EthereumEvent) -> Vec<Mint> {
     let mut mints = vec![];
     match event {
-        EthereumEvent::TransfersToNamada(transfers) => {
+        EthereumEvent::TransfersToNamada { nonce, transfers } => {
             for transfer in transfers {
                 let TransferToNamada {
                     amount,
@@ -46,6 +46,7 @@ pub(crate) fn construct_mints(event: EthereumEvent) -> Vec<Mint> {
                 })
             }
         }
+        _ => panic!("unexpected event"),
     }
     mints
 }
