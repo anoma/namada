@@ -2,5 +2,19 @@
 authors = ["Heliax AG"]
 language = "en"
 multilingual = false
+site-url = "https://specs.namada.net"
 src = "src"
 title = "Namada Specifications"
+
+[output.html]
+edit-url-template = "https://github.com/anoma/namada/edit/master/documentation/spec/{path}"
+git-repository-url = "https://github.com/anoma/namada"
+
+[output.html.search]
+expand = true
+
+[output.katex]
+
+[output.linkcheck]
+
+[preprocessor.katex]
