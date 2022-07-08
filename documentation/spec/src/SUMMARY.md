@@ -16,6 +16,7 @@
     - [Proof-of-stake](./economics/proof-of-stake.md)
     - [Fee system](./economics/fee-system.md)
     - [Inflation system](./economics/inflation-system.md)
+    - [Public goods funding](./economics/public-goods-funding.md)
     - [Shielded pool incentives](./economics/shielded-pool-incentives.md)
 - [User interfaces](./user-interfaces.md)
     - [Web wallet](./user-interfaces/web-wallet-interface.md)
