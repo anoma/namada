@@ -1,6 +1,6 @@
-# Execution system
+# Execution
 
-Namada chain is running on the [Anoma ledger](https://docs.anoma.network/master/specs/ledger.html). Namada is set out to initially only leverage a selected subset of Anoma's features and e.g. Anoma Intent gossiper and Matchmaker systems will not be supported. The main component specified on this page is the Tendermint-based Anoma ledger with a WASM-based transaction and validity predicate system, that powers many other components of Namada (such as IBC, PoS and MASP integrations).
+The Namada chain is running on the [Anoma ledger](https://docs.anoma.network/master/specs/ledger.html). Namada is set out to initially only leverage a selected subset of Anoma's features and e.g. Anoma Intent gossiper and Matchmaker systems will not be supported. The main component specified on this page is the Tendermint-based Anoma ledger with a WASM-based transaction and validity predicate system, that powers many other components of Namada (such as IBC, PoS and MASP integrations).
 
 ## Anoma Ledger
 
@@ -21,6 +21,7 @@ Conceptually, a VP is a function from the transaction's data and the storage sta
 There are some native VPs for [internal transparent addresses](accounts.md#internal-transparent-addresses) that are built into the ledger. All the other VPs are implemented as [WASM programs](wasm-vm.md). One can build a custom VP using the [VP template](https://github.com/anoma/anoma/tree/master/wasm/vp_template) or use one of the pre-defined VPs.
 
 ## List of Default VP for Namada
+
 native:
 - Pos
 - IBC: main IBC VP
