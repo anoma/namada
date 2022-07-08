@@ -1,1 +1,0 @@
-# Trusted setup

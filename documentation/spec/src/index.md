@@ -47,40 +47,11 @@ provide throughput and user-friendliness guarantees which
 are more difficult to provide with a more general platform.
 Namada is designed so that it could evolve into such an instance.
 
-# Features
+## Layout of this specification
 
-## Base Ledger
-
-- [Consensus layer](./consensus.md)
-- [Execution system](./transparent-execution.md)
-- [Governance](./governance.md)
-- [Proof-of-stake](./proof-of-stake.md)
-
-## Cryptography
-
-- [Multi-asset shielded pool circuit](./masp.md)
-
-## Interoperability
-
-- [IBC integration](./ibc.md)
-- [Bidirectional Ethereum bridge](./ethereum-bridge.md)
-
-## Economics
-
-- [Shielded pool incentives](./masp/shielded-pool-incentives.md)
-- [Proof-of-stake reward distribution](./proof-of-stake/reward-distribution.md)
-- [Cubic slashing](./proof-of-stake/cubic-slashing.md)
-- [Inflation system](./inflation-system.md)
-- [Fee system](./fee-system.md)
-
-## User interfaces
-
-- [Web-based wallet](./web-wallet-interface.md)
-- [Web-based block explorer](./web-explorer-interface.md)
-
-# Later components
-
-- Mobile clients (Android/iOS)
-- More IBC adapters to different chains & ecosystems
-- Light clients, indexers with proofs
-- Private bridges
+The Namada specification documents are organised into five sub-sections:
+- [Base ledger](./base-ledger.md)
+- [Multi-asset shielded pool](./masp.md)
+- [Interoperability](./interoperability.md)
+- [Economics](./economics.md)
+- [User interfaces](./user-interfaces.md)

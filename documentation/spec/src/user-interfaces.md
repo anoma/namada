@@ -1,0 +1,3 @@
+- [Web-based wallet](./web-wallet-interface.md)
+- [Web-based block explorer](./web-explorer-interface.md)
+- [External integrations](./user-interfaces/external-integrations.md)
