@@ -1,4 +1,4 @@
-# Namada
+## Namada
 
 Welcome to the Namada specifications!
 
