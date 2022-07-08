@@ -4,7 +4,7 @@
 
 The protocol controls Namada token NAM (the native staking token) sourced from two locations:
 
-- Fees paid for transactions per the description in [fee system](../ledger/fee-system.md), 50 % goes to block production and 50 % goes to treasury.  
+- Fees paid for transactions per the description in [fee system](./fee-system.md), 50 % goes to block production and 50 % goes to treasury.  
 - Inflation (described below), as in tokens directly printed by the protocol (which we can do arbitrarily), where these tokens then flow to many different sinks:
 
 1. Proof-of-stake rewards, which are paid into the reward distribution mechanism in order to distribute them to validators and delegators.
