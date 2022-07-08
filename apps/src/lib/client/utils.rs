@@ -740,26 +740,6 @@ pub fn init_network(
     let genesis_path = global_args
         .base_dir
         .join(format!("{}.toml", chain_id.as_str()));
-    let wasm_dir = global_args
-        .wasm_dir
-        .as_ref()
-        .cloned()
-        .or_else(|| {
-            if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-                let wasm_dir: PathBuf = wasm_dir.into();
-                Some(wasm_dir)
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| config::DEFAULT_WASM_DIR.into());
-    if wasm_dir.is_absolute() {
-        eprintln!(
-            "The arg `--wasm-dir` cannot be an absolute path. It is nested \
-             inside the chain directory."
-        );
-        cli::safe_exit(1);
-    }
 
     // Write the genesis file
     genesis_config::write_genesis_config(&config_clean, &genesis_path);
@@ -776,7 +756,7 @@ pub fn init_network(
     fs::rename(&temp_dir, &chain_dir).unwrap();
 
     // Copy the WASM checksums
-    let wasm_dir_full = chain_dir.join(&wasm_dir);
+    let wasm_dir_full = chain_dir.join(&config::DEFAULT_WASM_DIR);
     fs::create_dir_all(&wasm_dir_full).unwrap();
     fs::copy(
         &wasm_checksums_path,
@@ -800,15 +780,6 @@ pub fn init_network(
         // to `chain_id`
         std::fs::rename(&temp_validator_chain_dir, &validator_chain_dir)
             .unwrap();
-
-        // Copy the WASM checksums
-        let wasm_dir_full = validator_chain_dir.join(&wasm_dir);
-        fs::create_dir_all(&wasm_dir_full).unwrap();
-        fs::copy(
-            &wasm_checksums_path,
-            wasm_dir_full.join(config::DEFAULT_WASM_CHECKSUMS_FILE),
-        )
-        .unwrap();
 
         // Write the genesis and global config into validator sub-dirs
         genesis_config::write_genesis_config(
