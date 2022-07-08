@@ -1,6 +1,6 @@
-# MASP
+## Multi-asset shielded pool
 
-The multi-asset shielded pool is an extension to the Sapling circuit which adds support for sending arbitrary assets.
+The multi-asset shielded pool (MASP) is an extension to the Sapling circuit which adds support for sending arbitrary assets.
 
 See the following documents:
 - [Cryptographic specification](https://github.com/anoma/masp/blob/main/docs/multi-asset-shielded-pool.pdf)
