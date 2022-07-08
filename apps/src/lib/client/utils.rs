@@ -781,6 +781,15 @@ pub fn init_network(
         std::fs::rename(&temp_validator_chain_dir, &validator_chain_dir)
             .unwrap();
 
+        // Copy the WASM checksums
+        let wasm_dir_full = validator_chain_dir.join(&config::DEFAULT_WASM_DIR);
+        fs::create_dir_all(&wasm_dir_full).unwrap();
+        fs::copy(
+            &wasm_checksums_path,
+            wasm_dir_full.join(config::DEFAULT_WASM_CHECKSUMS_FILE),
+        )
+        .unwrap();
+
         // Write the genesis and global config into validator sub-dirs
         genesis_config::write_genesis_config(
             &config,
