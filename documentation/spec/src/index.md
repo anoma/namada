@@ -1,6 +1,4 @@
-# V1
-
-## What is Anoma v1?
+# Namada
 
 Namada is the first release protocol version and the first fractal instance of the Anoma protocol.
 Namada is a sovereign proof-of-stake blockchain, using Tendermint BFT consensus,
@@ -53,32 +51,32 @@ Namada is designed so that it could evolve into such an instance.
 
 ## Base Ledger
 
-- [Consensus and P2P layer](../architecture/consensus/tendermint.md)
-- [Execution system](../architecture/ledger/transparent-execution.md)
-- [Governance](../architecture/governance/signaling.md)
-- [Proof-of-stake](../architecture/economics/proof-of-stake.md)
+- [Consensus layer](./consensus.md)
+- [Execution system](./transparent-execution.md)
+- [Governance](./governance.md)
+- [Proof-of-stake](./proof-of-stake.md)
 
 ## Cryptography
 
-- [Multi-asset shielded pool circuit](../architecture/ledger/shielded-execution/masp.md)
+- [Multi-asset shielded pool circuit](./masp.md)
 
 ## Interoperability
 
-- [IBC integration](../architecture/interoperability/ibc.md)
-- [Bidirectional Ethereum bridge](../architecture/interoperability/ethereum-bridge.md)
+- [IBC integration](./ibc.md)
+- [Bidirectional Ethereum bridge](./ethereum-bridge.md)
 
 ## Economics
 
-- [Shielded pool incentives](../architecture/ledger/shielded-execution/masp/shielded-pool-incentives.md)
-- [Proof-of-stake reward distribution](../architecture/economics/proof-of-stake/reward-distribution.md)
-- [Cubic slashing](../architecture/economics/proof-of-stake/cubic-slashing.md)
-- [Inflation system](../architecture/economics/inflation-system.md)
-- [Fee system](../architecture/ledger/fee-system.md)
+- [Shielded pool incentives](./masp/shielded-pool-incentives.md)
+- [Proof-of-stake reward distribution](./proof-of-stake/reward-distribution.md)
+- [Cubic slashing](./proof-of-stake/cubic-slashing.md)
+- [Inflation system](./inflation-system.md)
+- [Fee system](./fee-system.md)
 
 ## User interfaces
 
-- [Web-based wallet](../architecture/clients/web-wallet-interface.md)
-- [Web-based block explorer](../architecture/clients/web-explorer-interface.md)
+- [Web-based wallet](./web-wallet-interface.md)
+- [Web-based block explorer](./web-explorer-interface.md)
 
 # Later components
 
