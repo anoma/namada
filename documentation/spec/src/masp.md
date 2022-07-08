@@ -7,3 +7,4 @@ See the following documents:
 - [Ledger integration](./masp/ledger-integration.md)
 - [Shielded pool incentives](./masp/shielded-pool-incentives.md)
 - [Burn and mint](./masp/burn-and-mint.md)
+- [Convert circuit](./masp/convert-circuit.md)

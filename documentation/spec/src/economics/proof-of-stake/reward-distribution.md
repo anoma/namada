@@ -26,18 +26,15 @@ $$
 D \rightarrow D( 1 + r_V(e)/s_V(e))
 $$
 where $r_V(e)$ and $s_V(e)$ respectively denote the reward and stake of validator $V$ at epoch $e$.
-- Similarly, multiply the validator's voting power by the same factor $( 1 + r_V(e)/s_V(e))$, which should now equal the sum of their revised-amount delegations.
+- Similarly, multiply the validator's voting power by the same factor $(1 + r_V(e)/s_V(e))$, which should now equal the sum of their revised-amount delegations.
 
 In this system, rewards are automatically rebonded to delegations, increasing the delegation amounts and validator voting powers accordingly.
 
 However, we wish to implement this without actually needing to iterate over all delegations each block, since this is too computationally expensive. We can exploit this constant multiplicative factor $(1  + r_V(e) / s_V(e))$ which does not vary per delegation to perform this calculation lazily, storing only a constant amount of data per validator per epoch, and calculate revised amounts for each individual delegation only when a delegation changes. 
 
-We will demonstrate this for a delegation $D$ to a validator $V$.Let $s_D(e)$ denote the stake of $D$ at epoch $e$.
+We will demonstrate this for a delegation $D$ to a validator $V$. Let $s_D(e)$ denote the stake of $D$ at epoch $e$.
 
-
-
-
-For two epochs $m$ and $n$ with $m<n$, define the function $p$ as  
+For two epochs $m$ and $n$ with $m<n$, define the function $p$ as
 
 $$
 p(n, m) = \prod_{e = m}^{n} \Big(1 + \frac{r_V(e)} {s_V(e)}\Big).
@@ -69,9 +66,91 @@ $$
 
 Clearly, the quantity $p_n/p_m$ does not depend on the delegation $D$. Thus, for a given validator, we need only store this product $p_e$ at each epoch $e$, with which updated amounts for all delegations can be calculated.
 
+The product $p_e$ at the end of each epoch $e$ is updated as follows.
+```haskell=
+
+updateProducts 
+:: HashMap<Address, HashMap<Epoch, Float>> 
+-> HashSet<Address> 
+-> Epoch 
+-> HashMap<BondId, Token::amount>>
+
+updateProducts validatorProducts activeSet currentEpoch = 
+	let stake = PoS.readValidatorTotalDeltas validator currentEpoch
+        reward = PoS.reward stake currentEpoch
+		entries = lookup validatorProducts validator
+	    lastProduct = lookup entries (Epoch (currentEpoch - 1))
+	in insert currentEpoch (product*(1+rsratio)) entries
+	
+```
+
+
+<!--
+```rust=
+	pub update_products (validator_products: HashMap<Address, HashMap <Epoch, Product>>, active_set: HashSet<Address>, current_epoch: Epoch ) ->  HashMap<Epoch, HashMap<BondId, Token::amount>> {
+	    for validator in active_set {
+		let stake = pos::read_validator_total_deltas(validator, current_epoch);
+		let reward = pos::reward(stake, current_epoch);
+		let last_product = validator_products.entry(validator).entry(Epoch {current_epoch.0 - 1});
+		validator_products.entry(validator)
+		    .or_default()
+		    .and_modify(|rsratio| rsratio.insert(current_epoch, product(last_product, RewardStakeRatio{ reward, stake})));
+	    }
+	    bonds
+	}
+	pub fn product (product: Product, rsratio: RewardStakeRatio) -> Product {
+	    product*(1+ rsratio.reward/rsratio.stake)
+	}
+```
+-->
+
+In case a delegator wishes to withdraw delegation(s), then the proportionate rewards are appropriated using the aforementioned scheme, which is implemented by the following function.
+
+```haskell=
+withdrawalAmount 
+:: HashMap<Address, HashMap <Epoch, Product>> 
+-> BondId 
+->  [(Epoch, Delegation)] 
+-> Token::amount
+
+withdrawalAmount validatorProducts bondId unbonds = 
+	sum [stake * endp/startp | (endEpoch, unbond) <- unbonds, 
+	                           let epochProducts = lookup (validator bondId)
+								                   validatorProducts, 
+	                           let startp = lookup (startEpoch unbond) 
+							                epochProducts, 
+	                           let endp = lookup endEpoch epochProducts, 
+	                           let stake =  delegation unbond]
+	
+```
+<!-- ```rust=
+  pub fn withdrawal_amount (validator_products: HashMap<Address, HashMap <Epoch, Product>>,  bond_id: BondId, unbonds: Iterator<(Epoch, Delegation)>) -> Token::amount {
+	let mut withdrawn = 0;
+	for (end_epoch, unbond) in unbonds {
+	    let pstart = validator_products.get_product(unbond.start_epoch, bond_id.validator);
+	    let pend = validator_products.get_product(end_epoch, bond_id.validator);
+	    let stake = unbond.delegation;
+	    withdrawn += stake * pend/pstart;
+	}
+	withdrawn
+    }
+```
+-->
+
 ## Commission
 
-Commission is implemented as a change to $R_{e, i}$. Validators can charge any commission they wish (in $[0, 1]$). The commission is paid directly to the account indicated by the validator.
+Commission is charged by a validator on the rewards coming from delegations. These are set as percentages by the validator, who may charge any commission they wish between 0-100%. 
+
+Let $c_V(e)$ be the commission rate for a delegation $D$ to a validator $V$ at epoch $e$. The expression for the product $p_n$ we have introduced earlier can be modified as
+
+$$ p_n = \prod_{e = 0}^{n} \Big(1 + (1-c_V(e))\frac{r_V(e)} {s_V(e)} \Big). $$
+
+in order to calculate the new rewards given out to delegators during withdrawal. Thus the commission charged per epoch is retained by the validator and remains untouched upon withdrawal by the delegator. 
+
+The commission rate $c_V(e)$ is the same for all delegations to a validator $V$ in a given epoch $e$, including for self-bonds. The validator can change the commission rate at any point, subject to a maximum rate of change per epoch, which is a constant specified when the validator is created and immutable once validator creation has been accepted.
+
+While rewards are given out at the end of every epoch, voting power is only updated after the pipeline offset. According to the [proof-of-stake system](bonding-mechanism.md#epoched-data),  at the current epoch `e`, the validator sets an only be updated for epoch `e + pipeline_offset`, and it should remain unchanged from epoch `e` to `e + pipeline_offset - 1`. Updating voting power in the current epoch would violate this rule.
+
 
 ## Slashes
 
@@ -81,6 +160,8 @@ This can be implemented as a negative inflation rate for a particular block.
 
 Instant redelegation is not supported. Redelegations must wait the unbonding period.
 
-## State management
+<!--## State management
 
-Each $entry_{v,i}$ can be reference-counted by the number of delegations created during that epoch which might need to reference it. As soon as the number of delegations drops to zero, the entry can be deleted.
+Each $entry_{v,i}$ can be reference-counted by the number of delegations created during that epoch which might need to reference it. As soon as the number of delegations drops to zero, the entry can be deleted.-->
+
+

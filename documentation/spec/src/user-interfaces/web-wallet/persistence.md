@@ -1,5 +1,3 @@
-# Web Wallet
-
 ## Persistence of User Wallet
 
 The state of the user's wallet, consisting of their master seed, along with any accounts derived from that seed, should be stored locally in a safe manner. As this requires the use of `localStorage`, all data should be encrypted.

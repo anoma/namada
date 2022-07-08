@@ -361,7 +361,11 @@ Below, the conditions necessary to maintain consistency between the MASP validit
     * its value must equal that of the containing transfer - this prevents replay attacks altering transfer amounts
     * its asset type must be derived from the token address raw bytes - this prevents replay attacks altering transfer asset types
       * the derivation must be done as specified in `0.3 Derivation of Asset Generator from Asset Identifer`
-* If the source address is the MASP validity predicate, then no transparent inputs are permitted in the shielded transaction
+* If the source address is the MASP validity predicate, then:
+  * no transparent inputs are permitted in the shielded transaction
+  * the transparent transaction value pool's amount must equal the containing wrapper transaction's fee amount
+  * the transparent transaction value pool's asset type must be derived from the containing wrapper transaction's fee token
+    * the derivation must be done as specified in `0.3 Derivation of Asset Generator from Asset Identifer`
 * If the source address is not the MASP validity predicate, then:
   * there must be exactly one transparent input in the shielded transaction and:
     * its value must equal that of amount in the containing transfer - this prevents stealing/losing funds from/to the pool
@@ -372,6 +376,8 @@ Below, the conditions necessary to maintain consistency between the MASP validit
 Below are miscellaneous remarks on the capabilities and limitations of the current MASP implementation:
 * The gas fees for shielded transactions are charged to the signer just like it is done for transparent transactions
   * As a consequence, an amount exceeding the gas fees must be available in a transparent account in order to execute an unshielding transaction - this prevents denial of service attacks
+* Using the MASP sentinel transaction key for transaction signing indicates that gas be drawn from the transaction's transparent value pool
+  * In this case, the gas will be taken from the MASP transparent address if the shielded transaction is proven to be valid
 
 ## Multi-Asset Shielded Pool Specification Differences from Zcash Protocol Specification
 The [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/anoma/masp/main/docs/multi-asset-shielded-pool.pdf) referenced above is in turn an extension to the [Zcash Protocol Specification](https://zips.z.cash/protocol/protocol.pdf). Below, the changes from the Zcash Protocol Specification assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
