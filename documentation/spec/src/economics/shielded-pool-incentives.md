@@ -12,4 +12,5 @@ Incentive mechanisms are also dangerous, as they give users reason to craft part
 
 (to be written up: formal definition of "privacy set" used for the incentives here)
 
-(to be written up: Joe's proposal)
+<!--(to be written up: Joe's proposal)-->
+The total incetives that are paid out, $I_L$, is minted each epoch based on the current parameters and are calculated according to the [inflation model](../../../economics/inflation-system.md). This total is then distributed evenly among recipients. 
