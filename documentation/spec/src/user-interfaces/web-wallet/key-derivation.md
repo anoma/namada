@@ -1,5 +1,3 @@
-# Web Wallet
-
 ## Key Derivation (transparent addresses)
 
 Given a master seed (a 12 or 24 word `bip39` mnemonic), the user should be able to derive additional accounts deterministically.

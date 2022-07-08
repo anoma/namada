@@ -1,14 +1,18 @@
 # Ethereum bridge
 
-The Namada - Ethereum bridge exists to mint wrapped ETH tokens on Namada which naturally
-can be redeemed on Ethereum at a later time. Furthermore, it allows the
-minting of wrapped tokens on Ethereum backed by escrowed assets on Namada.
+The Namada - Ethereum bridge exists to mint ERC20 tokens on Namada 
+which naturally can be redeemed on Ethereum at a later time. Furthermore, it 
+allows the minting of wrapped tokens on Ethereum backed by escrowed assets on 
+Namada.
 
 The Namada Ethereum bridge system consists of:
-* Ethereum state inclusion onto Namada.
-* A set of validity predicates on Namada which roughly implements [ICS20](https://docs.cosmos.network/v0.42/modules/ibc/) fungible token transfers.
+* An Ethereum full node run by each Namada validator, for including relevant 
+  Ethereum events into Namada.
+* A set of validity predicates on Namada which roughly implements 
+  [ICS20](https://docs.cosmos.network/v0.42/modules/ibc/) fungible token 
+  transfers.
 * A set of Ethereum smart contracts.
-* A Namada bridge process
+* A relayer for submitting transactions to Ethereum
 
 This basic bridge architecture should provide for almost-Namada consensus
 security for the bridge and free Ethereum state reads on Namada, plus
@@ -19,170 +23,221 @@ Ethereum side.
 On Namada, the validators are full nodes of Ethereum and their stake is also
 accounting for security of the bridge. If they carry out a forking attack
 on Namada to steal locked tokens of Ethereum their stake will be slashed on Namada.
-On the Ethereum side, we will add a limit to the amount of ETH that can be
+On the Ethereum side, we will add a limit to the amount of assets that can be
 locked to limit the damage a forking attack on Namada can do. To make an attack
-more cumbersome we will also add a limit on how fast wrapped ETH can be
-redeemed. This will not add more security, but rather make the attack more
-inconvenient.
+more cumbersome we will also add a limit on how fast wrapped Ethereum assets can
+be redeemed from Namada. This will not add more security, but rather make the 
+attack more inconvenient.
 
-## Ethereum State Inclusion
-We want to store data identifying which Ethereum blocks have been seen
-and validated by at least 2/3 of the staking validators in the blockchain storage.
-The data stored from each Ethereum block will be:
-* The block header
-* The block hash
-* Messages from the Ethereum smart contracts relevant
-  to the bridge.
-  We may also we to include Merkle proofs of inclusion of
-  these messages in the relevant blocks. We might also implement policies to
-  prune old/irrelevant data or do checkpointing.
+## Ethereum Events Attestation
+We want to store events from the smart contracts of our bridge onto Namada.
+We need to have consensus on these events, we will only include those that 
+have been seen and validated by at least 2/3 of the staking validators in
+the blockchain storage.
 
-Each piece of block data should have a list of the validators that have seen
-this block and the current amount of stake associated with it. This
+There will be multiple types of events emitted. Validators should
+ignore improperly formatted events. Raw events from Ethereum are converted to a 
+Rust enum type (`EthereumEvent`) by Namada validators before being included 
+in vote extensions or stored on chain.
+
+```rust
+pub enum EthereumEvent {
+    // we will have different variants here corresponding to different types
+    // of raw events we receive from Ethereum
+    TransfersToNamada(Vec<TransferToNamada>)
+    // ...
+}
+```
+
+Each event should have a list of the validators that have seen
+this event and the current amount of stake associated with it. This
 will need to be appropriately adjusted across epoch boundaries. However,
-once a block has been seen by 2/3 of the staking validators, it is locked into a
-`seen` state. Thus, even if after an epoch that block has no longer been
-reported as seen by 2/3 of the new staking validators set, it is still
+once an event has been seen by 2/3 of the voting power, it is locked into a
+`seen` state. Thus, even if after an epoch that event has no longer been
+reported as seen by 2/3 of the new staking validators voting power, it is still
 considered as `seen`.
 
-To make this easy, we take the approach of always overwriting the state with
-the new state rather than applying state diffs. The storage keys involved
-are:
+Each event from Ethereum should include the minimum number of confirmations
+necessary to be considered seen. Validators should not vote to include events
+that have not met the required number of confirmations. Furthermore, validators
+should not look at events that have not reached protocol specified minimum
+number of confirmations (regardless of what is specified in an event). This 
+constant may be changeable via governance. Voting on unconfirmed events is
+considered a slashable offence.
+
+### Storage
+To make including new events easy, we take the approach of always overwriting 
+the state with the new state rather than applying state diffs. The storage 
+keys involved are:
 ```
-/eth_block/$block_hash/header : Vec<u8>
-/eth_block/$block_hash/messages : Vec<Vec<u8>>
-/eth_block/$block_hash/seen_by : Vec<Address>
-/eth_block/$block_hash/voting_power: u64
-/eth_block/$block_hash/seen: bool
-/eth_block/$block_hash/? : [u8; 32]
-# not yet decided
-/eth_block/$block_hash/merkle_proofs : Vec<Vec<u8>>
+# all values are Borsh-serialized
+/eth_msgs/$msg_hash/body : EthereumEvent
+/eth_msgs/$msg_hash/seen_by : Vec<Address>
+/eth_msgs/$msg_hash/voting_power: (u64, u64)  # reduced fraction < 1 e.g. (2, 3)
+/eth_msgs/$msg_hash/seen: bool
 ```
 
-For every Namada block proposal, the vote of a validator should include
-the headers, hash, & smart contract messages (possibly with Merkle proofs)
-of the Ethereum blocks they have seen via their full node such that:
+`$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant 
+`EthereumEvent`.
 
-1. Has not been marked as `seen` by Namada
-2. The storage value `/eth_block/$block_hash/seen_by` does not include their
+Changes to this `/eth_msgs` storage subspace are only ever made by internal transactions crafted 
+and applied by all nodes based on the aggregate of vote extensions for the last Tendermint round. That is, changes to `/eth_msgs` happen 
+in block `n+1` in a deterministic manner based on the vote extensions of the Tendermint 
+round for block `n`.
+
+The `/eth_msgs` storage subspace does not belong to any account and cannot be 
+modified by transactions submitted from outside of the ledger via Tendermint. 
+The storage will be guarded by a special validity predicate - `EthSentinel` - 
+that is part of the verifier set by default for every transaction, but will be 
+removed by the ledger code for the specific permitted transactions that are 
+allowed to update `/eth_msgs`.
+
+### Including events into storage
+For every Namada block proposal, the vote extension of a validator should include
+the events of the Ethereum blocks they have seen via their full node such that:
+1. The storage value `/eth_msgs/$msg_hash/seen_by` does not include their
    address.
-3. Is a descendant of a block they have seen (even if it is not marked `seen`)
+2. It's correctly formatted.
+3. It's reached the required number of confirmations on the Ethereum chain
 
-After a Namada block is committed, the next block proposer receives the
-aggregate of the vote extensions. From that, they should craft the proposed
-state change of the above form. They subsequently include a tx to that end
-in their block proposal. This aggregated state change needs to be validated
-by at least 2/3 of the staking validators as usual.
-
-## Namada Validity Predicates
-
-### Minting wrapped ETH tokens on Namada
-Namada requires a validity predicate with dedicated storage to mint wrapped
-ETH. This validity predicate should be called on every inclusion of Ethereum
-state above. Its storage contains a queue of messages from the Ethereum
-bridge contracts. It also mints corresponding assets on Namada, where the asset denomination corresponds to
-`{token address on ethereum} || {minimum number of confirmations}`.
-
-The minimum number of confirmations indicated in the outgoing Ethereum message
-(maybe defaulting to 25 or 50 if unspecified) specifies the minimum number of
-confirmations in block depth that must be reached before the assets will be
-minted on Namada. This is the purpose of the message queue for this validity
-predicate.
-
-This queue contains instances of the `MintEthToken` struct below.
+Each event that a validator is voting to include must be individually signed by 
+them. The vote extension data field will be a Borsh-serialization of something 
+like the following.
 ```rust
-/// The token address for wrapped ETH tokens
-const WRAPPED_ETH_ADDRESS: Address = ... 
-pub struct WrappedETHAddress;
-pub struct NamAddress(Address);
+pub struct VoteExtension(Vec<SignedEthEvent>);
 
-pub trait MintingAddress {
-    fn get_address(&self) -> &Address;
+/// A struct used by validators to sign that they have seen a particular
+/// ethereum event. These are included in vote extensions
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct SignedEthEvent {
+    /// The address of the signing validator
+    signer: Address,
+    /// The proportion of the total voting power held by the validator
+    power: FractionalVotingPower,
+    /// The event being signed and the block height at which
+    /// it was seen. We include the height as part of enforcing
+    /// that a block proposer submits vote extensions from
+    /// **the previous round only**
+    event: Signed<(EthereumEvent, BlockHeight)>,
 }
-
-impl MintingAddress for WrappedETHAddress {
-    fn get_address(&self) -> &Address {
-        &WRAPPED_ETH_ADDRESS
-    }
-}
-
-impl MintingAddress for NamAddress {
-    fn get_address(&self) -> &Address {
-        &self.0
-    }
-}
-
-/// Generic struct for transferring value from Ethereum
-struct TransferFromEthereum<Token: MintingAddress> {
-    /// token address on Ethereum
-    ethereum_address: Address,
-    /// the address on Namada receiving the tokens
-    receiver: Address,
-    /// The Namada token that will be minted
-    token: Token, 
-    /// the amount of ETH token to mint
-    amount: Amount,
-    /// minimum number of confirmations needed for mints
-    min_confirmations: u8,
-    /// height of the block at which the message appeared
-    height: u64,
-    /// the hash & height of the last descendant block marked as `seen`
-    latest_descendant: ([u8; 32], u64)
-}
-
-impl TransferFromEthereum {
-    /// Update the hash and height of the block `B` marked as `seen` in Namada
-    /// storage such that 
-    ///   1. `B` is a descendant of the block containing the original message
-    ///   2. `B` has the maximum height of all blocks satisfying 1.
-    fn update_latest_descendant(&mut self, hash: [u8; 32], height: u64) {
-        if height > self.latest_descendant.1 {
-            self.latest_descendant = (hash, height);    
-        }
-    }
-    
-    /// Check if the number of confirmations for the block containing
-    /// the original message exceeds the minimum number required to 
-    /// consider the message confirmed.
-    pub fn is_confirmed(&self) -> bool {
-        self.latest_descendant.1 - self.height >= self.min_confirmations
-    }
-}
-
-/// Struct for minting wrapped ETH tokens on Namada
-pub type MintEthToken = TransferFromEthereum<WrappedETHAddress>;
-/// Struct for redeeming wrapped NAM tokens from Ethereum
-pub type RedeemNam = TransferFromEthereum<NamAddress>;
 ```
-Every time this validity predicate is called, it must perform the following
-actions:
-1. Add new messages from the input into the queue
-2. For each message in the queue, update its number of confirmations. This
-   can be done by finding Ethereum block headers marked as `seen` in the new
-   storage data (the input from finalizing the block, it isn't necessary to
-   access Namada storage) that are descendants of the `latest_descendant` field.
 
-At the end of each `FinalizeBlock` call, validators should check this queue.
-For each message that is confirmed, they should transfer the appropriate
-tokens (as determined by the `get_address` method of the `token` field) to
-the address in the `receiver` field.
+These vote extensions will be given to the next block proposer who will
+aggregate those that it can verify and will inject a protocol transaction
+(the "vote extensions" transaction).
 
-Note that this means that a transfer initiated on Ethereum will automatically
-be seen and acted upon by Namada. The appropriate transfers of tokens to the
+```rust
+pub struct MultiSigned<T: BorshSerialize + BorshDeserialize> {
+    /// Arbitrary data to be signed
+    pub data: T,
+    /// The signature of the data
+    pub sigs: Vec<common::Signature>,
+}
+
+pub struct MultiSignedEthEvent {
+    /// Address and voting power of the signing validators
+    pub signers: Vec<(Address, FractionalVotingPower)>,
+    /// Events as signed by validators
+    pub event: MultiSigned<(EthereumEvent, BlockHeight)>,
+}
+
+pub enum ProtocolTxType {
+    EthereumEvents(Vec<MultiSignedEthEvent>)
+}
+```
+
+This vote extensions transaction will be signed by the block proposer. 
+Validators will check this transaction and the validity of the new votes as 
+part of `ProcessProposal`, this includes checking:
+- signatures
+- that votes are really from active validators
+- the calculation of backed voting power
+
+It is also checked that each vote extension came from the previous round, 
+requiring validators to sign over the Namada block height with their vote
+extension. Furthermore, the vote extensions included by the block proposer
+should have at least 2 / 3 of the total voting power backing it. Otherwise
+the block proposer would not have passed the `FinalizeBlock` phase of the
+last round. These checks are to prevent censorship of events from validators
+by the block proposer.
+
+In `FinalizeBlock`, we derive a second transaction (the "state update" 
+transaction) from the vote extensions transaction that:
+- calculates the required changes to `/eth_msgs` storage and applies it
+- acts on any `/eth_msgs/$msg_hash` where `seen` is going from `false` to `true`
+  (e.g. appropriately minting wrapped Ethereum assets)
+
+This state update transaction will not be recorded on chain but will be 
+deterministically derived from the vote extensions transaction, which is 
+recorded on chain. All ledger nodes will derive and apply this transaction to 
+their own local blockchain state, whenever they receive a block with a vote 
+extensions transaction. No signature is required.
+
+The value of `/eth_msgs/$msg_hash/seen` will also indicate if the event 
+has been acted on on the Namada side. The appropriate transfers of tokens to the
 given user will be included on chain free of charge and requires no
 additional actions from the end user.
 
-### Redeeming ETH by burning tokens on Namada
+## Namada Validity Predicates
 
-For redeeming wrapped ETH, the Namada side will need another validity predicate
-that is called only when the appropriate user tx lands on chain. This validity
-predicate will simply burn the tokens.
+There will be three internal accounts with associated native validity predicates:
+- `#EthSentinel` - whose validity predicate will verify the inclusion of events from Ethereum. This validity predicate will control the `/eth_msgs` storage subspace.
+- `#EthBridge` - the storage of which will contain ledgers of balances for wrapped Ethereum assets (ETH and ERC20 tokens) structured in a ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy
+- `#EthBridgeEscrow` which will hold in escrow wrapped Namada tokens which have been sent to Ethereum.
 
-Once this transaction is approved, it is incumbent on the end user to
+### Transferring assets from Ethereum to Namada
+
+#### Wrapped ERC20
+The "transfer" transaction mints the appropriate amount to the corresponding 
+multitoken balance key for the receiver, based on the specifics of a 
+`TransferToNamada` Ethereum event.
+
+```rust
+pub struct EthAddress(pub [u8; 20]);
+
+/// Represents Ethereum assets on the Ethereum blockchain
+pub enum EthereumAsset {
+    /// An ERC20 token and the address of its contract
+    ERC20(EthAddress),
+}
+
+/// An event transferring some kind of value from Ethereum to Anoma
+pub struct TransferToNamada {
+    /// Quantity of ether in the transfer
+    pub amount: Amount,
+    /// Address on Ethereum of the asset
+    pub asset: EthereumAsset,
+    /// The Namada address receiving wrapped assets on Anoma
+    pub receiver: Address,
+}
+```
+
+##### Example
+
+For 10 DAI i.e. ERC20([0x6b175474e89094c44da98b954eedeac495271d0f](https://etherscan.io/token/0x6b175474e89094c44da98b954eedeac495271d0f)) to `atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt`
+```
+#EthBridge
+    /erc20
+        /0x6b175474e89094c44da98b954eedeac495271d0f
+            /balances
+                /atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt 
+                += 10
+```
+
+#### Namada tokens
+Any wrapped Namada tokens being redeemed from Ethereum must have an equivalent amount of the native token held in escrow by `#EthBridgeEscrow`.
+The protocol transaction should simply make a transfer from `#EthBridgeEscrow` to the `receiver` for the appropriate amount and asset.
+
+### Transferring from Namada to Ethereum
+
+To redeem wrapped Ethereum assets, a user should make a transaction to burn 
+their wrapped tokens, which the `#EthBridge` validity predicate will accept.
+
+Once this burn is done, it is incumbent on the end user to
 request an appropriate "proof" of the transaction. This proof must be
 submitted to the appropriate Ethereum smart contract by the user to
-redeem their ETH. This also means all Ethereum gas costs are the
-responsibility of the end user.
+redeem their native Ethereum assets. This also means all Ethereum gas costs 
+are the responsibility of the end user.
 
 The proofs to be used will be custom bridge headers that are calculated
 deterministically from the block contents, including messages sent by Namada and
@@ -198,7 +253,7 @@ responsibility of the next block proposer.
 
 The bridge headers need only be produced when the proposed block contains
 requests to transfer value over the bridge to Ethereum. The exception is
-when validator sets change.  Since the Ethereum smart contract should
+when validator sets change. Since the Ethereum smart contract should
 accept any header signed by bridge header signed by 2 / 3 of the staking
 validators, it needs up-to-date knowledge of:
 - The current validators' public keys
@@ -228,51 +283,33 @@ Signing incorrect headers is considered a slashable offense. Anyone witnessing
 an incorrect header that is signed may submit a complaint (a type of transaction)
 to initiate slashing of the validator who made the signature.
 
-### Minting wrapped Namada tokens on Ethereum
+#### Namada tokens
 
-If a user wishes to mint a wrapped token on Ethereum backed by a token on
-Namada, (including NAM, Namada's native token), they first must submit a special transaction on Namada. This transaction
-should be an instance of the following:
+Mints of a wrapped Namada token on Ethereum (including NAM, Namada's native token)
+will be represented by a data type like:
 
 ```rust
 struct MintWrappedNam {
     /// The Namada address owning the token
-    source: Address,
+    owner: NamadaAddress,
     /// The address on Ethereum receiving the wrapped tokens
-    ethereum_address: Address,
+    receiver: EthereumAddress,
     /// The address of the token to be wrapped 
-    token: Address,
-    /// The number of tokens to mint
+    token: NamadaAddress,
+    /// The number of wrapped Namada tokens to mint on Ethereum
     amount: Amount,
 }
 ```
-A special Namada validity predicate will be called on this transaction. If the
-transaction is valid, the corresponding amount of the NAM token will be transferred
-from the `source` address and deposited in an escrow account by the
-validity predicate.
 
-Just as in redeeming ETH above, it is incumbent on the end user to
+If a user wishes to mint a wrapped Namada token on Ethereum, they must submit a transaction on Namada that:
+- stores `MintWrappedNam` on chain somewhere - TBD
+- sends the correct amount of Namada token to `#EthBridgeEscrow`
+
+Just as in redeeming Ethereum assets above, it is incumbent on the end user to
 request an appropriate proof of the transaction. This proof must be
 submitted to the appropriate Ethereum smart contract by the user.
 The corresponding amount of wrapped NAM tokens will be transferred to the
-`ethereum_address` by the smart contract.
-
-### Redeeming NAM tokens
-
-Redeeming wrapped NAM tokens from Ethereum works much the same way as sending
-ETH over the bridge. In fact, it may be handled by the same validity
-predicate.
-
-Every time Ethereum state is included, this validity predicate is called .
-It keeps a queue of messages from the Ethereum bridge contracts that
-indicate wrapped NAM tokens have been burned by said contract Ethereum side.
-
-The messages should be instances of the `RedeemNam` struct defined in [the
-above section](#minting-wrapped-eth-tokens-on-m1). Once such a message
-has reached the requisite number of confirmations, a free protocol
-transaction should be included by the next block proposer. This transaction
-should transfer the appropriate amount of NAM tokens from the Namada escrow account
-to the address of the recipient.
+`receiver` on Ethereum by the smart contract.
 
 ## Namada Bridge Relayers
 
@@ -327,6 +364,9 @@ a proof from Namada:
 If all the above verifications succeed, the contract may affect the
 appropriate state change, emit logs, etc.
 
+## Starting the bridge
+
+Before the bridge can start running, some storage will need to be initialized in Namada. For example, the `#EthBridge/queue` storage key should be initialized to an empty `Vec<TransferFromEthereum>`. TBD.
 
 ## Resources which may be helpful:
 - [Gravity Bridge Solidity contracts](https://github.com/Gravity-Bridge/Gravity-Bridge/tree/main/solidity)

@@ -29,21 +29,19 @@ A validator must have a public consensus key. Additionally, it may also specify 
 A validator may be in one of the following states:
 - *inactive*:
   A validator is not being considered for block creation and cannot receive any new delegations.
-- *pending*:
-  A validator has requested to become a *candidate*.
 - *candidate*:
   A validator is considered for block creation and can receive delegations.
 
-For each validator (in any state), the system also tracks total bonded tokens as a sum of the tokens in their self-bonds and delegated bonds, less any unbonded tokens. The total bonded tokens determine their voting voting power by multiplication by the `votes_per_token` [parameter](#system-parameters). The voting power is used for validator selection for block creation and is used in governance related activities.
+For each validator (in any state), the system also tracks total bonded tokens as a sum of the tokens in their self-bonds and delegated bonds. The total bonded tokens determine their voting voting power by multiplication by the `votes_per_token` [parameter](#system-parameters). The voting power is used for validator selection for block creation and is used in governance related activities.
 
 #### Validator actions
 
 - *become validator*:
-  Any account that is not a validator already and that doesn't have any delegations may request to become a validator. It is required to provide a public consensus key and staking reward address. For the action applied in epoch `n`, the validator's state will be immediately set to *pending*, it will be set to *candidate* for epoch `n + pipeline_length` and the consensus key is set for epoch `n + pipeline_length`.
+  Any account that is not a validator already and that doesn't have any delegations may request to become a validator. It is required to provide a public consensus key and staking reward address. For the action applied in epoch `n`, the validator's state will be set to *candidate* for epoch `n + pipeline_length` and the consensus key is set for epoch `n + pipeline_length`.
 - *deactivate*:
-  Only a *pending* or *candidate* validator account may *deactivate*. For this action applied in epoch `n`, the validator's account is set to become *inactive* in the epoch `n + pipeline_length`.
+  Only a validator whose state at or before the `pipeline_length` offset is *candidate* account may *deactivate*. For this action applied in epoch `n`, the validator's account is set to become *inactive* in the epoch `n + pipeline_length`.
 - *reactivate*:
-  Only an *inactive* validator may *reactivate*. Similarly to *become validator* action, for this action applied in epoch `n`, the validator's state will be immediately set to *pending* and it will be set to *candidate* for epoch `n + pipeline_length`.
+  Only an *inactive* validator may *reactivate*. Similarly to *become validator* action, for this action applied in epoch `n`, the validator's state will be set to *candidate* for epoch `n + pipeline_length`.
 - *self-bond*:
   A validator may lock-up tokens into a [bond](#bonds) only for its own validator's address.
 - *unbond*:
@@ -55,7 +53,7 @@ For each validator (in any state), the system also tracks total bonded tokens as
 
 #### Active validator set
 
-From all the *candidate* validators, in each epoch the ones with the most voting power limited up to the `max_active_validators` [parameter](#system-parameters) are selected for the active validator set. The active validator set selected in epoch `n` is set for epoch `n + pipeline_length`.
+From all the *candidate* validators, in each epoch the ones with the most voting power limited up to the `max_validator_slots` [parameter](#system-parameters) are selected for the active validator set. The active validator set selected in epoch `n` is set for epoch `n + pipeline_length`.
 
 ### Delegator
 
@@ -87,6 +85,8 @@ An unbonding action (validator *unbond* or delegator *undelegate*) requested by 
 Any unbonds created in epoch `n` decrements the bond's validator's total bonded tokens by the bond's token amount and update the voting power for epoch `n + unbonding_length`.
 
 An "unbond" with epoch set to `n` may be withdrawn by the bond's source address in or any time after the epoch `n`. Once withdrawn, the unbond is deleted and the tokens are credited to the source account.
+
+Note that unlike bonding and unbonding where token changes are delayed to some future epochs (pipeline or unbonding offset), the token withdrawal applies immediately. This because when the tokens are withdrawable, they are already "unlocked" from the PoS system and do not contribute to voting power.
 
 ### Staking rewards
 Until we have programmable validity predicates, rewards can use the mechanism outlined in the [F1 paper](https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf), but it should use the exponential model, so that withdrawing rewards more frequently provides no additional benefit (this is a design constraint we should follow in general, we don't want to accidentally encourage transaction spam). This should be written in a way that allows for a natural upgrade to a validator-customisable rewards model (defaulting to this one) if possible.
@@ -128,7 +128,7 @@ The invariant is that the sum of amounts that may be withdrawn from a misbehavin
 The default values that are relative to epoch duration assume that an epoch last about 24 hours.
 
 - `max_validator_slots`: Maximum active validators, default `128`
-- `pipeline_len`: Pipeline length in number of epochs, default `2`
+- `pipeline_len`: Pipeline length in number of epochs, default `2` (see <https://github.com/cosmos/cosmos-sdk/blob/019444ae4328beaca32f2f8416ee5edbac2ef30b/docs/architecture/adr-039-epoched-staking.md#pipelining-the-epochs>)
 - `unboding_len`: Unbonding duration in number of epochs, default `6`
 - `votes_per_token`: Used in validators' voting power calculation, default 100‱ (1 voting power unit per 1000 tokens)
 - `block_proposer_reward`: Amount of tokens rewarded to a validator for proposing a block
@@ -215,7 +215,7 @@ struct WeightedValidator {
 }
 
 struct ValidatorSet {
-  /// Active validator set with maximum size equal to `max_active_validators`
+  /// Active validator set with maximum size equal to `max_validator_slots`
   active: BTreeSet<WeightedValidator>,
   /// All the other validators that are not active
   inactive: BTreeSet<WeightedValidator>,
@@ -253,7 +253,6 @@ struct Validator {
 
 enum ValidatorState {
   Inactive,
-  Pending,
   Candidate,
 }
 ```

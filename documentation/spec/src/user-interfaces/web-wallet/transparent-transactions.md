@@ -1,4 +1,4 @@
-# Web Wallet
+# Transparent Transactions
 
 #### Table of Contents
 
@@ -76,7 +76,6 @@ let data = transfer
 _In Anoma CLI:_
 https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L406-L411
 
-[ [Table of Contents](#table-of-contents) ]
 
 #### Creating and signing the `proto::Tx` struct
 
@@ -101,7 +100,6 @@ impl Tx {
 _In Anoma CLI:_
 https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L417-L419
 
-[ [Table of Contents](#table-of-contents) ]
 
 ### 1.2 - Creating the `anoma::types::transaction::WrapperTx` struct
 
@@ -135,8 +133,6 @@ transaction::WrapperTx::new(
 
 _In Anoma CLI:_
 https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L687-L696
-
-[ [Table of Contents](#table-of-contents) ]
 
 #### 1.3 - Create a new `Tx` with `WrapperTx` and sign it
 
@@ -191,7 +187,6 @@ Ok(Transaction {
 _In Anoma CLI:_
 https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L810-L814
 
-[ [Table of Contents](#table-of-contents) ]
 
 ## Part 2 - Initialize Account Transaction
 
@@ -213,10 +208,6 @@ let data = InitAccount {
 
 Following this, we will pass `data` into to our new transaction as before, along with `tx_code` and required values for `WrapperTx`, returning the final result in a `JsValue` containing the transaction hash and returned byte array.
 
-[ [Table of Contents](#table-of-contents) ]
-
 ## Submitting Transparent Transactions
 
 See [RPC](./rpc.md) for more information on HTTP and WebSocket RPC interaction with ledger.
-
-[ [Table of Contents](#table-of-contents) ]

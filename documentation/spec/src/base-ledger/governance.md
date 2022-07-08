@@ -1,6 +1,6 @@
 # Namada Governance
 
-Anoma introduce a governance mechanism to propose and apply protocol changes with and without the need for an hard fork. Anyone holding some `NAM` will be able to prosose some changes to which delegators and validator will cast their `yay` or `nay` votes. Governance on Anoma supports both `signaling` and `voting` mechanism. The difference between the the two, is that the former is needed when the changes require an hard fork. In cases where the chain is not able to produce blocks anymore, Anoma relies on `off chain` signaling to agree on a common move.
+Anoma introduces a governance mechanism to propose and apply protocol changes with  or without the need for an hard fork. Anyone holding some `NAM` will be able to propose some changes to which delegators and validators will cast their `yay` or `nay` votes. Governance on Anoma supports both `signaling` and `voting` mechanism. The difference between the the two is that the former is needed when the changes require an hard fork. In cases where the chain is not able to produce blocks anymore, Anoma relies on [off chain](#off-chain-protocol) signaling to agree on a common move.
 
 ## On-chain protocol
 
@@ -9,11 +9,12 @@ Governance adds 2 internal addresses:
 - GovernanceAddress
 - TreasuryAddress
 
-The first address contains all the proposals under his address space.
+The first address contains all the proposals under its address space.
 The second address holds the funds of rejected proposals.
 
 ### Governance storage
 Each proposal will be stored in a sub-key under the internal proposal address. The storage keys involved are:
+
 ```
 /$GovernanceAddress/proposal/$id/content : Vec<u8>
 /$GovernanceAddress/proposal/$id/author : Address
@@ -85,17 +86,17 @@ Just like Pos, also governance has his own storage space. The `GovernanceAddress
 - Lock some funds >= `MIN_PROPOSAL_FUND`
 - Contains a unique ID
 - Contains a start, end and grace Epoch
-- The difference between StartEpoch and EndEpoch should be >= `MIN_PROPOSAL_PERIOD` * constant.
+- The difference between StartEpoch and EndEpoch should be >= `MIN_PROPOSAL_PERIOD * constant`.
 - Should contain a text describing the proposal with length < `MAX_PROPOSAL_CONTENT_SIZE` characters.
 - Vote can be done only by a delegator or validator
 - Validator can vote only in the initial 2/3 of the whole proposal duration (`EndEpoch` - `StartEpoch`)
 - Due to the previous requirement, the following must be true,`(EndEpoch - StartEpoch) % 3 == 0` 
-- If defined `proposalCode`, should be the wasm bytecode rappresentation of the changes. This code is triggered in case the proposal has a position outcome.
+- If defined, `proposalCode` should be the wasm bytecode rappresentation of the changes. This code is triggered in case the proposal has a position outcome.
 - `GraceEpoch` should be greater than `EndEpoch` of at least `MIN_PROPOSAL_GRACE_EPOCHS`
 
 `MIN_PROPOSAL_FUND`, `MAX_PROPOSAL_CODE_SIZE`, `MIN_PROPOSAL_GRACE_EPOCHS`, `MAX_PROPOSAL_CONTENT_SIZE` and `MIN_PROPOSAL_PERIOD` are parameters of the protocol.
 Once a proposal has been created, nobody can modify any of its fields.
-If `proposalCode`  is `Emtpy` or `None` , the proposal upgrade will need to be done via hard fork.
+If `proposalCode`  is `Empty` or `None` , the proposal upgrade will need to be done via hard fork.
 
 It is possible to check the actual implementation [here](https://github.com/anoma/anoma/blob/master/shared/src/ledger/governance/mod.rs#L69).
 
@@ -110,7 +111,7 @@ This means that corresponding VPs need to handle these cases.
 
 The proposal transaction will have the following structure, where `author` address will be the refund address.
 
-```rust=
+```rust
 struct OnChainProposal {
     id: u64
     content: Vec<u8>
@@ -126,7 +127,7 @@ struct OnChainProposal {
 
 Vote transactions have the following structure:
 
-```rust=
+```rust
 struct OnChainVote {
     id: u64
     voter: Address
@@ -137,27 +138,34 @@ struct OnChainVote {
 Vote transaction creates or modify the following storage key:
 
 ```
-/$GovernanceAddress/proposal/id/vote/$address: Enum(yay|nay)
+/$GovernanceAddress/proposal/$id/vote/$delegation_address/$voter_address: Enum(yay|nay)
 ```
 
 The storage key will only be created if the transaction is signed either by a validator or a delagator. 
-Validators will be able to vote only for 2/3 of the total voting period, meanwhile delegators can vote until the end of the voting period.
-If a delegator votes opposite to its validator this will *overri*de the corresponding vote of this validator (e.g. if a delegator has a voting power of 200 and votes opposite to the delegator holding these tokens, than 200 will be subtracted from the votig power of the involved validator).
+Validators will be able to vote only for 2/3 of the total voting period, while delegators can vote until the end of the voting period.
+
+If a delegator votes opposite to its validator, this will *override* the corresponding vote of this validator (e.g. if a delegator has a voting power of 200 and votes opposite to the delegator holding these tokens, than 200 will be subtracted from the votig power of the involved validator).
+
+As a small form of space optimization, if a delegator votes accordingly to its validator, the vote will not actually be submitted to the chain. This logic is applied only if the following conditions are satisfied:
+
+- The transaction is not being forced
+- The vote is submitted in the last third of the voting period (the one exclusive to delegators). This second condition is necessary to prevent a validator from changing its vote after a delegator vote has been submitted, effectively stealing the delegator's vote.   
 
 ### Tally
-At the beginning of each new epoch (and only then), in the `FinalizeBlock` event, talling will occur for all the proposals ending at this epoch (specified via the `endEpoch` field).
-The proposal has a positive outcome if 2/3 of the staked `NAM` total is voting `yay`. Tallying is compute with the following rules
+At the beginning of each new epoch (and only then), in the `FinalizeBlock` event, tallying will occur for all the proposals ending at this epoch (specified via the `endEpoch` field).
+The proposal has a positive outcome if 2/3 of the staked `NAM` total is voting `yay`. Tallying is computed with the following rules:
+
 - Sum all the voting power of validators that voted `yay`
 - For any validator that voted `yay`, subtract the voting power of any delegation that voted `nay`
 - Add voting power for any delegation that voted `yay` (whose corresponding validator didn't vote `yay`)
 - If the aformentioned sum divided by the total voting power is >= 0.66, the proposal outcome is positive otherwise negative.
 
-All the computation above must be made at the epoch specified in the  `start_epoch` field of the proposal.
+All the computation above must be made at the epoch specified in the  `end_epoch` field of the proposal.
 
 It is possible to check the actual implementation [here](https://github.com/anoma/anoma/blob/master/shared/src/ledger/governance/utils.rs#L68).
 
 ### Refund and Proposal Execution mechanism
-Together with the talling, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `TreasuryAddress`. Moreover, if the proposal had a positive outcome and `proposalCode` is defined, these changes will be executed right away.
+Together with tallying, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `TreasuryAddress`. Moreover, if the proposal had a positive outcome and `proposalCode` is defined, these changes will be executed right away.
 
 If the proposal outcome is positive and current epoch is equal to the proposal `grace_epoch`, in the `FinalizeBlock` event:
 - transfer the locked funds to the proposal author
@@ -228,7 +236,7 @@ A CLI command to create a signed JSON rappresentation of the proposal. The JSON 
 }
 ```
 
-The signature is produced over the hash of the concatenation of `content`, `author`, `votingStart` and `votingEnd`.
+The signature is produced over the hash of the concatenation of: `content`, `author`, `votingStart` and `votingEnd`.
 
 ### Create vote
 
@@ -242,10 +250,10 @@ A CLI command to create a signed JSON rappresentation of a vote. The JSON will h
 }
 ```
 
-The proposalHash is produced over the concatenation of `content`, `author`, `votingStart`, `votingEnd`, `voter` and `vote`.
+The proposalHash is produced over the concatenation of: `content`, `author`, `votingStart`, `votingEnd`, `voter` and `vote`.
 
 ### Tally
-Same mechanism as OnChain tally but instead of reading the data from storage it will require a list of serialized json votes.
+Same mechanism as [on chain](#tally) tally but instead of reading the data from storage it will require a list of serialized json votes.
 
 ## Interfaces
 
