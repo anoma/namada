@@ -131,15 +131,6 @@ pub async fn join_network(
             None
         }
     });
-    if let Some(wasm_dir) = wasm_dir.as_ref() {
-        if wasm_dir.is_absolute() {
-            eprintln!(
-                "The arg `--wasm-dir` cannot be an absolute path. It is \
-                 nested inside the chain directory."
-            );
-            cli::safe_exit(1);
-        }
-    }
 
     let release_filename = format!("{}.tar.gz", chain_id);
     let release_url = format!(
