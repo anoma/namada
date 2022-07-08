@@ -1,6 +1,6 @@
 # Namada Governance
 
-Anoma introduces a governance mechanism to propose and apply protocol changes with  or without the need for an hard fork. Anyone holding some `NAM` will be able to propose some changes to which delegators and validators will cast their `yay` or `nay` votes. Governance on Anoma supports both `signaling` and `voting` mechanism. The difference between the the two is that the former is needed when the changes require an hard fork. In cases where the chain is not able to produce blocks anymore, Anoma relies on [off chain](#off-chain-protocol) signaling to agree on a common move.
+Namada introduces a governance mechanism to propose and apply protocol changes with  or without the need for an hard fork. Anyone holding some `NAM` will be able to propose some changes to which delegators and validators will cast their `yay` or `nay` votes. Governance on Namada supports both `signaling` and `voting` mechanisms. The difference between the the two is that the former is needed when the changes require an hard fork. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain](#off-chain-protocol) signaling to agree on a common move.
 
 ## On-chain protocol
 
@@ -98,7 +98,7 @@ Just like Pos, also governance has his own storage space. The `GovernanceAddress
 Once a proposal has been created, nobody can modify any of its fields.
 If `proposalCode`  is `Empty` or `None` , the proposal upgrade will need to be done via hard fork.
 
-It is possible to check the actual implementation [here](https://github.com/anoma/anoma/blob/master/shared/src/ledger/governance/mod.rs#L69).
+It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/governance/mod.rs#L69).
 
 Example of `proposalCode` could be:
 - storage writes to change some protocol parameter
@@ -162,7 +162,7 @@ The proposal has a positive outcome if 2/3 of the staked `NAM` total is voting `
 
 All the computation above must be made at the epoch specified in the  `end_epoch` field of the proposal.
 
-It is possible to check the actual implementation [here](https://github.com/anoma/anoma/blob/master/shared/src/ledger/governance/utils.rs#L68).
+It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/governance/utils.rs#L68).
 
 ### Refund and Proposal Execution mechanism
 Together with tallying, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `TreasuryAddress`. Moreover, if the proposal had a positive outcome and `proposalCode` is defined, these changes will be executed right away.
@@ -174,7 +174,7 @@ If the proposal outcome is positive and current epoch is equal to the proposal `
 In case the proposal was rejected or if any error, in the `FinalizeBlock` event:
 - transfer the locked funds to `TreasuryAddress`
 
-**NOTE**: we need a way to signal the fulfillment of an accepted proposal inside the block in which it is applied to the state. We could do that by using `Events` https://github.com/tendermint/tendermint/blob/ab0835463f1f89dcadf83f9492e98d85583b0e71/docs/spec/abci/abci.md#events (see https://github.com/anoma/anoma/issues/930).
+**NOTE**: we need a way to signal the fulfillment of an accepted proposal inside the block in which it is applied to the state. We could do that by using `Events` https://github.com/tendermint/tendermint/blob/ab0835463f1f89dcadf83f9492e98d85583b0e71/docs/spec/abci/abci.md#events (see https://github.com/anoma/namada/issues/930).
 
 ## TreasuryAddress
 Funds locked in `TreasuryAddress` address should be spendable only by proposals.
@@ -197,7 +197,7 @@ The treasury validity predicate will approve a trasfer only if:
 
 `MAX_SPENDABLE_SUM` is a parameter of the treasury native vp.
 
-It is possible to check the actual implementation [here](https://github.com/anoma/anoma/blob/master/shared/src/ledger/treasury/mod.rs#L55).
+It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/treasury/mod.rs#L55).
 
 
 ## ParameterAddress
@@ -219,7 +219,7 @@ At the moment there are 5 parameters:
 The parameter validity predicate will approve changes to the protocol parameter only if:
 - the changes have been made by the protocol (by checking the existence of `/$GovernanceAddress/pending/$proposal_id` storage key)
 
-It is possible to check the actual implementation [here](https://github.com/anoma/anoma/blob/master/shared/src/ledger/parameters/mod.rs#L53).
+It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/parameters/mod.rs#L53).
 
 
 ## Off-chain protocol
