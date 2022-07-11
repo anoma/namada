@@ -12,9 +12,9 @@ Every account also has its dedicated key-value storage. The ledger encodes agnos
 
 To illustrate with an example storage key used for fungible tokens (with addresses shortened for clarity), let's say:
 
-- XAN token's address is `atest1v4ehgw36x3prs...`
+- NAM token's address is `atest1v4ehgw36x3prs...`
 - A user Bertha has address `atest1v4ehgw36xvcyyv...`
-- Then, the balance of Bertha's XAN tokens is stored in the XAN account, with the storage key comprised of `#{token}/balance/#{owner}`, i.e.:
+- Then, the balance of Bertha's NAM tokens is stored in the NAM account, with the storage key comprised of `#{token}/balance/#{owner}`, i.e.:
 
   ```text
   #atest1v4ehgw36x3prs.../balance/#atest1v4ehgw36xvcyy...

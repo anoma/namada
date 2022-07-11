@@ -89,7 +89,7 @@ anomac init-account --source my-implicit --public-key my-implicit --alias my-est
 anomac transfer --token btc --amount 1000 --source faucet --target my-established --signer my-established
 ```
 
-The testnet tokens which the faucet can provide you are named `XAN`,
+The testnet tokens which the faucet can provide you are named `NAM`,
 `BTC`, `ETH`, `DOT`, `Schnitzel`, `Apfel`, and `Kartoffel`. The faucet
 will transfer these in increments of 1000 at a time.
 
