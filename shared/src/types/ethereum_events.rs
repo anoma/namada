@@ -212,6 +212,11 @@ pub mod vote_extensions {
         pub fn zero() -> Self {
             Self(Ratio::new(0, 1))
         }
+
+        /// Convenience function for returning full [`FractionalVotingPower`]
+        pub fn full() -> Self {
+            Self(Ratio::new(1, 1))
+        }
     }
 
     impl Deref for FractionalVotingPower {
