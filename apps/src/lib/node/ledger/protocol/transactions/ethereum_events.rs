@@ -63,7 +63,9 @@ mod test {
         FractionalVotingPower, MultiSignedEthEvent,
     };
     use anoma::types::ethereum_events::{EthereumEvent, Uint};
+    use anoma::types::key::{common, ed25519};
     use anoma::types::storage::BlockHeight;
+    use rand::prelude::ThreadRng;
 
     use super::calculate_eth_msgs_state;
 
@@ -77,6 +79,17 @@ mod test {
 
     fn arbitrary_block_height() -> BlockHeight {
         BlockHeight(100)
+    }
+
+    /// This will actually generate a new random secret key each time it's
+    /// called
+    fn arbitrary_secret_key() -> common::SecretKey {
+        let mut rng: ThreadRng = rand::thread_rng();
+        let sk: common::SecretKey = {
+            use anoma::types::key::{SecretKey, SigScheme};
+            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
+        };
+        sk
     }
 
     #[test]
@@ -96,17 +109,17 @@ mod test {
             nonce: arbitrary_nonce(),
             transfers: vec![],
         };
+        let sk = arbitrary_secret_key();
+        let heighted = (empty_transfers, arbitrary_block_height());
+        let signed =
+            MultiSigned::<(EthereumEvent, BlockHeight)>::new(&sk, heighted);
+        // ed25519::Signature::from(_)
         let aggregated = vec![MultiSignedEthEvent {
             signers: vec![(
                 validator.clone(),
                 arbitrary_fractional_voting_power(),
             )],
-            event: MultiSigned {
-                data: (empty_transfers, arbitrary_block_height()),
-                sigs: vec![
-                    // TODO: single signature here
-                ],
-            },
+            event: signed,
         }];
         assert!(calculate_eth_msgs_state(aggregated).is_err());
     }
