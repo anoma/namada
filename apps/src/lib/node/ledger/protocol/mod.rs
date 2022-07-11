@@ -126,8 +126,8 @@ where
             ..
         }) => {
             tracing::debug!("Ethereum events received");
-            let _eth_msgs =
-                transactions::ethereum_events::calculate_eth_msgs_state(events);
+            let _diffs =
+                transactions::ethereum_events::calculate_eth_msg_diffs(events);
             // TODO: calculate mints/transfers
             // TODO: apply transaction to storage
             // TODO: return TxResult

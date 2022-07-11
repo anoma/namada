@@ -5,23 +5,17 @@ use anoma::types::ethereum_events::vote_extensions::{
 use anoma::types::ethereum_events::EthereumEvent;
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
-use num_rational::Ratio;
-
-fn threshold() -> Ratio<u64> {
-    Ratio::new(2, 3)
-}
 
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub(crate) struct EthMsg {
+pub(crate) struct EthMsgDiff {
     body: EthereumEvent,
     seen_by: Vec<Address>,
     voting_power: FractionalVotingPower,
-    seen: bool,
 }
 
-pub(crate) fn calculate_eth_msgs_state(
+pub(crate) fn calculate_eth_msg_diffs(
     multisigneds: Vec<MultiSignedEthEvent>,
-) -> Result<Vec<EthMsg>> {
+) -> Result<Vec<EthMsgDiff>> {
     let mut eth_msgs = Vec::with_capacity(multisigneds.len());
     for multisigned in multisigneds {
         let (body, _) = multisigned.event.data;
@@ -36,12 +30,10 @@ pub(crate) fn calculate_eth_msgs_state(
                 (*voting_power + *total_voting_power).try_into().unwrap();
         }
 
-        let seen = *total_voting_power > threshold();
-        eth_msgs.push(EthMsg {
+        eth_msgs.push(EthMsgDiff {
             body,
             seen_by,
             voting_power: total_voting_power,
-            seen,
         });
     }
     Ok(eth_msgs)
@@ -101,17 +93,17 @@ mod test {
     }
 
     #[test]
-    fn test_calculate_eth_msgs_state_empty() {
-        assert!(calculate_eth_msgs_state(vec![]).unwrap().is_empty())
+    fn calculate_eth_msg_diffs_empty() {
+        assert!(calculate_eth_msg_diffs(vec![]).unwrap().is_empty())
     }
 
     #[test]
-    fn test_calculate_eth_msgs_state_accepts_all_ethereum_events() {
+    fn calculate_eth_msg_diffs_accepts_all_ethereum_events() {
         // TODO
     }
 
     #[test]
-    fn test_calculate_eth_msgs_state_rejects_empty_transfers_to_namada() {
+    fn calculate_eth_msg_diffs_rejects_empty_transfers_to_namada() {
         let validator = address::testing::established_address_1();
         let empty_transfers = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
@@ -128,11 +120,11 @@ mod test {
             )],
             event: signed,
         }];
-        assert!(calculate_eth_msgs_state(aggregated).is_err());
+        assert!(calculate_eth_msg_diffs(aggregated).is_err());
     }
 
     #[test]
-    fn test_calculate_eth_msgs_state_accepts_one_validator_one_transfer() {
+    fn calculate_eth_msg_diffs_accepts_one_validator_one_transfer() {
         let sole_validator = address::testing::established_address_1();
         let receiver = address::testing::established_address_2();
         let single_transfer = EthereumEvent::TransfersToNamada {
@@ -154,14 +146,13 @@ mod test {
             )],
             event: signed,
         }];
-        let expected = EthMsg {
+        let expected = EthMsgDiff {
             body: single_transfer.clone(),
             seen_by: vec![sole_validator],
             voting_power: FractionalVotingPower::full(),
-            seen: true,
         };
 
-        let eth_msgs = calculate_eth_msgs_state(aggregated);
+        let eth_msgs = calculate_eth_msg_diffs(aggregated);
 
         let eth_msgs = eth_msgs.unwrap();
         assert_eq!(eth_msgs.len(), 1);
