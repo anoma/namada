@@ -54,12 +54,18 @@ mod test {
     use anoma::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent,
     };
-    use anoma::types::ethereum_events::{EthereumEvent, Uint};
+    use anoma::types::ethereum_events::{
+        EthAddress, EthereumEvent, TransferToNamada, Uint,
+    };
     use anoma::types::key::{common, ed25519};
     use anoma::types::storage::BlockHeight;
+    use anoma::types::token::Amount;
     use rand::prelude::ThreadRng;
 
-    use super::calculate_eth_msgs_state;
+    use super::*;
+
+    const DAI_ERC20_ETH_ADDRESS: &str =
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F";
 
     fn arbitrary_fractional_voting_power() -> FractionalVotingPower {
         FractionalVotingPower::new(1, 3).unwrap()
@@ -82,6 +88,16 @@ mod test {
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
         };
         sk
+    }
+
+    fn arbitrary_eth_address() -> EthAddress {
+        let bytes: [u8; 20] =
+            hex::decode(DAI_ERC20_ETH_ADDRESS[2..].as_bytes())
+                .unwrap()
+                .try_into()
+                .unwrap();
+
+        EthAddress(bytes)
     }
 
     #[test]
@@ -115,6 +131,42 @@ mod test {
         assert!(calculate_eth_msgs_state(aggregated).is_err());
     }
 
+    #[test]
+    fn test_calculate_eth_msgs_state_accepts_one_validator_one_transfer() {
+        let sole_validator = address::testing::established_address_1();
+        let receiver = address::testing::established_address_2();
+        let single_transfer = EthereumEvent::TransfersToNamada {
+            nonce: arbitrary_nonce(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: arbitrary_eth_address(),
+                receiver,
+            }],
+        };
+        let sk = arbitrary_secret_key();
+        let heighted = (single_transfer.clone(), arbitrary_block_height());
+        let signed =
+            MultiSigned::<(EthereumEvent, BlockHeight)>::new(&sk, heighted);
+        let aggregated = vec![MultiSignedEthEvent {
+            signers: vec![(
+                sole_validator.clone(),
+                FractionalVotingPower::full(),
+            )],
+            event: signed,
+        }];
+        let expected = EthMsg {
+            body: single_transfer.clone(),
+            seen_by: vec![sole_validator],
+            voting_power: FractionalVotingPower::full(),
+            seen: true,
+        };
+
+        let eth_msgs = calculate_eth_msgs_state(aggregated);
+
+        let eth_msgs = eth_msgs.unwrap();
+        assert_eq!(eth_msgs.len(), 1);
+        assert_eq!(eth_msgs[0], expected);
+    }
+
     // TODO: test signatures match signers
-    // TODO: test one valid event
 }
