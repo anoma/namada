@@ -51,6 +51,7 @@ pub const RESERVED_VP_KEY: &str = "?";
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
