@@ -1,4 +1,4 @@
-# 💾 Install Namada
+# Install Namada
 
 ```admonish warning
 At the moment, Namada only supports Linux and macOS. 
