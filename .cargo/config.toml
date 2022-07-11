@@ -1,0 +1,3 @@
+[profile.small]
+inherits = "dev"
+strip = "symbols"
