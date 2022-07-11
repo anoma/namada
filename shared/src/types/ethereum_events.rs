@@ -167,7 +167,7 @@ pub mod vote_extensions {
 
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use eyre::{eyre, Result};
-    use num_rational::Ratio;
+    use num::rational::Ratio;
 
     use super::EthereumEvent;
     use crate::proto::MultiSigned;

@@ -204,7 +204,7 @@ dependencies = [
  "ics23",
  "itertools 0.10.3",
  "loupe",
- "num-rational 0.4.1",
+ "num 0.4.0",
  "parity-wasm",
  "pretty_assertions",
  "proptest",
