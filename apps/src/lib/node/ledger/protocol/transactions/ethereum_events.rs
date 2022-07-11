@@ -25,16 +25,8 @@ pub(crate) fn calculate_eth_msgs_state(
     let mut eth_msgs = Vec::with_capacity(multisigneds.len());
     for multisigned in multisigneds {
         let (body, _) = multisigned.event.data;
-        match &body {
-            EthereumEvent::TransfersToNamada {
-                nonce: _,
-                transfers,
-            } => {
-                if transfers.is_empty() {
-                    return Err(eyre!("empty transfer batch"));
-                }
-            }
-            _ => return Err(eyre!("unexpected Ethereum event")),
+        if !body.is_valid() {
+            return Err(eyre!("invalid event: {:#?}", body));
         }
         let mut total_voting_power = FractionalVotingPower::zero();
         let mut seen_by = vec![];
@@ -98,7 +90,7 @@ mod test {
     }
 
     #[test]
-    fn test_calculate_eth_msgs_state_rejects_unexpected_ethereum_events() {
+    fn test_calculate_eth_msgs_state_accepts_all_ethereum_events() {
         // TODO
     }
 
@@ -113,7 +105,6 @@ mod test {
         let heighted = (empty_transfers, arbitrary_block_height());
         let signed =
             MultiSigned::<(EthereumEvent, BlockHeight)>::new(&sk, heighted);
-        // ed25519::Signature::from(_)
         let aggregated = vec![MultiSignedEthEvent {
             signers: vec![(
                 validator.clone(),

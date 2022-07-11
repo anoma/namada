@@ -119,6 +119,17 @@ impl EthereumEvent {
         let bytes = self.try_to_vec()?;
         Ok(Hash::sha256(&bytes))
     }
+
+    /// Whether the event is valid or not. Validators should be slashed if they
+    /// included a signed invalid event in their vote extension.
+    pub fn is_valid(&self) -> bool {
+        match self {
+            EthereumEvent::TransfersToNamada { transfers, .. } => {
+                !transfers.is_empty()
+            }
+            _ => true,
+        }
+    }
 }
 
 /// An event transferring some kind of value from Ethereum to Anoma
