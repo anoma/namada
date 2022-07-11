@@ -1,6 +1,8 @@
 # 💾 Install Namada
 
->⚠️ We only support Linux or macOS (at the moment, we are not supporting Windows)
+```admonish warning
+At the moment, Namada only supports Linux and macOS. 
+```
 
 ## Hardware Requirements
 
@@ -16,7 +18,7 @@ This section covers the minimum and recommended hardware requirements for engagi
 
 There are different ways to install Namada: [From Source](#from-source), [From Binaries](#from-binaries), [From Docker](#from-docker) and [From Nix](#from-nix).
 
-### From Source
+## From Source
 
 If you'd like to install Namada from source you will have to install some dependencies first: [Rust](https://www.rust-lang.org/tools/install), [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git), Clang, OpenSSL and LLVM.
 
@@ -46,7 +48,9 @@ xcode-select --install
 
 Now, that you have all dependencies installed you can clone the source code from the [Namada repository](https://github.com/anoma/namada) and build it with:
 
->⚠️ During internal and private testnets, checkout the latest testnet branch using `$NAMADA_TESTNET_BRANCH`.
+```admonish warning
+During internal and private testnets, checkout the latest testnet branch using `git checkout $NAMADA_TESTNET_BRANCH`.
+```
 
 ```shell
 git clone https://github.com/anoma/anoma.git
@@ -54,10 +58,11 @@ cd anoma
 make install
 ```
 
-### From Binaries
+## From Binaries
 
->⚠️ During internal and private testnets, prebuilt binaries might not be available under our [Github releases page](https://github.com/anoma/namada/releases).
->We recommend you [build from source](#from-source) from the appropriate branch or commit.
+```admonish warning
+Prebuilt binaries might not be available for a specific release or architecture, in this case you have to [build from source](#from-source).
+```
 
 If you'd like to install Namada from binaries you will have to install some dependencies first: [Tendermint](https://docs.tendermint.com/master/introduction/install.html) `0.34.x` and GLIBC `v2.29` or higher.
 
@@ -81,35 +86,7 @@ Finally, you should have GLIBC `v2.29` or higher.
 
 Now, that you have all dependencies installed you can download the latest binary release from our [releases page](https://github.com/anoma/namada/releases) by choosing the appropriate architecture.
 
->⚠️ Prebuilt binaries might not be available for a specific release or architecture, in this case you have to [build from source](#from-source).
-
 [fixme]: <> (update docker config as soon as Anoma is transferred fully to Namada)
 ## From Docker
 
 Go to [heliaxdev dockerhub account](https://hub.docker.com/r/heliaxdev/anoma) and pull the image.
-
-[fixme]: <> (update nix or remove it if it's not needed anymore)
-## From Nix
-
-If you have [Nix](https://nixos.org/), you can get Anoma easily as a flake. For
-this to work, make sure that you have Nix 2.4 or later and that you have
-`experimental-features = nix-command flakes` in your `~/.config/nix/nix.conf`.
-
-```shell
-# Install to user profile
-nix profile install github:anoma/anoma/<revision>
-
-# Run without installing
-nix run github:anoma/anoma/<revision> -- --help
-
-# Enter a shell where anoma executables are available
-nix run github:anoma/anoma/<revision>
-```
-
-Set `<revision>` to the git tag, branch or hash you want.
-
-With Nix versions older than 2.4, use this command instead:
-
-```shell
-nix-env -f https://github.com/anoma/anoma/archive/<revision>.tar.gz -iA default
-```
