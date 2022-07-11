@@ -170,6 +170,7 @@ pub mod vote_extensions {
     use super::EthereumEvent;
     use crate::proto::MultiSigned;
     use crate::types::address::Address;
+    use crate::types::storage::BlockHeight;
 
     /// A fraction of the total voting power. This should always be a reduced
     /// fraction that is between zero and one inclusive.
@@ -245,7 +246,7 @@ pub mod vote_extensions {
         /// Address and voting power of the signing validators
         pub signers: Vec<(Address, FractionalVotingPower)>,
         /// Events as signed by validators
-        pub event: MultiSigned<EthereumEvent>,
+        pub event: MultiSigned<(EthereumEvent, BlockHeight)>,
     }
 
     #[cfg(test)]
