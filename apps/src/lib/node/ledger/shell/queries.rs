@@ -2,11 +2,13 @@
 use std::cmp::max;
 
 use anoma::ledger::parameters::EpochDuration;
+#[cfg(not(feature = "ABCI"))]
+use anoma::ledger::pos::anoma_proof_of_stake::types::VotingPower;
 use anoma::ledger::pos::PosParams;
 use anoma::types::address::Address;
 use anoma::types::key;
 use anoma::types::key::dkg_session_keys::DkgPublicKey;
-use anoma::types::storage::{Key, PrefixValue};
+use anoma::types::storage::{Epoch, Key, PrefixValue};
 use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
@@ -299,16 +301,17 @@ where
     pub fn get_validator_from_protocol_pk(
         &self,
         pk: &key::common::PublicKey,
+        epoch: Option<Epoch>,
     ) -> Option<TendermintValidator<EllipticCurve>> {
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
         // get the current epoch
-        let (current_epoch, _) = self.storage.get_current_epoch();
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         // get the active validator set
         self.storage
             .read_validator_set()
-            .get(current_epoch)
+            .get(epoch)
             .expect("Validators for the next epoch should be known")
             .active
             .iter()
@@ -341,5 +344,82 @@ where
                     public_key: dkg_publickey.into(),
                 }
             })
+    }
+
+    /// Lookup data about a validator from their address
+    #[cfg(not(feature = "ABCI"))]
+    pub fn get_validator_from_address(
+        &self,
+        address: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<(VotingPower, common::PublicKey)> {
+        // get the current epoch
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        // get the active validator set
+        self.storage
+            .read_validator_set()
+            .get(epoch)
+            .expect("Validators for the next epoch should be known")
+            .active
+            .iter()
+            .find(|validator| address == &validator.address)
+            .map(|validator| {
+                let protocol_pk_key = key::protocol_pk_key(&validator.address);
+                let bytes = self
+                    .storage
+                    .read(&protocol_pk_key)
+                    .expect("Validator should have public protocol key")
+                    .0
+                    .expect("Validator should have public protocol key");
+                let protocol_pk: common::PublicKey =
+                    BorshDeserialize::deserialize(&mut bytes.as_ref()).expect(
+                        "Protocol public key in storage should be \
+                         deserializable",
+                    );
+                (validator.voting_power, protocol_pk)
+            })
+    }
+
+    /// Lookup the total voting power for an epoch
+    #[cfg(not(feature = "ABCI"))]
+    pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
+        // get the current epoch
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        // get the active validator set
+        self.storage
+            .read_validator_set()
+            .get(epoch)
+            .map(|validators| {
+                validators
+                    .active
+                    .iter()
+                    .map(|validator| u64::from(validator.voting_power))
+                    .sum::<u64>()
+                    .into()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get the voting power of this node (as a fraction of this epochs total
+    /// voting power) if it is a validator. Else return None
+    #[cfg(not(feature = "ABCI"))]
+    pub fn get_validator_voting_power(&self) -> Option<FractionalVotingPower> {
+        let power = if let Some(secret_key) = self.mode.get_protocol_key() {
+            match self
+                .get_validator_from_protocol_pk(&secret_key.ref_to(), None)
+            {
+                Some(validator) => Some(validator.power),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let total = u64::from(self.get_total_voting_power(None));
+        match power {
+            Some(power) if total > 0 => {
+                FractionalVotingPower::new(power, total).ok()
+            }
+            _ => None,
+        }
     }
 }
