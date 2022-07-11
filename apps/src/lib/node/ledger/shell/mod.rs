@@ -11,6 +11,7 @@ mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
+mod vote_extensions;
 
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
@@ -32,6 +33,8 @@ use anoma::ledger::storage::{
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::chain::ChainId;
+#[cfg(not(feature = "ABCI"))]
+use anoma::types::ethereum_events::vote_extensions::FractionalVotingPower;
 use anoma::types::ethereum_events::EthereumEvent;
 use anoma::types::key::*;
 use anoma::types::storage::{BlockHeight, Key};
@@ -538,26 +541,6 @@ where
                     tracing::error!("Error in slashing: {}", err);
                 }
             }
-        }
-    }
-
-    #[cfg(not(feature = "ABCI"))]
-    /// INVARIANT: This method must be stateless.
-    pub fn extend_vote(
-        &self,
-        _req: request::ExtendVote,
-    ) -> response::ExtendVote {
-        Default::default()
-    }
-
-    #[cfg(not(feature = "ABCI"))]
-    /// INVARIANT: This method must be stateless.
-    pub fn verify_vote_extension(
-        &self,
-        _req: request::VerifyVoteExtension,
-    ) -> response::VerifyVoteExtension {
-        response::VerifyVoteExtension {
-            status: VerifyStatus::Accept as i32,
         }
     }
 
