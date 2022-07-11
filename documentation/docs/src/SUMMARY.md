@@ -9,14 +9,10 @@
   - [The Ledger](./user-guide/ledger.md)
     - [Interact with PoS](./user-guide/ledger/pos.md)
     - [Governance](./user-guide/ledger/governance.md)
-    - [MASP](./user-guide/ledger/masp.md)
+    - [Private Transfers](./user-guide/ledger/masp.md)
     - [Customize](./user-guide/ledger/customize.md)
   - [Genesis validator setup](./user-guide/genesis-validator-setup.md)
   - [Applying to be a genesis validator](./user-guide/genesis-validator-apply.md)
-  <!-- - [The Intent gossiper and Matchmaker](./user-guide/intent-gossiper-and-matchmaker.md) -->
 - [Testnets](./testnets/README.md)
   - [Namada Close Quarters Testnet 1](./testnets/namada-close-quarters-testnet-1.md)
 - [Namada Trusted Setup](./namada-trusted-setup.md)
-<!-- - [Archive](./archive/README.md)
-  - [MASP + Governance devnet 1](./testnets/gov-masp-devnet-1.md)
-  - [Internal Testnet 1](./testnets/internal-testnet-1.md) -->

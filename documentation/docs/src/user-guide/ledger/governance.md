@@ -1,10 +1,11 @@
-# Introduction to governance
+# Governance
 
 The Namada governance mechanism gives users the possibility to upgrade the protocol dynamically.
+
 There are two different mechanism to create a proposal:
 
-- On-chain: Proposal is voted on and tallied on-chain. This can optionally include proposal code to be executed if the proposal is accepted.
-- Off-chain
+- [On-chain proposals](#on-chain-proposals): Proposal is voted on and tallied on-chain. This can optionally include proposal code to be executed if the proposal is accepted.
+- [Off-chain proposals](#off-chain-proposals)
 
 ## On-chain proposals
 
@@ -69,7 +70,7 @@ where `0` is the proposal id.
 
 ### Vote a proposal
 
-Only validator and delegators can vote. Assuming you have a validator/delegator account (in this example we are going to use `validator`), you can send a vote with the following command:
+Only validators and delegators can vote. Assuming you have a validator or a delegator account (in this example we are going to use `validator`), you can send a vote with the following command:
 
 ```shell
 anoma client vote-proposal \
@@ -95,6 +96,8 @@ anoma client query-proposal-result --proposal-id 0
 ```
 
 ## Off-chain proposals
+
+If for any reason issuing an on-chain proposal is not adequate to your needs, you still have the option to create an off-chain proposal. 
 
 ### Create proposal
 

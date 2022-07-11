@@ -1,5 +1,5 @@
-# MASP
-The  Multi-Asset Shielded Pool (MASP) is a zero-knowledge circuit - aka zk-SNARK - that enables shielded (private) transfers where all assets share one anonymity set private. The MASP is an extension of the Zcash Sapling circuit that adds support for sending arbitrary assets.
+# Private transfers
+In Namada, private transfers are enabled by the Multi-Asset Shielded Pool (MASP). The MASP is a zero-knowledge circuit (zk-SNARK) that extends the Zcash Sapling circuit to add support for sending arbitrary assets. All assets in the pool share the same anonymity set, this means that the more transactions are issued to MASP, the stronger are the privacity guarantees.
 
 ## Using MASP
 
