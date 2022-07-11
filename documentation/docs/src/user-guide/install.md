@@ -16,7 +16,10 @@ This section covers the minimum and recommended hardware requirements for engagi
 | RAM     | 16GB DDR4     |
 | Storage     | at least 60GB SSD (NVMe SSD is recommended. HDD will be enough for localnet only)    |
 
-There are different ways to install Namada: [From Source](#from-source), [From Binaries](#from-binaries), [From Docker](#from-docker) and [From Nix](#from-nix).
+There are different ways to install Namada: 
+- [From Source](#from-source) 
+- [From Binaries](#from-binaries)
+- [From Docker](#from-docker)
 
 ## From Source
 
