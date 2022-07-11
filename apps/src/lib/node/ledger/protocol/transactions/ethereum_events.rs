@@ -4,6 +4,7 @@ use anoma::types::ethereum_events::vote_extensions::{
 };
 use anoma::types::ethereum_events::EthereumEvent;
 use borsh::{BorshDeserialize, BorshSerialize};
+use eyre::{eyre, Result};
 use num_rational::Ratio;
 
 fn threshold() -> Ratio<u64> {
@@ -20,10 +21,21 @@ pub(crate) struct EthMsg {
 
 pub(crate) fn calculate_eth_msgs_state(
     multisigneds: Vec<MultiSignedEthEvent>,
-) -> Vec<EthMsg> {
+) -> Result<Vec<EthMsg>> {
     let mut eth_msgs = Vec::with_capacity(multisigneds.len());
     for multisigned in multisigneds {
         let (body, _) = multisigned.event.data;
+        match &body {
+            EthereumEvent::TransfersToNamada {
+                nonce: _,
+                transfers,
+            } => {
+                if transfers.is_empty() {
+                    return Err(eyre!("empty transfer batch"));
+                }
+            }
+            _ => return Err(eyre!("unexpected Ethereum event")),
+        }
         let mut total_voting_power = FractionalVotingPower::zero();
         let mut seen_by = vec![];
         for (signer, voting_power) in multisigned.signers {
@@ -40,7 +52,7 @@ pub(crate) fn calculate_eth_msgs_state(
             seen,
         });
     }
-    eth_msgs
+    Ok(eth_msgs)
 }
 
 #[cfg(test)]
@@ -50,43 +62,55 @@ mod test {
     use anoma::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent,
     };
-    use anoma::types::ethereum_events::EthereumEvent;
+    use anoma::types::ethereum_events::{EthereumEvent, Uint};
     use anoma::types::storage::BlockHeight;
 
     use super::calculate_eth_msgs_state;
-    use crate::node::ledger::protocol::transactions::ethereum_events::EthMsg;
+
+    fn arbitrary_fractional_voting_power() -> FractionalVotingPower {
+        FractionalVotingPower::new(1, 3).unwrap()
+    }
+
+    fn arbitrary_nonce() -> Uint {
+        123.into()
+    }
+
+    fn arbitrary_block_height() -> BlockHeight {
+        BlockHeight(100)
+    }
 
     #[test]
-    fn test_calculate_eth_msgs_state() {
-        let est1 = address::testing::established_address_1();
-        let event = EthereumEvent::TransfersToNamada {
-            nonce: 0.into(),
+    fn test_calculate_eth_msgs_state_empty() {
+        assert!(calculate_eth_msgs_state(vec![]).unwrap().is_empty())
+    }
+
+    #[test]
+    fn test_calculate_eth_msgs_state_rejects_unexpected_ethereum_events() {
+        // TODO
+    }
+
+    #[test]
+    fn test_calculate_eth_msgs_state_rejects_empty_transfers_to_namada() {
+        let validator = address::testing::established_address_1();
+        let empty_transfers = EthereumEvent::TransfersToNamada {
+            nonce: arbitrary_nonce(),
             transfers: vec![],
         };
-        assert_eq!(calculate_eth_msgs_state(vec![]), vec![]);
-        assert_eq!(
-            calculate_eth_msgs_state(vec![MultiSignedEthEvent {
-                signers: vec![(
-                    est1.clone(),
-                    FractionalVotingPower::new(1, 3).unwrap()
-                )],
-                event: MultiSigned {
-                    data: (
-                        EthereumEvent::TransfersToNamada {
-                            nonce: 0.into(),
-                            transfers: vec![]
-                        },
-                        BlockHeight(100)
-                    ),
-                    sigs: vec![]
-                }
-            }]),
-            vec![EthMsg {
-                body: event,
-                seen_by: vec![est1.clone()],
-                voting_power: FractionalVotingPower::new(1, 3).unwrap(),
-                seen: false,
-            }]
-        );
+        let aggregated = vec![MultiSignedEthEvent {
+            signers: vec![(
+                validator.clone(),
+                arbitrary_fractional_voting_power(),
+            )],
+            event: MultiSigned {
+                data: (empty_transfers, arbitrary_block_height()),
+                sigs: vec![
+                    // TODO: single signature here
+                ],
+            },
+        }];
+        assert!(calculate_eth_msgs_state(aggregated).is_err());
     }
+
+    // TODO: test signatures match signers
+    // TODO: test one valid event
 }
