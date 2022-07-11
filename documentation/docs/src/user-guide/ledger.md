@@ -57,14 +57,14 @@ You can see the tokens addresses known by the client when you query all tokens b
 anoma client balance
 ```
 
-XAN is Namada's native token. To obtain some tokens in a testnet, there is a special "faucet" account that allows anyone to withdraw up to 1000 of any token for a single transaction. You can find the address of this account in your wallet. To get some tokens from the faucet account:
+NAM is Namada's native token. To obtain some tokens in a testnet, there is a special "faucet" account that allows anyone to withdraw up to 1000 of any token for a single transaction. You can find the address of this account in your wallet. To get some tokens from the faucet account:
 
 ```shell
 anoma client transfer \
   --source faucet \
   --target my-new-acc \
   --signer my-new-acc \
-  --token XAN \
+  --token NAM \
   --amount 1000
 ```
 
@@ -76,7 +76,7 @@ To submit a regular token transfer from your account to the `validator-1` addres
 anoma client transfer \
   --source my-new-acc \
   --target validator-1 \
-  --token XAN \
+  --token NAM \
   --amount 10
 ```
 
@@ -85,7 +85,7 @@ This command will attempt to find and use the key of the source address to sign 
 To query token balances for a specific token and/or owner:
 
 ```shell
-anoma client balance --token XAN --owner my-new-acc
+anoma client balance --token NAM --owner my-new-acc
 ```
 
 Note that for any client command that submits a transaction (`init-account`, `transfer`, `tx`, `update` and [PoS transactions](ledger/pos.md)), you can use the `--dry-run` flag to simulate the transaction being applied in the block, to see what its result would be.

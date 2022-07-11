@@ -39,7 +39,7 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
    ```shell
    anoma client transfer --source faucet --target alberto-account --signer alberto-account --token BTC --amount 1000
    anoma client transfer --source faucet --target bertha-account --signer bertha-account --token ETH --amount 1000
-   anoma client transfer --source faucet --target christel-account --signer christel-account --token XAN --amount 1000
+   anoma client transfer --source faucet --target christel-account --signer christel-account --token NAM --amount 1000
    ```
 
 1) Lets export some variables:
@@ -48,7 +48,7 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
    export ALBERTO=$(anoma wallet address find --alias alberto-account | cut -c 28- | tr -d '\n')
    export CHRISTEL=$(anoma wallet address find --alias christel-account | cut -c 28- | tr -d '\n')
    export BERTHA=$(anoma wallet address find --alias bertha-account | cut -c 28- | tr -d '\n')
-   export XAN=$(anoma wallet address find --alias XAN | cut -c 28- | tr -d '\n')
+   export NAM=$(anoma wallet address find --alias NAM | cut -c 28- | tr -d '\n')
    export BTC=$(anoma wallet address find --alias BTC | cut -c 28- | tr -d '\n')
    export ETH=$(anoma wallet address find --alias ETH | cut -c 28- | tr -d '\n')
    ```
@@ -56,11 +56,11 @@ This pre-built matchmaker implementation is [the fungible token exchange `mm_tok
 1) Create files with the intents description:
 
    ```shell
-   echo '[{"addr":"'$ALBERTO'","key":"'$ALBERTO'","max_sell":"70","min_buy":"100","rate_min":"2","token_buy":"'$XAN'","token_sell":"'$BTC'","vp_path": "wasm_for_tests/vp_always_true.wasm"}]' > intent.A.data
+   echo '[{"addr":"'$ALBERTO'","key":"'$ALBERTO'","max_sell":"70","min_buy":"100","rate_min":"2","token_buy":"'$NAM'","token_sell":"'$BTC'","vp_path": "wasm_for_tests/vp_always_true.wasm"}]' > intent.A.data
    
    echo '[{"addr":"'$BERTHA'","key":"'$BERTHA'","max_sell":"300","min_buy":"50","rate_min":"0.7","token_buy":"'$BTC'","token_sell":"'$ETH'"}]' > intent.B.data
 
-   echo '[{"addr":"'$CHRISTEL'","key":"'$CHRISTEL'","max_sell":"200","min_buy":"20","rate_min":"0.5","token_buy":"'$ETH'","token_sell":"'$XAN'"}]' > intent.C.data
+   echo '[{"addr":"'$CHRISTEL'","key":"'$CHRISTEL'","max_sell":"200","min_buy":"20","rate_min":"0.5","token_buy":"'$ETH'","token_sell":"'$NAM'"}]' > intent.C.data
    ```
 
 1) Start the ledger, intent gossiper and the matchmaker. Instruct the intent gossiper to subscribe to a topic "asset_v1":

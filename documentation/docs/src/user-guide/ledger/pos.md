@@ -1,6 +1,6 @@
 # 🔏 Interacting with the Proof-of-Stake system
 
-The Namada Proof of Stake system uses the XAN token as the staking token. It features delegation to any number of validators and customizable validator validity predicates.
+The Namada Proof of Stake system uses the NAM token as the staking token. It features delegation to any number of validators and customizable validator validity predicates.
 
 The PoS system is implemented as an account with a validity predicate that governs the rules of the system. You can find its address in your wallet:
 
@@ -111,10 +111,10 @@ anoma ledger
 
 The ledger will then use the validator consensus key to sign blocks, should your validator account acquire enough voting power to be included in the active validator set. The size of the active validator set is limited to `128` (the limit is set by the PoS `max_validator_slots` parameter).
 
-Note that the balance of XAN tokens that is in your validator account does not count towards your validator's stake and voting power:
+Note that the balance of NAM tokens that is in your validator account does not count towards your validator's stake and voting power:
 
 ```shell
-anoma client balance --owner my-validator --token XAN
+anoma client balance --owner my-validator --token NAM
 ```
 
 That is, the balance of your account's address is a regular liquid balance that you can transfer using your validator account key, depending on the rules of the validator account's validity predicate. The default validity predicate allows you to transfer it with a signed transaction and/or stake it in the PoS system.

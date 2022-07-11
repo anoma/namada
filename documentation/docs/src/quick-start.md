@@ -76,13 +76,13 @@ The transaction initialized 1 new account
 ➜ Added alias example-established for address atest1v4ehgw36ggmyzwp5g9prgsekgsu5y32z8ycnsvpeggcnys35gv65yvzxg3zrjwphgcu5gde4lvmstw
 ```
 
-Let's transfer ourselves 1000 XAN from the faucet with the same alias using:
+Let's transfer ourselves 1000 NAM from the faucet with the same alias using:
 
 ```shell
 anomac transfer \
   --source faucet \
   --target example-established \
-  --token XAN \
+  --token NAM \
   --amount 1000 \
   --signer example-established
 
@@ -154,13 +154,13 @@ When you restart the node, you might notice log message "This node is not a vali
 
 We will now add some stake to your validator account.
 
-Transfer 1000 XAN to your validator account ("example-validator"):
+Transfer 1000 NAM to your validator account ("example-validator"):
 
 ```shell
 anomac transfer \
   --source example-established \
   --target example-validator \
-  --token XAN \
+  --token NAM \
   --amount 1000
 
 ➜  Jan 06 22:28:17.624  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
@@ -178,7 +178,7 @@ Transaction applied with result: {
 }
 ```
 
-Bond the 1000 XAN to "example-validator" using:
+Bond the 1000 NAM to "example-validator" using:
 
 ```shell
 anomac bond \

@@ -34,7 +34,7 @@ anomac init-account \
 #### Get tokens from the Testnet Faucet
 
 ```admonish info "Testnet Faucet Tokens"
-The testnet tokens which the faucet can provide you are named `XAN`,
+The testnet tokens which the faucet can provide you are named `NAM`,
 `BTC`, `ETH`, `DOT`, `Schnitzel`, `Apfel`, and `Kartoffel`. The faucet
 will transfer these in increments of 1000 maximum at a time.
 ```
