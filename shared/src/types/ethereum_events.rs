@@ -165,7 +165,7 @@ pub struct TokenWhitelist {
 pub mod vote_extensions {
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use eyre::{eyre, Result};
-    use num::rational::Ratio;
+    use num_rational::Ratio;
 
     use super::EthereumEvent;
     use crate::proto::MultiSigned;

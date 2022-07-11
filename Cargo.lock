@@ -204,7 +204,7 @@ dependencies = [
  "ics23",
  "itertools 0.10.3",
  "loupe",
- "num 0.4.0",
+ "num-rational 0.4.1",
  "parity-wasm",
  "pretty_assertions",
  "proptest",
@@ -4661,7 +4661,7 @@ dependencies = [
  "num-complex 0.4.1",
  "num-integer",
  "num-iter",
- "num-rational 0.4.0",
+ "num-rational 0.4.1",
  "num-traits 0.2.15",
 ]
 
@@ -4753,9 +4753,9 @@ dependencies = [
 
 [[package]]
 name = "num-rational"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d41702bd167c2df5520b384281bc111a4b5efcf7fbc4c9c222c815b07e0a6a6a"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
 dependencies = [
  "autocfg 1.1.0",
  "num-bigint 0.4.3",
