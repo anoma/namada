@@ -11,6 +11,7 @@ mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
+mod vote_extensions;
 
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
@@ -33,6 +34,8 @@ use namada::ledger::storage::{
 use namada::ledger::{ibc, parameters, pos};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
+#[cfg(not(feature="ABCI"))]
+use namada::types::ethereum_events::vote_extensions::FractionalVotingPower;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key};
@@ -539,26 +542,6 @@ where
                     tracing::error!("Error in slashing: {}", err);
                 }
             }
-        }
-    }
-
-    #[cfg(not(feature = "ABCI"))]
-    /// INVARIANT: This method must be stateless.
-    pub fn extend_vote(
-        &self,
-        _req: request::ExtendVote,
-    ) -> response::ExtendVote {
-        Default::default()
-    }
-
-    #[cfg(not(feature = "ABCI"))]
-    /// INVARIANT: This method must be stateless.
-    pub fn verify_vote_extension(
-        &self,
-        _req: request::VerifyVoteExtension,
-    ) -> response::VerifyVoteExtension {
-        response::VerifyVoteExtension {
-            status: VerifyStatus::Accept as i32,
         }
     }
 
