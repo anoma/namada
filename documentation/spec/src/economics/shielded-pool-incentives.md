@@ -14,12 +14,10 @@ Incentive mechanisms are also dangerous, as they give users reason to craft part
 
 ### Design
 
-Namada enacts a shielded pool incentive which pays users a variable rate for keeping assets in the shielded pool. Assets do not need to be locked in any way. Users may claim rewards while remaining in the shielded pool using the convert circuit, and unshield the rewards (should they wish to) at some later point in time. The protocol uses a PD-controller to target particular minimum amounts of particular assets being shielded. Rewards compound automatically over time, so claiming rewards more frequently does not result in additional funds.
+Namada enacts a shielded pool incentive which pays users a variable rate for keeping assets in the shielded pool. Assets do not need to be locked in any way. Users may claim rewards while remaining in the shielded pool using the convert circuit, and unshield the rewards (should they wish to) at some later point in time. The protocol uses a PD-controller to target particular minimum amounts of particular assets being shielded. Rewards accumulate automatically over time, so claiming rewards more frequently does not result in additional funds.
 
 ### Implementation
 
-- When users deposit assets, they get epoch-stamped versions
-- Convert circuit allows conversion based on epoch differences
-- When users withdraw, they convert to the current epoch (then asset type changes back)
+When users deposit assets into the shielded pool, the current epoch is appended to the asset type. Users can use these "epoched assets" as normal within the shielded pool. When epochs advance, users can use the [convert circuit](../masp/convert-circuit.md) to convert assets tagged with the old epoch to assets tagged with the new epoch, receiving shielded rewards in NAM proportional to the amount of the asset they had shielded, which automatically compound while the assets are shielded and the epochs progressing. When unshielding from the shielded pool, assets must be first converted to the current epoch (claiming any rewards), after which they can be converted back to the normal (un-epoched) unshielded asset denomination.
 
-The total incemtives that are paid out, $I_L$, is minted each epoch based on the current parameters and are calculated according to the [inflation model](./inflation-system.md). This total is then distributed evenly among recipients. 
+Namada allocates up to 10% per annum inflation of NAM to pay for shielded pool rewards. This inflation is kept in a temporary shielded rewards pool, which is then allocated according to a set of PD (proportional-derivative) controllers for assets and target shielded amounts configured by Namada governance. Each epoch, subject to available rewards, each controller calculates the reward rate for its asset in this epoch, which is then used to compute entries into the conversion table. Entries from epochs before the previous one are recalculated based on cumulative rewards. Users may then asynchronously claim their rewards by using the convert circuit at some future point in time.
