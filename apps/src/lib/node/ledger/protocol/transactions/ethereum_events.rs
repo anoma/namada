@@ -4,7 +4,7 @@ use anoma::types::ethereum_events::vote_extensions::{
 };
 use anoma::types::ethereum_events::EthereumEvent;
 use borsh::{BorshDeserialize, BorshSerialize};
-use eyre::{eyre, Result};
+use eyre::{eyre, Context, Result};
 
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub(crate) struct EthMsgDiff {
@@ -44,6 +44,13 @@ pub(crate) fn calculate_eth_msg_diff(
         seen_by,
         voting_power: total_voting_power,
     })
+}
+
+pub(crate) fn construct_tx_data(diffs: Vec<EthMsgDiff>) -> Result<Vec<u8>> {
+    // TODO: when can .try_to_vec() ever fail?
+    diffs
+        .try_to_vec()
+        .wrap_err_with(|| eyre!("couldn't serialize diffs"))
 }
 
 #[cfg(test)]

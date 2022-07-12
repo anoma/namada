@@ -126,11 +126,16 @@ where
             ..
         }) => {
             tracing::debug!("Ethereum events received");
-            let _diffs =
-                transactions::ethereum_events::calculate_eth_msg_diffs(events);
-            // TODO: calculate mints/transfers
-            // TODO: apply transaction to storage
-            // TODO: return TxResult
+            // TODO: don't use unwraps, handle errors gracefully
+            let diffs =
+                transactions::ethereum_events::calculate_eth_msg_diffs(events)
+                    .unwrap();
+            let _tx_data =
+                transactions::ethereum_events::construct_tx_data(diffs)
+                    .unwrap();
+            // TODO: apply transaction to storage - mints etc should be
+            // calculated in the transaction wasm itself
+            // TODO: return appropriate TxResult
             let gas_used = block_gas_meter
                 .finalize_transaction()
                 .map_err(Error::GasError)?;
