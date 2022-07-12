@@ -642,7 +642,7 @@ mod test_utils {
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
     use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
@@ -885,6 +885,7 @@ mod test_utils {
                 next_epoch_min_start_height: BlockHeight(3),
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: &address_gen,
+                results: &BlockResults::default(),
                 tx_queue: &shell.storage.tx_queue,
             })
             .expect("Test failed");
