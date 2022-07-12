@@ -165,11 +165,8 @@ pub struct TokenWhitelist {
 /// Contains types necessary for processing Ethereum events
 /// in vote extensions
 pub mod vote_extensions {
-
     use std::cmp::Ordering;
-    use std::convert::TryFrom;
     use std::hash::Hasher;
-
 
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use eyre::{eyre, Result};
@@ -424,7 +421,6 @@ pub mod vote_extensions {
                 },
             }
         }
-
     }
 
     #[cfg(test)]
