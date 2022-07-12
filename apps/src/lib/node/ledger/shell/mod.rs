@@ -31,9 +31,10 @@ use namada::ledger::storage::{
 };
 use namada::ledger::{ibc, parameters, pos};
 use namada::proto::{self, Tx};
+use namada::types::address::{masp, masp_tx_key};
 use namada::types::chain::ChainId;
 use namada::types::key::*;
-use namada::types::storage::{BlockHeight, Key};
+use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
@@ -567,6 +568,7 @@ where
                 match protocol::apply_tx(
                     tx,
                     tx_bytes.len(),
+                    TxIndex::default(),
                     &mut gas_meter,
                     &mut write_log,
                     &self.storage,
