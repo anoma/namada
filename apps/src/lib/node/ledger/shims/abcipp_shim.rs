@@ -15,6 +15,8 @@ use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::response::TxResult;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
+#[cfg(feature = "ABCI")]
+use crate::node::ledger::shell::Error::TxDecoding;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
