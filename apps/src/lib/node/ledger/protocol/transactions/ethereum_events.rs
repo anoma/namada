@@ -23,11 +23,14 @@ pub(crate) fn calculate_eth_msg_diffs(
     Ok(eth_msgs)
 }
 
-pub(crate) fn calculate_eth_msg_diff(multisigned: MultiSignedEthEvent) -> Result<EthMsgDiff> {
+pub(crate) fn calculate_eth_msg_diff(
+    multisigned: MultiSignedEthEvent,
+) -> Result<EthMsgDiff> {
     let (body, _) = multisigned.event.data;
     if !body.is_valid() {
         return Err(eyre!("invalid event: {:#?}", body));
     }
+
     let mut total_voting_power = FractionalVotingPower::zero();
     let mut seen_by = vec![];
     for (signer, voting_power) in multisigned.signers {
@@ -53,7 +56,7 @@ mod test {
     use anoma::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToNamada, Uint,
     };
-    use anoma::types::key::{common, ed25519};
+    use anoma::types::key::{common, ed25519, SigScheme};
     use anoma::types::storage::BlockHeight;
     use anoma::types::token::Amount;
     use rand::prelude::ThreadRng;
@@ -71,6 +74,10 @@ mod test {
         123.into()
     }
 
+    fn arbitrary_amount() -> Amount {
+        Amount::from(1_000)
+    }
+
     fn arbitrary_block_height() -> BlockHeight {
         BlockHeight(100)
     }
@@ -80,7 +87,7 @@ mod test {
     fn arbitrary_secret_key() -> common::SecretKey {
         let mut rng: ThreadRng = rand::thread_rng();
         let sk: common::SecretKey = {
-            use anoma::types::key::{SecretKey, SigScheme};
+            use anoma::types::key::SecretKey;
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
         };
         sk
@@ -134,7 +141,7 @@ mod test {
         let single_transfer = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
             transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
+                amount: arbitrary_amount(),
                 asset: arbitrary_eth_address(),
                 receiver,
             }],
@@ -161,6 +168,4 @@ mod test {
         let eth_msg = eth_msg.unwrap();
         assert_eq!(eth_msg, expected);
     }
-
-    // TODO: test signatures match signers
 }
