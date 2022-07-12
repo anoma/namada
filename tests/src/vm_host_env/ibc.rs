@@ -65,7 +65,7 @@ use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::ibc::data::FungibleTokenPacketData;
 use namada::types::ibc::IbcEvent;
-use namada::types::storage::{BlockHash, BlockHeight, Key};
+use namada::types::storage::{BlockHash, BlockHeight, Key, TxIndex};
 use namada::types::time::Rfc3339String;
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
@@ -193,6 +193,7 @@ pub fn init_ibc_vp_from_tx<'a>(
         &tx_env.storage,
         &tx_env.write_log,
         tx,
+        &TxIndex(0),
         VpGasMeter::new(0),
         vp_wasm_cache,
     );
@@ -224,6 +225,7 @@ pub fn init_token_vp_from_tx<'a>(
         &tx_env.storage,
         &tx_env.write_log,
         tx,
+        &TxIndex(0),
         VpGasMeter::new(0),
         vp_wasm_cache,
     );
