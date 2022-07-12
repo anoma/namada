@@ -353,7 +353,6 @@ where
         address: &Address,
         epoch: Option<Epoch>,
     ) -> Option<(VotingPower, common::PublicKey)> {
-        // get the current epoch
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         // get the active validator set
         self.storage
