@@ -3,8 +3,10 @@ use std::cmp::max;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
+use masp_primitives::asset_type::AssetType;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::PosParams;
+use namada::ledger::storage::types;
 use namada::types::address::Address;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
@@ -53,6 +55,9 @@ where
                         ..Default::default()
                     }
                 }
+                Path::Conversion(asset_type) => {
+                    self.read_conversion(&asset_type)
+                }
                 Path::Value(storage_key) => {
                     self.read_storage_value(&storage_key, height, query.prove)
                 }
@@ -66,6 +71,38 @@ where
                 info: format!("RPC error: {}", err),
                 ..Default::default()
             },
+        }
+    }
+
+    /// Query to read a conversion from storage
+    pub fn read_conversion(&self, asset_type: &AssetType) -> response::Query {
+        // Conversion values are constructed on request
+        if let Some((addr, epoch, conv, pos)) =
+            self.storage.conversion_state.assets.get(asset_type)
+        {
+            let conv = (
+                addr,
+                epoch,
+                Into::<masp_primitives::transaction::components::Amount>::into(
+                    conv.clone(),
+                ),
+                self.storage.conversion_state.tree.path(*pos),
+            );
+            response::Query {
+                value: types::encode(&conv),
+                proof_ops: None,
+                ..Default::default()
+            }
+        } else {
+            response::Query {
+                code: 1,
+                info: format!(
+                    "No conversion found for asset type: {}",
+                    asset_type
+                ),
+                proof_ops: None,
+                ..Default::default()
+            }
         }
     }
 
