@@ -1,7 +1,6 @@
 use std::env;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -35,7 +34,7 @@ pub async fn run(
     }: config::Matchmaker,
     intent_gossiper_addr: SocketAddr,
     ledger_addr: TendermintAddress,
-    tx_signing_key: Rc<common::SecretKey>,
+    tx_signing_key: common::SecretKey,
     tx_source_address: Address,
     wasm_dir: impl AsRef<Path>,
 ) {
@@ -98,7 +97,7 @@ pub struct ResultHandler {
     /// A source address for transactions created from intents.
     tx_source_address: Address,
     /// A keypair that will be used to sign transactions.
-    tx_signing_key: Rc<common::SecretKey>,
+    tx_signing_key: common::SecretKey,
 }
 
 /// The loaded implementation's dylib and its state
@@ -126,7 +125,7 @@ impl Runner {
         matchmaker_path: PathBuf,
         tx_code_path: PathBuf,
         ledger_address: TendermintAddress,
-        tx_signing_key: Rc<common::SecretKey>,
+        tx_signing_key: common::SecretKey,
         tx_source_address: Address,
         wasm_dir: impl AsRef<Path>,
     ) -> (Self, ResultHandler) {
