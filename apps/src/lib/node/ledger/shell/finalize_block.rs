@@ -9,7 +9,7 @@ use namada::ledger::storage::types::encode;
 use namada::ledger::treasury::ADDRESS as treasury_address;
 use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
-use namada::types::storage::{BlockHash, Epoch, Header};
+use namada::types::storage::{BlockHash, BlockResults, Epoch, Header, TxIndex};
 use tendermint_proto::abci::Misbehavior as Evidence;
 use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
@@ -224,6 +224,8 @@ where
             }
         }
 
+        // Tracks the accepted transactions
+        self.storage.block.results = BlockResults::with_len(req.txs.len());
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {
             let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
                 tx
@@ -357,6 +359,7 @@ where
                         self.write_log.commit_tx();
                         if !tx_event.contains_key("code") {
                             tx_event["code"] = ErrorCodes::Ok.into();
+                            self.storage.block.results.accept(tx_index);
                         }
                         if let Some(ibc_event) = &result.ibc_event {
                             // Add the IBC event besides the tx_event
