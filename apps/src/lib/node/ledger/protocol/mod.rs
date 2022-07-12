@@ -1,6 +1,7 @@
 //! The ledger's protocol
 use std::collections::BTreeSet;
 use std::panic;
+use std::path::Path;
 
 use anoma::ledger::eth_bridge::vp::EthBridge;
 use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter};
@@ -21,6 +22,8 @@ use anoma::vm::wasm::{TxCache, VpCache};
 use anoma::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
+
+use crate::wasm_loader;
 
 mod transactions;
 
@@ -130,9 +133,16 @@ where
             let diffs =
                 transactions::ethereum_events::calculate_eth_msg_diffs(events)
                     .unwrap();
-            let _tx_data =
+            let tx_data =
                 transactions::ethereum_events::construct_tx_data(diffs)
                     .unwrap();
+            let tx_code = wasm_loader::read_wasm(
+                Path::new("wasm_for_tests"), /* TODO: don't use hardcoded
+                                              * wasm_dir path */
+                Path::new("tx_no_op"),
+            );
+            let _tx = Tx::new(tx_code, Some(tx_data));
+
             // TODO: apply transaction to storage - mints etc should be
             // calculated in the transaction wasm itself
             // TODO: return appropriate TxResult
