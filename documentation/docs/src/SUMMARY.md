@@ -10,7 +10,6 @@
     - [Interact with PoS](./user-guide/ledger/pos.md)
     - [Governance](./user-guide/ledger/governance.md)
     - [Private Transfers](./user-guide/ledger/masp.md)
-    - [Customize](./user-guide/ledger/customize.md)
   - [Genesis validator setup](./user-guide/genesis-validator-setup.md)
   - [Applying to be a genesis validator](./user-guide/genesis-validator-apply.md)
 - [Testnets](./testnets/README.md)
