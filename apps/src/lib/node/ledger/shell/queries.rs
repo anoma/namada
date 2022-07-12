@@ -306,7 +306,6 @@ where
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
-        // get the current epoch
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         // get the active validator set
         self.storage
