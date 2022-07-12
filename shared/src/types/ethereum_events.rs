@@ -2,6 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::Uint as ethUint;
+use thiserror::Error;
 
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -377,6 +378,29 @@ pub mod vote_extensions {
         pub signers: Vec<(Address, FractionalVotingPower)>,
         /// Events as signed by validators
         pub event: MultiSigned<(EthereumEvent, BlockHeight)>,
+    }
+
+    impl MultiSignedEthEvent {
+        /// Add a new signature for the same (block header, block height)
+        /// to this instance.
+        pub fn add(&mut self, other: SignedEthEvent) -> Result<()> {
+            if self.hash() == other.hash() {
+                self.signers.push((other.address, other.voting_power));
+                self.event.sigs.push(other.signed_header.sig);
+                Ok(())
+            } else {
+                Err(Error::IncompatibleHeaders)
+            }
+        }
+    }
+
+    // this `Hash` implementation is here to filter identical
+    // ethereum events that came from different validators in
+    // `apps/src/lib/node/ledger/shell/prepare_proposal.rs`
+    impl core::hash::Hash for MultiSignedEthEvent {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            self.event.data.hash(state);
+        }
     }
 
     impl SignedEvent for MultiSignedEthEvent {

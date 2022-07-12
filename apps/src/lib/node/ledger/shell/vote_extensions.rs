@@ -10,7 +10,7 @@ mod extend_votes {
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     pub struct VoteExtension {
         /// Ethereum events seen since last round
-        ethereum_events: Vec<SignedEthEvent>,
+        pub ethereum_events: Vec<SignedEthEvent>,
     }
 
     impl<D, H> Shell<D, H>

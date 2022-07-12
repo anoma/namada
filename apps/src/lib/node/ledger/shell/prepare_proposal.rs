@@ -2,10 +2,15 @@
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
+    use borsh::BorshDeserialize;
     use tendermint_proto::abci::TxRecord;
+    use anoma::types::transaction::protocol::{ProtocolTxType, VoteExtension};
 
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+    use crate::shared::types::ethereum_events::vote_extensions::{
+        MultiSignedEthEvent, SignedEthEvent,
+    };
 
     impl<D, H> Shell<D, H>
     where
@@ -33,10 +38,69 @@ mod prepare_block {
                 // TODO: This should not be hardcoded
                 let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
+                // Add the vote extensions in as a protocol tx
+                let mut txs: Vec<TxBytes> = {
+                    let protocol_key = self.mode
+                        .get_protocol_key()
+                        .expect("If we are a validator, we should always have a protocol key");
+
+                    let ethereum_events: Vec<_> = req.local_last_commit
+                        .map(|local_last_commit| {
+                            local_last_commit
+                                .votes
+                                .into_iter()
+                                .filter_map(|vote| {
+                                    <VoteExtension as BorshDeserialize>::try_from_slice(
+                                        &vote.vote_extension[..]
+                                    ).ok()
+                                })
+                                .flat_map(|vote_extension| {
+                                    vote_extension
+                                        .ethereum_events
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    // TODO(tiago):
+                    // 1. filter ...
+                    // 2. construct MultiSignedEthEvent ...
+                    // 3. build a transaction (ProtocolTxType)
+                    // 3.5 check no one is Byzantine
+                    //    - call validate_ethereum_header() - https://github.com/anoma/anoma/blob/bat/eth-header-vp/apps/src/lib/node/ledger/shell/prepare_proposal.rs
+                    //    - check that (2/3 + 1) of the voting power (ask james)
+                    // 4. serialize tx
+                    // 5. sign tx
+                    // 6. tada, TxBytes
+                    let mut eth_events: HashSet<VoteExtension> =
+
+                    ProtocolTxType::EthereumEvents(
+                        todo!()
+                    )
+
+                    /*
+                        .map(|protocol_key| {
+                            ProtocolTxType::EthereumEvents(
+                                req.local_last_commit
+                                    .map(|local_las
+                                    .into_iter()
+                                    .filter_map(|vote| {
+                                        vote.vote_extension
+                                            .map(VoteExtension::from)
+                                    })
+                                    .collect(),
+                            )
+                            .sign(&protocol_key.ref_to(), protocol_key)
+                        })
+                        .unwrap()
+                        .to_bytes(),
+                    */
+                };
+
                 // filter in half of the new txs from Tendermint, only keeping
                 // wrappers
                 let number_of_new_txs = 1 + req.txs.len() / 2;
-                let mut txs: Vec<TxRecord> = req
+                let mempool_txs: Vec<TxRecord> = req
                     .txs
                     .into_iter()
                     .take(number_of_new_txs)
@@ -50,6 +114,8 @@ mod prepare_block {
                         }
                     })
                     .collect();
+
+                txs.append(&mut mempool_txs);
 
                 // decrypt the wrapper txs included in the previous block
                 let mut decrypted_txs = self
