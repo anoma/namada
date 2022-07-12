@@ -15,6 +15,21 @@ The main binary `anoma` has sub-commands for all of the other binaries:
 
 To explore the command-line interface, add `--help` argument at any sub-command level to find out any possible sub-commands and/or arguments.
 
+
+
 ## Join a network
 
-Before most commands will work, you will need to join a live network (e.g. testnet) with the `anoma client utils join-network` command and the chain ID of a network. To join a testnet, head over to the [testnets](../testnets) section for details on how to do this.
+After you installed Namada, you will need to join a live network (e.g. testnet) to be able to interact with a chain and execute most available commands. You can join a network with the following command:
+```
+anoma client utils join-network --chain-id=<network-chain-id>
+``` 
+To join a testnet, head over to the [testnets](../testnets) section for details on how to do this.
+
+## Start your node
+
+As soon as you are connected to a network, you can start your local node with:
+```
+anoma ledger
+```
+
+Learn more about the configuration of the Ledger in [The Ledger](./ledger.md) section

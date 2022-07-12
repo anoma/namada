@@ -1,9 +1,10 @@
 # Namada Wallet Guide
 
-This document describes the different wallet concepts and options that are available to users of Namada who want to be able to [send, receive and interact](#send-and-receive-tokens) with NAM tokens on the Namada blockchain.
+This document describes the different wallet concepts and options that are available to users of Namada who want to be able to [send, receive and interact](#send-and-receive-nam-tokens) with NAM tokens on the Namada blockchain.
 
 Check out the different options to generate a wallet:
 - File System Wallet
+- Web Wallet
 - Paper Wallet
 - Hardware Wallet
 
@@ -25,7 +26,9 @@ Generate a keypair with a given alias and derive the implicit address from its p
 anoma wallet key gen --alias my-key
 ```
 
-Note that the derived implicit address shares the same `my-key` alias. The previous command has the same effect as `anoma wallet address gen --alias my-key`.
+```admonish note
+The derived implicit address shares the same `my-key` alias. The previous command has the same effect as `anoma wallet address gen --alias my-key`.
+```
 
 ### List all known keys
 
@@ -39,7 +42,7 @@ All accounts in Namada have an unique address, exactly one Validity Predicate an
 
 There are currently 3 types of account addresses:
 
-- **Established:** Used for accounts that allow the deployment of custom validation logic. These must be created on-chain via a transaction (see [the Ledger guide](./ledger.md#-initialize-an-account)). The address is generated on-chain and is not known until the transaction is applied.
+- **Established:** Used for accounts that allow the deployment of custom validation logic. These must be created on-chain via a transaction (e.g. [initialize an account](#initialize-an-established-account)). The address is generated on-chain and is not known until the transaction is applied.
 - **Implicit *(not fully supported yet)*:** Derived from your kepair, it can be used to authorize certain transactions from the account. They can be used as recipients of transactions even if the account has not been used on-chain before.
 - **Internal:** Special internal accounts, such as protocol parameters account, PoS and IBC.
 
@@ -55,7 +58,10 @@ anoma wallet address
 anoma wallet address gen --alias my-account
 ```
 
+```admonish note
+
 Note that this will also generate and save a key from which the address was derived and save it under the same `my-account` alias. Thus, this command has the same effect as `anoma wallet key gen --alias my-account`.
+```
 
 ### List all known addresses
 
@@ -71,9 +77,13 @@ If the wallet doesn't already exist, it will be created for you as soon as you r
 
 Currently, the Namada client can load the password via:
 
-- Stdin: the client will prompt for a password.
-- Env variable: by exporting a ENV variable called `ANOMA_WALLET_PASSWORD` with value of the actual password.
-- File: by exporting an ENV variable called `ANOMA_WALLET_PASSWORD_FILE` with value containing the path to a file containing the password.
+- **Stdin:** the client will prompt for a password.
+- **Env variable:** by exporting a ENV variable called `ANOMA_WALLET_PASSWORD` with value of the actual password.
+- **File:** by exporting an ENV variable called `ANOMA_WALLET_PASSWORD_FILE` with value containing the path to a file containing the password.
+
+## Web Wallet
+
+The Web Wallet for Namada is currently in closed beta. 
 
 ## Paper Wallet
 
@@ -84,6 +94,8 @@ At the moment, the Namada CLI doesn't provide a Paper Wallet.
 The Ledger Hardware Wallet is currently in development.
 
 ## Send and Receive NAM tokens
+
+In Namada, tokens are implemented as accounts with the [Token Validity Predicate](https://github.com/anoma/namada/blob/namada/wasm/wasm_source/src/vp_token.rs). It checks that its total supply is preserved in any transaction that uses this token. Your wallet will be pre-loaded with some token addresses that are initialized in the genesis block.
 
 ### Initialize an established account
 
@@ -102,28 +114,8 @@ Once this transaction has been applied, the client will automatically see the ne
 
 This command uses the prebuilt [User Validity Predicate](https://github.com/anoma/namada/blob/namada/wasm/wasm_source/src/vp_user.rs).
 
-## Token transactions and queries
+### Send a Payment
 
-In Namada, tokens are implemented as accounts with a token validity predicate. It checks that its total supply is preserved in any transaction that uses this token. Your wallet will be pre-loaded with some token addresses that are initialized in the genesis block.
-
-You can see the tokens addresses known by the client when you query all tokens balances:
-
-```shell
-anoma client balance
-```
-
-NAM is Namada's native token. To obtain some tokens in a testnet, there is a special "faucet" account that allows anyone to withdraw up to 1000 of any token for a single transaction. You can find the address of this account in your wallet. To get some tokens from the faucet account:
-
-```shell
-anoma client transfer \
-  --source faucet \
-  --target my-new-acc \
-  --signer my-new-acc \
-  --token NAM \
-  --amount 1000
-```
-
-Note that because you don't have the key to sign a transfer from the faucet account, in the command above, we set the `--signer` explicitly to your account's address.
 
 To submit a regular token transfer from your account to the `validator-1` address:
 
@@ -137,10 +129,23 @@ anoma client transfer \
 
 This command will attempt to find and use the key of the source address to sign the transaction.
 
+### See your balance
+
 To query token balances for a specific token and/or owner:
 
 ```shell
 anoma client balance --token NAM --owner my-new-acc
 ```
 
-Note that for any client command that submits a transaction (`init-account`, `transfer`, `tx`, `update` and [PoS transactions](ledger/pos.md)), you can use the `--dry-run` flag to simulate the transaction being applied in the block, to see what its result would be.
+```admonish note
+For any client command that submits a transaction (`init-account`, `transfer`, `tx`, `update` and [PoS transactions](ledger/pos.md)), you can use the `--dry-run` flag to simulate the transaction being applied in the block and see what would be the result.
+
+```
+
+### See every known addresses' balance
+You can see the token's addresses known by the client when you query all tokens balances:
+
+```shell
+anoma client balance
+```
+
