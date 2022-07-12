@@ -30,10 +30,9 @@ be redeemed from Namada. This will not add more security, but rather make the
 attack more inconvenient.
 
 ## Ethereum Events Attestation
-We want to store events from the smart contracts of our bridge onto Namada.
-We need to have consensus on these events, we will only include those that 
-have been seen and validated by at least 2/3 of the staking validators in
-the blockchain storage.
+We want to store events from the smart contracts of our bridge onto Namada. We
+will include events that have been seen by at least one validator, but will not
+act on them until they have been seen by at least 2/3 of voting power.
 
 There will be multiple types of events emitted. Validators should
 ignore improperly formatted events. Raw events from Ethereum are converted to a 
@@ -49,21 +48,26 @@ pub enum EthereumEvent {
 }
 ```
 
-Each event should have a list of the validators that have seen
-this event and the current amount of stake associated with it. This
-will need to be appropriately adjusted across epoch boundaries. However,
-once an event has been seen by 2/3 of the voting power, it is locked into a
-`seen` state. Thus, even if after an epoch that event has no longer been
-reported as seen by 2/3 of the new staking validators voting power, it is still
-considered as `seen`.
+Each event will be stored with a list of the validators that have ever seen it 
+as well as the fraction of total voting power that has ever seen it. 
+Once an event has been seen by 2/3 of voting power, it is locked into a
+`seen` state, and acted upon.
 
-Each event from Ethereum should include the minimum number of confirmations
-necessary to be considered seen. Validators should not vote to include events
-that have not met the required number of confirmations. Furthermore, validators
-should not look at events that have not reached protocol specified minimum
-number of confirmations (regardless of what is specified in an event). This 
-constant may be changeable via governance. Voting on unconfirmed events is
-considered a slashable offence.
+There is no adjustment across epoch boundaries - e.g. if an event is seen by 1/3
+of voting power in epoch n, then seen by a different 1/3 of voting power in 
+epoch m>n, the event will be considered `seen` in total. Validators may never
+vote more than once for a given event.
+
+### Minimum confirmations
+There will be a protocol-specified minimum number of confirmations that events
+must reach on the Ethereum chain, before validators should vote to include them
+on Namada. Validators should not vote to include events that have not met this 
+required number of confirmations. This constant will be changeable via 
+governance. Voting on unconfirmed events is considered a slashable offence.
+
+In a future version of the Ethereum bridge, we may allow an additional per-event
+minimum number of confirmations that an event should have to reach before being
+included in Namada.
 
 ### Storage
 To make including new events easy, we take the approach of always overwriting 
@@ -80,10 +84,11 @@ keys involved are:
 `$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant 
 `EthereumEvent`.
 
-Changes to this `/eth_msgs` storage subspace are only ever made by internal transactions crafted 
-and applied by all nodes based on the aggregate of vote extensions for the last Tendermint round. That is, changes to `/eth_msgs` happen 
-in block `n+1` in a deterministic manner based on the vote extensions of the Tendermint 
-round for block `n`.
+Changes to this `/eth_msgs` storage subspace are only ever made by internal 
+transactions crafted and applied by all nodes based on the aggregate of vote 
+extensions for the last Tendermint round. That is, changes to `/eth_msgs` happen 
+in block `n+1` in a deterministic manner based on the vote extensions of the 
+Tendermint round for block `n`.
 
 The `/eth_msgs` storage subspace does not belong to any account and cannot be 
 modified by transactions submitted from outside of the ledger via Tendermint. 
@@ -93,16 +98,19 @@ removed by the ledger code for the specific permitted transactions that are
 allowed to update `/eth_msgs`.
 
 ### Including events into storage
-For every Namada block proposal, the vote extension of a validator should include
-the events of the Ethereum blocks they have seen via their full node such that:
+For every Namada block proposal, each validator must include a vote extension
+containing the events of the Ethereum blocks they have seen via their full node 
+such that:
 1. The storage value `/eth_msgs/$msg_hash/seen_by` does not include their
    address.
 2. It's correctly formatted.
 3. It's reached the required number of confirmations on the Ethereum chain
 
 Each event that a validator is voting to include must be individually signed by 
-them. The vote extension data field will be a Borsh-serialization of something 
-like the following.
+them. If the validator is not voting to include any events, they must still
+provide a signed voted extension indicating this.
+
+The vote extension data field will be a Borsh-serialization of something like the following.
 ```rust
 pub struct VoteExtension(Vec<SignedEthEvent>);
 
@@ -156,10 +164,10 @@ part of `ProcessProposal`, this includes checking:
 It is also checked that each vote extension came from the previous round, 
 requiring validators to sign over the Namada block height with their vote
 extension. Furthermore, the vote extensions included by the block proposer
-should have at least 2 / 3 of the total voting power backing it. Otherwise
-the block proposer would not have passed the `FinalizeBlock` phase of the
-last round. These checks are to prevent censorship of events from validators
-by the block proposer.
+should have at least 2 / 3 of the total voting power of the previous round 
+backing it. Otherwise the block proposer would not have passed the 
+`FinalizeBlock` phase of the last round. These checks are to prevent censorship 
+of events from validators by the block proposer.
 
 In `FinalizeBlock`, we derive a second transaction (the "state update" 
 transaction) from the vote extensions transaction that:
@@ -171,7 +179,8 @@ This state update transaction will not be recorded on chain but will be
 deterministically derived from the vote extensions transaction, which is 
 recorded on chain. All ledger nodes will derive and apply this transaction to 
 their own local blockchain state, whenever they receive a block with a vote 
-extensions transaction. No signature is required.
+extensions transaction. This transaction cannot require a protocol signature 
+as even non-validator full nodes of Namada will be expected to do this.
 
 The value of `/eth_msgs/$msg_hash/seen` will also indicate if the event 
 has been acted on on the Namada side. The appropriate transfers of tokens to the
@@ -181,9 +190,15 @@ additional actions from the end user.
 ## Namada Validity Predicates
 
 There will be three internal accounts with associated native validity predicates:
-- `#EthSentinel` - whose validity predicate will verify the inclusion of events from Ethereum. This validity predicate will control the `/eth_msgs` storage subspace.
-- `#EthBridge` - the storage of which will contain ledgers of balances for wrapped Ethereum assets (ETH and ERC20 tokens) structured in a ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy
-- `#EthBridgeEscrow` which will hold in escrow wrapped Namada tokens which have been sent to Ethereum.
+
+- `#EthSentinel` - whose validity predicate will verify the inclusion of events 
+from Ethereum. This validity predicate will control the `/eth_msgs` storage 
+subspace.
+- `#EthBridge` - the storage of which will contain ledgers of balances for 
+wrapped Ethereum assets (ERC20 tokens) structured in a 
+["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy
+- `#EthBridgeEscrow` which will hold in escrow wrapped Namada tokens which have 
+been sent to Ethereum.
 
 ### Transferring assets from Ethereum to Namada
 
@@ -366,7 +381,8 @@ appropriate state change, emit logs, etc.
 
 ## Starting the bridge
 
-Before the bridge can start running, some storage will need to be initialized in Namada. For example, the `#EthBridge/queue` storage key should be initialized to an empty `Vec<TransferFromEthereum>`. TBD.
+Before the bridge can start running, some storage may need to be initialized in 
+Namada. TBD.
 
 ## Resources which may be helpful:
 - [Gravity Bridge Solidity contracts](https://github.com/Gravity-Bridge/Gravity-Bridge/tree/main/solidity)
@@ -375,4 +391,4 @@ Before the bridge can start running, some storage will need to be initialized in
 - [IBC in Solidity](https://github.com/hyperledger-labs/yui-ibc-solidity)
 
 Operational notes:
-1. We should bundle the Ethereum full node with the `namada` daemon executable.
+1. We will bundle the Ethereum full node with the `namada` daemon executable.
