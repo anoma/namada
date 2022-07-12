@@ -18,25 +18,29 @@ pub(crate) fn calculate_eth_msg_diffs(
 ) -> Result<Vec<EthMsgDiff>> {
     let mut eth_msgs = Vec::with_capacity(multisigneds.len());
     for multisigned in multisigneds {
-        let (body, _) = multisigned.event.data;
-        if !body.is_valid() {
-            return Err(eyre!("invalid event: {:#?}", body));
-        }
-        let mut total_voting_power = FractionalVotingPower::zero();
-        let mut seen_by = vec![];
-        for (signer, voting_power) in multisigned.signers {
-            seen_by.push(signer);
-            total_voting_power =
-                (*voting_power + *total_voting_power).try_into().unwrap();
-        }
-
-        eth_msgs.push(EthMsgDiff {
-            body,
-            seen_by,
-            voting_power: total_voting_power,
-        });
+        eth_msgs.push(calculate_eth_msg_diff(multisigned)?);
     }
     Ok(eth_msgs)
+}
+
+pub(crate) fn calculate_eth_msg_diff(multisigned: MultiSignedEthEvent) -> Result<EthMsgDiff> {
+    let (body, _) = multisigned.event.data;
+    if !body.is_valid() {
+        return Err(eyre!("invalid event: {:#?}", body));
+    }
+    let mut total_voting_power = FractionalVotingPower::zero();
+    let mut seen_by = vec![];
+    for (signer, voting_power) in multisigned.signers {
+        seen_by.push(signer);
+        total_voting_power =
+            (*voting_power + *total_voting_power).try_into().unwrap();
+    }
+
+    Ok(EthMsgDiff {
+        body,
+        seen_by,
+        voting_power: total_voting_power,
+    })
 }
 
 #[cfg(test)]
@@ -98,12 +102,12 @@ mod test {
     }
 
     #[test]
-    fn calculate_eth_msg_diffs_accepts_all_ethereum_events() {
+    fn calculate_eth_msg_diff_accepts_all_ethereum_events() {
         // TODO
     }
 
     #[test]
-    fn calculate_eth_msg_diffs_rejects_empty_transfers_to_namada() {
+    fn calculate_eth_msg_diff_rejects_empty_transfers_to_namada() {
         let validator = address::testing::established_address_1();
         let empty_transfers = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
@@ -113,18 +117,18 @@ mod test {
         let heighted = (empty_transfers, arbitrary_block_height());
         let signed =
             MultiSigned::<(EthereumEvent, BlockHeight)>::new(&sk, heighted);
-        let aggregated = vec![MultiSignedEthEvent {
+        let with_signers = MultiSignedEthEvent {
             signers: vec![(
                 validator.clone(),
                 arbitrary_fractional_voting_power(),
             )],
             event: signed,
-        }];
-        assert!(calculate_eth_msg_diffs(aggregated).is_err());
+        };
+        assert!(calculate_eth_msg_diff(with_signers).is_err());
     }
 
     #[test]
-    fn calculate_eth_msg_diffs_accepts_one_validator_one_transfer() {
+    fn calculate_eth_msg_diff_accepts_one_validator_one_transfer() {
         let sole_validator = address::testing::established_address_1();
         let receiver = address::testing::established_address_2();
         let single_transfer = EthereumEvent::TransfersToNamada {
@@ -139,24 +143,23 @@ mod test {
         let heighted = (single_transfer.clone(), arbitrary_block_height());
         let signed =
             MultiSigned::<(EthereumEvent, BlockHeight)>::new(&sk, heighted);
-        let aggregated = vec![MultiSignedEthEvent {
+        let with_signers = MultiSignedEthEvent {
             signers: vec![(
                 sole_validator.clone(),
                 FractionalVotingPower::full(),
             )],
             event: signed,
-        }];
+        };
         let expected = EthMsgDiff {
             body: single_transfer.clone(),
             seen_by: vec![sole_validator],
             voting_power: FractionalVotingPower::full(),
         };
 
-        let eth_msgs = calculate_eth_msg_diffs(aggregated);
+        let eth_msg = calculate_eth_msg_diff(with_signers);
 
-        let eth_msgs = eth_msgs.unwrap();
-        assert_eq!(eth_msgs.len(), 1);
-        assert_eq!(eth_msgs[0], expected);
+        let eth_msg = eth_msg.unwrap();
+        assert_eq!(eth_msg, expected);
     }
 
     // TODO: test signatures match signers
