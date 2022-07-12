@@ -105,42 +105,33 @@ mod extend_votes {
         ) -> bool {
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
             let total_voting_power = self.get_total_voting_power(epoch);
+            if u64::from(total_voting_power) == 0 {
+                return false;
+            }
 
             // Get the public keys of each validator. Filter out those that
             // inaccurately stated their voting power at a given block height
-            let public_keys: Vec<common::PublicKey> = event
-                .get_voting_powers()
-                .into_iter()
-                .filter_map(
-                    |EpochPower {
-                         validator,
-                         voting_power,
-                         block_height,
-                     }| {
-                        if block_height != height {
-                            return None;
-                        }
-                        if let Some((power, pk)) =
-                            self.get_validator_from_address(&validator, epoch)
-                        {
-                            FractionalVotingPower::new(
-                                power,
-                                total_voting_power,
-                            )
-                            .ok()
-                            .and_then(|power| {
-                                if power == voting_power {
-                                    Some(pk)
-                                } else {
-                                    None
-                                }
-                            })
-                        } else {
-                            None
-                        }
-                    },
-                )
-                .collect();
+            let mut public_keys = vec![];
+            for EpochPower {
+                validator,
+                voting_power,
+                block_height,
+            } in event.get_voting_powers().into_iter()
+            {
+                if block_height != height {
+                    continue;
+                }
+                if let Some((power, pk)) =
+                    self.get_validator_from_address(&validator, epoch)
+                {
+                    let power =
+                        FractionalVotingPower::new(power, total_voting_power)
+                            .unwrap();
+                    if power == voting_power {
+                        public_keys.push(pk);
+                    }
+                }
+            }
             // check that we found all the public keys and
             // check that the signatures are valid
             public_keys.len() == event.number_of_signers()
