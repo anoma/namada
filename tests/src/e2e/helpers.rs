@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 use std::{env, time};
 
 use color_eyre::eyre::Result;
@@ -15,7 +16,7 @@ use namada::types::storage::Epoch;
 use namada_apps::config::{Config, TendermintMode};
 
 use super::setup::{Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES};
-use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
+use crate::e2e::setup::{sleep, Bin, Who, APPS_PACKAGE};
 use crate::run;
 
 /// Find the address of an account by its alias from the wallet
@@ -225,4 +226,26 @@ fn strip_trailing_newline(input: &str) -> &str {
         .strip_suffix("\r\n")
         .or_else(|| input.strip_suffix('\n'))
         .unwrap_or(input)
+}
+
+/// Sleep until the next epoch starts
+pub fn epoch_sleep(
+    test: &Test,
+    ledger_address: &str,
+    timeout_secs: u64,
+) -> Result<Epoch> {
+    let old_epoch = get_epoch(test, ledger_address)?;
+    let start = Instant::now();
+    let loop_timeout = Duration::new(timeout_secs, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!("Timed out waiting for the next epoch");
+        }
+        let epoch = get_epoch(test, ledger_address)?;
+        if epoch > old_epoch {
+            break Ok(epoch);
+        } else {
+            sleep(1);
+        }
+    }
 }
