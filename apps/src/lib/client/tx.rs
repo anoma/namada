@@ -5,8 +5,26 @@ use std::fs::File;
 use std::time::Duration;
 
 use async_std::io::{self, WriteExt};
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Either::*;
+use masp_primitives::asset_type::AssetType;
+use masp_primitives::consensus::{BranchId, TestNetwork};
+use masp_primitives::convert::AllowedConversion;
+use masp_primitives::ff::PrimeField;
+use masp_primitives::group::cofactor::CofactorGroup;
+use masp_primitives::keys::FullViewingKey;
+use masp_primitives::legacy::TransparentAddress;
+use masp_primitives::merkle_tree::{
+    CommitmentTree, IncrementalWitness, MerklePath,
+};
+use masp_primitives::note_encryption::*;
+use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
+use masp_primitives::sapling::Node;
+use masp_primitives::transaction::builder::{self, *};
+use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
+use masp_primitives::transaction::Transaction;
+use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
+use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
@@ -17,7 +35,6 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::Epoch;
-use namada::types::token::Amount;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -25,6 +42,9 @@ use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, token};
 use namada::{ledger, vm};
+use rand_core::{CryptoRng, OsRng, RngCore};
+use sha2::Digest;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use tendermint_rpc::query::{EventType, Query};
@@ -360,6 +380,26 @@ pub async fn submit_init_validator(
     }
 }
 
+/// Generate a valid diversifier, i.e. one that has a diversified base. Return
+/// also this diversified base.
+pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
+    rng: &mut R,
+) -> (Diversifier, masp_primitives::jubjub::SubgroupPoint) {
+    let mut diversifier;
+    let g_d;
+    // Keep generating random diversifiers until one has a diversified base
+    loop {
+        let mut d = [0; 11];
+        rng.fill_bytes(&mut d);
+        diversifier = Diversifier(d);
+        if let Some(val) = diversifier.g_d() {
+            g_d = val;
+            break;
+        }
+    }
+    (diversifier, g_d)
+}
+
 pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let source = ctx.get(&args.source);
     // Check that the source address exists on chain
@@ -544,7 +584,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         };
 
         let min_proposal_funds_key = gov_storage::get_min_proposal_fund_key();
-        let min_proposal_funds: Amount =
+        let min_proposal_funds: token::Amount =
             rpc::query_storage_value(&client, &min_proposal_funds_key)
                 .await
                 .unwrap();
@@ -559,7 +599,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1);
         }
         let min_proposal_funds_key = gov_storage::get_min_proposal_fund_key();
-        let min_proposal_funds: Amount =
+        let min_proposal_funds: token::Amount =
             rpc::query_storage_value(&client, &min_proposal_funds_key)
                 .await
                 .unwrap();

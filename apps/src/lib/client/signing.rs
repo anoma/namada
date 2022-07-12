@@ -1,8 +1,6 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
-use std::rc::Rc;
-
 use borsh::BorshSerialize;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
@@ -23,7 +21,7 @@ pub async fn find_keypair(
     wallet: &mut Wallet,
     addr: &Address,
     ledger_address: TendermintAddress,
-) -> Rc<common::SecretKey> {
+) -> common::SecretKey {
     match addr {
         Address::Established(_) => {
             println!(

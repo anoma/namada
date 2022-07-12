@@ -48,6 +48,7 @@ ark-bls12-381 = {version = "0.3"}
 ark-ec = {version = "0.3", optional = true}
 ark-serialize = "0.3"
 bech32 = "0.8.0"
+bit-vec = "0.6.3"
 borsh = "0.9.0"
 chrono = "0.4.19"
 # Using unreleased commit on top of version 0.5.0 that adds Sync to the CLruCache
@@ -73,6 +74,7 @@ pwasm-utils = {version = "0.18.0", optional = true}
 rand = {version = "0.8", optional = true}
 # TODO proptest rexports the RngCore trait but the re-implementations only work for version `0.8`. *sigh*
 rand_core = {version = "0.6", optional = true}
+rayon = "=1.5.1"
 rust_decimal = "1.14.3"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_json = "1.0.62"
@@ -92,6 +94,9 @@ wasmer-engine-dylib = {version = "=2.2.0", optional = true}
 wasmer-engine-universal = {version = "=2.2.0", optional = true}
 wasmer-vm = {version = "2.2.0", optional = true}
 wasmparser = "0.83.0"
+#libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
