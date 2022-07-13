@@ -1,9 +1,10 @@
 # Convert Circuit
 
 ## Convert Circuit Description
-The high-level description of `Convert` can be found [Brun and mint](./burn-and-mint.html).
+The high-level description of `Convert` can be found [Burn and mint](./burn-and-mint.html).
 
-The `Convert` provides a mechanism that burning and minting of assets can be enabled by adding `Convert Value Vommitments` in transaction and ensuring the homomorphic sum of `Spend`, `Output` and `Convert` value commitments to be zero.
+The `Convert` provides a mechanism that burning and minting of assets can be 
+enabled by adding `Convert Value Commitments` in transaction and ensuring the homomorphic sum of `Spend`, `Output` and `Convert` value commitments to be zero.
 
 The Convert value commitment is constructed from `AllowedConversion` which was published earlier in `AllowedConversion Tree`. The `AllowedConversion` defines the allowed conversion assets. The `AllowedConversion Tree` is a merkle hash tree stored in the ledger.
 
@@ -12,7 +13,8 @@ An `AllowedConversion` is a compound asset type in essence, which contains disti
 
 `AllowedConversion` is an array of tuple $\{(t_1, v_1^{ratio}),(t_2, v_2^{ratio})...(t_n, v_n^{ratio})\}$
 * $t$: $\mathbb{B}^{\mathcal{l}_t}$ is a bytestring representing the asset identifier of the note.
-* $v^{ratio}$: $v^{ratio}$ is a signed 64-bit integer in the range $\{−2^{63} .. 2^{63} − 1\}$.
+* $v^{ratio}$: $v^{ratio}$ is a signed 64-bit integer in the range $\{−2^{63}
+  ,\dots, 2^{63} − 1\}$.
 
 Calculate:
  
@@ -28,7 +30,8 @@ An `AllowedConversion` can be used by proving the existence in `AllowedConversio
 
 ## Convert Value Commitment
 `Convert Value Commitment` is a tuple $(vb^{allowedconversion}, v^{convert}, rcv^{convert})$
-* $v^{convert}$: $v^{convert}$ is an unsigned integer representing the value of conversion in range $\{0 .. 2^{64} − 1\}$.
+* $v^{convert}$: $v^{convert}$ is an unsigned integer representing the value 
+  of conversion in range $[2^{64} − 1]$.
 
 Choose independent uniformly random commitment trapdoors:
 * $rcv^{convert}$ $\leftarrow \mathsf{ValueCommit}\mathsf{.GenTrapdoor}()$
@@ -76,7 +79,9 @@ Return $(cv^{convert}, rt^{convert},\pi_{convert})$
 
 Notes: 
 * Public and auxiliary inputs MUST be constrained to have the types specified. In particular, see the original Sapling specification, for required validity checks on compressed representations of Jubjub curve points. The ValueCommit.Output type also represents points, i.e. $\mathbb{J}$.
-* In the Merkle path validity check, each layer does not check that its input bit sequence is a canonical encoding(in {${0 .. r_{\mathbb{S}} − 1}$}) of the integer from the previous layer.
+* In the Merkle path validity check, each layer does not check that its 
+  input bit sequence is a canonical encoding(in $[r_{\mathbb{S}} − 1]$) of 
+  the integer from the previous layer.
 
 ## Incentive Description
 
@@ -90,18 +95,31 @@ In general, there are three items in `Incentive AllowedConversion Struct`(but no
 
 Note that the absolute value of input and output must be consistent in incentive system. The quantity of input is negative and the quantity of output is positive.
 
-To guarantee the input and output to be open as the same asset type in future unshielding transactions, the input and output assets have the same prefix description(e.g. BTC_1, BTC_2...BTC_n). And to prevent repeated shielding and unshielding and encourage long-term contribution to privacy pool, the postfix `timestamp` is used to distinct the input and output assets. The `timestamp` is depended on the update period and can be defined flexibly(e.g. date, epoch num). When new `timestamp` occurs, the `AllowedConversion` will be updated to support all the "history asset" conversion to the latest one.  
+To guarantee the input and output to be open as the same asset type in 
+future unshielding transactions, the input and output assets have the same 
+prefix description(e.g. BTC_1, BTC_2...BTC_n). To prevent repeated 
+shielding and unshielding and encourage long-term contribution to privacy 
+pool, the postfix `timestamp` is used to distinguish the input and output 
+assets. The `timestamp` depends on the update period and can be defined 
+flexibly (e.g. date, epoch num). When a new `timestamp` occurs, the 
+`AllowedConversion` will be updated to support all the "history asset" conversion to the latest one.  
 
-### Incentive AllowedConversion Operatioin
+### Incentive AllowedConversion Operation
 `Incentive AllowedConversion` is governed by incentive system, who will be in charge of issuing new incentive plan, updating(modifying) to the latest `timestamp` and destroying the disabled.
+```
+Jacob: I'm not sure what "destroying the disabled" 
+is supposed to mean.
+```
 
 * Issue 
     * Issue a new incentive plan for new asset. 
     * Issue for the last latest `AllowedConversion` when new `timestamp` occurs.
 * Update
-    * For every new `timestamp` occurs, updating the existing `AllowedConversion`. Keep the input still, update the output to the latest asset and modify the reward quantity according to the ratio. 
+    * For every new `timestamp` that occurs, update the existing 
+      `AllowedConversion`. Keep the input but update the output to the latest 
+      asset and modify the reward quantity according to the ratio. 
 * Destroy
-    * Detele the `AllowedConversion` from the tree.
+    * Delete the `AllowedConversion` from the tree.
 * Query Service
     * A service for querying the latest `AllowedConversion`, return (anchor, path, AllowedConversion).
 

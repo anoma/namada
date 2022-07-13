@@ -18,9 +18,17 @@ In Anoma, the sending tokens is triggered by a transaction having [MsgTransfer](
 
 Anoma chain receives the tokens by a transaction having [MsgRecvPacket](https://github.com/informalsystems/ibc-rs/blob/0a952b295dbcf67bcabb79ce57ce92c9c8d7e5c6/modules/src/core/ics04_channel/msgs/recv_packet.rs#L19-L23) which has the packet including `FungibleTokenPacketData`.
 
-The sending and receiving tokens in a transaction are validated by not only IBC validity predicate but also [IBC token validity predicate](https://docs.anoma.network/master/rustdoc/anoma/ledger/ibc/vp/struct.IbcToken.html#impl-NativeVp). IBC validity predicate validates if sending and receiving the packet is proper. IBC token validity predicate is also one of the native validity predicates and checks if the token transfer is valid. If the transfer is not valid, e.g. the unexpected amount is minted, the validity predicate makes the transaction fail.
+The sending and receiving tokens in a transaction are validated by not only 
+IBC validity predicate but also [IBC token validity predicate](https://docs.
+anoma.network/master/rustdoc/anoma/ledger/ibc/vp/struct.IbcToken.
+html#impl-NativeVp). IBC validity predicate validates if sending and receiving the packet is proper. IBC token validity predicate is also one of the native validity predicates and checks if the token transfer is valid. If the transfer is not valid, e.g. an unexpected amount is minted, the validity predicate makes the transaction fail.
 
-A transaction escrowing/unescrowing a token changes the escrow account's balance of the token. The key is `{token_addr}/balance/{escrow_addr}`. A transaction burning a token changes the burn account's balance of the token. The key is `{token_addr}/balance/BURN_ADDR`. A transaction minting a token changes the mint account's balance of the token. The key is `{token_addr}/balance/MINT_ADDR`. `{escrow_addr}`, `{BURN_ADDR}`, and `{MINT_ADDR}` are addresses of [`InternalAddress`](https://docs.anoma.network/master/rustdoc/anoma/types/address/enum.InternalAddress.html). When these address are included of the change keys after transaction execution, IBC token validity predicate is executed.
+A transaction escrowing/unescrowing a token changes the escrow account's 
+balance of the token. The key is `{token_addr}/balance/{escrow_addr}`. A 
+transaction burning a token changes the burn account's balance of the token. 
+The key is `{token_addr}/balance/BURN_ADDR`. A transaction minting a token 
+changes the mint account's balance of the token. The key is `{token_addr}
+/balance/MINT_ADDR`. `{escrow_addr}`, `{BURN_ADDR}`, and `{MINT_ADDR}` are addresses of [`InternalAddress`](https://docs.anoma.network/master/rustdoc/anoma/types/address/enum.InternalAddress.html). When these addresses are included in the changed keys after transaction execution, IBC token validity predicate is executed.
 
 ## IBC message
 

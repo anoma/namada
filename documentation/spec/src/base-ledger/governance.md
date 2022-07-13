@@ -1,6 +1,6 @@
 # Namada Governance
 
-Namada introduces a governance mechanism to propose and apply protocol changes with  or without the need for an hard fork. Anyone holding some `NAM` will be able to propose some changes to which delegators and validators will cast their `yay` or `nay` votes. Governance on Namada supports both `signaling` and `voting` mechanisms. The difference between the the two is that the former is needed when the changes require an hard fork. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain](#off-chain-protocol) signaling to agree on a common move.
+Namada introduces a governance mechanism to propose and apply protocol changes with  or without the need for a hard fork. Anyone holding some `NAM` will be able to propose some changes to which delegators and validators will cast their `yay` or `nay` votes. Governance on Namada supports both `signaling` and `voting` mechanisms. The difference between the the two is that the former is needed when the changes require a hard fork. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain](#off-chain-protocol) signaling to agree on a common move.
 
 ## On-chain protocol
 
@@ -63,7 +63,7 @@ The `content` value should follow a standard format. We leverage something simil
 `min_proposal_period` sets the minimum voting time window (in `Epoch`).\
 `max_proposal_content_size` tells the maximum number of characters allowed in the proposal content.\
 `min_proposal_grace_epochs` is the minimum required time window (in `Epoch`) between `end_epoch` and the epoch in which the proposal has to be executed.
-`/$GovernanceAddress/pending/$proposal_id` this storage key is written only before the execution of the the code defined in `/$GovernanceAddress/proposal/$id/proposal_code` and deleted afterwards. Since this storage key can be written only by the protocol itself (and by no other means), VPs can check for the presence of this storage key to be sure that a a proposal_code has been executed by the protocol and not by a transaction.
+`/$GovernanceAddress/pending/$proposal_id` this storage key is written only before the execution of the code defined in `/$GovernanceAddress/proposal/$id/proposal_code` and deleted afterwards. Since this storage key can be written only by the protocol itself (and by no other means), VPs can check for the presence of this storage key to be sure that a proposal_code has been executed by the protocol and not by a transaction.
 
 The governance machinery also relies on a subkey stored under the `NAM` token address:
 
@@ -75,7 +75,7 @@ This is to leverage the `NAM` VP to check that the funds were correctly locked.
 The governance subkey, `/$GovernanceAddress/proposal/$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
 
 ### GovernanceAddress VP
-Just like Pos, also governance has his own storage space. The `GovernanceAddress` validity predicate task is to check the integrity and correctness of new proposals. A proposal, to be correct, must satisfy the followings:
+Just like Pos, also governance has his own storage space. The `GovernanceAddress` validity predicate task is to check the integrity and correctness of new proposals. A proposal, to be correct, must satisfy the following:
 - Mandatory storage writes are:
     - counter
     - author
@@ -91,7 +91,8 @@ Just like Pos, also governance has his own storage space. The `GovernanceAddress
 - Vote can be done only by a delegator or validator
 - Validator can vote only in the initial 2/3 of the whole proposal duration (`EndEpoch` - `StartEpoch`)
 - Due to the previous requirement, the following must be true,`(EndEpoch - StartEpoch) % 3 == 0` 
-- If defined, `proposalCode` should be the wasm bytecode rappresentation of the changes. This code is triggered in case the proposal has a position outcome.
+- If defined, `proposalCode` should be the wasm bytecode representation of 
+  the changes. This code is triggered in case the proposal has a position outcome.
 - `GraceEpoch` should be greater than `EndEpoch` of at least `MIN_PROPOSAL_GRACE_EPOCHS`
 
 `MIN_PROPOSAL_FUND`, `MAX_PROPOSAL_CODE_SIZE`, `MIN_PROPOSAL_GRACE_EPOCHS`, `MAX_PROPOSAL_CONTENT_SIZE` and `MIN_PROPOSAL_PERIOD` are parameters of the protocol.
@@ -135,16 +136,18 @@ struct OnChainVote {
 }
 ```
 
-Vote transaction creates or modify the following storage key:
+Vote transaction creates or modifies the following storage key:
 
 ```
 /$GovernanceAddress/proposal/$id/vote/$delegation_address/$voter_address: Enum(yay|nay)
 ```
 
-The storage key will only be created if the transaction is signed either by a validator or a delagator. 
+The storage key will only be created if the transaction is signed either by 
+a validator or a delegator. 
 Validators will be able to vote only for 2/3 of the total voting period, while delegators can vote until the end of the voting period.
 
-If a delegator votes opposite to its validator, this will *override* the corresponding vote of this validator (e.g. if a delegator has a voting power of 200 and votes opposite to the delegator holding these tokens, than 200 will be subtracted from the votig power of the involved validator).
+If a delegator votes opposite to its validator, this will *override* the 
+corresponding vote of this validator (e.g. if a delegator has a voting power of 200 and votes opposite to the delegator holding these tokens, than 200 will be subtracted from the voting power of the involved validator).
 
 As a small form of space optimization, if a delegator votes accordingly to its validator, the vote will not actually be submitted to the chain. This logic is applied only if the following conditions are satisfied:
 
@@ -191,7 +194,7 @@ The funds will be stored under:
 ```
 
 ### TreasuryAddress VP
-The treasury validity predicate will approve a trasfer only if:
+The treasury validity predicate will approve a transfer only if:
 - the transfer has been made by the protocol (by checking the existence of `/$GovernanceAddress/pending/$proposal_id` storage key)
 - the transfered amount is <= `MAX_SPENDABLE_SUM`
 
@@ -225,7 +228,8 @@ It is possible to check the actual implementation [here](https://github.com/anom
 ## Off-chain protocol
 
 ### Create proposal
-A CLI command to create a signed JSON rappresentation of the proposal. The JSON will have the following structure:
+A CLI command to create a signed JSON representation of the proposal. The 
+JSON will have the following structure:
 ```
 {
   content: Base64<Vec<u8>>,
@@ -240,7 +244,8 @@ The signature is produced over the hash of the concatenation of: `content`, `aut
 
 ### Create vote
 
-A CLI command to create a signed JSON rappresentation of a vote. The JSON will have the following structure:
+A CLI command to create a signed JSON representation of a vote. The JSON 
+will have the following structure:
 ```
 {
   proposalHash: Base64<Vec<u8>>,
