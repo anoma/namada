@@ -245,7 +245,7 @@ impl MultiSignedEthEvent {
 
     /// Compresses many [`SignedEthEvent`] instances into different [`MultiSignedEthEvent`]
     /// instances, for matching block height and event kinds.
-    pub fn from_signed_eth_events(events: Vec<SignedEthEvent>) -> Vec<Self> {
+    pub fn from_signed_eth_events(events: Vec<SignedEthEvent>) -> impl Iterator<Item = Self> {
         let mut multi_events: BTreeMap<_, MultiSignedEthEvent> = BTreeMap::new();
 
         for ev in events {
@@ -268,7 +268,6 @@ impl MultiSignedEthEvent {
 
         multi_events
             .into_values()
-            .collect()
     }
 }
 

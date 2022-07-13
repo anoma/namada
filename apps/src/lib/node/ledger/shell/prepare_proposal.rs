@@ -72,8 +72,7 @@ mod prepare_block {
                     // 4. serialize tx
                     // 5. sign tx
                     // 6. tada, TxBytes
-                    let multi_events =
-                        MultiSignedEthEvent::from_signed_eth_events(ethereum_events);
+                    let multi_events = MultiSignedEthEvent::from_signed_eth_events(ethereum_events);
 
                     //ProtocolTxType::EthereumEvents(
                     //    todo!()
