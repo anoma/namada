@@ -11,7 +11,6 @@ use std::collections::{
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
 use num_rational::Ratio;
-use thiserror::Error;
 
 use super::EthereumEvent;
 use crate::proto::{MultiSigned, Signed};
@@ -22,18 +21,6 @@ use crate::types::storage::BlockHeight;
 use crate::types::transaction::hash_tx;
 use crate::types::hash::Hash;
 
-
-/// Errors in transforming types related to Ethereum headers
-#[derive(Error, Debug)]
-pub enum Error {
-    /// Error for an invalid Ethereum header.
-    #[error("Encountered an invalid Ethereum header")]
-    InvalidHeader,
-    /// Error when trying to combine different headers into a
-    /// multi-signed header struct
-    #[error("Could not combine Signed headers due to incompatibility")]
-    IncompatibleHeaders,
-}
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
@@ -245,14 +232,15 @@ pub struct MultiSignedEthEvent {
 impl MultiSignedEthEvent {
     /// Add a new signature for the same (block header, block height)
     /// to this instance.
-    pub fn add(&mut self, other: SignedEthEvent) -> core::result::Result<(), Error> {
-        if self.hash() == other.hash() {
-            self.signers.push((other.signer, other.power));
-            self.event.sigs.push(other.event.sig);
-            Ok(())
-        } else {
-            Err(Error::IncompatibleHeaders)
-        }
+    ///
+    /// This method is unsafe because we do not check the following:
+    ///
+    /// ```ignore
+    /// self.hash() == other.hash()
+    /// ```
+    unsafe fn add_unchecked(&mut self, other: SignedEthEvent) {
+        self.signers.push((other.signer, other.power));
+        self.event.sigs.push(other.event.sig);
     }
 
     /// Compresses many [`SignedEthEvent`] instances into different [`MultiSignedEthEvent`]
@@ -268,7 +256,12 @@ impl MultiSignedEthEvent {
                 },
                 btree_map::Entry::Occupied(mut entry) => {
                     // append `SignedEthEvent` to `MultiSignedEthEvent`
-                    let _ = entry.get_mut().add(ev);
+                    //
+                    // SAFETY: we know the `SignedEthEvent` and `MultiSignedEthEvent`
+                    // have the same hash, so it's safe to add `ev` to the `MultiSignedEthEvent`
+                    unsafe {
+                        entry.get_mut().add_unchecked(ev);
+                    }
                 },
             }
         }
