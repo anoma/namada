@@ -38,6 +38,8 @@ pub type HashResult<T> = std::result::Result<T, Error>;
     Hash,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
