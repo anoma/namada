@@ -14,9 +14,7 @@ is provided in order to facilitate safe and private user interaction with the pr
 
 ### How does Namada relate to Anoma?
 
-Namada is _two things_:
-- The first major release _version_ of the Anoma protocol.
-- The first _fractal instance_ launched as part of the Anoma network.
+Namada is the first fractal instance launched as part of the Anoma ecosystem.
 
 The Anoma protocol is designed to facilitate the operation of networked fractal instances,
 which intercommunicate but can utilise varied state machines and security models. Different
@@ -27,9 +25,9 @@ instance will be the first such fractal instance, and it will be focused exclusi
 
 Safe and user-friendly multi-asset privacy doesn't yet exist in the blockchain ecosystem.
 Up until now users have had the choice of either a sovereign chain that reissues assets (e.g. Zcash)
-or a privacy preserving solution build on an existing smart contract chain (e.g. Tornado Cash on
-Ethereum). Both have large trade-offs: in the former case users don't have
-assets that they actually want to transact with and in the latter case the restrictions
+or a privacy preserving solution built on an existing smart contract chain (e.g. Tornado Cash on
+Ethereum). Both have large trade-offs: in the former case, users don't have
+assets that they actually want to transact with, and in the latter case, the restrictions
 of existing platforms mean that users leak a ton of metadata
 and the protocols are expensive and clunky to use.
 
