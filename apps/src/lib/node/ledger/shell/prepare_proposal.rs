@@ -42,7 +42,7 @@ mod prepare_block {
                 let mut txs: Vec<TxBytes> = {
                     let protocol_key = self.mode
                         .get_protocol_key()
-                        .expect("If we are a validator, we should always have a protocol key");
+                        .expect("Validators should always have a protocol key");
 
                     let ethereum_events: Vec<_> = req.local_last_commit
                         .map(|local_last_commit| {
