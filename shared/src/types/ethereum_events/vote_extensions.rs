@@ -265,16 +265,6 @@ impl MultiSignedEthEvent {
     }
 }
 
-// this `Hash` implementation is here to filter identical
-// ethereum events that came from different validators in
-// `apps/src/lib/node/ledger/shell/prepare_proposal.rs`
-impl core::hash::Hash for MultiSignedEthEvent {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        todo!()
-        //self.event.data.hash(state);
-    }
-}
-
 impl SignedEvent for MultiSignedEthEvent {
     fn get_height(&self) -> BlockHeight {
         let MultiSigned {
@@ -307,9 +297,8 @@ impl SignedEvent for MultiSignedEthEvent {
     }
 
     fn hash(&self) -> Hash {
-        todo!()
-        //let Signed { data, .. } = &self.event;
-        //hash_tx(&data.try_to_vec().unwrap())
+        let MultiSigned { data, .. } = &self.event;
+        hash_tx(&data.try_to_vec().unwrap())
     }
 }
 
