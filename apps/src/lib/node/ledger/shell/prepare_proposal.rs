@@ -72,11 +72,13 @@ mod prepare_block {
                     // 4. serialize tx
                     // 5. sign tx
                     // 6. tada, TxBytes
-                    let mut eth_events: HashSet<VoteExtension> =
+                    let mut eth_events: HashSet<VoteExtension> = todo!();
 
-                    ProtocolTxType::EthereumEvents(
-                        todo!()
-                    )
+                    //ProtocolTxType::EthereumEvents(
+                    //    todo!()
+                    //)
+
+                    todo!()
 
                     /*
                         .map(|protocol_key| {
