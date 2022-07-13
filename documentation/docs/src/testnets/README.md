@@ -9,4 +9,4 @@ anoma client utils join-network --chain-id=$NAMADA_CHAIN_ID
 ```
 
 ## Current testnets
-- [Namada Close Quarters Testnet 1](./testnets/namada-close-quarters-testnet-1.md)
+- [Namada Close Quarters Testnet 1](./namada-close-quarters-testnet-1.md)
