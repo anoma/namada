@@ -1,7 +1,6 @@
 //! The ledger's protocol
 use std::collections::BTreeSet;
 use std::panic;
-use std::path::Path;
 
 use anoma::ledger::eth_bridge::vp::EthBridge;
 use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter};
@@ -138,8 +137,7 @@ where
                     .unwrap();
             tracing::debug!(bytes = tx_data.len(), "Serialized tx_data");
             // TODO: don't hardcode path to wasm
-            let mut tx_code =
-                std::fs::read("wasm_for_tests/tx_log.wasm").unwrap();
+            let tx_code = std::fs::read("wasm_for_tests/tx_log.wasm").unwrap();
             tracing::debug!(bytes = tx_code.len(), "Read tx_code");
 
             let _tx = Tx::new(tx_code, Some(tx_data));
