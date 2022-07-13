@@ -248,7 +248,6 @@ small:
 		-p anoma_apps
 
 compose: small
-	docker compose build
-	docker compose up
+	docker compose up --build --force-recreate
 
 .PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker build-wasm-scripts clean-wasm-scripts dev-deps test-miri
