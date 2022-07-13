@@ -1,7 +1,6 @@
 //! The ledger's protocol
 use std::collections::BTreeSet;
 use std::panic;
-use std::path::Path;
 
 use anoma::ledger::eth_bridge::vp::EthBridge;
 use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter};
@@ -26,7 +25,6 @@ use thiserror::Error;
 mod transactions;
 
 use crate::node::ledger::shell::Shell;
-use crate::wasm_loader;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -110,7 +108,7 @@ pub(crate) fn apply_tx<'a, D, H, CA>(
         block_gas_meter,
         write_log,
         storage,
-        wasm_dir,
+        wasm_dir: _wasm_dir,
         vp_wasm_cache,
         tx_wasm_cache,
     }: ShellParams<'a, D, H, CA>,
@@ -175,8 +173,15 @@ where
                 transactions::ethereum_events::construct_tx_data(diffs)
                     .unwrap();
             tracing::debug!(bytes = tx_data.len(), "Serialized tx_data");
-            let tx_code =
-                wasm_loader::read_wasm(&wasm_dir, Path::new("tx_eth_bridge"));
+            let tx_code = {
+                // TODO: once tx_eth_bridge can be added to checksums.wasm
+                // start loading it using wasm_loader::read_wasm
+                // crate::wasm_loader::read_wasm(
+                //     &wasm_dir,
+                //     Path::new("tx_eth_bridge"),
+                // )
+                std::fs::read("wasm/tx_eth_bridge.wasm").unwrap()
+            };
             tracing::debug!(bytes = tx_code.len(), "Read tx_code");
             // TODO: mints should be applied within transaction
 
