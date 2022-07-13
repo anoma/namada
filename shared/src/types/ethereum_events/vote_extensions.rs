@@ -3,6 +3,10 @@
 
 use std::cmp::Ordering;
 use std::hash::Hasher;
+use std::collections::{
+    BTreeMap,
+    btree_map,
+};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -251,17 +255,27 @@ impl MultiSignedEthEvent {
         }
     }
 
-    /// Aggregates many [`SignedEthEvent`] instances into a single [`MultiSignedEthEvent`]
-    /// instance, of matching block height and event kind.
+    /// Compresses many [`SignedEthEvent`] instances into different [`MultiSignedEthEvent`]
+    /// instances, for matching block height and event kinds.
     pub fn from_signed_eth_events(events: Vec<SignedEthEvent>) -> Vec<Self> {
-        todo!()
-        //Self {
-        //    signers: vec![(event.signer, event.power)],
-        //    event: MultiSigned {
-        //        data: event.event.data,
-        //        sigs: vec![event.event.sig],
-        //    },
-        //}
+        let mut multi_events: BTreeMap<_, MultiSignedEthEvent> = BTreeMap::new();
+
+        for ev in events {
+            match multi_events.entry(ev.hash()) {
+                btree_map::Entry::Vacant(entry) => {
+                    // convert `SignedEthEvent` to `MultiSignedEthEvent`
+                    entry.insert(ev.into());
+                },
+                btree_map::Entry::Occupied(mut entry) => {
+                    // append `SignedEthEvent` to `MultiSignedEthEvent`
+                    let _ = entry.get_mut().add(ev);
+                },
+            }
+        }
+
+        multi_events
+            .into_values()
+            .collect()
     }
 }
 

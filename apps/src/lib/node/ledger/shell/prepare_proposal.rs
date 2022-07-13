@@ -72,7 +72,8 @@ mod prepare_block {
                     // 4. serialize tx
                     // 5. sign tx
                     // 6. tada, TxBytes
-                    let mut eth_events: HashSet<VoteExtension> = todo!();
+                    let multi_events =
+                        MultiSignedEthEvent::from_signed_eth_events(ethereum_events);
 
                     //ProtocolTxType::EthereumEvents(
                     //    todo!()
