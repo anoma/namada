@@ -2,11 +2,15 @@
 
 The Namada Proof of Stake system uses the NAM token as the staking token. It features delegation to any number of validators and customizable validator validity predicates.
 
-The PoS system is implemented as an account with a validity predicate that governs the rules of the system. You can find its address in your wallet:
+## PoS Validity Predicate 
+
+The PoS system is implemented as an account with the [PoS Validity Predicate](https://github.com/anoma/namada/blob/namada/shared/src/ledger/pos/vp.rs) that governs the rules of the system. You can find its address in your wallet:
 
 ```shell
 anoma wallet address find --alias PoS
 ```
+
+## Epochs
 
 The system relies on the concept of epochs. An epoch is a range of consecutive blocks identified by consecutive natural numbers. Each epoch lasts a minimum duration and includes a minimum number of blocks since the beginning of the last epoch. These are defined by protocol parameters.
 
@@ -15,6 +19,8 @@ To query the current epoch:
 ```shell
 anoma client epoch
 ```
+
+## Delegating
 
 You can delegate to any number of validators at any time. When you delegate tokens, the delegation won't count towards the validator's stake (which in turn determines its voting power) until the beginning of epoch `n + 2` in the current epoch `n` (the literal `2` is set by PoS parameter `pipeline_len`). The delegated amount of tokens will be deducted from your account immediately, and will be credited to the PoS system's account.
 
@@ -41,11 +47,15 @@ Because the PoS system is just an account, you can query its balance, which is t
 anoma client balance --owner PoS
 ```
 
+### Slashes
+
 Should a validator exhibit punishable behavior, the delegations towards this validator are also liable for slashing. Only the delegations that were active in the epoch in which the fault occurred will be slashed by the slash rate of the fault type. If any of your delegations have been slashed, this will be displayed in the `bonds` query. You can also find all the slashes applied with:
 
 ```shell
 anoma client slashes
 ```
+
+### Unbounding
 
 While your tokens are being delegated, they are locked-in the PoS system and hence are not liquid until you withdraw them. To do that, you first need to send a transaction to “unbond” your tokens. You can unbond any amount, up to the sum of all your delegations to the given validator, even before they become active.
 
@@ -74,6 +84,8 @@ anoma client withdraw \
 
 Upon success, the withdrawn tokens will be credited back your account and debited from the PoS system.
 
+### Validators' Voting Power
+
 To see all validators and their voting power, you can query:
 
 ```shell
@@ -83,6 +95,8 @@ anoma client voting-power
 With this command, you can specify `--epoch` to find the voting powers at some future epoch. Note that only the voting powers for the current and the next epoch are final.
 
 ## 📒 PoS Validators
+
+### Generate a validator account
 
 To register a new validator account, run:
 
@@ -119,6 +133,8 @@ anoma client balance --owner my-validator --token NAM
 
 That is, the balance of your account's address is a regular liquid balance that you can transfer using your validator account key, depending on the rules of the validator account's validity predicate. The default validity predicate allows you to transfer it with a signed transaction and/or stake it in the PoS system.
 
+### Self-bonding 
+
 You can submit a self-bonding transaction of tokens from a validator account to the PoS system with:
 
 ```shell
@@ -127,11 +143,15 @@ anoma client bond \
   --amount 3.3
 ```
 
+### Determine your voting power 
+
 A validator's voting power is determined by the sum of all their active self-bonds and delegations of tokens, with slashes applied, if any, divided by `1000` (PoS `votes_per_token` parameter, with the current value set to `10‱` in parts per ten thousand).
 
 The same rules apply to delegations. When you self-bond tokens, the bonded amount won't count towards your validator's stake (which in turn determines your power) until the beginning of epoch `n + 2` in the current epoch `n`. The bonded amount of tokens will be deducted from the validator's account immediately and will be credited to the PoS system's account.
 
 While your tokens are being self-bonded, they are locked-in the PoS system and hence are not liquid until you withdraw them. To do that, you first need to send a transaction to “unbond” your tokens. You can unbond any amount, up to the sum of all your self-bonds, even before they become active.
+
+### Self-unbounding 
 
 To submit an unbonding of self-bonded tokens from your validator:
 
