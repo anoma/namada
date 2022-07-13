@@ -23,8 +23,6 @@ use anoma::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::wasm_loader;
-
 mod transactions;
 
 #[derive(Error, Debug)]
@@ -128,19 +126,22 @@ where
             tx: ProtocolTxType::EthereumEvents(events),
             ..
         }) => {
-            tracing::debug!("Ethereum events received");
+            tracing::debug!(n = events.len(), "Ethereum events received");
             // TODO: don't use unwraps, handle errors gracefully
+            // TODO: improve logging
             let diffs =
                 transactions::ethereum_events::calculate_eth_msg_diffs(events)
                     .unwrap();
+            tracing::debug!("Calculated diffs for /eth_msgs");
             let tx_data =
                 transactions::ethereum_events::construct_tx_data(diffs)
                     .unwrap();
-            let tx_code = wasm_loader::read_wasm(
-                Path::new("wasm_for_tests"), /* TODO: don't use hardcoded
-                                              * wasm_dir path */
-                Path::new("tx_log"),
-            );
+            tracing::debug!(bytes = tx_data.len(), "Serialized tx_data");
+            // TODO: don't hardcode path to wasm
+            let mut tx_code =
+                std::fs::read("wasm_for_tests/tx_log.wasm").unwrap();
+            tracing::debug!(bytes = tx_code.len(), "Read tx_code");
+
             let _tx = Tx::new(tx_code, Some(tx_data));
 
             // TODO: apply transaction to storage - mints etc should be
