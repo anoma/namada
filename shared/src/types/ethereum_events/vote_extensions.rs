@@ -241,10 +241,10 @@ pub struct MultiSignedEthEvent {
 impl MultiSignedEthEvent {
     /// Add a new signature for the same (block header, block height)
     /// to this instance.
-    pub fn add(&mut self, other: SignedEthEvent) -> Result<()> {
+    pub fn add(&mut self, other: SignedEthEvent) -> core::result::Result<(), Error> {
         if self.hash() == other.hash() {
             self.signers.push((other.signer, other.power));
-            self.event.sigs.push(other.signed_header.sig);
+            self.event.sigs.push(other.event.sig);
             Ok(())
         } else {
             Err(Error::IncompatibleHeaders)
