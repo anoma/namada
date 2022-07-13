@@ -22,6 +22,8 @@ use anoma::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+use crate::node::ledger::shell::Shell;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
@@ -58,6 +60,38 @@ pub enum Error {
     AccessForbidden(InternalAddress),
 }
 
+pub(crate) struct ShellParams<'a, D, H, CA>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    pub block_gas_meter: &'a mut BlockGasMeter,
+    pub write_log: &'a mut WriteLog,
+    pub storage: &'a Storage<D, H>,
+    pub wasm_dir: &'a std::path::Path,
+    pub vp_wasm_cache: &'a mut VpCache<CA>,
+    pub tx_wasm_cache: &'a mut TxCache<CA>,
+}
+
+impl<'a, D, H> From<&'a mut Shell<D, H>>
+    for ShellParams<'a, D, H, anoma::vm::WasmCacheRwAccess>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    fn from(shell: &'a mut Shell<D, H>) -> Self {
+        Self {
+            block_gas_meter: &mut shell.gas_meter,
+            write_log: &mut shell.write_log,
+            storage: &mut shell.storage,
+            wasm_dir: shell.wasm_dir.as_path(),
+            vp_wasm_cache: &mut shell.vp_wasm_cache,
+            tx_wasm_cache: &mut shell.tx_wasm_cache,
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Apply a given transaction
@@ -65,14 +99,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// If the given tx is a successfully decrypted payload apply the necessary
 /// vps. Otherwise, we include the tx on chain with the gas charge added
 /// but no further validations.
-pub fn apply_tx<D, H, CA>(
+pub(crate) fn apply_tx<'a, D, H, CA>(
     tx: TxType,
     tx_length: usize,
-    block_gas_meter: &mut BlockGasMeter,
-    write_log: &mut WriteLog,
-    storage: &Storage<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    ShellParams {
+        block_gas_meter,
+        write_log,
+        storage,
+        wasm_dir: _wasm_dir,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    }: ShellParams<'a, D, H, CA>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
