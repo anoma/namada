@@ -139,7 +139,7 @@ where
             let tx_code = wasm_loader::read_wasm(
                 Path::new("wasm_for_tests"), /* TODO: don't use hardcoded
                                               * wasm_dir path */
-                Path::new("tx_no_op"),
+                Path::new("tx_log"),
             );
             let _tx = Tx::new(tx_code, Some(tx_data));
 
