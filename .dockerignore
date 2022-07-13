@@ -3,4 +3,4 @@
 !target/x86_64-unknown-linux-gnu/small/anomac
 !target/x86_64-unknown-linux-gnu/small/anoman
 !target/x86_64-unknown-linux-gnu/small/anomaw
-!wasm_for_tests/tx_log.wasm
+!wasm/tx_eth_bridge.wasm

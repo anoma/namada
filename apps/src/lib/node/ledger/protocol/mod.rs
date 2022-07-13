@@ -136,8 +136,8 @@ where
                 transactions::ethereum_events::construct_tx_data(diffs)
                     .unwrap();
             tracing::debug!(bytes = tx_data.len(), "Serialized tx_data");
-            // TODO: don't hardcode path to wasm
-            let tx_code = std::fs::read("wasm_for_tests/tx_log.wasm").unwrap();
+            // TODO: don't hardcode path to wasm - use a wasm_dir
+            let tx_code = std::fs::read("wasm/tx_eth_bridge.wasm").unwrap();
             tracing::debug!(bytes = tx_code.len(), "Read tx_code");
             // TODO: mints should be applied within transaction
 
