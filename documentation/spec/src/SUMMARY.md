@@ -1,6 +1,6 @@
 # Summary
 
-- [Index](./index.md)
+- [Introduction](./introduction.md)
 - [Base ledger](./base-ledger.md)
     - [Consensus](./base-ledger/consensus.md)
     - [Execution](./base-ledger/execution.md)
@@ -23,8 +23,4 @@
         - [Reward distribution](./economics/proof-of-stake/reward-distribution.md)
     - [Shielded pool incentives](./economics/shielded-pool-incentives.md)
     - [Public goods funding](./economics/public-goods-funding.md)
-- [User interfaces](./user-interfaces.md)
-    - [Web wallet](./user-interfaces/web-wallet-interface.md)
-    - [Web explorer](./user-interfaces/web-explorer-interface.md)
-    - [External integrations](./user-interfaces/external-integrations.md)
 - [Further readhing](./further-reading.md)

@@ -48,10 +48,9 @@ Namada is designed to be such an instance.
 
 ### Layout of this specification
 
-The Namada specification documents are organised into five sub-sections:
+The Namada specification documents are organised into four sub-sections:
 
 - [Base ledger](./base-ledger.md)
 - [Multi-asset shielded pool](./masp.md)
 - [Interoperability](./interoperability.md)
 - [Economics](./economics.md)
-- [User interfaces](./user-interfaces.md)
