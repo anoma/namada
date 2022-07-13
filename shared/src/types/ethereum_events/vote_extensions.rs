@@ -2,7 +2,7 @@
 //! in vote extensions
 
 use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
+use std::hash::Hasher;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -15,6 +15,8 @@ use crate::types::address::Address;
 use crate::types::key::common::PublicKey;
 use crate::types::key::{common, VerifySigError};
 use crate::types::storage::BlockHeight;
+use crate::types::transaction::hash_tx;
+use crate::types::hash::Hash;
 
 
 /// Errors in transforming types related to Ethereum headers
@@ -156,6 +158,8 @@ pub trait SignedEvent {
         &self,
         public_keys: &[common::PublicKey],
     ) -> Result<(), VerifySigError>;
+    /// Get the hash of the inner signed event and height seen
+    fn hash(&self) -> Hash;
 }
 
 /// A struct used by validators to sign that they have seen a particular
@@ -216,6 +220,11 @@ impl SignedEvent for SignedEthEvent {
     ) -> Result<(), VerifySigError> {
         self.event.verify(&public_keys[0])
     }
+
+    fn hash(&self) -> Hash {
+        let Signed { data, .. } = &self.event;
+        hash_tx(&data.try_to_vec().unwrap())
+    }
 }
 
 /// This is created by the block proposer based on the Ethereum events
@@ -234,7 +243,7 @@ impl MultiSignedEthEvent {
     /// to this instance.
     pub fn add(&mut self, other: SignedEthEvent) -> Result<()> {
         if self.hash() == other.hash() {
-            self.signers.push((other.address, other.voting_power));
+            self.signers.push((other.signer, other.power));
             self.event.sigs.push(other.signed_header.sig);
             Ok(())
         } else {
@@ -245,13 +254,14 @@ impl MultiSignedEthEvent {
     /// Aggregates many [`SignedEthEvent`] instances into a single [`MultiSignedEthEvent`]
     /// instance, of matching block height and event kind.
     pub fn from_signed_eth_events(events: Vec<SignedEthEvent>) -> Vec<Self> {
-        Self {
-            signers: vec![(event.signer, event.power)],
-            event: MultiSigned {
-                data: event.event.data,
-                sigs: vec![event.event.sig],
-            },
-        }
+        todo!()
+        //Self {
+        //    signers: vec![(event.signer, event.power)],
+        //    event: MultiSigned {
+        //        data: event.event.data,
+        //        sigs: vec![event.event.sig],
+        //    },
+        //}
     }
 }
 
@@ -260,7 +270,8 @@ impl MultiSignedEthEvent {
 // `apps/src/lib/node/ledger/shell/prepare_proposal.rs`
 impl core::hash::Hash for MultiSignedEthEvent {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.event.data.hash(state);
+        todo!()
+        //self.event.data.hash(state);
     }
 }
 
@@ -293,6 +304,12 @@ impl SignedEvent for MultiSignedEthEvent {
         public_keys: &[PublicKey],
     ) -> Result<(), VerifySigError> {
         self.event.verify(public_keys)
+    }
+
+    fn hash(&self) -> Hash {
+        todo!()
+        //let Signed { data, .. } = &self.event;
+        //hash_tx(&data.try_to_vec().unwrap())
     }
 }
 
