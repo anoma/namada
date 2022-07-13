@@ -118,14 +118,10 @@ where
                                     );
                                 let tx_result = protocol::apply_tx(
                                     tx_type,
-                                    0, /*  this is used to compute the fee
+                                    0, /* this is used to compute the fee
                                         * based on the code size. We dont
                                         * need it here. */
-                                    &mut BlockGasMeter::default(),
-                                    &mut self.write_log,
-                                    &self.storage,
-                                    &mut self.vp_wasm_cache,
-                                    &mut self.tx_wasm_cache,
+                                    self.into(),
                                 );
                                 self.storage
                                     .delete(&pending_execution_key)
@@ -342,16 +338,8 @@ where
                 },
             };
 
-            match protocol::apply_tx(
-                tx_type,
-                tx_length,
-                &mut self.gas_meter,
-                &mut self.write_log,
-                &self.storage,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-            )
-            .map_err(Error::TxApply)
+            match protocol::apply_tx(tx_type, tx_length, self.into())
+                .map_err(Error::TxApply)
             {
                 Ok(result) => {
                     if result.is_accepted() {
